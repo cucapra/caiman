@@ -1,0 +1,8 @@
+[types]
+[pipelines]
+[pipelines.draw_triangle]
+variables = {}
+arguments = []
+instructions = [
+	{ GpuRasterCall = {} }
+]
