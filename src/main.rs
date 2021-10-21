@@ -1,5 +1,10 @@
 mod ir;
 mod definition;
+mod analyses;
+mod transforms;
+
+#[macro_use]
+extern crate bitflags;
 
 //#[macro_use]
 //extern crate clap;
@@ -56,6 +61,9 @@ fn main()
 		Ok(_) => ()
 	};
 
-	let definition : definition::Definition = toml::from_str(& input_string).unwrap();
-	println!("{:?}", definition);
+	//let definition : definition::Definition = toml::from_str(& input_string).unwrap();
+	//println!("{:?}", definition);
+
+	let program : ir::Program = toml::from_str(& input_string).unwrap();
+	println!("{:?}", program);
 }

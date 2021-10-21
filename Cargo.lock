@@ -47,6 +47,7 @@ dependencies = [
 name = "declarative_wgpu_compiler"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "clap",
  "serde",
  "serde_derive",

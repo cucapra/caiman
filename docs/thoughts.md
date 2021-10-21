@@ -22,3 +22,17 @@ The GPU Coordinator block captures that there's some code we definitely want on 
 This also keeps scope to the interface rather than the whole unified language problem of CUDA and SYCL, and presents a more gradual approach towards a potential unification.  The interface is where many of the interesting problems are, anyway.
 
 Ultimately, I think I want a language model for explaining limitations in the APIs and why they're so painful.
+
+15 Oct 2021
+
+I created this "definition" and "ir" separation because I needed a user friendly way to edit programs, but I'm increasingly feeling like the definition part is going to be throwaway work in the near future.  I'm going to almost certainly want a better definition language than what I can expose via TOML.
+
+19 Oct 2021
+
+Yeah, it doesn't make much sense to put that much effort into the definition part.  I think it's good as a functioning sketch of what a slightly less painful UX for the system would look like, but the end goal really would be to ditch it as soon as possible in favor of compilation from a different system.  At this point, I'm putting more effort into the IR so I can get a better feel for the transforms in action.
+
+20 Oct 2021
+
+Stages, roughly, are:
+1. high level function soup with no notion of where things are computed
+2. Map values into version of language with scope functors around everything to express CPU and GPU computation
