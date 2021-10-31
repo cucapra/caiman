@@ -36,3 +36,7 @@ Yeah, it doesn't make much sense to put that much effort into the definition par
 Stages, roughly, are:
 1. high level function soup with no notion of where things are computed
 2. Map values into version of language with scope functors around everything to express CPU and GPU computation
+
+30 Oct 2021
+
+I'm wondering whether it makes more sense to do something similar to region inference (track scopes as a separate graph) within a funclet to preserve the dataflow structure without forcing the splitting of funclets (a CFG).  Splitting of funclets will be more valuable near the end (code generation) but preserving dataflow will probably be better for optimizations.

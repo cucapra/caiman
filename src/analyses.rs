@@ -6,22 +6,22 @@ mod scope_propagation
 	//pub types : HashMap<usize, Type>,
 	enum NodeState
 	{
-		SingleResult ( ir::Scope ),
-		MultipleResult ( Box<[ir::Scope]> )
+		SingleResult ( ir::ScopeSet ),
+		MultipleResult ( Box<[ir::ScopeSet]> )
 	}
 
-	struct FuncletState<'funclet>
+	pub struct FuncletState<'funclet>
 	{
 		//new_types : HashMap<usize, Type>,
 		funclet : & 'funclet ir::Funclet,
 		node_states : Box<[NodeState]>,
-		output_scopes : Box<[ir::Scope]>
+		output_scopes : Box<[ir::ScopeSet]>
 	}
 
 	impl<'funclet> FuncletState<'funclet>
 	{
-		fn new<'funclets, F>(funclet : & 'funclet ir::Funclet, input_scopes : &[ir::Scope], get_funclet_output_scopes : F) -> Self
-			where F : Fn(ir::FuncletId) -> & 'funclets [ir::Scope]
+		pub fn new<'funclets, F>(funclet : & 'funclet ir::Funclet, input_scopes : &[ir::ScopeSet], get_funclet_output_scopes : F) -> Self
+			where F : Fn(ir::FuncletId) -> & 'funclets [ir::ScopeSet]
 		{
 			let mut node_states = Vec::<NodeState>::new();
 			
@@ -31,7 +31,7 @@ mod scope_propagation
 				let node_state = match node
 				{
 					ir::Node::Phi { index } => NodeState::SingleResult ( input_scopes[*index] ),
-					ir::Node::Extract { node_id, index } =>
+					ir::Node::ExtractResult { node_id, index } =>
 					{
 						let scope = match & node_states[*node_id]
 						{
@@ -42,15 +42,15 @@ mod scope_propagation
 						NodeState::SingleResult ( scope )
 					}
 					//Node::ReadBuffer { node_id, type_id, byte_offset } => node_scope_sets[*node_id],
-					ir::Node::CallExternalCpu { external_function_id, arguments } => NodeState::SingleResult ( ir::Scope::Cpu ),
-					ir::Node::CallExternalGpuCompute { external_function_id, arguments, dimensions } => NodeState::SingleResult ( ir::Scope::Gpu ),
-					ir::Node::CallGpuCoordinator { funclet_id, arguments } => NodeState::SingleResult ( ir::Scope::Cpu ),
-					_ => NodeState::SingleResult ( ir::Scope::Unknown ) //CallExternalCpu { _ }
+					ir::Node::CallExternalCpu { external_function_id, arguments } => NodeState::SingleResult ( ir::ScopeSet::Cpu ),
+					ir::Node::CallExternalGpuCompute { external_function_id, arguments, dimensions } => NodeState::SingleResult ( ir::ScopeSet::Gpu ),
+					ir::Node::CallGpuCoordinator { funclet_id, arguments } => NodeState::SingleResult ( ir::ScopeSet::Cpu ),
+					_ => NodeState::SingleResult ( ir::ScopeSet::empty() ) //CallExternalCpu { _ }
 				};
 				node_states.push(node_state);
 			}
 
-			let mut output_scopes = Vec::<ir::Scope>::new();
+			let mut output_scopes = Vec::<ir::ScopeSet>::new();
 			match & funclet.tail_edge
 			{
 				ir::TailEdge::Return { return_values } =>
@@ -63,7 +63,7 @@ mod scope_propagation
 							NodeState::MultipleResult ( scopes ) =>
 							{
 								panic!("Cannot convert multiple results to single");
-								ir::Scope::Unknown
+								ir::ScopeSet::empty()
 							}
 						};
 

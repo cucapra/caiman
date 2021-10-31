@@ -13,16 +13,22 @@ struct Scope
 	Gpu,
 }*/
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+/*
+Scope works like a union type.
+Constant is the bottom of the lattice and CpuOrGpu is the top.
+Unknown is unknown.
+*/
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum Scope
 {
-	Unknown,
-	Constant,
+	//Unknown,
+	//Constant,
 	Cpu,
 	Gpu,
+	//CpuOrGpu
 }
 
-/*bitflags!
+bitflags!
 {
 	#[derive(Serialize, Deserialize, Default)]
 	pub struct ScopeSet : u32
@@ -33,7 +39,7 @@ pub enum Scope
 		const GpuWorker = 0b100;
 		const Gpu = Self::GpuCoordinator.bits | Self::GpuWorker.bits;
 	}
-}*/
+}
 
 /*
 #[derive(Debug)]
@@ -101,7 +107,7 @@ pub enum Type
 	Array { element_type : TypeId, length : usize },
 	Struct { fields : Box<[StructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
 
-	Scoped { scope : Scope },
+	//Scoped { scope : Scope },
 
 	Buffer,
 	Texture
@@ -114,7 +120,8 @@ pub enum Node
 {
 	// Core
 	Phi { index : usize },
-	Extract { node_id : NodeId, index : usize },
+	ComputedResult { node_ids : Box<[NodeId]> }, // Tuple produced as a result of inlining
+	ExtractResult { node_id : NodeId, index : usize },
 	//ReadBuffer { node_id : NodeId, type_id : TypeId, byte_offset : usize },
 
 	// High Level Coordinator Language
