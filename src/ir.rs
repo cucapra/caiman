@@ -120,6 +120,8 @@ pub enum Node
 {
 	// Core
 	Phi { index : usize },
+	ConstantInteger (i64, TypeId),
+	ConstantUnsignedInteger (u64, TypeId),
 	ComputedResult { node_ids : Box<[NodeId]> }, // Tuple produced as a result of inlining
 	ExtractResult { node_id : NodeId, index : usize },
 	//ReadBuffer { node_id : NodeId, type_id : TypeId, byte_offset : usize },
@@ -187,6 +189,7 @@ pub struct Funclet
 {
 	pub input_types : Box<[TypeId]>,
 	//input_scopes : Box<[ScopeSet]>,
+	pub execution_scope : Option<Scope>,
 	pub output_types : Box<[TypeId]>,
 	//output_scopes : Box<[ScopeSet]>,
 	pub nodes : Box<[Node]>,
@@ -215,6 +218,7 @@ pub struct ExternalGpuFunction
 	// Scopes are always GPU (for now)
 	pub output_types : Box<[TypeId]>,
 	// Contains pipeline and single render pass state
+	pub shader_text : String
 }
 
 #[derive(Serialize, Deserialize, Debug)]
