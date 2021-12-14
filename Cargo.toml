@@ -1,5 +1,5 @@
 [package]
-name = "declarative_wgpu_compiler"
+name = "caiman"
 version = "0.1.0"
 edition = "2018"
 
