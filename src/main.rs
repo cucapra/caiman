@@ -1,8 +1,7 @@
-mod ir;
-mod codegen;
+//#[macro_use]
+//extern crate bitflags;
 
-#[macro_use]
-extern crate bitflags;
+use caiman::ir;
 
 //#[macro_use]
 //extern crate clap;
