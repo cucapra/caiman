@@ -2,103 +2,6 @@ use crate::ir;
 use std::default::Default;
 use std::collections::HashMap;
 
-enum CpuInstruction
-{
-	//AdapterRequestDevice { adapter_id : usize,  },
-	GetDefaultDevice { device_id : usize },
-	DeviceGetDefaultQueue { device_id : usize, queue_id : usize },
-	DeviceCreateCommandEncoder { device_id : usize, encoder_id : usize },
-	//DeviceCreateBuffer,
-	CommandEncoderFinish { encoder_id : usize, command_buffer_id : usize },
-	InstantiateCommandBuffer { device_id : usize, command_buffer_id : usize, command_buffer_instance_id : usize },
-	QueueSubmit { queue_id : usize, command_buffer_id : usize },
-	CallExternal { external_function_id : ir::ExternalCpuFunctionId },
-	CommandEncoderBeginComputePass { compute_encoder_id : usize, compute_pass_var : usize },
-	ComputePassDispatch { compute_pass_var : usize, dimension_vars : [usize; 3] },
-}
-
-enum CommandBufferInstruction
-{
-	//DispatchCompute { external_function_id : ir::ExternalGpuFunctionId, arguments : Box<[usize]>, dimensions : [usize; 3] }
-}
-
-struct CpuFunction
-{
-	instructions : Box<[CpuInstruction]>
-}
-
-struct CommandBuffer
-{
-	instructions : Box<[CommandBufferInstruction]>
-}
-
-struct CompiledProgram
-{
-	cpu_functions : Box<[CpuFunction]>,
-	command_buffers : Box<[CommandBuffer]>
-}
-
-impl CompiledProgram
-{
-	/*fn new() -> Self
-	{
-		Self { functions : vec![].into_boxed_slice() }
-	}*/
-
-	fn generate_string(& self) -> String
-	{
-		let mut output_string = String::new();
-
-		for function in self.cpu_functions.iter()
-		{
-			for instruction in function.instructions.iter()
-			{
-				match instruction
-				{
-					CpuInstruction::GetDefaultDevice { device_id } =>
-					{
-						output_string.push_str(format!("let var_{} = self.device_id;", device_id).as_str());
-					}
-					CpuInstruction::DeviceGetDefaultQueue { device_id, queue_id } =>
-					{
-						output_string.push_str(format!("let var_{} = wgpu_device_get_default_queue(var_{});", queue_id, device_id).as_str());
-					}
-					CpuInstruction::DeviceCreateCommandEncoder { device_id, encoder_id } =>
-					{
-						output_string.push_str(format!("let var_{} = wgpu_device_create_command_encoder(var_{}, None);", encoder_id, device_id).as_str());
-					}
-					CpuInstruction::CommandEncoderFinish { encoder_id, command_buffer_id } =>
-					{
-						output_string.push_str(format!("let var_{} = wgpu_command_encoder_finish(var_{}, None);", command_buffer_id, encoder_id).as_str());
-					}
-					CpuInstruction::QueueSubmit { queue_id, command_buffer_id } =>
-					{
-						output_string.push_str(format!("wgpu_queue_submit(var_{}, (& var_{} as *wgpu_core::id::CommandBufferId), 1);", queue_id, command_buffer_id).as_str());
-					}
-					_ => panic!("Unknown instruction")
-				}
-			}
-		}
-
-		/*for command_buffer in self.command_buffers.iter()
-		{
-			for instruction in command_buffer.instructions.iter()
-			{
-				match instruction
-				{
-					CommandBufferInstruction::DispatchCompute { external_function_id, arguments, dimensions } =>
-					{
-
-					}
-					_ => panic!("Unknown instruction")
-				}
-			}
-		}*/
-		
-		return output_string;
-	}
-}
-
 struct CodeWriter
 {
 	code_string : String
@@ -456,7 +359,7 @@ impl<'program> CodeGen<'program>
 						for output_index in 0 .. external_gpu_function.output_types.len()
 						{
 							let output_type = external_gpu_function.output_types[output_index];
-							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read> output_{} : {};\n", binding, output_index, self.get_type_name(output_type)));
+							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read_write> output_{} : {};\n", binding, output_index, self.get_type_name(output_type)));
 							binding += 1;
 						}
 
@@ -532,82 +435,13 @@ impl<'program> CodeGen<'program>
 
 					NodeResult::MultipleOutput(output_variables.into_boxed_slice())
 				}
-				/*ir::Node::CallGpuCoordinator { funclet_id : callee_funclet_id, arguments } =>
-				{
-					let callee_funclet = & self.program.funclets[& callee_funclet_id];
-					assert_eq!(callee_funclet.execution_scope, Some(ir::Scope::Gpu));
-
-					let command_buffer_id = variable_tracker.generate();
-					//let command_buffer_instance_id = self.generate_command_buffer(*callee_funclet_id);
-					let mut output_variables = Vec::<usize>::new();
-					for _ in 0 .. callee_funclet.output_types.len()
-					{
-						//force_single_output()
-						output_variables.push(variable_tracker.generate());
-					}
-					{
-						let gpu_funclet = & self.program.funclets[callee_funclet_id];
-						assert_eq!(gpu_funclet.execution_scope, Some(ir::Scope::Gpu));
-
-						let mut gpu_node_results = Vec::<NodeResult>::new();
-
-						for (gpu_node_id, gpu_node) in gpu_funclet.nodes.iter().enumerate()
-						{
-							let gpu_node_result = match gpu_node
-							{
-								ir::Node::Phi {index} => node_results[*index],
-								ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
-								{
-									let dimension_vars = [
-										force_single_output(gpu_node_results[dimensions[0]]),
-										force_single_output(gpu_node_results[dimensions[1]]),
-										force_single_output(gpu_node_results[dimensions[2]])
-									];
-
-									let compute_pass_var = variable_tracker.generate();
-									instructions.push(CpuInstruction::DeviceCreateCommandEncoder { , compute_pass_var });
-									instructions.push(CpuInstruction::CommandEncoderBeginComputePass { command_encoder_id, compute_pass_var });
-									instructions.push(CpuInstruction::DeviceCreateComputePipeline );
-									instructions.push(CpuInstruction::ComputePassSetPipeline );
-									instructions.push(CpuInstruction::DeviceCreateBindGroup );
-									instructions.push(CpuInstruction::ComputePassSetBindGroup );
-									instructions.push(CpuInstruction::ComputePassDispatch { compute_pass_var, dimension_vars });
-									instructions.push(CpuInstruction::CommandEncoderFinish );
-								}
-								_ => panic!("Unknown node")
-							};
-							gpu_node_results.push(gpu_node_result);
-						};
-						0usize
-					}
-					//instructions.push(CpuInstruction::InstantiateCommandBuffer { device_id : device_variable_id, command_buffer_id, command_buffer_instance_id });
-					instructions.push(CpuInstruction::QueueSubmit { queue_id : queue_variable_id, command_buffer_id });
-					// Still need to unpack outputs
-					NodeResult::MultipleOutput(output_variables.into_boxed_slice())
-				}*/
 				_ => panic!("Unknown node")
 			};
 			node_results.push(node_result);
-
-			//let line = format!("let var_{} = {};", variable_id, );
-			//self.code_writer.write_line(& line);
 		}
 
 		self.code_writer.write("}\n".to_string());
 	}
-
-	/*fn generate(&mut self) -> CompiledProgram
-	{
-		//code_string.push("fn ");
-		for pipeline in self.program.pipelines.iter()
-		{
-			self.code_writer.begin_pipeline(& self.name);
-			self.generate_funclet(pipeline.entry_funclet);
-			self.code_writer.end_pipeline();
-		}
-
-		return self.code_writer.finish();
-	}*/
 
 	fn generate<'codegen>(& 'codegen mut self) -> String
 	{
@@ -623,8 +457,6 @@ impl<'program> CodeGen<'program>
 
 			for type_id in type_ids.iter()
 			{
-				//self.program.types[type_id]
-				//self.code_writer.write();
 				self.generate_type_definition(* type_id);
 				self.code_writer.write_str("\n");
 			}
@@ -635,15 +467,6 @@ impl<'program> CodeGen<'program>
 			self.generate_cpu_function(pipeline.entry_funclet);
 		}
 
-
-		/*let mut final_output = String::new();
-		for code_string in self.code_strings.iter()
-		{
-			final_output += code_string.as_str();
-		}
-
-		return final_output;*/
-
 		return self.code_writer.finish();
 	}
 }
@@ -653,32 +476,6 @@ mod tests
 {
 	use crate::codegen;
 	use crate::ir;
-
-	/*#[test]
-	fn test_compiled_program()
-	{
-		let compiled_program = codegen::CompiledProgram
-		{
-			cpu_functions : Box::new
-			([
-				codegen::CpuFunction
-				{
-					instructions : Box::new
-					([
-						codegen::CpuInstruction::GetDefaultDevice { device_id : 0 },
-						codegen::CpuInstruction::DeviceGetDefaultQueue { device_id : 0, queue_id : 1 },
-						codegen::CpuInstruction::DeviceCreateCommandEncoder { device_id : 0, encoder_id : 2 },
-						codegen::CpuInstruction::CommandEncoderFinish { encoder_id : 2, command_buffer_id : 3 },
-						codegen::CpuInstruction::QueueSubmit { queue_id : 1, command_buffer_id : 3}
-					])
-				}
-			]),
-			command_buffers : Box::new([])
-		};
-		let mut output_string = compiled_program.generate_string();
-		//println!("Test output: {}", output_string);
-		assert_eq!(output_string, "", "");
-	}*/
 
 	#[test]
 	fn test_1()
@@ -708,6 +505,5 @@ mod tests
 		let mut codegen = codegen::CodeGen::new(& program);
 		let output_string = codegen.generate();
 		println!("{}", output_string);
-		//assert_eq!(output_string, "", "");
 	}
 }
