@@ -208,12 +208,8 @@ impl<'program> CodeGen<'program>
 
 		let mut argument_variable_ids = Vec::<usize>::new();
 		let mut node_results = Vec::<NodeResult>::new();
-		//let mut instructions = Vec::<CpuInstruction>::new();
-		//let mut code_strings = Vec::<String>::new();
 		let device_var = variable_tracker.generate();
 		let queue_var = variable_tracker.generate();
-		//instructions.push(CpuInstruction::DeviceGetDefaultQueue{ device_id : device_variable_id, queue_id : queue_variable_id });
-		//code_strings.push(format!("let var_{}", device_var, queue_var));
 
 		self.code_writer.write(format!("pub struct PipelineOutput{} {{", funclet_id));
 		for output_index in 0 .. funclet.output_types.len()
@@ -307,7 +303,6 @@ impl<'program> CodeGen<'program>
 					{
 						ir::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
 					};
-					//shadergen::ShaderModule::new_with_wgsl(external_gpu_function.shader_text.as_str());
 
 					let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
 					let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
@@ -328,39 +323,6 @@ impl<'program> CodeGen<'program>
 							output_binding_map.insert(output, resource_binding.binding);
 						}
 					}
-
-					/*let mut output_staging_variables = Vec::<usize>::new();
-					for output_index in 0 .. external_gpu_function.output_types.len()
-					{
-						let variable_id = variable_tracker.generate();
-						output_staging_variables.push(variable_id);
-						let type_id = external_gpu_function.output_types[output_index];
-
-						let type_binding_info = self.get_type_binding_info(type_id); 
-						let type_name = self.get_type_name(type_id);
-						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
-					};
-
-					let mut input_staging_variables = Vec::<usize>::new();
-					assert_eq!(arguments.len(), external_gpu_function.input_types.len());
-					for input_index in 0 .. external_gpu_function.input_types.len()
-					{
-						let variable_id = variable_tracker.generate();
-						input_staging_variables.push(variable_id);
-						let type_id = external_gpu_function.input_types[input_index];
-
-						let type_binding_info = self.get_type_binding_info(type_id); 
-						let type_name = self.get_type_name(type_id);
-						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
-						self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, unsafe {{ std::mem::transmute::<& {}, & [u8; {}]>(& var_{}) }} );\n", variable_id, type_name, type_binding_info.size, arguments[input_index]));
-					}*/
-
-					/*let mut output_staging_variable_map = std::collections::BTreeMap::<usize, usize>::new();
-					let mut input_staging_variable_map = std::collections::BTreeMap::<usize, usize>::new();
-					for (binding, input_index_opt, output_index_opt) in bindings.iter()
-					{
-
-					}*/
 
 					let mut input_staging_variables = Vec::<usize>::new();
 					assert_eq!(arguments.len(), external_gpu_function.input_types.len());
@@ -415,25 +377,6 @@ impl<'program> CodeGen<'program>
 
 					self.code_writer.write("{\n".to_string());
 
-					/*self.code_writer.write("let bind_group_layout_entries = [".to_string());
-					let mut binding = 0usize;
-					for input_type in external_gpu_function.input_types.iter()
-					{
-						self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
-						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : true }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
-						self.code_writer.write(" }, ".to_string());
-						binding += 1;
-					}
-					let output_binding_start = binding;
-					for output_type in external_gpu_function.output_types.iter()
-					{
-						self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
-						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : false }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
-						self.code_writer.write(" }, ".to_string());
-						binding += 1;
-					}
-					self.code_writer.write("];\n".to_string());*/
-
 					self.code_writer.write("let bind_group_layout_entries = [".to_string());
 					for (binding, (_input_opt, output_opt)) in bindings.iter()
 					{
@@ -450,67 +393,12 @@ impl<'program> CodeGen<'program>
 						ir::ShaderModuleContent::Wgsl(text) => self.code_writer.write_str(text.as_str())
 					}*/
 					self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
-					//self.code_writer.write_str(external_gpu_function.shader_text.as_str());
-					/*self.code_writer.write_str("\n\n");
-					{
-						let mut binding = 0usize;
-						let binding_count = external_gpu_function.input_types.len() + external_gpu_function.output_types.len();
-
-						for input_index in 0 .. external_gpu_function.input_types.len()
-						{
-							let input_type = external_gpu_function.input_types[input_index];
-							//self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read> input_{} : {};\n", binding, input_index, self.get_type_name(input_type)));
-							self.code_writer.write(format!("struct Input_{} {{ field_0 : {}; }};\n", input_index, self.get_type_name(input_type)));
-							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read> input_{} : Input_{};\n", binding, input_index, input_index));
-							binding += 1;
-						}
-
-						for output_index in 0 .. external_gpu_function.output_types.len()
-						{
-							let output_type = external_gpu_function.output_types[output_index];
-							self.code_writer.write(format!("struct Output_{} {{ field_0 : {}; }};\n", output_index, self.get_type_name(output_type)));
-							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read_write> output_{} : Output_{};\n", binding, output_index, output_index));
-							binding += 1;
-						}
-
-						self.code_writer.write_str("[[stage(compute), workgroup_size(1, 1, 1)]] fn main(");
-						self.code_writer.write_str(")\n{\nlet output = ");
-						self.code_writer.write_str(external_gpu_function.name.as_str());
-						self.code_writer.write_str("(");
-						for input_index in 0 .. external_gpu_function.input_types.len()
-						{
-							let input_type = external_gpu_function.input_types[input_index];
-							self.code_writer.write(format!("input_{}.field_0", input_index));
-							if input_index + 1 < external_gpu_function.input_types.len()
-							{
-								self.code_writer.write_str(", ");
-							}
-						}
-						self.code_writer.write_str(");\n");
-						for output_index in 0 .. external_gpu_function.output_types.len()
-						{
-							self.code_writer.write(format!("output_{}.field_0 = output.field_{};\n", output_index, output_index));
-						}
-						self.code_writer.write_str("}\n");
-					}*/
 					self.code_writer.write_str("\"))});\n");
-					//self.code_writer.write("let module = device.create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"\"))});\n");
 					self.code_writer.write("let bind_group_layout = device.create_bind_group_layout(& wgpu::BindGroupLayoutDescriptor { label : None, entries : & bind_group_layout_entries});\n".to_string());
 					self.code_writer.write("let pipeline_layout = device.create_pipeline_layout(& wgpu::PipelineLayoutDescriptor { label : None, bind_group_layouts : & [& bind_group_layout], push_constant_ranges : & []});\n".to_string());
 					self.code_writer.write("let pipeline = device.create_compute_pipeline(& wgpu::ComputePipelineDescriptor {label : None, layout : Some(& pipeline_layout), module : & module, entry_point : & \"main\"});\n".to_string());
 					self.code_writer.write("let mut command_encoder = device.create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
 					self.code_writer.write("let entries = [".to_string());
-					/*binding = 0usize;
-					for input_index in 0 .. arguments.len()
-					{
-						self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, input_staging_variables[input_index]));
-						binding += 1;
-					}
-					for output_index in external_gpu_function.output_types.iter()
-					{
-						self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, output_staging_variables[*output_index]));
-						binding += 1;
-					}*/
 					for (binding, (input_opt, output_opt)) in bindings.iter()
 					{
 						let mut variable_id : Option<usize> = None;
@@ -632,35 +520,4 @@ mod tests
 {
 	use crate::codegen;
 	use crate::ir;
-
-	/*#[test]
-	fn test_1()
-	{
-		let mut program = ir::Program::new();
-
-		program.types.insert(0, ir::Type::I32);
-		program.external_gpu_functions.push(ir::ExternalGpuFunction { name : "do_thing_on_gpu".to_string(), input_types : vec![0usize].into_boxed_slice(), output_types : vec![0usize].into_boxed_slice(), shader_text : "fn do_thing_on_gpu(a : i32, b : i32)\n{\n\n}\n".to_string() });
-		program.external_cpu_functions.push(ir::ExternalCpuFunction { name : "do_thing_on_cpu".to_string(), input_types : vec![0usize].into_boxed_slice(), output_types : vec![0usize].into_boxed_slice() });
-
-		let funclet = ir::Funclet 
-		{
-			input_types : vec![0usize].into_boxed_slice(),
-			execution_scope : Some(ir::Scope::Cpu),
-			output_types : vec![0usize].into_boxed_slice(),
-			nodes : vec!
-			[
-				ir::Node::Phi { index : 0 },
-				ir::Node::ConstantInteger(1, 0),
-				ir::Node::CallExternalCpu { external_function_id : 0, arguments : vec![0usize].into_boxed_slice() },
-				ir::Node::CallExternalGpuCompute { external_function_id : 0, arguments : vec![2usize].into_boxed_slice(), dimensions : [1, 1, 1] }
-			].into_boxed_slice(),
-			tail_edge : ir::TailEdge::Return { return_values : vec![].into_boxed_slice() }
-		};
-		program.funclets.insert(0, funclet);
-		program.pipelines.push(ir::Pipeline { name : "pipeline_1".to_string(), entry_funclet : 0 });
-		let mut codegen = codegen::CodeGen::new(& program);
-		let output_string = codegen.generate();
-		println!("{}", ron::to_string(& program).unwrap());
-		println!("{}", output_string);
-	}*/
 }
