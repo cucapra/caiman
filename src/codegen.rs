@@ -183,7 +183,7 @@ impl<'program> CodeGen<'program>
 		}
 	}
 
-	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId)
+	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
@@ -211,7 +211,29 @@ impl<'program> CodeGen<'program>
 		let device_var = variable_tracker.generate();
 		let queue_var = variable_tracker.generate();
 
-		self.code_writer.write(format!("pub struct PipelineOutput{} {{", funclet_id));
+		for external_cpu_function in self.program.external_cpu_functions.iter()
+		{
+			self.code_writer.write(format!("pub struct PipelineCpuFunctionOutput_{}{{ ", external_cpu_function.name));
+			for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
+			{
+				self.code_writer.write(format!("pub field_{} : {}, ", output_index, self.get_type_name(*output_type)));
+			}
+			self.code_writer.write(format!("}}\n"));
+		}
+
+		self.code_writer.write(format!("pub trait PipelineCpuFunctions_{}\n{{\n", pipeline_name));
+		for external_cpu_function in self.program.external_cpu_functions.iter()
+		{
+			self.code_writer.write(format!("\tfn {}(&self", external_cpu_function.name));
+			for (input_index, input_type) in external_cpu_function.input_types.iter().enumerate()
+			{
+				self.code_writer.write(format!(", _ : {}", self.get_type_name(*input_type)));
+			}
+			self.code_writer.write(format!(") -> PipelineCpuFunctionOutput_{};\n", external_cpu_function.name));
+		}
+		self.code_writer.write(format!("}}\n"));
+
+		self.code_writer.write(format!("pub struct PipelineOutput_{} {{", pipeline_name));
 		for output_index in 0 .. funclet.output_types.len()
 		{
 			let output_type = funclet.output_types[output_index];
@@ -220,7 +242,7 @@ impl<'program> CodeGen<'program>
 		self.code_writer.write(format!("}}\n"));
 		
 
-		self.code_writer.write(format!("pub fn pipeline_{}(device : &mut wgpu::Device, queue : &mut wgpu::Queue", funclet_id));
+		self.code_writer.write(format!("pub fn pipeline_{}<F>(device : &mut wgpu::Device, queue : &mut wgpu::Queue, cpu_functions : & F", funclet_id));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in funclet.input_types.iter().enumerate()
 		{
@@ -237,7 +259,7 @@ impl<'program> CodeGen<'program>
 			}*/
 		}
 
-		self.code_writer.write(format!(" ) -> PipelineOutput{}", funclet_id));
+		self.code_writer.write(format!(" ) -> PipelineOutput_{}\n\twhere F : PipelineCpuFunctions_{}", pipeline_name, pipeline_name));
 		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
 
 		for (node_id, node) in funclet.nodes.iter().enumerate()
@@ -283,7 +305,7 @@ impl<'program> CodeGen<'program>
 							argument_string += ", ";
 						}
 					}
-					self.code_writer.write(format!("let var_{} = {}({});\n", call_result_var, external_cpu_function.name, argument_string));
+					self.code_writer.write(format!("let var_{} = cpu_functions.{}({});\n", call_result_var, external_cpu_function.name, argument_string));
 					let mut output_variables = Vec::<usize>::new();
 					for i in 0 .. external_cpu_function.output_types.len()
 					{
@@ -475,7 +497,7 @@ impl<'program> CodeGen<'program>
 			ir::TailEdge::Return { return_values } =>
 			{
 				assert_eq!(return_values.len(), funclet.output_types.len());
-				self.code_writer.write(format!("return PipelineOutput{} {{", funclet_id));
+				self.code_writer.write(format!("return PipelineOutput_{} {{", pipeline_name));
 				for (return_index, node_index) in return_values.iter().enumerate()
 				{
 					self.code_writer.write(format!("field_{} : var_{}, ", return_index, force_single_output(& node_results[* node_index])));
@@ -508,7 +530,7 @@ impl<'program> CodeGen<'program>
 
 		for pipeline in self.program.pipelines.iter()
 		{
-			self.generate_cpu_function(pipeline.entry_funclet);
+			self.generate_cpu_function(pipeline.entry_funclet, pipeline.name.as_str());
 		}
 
 		return self.code_writer.finish();
