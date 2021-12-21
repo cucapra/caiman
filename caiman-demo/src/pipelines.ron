@@ -9,9 +9,10 @@
 				Phi(index : 0),
 				ConstantInteger(1, 0),
 				CallExternalCpu(external_function_id : 0, arguments : [0]),
-				CallExternalGpuCompute(external_function_id : 0, arguments : [2], dimensions : (1, 1, 1))
+				CallExternalGpuCompute(external_function_id : 0, arguments : [2], dimensions : (1, 1, 1)),
+				ExtractResult(node_id : 3, index : 0)
 			],
-			tail_edge : Return(return_values : [3])
+			tail_edge : Return(return_values : [4])
 		)
 	},
 	external_cpu_functions : [

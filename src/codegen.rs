@@ -214,6 +214,15 @@ impl<'program> CodeGen<'program>
 		//instructions.push(CpuInstruction::DeviceGetDefaultQueue{ device_id : device_variable_id, queue_id : queue_variable_id });
 		//code_strings.push(format!("let var_{}", device_var, queue_var));
 
+		self.code_writer.write(format!("pub struct PipelineOutput{} {{", funclet_id));
+		for output_index in 0 .. funclet.output_types.len()
+		{
+			let output_type = funclet.output_types[output_index];
+			self.code_writer.write(format!("pub field_{} : {}, ", output_index, self.get_type_name(output_type)));
+		}
+		self.code_writer.write(format!("}}\n"));
+		
+
 		self.code_writer.write(format!("pub fn pipeline_{}(device : &mut wgpu::Device, queue : &mut wgpu::Queue", funclet_id));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in funclet.input_types.iter().enumerate()
@@ -230,7 +239,9 @@ impl<'program> CodeGen<'program>
 				self.code_strings.push(", ".to_string());
 			}*/
 		}
-		self.code_writer.write(" )\n{\n\tuse std::convert::TryInto;\n".to_string());
+
+		self.code_writer.write(format!(" ) -> PipelineOutput{}", funclet_id));
+		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
 
 		for (node_id, node) in funclet.nodes.iter().enumerate()
 		{
@@ -325,6 +336,16 @@ impl<'program> CodeGen<'program>
 						force_single_output(& node_results[dimensions[2]])
 					];
 					
+					let mut output_variables = Vec::<usize>::new();
+					self.code_writer.write(format!("let ("));
+					for output_index in 0 .. external_gpu_function.output_types.len()
+					{
+						let var_id = variable_tracker.generate();
+						output_variables.push(var_id);
+						self.code_writer.write(format!("var_{}, ", var_id));
+					}
+					self.code_writer.write(format!(") = "));
+
 					self.code_writer.write("{\n".to_string());
 					self.code_writer.write("let bind_group_layout_entries = [".to_string());
 					let mut binding = 0usize;
@@ -427,36 +448,57 @@ impl<'program> CodeGen<'program>
 					self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
 					self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
 
-					let mut output_variables = Vec::<usize>::new();
+					let mut output_temp_variables = Vec::<usize>::new();
 					for output_index in 0 .. external_gpu_function.output_types.len()
 					{
 						let staging_var_id = output_staging_variables[output_index];
 						let type_id = external_gpu_function.output_types[output_index];
 						let range_var_id = variable_tracker.generate();
-						let output_var_id = variable_tracker.generate();
+						let output_temp_var_id = variable_tracker.generate();
 						let slice_var_id = variable_tracker.generate();
 						let future_var_id = variable_tracker.generate();
-						output_variables.push(output_var_id);
+						output_temp_variables.push(output_temp_var_id);
 						let type_binding_info = self.get_type_binding_info(type_id); 
 						let type_name = self.get_type_name(type_id);
-						self.code_writer.write_str("{\n");
+						//self.code_writer.write_str("{\n");
 						self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
 						self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
 						self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
 						self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
 						self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
-						self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_var_id, type_name, range_var_id));
+						self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_temp_var_id, type_name, range_var_id));
 						//self.code_writer.write(format!("let var_{} = unsafe {{ let mut temp = std::mem::zeroed::<{}>(); std::mempcy(std::mem::transmute::<& {}, & [u8; {}]>(& temp), var_{}.as_ptr(), var_{}.len()); temp }};\n", output_var_id, type_name, type_name, type_binding_info.size, range_var_id, range_var_id));
-						self.code_writer.write_str("}\n");
+						//self.code_writer.write_str("}\n");
 					}
 
-					self.code_writer.write("}\n".to_string());
+					self.code_writer.write(format!("("));
+					for output_temp_var_id in output_temp_variables.iter()
+					{
+						self.code_writer.write(format!("var_{}, ", output_temp_var_id));
+					}
+					self.code_writer.write(format!(")"));
+
+					self.code_writer.write("};\n".to_string());
 
 					NodeResult::MultipleOutput(output_variables.into_boxed_slice())
 				}
 				_ => panic!("Unknown node")
 			};
 			node_results.push(node_result);
+		}
+
+		match & funclet.tail_edge
+		{
+			ir::TailEdge::Return { return_values } =>
+			{
+				assert_eq!(return_values.len(), funclet.output_types.len());
+				self.code_writer.write(format!("return PipelineOutput{} {{", funclet_id));
+				for (return_index, node_index) in return_values.iter().enumerate()
+				{
+					self.code_writer.write(format!("field_{} : var_{}, ", return_index, force_single_output(& node_results[* node_index])));
+				}
+				self.code_writer.write(format!("}};"));
+			}
 		}
 
 		self.code_writer.write("}\n".to_string());
@@ -496,7 +538,7 @@ mod tests
 	use crate::codegen;
 	use crate::ir;
 
-	#[test]
+	/*#[test]
 	fn test_1()
 	{
 		let mut program = ir::Program::new();
@@ -525,5 +567,5 @@ mod tests
 		let output_string = codegen.generate();
 		println!("{}", ron::to_string(& program).unwrap());
 		println!("{}", output_string);
-	}
+	}*/
 }
