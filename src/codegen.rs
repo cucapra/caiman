@@ -291,6 +291,8 @@ impl<'program> CodeGen<'program>
 					let external_gpu_function = & self.program.external_gpu_functions[* external_function_id];
 					assert_eq!(external_gpu_function.input_types.len(), arguments.len());
 					
+					
+
 					let mut output_staging_variables = Vec::<usize>::new();
 					for output_index in 0 .. external_gpu_function.output_types.len()
 					{
@@ -337,7 +339,7 @@ impl<'program> CodeGen<'program>
 					for output_type in external_gpu_function.output_types.iter()
 					{
 						self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
-						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : true }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
+						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : false }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
 						self.code_writer.write(" }, ".to_string());
 						binding += 1;
 					}
@@ -352,25 +354,28 @@ impl<'program> CodeGen<'program>
 						for input_index in 0 .. external_gpu_function.input_types.len()
 						{
 							let input_type = external_gpu_function.input_types[input_index];
-							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read> input_{} : {};\n", binding, input_index, self.get_type_name(input_type)));
+							//self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read> input_{} : {};\n", binding, input_index, self.get_type_name(input_type)));
+							self.code_writer.write(format!("struct Input_{} {{ field_0 : {}; }};\n", input_index, self.get_type_name(input_type)));
+							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read> input_{} : Input_{};\n", binding, input_index, input_index));
 							binding += 1;
 						}
 
 						for output_index in 0 .. external_gpu_function.output_types.len()
 						{
 							let output_type = external_gpu_function.output_types[output_index];
-							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read_write> output_{} : {};\n", binding, output_index, self.get_type_name(output_type)));
+							self.code_writer.write(format!("struct Output_{} {{ field_0 : {}; }};\n", output_index, self.get_type_name(output_type)));
+							self.code_writer.write(format!("[[group(0), binding({})]] var<storage, read_write> output_{} : Output_{};\n", binding, output_index, output_index));
 							binding += 1;
 						}
 
 						self.code_writer.write_str("[[stage(compute), workgroup_size(1, 1, 1)]] fn main(");
-						self.code_writer.write_str(")\n{\n");
+						self.code_writer.write_str(")\n{\nlet output = ");
 						self.code_writer.write_str(external_gpu_function.name.as_str());
 						self.code_writer.write_str("(");
 						for input_index in 0 .. external_gpu_function.input_types.len()
 						{
 							let input_type = external_gpu_function.input_types[input_index];
-							self.code_writer.write(format!("input_{}", input_index));
+							self.code_writer.write(format!("input_{}.field_0", input_index));
 							if input_index + 1 < external_gpu_function.input_types.len()
 							{
 								self.code_writer.write_str(", ");
@@ -383,6 +388,10 @@ impl<'program> CodeGen<'program>
 							self.code_writer.write_str(",");
 						}*/
 						self.code_writer.write_str(");\n");
+						for output_index in 0 .. external_gpu_function.output_types.len()
+						{
+							self.code_writer.write(format!("output_{}.field_0 = output.field_{};\n", output_index, output_index));
+						}
 						self.code_writer.write_str("}\n");
 					}
 					self.code_writer.write_str("\"))});\n");
