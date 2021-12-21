@@ -1,5 +1,18 @@
+
+
+
 mod pipelines
 {
+	struct Output
+	{
+		field_0 : i32
+	}
+	
+	fn do_thing_on_cpu( value : i32 ) -> Output
+	{
+		return Output { field_0 : value };
+	}
+
 	include!(concat!(env!("OUT_DIR"), "/generated/pipelines.txt"));
 }
 

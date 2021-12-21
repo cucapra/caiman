@@ -18,7 +18,7 @@
 		(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
 	],
 	external_gpu_functions : [
-		(name : "do_thing_on_gpu", input_types : [0], output_types : [0], shader_text : "fn do_thing_on_gpu(a : i32, b : i32)\n{\n\n}\n")
+		(name : "do_thing_on_gpu", input_types : [0], output_types : [0], shader_text : "struct Output {field_0 : i32;};\nfn do_thing_on_gpu(a : i32) -> Output \n{\nvar output : Output; output.field_0 = a; return output;\n}\n")
 	],
 	pipelines : [(name : "pipeline_1", entry_funclet : 0)]
 )

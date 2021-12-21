@@ -214,7 +214,7 @@ impl<'program> CodeGen<'program>
 		//instructions.push(CpuInstruction::DeviceGetDefaultQueue{ device_id : device_variable_id, queue_id : queue_variable_id });
 		//code_strings.push(format!("let var_{}", device_var, queue_var));
 
-		self.code_writer.write(format!("fn pipeline_{}(device : &mut wgpu::Device, queue : &mut wgpu::Queue", funclet_id));
+		self.code_writer.write(format!("pub fn pipeline_{}(device : &mut wgpu::Device, queue : &mut wgpu::Queue", funclet_id));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in funclet.input_types.iter().enumerate()
 		{
@@ -230,7 +230,7 @@ impl<'program> CodeGen<'program>
 				self.code_strings.push(", ".to_string());
 			}*/
 		}
-		self.code_writer.write(" )\n{\n".to_string());
+		self.code_writer.write(" )\n{\n\tuse std::convert::TryInto;\n".to_string());
 
 		for (node_id, node) in funclet.nodes.iter().enumerate()
 		{
@@ -300,7 +300,7 @@ impl<'program> CodeGen<'program>
 
 						let type_binding_info = self.get_type_binding_info(type_id); 
 						let type_name = self.get_type_name(type_id);
-						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::all(), mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
 					};
 
 					let mut input_staging_variables = Vec::<usize>::new();
@@ -313,7 +313,7 @@ impl<'program> CodeGen<'program>
 
 						let type_binding_info = self.get_type_binding_info(type_id); 
 						let type_name = self.get_type_name(type_id);
-						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::all(), mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
 						self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, unsafe {{ std::mem::transmute::<& {}, & [u8; {}]>(& var_{}) }} );\n", variable_id, type_name, type_binding_info.size, arguments[input_index]));
 					}
 
@@ -329,7 +329,7 @@ impl<'program> CodeGen<'program>
 					for input_type in external_gpu_function.input_types.iter()
 					{
 						self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
-						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::all(), ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : true }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
+						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : true }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
 						self.code_writer.write(" }, ".to_string());
 						binding += 1;
 					}
@@ -337,7 +337,7 @@ impl<'program> CodeGen<'program>
 					for output_type in external_gpu_function.output_types.iter()
 					{
 						self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
-						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::all(), ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : true }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
+						self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : true }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding));
 						self.code_writer.write(" }, ".to_string());
 						binding += 1;
 					}
@@ -363,7 +363,7 @@ impl<'program> CodeGen<'program>
 							binding += 1;
 						}
 
-						self.code_writer.write_str("[[stage(compute)]] fn main(");
+						self.code_writer.write_str("[[stage(compute), workgroup_size(1, 1, 1)]] fn main(");
 						self.code_writer.write_str(")\n{\n");
 						self.code_writer.write_str(external_gpu_function.name.as_str());
 						self.code_writer.write_str("(");
@@ -371,14 +371,17 @@ impl<'program> CodeGen<'program>
 						{
 							let input_type = external_gpu_function.input_types[input_index];
 							self.code_writer.write(format!("input_{}", input_index));
-							self.code_writer.write_str(",");
+							if input_index + 1 < external_gpu_function.input_types.len()
+							{
+								self.code_writer.write_str(", ");
+							}
 						}
-						for output_index in 0 .. external_gpu_function.output_types.len()
+						/*for output_index in 0 .. external_gpu_function.output_types.len()
 						{
 							let output_type = external_gpu_function.output_types[output_index];
 							self.code_writer.write(format!("output_{}", output_index));
 							self.code_writer.write_str(",");
-						}
+						}*/
 						self.code_writer.write_str(");\n");
 						self.code_writer.write_str("}\n");
 					}
@@ -392,12 +395,12 @@ impl<'program> CodeGen<'program>
 					binding = 0usize;
 					for input_index in 0 .. arguments.len()
 					{
-						self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}", binding, input_staging_variables[input_index]));
+						self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, input_staging_variables[input_index]));
 						binding += 1;
 					}
 					for output_index in external_gpu_function.output_types.iter()
 					{
-
+						self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, output_staging_variables[*output_index]));
 						binding += 1;
 					}
 					self.code_writer.write("];\n".to_string());
@@ -412,6 +415,7 @@ impl<'program> CodeGen<'program>
 
 					self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
 					self.code_writer.write("queue.submit([command_buffer]);\n".to_string());
+					self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
 					self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
 
 					let mut output_variables = Vec::<usize>::new();
@@ -421,11 +425,17 @@ impl<'program> CodeGen<'program>
 						let type_id = external_gpu_function.output_types[output_index];
 						let range_var_id = variable_tracker.generate();
 						let output_var_id = variable_tracker.generate();
+						let slice_var_id = variable_tracker.generate();
+						let future_var_id = variable_tracker.generate();
 						output_variables.push(output_var_id);
 						let type_binding_info = self.get_type_binding_info(type_id); 
 						let type_name = self.get_type_name(type_id);
 						self.code_writer.write_str("{\n");
-						self.code_writer.write(format!("let var_{} = var_{}.slice(0..).get_mapped_range();\n", range_var_id, staging_var_id));
+						self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
+						self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
+						self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
+						self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
+						self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
 						self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_var_id, type_name, range_var_id));
 						//self.code_writer.write(format!("let var_{} = unsafe {{ let mut temp = std::mem::zeroed::<{}>(); std::mempcy(std::mem::transmute::<& {}, & [u8; {}]>(& temp), var_{}.as_ptr(), var_{}.len()); temp }};\n", output_var_id, type_name, type_name, type_binding_info.size, range_var_id, range_var_id));
 						self.code_writer.write_str("}\n");
