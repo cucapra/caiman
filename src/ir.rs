@@ -222,6 +222,12 @@ pub struct ExternalGpuFunctionResourceBinding
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum ShaderModuleContent
+{
+	Wgsl(String)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ExternalGpuFunction
 {
 	pub name : String,
@@ -231,7 +237,7 @@ pub struct ExternalGpuFunction
 	// Contains pipeline and single render pass state
 	pub entry_point : String,
 	pub resource_bindings : Box<[ExternalGpuFunctionResourceBinding]>,
-	pub shader_text : String,
+	pub shader_module_content : ShaderModuleContent,
 	//pub shader_module : usize,
 }
 
@@ -240,18 +246,6 @@ pub struct Pipeline
 {
 	pub name : String,
 	pub entry_funclet : FuncletId
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum ShaderModuleContent
-{
-	Wgsl(String)
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ShaderModule
-{
-	content : ShaderModuleContent
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

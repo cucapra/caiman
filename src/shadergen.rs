@@ -20,6 +20,21 @@ impl ShaderModule
 			Ok(module) => Self::new_with_naga_module(module)
 		}
 	}
+
+	pub fn compile_wgsl_text(&mut self) -> String
+	{
+		let mut validator = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty());
+		let module_info = match validator.validate(& self.shader_module)
+		{
+			Err(why) => panic!("Error while validating WGSL: {}", why),
+			Ok(module_info) => module_info
+		};
+		match naga::back::wgsl::write_string(& self.shader_module, & module_info, naga::back::wgsl::WriterFlags::EXPLICIT_TYPES)
+		{
+			Err(why) => panic!("Error while emitting WGSL: {}", why),
+			Ok(text) => text
+		}
+	}
 }
 
 

@@ -303,7 +303,11 @@ impl<'program> CodeGen<'program>
 					let external_gpu_function = & self.program.external_gpu_functions[* external_function_id];
 					assert_eq!(external_gpu_function.input_types.len(), arguments.len());
 					
-					let mut shader_module = shadergen::ShaderModule::new_with_wgsl(external_gpu_function.shader_text.as_str());
+					let mut shader_module = match & external_gpu_function.shader_module_content
+					{
+						ir::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
+					};
+					//shadergen::ShaderModule::new_with_wgsl(external_gpu_function.shader_text.as_str());
 
 					let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
 					let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
@@ -441,7 +445,12 @@ impl<'program> CodeGen<'program>
 					self.code_writer.write("];\n".to_string());
 
 					self.code_writer.write_str("let module = device.create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
-					self.code_writer.write_str(external_gpu_function.shader_text.as_str());
+					/*match & external_gpu_function.shader_module_content
+					{
+						ir::ShaderModuleContent::Wgsl(text) => self.code_writer.write_str(text.as_str())
+					}*/
+					self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
+					//self.code_writer.write_str(external_gpu_function.shader_text.as_str());
 					/*self.code_writer.write_str("\n\n");
 					{
 						let mut binding = 0usize;
