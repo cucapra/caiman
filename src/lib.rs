@@ -1,2 +1,3 @@
 pub mod ir;
-mod codegen;
+pub mod codegen;
+pub mod frontend;

@@ -1,0 +1,24 @@
+(
+	types : {0:I32},
+	funclets : {
+		0 : (
+			input_types : [0],
+			execution_scope : Some(Cpu),
+			output_types : [0],
+			nodes : [
+				Phi(index : 0),
+				ConstantInteger(1, 0),
+				CallExternalCpu(external_function_id : 0, arguments : [0]),
+				CallExternalGpuCompute(external_function_id : 0, arguments : [2], dimensions : (1, 1, 1))
+			],
+			tail_edge : Return(return_values : [3])
+		)
+	},
+	external_cpu_functions : [
+		(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
+	],
+	external_gpu_functions : [
+		(name : "do_thing_on_gpu", input_types : [0], output_types : [0], shader_text : "fn do_thing_on_gpu(a : i32, b : i32)\n{\n\n}\n")
+	],
+	pipelines : [(name : "pipeline_1", entry_funclet : 0)]
+)

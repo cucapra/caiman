@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::default::Default;
-use serde::{Serialize, Deserialize};
+//use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
 use bitflags::bitflags;
 

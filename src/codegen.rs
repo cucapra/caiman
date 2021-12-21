@@ -66,7 +66,7 @@ impl VariableTracker
 }
 
 //#[derive(Default)]
-struct CodeGen<'program>
+pub struct CodeGen<'program>
 {
 	program : & 'program ir::Program,
 	//code_strings : Vec<String>,
@@ -81,7 +81,7 @@ struct TypeBindingInfo
 
 impl<'program> CodeGen<'program>
 {
-	fn new(program : & 'program ir::Program) -> Self
+	pub fn new(program : & 'program ir::Program) -> Self
 	{
 		Self { program : & program, code_writer : CodeWriter::new()/*, code_strings : Vec::<String>::new()*/ }
 	}
@@ -443,7 +443,7 @@ impl<'program> CodeGen<'program>
 		self.code_writer.write("}\n".to_string());
 	}
 
-	fn generate<'codegen>(& 'codegen mut self) -> String
+	pub fn generate<'codegen>(& 'codegen mut self) -> String
 	{
 		{
 			let mut type_ids = Vec::<ir::TypeId>::new();
@@ -504,6 +504,7 @@ mod tests
 		program.pipelines.push(ir::Pipeline { name : "pipeline_1".to_string(), entry_funclet : 0 });
 		let mut codegen = codegen::CodeGen::new(& program);
 		let output_string = codegen.generate();
+		println!("{}", ron::to_string(& program).unwrap());
 		println!("{}", output_string);
 	}
 }
