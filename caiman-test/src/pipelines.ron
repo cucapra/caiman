@@ -19,7 +19,27 @@
 		(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
 	],
 	external_gpu_functions : [
-		(name : "do_thing_on_gpu", input_types : [0], output_types : [0], shader_text : "struct Output {field_0 : i32;};\nfn do_thing_on_gpu(a : i32) -> Output \n{\nvar output : Output; output.field_0 = a; return output;\n}\n")
+		//(name : "do_thing_on_gpu", input_types : [0], output_types : [0], shader_text : "struct Output {field_0 : i32;};\nfn do_thing_on_gpu(a : i32) -> Output \n{\nvar output : Output; output.field_0 = a; return output;\n}\n")
+		(name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+		shader_text : "
+	struct Output {field_0 : i32;};
+	fn do_thing_on_gpu(a : i32) -> Output 
+	{
+		var output : Output;
+		output.field_0 = a;
+		return output;
+	}
+	
+	struct Input_0 { field_0 : i32; };
+	[[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
+	struct Output_0 { field_0 : i32; };
+	[[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
+	[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
+	{
+		let output = do_thing_on_gpu(input_0.field_0);
+		output_0.field_0 = output.field_0;
+	}
+	")	
 	],
 	pipelines : [(name : "pipeline_1", entry_funclet : 0)]
 )

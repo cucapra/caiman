@@ -210,6 +210,17 @@ pub struct ExternalCpuFunction
 	pub output_types : Box<[TypeId]>,
 }
 
+// This describes the initial mapping from the binding in the shader to the IR
+// It's expected codegen will emit a module with a different mapping
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExternalGpuFunctionResourceBinding
+{
+	pub group : usize,
+	pub binding : usize,
+	pub input : Option<usize>,
+	pub output : Option<usize>
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ExternalGpuFunction
 {
@@ -218,7 +229,10 @@ pub struct ExternalGpuFunction
 	// Scopes are always GPU (for now)
 	pub output_types : Box<[TypeId]>,
 	// Contains pipeline and single render pass state
-	pub shader_text : String
+	pub entry_point : String,
+	pub resource_bindings : Box<[ExternalGpuFunctionResourceBinding]>,
+	pub shader_text : String,
+	//pub shader_module : usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -228,6 +242,18 @@ pub struct Pipeline
 	pub entry_funclet : FuncletId
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ShaderModuleContent
+{
+	Wgsl(String)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ShaderModule
+{
+	content : ShaderModuleContent
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Program
 {
@@ -235,7 +261,8 @@ pub struct Program
 	pub funclets : HashMap<usize, Funclet>,
 	pub external_cpu_functions : Vec<ExternalCpuFunction>,
 	pub external_gpu_functions : Vec<ExternalGpuFunction>,
-	pub pipelines : Vec<Pipeline>
+	pub pipelines : Vec<Pipeline>,
+	//pub shader_modules : HashMap<usize, ShaderModule>
 }
 
 impl Program
