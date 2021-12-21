@@ -15,7 +15,7 @@ clap = { version = "~2.33.3", optional = true }
 ron = "0.7"
 
 [dev-dependencies]
-caiman-demo = { path = "caiman-demo" }
+caiman-test = { path = "caiman-test" }
 
 [features]
 build-binary = [ "toml", "clap" ]
