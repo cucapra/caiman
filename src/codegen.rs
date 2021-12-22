@@ -2,69 +2,7 @@ use crate::ir;
 use crate::shadergen;
 use std::default::Default;
 use std::collections::HashMap;
-
-struct CodeWriter
-{
-	code_string : String
-}
-
-impl CodeWriter
-{
-	fn new() -> Self
-	{
-		Self { code_string : String::new() }
-	}
-
-	fn finish(&mut self) -> String
-	{
-		self.code_string.clone()
-	}
-
-	/*fn begin_pipeline(&mut self, name : &String)
-	{
-
-	}
-
-	fn end_pipeline(&mut self)
-	{
-
-	}*/
-
-	/*fn write_line(&mut self, line : &String)
-	{
-
-	}*/
-
-	fn write(&mut self, text : String)
-	{
-		self.code_string += text.as_str();
-	}
-
-	fn write_str(&mut self, text : &str)
-	{
-		self.code_string += text;
-	}
-}
-
-struct VariableTracker
-{
-	next_id : usize
-}
-
-impl VariableTracker
-{
-	fn new() -> Self
-	{
-		Self { next_id : 0 }
-	}
-
-	fn generate(&mut self) -> usize
-	{
-		let id = self.next_id;
-		self.next_id += 1;
-		id
-	}
-}
+use crate::rust_wgpu_backend::code_writer::{CodeWriter, VariableTracker};
 
 //#[derive(Default)]
 pub struct CodeGen<'program>
