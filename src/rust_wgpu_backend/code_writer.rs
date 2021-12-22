@@ -68,13 +68,39 @@ impl CodeWriter
 	{
 		self.writing_states.pop();
 	}*/
+
+
+	pub fn begin_module(&mut self, name : &str)
+	{
+		write!(self, "pub mod {} {{\n", name);
+	}
+
+	pub fn end_module(&mut self)
+	{
+		write!(self, "}}\n");
+	}
+
+	pub fn begin_struct(&mut self, name : &str)
+	{
+		write!(self, "pub struct {} {{", name);
+	}
+
+	pub fn write_struct_field(&mut self, index : usize, type_name : &str)
+	{
+		self.write(format!("pub field_{} : {}, ", index, type_name));
+	}
+
+	pub fn end_struct(&mut self)
+	{
+		write!(self, "}}\n");
+	}
 	
 	fn get_active_section_ptr(&mut self) -> &mut TextSection
 	{
 		&mut self.sections[self.active_section]
 	}
 
-	pub fn begin_pipeline(&mut self, pipeline_name : &str)
+	/*pub fn begin_pipeline(&mut self, pipeline_name : &str)
 	{
 		write!(self.get_active_section_ptr().code_string, "pub mod {} {{\n", pipeline_name);
 		self.break_section();
@@ -83,7 +109,7 @@ impl CodeWriter
 	pub fn end_pipeline(&mut self)
 	{
 		self.get_active_section_ptr().code_string += "}\n";
-	}
+	}*/
 
 	/*fn write_line(&mut self, line : &String)
 	{
@@ -106,8 +132,7 @@ impl Write for CodeWriter
 
 /*pub struct PipelineWriter
 {
-	code_writer : CodeWriter,
-	section
+	code_writer : CodeWriter
 }
 
 impl PipelineWriter
@@ -126,22 +151,12 @@ impl Write for PipelineWriter
 	}
 }*/
 
-pub struct VariableTracker
+/*pub struct PipelineStageWriter
 {
-	next_id : usize
+	code_writer : CodeWriter
 }
 
-impl VariableTracker
+impl PipelineStageWriter
 {
-	pub fn new() -> Self
-	{
-		Self { next_id : 0 }
-	}
-
-	pub fn generate(&mut self) -> usize
-	{
-		let id = self.next_id;
-		self.next_id += 1;
-		id
-	}
-}
+	fn build_
+}*/

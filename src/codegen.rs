@@ -2,8 +2,29 @@ use crate::ir;
 use crate::shadergen;
 use std::default::Default;
 use std::collections::HashMap;
-use crate::rust_wgpu_backend::code_writer::{CodeWriter, VariableTracker};
+use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use std::fmt::Write;
+
+pub struct VariableTracker
+{
+	next_id : usize
+}
+
+impl VariableTracker
+{
+	pub fn new() -> Self
+	{
+		Self { next_id : 0 }
+	}
+
+	pub fn generate(&mut self) -> usize
+	{
+		let id = self.next_id;
+		self.next_id += 1;
+		id
+	}
+}
+
 
 //#[derive(Default)]
 pub struct CodeGen<'program>
@@ -151,28 +172,39 @@ impl<'program> CodeGen<'program>
 		let queue_var = variable_tracker.generate();
 
 		//self.code_writer.write(format!("pub mod {} {{\n", pipeline_name));
-		self.code_writer.begin_pipeline(pipeline_name);
-
-		self.code_writer.write(format!("pub mod outputs {{\n"));
-		for external_cpu_function in self.program.external_cpu_functions.iter()
+		//self.code_writer.begin_pipeline(pipeline_name);
+		self.code_writer.begin_module(pipeline_name);
+		
+		//self.code_writer.write(format!("pub mod outputs {{\n"));
+		self.code_writer.begin_module("outputs");
 		{
-			self.code_writer.write(format!("pub struct {}{{ ", external_cpu_function.name));
-			for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
+			for external_cpu_function in self.program.external_cpu_functions.iter()
 			{
-				self.code_writer.write(format!("pub field_{} : {}, ", output_index, self.get_type_name(*output_type)));
+				//self.code_writer.write(format!("pub struct {}{{ ", external_cpu_function.name));
+				self.code_writer.begin_struct(external_cpu_function.name.as_str());
+				for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
+				{
+					//self.code_writer.write(format!("pub field_{} : {}, ", output_index, self.get_type_name(*output_type)));
+					self.code_writer.write_struct_field(output_index, self.get_type_name(*output_type).as_str());
+				}
+				//self.code_writer.write(format!("}}\n"));
+				self.code_writer.end_struct();
 			}
-			self.code_writer.write(format!("}}\n"));
-		}
 
-		self.code_writer.write(format!("pub struct {} {{", pipeline_name));
-		for output_index in 0 .. funclet.output_types.len()
-		{
-			let output_type = funclet.output_types[output_index];
-			self.code_writer.write(format!("pub field_{} : {}, ", output_index, self.get_type_name(output_type)));
+			//self.code_writer.write(format!("pub struct {} {{", pipeline_name));
+			self.code_writer.begin_struct(pipeline_name);
+			for output_index in 0 .. funclet.output_types.len()
+			{
+				let output_type = funclet.output_types[output_index];
+				//self.code_writer.write(format!("pub field_{} : {}, ", output_index, self.get_type_name(output_type)));
+				self.code_writer.write_struct_field(output_index, self.get_type_name(output_type).as_str());
+			}
+			//self.code_writer.write(format!("}}\n"));
+			self.code_writer.end_struct();
 		}
-		self.code_writer.write(format!("}}\n"));
+		self.code_writer.end_module();
 
-		self.code_writer.write(format!("}}\n"));
+		//self.code_writer.write(format!("}}\n"));
 
 		self.code_writer.write(format!("pub trait CpuFunctions\n{{\n"));
 		for external_cpu_function in self.program.external_cpu_functions.iter()
@@ -454,8 +486,9 @@ impl<'program> CodeGen<'program>
 
 		self.code_writer.write("}\n".to_string());
 
-		self.code_writer.end_pipeline();
+		//self.code_writer.end_pipeline();
 		//self.code_writer.write(format!("}}\n"));
+		self.code_writer.end_module();
 	}
 
 	pub fn generate<'codegen>(& 'codegen mut self) -> String
