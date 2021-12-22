@@ -1,3 +1,6 @@
+extern crate clap;
+use clap::{Arg, App, SubCommand};
+
 use caiman::frontend;
 use std::fs::File;
 use std::io::prelude::*;
@@ -34,9 +37,39 @@ fn main()
 {
 	let arguments =
 	{
-		let input_path = std::env::args().nth(1).expect("No input");
-		let output_path = None;
-		Arguments {input_path, output_path}
+		let matches =
+			App::new("Caiman Compiler")
+			.version("0.0.1")
+			.arg
+			(
+				Arg::with_name("input")
+					.short("i")
+					.long("input")
+					.value_name("path.ron")
+					.help("Path to input spec (ron)")
+					.takes_value(true)
+			)
+			.arg
+			(
+				Arg::with_name("output")
+					.short("o")
+					.long("output")
+					.value_name("path.rs")
+					.help("Path to output code (rust)")
+					.takes_value(true)
+			)
+			.get_matches();
+		let input_match = matches.value_of("input");
+		if input_match.is_none()
+		{
+			panic!("Must have input path");
+		}
+		let output_path = match matches.value_of("output")
+		{
+			Some(path) => Some(path.to_string()),
+			None => None
+		};
+		Arguments {input_path : input_match.unwrap().to_string(), output_path}
 	};
 
 	let input_path = Path::new(& arguments.input_path);
