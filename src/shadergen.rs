@@ -68,6 +68,6 @@ mod tests
 	fn test_naga_sanity()
 	{
 		let mut shader_module = shadergen::ShaderModule::new_with_wgsl(sample_text_1);
-		let wgsl_text = shader_generator.compile_wgsl_text();
+		let wgsl_text = shader_module.compile_wgsl_text();
 	}
 }
