@@ -3,6 +3,7 @@ use crate::shadergen;
 use std::default::Default;
 use std::collections::HashMap;
 use crate::rust_wgpu_backend::code_writer::{CodeWriter, VariableTracker};
+use std::fmt::Write;
 
 //#[derive(Default)]
 pub struct CodeGen<'program>
@@ -149,7 +150,8 @@ impl<'program> CodeGen<'program>
 		let device_var = variable_tracker.generate();
 		let queue_var = variable_tracker.generate();
 
-		self.code_writer.write(format!("pub mod {} {{\n", pipeline_name));
+		//self.code_writer.write(format!("pub mod {} {{\n", pipeline_name));
+		self.code_writer.begin_pipeline(pipeline_name);
 
 		self.code_writer.write(format!("pub mod outputs {{\n"));
 		for external_cpu_function in self.program.external_cpu_functions.iter()
@@ -300,7 +302,8 @@ impl<'program> CodeGen<'program>
 						let type_binding_info = self.get_type_binding_info(type_id); 
 						let type_name = self.get_type_name(type_id);
 						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
-						self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, unsafe {{ std::mem::transmute::<& {}, & [u8; {}]>(& var_{}) }} );\n", variable_id, type_name, type_binding_info.size, arguments[input_index]));
+						//self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, unsafe {{ std::mem::transmute::<& {}, & [u8; {}]>(& var_{}) }} );\n", variable_id, type_name, type_binding_info.size, arguments[input_index]));
+						self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, arguments[input_index]));
 					}
 
 					let mut output_staging_variables = Vec::<usize>::new();
@@ -451,7 +454,8 @@ impl<'program> CodeGen<'program>
 
 		self.code_writer.write("}\n".to_string());
 
-		self.code_writer.write(format!("}}\n"));
+		self.code_writer.end_pipeline();
+		//self.code_writer.write(format!("}}\n"));
 	}
 
 	pub fn generate<'codegen>(& 'codegen mut self) -> String
