@@ -1,5 +1,3 @@
-use caiman::{ir, codegen};
-
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -14,14 +12,12 @@ fn compile(input_file : &mut File, output_file : &mut File)
 		Ok(_) => ()
 	};
 
-	let result : Result<ir::Program, ron::de::Error> = ron::from_str(& input_string);
+	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, None);
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
-		Ok(program) =>
+		Ok(output_string) =>
 		{
-			let mut codegen = codegen::CodeGen::new(& program);
-			let output_string = codegen.generate();
 			write!(output_file, "{}", output_string);
 		}
 	}

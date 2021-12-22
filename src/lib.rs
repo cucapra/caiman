@@ -1,4 +1,4 @@
-pub mod ir;
-pub mod codegen;
-pub mod shadergen;
+mod ir;
+mod codegen;
+mod shadergen;
 pub mod frontend;

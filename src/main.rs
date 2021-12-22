@@ -1,43 +1,50 @@
-//#[macro_use]
-//extern crate bitflags;
-
-use caiman::ir;
-
-//#[macro_use]
-//extern crate clap;
-//use clap::App;
+use caiman::frontend;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
-//#[derive(Clap, Debug)]
-//#[clap(name = "dgc")]
 struct Arguments
 {
-	//#[clap(short, long)]
-	input : String,
+	input_path : String,
+	output_path : Option<String>
+}
 
-	//#[clap(short, long, default_value = "a.out")]
-	//output : String,
+fn compile(input_file : &mut File, output_file : &mut File)
+{
+
+	let mut input_string = String::new();
+	match input_file.read_to_string(&mut input_string)
+	{
+		Err(why) => panic!("Couldn't read file: {}", why),
+		Ok(_) => ()
+	};
+
+	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, None);
+	match result
+	{
+		Err(why) => panic!("Parse error: {}", why),
+		Ok(output_string) =>
+		{
+			write!(output_file, "{}", output_string);
+		}
+	}
 }
 
 fn main()
 {
-	//let arguments = Arguments::parse();
 	let arguments =
 	{
-		/*let matches = clap_app!(dgc =>
-			(version : "0.1")
-			(author: "Author")
-			(@arg INPUT +required "The input toml spec")
-		).get_matches();
-		let input = value_t!(matches.value_of("INPUT"), String).unwrap_or_else(|e| e.exit());*/
-		let input = std::env::args().nth(1).expect("No input");
-		Arguments {input : input}
+		let input_path = std::env::args().nth(1).expect("No input");
+		let output_path = None;
+		Arguments {input_path, output_path}
 	};
 
-	let input_path = Path::new(& arguments.input);
-	//let output_path = Path::new(& arguments.output);
+	let input_path = Path::new(& arguments.input_path);
+	let output_path = match & arguments.output_path
+	{
+		Some(output_path) => output_path.clone(),
+		None => String::from("a.out")
+	};
 	
 	let mut input_file = match File::open(& input_path)
 	{
@@ -45,22 +52,6 @@ fn main()
 		Ok(file) => file
 	};
 
-	/*let mut output_file = match File::open(& output_path)
-	{
-		Err(why) => panic!("Couldn't open {}: {}", output_path.display(), why),
-		Ok(file) => file
-	};*/
-
-	let mut input_string = String::new();
-	match input_file.read_to_string(&mut input_string)
-	{
-		Err(why) => panic!("Couldn't read {}: {}", input_path.display(), why),
-		Ok(_) => ()
-	};
-
-	//let definition : definition::Definition = toml::from_str(& input_string).unwrap();
-	//println!("{:?}", definition);
-
-	let program : ir::Program = toml::from_str(& input_string).unwrap();
-	println!("{:?}", program);
+	let mut output_file = File::create(output_path).unwrap();
+	compile(&mut input_file, &mut output_file);
 }

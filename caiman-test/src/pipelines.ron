@@ -1,47 +1,50 @@
 (
-	types : {0:I32},
-	funclets : {
-		0 : (
-			input_types : [0],
-			execution_scope : Some(Cpu),
-			output_types : [0],
-			nodes : [
-				Phi(index : 0),
-				ConstantInteger(1, 0),
-				CallExternalCpu(external_function_id : 0, arguments : [0]),
-				CallExternalGpuCompute(external_function_id : 0, arguments : [2], dimensions : (1, 1, 1)),
-				ExtractResult(node_id : 3, index : 0)
-			],
-			tail_edge : Return(return_values : [4])
-		)
-	},
-	external_cpu_functions : [
-		(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
-	],
-	external_gpu_functions : [
-		(
-			name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
-			shader_module_content : Wgsl
-			("
-				struct Output {field_0 : i32;};
-				fn do_thing_on_gpu(a : i32) -> Output 
-				{
-					var output : Output;
-					output.field_0 = a;
-					return output;
-				}
-				
-				struct Input_0 { field_0 : i32; };
-				[[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
-				struct Output_0 { field_0 : i32; };
-				[[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
-				[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
-				{
-					let output = do_thing_on_gpu(input_0.field_0);
-					output_0.field_0 = output.field_0;
-				}
-			")
-		)
-	],
-	pipelines : [(name : "pipeline_1", entry_funclet : 0)]
+	version : (0, 0, 1),
+	program : (
+		types : {0:I32},
+		funclets : {
+			0 : (
+				input_types : [0],
+				execution_scope : Some(Cpu),
+				output_types : [0],
+				nodes : [
+					Phi(index : 0),
+					ConstantInteger(1, 0),
+					CallExternalCpu(external_function_id : 0, arguments : [0]),
+					CallExternalGpuCompute(external_function_id : 0, arguments : [2], dimensions : (1, 1, 1)),
+					ExtractResult(node_id : 3, index : 0)
+				],
+				tail_edge : Return(return_values : [4])
+			)
+		},
+		external_cpu_functions : [
+			(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
+		],
+		external_gpu_functions : [
+			(
+				name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+				shader_module_content : Wgsl
+				("
+					struct Output {field_0 : i32;};
+					fn do_thing_on_gpu(a : i32) -> Output 
+					{
+						var output : Output;
+						output.field_0 = a;
+						return output;
+					}
+					
+					struct Input_0 { field_0 : i32; };
+					[[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
+					struct Output_0 { field_0 : i32; };
+					[[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
+					[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
+					{
+						let output = do_thing_on_gpu(input_0.field_0);
+						output_0.field_0 = output.field_0;
+					}
+				")
+			)
+		],
+		pipelines : [(name : "pipeline_1", entry_funclet : 0)]
+	)
 )
