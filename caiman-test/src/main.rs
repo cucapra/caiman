@@ -9,7 +9,7 @@ impl pipelines::pipeline_1::CpuFunctions for Callbacks
 {
 	fn do_thing_on_cpu( & self, value : i32 ) -> pipelines::pipeline_1::outputs::do_thing_on_cpu
 	{
-		return pipelines::pipeline_1::outputs::do_thing_on_cpu { field_0 : value };
+		return pipelines::pipeline_1::outputs::do_thing_on_cpu { field_0 : value + 1 };
 	}
 }
 
@@ -28,6 +28,6 @@ mod tests
 		let (mut device, mut queue) = futures::executor::block_on(adapter.request_device(& std::default::Default::default(), None)).unwrap();
 		let callbacks = crate::Callbacks;
 		let result = crate::pipelines::pipeline_1::run(&mut device, &mut queue, & callbacks, 1);
-		assert_eq!(1, result.field_0);
+		assert_eq!(3, result.field_0);
 	}
 }

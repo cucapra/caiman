@@ -30,7 +30,7 @@
 					fn do_thing_on_gpu(a : i32) -> Output 
 					{
 						var output : Output;
-						output.field_0 = a;
+						output.field_0 = a + 1;
 						return output;
 					}
 					
