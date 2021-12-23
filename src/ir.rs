@@ -3,7 +3,7 @@ use std::default::Default;
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
 use bitflags::bitflags;
-
+use crate::arena::Arena;
 
 /*#[derive(Serialize, Deserialize, Debug, Default)]
 struct Scope
@@ -106,6 +106,7 @@ pub enum Type
 	MutSlice { element_type : TypeId },
 	Array { element_type : TypeId, length : usize },
 	Struct { fields : Box<[StructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
+	Tuple { fields : Box<[TypeId]> },
 
 	//Scoped { scope : Scope },
 
@@ -255,7 +256,8 @@ pub struct Pipeline
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Program
 {
-	pub types : HashMap<usize, Type>,
+	//pub types : HashMap<usize, Type>,
+	pub types : Arena<Type>,
 	pub funclets : HashMap<usize, Funclet>,
 	pub external_cpu_functions : Vec<ExternalCpuFunction>,
 	pub external_gpu_functions : Vec<ExternalGpuFunction>,

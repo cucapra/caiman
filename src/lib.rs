@@ -1,3 +1,4 @@
+mod arena;
 mod ir;
 mod codegen;
 mod shadergen;

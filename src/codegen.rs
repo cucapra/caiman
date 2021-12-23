@@ -1,7 +1,9 @@
 use crate::ir;
 use crate::shadergen;
+use crate::arena::Arena;
 use std::default::Default;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use std::fmt::Write;
 
@@ -31,16 +33,19 @@ type VariableTracker = IdGenerator;
 struct TypeCodeGenerator
 {
 	code_string : String,
-	types : HashMap<usize, ir::Type>,
+	//types : HashMap<usize, ir::Type>,
+	types : Arena<ir::Type>,
+	has_been_generated : HashSet<usize>
 	//id_generator : IdGenerator
 }
 
 impl TypeCodeGenerator
 {
-	fn new(types : HashMap<usize, ir::Type>) -> Self
+	fn new(types : Arena<ir::Type>) -> Self
 	{
 		let code_string = String::new();
-		Self {code_string, types}
+		let has_been_generated = HashSet::new();
+		Self {code_string, types, has_been_generated}
 	}
 
 	fn finish(&mut self) -> String
@@ -50,8 +55,15 @@ impl TypeCodeGenerator
 
 	fn generate_type_definition(&mut self, type_id : ir::TypeId)
 	{
+		if self.has_been_generated.contains(& type_id)
+		{
+			return;
+		}
+
+		self.has_been_generated.insert(type_id);
+
 		let typ = & self.types[& type_id];
-		write!(self.code_string, "// Type #{}: {:?}", type_id, typ);
+		write!(self.code_string, "// Type #{}: {:?}\n", type_id, typ);
 		match typ
 		{
 			ir::Type::F32 => (),
@@ -69,14 +81,25 @@ impl TypeCodeGenerator
 			ir::Type::ConstSlice { element_type } => (),
 			ir::Type::MutSlice { element_type } => (),
 			ir::Type::Array { element_type, length } => (),
+			ir::Type::Tuple { fields } =>
+			{
+				write!(self.code_string, "pub struct type_{}", type_id);
+				self.code_string.write_str("{\n");
+				for (index, field_type_id) in fields.iter().enumerate()
+				{
+					let type_name = self.get_type_name(* field_type_id);
+					write!(self.code_string, "\tpub field_{} : {},\n", index, type_name);
+				}
+				self.code_string.write_str("}\n\n");
+			}
 			ir::Type::Struct { fields, byte_alignment, byte_size } =>
 			{
-				write!(self.code_string, "struct type_{}", type_id);
+				write!(self.code_string, "pub struct type_{}", type_id);
 				self.code_string.write_str("{\n");
 				for field in fields.iter()
 				{
-					let type_name = self.get_type_name(type_id);
-					write!(self.code_string, "\t{} : {},\n", field.name, type_name);
+					let type_name = self.get_type_name(field.type_id);
+					write!(self.code_string, "\tpub {} : {},\n", field.name, type_name);
 				}
 				self.code_string.write_str("}\n\n");
 			}
@@ -291,9 +314,11 @@ impl<'program> CodeGen<'program>
 		let queue_var = variable_tracker.generate();
 
 		self.code_writer.begin_module(pipeline_name);
+
+		// Should eventually move this to types in the type system
 		
 		self.code_writer.begin_module("outputs");
-		{
+		/*{
 			for external_cpu_function in self.program.external_cpu_functions.iter()
 			{
 				self.code_writer.begin_struct(external_cpu_function.name.as_str());
@@ -311,6 +336,36 @@ impl<'program> CodeGen<'program>
 				self.code_writer.write_struct_field(output_index, self.get_type_name(output_type).as_str());
 			}
 			self.code_writer.end_struct();
+		}*/
+		{
+			for external_cpu_function in self.program.external_cpu_functions.iter()
+			{
+				//self.code_writer.begin_struct(external_cpu_function.name.as_str());
+				let mut tuple_fields = Vec::<ir::TypeId>::new();
+				for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
+				{
+					//self.code_writer.write_struct_field(output_index, self.get_type_name(*output_type).as_str());
+					//struct_fields.push(ir::StructField{name : format!("field_{}", ), type_id : *output_type, byte_offset : , byte_size : });
+					tuple_fields.push(*output_type);
+				}
+				let type_id = self.type_code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+				//self.code_writer.end_struct();
+				self.generate_type_definition(type_id);
+				write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
+			}
+
+			//self.code_writer.begin_struct(pipeline_name);
+			let mut tuple_fields = Vec::<ir::TypeId>::new();
+			for output_index in 0 .. funclet.output_types.len()
+			{
+				let output_type = funclet.output_types[output_index];
+				tuple_fields.push(output_type);
+				//self.code_writer.write_struct_field(output_index, self.get_type_name(output_type).as_str());
+			}
+			let type_id = self.type_code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			//self.code_writer.end_struct();
+			self.generate_type_definition(type_id);
+			write!(self.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
 		}
 		self.code_writer.end_module();
 
