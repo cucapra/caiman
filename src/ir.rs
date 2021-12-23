@@ -78,7 +78,7 @@ pub type FuncletId = usize;
 pub type NodeId = usize;
 pub type TypeId = usize;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StructField
 {
 	pub name : String,
@@ -87,7 +87,7 @@ pub struct StructField
 	pub byte_size : usize,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
 	F32,
@@ -125,6 +125,10 @@ pub enum Node
 	ComputedResult { node_ids : Box<[NodeId]> }, // Tuple produced as a result of inlining
 	ExtractResult { node_id : NodeId, index : usize },
 	//ReadBuffer { node_id : NodeId, type_id : TypeId, byte_offset : usize },
+
+	// Scopes
+	//GpuSubmissionStart{ cpu_resident_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
+	//GpuSubmissionEnd{ cpu_resident_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
 
 	// High Level Coordinator Language
 	CallExternalCpu { external_function_id : ExternalCpuFunctionId, arguments : Box<[NodeId]> },

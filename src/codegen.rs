@@ -5,12 +5,13 @@ use std::collections::HashMap;
 use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use std::fmt::Write;
 
-pub struct VariableTracker
+#[derive(Default)]
+pub struct IdGenerator
 {
 	next_id : usize
 }
 
-impl VariableTracker
+impl IdGenerator
 {
 	pub fn new() -> Self
 	{
@@ -25,45 +26,32 @@ impl VariableTracker
 	}
 }
 
+type VariableTracker = IdGenerator;
 
-//#[derive(Default)]
-pub struct CodeGen<'program>
+struct TypeCodeGenerator
 {
-	program : & 'program ir::Program,
-	//code_strings : Vec<String>,
-	code_writer : CodeWriter
+	code_string : String,
+	types : HashMap<usize, ir::Type>,
+	//id_generator : IdGenerator
 }
 
-struct TypeBindingInfo
+impl TypeCodeGenerator
 {
-	size : usize,
-	alignment : usize,
-}
-
-impl<'program> CodeGen<'program>
-{
-	pub fn new(program : & 'program ir::Program) -> Self
+	fn new(types : HashMap<usize, ir::Type>) -> Self
 	{
-		Self { program : & program, code_writer : CodeWriter::new()/*, code_strings : Vec::<String>::new()*/ }
+		let code_string = String::new();
+		Self {code_string, types}
 	}
 
-	/*fn generate_command_buffer(&mut self, funclet_id : ir::FuncletId) -> usize
+	fn finish(&mut self) -> String
 	{
-		let funclet = & self.program.funclets[& funclet_id];
-		assert_eq!(funclet.execution_scope, Some(ir::Scope::Gpu));
-
-		for (node_id, node) in funclet.nodes.iter().enumerate()
-		{
-			
-		}
-
-		panic!("Unfinished")
-	}*/
+		self.code_string.clone()
+	}
 
 	fn generate_type_definition(&mut self, type_id : ir::TypeId)
 	{
-		let typ = & self.program.types[& type_id];
-		self.code_writer.write(format!("// Type #{}: {:?}", type_id, typ));
+		let typ = & self.types[& type_id];
+		write!(self.code_string, "// Type #{}: {:?}", type_id, typ);
 		match typ
 		{
 			ir::Type::F32 => (),
@@ -83,14 +71,14 @@ impl<'program> CodeGen<'program>
 			ir::Type::Array { element_type, length } => (),
 			ir::Type::Struct { fields, byte_alignment, byte_size } =>
 			{
-				self.code_writer.write(format!("struct type_{}", type_id));
-				self.code_writer.write_str("{\n");
+				write!(self.code_string, "struct type_{}", type_id);
+				self.code_string.write_str("{\n");
 				for field in fields.iter()
 				{
 					let type_name = self.get_type_name(type_id);
-					self.code_writer.write(format!("\t{} : {},\n", field.name, type_name));
+					write!(self.code_string, "\t{} : {},\n", field.name, type_name);
 				}
-				self.code_writer.write_str("}\n\n");
+				self.code_string.write_str("}\n\n");
 			}
 			_ => panic!("Unimplemented")
 		}
@@ -98,7 +86,7 @@ impl<'program> CodeGen<'program>
 
 	fn get_type_name(& self, type_id : ir::TypeId) -> String
 	{
-		match & self.program.types[& type_id]
+		match & self.types[& type_id]
 		{
 			ir::Type::F32 => "f32".to_string(),
 			ir::Type::F64 => "f64".to_string(),
@@ -121,7 +109,7 @@ impl<'program> CodeGen<'program>
 
 	fn get_type_binding_info(&self, type_id : ir::TypeId) -> TypeBindingInfo
 	{
-		match & self.program.types[& type_id]
+		match & self.types[& type_id]
 		{
 			ir::Type::F32 => TypeBindingInfo { size : std::mem::size_of::<f32>(), alignment : std::mem::align_of::<f32>() },
 			ir::Type::F64 => TypeBindingInfo { size : std::mem::size_of::<f64>(), alignment : std::mem::align_of::<f64>() },
@@ -141,6 +129,137 @@ impl<'program> CodeGen<'program>
 			ir::Type::Struct { fields, byte_alignment, byte_size } => panic!("Unimplemented"),
 			_ => panic!("Unimplemented")
 		}
+	}
+}
+
+enum BufferState
+{
+	Unmapped,
+	UsedInSubmission { submission_id : usize }
+}
+
+enum SubmissionState
+{
+	Done,
+	Encoding,
+	Submitted,
+}
+
+#[derive(Default)]
+struct PipelineState
+{
+	buffer_states : HashMap<usize, BufferState>,
+	//old_submission_states : HashMap<usize, SubmissionState>
+}
+
+impl PipelineState
+{
+	/*fn bind_buffer(submission_id : usize, buffer_id : usize)
+	{
+		if let Some(old_state) = buffer_states.get(& buffer_id)
+		{
+			match old_state
+			{
+				BufferState::Unmapped => (),
+				BufferState::UsedInSubmission {submission_id : other_submission_id} => 
+			}
+		}
+
+		if let Some(old_state) = 
+		{
+
+		}
+	}
+
+	fn submit(submission_id : usize)
+	{
+
+	}*/
+}
+
+#[derive(Default)]
+struct PipelineBuilder
+{
+	pipeline_state : PipelineState,
+	code_string : String,
+	variable_tracker : VariableTracker
+}
+
+impl PipelineBuilder
+{
+	fn new() -> Self
+	{
+		Default::default()
+	}
+
+	fn build_constant_integer(&mut self, value : i64, type_name : &str) -> usize
+	{
+		let variable_id = self.variable_tracker.generate();
+		write!(self.code_string, "let var_{} : {} = {};\n", variable_id, type_name, value);
+		variable_id
+	}
+
+	fn build_constant_unsigned_integer(&mut self, value : u64, type_name : &str) -> usize
+	{
+		let variable_id = self.variable_tracker.generate();
+		write!(self.code_string, "let var_{} : {} = {};\n", variable_id, type_name, value);
+		variable_id
+	}
+
+	/*fn build_external_cpu_call(&mut self, function_name : &str)
+	{
+
+	}*/
+
+	//fn build_
+
+	/*fn build_submit() -> usize
+	{
+
+	}*/
+
+	fn commit(self, code_writer : &mut CodeWriter)
+	{
+		code_writer.write_str(self.code_string.as_str());
+	}
+}
+
+
+//#[derive(Default)]
+pub struct CodeGen<'program>
+{
+	program : & 'program ir::Program,
+	//code_strings : Vec<String>,
+	code_writer : CodeWriter,
+	type_code_generator : TypeCodeGenerator
+}
+
+struct TypeBindingInfo
+{
+	size : usize,
+	alignment : usize,
+}
+
+impl<'program> CodeGen<'program>
+{
+	pub fn new(program : & 'program ir::Program) -> Self
+	{
+		Self { program : & program, code_writer : CodeWriter::new()/*, code_strings : Vec::<String>::new()*/, type_code_generator : TypeCodeGenerator::new(program.types.clone()) }
+	}
+
+	fn generate_type_definition(&mut self, type_id : ir::TypeId)
+	{
+		self.type_code_generator.generate_type_definition(type_id)
+	}
+
+	fn get_type_name(& self, type_id : ir::TypeId) -> String
+	{
+		self.type_code_generator.get_type_name(type_id)
+	}
+
+	fn get_type_binding_info(&self, type_id : ir::TypeId) -> TypeBindingInfo
+	{
+		self.type_code_generator.get_type_binding_info(type_id)
 	}
 
 	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId, pipeline_name : &str)
@@ -228,6 +347,8 @@ impl<'program> CodeGen<'program>
 		self.code_writer.write(format!(" ) -> outputs::{}\n\twhere F : CpuFunctions", pipeline_name));
 		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
 
+		let mut pipeline_builder = PipelineBuilder::new();
+
 		for (node_id, node) in funclet.nodes.iter().enumerate()
 		{
 			self.code_writer.write(format!("// node #{}: {:?}\n", node_id, node));
@@ -250,12 +371,14 @@ impl<'program> CodeGen<'program>
 				{
 					let variable_id = variable_tracker.generate();
 					self.code_writer.write(format!("let var_{} : {} = {};\n", variable_id, self.get_type_name(* type_id), value));
+					//pipeline_builder.build_constant_integer(value, self.get_type_name(* type_id).as_str());
 					NodeResult::SingleOutput(variable_id)
 				}
 				ir::Node::ConstantUnsignedInteger(value, type_id) =>
 				{
 					let variable_id = variable_tracker.generate();
 					self.code_writer.write(format!("let var_{} : {} = {};\n", variable_id, self.get_type_name(* type_id), value));
+					//pipeline_builder.build_constant_unsigned_integer(value, self.get_type_name(* type_id).as_str());
 					NodeResult::SingleOutput(variable_id)
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
@@ -459,6 +582,8 @@ impl<'program> CodeGen<'program>
 			node_results.push(node_result);
 		}
 
+		//pipeline_builder.commit(&mut self.code_writer);
+
 		match & funclet.tail_edge
 		{
 			ir::TailEdge::Return { return_values } =>
@@ -502,7 +627,8 @@ impl<'program> CodeGen<'program>
 			self.generate_cpu_function(pipeline.entry_funclet, pipeline.name.as_str());
 		}
 
-		return self.code_writer.finish();
+		let code = self.code_writer.finish();
+		return self.type_code_generator.finish() + & code;
 	}
 }
 
