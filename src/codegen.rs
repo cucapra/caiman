@@ -32,28 +32,33 @@ impl VariableTracker
 	}
 }
 
-struct CodeGenerator
+struct CodeGenerator<'program>
 {
 	//code_string : String,
 	type_code_writer : CodeWriter,
+	code_writer : CodeWriter, // the "everything else" for now
 	//types : HashMap<usize, ir::Type>,
 	types : Arena<ir::Type>,
-	has_been_generated : HashSet<usize>
-	//id_generator : IdGenerator
+	external_cpu_functions : & 'program [ir::ExternalCpuFunction],
+	external_gpu_functions : & 'program [ir::ExternalGpuFunction],
+	has_been_generated : HashSet<usize>,
+	variable_tracker : IdGenerator
 }
 
-impl CodeGenerator
+impl<'program> CodeGenerator<'program>
 {
-	fn new(types : Arena<ir::Type>) -> Self
+	fn new(types : Arena<ir::Type>, external_cpu_functions : & 'program [ir::ExternalCpuFunction], external_gpu_functions : & 'program [ir::ExternalGpuFunction]) -> Self
 	{
+		let variable_tracker = IdGenerator::new();
 		let type_code_writer = CodeWriter::new();
+		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		Self {type_code_writer, types, has_been_generated}
+		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions}
 	}
 
 	fn finish(&mut self) -> String
 	{
-		self.type_code_writer.finish()
+		self.type_code_writer.finish() + self.code_writer.finish().as_str()
 	}
 
 	fn generate_type_definition(&mut self, type_id : ir::TypeId)
@@ -156,46 +161,6 @@ impl CodeGenerator
 			_ => panic!("Unimplemented")
 		}
 	}
-}
-
-//#[derive(Default)]
-pub struct CodeGen<'program>
-{
-	program : & 'program ir::Program,
-	//code_strings : Vec<String>,
-	code_writer : CodeWriter,
-	code_generator : CodeGenerator,
-	variable_tracker : VariableTracker
-}
-
-struct TypeBindingInfo
-{
-	size : usize,
-	alignment : usize,
-}
-
-impl<'program> CodeGen<'program>
-{
-	pub fn new(program : & 'program ir::Program) -> Self
-	{
-		let variable_tracker = VariableTracker::new();
-		Self { program : & program, code_writer : CodeWriter::new()/*, code_strings : Vec::<String>::new()*/, code_generator : CodeGenerator::new(program.types.clone()), variable_tracker }
-	}
-
-	fn generate_type_definition(&mut self, type_id : ir::TypeId)
-	{
-		self.code_generator.generate_type_definition(type_id)
-	}
-
-	fn get_type_name(& self, type_id : ir::TypeId) -> String
-	{
-		self.code_generator.get_type_name(type_id)
-	}
-
-	fn get_type_binding_info(&self, type_id : ir::TypeId) -> TypeBindingInfo
-	{
-		self.code_generator.get_type_binding_info(type_id)
-	}
 
 	fn build_constant_integer(&mut self, value : i64, type_id : ir::TypeId) -> usize
 	{
@@ -215,7 +180,7 @@ impl<'program> CodeGen<'program>
 
 	fn build_external_cpu_function_call(&mut self, external_function_id : ir::ExternalCpuFunctionId, argument_vars : &[usize]) -> Box<[usize]>
 	{
-		let external_cpu_function = & self.program.external_cpu_functions[external_function_id];
+		let external_cpu_function = & self.external_cpu_functions[external_function_id];
 		let call_result_var = self.variable_tracker.generate();
 		let mut argument_string = String::new();
 		for (index, argument) in argument_vars.iter().enumerate()
@@ -257,9 +222,10 @@ impl<'program> CodeGen<'program>
 		variable_id
 	}
 
+
 	fn build_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize]) -> Box<[usize]>
 	{
-		let external_gpu_function = & self.program.external_gpu_functions[external_function_id];
+		let external_gpu_function = & self.external_gpu_functions[external_function_id];
 		assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 
 		let mut shader_module = match & external_gpu_function.shader_module_content
@@ -413,6 +379,42 @@ impl<'program> CodeGen<'program>
 
 		output_variables.into_boxed_slice()
 	}
+}
+
+//#[derive(Default)]
+pub struct CodeGen<'program>
+{
+	program : & 'program ir::Program,
+	code_generator : CodeGenerator<'program>,
+}
+
+struct TypeBindingInfo
+{
+	size : usize,
+	alignment : usize,
+}
+
+impl<'program> CodeGen<'program>
+{
+	pub fn new(program : & 'program ir::Program) -> Self
+	{
+		Self { program : & program, code_generator : CodeGenerator::new(program.types.clone(), program.external_cpu_functions.as_slice(), program.external_gpu_functions.as_slice()) }
+	}
+
+	fn generate_type_definition(&mut self, type_id : ir::TypeId)
+	{
+		self.code_generator.generate_type_definition(type_id)
+	}
+
+	fn get_type_name(& self, type_id : ir::TypeId) -> String
+	{
+		self.code_generator.get_type_name(type_id)
+	}
+
+	fn get_type_binding_info(&self, type_id : ir::TypeId) -> TypeBindingInfo
+	{
+		self.code_generator.get_type_binding_info(type_id)
+	}
 
 	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
@@ -437,12 +439,12 @@ impl<'program> CodeGen<'program>
 
 		let mut argument_variable_ids = Vec::<usize>::new();
 		let mut node_results = Vec::<NodeResult>::new();
-		let device_var = self.variable_tracker.generate();
-		let queue_var = self.variable_tracker.generate();
+		let device_var = self.code_generator.variable_tracker.generate();
+		let queue_var = self.code_generator.variable_tracker.generate();
 
-		self.code_writer.begin_module(pipeline_name);
+		self.code_generator.code_writer.begin_module(pipeline_name);
 		
-		self.code_writer.begin_module("outputs");
+		self.code_generator.code_writer.begin_module("outputs");
 		{
 			for external_cpu_function in self.program.external_cpu_functions.iter()
 			{
@@ -453,7 +455,7 @@ impl<'program> CodeGen<'program>
 				}
 				let type_id = self.code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 				self.generate_type_definition(type_id);
-				write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
+				write!(self.code_generator.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
 			}
 
 			let mut tuple_fields = Vec::<ir::TypeId>::new();
@@ -464,33 +466,33 @@ impl<'program> CodeGen<'program>
 			}
 			let type_id = self.code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
-			write!(self.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
+			write!(self.code_generator.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
 		}
-		self.code_writer.end_module();
+		self.code_generator.code_writer.end_module();
 
-		self.code_writer.write(format!("pub trait CpuFunctions\n{{\n"));
+		self.code_generator.code_writer.write(format!("pub trait CpuFunctions\n{{\n"));
 		for external_cpu_function in self.program.external_cpu_functions.iter()
 		{
-			self.code_writer.write(format!("\tfn {}(&self", external_cpu_function.name));
+			self.code_generator.code_writer.write(format!("\tfn {}(&self", external_cpu_function.name));
 			for (input_index, input_type) in external_cpu_function.input_types.iter().enumerate()
 			{
-				self.code_writer.write(format!(", _ : {}", self.get_type_name(*input_type)));
+				self.code_generator.code_writer.write(format!(", _ : {}", self.get_type_name(*input_type)));
 			}
-			self.code_writer.write(format!(") -> outputs::{};\n", external_cpu_function.name));
+			self.code_generator.code_writer.write(format!(") -> outputs::{};\n", external_cpu_function.name));
 		}
-		self.code_writer.write(format!("}}\n"));
+		self.code_generator.code_writer.write(format!("}}\n"));
 		
 
-		self.code_writer.write(format!("pub fn run<F>(device : &mut wgpu::Device, queue : &mut wgpu::Queue, cpu_functions : & F"));
+		self.code_generator.code_writer.write(format!("pub fn run<F>(device : &mut wgpu::Device, queue : &mut wgpu::Queue, cpu_functions : & F"));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in funclet.input_types.iter().enumerate()
 		{
-			self.code_writer.write(", ".to_string());
+			self.code_generator.code_writer.write(", ".to_string());
 
-			let variable_id = self.variable_tracker.generate();
+			let variable_id = self.code_generator.variable_tracker.generate();
 			argument_variable_ids.push(variable_id);
 			let type_name = self.get_type_name(*input_type);
-			self.code_writer.write(format!("var_{} : {}", variable_id, type_name));
+			self.code_generator.code_writer.write(format!("var_{} : {}", variable_id, type_name));
 
 			/*if input_index + 1 < funclet.input_types.len()
 			{
@@ -498,12 +500,12 @@ impl<'program> CodeGen<'program>
 			}*/
 		}
 
-		self.code_writer.write(format!(" ) -> outputs::{}\n\twhere F : CpuFunctions", pipeline_name));
-		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
+		self.code_generator.code_writer.write(format!(" ) -> outputs::{}\n\twhere F : CpuFunctions", pipeline_name));
+		self.code_generator.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
 
 		for (node_id, node) in funclet.nodes.iter().enumerate()
 		{
-			self.code_writer.write(format!("// node #{}: {:?}\n", node_id, node));
+			self.code_generator.code_writer.write(format!("// node #{}: {:?}\n", node_id, node));
 			let node_result = match node
 			{
 				ir::Node::Phi {index} => NodeResult::SingleOutput(argument_variable_ids[*index as usize]),
@@ -521,12 +523,12 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::ConstantInteger(value, type_id) =>
 				{
-					let variable_id = self.build_constant_integer(* value, * type_id);
+					let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
 					NodeResult::SingleOutput(variable_id)
 				}
 				ir::Node::ConstantUnsignedInteger(value, type_id) =>
 				{
-					let variable_id = self.build_constant_unsigned_integer(* value, * type_id);
+					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
 					NodeResult::SingleOutput(variable_id)
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
@@ -536,7 +538,7 @@ impl<'program> CodeGen<'program>
 					{
 						argument_vars.push(force_single_output(& node_results[* argument]));
 					}
-					let output_variables = self.build_external_cpu_function_call(* external_function_id, argument_vars.as_slice());
+					let output_variables = self.code_generator.build_external_cpu_function_call(* external_function_id, argument_vars.as_slice());
 					NodeResult::MultipleOutput(output_variables)
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
@@ -553,7 +555,7 @@ impl<'program> CodeGen<'program>
 						argument_vars.push(force_single_output(& node_results[* argument]));
 					}
 
-					NodeResult::MultipleOutput(self.build_compute_dispatch(* external_function_id, & dimension_vars, argument_vars.as_slice()))
+					NodeResult::MultipleOutput(self.code_generator.build_compute_dispatch(* external_function_id, & dimension_vars, argument_vars.as_slice()))
 				}
 				_ => panic!("Unknown node")
 			};
@@ -565,18 +567,18 @@ impl<'program> CodeGen<'program>
 			ir::TailEdge::Return { return_values } =>
 			{
 				assert_eq!(return_values.len(), funclet.output_types.len());
-				self.code_writer.write(format!("return outputs::{} {{", pipeline_name));
+				self.code_generator.code_writer.write(format!("return outputs::{} {{", pipeline_name));
 				for (return_index, node_index) in return_values.iter().enumerate()
 				{
-					self.code_writer.write(format!("field_{} : var_{}, ", return_index, force_single_output(& node_results[* node_index])));
+					self.code_generator.code_writer.write(format!("field_{} : var_{}, ", return_index, force_single_output(& node_results[* node_index])));
 				}
-				self.code_writer.write(format!("}};"));
+				self.code_generator.code_writer.write(format!("}};"));
 			}
 		}
 
-		self.code_writer.write("}\n".to_string());
+		self.code_generator.code_writer.write("}\n".to_string());
 
-		self.code_writer.end_module();
+		self.code_generator.code_writer.end_module();
 	}
 
 	pub fn generate<'codegen>(& 'codegen mut self) -> String
@@ -594,7 +596,7 @@ impl<'program> CodeGen<'program>
 			for type_id in type_ids.iter()
 			{
 				self.generate_type_definition(* type_id);
-				self.code_writer.write_str("\n");
+				self.code_generator.code_writer.write_str("\n");
 			}
 		}
 
@@ -603,8 +605,8 @@ impl<'program> CodeGen<'program>
 			self.generate_cpu_function(pipeline.entry_funclet, pipeline.name.as_str());
 		}
 
-		let code = self.code_writer.finish();
-		return self.code_generator.finish() + & code;
+		//let code = self.code_generator.code_writer.finish();
+		return self.code_generator.finish();
 	}
 }
 

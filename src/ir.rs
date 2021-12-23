@@ -116,7 +116,7 @@ pub enum Type
 	//GpuFragmentWorkerState,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Node
 {
 	// Core
@@ -175,7 +175,7 @@ pub enum Node
 	//OutputFragment { state : NodeId, coords : [NodeId; 4] }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
 {
 	Return { return_values : Box<[NodeId]> },
@@ -189,7 +189,7 @@ pub enum TailEdge
 	//CallGpuWorker{ callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet
 {
 	pub input_types : Box<[TypeId]>,
@@ -206,7 +206,7 @@ impl Funclet
 	//fn is_gpu_executable()
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalCpuFunction
 {
 	pub name : String,
@@ -217,7 +217,7 @@ pub struct ExternalCpuFunction
 
 // This describes the initial mapping from the binding in the shader to the IR
 // It's expected codegen will emit a module with a different mapping
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalGpuFunctionResourceBinding
 {
 	pub group : usize,
@@ -226,13 +226,13 @@ pub struct ExternalGpuFunctionResourceBinding
 	pub output : Option<usize>
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ShaderModuleContent
 {
 	Wgsl(String)
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalGpuFunction
 {
 	pub name : String,
@@ -246,14 +246,14 @@ pub struct ExternalGpuFunction
 	//pub shader_module : usize,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pipeline
 {
 	pub name : String,
 	pub entry_funclet : FuncletId
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Program
 {
 	//pub types : HashMap<usize, Type>,
