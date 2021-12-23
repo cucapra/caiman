@@ -318,52 +318,26 @@ impl<'program> CodeGen<'program>
 		// Should eventually move this to types in the type system
 		
 		self.code_writer.begin_module("outputs");
-		/*{
-			for external_cpu_function in self.program.external_cpu_functions.iter()
-			{
-				self.code_writer.begin_struct(external_cpu_function.name.as_str());
-				for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
-				{
-					self.code_writer.write_struct_field(output_index, self.get_type_name(*output_type).as_str());
-				}
-				self.code_writer.end_struct();
-			}
-
-			self.code_writer.begin_struct(pipeline_name);
-			for output_index in 0 .. funclet.output_types.len()
-			{
-				let output_type = funclet.output_types[output_index];
-				self.code_writer.write_struct_field(output_index, self.get_type_name(output_type).as_str());
-			}
-			self.code_writer.end_struct();
-		}*/
 		{
 			for external_cpu_function in self.program.external_cpu_functions.iter()
 			{
-				//self.code_writer.begin_struct(external_cpu_function.name.as_str());
 				let mut tuple_fields = Vec::<ir::TypeId>::new();
 				for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
 				{
-					//self.code_writer.write_struct_field(output_index, self.get_type_name(*output_type).as_str());
-					//struct_fields.push(ir::StructField{name : format!("field_{}", ), type_id : *output_type, byte_offset : , byte_size : });
 					tuple_fields.push(*output_type);
 				}
 				let type_id = self.type_code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
-				//self.code_writer.end_struct();
 				self.generate_type_definition(type_id);
 				write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
 			}
 
-			//self.code_writer.begin_struct(pipeline_name);
 			let mut tuple_fields = Vec::<ir::TypeId>::new();
 			for output_index in 0 .. funclet.output_types.len()
 			{
 				let output_type = funclet.output_types[output_index];
 				tuple_fields.push(output_type);
-				//self.code_writer.write_struct_field(output_index, self.get_type_name(output_type).as_str());
 			}
 			let type_id = self.type_code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
-			//self.code_writer.end_struct();
 			self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
 		}
