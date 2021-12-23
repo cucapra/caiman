@@ -313,6 +313,26 @@ impl<'program> CodeGen<'program>
 		output_variables.into_boxed_slice()
 	}
 
+	fn build_create_buffer(&mut self, type_id : ir::TypeId) -> usize
+	{
+		let variable_id = self.variable_tracker.generate();
+
+		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_name = self.get_type_name(type_id);
+		self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+		variable_id
+	}
+
+	fn build_create_buffer_with_data(&mut self, data_var : usize, type_id : ir::TypeId) -> usize
+	{
+		let variable_id = self.variable_tracker.generate();
+		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_name = self.get_type_name(type_id);
+		self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+		self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, data_var));
+		variable_id
+	}
+
 	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
 		let funclet = & self.program.funclets[& funclet_id];
@@ -478,15 +498,16 @@ impl<'program> CodeGen<'program>
 					assert_eq!(arguments.len(), external_gpu_function.input_types.len());
 					for input_index in 0 .. external_gpu_function.input_types.len()
 					{
-						let variable_id = self.variable_tracker.generate();
-						input_staging_variables.push(variable_id);
+						//let variable_id = self.variable_tracker.generate();
 						let type_id = external_gpu_function.input_types[input_index];
 
-						let type_binding_info = self.get_type_binding_info(type_id); 
-						let type_name = self.get_type_name(type_id);
-						self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+						//let type_binding_info = self.get_type_binding_info(type_id); 
+						//let type_name = self.get_type_name(type_id);
+						//self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
 						//self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, unsafe {{ std::mem::transmute::<& {}, & [u8; {}]>(& var_{}) }} );\n", variable_id, type_name, type_binding_info.size, arguments[input_index]));
-						self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, arguments[input_index]));
+						//self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, arguments[input_index]));
+						let variable_id = self.build_create_buffer_with_data(arguments[input_index], type_id);
+						input_staging_variables.push(variable_id);
 					}
 
 					let mut output_staging_variables = Vec::<usize>::new();
@@ -500,13 +521,13 @@ impl<'program> CodeGen<'program>
 						}
 						else
 						{
-							let variable_id = self.variable_tracker.generate();
-							output_staging_variables.push(variable_id);
 							let type_id = external_gpu_function.output_types[output_index];
+							let variable_id = self.build_create_buffer(type_id);//self.variable_tracker.generate();
+							output_staging_variables.push(variable_id);
 
-							let type_binding_info = self.get_type_binding_info(type_id); 
+							/*let type_binding_info = self.get_type_binding_info(type_id); 
 							let type_name = self.get_type_name(type_id);
-							self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+							self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));*/
 						}
 					};
 
