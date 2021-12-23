@@ -1,2 +1,2 @@
-pub mod code_writer;
+mod code_writer;
 pub mod code_generator;

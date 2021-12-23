@@ -4,7 +4,6 @@ use crate::arena::Arena;
 use std::default::Default;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
 use std::fmt::Write;
 use crate::id_generator::IdGenerator;
