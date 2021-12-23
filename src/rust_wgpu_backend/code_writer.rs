@@ -7,12 +7,6 @@ struct TextSection
 	code_string : String
 }
 
-/*enum WritingState
-{
-	Root{section_id : usize},
-	Pipeline{section_id : usize, output_section_id : usize },
-}*/
-
 pub struct CodeWriter
 {
 	//code_string : String,
@@ -59,17 +53,6 @@ impl CodeWriter
 		section_id
 	}
 
-	/*fn push_writing_state(&mut self, state : WritingState)
-	{
-		self.writing_states.push(state);
-	}
-
-	fn pop_writing_state(&mut self)
-	{
-		self.writing_states.pop();
-	}*/
-
-
 	pub fn begin_module(&mut self, name : &str)
 	{
 		write!(self, "pub mod {} {{\n", name);
@@ -100,22 +83,6 @@ impl CodeWriter
 		&mut self.sections[self.active_section]
 	}
 
-	/*pub fn begin_pipeline(&mut self, pipeline_name : &str)
-	{
-		write!(self.get_active_section_ptr().code_string, "pub mod {} {{\n", pipeline_name);
-		self.break_section();
-	}
-
-	pub fn end_pipeline(&mut self)
-	{
-		self.get_active_section_ptr().code_string += "}\n";
-	}*/
-
-	/*fn write_line(&mut self, line : &String)
-	{
-
-	}*/
-
 	pub fn write(&mut self, text : String)
 	{
 		self.get_active_section_ptr().code_string += text.as_str();
@@ -129,34 +96,3 @@ impl Write for CodeWriter
 		self.get_active_section_ptr().code_string.write_str(text)
 	}
 }
-
-/*pub struct PipelineWriter
-{
-	code_writer : CodeWriter
-}
-
-impl PipelineWriter
-{
-	fn new(code_writer : CodeWriter) -> Self
-	{
-		Self{code_writer}
-	}
-}
-
-impl Write for PipelineWriter
-{
-	fn write_str(&mut self, text : &str) -> Result<(), std::fmt::Error>
-	{
-		self.sections[].code_string.write_str(text)
-	}
-}*/
-
-/*pub struct PipelineStageWriter
-{
-	code_writer : CodeWriter
-}
-
-impl PipelineStageWriter
-{
-	fn build_
-}*/

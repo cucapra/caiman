@@ -6,51 +6,54 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use std::fmt::Write;
+use crate::id_generator::IdGenerator;
+
+enum VariableState
+{
+	Dead,
+}
 
 #[derive(Default)]
-pub struct IdGenerator
+struct VariableTracker
 {
-	next_id : usize
+	id_generator : IdGenerator
 }
 
-impl IdGenerator
+impl VariableTracker
 {
-	pub fn new() -> Self
+	fn new() -> Self
 	{
-		Self { next_id : 0 }
+		Self { id_generator : IdGenerator::new() }
 	}
 
-	pub fn generate(&mut self) -> usize
+	fn generate(&mut self) -> usize
 	{
-		let id = self.next_id;
-		self.next_id += 1;
-		id
+		self.id_generator.generate()
 	}
 }
 
-type VariableTracker = IdGenerator;
-
-struct TypeCodeGenerator
+struct CodeGenerator
 {
-	code_string : String,
+	//code_string : String,
+	type_code_writer : CodeWriter,
 	//types : HashMap<usize, ir::Type>,
 	types : Arena<ir::Type>,
 	has_been_generated : HashSet<usize>
 	//id_generator : IdGenerator
 }
 
-impl TypeCodeGenerator
+impl CodeGenerator
 {
 	fn new(types : Arena<ir::Type>) -> Self
 	{
-		let code_string = String::new();
+		let type_code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		Self {code_string, types, has_been_generated}
+		Self {type_code_writer, types, has_been_generated}
 	}
 
 	fn finish(&mut self) -> String
 	{
-		self.code_string.clone()
+		self.type_code_writer.finish()
 	}
 
 	fn generate_type_definition(&mut self, type_id : ir::TypeId)
@@ -63,7 +66,7 @@ impl TypeCodeGenerator
 		self.has_been_generated.insert(type_id);
 
 		let typ = & self.types[& type_id];
-		write!(self.code_string, "// Type #{}: {:?}\n", type_id, typ);
+		write!(self.type_code_writer, "// Type #{}: {:?}\n", type_id, typ);
 		match typ
 		{
 			ir::Type::F32 => (),
@@ -83,25 +86,25 @@ impl TypeCodeGenerator
 			ir::Type::Array { element_type, length } => (),
 			ir::Type::Tuple { fields } =>
 			{
-				write!(self.code_string, "pub struct type_{}", type_id);
-				self.code_string.write_str("{\n");
+				write!(self.type_code_writer, "pub struct type_{}", type_id);
+				self.type_code_writer.write_str("{\n");
 				for (index, field_type_id) in fields.iter().enumerate()
 				{
 					let type_name = self.get_type_name(* field_type_id);
-					write!(self.code_string, "\tpub field_{} : {},\n", index, type_name);
+					write!(self.type_code_writer, "\tpub field_{} : {},\n", index, type_name);
 				}
-				self.code_string.write_str("}\n\n");
+				self.type_code_writer.write_str("}\n\n");
 			}
 			ir::Type::Struct { fields, byte_alignment, byte_size } =>
 			{
-				write!(self.code_string, "pub struct type_{}", type_id);
-				self.code_string.write_str("{\n");
+				write!(self.type_code_writer, "pub struct type_{}", type_id);
+				self.type_code_writer.write_str("{\n");
 				for field in fields.iter()
 				{
 					let type_name = self.get_type_name(field.type_id);
-					write!(self.code_string, "\tpub {} : {},\n", field.name, type_name);
+					write!(self.type_code_writer, "\tpub {} : {},\n", field.name, type_name);
 				}
-				self.code_string.write_str("}\n\n");
+				self.type_code_writer.write_str("}\n\n");
 			}
 			_ => panic!("Unimplemented")
 		}
@@ -155,92 +158,13 @@ impl TypeCodeGenerator
 	}
 }
 
-enum BufferState
-{
-	Unmapped,
-	UsedInSubmission { submission_id : usize }
-}
-
-enum SubmissionState
-{
-	Done,
-	Encoding,
-	Submitted,
-}
-
-#[derive(Default)]
-struct PipelineState
-{
-	buffer_states : HashMap<usize, BufferState>,
-	//old_submission_states : HashMap<usize, SubmissionState>
-}
-
-impl PipelineState
-{
-	/*fn bind_buffer(submission_id : usize, buffer_id : usize)
-	{
-		if let Some(old_state) = buffer_states.get(& buffer_id)
-		{
-			match old_state
-			{
-				BufferState::Unmapped => (),
-				BufferState::UsedInSubmission {submission_id : other_submission_id} => 
-			}
-		}
-
-		if let Some(old_state) = 
-		{
-
-		}
-	}
-
-	fn submit(submission_id : usize)
-	{
-
-	}*/
-}
-
-#[derive(Default)]
-struct PipelineCodeGenerator
-{
-	pipeline_state : PipelineState,
-	code_string : String,
-	variable_tracker : VariableTracker
-}
-
-impl PipelineCodeGenerator
-{
-	fn new() -> Self
-	{
-		Default::default()
-	}
-
-	/*fn build_external_cpu_call(&mut self, function_name : &str)
-	{
-
-	}*/
-
-	//fn build_
-
-	/*fn build_submit() -> usize
-	{
-
-	}*/
-
-	fn commit(self, code_writer : &mut CodeWriter)
-	{
-		code_writer.write_str(self.code_string.as_str());
-	}
-}
-
-
 //#[derive(Default)]
 pub struct CodeGen<'program>
 {
 	program : & 'program ir::Program,
 	//code_strings : Vec<String>,
 	code_writer : CodeWriter,
-	type_code_generator : TypeCodeGenerator,
+	code_generator : CodeGenerator,
 	variable_tracker : VariableTracker
 }
 
@@ -255,22 +179,22 @@ impl<'program> CodeGen<'program>
 	pub fn new(program : & 'program ir::Program) -> Self
 	{
 		let variable_tracker = VariableTracker::new();
-		Self { program : & program, code_writer : CodeWriter::new()/*, code_strings : Vec::<String>::new()*/, type_code_generator : TypeCodeGenerator::new(program.types.clone()), variable_tracker }
+		Self { program : & program, code_writer : CodeWriter::new()/*, code_strings : Vec::<String>::new()*/, code_generator : CodeGenerator::new(program.types.clone()), variable_tracker }
 	}
 
 	fn generate_type_definition(&mut self, type_id : ir::TypeId)
 	{
-		self.type_code_generator.generate_type_definition(type_id)
+		self.code_generator.generate_type_definition(type_id)
 	}
 
 	fn get_type_name(& self, type_id : ir::TypeId) -> String
 	{
-		self.type_code_generator.get_type_name(type_id)
+		self.code_generator.get_type_name(type_id)
 	}
 
 	fn get_type_binding_info(&self, type_id : ir::TypeId) -> TypeBindingInfo
 	{
-		self.type_code_generator.get_type_binding_info(type_id)
+		self.code_generator.get_type_binding_info(type_id)
 	}
 
 	fn build_constant_integer(&mut self, value : i64, type_id : ir::TypeId) -> usize
@@ -527,7 +451,7 @@ impl<'program> CodeGen<'program>
 				{
 					tuple_fields.push(*output_type);
 				}
-				let type_id = self.type_code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+				let type_id = self.code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 				self.generate_type_definition(type_id);
 				write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
 			}
@@ -538,7 +462,7 @@ impl<'program> CodeGen<'program>
 				let output_type = funclet.output_types[output_index];
 				tuple_fields.push(output_type);
 			}
-			let type_id = self.type_code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			let type_id = self.code_generator.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
 		}
@@ -680,7 +604,7 @@ impl<'program> CodeGen<'program>
 		}
 
 		let code = self.code_writer.finish();
-		return self.type_code_generator.finish() + & code;
+		return self.code_generator.finish() + & code;
 	}
 }
 
