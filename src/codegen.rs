@@ -42,7 +42,8 @@ struct CodeGenerator<'program>
 	external_cpu_functions : & 'program [ir::ExternalCpuFunction],
 	external_gpu_functions : & 'program [ir::ExternalGpuFunction],
 	has_been_generated : HashSet<usize>,
-	variable_tracker : IdGenerator
+	variable_tracker : IdGenerator,
+	active_pipeline_name : Option<String>,
 }
 
 impl<'program> CodeGenerator<'program>
@@ -53,12 +54,95 @@ impl<'program> CodeGenerator<'program>
 		let type_code_writer = CodeWriter::new();
 		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions}
+		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None}
 	}
 
 	fn finish(&mut self) -> String
 	{
 		self.type_code_writer.finish() + self.code_writer.finish().as_str()
+	}
+
+	fn begin_pipeline(&mut self, pipeline_name : &str, input_types : &[ir::TypeId], output_types : &[ir::TypeId]) -> Box<[usize]>
+	{
+		self.active_pipeline_name = Some(String::from(pipeline_name));
+		self.code_writer.begin_module(pipeline_name);
+
+		self.code_writer.begin_module("outputs");
+		{
+			for external_cpu_function in self.external_cpu_functions.iter()
+			{
+				let mut tuple_fields = Vec::<ir::TypeId>::new();
+				for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
+				{
+					tuple_fields.push(*output_type);
+				}
+				let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+				self.generate_type_definition(type_id);
+				write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
+			}
+
+			let mut tuple_fields = Vec::<ir::TypeId>::new();
+			for output_index in 0 .. output_types.len()
+			{
+				let output_type = output_types[output_index];
+				tuple_fields.push(output_type);
+			}
+			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			self.generate_type_definition(type_id);
+			write!(self.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
+		}
+		self.code_writer.end_module();
+
+		self.code_writer.write(format!("pub trait CpuFunctions\n{{\n"));
+		for external_cpu_function in self.external_cpu_functions.iter()
+		{
+			self.code_writer.write(format!("\tfn {}(&self", external_cpu_function.name));
+			for (input_index, input_type) in external_cpu_function.input_types.iter().enumerate()
+			{
+				self.code_writer.write(format!(", _ : {}", self.get_type_name(*input_type)));
+			}
+			self.code_writer.write(format!(") -> outputs::{};\n", external_cpu_function.name));
+		}
+		self.code_writer.write(format!("}}\n"));
+
+		let mut argument_variable_ids = Vec::<usize>::new();
+		self.code_writer.write(format!("pub fn run<F>(device : &mut wgpu::Device, queue : &mut wgpu::Queue, cpu_functions : & F"));
+		//self.code_strings.push("(".to_string());
+		for (input_index, input_type) in input_types.iter().enumerate()
+		{
+			self.code_writer.write(", ".to_string());
+
+			let variable_id = self.variable_tracker.generate();
+			argument_variable_ids.push(variable_id);
+			let type_name = self.get_type_name(*input_type);
+			self.code_writer.write(format!("var_{} : {}", variable_id, type_name));
+
+			/*if input_index + 1 < funclet.input_types.len()
+			{
+				self.code_strings.push(", ".to_string());
+			}*/
+		}
+
+		self.code_writer.write(format!(" ) -> outputs::{}\n\twhere F : CpuFunctions", pipeline_name));
+		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
+		argument_variable_ids.into_boxed_slice()
+	}
+
+	fn build_return(&mut self, output_var_ids : &[usize])
+	{
+		self.code_writer.write(format!("return outputs::{} {{", self.active_pipeline_name.as_ref().unwrap().as_str()));
+		for (return_index, var_id) in output_var_ids.iter().enumerate()
+		{
+			self.code_writer.write(format!("field_{} : var_{}, ", return_index, var_id));
+		}
+		self.code_writer.write(format!("}};"));
+	}
+
+	fn end_pipeline(&mut self)
+	{
+		self.code_writer.write("}\n".to_string());
+		self.code_writer.end_module();
+		self.active_pipeline_name = None;
 	}
 
 	fn generate_type_definition(&mut self, type_id : ir::TypeId)
@@ -437,14 +521,15 @@ impl<'program> CodeGen<'program>
 			panic!("Not a single output node result")
 		}
 
-		let mut argument_variable_ids = Vec::<usize>::new();
+		//let mut argument_variable_ids = Vec::<usize>::new();
 		let mut node_results = Vec::<NodeResult>::new();
 		let device_var = self.code_generator.variable_tracker.generate();
 		let queue_var = self.code_generator.variable_tracker.generate();
 
-		self.code_generator.code_writer.begin_module(pipeline_name);
+		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);
+		//self.code_generator.code_writer.begin_module(pipeline_name);
 		
-		self.code_generator.code_writer.begin_module("outputs");
+		/*self.code_generator.code_writer.begin_module("outputs");
 		{
 			for external_cpu_function in self.program.external_cpu_functions.iter()
 			{
@@ -468,8 +553,9 @@ impl<'program> CodeGen<'program>
 			self.generate_type_definition(type_id);
 			write!(self.code_generator.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
 		}
-		self.code_generator.code_writer.end_module();
+		self.code_generator.code_writer.end_module();*/
 
+		/*
 		self.code_generator.code_writer.write(format!("pub trait CpuFunctions\n{{\n"));
 		for external_cpu_function in self.program.external_cpu_functions.iter()
 		{
@@ -481,8 +567,9 @@ impl<'program> CodeGen<'program>
 			self.code_generator.code_writer.write(format!(") -> outputs::{};\n", external_cpu_function.name));
 		}
 		self.code_generator.code_writer.write(format!("}}\n"));
+		*/
 		
-
+/*
 		self.code_generator.code_writer.write(format!("pub fn run<F>(device : &mut wgpu::Device, queue : &mut wgpu::Queue, cpu_functions : & F"));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in funclet.input_types.iter().enumerate()
@@ -501,7 +588,7 @@ impl<'program> CodeGen<'program>
 		}
 
 		self.code_generator.code_writer.write(format!(" ) -> outputs::{}\n\twhere F : CpuFunctions", pipeline_name));
-		self.code_generator.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
+		self.code_generator.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());*/
 
 		for (node_id, node) in funclet.nodes.iter().enumerate()
 		{
@@ -567,23 +654,27 @@ impl<'program> CodeGen<'program>
 			ir::TailEdge::Return { return_values } =>
 			{
 				assert_eq!(return_values.len(), funclet.output_types.len());
-				self.code_generator.code_writer.write(format!("return outputs::{} {{", pipeline_name));
+				let mut output_var_ids = Vec::<usize>::new();
+				/*self.code_generator.code_writer.write(format!("return outputs::{} {{", pipeline_name));
 				for (return_index, node_index) in return_values.iter().enumerate()
 				{
 					self.code_generator.code_writer.write(format!("field_{} : var_{}, ", return_index, force_single_output(& node_results[* node_index])));
 				}
-				self.code_generator.code_writer.write(format!("}};"));
+				self.code_generator.code_writer.write(format!("}};"));*/
+				for (return_index, node_index) in return_values.iter().enumerate()
+				{
+					output_var_ids.push(force_single_output(& node_results[* node_index]));
+				}
+				self.code_generator.build_return(output_var_ids.as_slice());
 			}
 		}
 
-		self.code_generator.code_writer.write("}\n".to_string());
-
-		self.code_generator.code_writer.end_module();
+		self.code_generator.end_pipeline();
 	}
 
 	pub fn generate<'codegen>(& 'codegen mut self) -> String
 	{
-		{
+		/*{
 			let mut type_ids = Vec::<ir::TypeId>::new();
 
 			for (type_id, _) in self.program.types.iter()
@@ -598,7 +689,7 @@ impl<'program> CodeGen<'program>
 				self.generate_type_definition(* type_id);
 				self.code_generator.code_writer.write_str("\n");
 			}
-		}
+		}*/
 
 		for pipeline in self.program.pipelines.iter()
 		{
