@@ -16,10 +16,8 @@ struct TypeBindingInfo
 
 pub struct CodeGenerator<'program>
 {
-	//code_string : String,
 	type_code_writer : CodeWriter,
 	code_writer : CodeWriter, // the "everything else" for now
-	//types : HashMap<usize, ir::Type>,
 	types : Arena<ir::Type>,
 	external_cpu_functions : & 'program [ir::ExternalCpuFunction],
 	external_gpu_functions : & 'program [ir::ExternalGpuFunction],
@@ -428,15 +426,13 @@ impl<'program> CodeGenerator<'program>
 			output_temp_variables.push(output_temp_var_id);
 			let type_binding_info = self.get_type_binding_info(type_id); 
 			let type_name = self.get_type_name(type_id);
-			//self.code_writer.write_str("{\n");
+			
 			self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
 			self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
 			self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
 			self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
 			self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
 			self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_temp_var_id, type_name, range_var_id));
-			//self.code_writer.write(format!("let var_{} = unsafe {{ let mut temp = std::mem::zeroed::<{}>(); std::mempcy(std::mem::transmute::<& {}, & [u8; {}]>(& temp), var_{}.as_ptr(), var_{}.len()); temp }};\n", output_var_id, type_name, type_name, type_binding_info.size, range_var_id, range_var_id));
-			//self.code_writer.write_str("}\n");
 		}
 
 		self.code_writer.write(format!("("));

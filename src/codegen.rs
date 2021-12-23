@@ -33,7 +33,6 @@ impl VariableTracker
 	}
 }
 
-//#[derive(Default)]
 pub struct CodeGen<'program>
 {
 	program : & 'program ir::Program,
@@ -46,21 +45,6 @@ impl<'program> CodeGen<'program>
 	{
 		Self { program : & program, code_generator : CodeGenerator::new(program.types.clone(), program.external_cpu_functions.as_slice(), program.external_gpu_functions.as_slice()) }
 	}
-
-	/*fn generate_type_definition(&mut self, type_id : ir::TypeId)
-	{
-		self.code_generator.generate_type_definition(type_id)
-	}
-
-	fn get_type_name(& self, type_id : ir::TypeId) -> String
-	{
-		self.code_generator.get_type_name(type_id)
-	}
-
-	fn get_type_binding_info(&self, type_id : ir::TypeId) -> TypeBindingInfo
-	{
-		self.code_generator.get_type_binding_info(type_id)
-	}*/
 
 	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
@@ -84,14 +68,11 @@ impl<'program> CodeGen<'program>
 		}
 
 		let mut node_results = Vec::<NodeResult>::new();
-		//let device_var = self.code_generator.variable_tracker.generate();
-		//let queue_var = self.code_generator.variable_tracker.generate();
 
 		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);		
 
 		for (node_id, node) in funclet.nodes.iter().enumerate()
 		{
-			//self.code_generator.code_writer.write(format!("// node #{}: {:?}\n", node_id, node));
 			self.code_generator.insert_comment(format!(" node #{}: {:?}", node_id, node).as_str());
 			let node_result = match node
 			{
