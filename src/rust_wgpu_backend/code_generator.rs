@@ -108,7 +108,7 @@ struct SubmissionEncodingState
 {
 	//shader_module : shadergen::ShaderModule,
 	//bindings : BTreeMap<(usize, usize), Binding>,
-	commands : Vec<Command>
+	commands : Vec<Command>,
 }
 
 struct TypeBindingInfo
@@ -128,7 +128,9 @@ pub struct CodeGenerator<'program>
 	variable_tracker : VariableTracker,
 	active_pipeline_name : Option<String>,
 	use_recording : bool,
-	active_submission_encoding_state : Option<SubmissionEncodingState>
+	active_submission_encoding_state : Option<SubmissionEncodingState>,
+	active_external_gpu_function_id : Option<ir::ExternalGpuFunctionId>,
+	active_shader_module : Option<shadergen::ShaderModule>
 }
 
 impl<'program> CodeGenerator<'program>
@@ -139,7 +141,7 @@ impl<'program> CodeGenerator<'program>
 		let type_code_writer = CodeWriter::new();
 		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, use_recording : true, active_submission_encoding_state : None}
+		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module : None}
 	}
 
 	pub fn finish(&mut self) -> String
@@ -170,6 +172,43 @@ impl<'program> CodeGenerator<'program>
 		}
 
 		None
+	}
+
+	fn set_active_external_gpu_function(&mut self, external_function_id : ir::ExternalGpuFunctionId)
+	{
+		if let Some(previous_id) = self.active_external_gpu_function_id.as_ref()
+		{
+			if * previous_id == external_function_id
+			{
+				return;
+			}
+		}
+
+		self.active_external_gpu_function_id = None;
+
+		let external_gpu_function = & self.external_gpu_functions[external_function_id];
+
+		let mut shader_module = match & external_gpu_function.shader_module_content
+		{
+			ir::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
+		};
+
+		self.code_writer.write_str("let module = device.create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
+		/*match & external_gpu_function.shader_module_content
+		{
+			ir::ShaderModuleContent::Wgsl(text) => self.code_writer.write_str(text.as_str())
+		}*/
+		self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
+		self.code_writer.write_str("\"))});\n");
+
+		self.active_external_gpu_function_id = Some(external_function_id);
+		self.active_shader_module = Some(shader_module);
+	}
+
+	fn reset_pipeline(&mut self)
+	{
+		self.active_external_gpu_function_id = None;
+		self.active_shader_module = None;
 	}
 
 	/*fn get_var_name(&mut self, var_id : usize) -> String
@@ -265,7 +304,7 @@ impl<'program> CodeGenerator<'program>
 
 		if let Some(submission_encoding_state) = active_submission_encoding_state
 		{
-			let mut previous_external_function_id : Option<ir::ExternalGpuFunctionId> = None;
+			//let mut previous_external_function_id : Option<ir::ExternalGpuFunctionId> = None;
 			for command in submission_encoding_state.commands.iter()
 			{
 				match command
@@ -278,39 +317,7 @@ impl<'program> CodeGenerator<'program>
 						let external_gpu_function = & self.external_gpu_functions[* external_function_id];
 						assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 
-						previous_external_function_id = if let Some(previous_id) = previous_external_function_id.as_ref()
-						{
-							if * previous_id == * external_function_id
-							{
-								Some(* previous_id)
-							}
-							else
-							{
-								None
-							}
-						}
-						else
-						{
-							None
-						};
-
-						if previous_external_function_id.is_none()
-						{
-							let mut shader_module = match & external_gpu_function.shader_module_content
-							{
-								ir::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
-							};
-
-							self.code_writer.write_str("let module = device.create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
-							/*match & external_gpu_function.shader_module_content
-							{
-								ir::ShaderModuleContent::Wgsl(text) => self.code_writer.write_str(text.as_str())
-							}*/
-							self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
-							self.code_writer.write_str("\"))});\n");
-
-							previous_external_function_id = Some(* external_function_id);
-						}
+						self.set_active_external_gpu_function(* external_function_id);
 
 						let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
 						let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
@@ -483,6 +490,8 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn begin_pipeline(&mut self, pipeline_name : &str, input_types : &[ir::TypeId], output_types : &[ir::TypeId]) -> Box<[usize]>
 	{
+		self.reset_pipeline();
+
 		self.active_pipeline_name = Some(String::from(pipeline_name));
 		self.code_writer.begin_module(pipeline_name);
 
@@ -564,6 +573,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write("}\n".to_string());
 		self.code_writer.end_module();
 		self.active_pipeline_name = None;
+		self.reset_pipeline();
 	}
 
 	fn generate_type_definition(&mut self, type_id : ir::TypeId)
