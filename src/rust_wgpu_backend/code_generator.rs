@@ -205,6 +205,107 @@ impl<'program> CodeGenerator<'program>
 		self.active_shader_module = Some(shader_module);
 	}
 
+	fn set_active_bindings(&mut self, argument_vars : &[usize], output_vars : &[usize]) -> Box<[usize]>
+	{
+		let external_function_id = self.active_external_gpu_function_id.unwrap();
+		let external_gpu_function = & self.external_gpu_functions[external_function_id];
+
+		let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
+		let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
+		let mut input_binding_map = std::collections::BTreeMap::<usize, usize>::new();
+
+		for resource_binding in external_gpu_function.resource_bindings.iter()
+		{
+			assert_eq!(resource_binding.group, 0);
+			bindings.insert(resource_binding.binding, (resource_binding.input, resource_binding.output));
+
+			if let Some(input) = resource_binding.input
+			{
+				input_binding_map.insert(input, resource_binding.binding);
+			}
+
+			if let Some(output) = resource_binding.output
+			{
+				output_binding_map.insert(output, resource_binding.binding);
+			}
+		}
+
+		let mut input_staging_variables = Vec::<usize>::new();
+		assert_eq!(argument_vars.len(), external_gpu_function.input_types.len());
+		for input_index in 0 .. external_gpu_function.input_types.len()
+		{
+			let type_id = external_gpu_function.input_types[input_index];
+			//let variable_id = self.build_create_buffer_with_data(argument_vars[input_index], type_id);
+			let input_variable_id = argument_vars[input_index];
+
+			let binding = input_binding_map[& input_index];
+			if let (_, Some(_output)) = bindings[& binding]
+			{
+				let variable_id = self.build_create_buffer_with_buffer_data(input_variable_id, type_id);
+				input_staging_variables.push(variable_id);
+			}
+			else
+			{
+				input_staging_variables.push(input_variable_id);
+			}
+		}
+
+		let mut output_staging_variables = Vec::<usize>::new();
+		for output_index in 0 .. external_gpu_function.output_types.len()
+		{
+			let binding = output_binding_map[& output_index];
+			if let (Some(input), _) = bindings[& binding]
+			{
+				let variable_id = input_staging_variables[input];
+				output_staging_variables.push(variable_id);
+			}
+			else
+			{
+				let type_id = external_gpu_function.output_types[output_index];
+				let variable_id = self.build_create_buffer(type_id);
+				output_staging_variables.push(variable_id);
+			}
+		};
+
+		self.code_writer.write("let bind_group_layout_entries = [".to_string());
+		for (binding, (_input_opt, output_opt)) in bindings.iter()
+		{
+			let is_read_only : bool = output_opt.is_none();
+			self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
+			self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : {} }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding, is_read_only));
+			self.code_writer.write(" }, ".to_string());
+		}
+		self.code_writer.write("];\n".to_string());
+
+		self.code_writer.write("let bind_group_layout = device.create_bind_group_layout(& wgpu::BindGroupLayoutDescriptor { label : None, entries : & bind_group_layout_entries});\n".to_string());
+
+		self.code_writer.write("let entries = [".to_string());
+		for (binding, (input_opt, output_opt)) in bindings.iter()
+		{
+			let mut variable_id : Option<usize> = None;
+			
+			if let Some(input) = input_opt
+			{
+				variable_id = Some(input_staging_variables[*input]);
+			}
+
+			if let Some(output) = output_opt
+			{
+				variable_id = Some(output_staging_variables[*output]);
+			}
+
+			assert_eq!(variable_id.is_some(), true, "Binding must be input or output");
+			self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, variable_id.unwrap()));
+		}
+		self.code_writer.write("];\n".to_string());
+		self.code_writer.write("let bind_group = device.create_bind_group(& wgpu::BindGroupDescriptor {label : None, layout : & bind_group_layout, entries : & entries});\n".to_string());
+
+		self.code_writer.write("let pipeline_layout = device.create_pipeline_layout(& wgpu::PipelineLayoutDescriptor { label : None, bind_group_layouts : & [& bind_group_layout], push_constant_ranges : & []});\n".to_string());
+		self.code_writer.write("let pipeline = device.create_compute_pipeline(& wgpu::ComputePipelineDescriptor {label : None, layout : Some(& pipeline_layout), module : & module, entry_point : & \"main\"});\n".to_string());
+
+		output_staging_variables.into_boxed_slice()
+	}
+
 	fn reset_pipeline(&mut self)
 	{
 		self.active_external_gpu_function_id = None;
@@ -304,7 +405,6 @@ impl<'program> CodeGenerator<'program>
 
 		if let Some(submission_encoding_state) = active_submission_encoding_state
 		{
-			//let mut previous_external_function_id : Option<ir::ExternalGpuFunctionId> = None;
 			for command in submission_encoding_state.commands.iter()
 			{
 				match command
@@ -318,63 +418,7 @@ impl<'program> CodeGenerator<'program>
 						assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 
 						self.set_active_external_gpu_function(* external_function_id);
-
-						let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
-						let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
-						let mut input_binding_map = std::collections::BTreeMap::<usize, usize>::new();
-
-						for resource_binding in external_gpu_function.resource_bindings.iter()
-						{
-							assert_eq!(resource_binding.group, 0);
-							bindings.insert(resource_binding.binding, (resource_binding.input, resource_binding.output));
-
-							if let Some(input) = resource_binding.input
-							{
-								input_binding_map.insert(input, resource_binding.binding);
-							}
-
-							if let Some(output) = resource_binding.output
-							{
-								output_binding_map.insert(output, resource_binding.binding);
-							}
-						}
-
-						let mut input_staging_variables = Vec::<usize>::new();
-						assert_eq!(argument_vars.len(), external_gpu_function.input_types.len());
-						for input_index in 0 .. external_gpu_function.input_types.len()
-						{
-							let type_id = external_gpu_function.input_types[input_index];
-							//let variable_id = self.build_create_buffer_with_data(argument_vars[input_index], type_id);
-							let input_variable_id = argument_vars[input_index];
-
-							let binding = input_binding_map[& input_index];
-							if let (_, Some(_output)) = bindings[& binding]
-							{
-								let variable_id = self.build_create_buffer_with_buffer_data(input_variable_id, type_id);
-								input_staging_variables.push(variable_id);
-							}
-							else
-							{
-								input_staging_variables.push(input_variable_id);
-							}
-						}
-
-						let mut output_staging_variables = Vec::<usize>::new();
-						for output_index in 0 .. external_gpu_function.output_types.len()
-						{
-							let binding = output_binding_map[& output_index];
-							if let (Some(input), _) = bindings[& binding]
-							{
-								let variable_id = input_staging_variables[input];
-								output_staging_variables.push(variable_id);
-							}
-							else
-							{
-								let type_id = external_gpu_function.output_types[output_index];
-								let variable_id = self.build_create_buffer(type_id);
-								output_staging_variables.push(variable_id);
-							}
-						};
+						let output_staging_variables = self.set_active_bindings(argument_vars, output_vars);
 						
 						//let mut output_variables = Vec::<usize>::new();
 						self.code_writer.write(format!("let ("));
@@ -389,40 +433,7 @@ impl<'program> CodeGenerator<'program>
 
 						self.code_writer.write("{\n".to_string());
 
-						self.code_writer.write("let bind_group_layout_entries = [".to_string());
-						for (binding, (_input_opt, output_opt)) in bindings.iter()
-						{
-							let is_read_only : bool = output_opt.is_none();
-							self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
-							self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : {} }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding, is_read_only));
-							self.code_writer.write(" }, ".to_string());
-						}
-						self.code_writer.write("];\n".to_string());
-
-						self.code_writer.write("let bind_group_layout = device.create_bind_group_layout(& wgpu::BindGroupLayoutDescriptor { label : None, entries : & bind_group_layout_entries});\n".to_string());
-						self.code_writer.write("let pipeline_layout = device.create_pipeline_layout(& wgpu::PipelineLayoutDescriptor { label : None, bind_group_layouts : & [& bind_group_layout], push_constant_ranges : & []});\n".to_string());
-						self.code_writer.write("let pipeline = device.create_compute_pipeline(& wgpu::ComputePipelineDescriptor {label : None, layout : Some(& pipeline_layout), module : & module, entry_point : & \"main\"});\n".to_string());
 						self.code_writer.write("let mut command_encoder = device.create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
-						self.code_writer.write("let entries = [".to_string());
-						for (binding, (input_opt, output_opt)) in bindings.iter()
-						{
-							let mut variable_id : Option<usize> = None;
-							
-							if let Some(input) = input_opt
-							{
-								variable_id = Some(input_staging_variables[*input]);
-							}
-
-							if let Some(output) = output_opt
-							{
-								variable_id = Some(output_staging_variables[*output]);
-							}
-
-							assert_eq!(variable_id.is_some(), true, "Binding must be input or output");
-							self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, variable_id.unwrap()));
-						}
-						self.code_writer.write("];\n".to_string());
-						self.code_writer.write("let bind_group = device.create_bind_group(& wgpu::BindGroupDescriptor {label : None, layout : & bind_group_layout, entries : & entries});\n".to_string());
 						
 						self.code_writer.write_str("{\n");
 						self.code_writer.write("let mut compute_pass = command_encoder.begin_compute_pass(& wgpu::ComputePassDescriptor {label : None});\n".to_string());
