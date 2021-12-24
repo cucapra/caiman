@@ -6,31 +6,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
 use std::fmt::Write;
-use crate::id_generator::IdGenerator;
-
-enum VariableState
-{
-	Dead,
-}
-
-#[derive(Default)]
-struct VariableTracker
-{
-	id_generator : IdGenerator
-}
-
-impl VariableTracker
-{
-	fn new() -> Self
-	{
-		Self { id_generator : IdGenerator::new() }
-	}
-
-	fn generate(&mut self) -> usize
-	{
-		self.id_generator.generate()
-	}
-}
 
 pub struct CodeGen<'program>
 {
