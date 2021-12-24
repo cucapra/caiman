@@ -15,24 +15,29 @@ enum ResourceUsage
 }
 
 // Tracks where the data is
+#[derive(PartialEq, Eq, Debug)]
 enum VariableState
 {
 	Dead,
 	InEncoding,
+	InQueue,
+	OnGpu,
+	Local,
 }
 
 #[derive(Default)]
 struct VariableTracker
 {
 	id_generator : IdGenerator,
-	variable_states : HashMap<usize, VariableState>
+	variable_states : HashMap<usize, VariableState>,
+	variable_types : HashMap<usize, ir::TypeId>
 }
 
 impl VariableTracker
 {
 	fn new() -> Self
 	{
-		Self { id_generator : IdGenerator::new(), variable_states : HashMap::<usize, VariableState>::new() }
+		Self { id_generator : IdGenerator::new(), variable_states : HashMap::<usize, VariableState>::new(), variable_types : HashMap::<usize, ir::TypeId>::new() }
 	}
 
 	fn generate(&mut self) -> usize
@@ -45,6 +50,44 @@ impl VariableTracker
 		let id = self.generate();
 		self.variable_states.insert(id, state);
 		id
+	}
+
+	fn create_local(&mut self, type_id : ir::TypeId) -> usize
+	{
+		let id = self.create(VariableState::Local);
+		self.variable_types.insert(id, type_id);
+		id
+	}
+
+	fn create_in_encoding(&mut self, type_id : ir::TypeId) -> usize
+	{
+		let id = self.create(VariableState::InEncoding);
+		self.variable_types.insert(id, type_id);
+		id
+	}
+
+	fn transition_to_queue(&mut self, var_id : usize)
+	{
+		if let VariableState::InEncoding = self.variable_states[& var_id]
+		{
+			self.variable_states.insert(var_id, VariableState::InQueue);
+		}
+		else
+		{
+			panic!("Var {} is not in encoding", var_id);
+		}
+	}
+
+	fn transition_to_on_gpu(&mut self, var_id : usize)
+	{
+		assert_eq!(self.variable_states[& var_id], VariableState::InQueue);
+		self.variable_states.insert(var_id, VariableState::OnGpu);
+	}
+
+	fn transition_to_local(&mut self, var_id : usize)
+	{
+		assert_eq!(self.variable_states[& var_id], VariableState::OnGpu);
+		self.variable_states.insert(var_id, VariableState::Local);
 	}
 }
 
@@ -118,7 +161,7 @@ impl<'program> CodeGenerator<'program>
 			let external_gpu_function = & self.external_gpu_functions[external_function_id];
 			for (output_index, output_type_id) in external_gpu_function.output_types.iter().enumerate()
 			{
-				let variable_id = self.variable_tracker.create(VariableState::InEncoding);
+				let variable_id = self.variable_tracker.create_in_encoding(* output_type_id);
 				output_vars.push(variable_id);
 			}
 
@@ -129,10 +172,45 @@ impl<'program> CodeGenerator<'program>
 		None
 	}
 
-	/*fn prepare_submission(&mut self)
+	/*fn get_var_name(&mut self, var_id : usize) -> String
 	{
 
 	}*/
+
+	fn make_local(&mut self, variable_ids : &[usize])
+	{
+		for variable_id in variable_ids.iter()
+		{
+			match self.variable_tracker.variable_states[variable_id]
+			{
+				VariableState::Local => (),
+				VariableState::OnGpu =>
+				{
+					let type_id = self.variable_tracker.variable_types[variable_id];
+					let range_var_id = self.variable_tracker.generate();
+					let output_temp_var_id = self.variable_tracker.generate();
+					let slice_var_id = self.variable_tracker.generate();
+					let future_var_id = self.variable_tracker.generate();
+					let type_binding_info = self.get_type_binding_info(type_id); 
+					let type_name = self.get_type_name(type_id);
+					
+					self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, variable_id));
+					self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
+					self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
+					self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
+					self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
+					self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", variable_id, type_name, range_var_id));
+				}
+				_ => panic!("Unimplemented")
+			}
+
+			self.variable_tracker.variable_states.insert(* variable_id, VariableState::Local);
+			/*let type_id = match variable_state
+			{
+
+			};*/
+		}
+	}
 
 	fn flush_submission(&mut self)
 	{
@@ -147,6 +225,9 @@ impl<'program> CodeGenerator<'program>
 				{
 					Command::DispatchCompute{external_function_id, dimension_vars, argument_vars, output_vars} =>
 					{
+						self.make_local(dimension_vars);
+						self.make_local(argument_vars);
+
 						let external_gpu_function = & self.external_gpu_functions[* external_function_id];
 						assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 
@@ -277,16 +358,18 @@ impl<'program> CodeGenerator<'program>
 							let output_temp_var_id = self.variable_tracker.generate();
 							let slice_var_id = self.variable_tracker.generate();
 							let future_var_id = self.variable_tracker.generate();
-							output_temp_variables.push(output_temp_var_id);
+							//output_temp_variables.push(output_temp_var_id);
 							let type_binding_info = self.get_type_binding_info(type_id); 
 							let type_name = self.get_type_name(type_id);
+
+							output_temp_variables.push(staging_var_id);
 							
-							self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
+							/*self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
 							self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
 							self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
 							self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
 							self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
-							self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_temp_var_id, type_name, range_var_id));
+							self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_temp_var_id, type_name, range_var_id));*/
 						}
 
 						self.code_writer.write(format!("("));
@@ -297,6 +380,13 @@ impl<'program> CodeGenerator<'program>
 						self.code_writer.write(format!(")"));
 
 						self.code_writer.write("};\n".to_string());
+
+						for var_id in output_vars.iter()
+						{
+							self.variable_tracker.transition_to_queue(* var_id);
+							self.variable_tracker.transition_to_on_gpu(* var_id);
+							//self.variable_tracker.transition_to_local(* var_id);
+						}
 
 						//output_variables.into_boxed_slice()
 					}
@@ -363,7 +453,8 @@ impl<'program> CodeGenerator<'program>
 		{
 			self.code_writer.write(", ".to_string());
 
-			let variable_id = self.variable_tracker.generate();
+			//let variable_id = self.variable_tracker.generate();
+			let variable_id = self.variable_tracker.create_local(* input_type);
 			argument_variable_ids.push(variable_id);
 			let type_name = self.get_type_name(*input_type);
 			self.code_writer.write(format!("var_{} : {}", variable_id, type_name));
@@ -381,6 +472,7 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn build_return(&mut self, output_var_ids : &[usize])
 	{
+		self.make_local(output_var_ids);
 		self.code_writer.write(format!("return outputs::{} {{", self.active_pipeline_name.as_ref().unwrap().as_str()));
 		for (return_index, var_id) in output_var_ids.iter().enumerate()
 		{
@@ -499,16 +591,18 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn build_constant_integer(&mut self, value : i64, type_id : ir::TypeId) -> usize
 	{
-		let variable_id = self.variable_tracker.generate();
+		//let variable_id = self.variable_tracker.generate();
 		self.generate_type_definition(type_id);
+		let variable_id = self.variable_tracker.create_local(type_id);
 		write!(self.code_writer, "let var_{} : {} = {};\n", variable_id, self.get_type_name(type_id), value);
 		variable_id
 	}
 
 	pub fn build_constant_unsigned_integer(&mut self, value : u64, type_id : ir::TypeId) -> usize
 	{
-		let variable_id = self.variable_tracker.generate();
+		//let variable_id = self.variable_tracker.generate();
 		self.generate_type_definition(type_id);
+		let variable_id = self.variable_tracker.create_local(type_id);
 		write!(self.code_writer, "let var_{} : {} = {};\n", variable_id, self.get_type_name(type_id), value);
 		variable_id
 	}
@@ -528,9 +622,10 @@ impl<'program> CodeGenerator<'program>
 		}
 		self.code_writer.write(format!("let var_{} = cpu_functions.{}({});\n", call_result_var, external_cpu_function.name, argument_string));
 		let mut output_variables = Vec::<usize>::new();
-		for i in 0 .. external_cpu_function.output_types.len()
+		for (i, output_type) in external_cpu_function.output_types.iter().enumerate()
 		{
-			let var = self.variable_tracker.generate();
+			//let var = self.variable_tracker.generate();
+			let var = self.variable_tracker.create_local(* output_type);
 			output_variables.push(var);
 			self.code_writer.write(format!("let var_{} = var_{}.field_{};\n", var, call_result_var, i));
 		};
