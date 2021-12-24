@@ -398,6 +398,84 @@ impl<'program> CodeGenerator<'program>
 
 	}
 
+	fn generate_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
+	{
+		self.require_local(dimension_vars);
+		self.require_on_gpu(argument_vars);
+
+		let external_gpu_function = & self.external_gpu_functions[external_function_id];
+		assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
+
+		self.set_active_external_gpu_function(external_function_id);
+		let output_staging_variables = self.set_active_bindings(argument_vars, output_vars);
+		
+		//let mut output_variables = Vec::<usize>::new();
+		self.code_writer.write(format!("let ("));
+		for output_index in 0 .. external_gpu_function.output_types.len()
+		{
+			//let var_id = self.variable_tracker.generate();
+			//output_variables.push(var_id);
+			let var_id = output_vars[output_index];
+			self.code_writer.write(format!("var_{}, ", var_id));
+		}
+		self.code_writer.write(format!(") = "));
+
+		self.code_writer.write("{\n".to_string());
+
+		self.code_writer.write("let mut command_encoder = device.create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
+		
+		self.code_writer.write_str("{\n");
+		self.code_writer.write("let mut compute_pass = command_encoder.begin_compute_pass(& wgpu::ComputePassDescriptor {label : None});\n".to_string());
+		self.code_writer.write("compute_pass.set_pipeline(& pipeline);\n".to_string());
+		self.code_writer.write("compute_pass.set_bind_group(0, & bind_group, & []);\n".to_string());
+		self.code_writer.write(format!("compute_pass.dispatch(var_{}.try_into().unwrap(), var_{}.try_into().unwrap(), var_{}.try_into().unwrap());\n", dimension_vars[0], dimension_vars[1], dimension_vars[2]));
+		self.code_writer.write_str("}\n");
+
+		self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
+		self.code_writer.write("queue.submit([command_buffer]);\n".to_string());
+		self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
+		self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
+
+		let mut output_temp_variables = Vec::<usize>::new();
+		for output_index in 0 .. external_gpu_function.output_types.len()
+		{
+			let staging_var_id = output_staging_variables[output_index];
+			let type_id = external_gpu_function.output_types[output_index];
+			let range_var_id = self.variable_tracker.generate();
+			let output_temp_var_id = self.variable_tracker.generate();
+			let slice_var_id = self.variable_tracker.generate();
+			let future_var_id = self.variable_tracker.generate();
+			//output_temp_variables.push(output_temp_var_id);
+			let type_binding_info = self.get_type_binding_info(type_id); 
+			let type_name = self.get_type_name(type_id);
+
+			output_temp_variables.push(staging_var_id);
+			
+			/*self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
+			self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
+			self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
+			self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
+			self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
+			self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_temp_var_id, type_name, range_var_id));*/
+		}
+
+		self.code_writer.write(format!("("));
+		for output_temp_var_id in output_temp_variables.iter()
+		{
+			self.code_writer.write(format!("var_{}, ", output_temp_var_id));
+		}
+		self.code_writer.write(format!(")"));
+
+		self.code_writer.write("};\n".to_string());
+
+		for var_id in output_vars.iter()
+		{
+			self.variable_tracker.transition_to_queue(* var_id);
+			self.variable_tracker.transition_to_on_gpu(* var_id);
+			//self.variable_tracker.transition_to_local(* var_id);
+		}
+	}
+
 	fn flush_submission(&mut self)
 	{
 		let mut active_submission_encoding_state = None;
@@ -411,80 +489,7 @@ impl<'program> CodeGenerator<'program>
 				{
 					Command::DispatchCompute{external_function_id, dimension_vars, argument_vars, output_vars} =>
 					{
-						self.require_local(dimension_vars);
-						self.require_on_gpu(argument_vars);
-
-						let external_gpu_function = & self.external_gpu_functions[* external_function_id];
-						assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
-
-						self.set_active_external_gpu_function(* external_function_id);
-						let output_staging_variables = self.set_active_bindings(argument_vars, output_vars);
-						
-						//let mut output_variables = Vec::<usize>::new();
-						self.code_writer.write(format!("let ("));
-						for output_index in 0 .. external_gpu_function.output_types.len()
-						{
-							//let var_id = self.variable_tracker.generate();
-							//output_variables.push(var_id);
-							let var_id = output_vars[output_index];
-							self.code_writer.write(format!("var_{}, ", var_id));
-						}
-						self.code_writer.write(format!(") = "));
-
-						self.code_writer.write("{\n".to_string());
-
-						self.code_writer.write("let mut command_encoder = device.create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
-						
-						self.code_writer.write_str("{\n");
-						self.code_writer.write("let mut compute_pass = command_encoder.begin_compute_pass(& wgpu::ComputePassDescriptor {label : None});\n".to_string());
-						self.code_writer.write("compute_pass.set_pipeline(& pipeline);\n".to_string());
-						self.code_writer.write("compute_pass.set_bind_group(0, & bind_group, & []);\n".to_string());
-						self.code_writer.write(format!("compute_pass.dispatch(var_{}.try_into().unwrap(), var_{}.try_into().unwrap(), var_{}.try_into().unwrap());\n", dimension_vars[0], dimension_vars[1], dimension_vars[2]));
-						self.code_writer.write_str("}\n");
-
-						self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
-						self.code_writer.write("queue.submit([command_buffer]);\n".to_string());
-						self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
-						self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
-
-						let mut output_temp_variables = Vec::<usize>::new();
-						for output_index in 0 .. external_gpu_function.output_types.len()
-						{
-							let staging_var_id = output_staging_variables[output_index];
-							let type_id = external_gpu_function.output_types[output_index];
-							let range_var_id = self.variable_tracker.generate();
-							let output_temp_var_id = self.variable_tracker.generate();
-							let slice_var_id = self.variable_tracker.generate();
-							let future_var_id = self.variable_tracker.generate();
-							//output_temp_variables.push(output_temp_var_id);
-							let type_binding_info = self.get_type_binding_info(type_id); 
-							let type_name = self.get_type_name(type_id);
-
-							output_temp_variables.push(staging_var_id);
-							
-							/*self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
-							self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
-							self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
-							self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
-							self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
-							self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_temp_var_id, type_name, range_var_id));*/
-						}
-
-						self.code_writer.write(format!("("));
-						for output_temp_var_id in output_temp_variables.iter()
-						{
-							self.code_writer.write(format!("var_{}, ", output_temp_var_id));
-						}
-						self.code_writer.write(format!(")"));
-
-						self.code_writer.write("};\n".to_string());
-
-						for var_id in output_vars.iter()
-						{
-							self.variable_tracker.transition_to_queue(* var_id);
-							self.variable_tracker.transition_to_on_gpu(* var_id);
-							//self.variable_tracker.transition_to_local(* var_id);
-						}
+						self.generate_compute_dispatch(* external_function_id, dimension_vars, argument_vars, output_vars);
 					}
 				}
 			}
