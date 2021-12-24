@@ -177,7 +177,7 @@ impl<'program> CodeGenerator<'program>
 
 	}*/
 
-	fn make_local(&mut self, variable_ids : &[usize])
+	fn require_local(&mut self, variable_ids : &[usize])
 	{
 		for variable_id in variable_ids.iter()
 		{
@@ -218,7 +218,7 @@ impl<'program> CodeGenerator<'program>
 		}
 	}
 
-	fn make_on_gpu(&mut self, variable_ids : &[usize])
+	fn require_on_gpu(&mut self, variable_ids : &[usize])
 	{
 		for variable_id in variable_ids.iter()
 		{
@@ -240,7 +240,6 @@ impl<'program> CodeGenerator<'program>
 					self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", temp_id, type_binding_info.size));
 					self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", temp_id, variable_id));
 					self.code_writer.write(format!("let var_{} = var_{};\n", variable_id, temp_id));
-
 				}
 				VariableState::OnGpu => (),
 				_ => panic!("Unimplemented")
@@ -252,6 +251,11 @@ impl<'program> CodeGenerator<'program>
 
 			};*/
 		}
+	}
+
+	fn require_exclusive(&mut self, variable_ids : &[usize])
+	{
+
 	}
 
 	fn flush_submission(&mut self)
@@ -268,8 +272,8 @@ impl<'program> CodeGenerator<'program>
 				{
 					Command::DispatchCompute{external_function_id, dimension_vars, argument_vars, output_vars} =>
 					{
-						self.make_local(dimension_vars);
-						self.make_on_gpu(argument_vars);
+						self.require_local(dimension_vars);
+						self.require_on_gpu(argument_vars);
 
 						let external_gpu_function = & self.external_gpu_functions[* external_function_id];
 						assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
@@ -334,8 +338,18 @@ impl<'program> CodeGenerator<'program>
 						{
 							let type_id = external_gpu_function.input_types[input_index];
 							//let variable_id = self.build_create_buffer_with_data(argument_vars[input_index], type_id);
-							let variable_id = argument_vars[input_index];
-							input_staging_variables.push(variable_id);
+							let input_variable_id = argument_vars[input_index];
+
+							let binding = input_binding_map[& input_index];
+							if let (_, Some(_output)) = bindings[& binding]
+							{
+								let variable_id = self.build_create_buffer_with_buffer_data(input_variable_id, type_id);
+								input_staging_variables.push(variable_id);
+							}
+							else
+							{
+								input_staging_variables.push(input_variable_id);
+							}
 						}
 
 						let mut output_staging_variables = Vec::<usize>::new();
@@ -344,7 +358,6 @@ impl<'program> CodeGenerator<'program>
 							let binding = output_binding_map[& output_index];
 							if let (Some(input), _) = bindings[& binding]
 							{
-								// There might be a bug here with the reuse across gpu -> gpu boundaries
 								let variable_id = input_staging_variables[input];
 								output_staging_variables.push(variable_id);
 							}
@@ -537,7 +550,7 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn build_return(&mut self, output_var_ids : &[usize])
 	{
-		self.make_local(output_var_ids);
+		self.require_local(output_var_ids);
 		self.code_writer.write(format!("return outputs::{} {{", self.active_pipeline_name.as_ref().unwrap().as_str()));
 		for (return_index, var_id) in output_var_ids.iter().enumerate()
 		{
@@ -703,7 +716,7 @@ impl<'program> CodeGenerator<'program>
 
 		let type_binding_info = self.get_type_binding_info(type_id); 
 		let type_name = self.get_type_name(type_id);
-		self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+		self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
 		variable_id
 	}
 
@@ -712,8 +725,26 @@ impl<'program> CodeGenerator<'program>
 		let variable_id = self.variable_tracker.generate();
 		let type_binding_info = self.get_type_binding_info(type_id); 
 		let type_name = self.get_type_name(type_id);
-		self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+		self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
 		self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, data_var));
+		variable_id
+	}
+
+	fn build_create_buffer_with_buffer_data(&mut self, data_var : usize, type_id : ir::TypeId) -> usize
+	{
+		let variable_id = self.variable_tracker.generate();
+		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_name = self.get_type_name(type_id);
+		self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", variable_id, type_binding_info.size));
+		write!(self.code_writer, "{{\n");
+		self.code_writer.write("let mut command_encoder = device.create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
+		write!(self.code_writer, "command_encoder.copy_buffer_to_buffer(& var_{}, 0, & var_{}, 0, {});\n", data_var, variable_id, type_binding_info.size);
+		self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
+		self.code_writer.write("queue.submit([command_buffer]);\n".to_string());
+		self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
+		self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
+		write!(self.code_writer, "}}\n");
+		//self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, data_var));
 		variable_id
 	}
 
