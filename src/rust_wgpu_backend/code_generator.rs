@@ -186,7 +186,7 @@ impl<'program> CodeGenerator<'program>
 				VariableState::InEncoding => self.flush_submission(),
 				_ => ()
 			}
-			
+
 			match self.variable_tracker.variable_states[variable_id]
 			{
 				VariableState::Local => (),
@@ -218,6 +218,42 @@ impl<'program> CodeGenerator<'program>
 		}
 	}
 
+	fn make_on_gpu(&mut self, variable_ids : &[usize])
+	{
+		for variable_id in variable_ids.iter()
+		{
+			/*match self.variable_tracker.variable_states[variable_id]
+			{
+				VariableState::InEncoding => self.flush_submission(),
+				_ => ()
+			}*/
+
+			match self.variable_tracker.variable_states[variable_id]
+			{
+				VariableState::InEncoding => (),
+				VariableState::Local =>
+				{
+					let type_id = self.variable_tracker.variable_types[variable_id];
+					let type_binding_info = self.get_type_binding_info(type_id); 
+					let type_name = self.get_type_name(type_id);
+					let temp_id = self.variable_tracker.generate();
+					self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", temp_id, type_binding_info.size));
+					self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", temp_id, variable_id));
+					self.code_writer.write(format!("let var_{} = var_{};\n", variable_id, temp_id));
+
+				}
+				VariableState::OnGpu => (),
+				_ => panic!("Unimplemented")
+			}
+
+			self.variable_tracker.variable_states.insert(* variable_id, VariableState::Local);
+			/*let type_id = match variable_state
+			{
+
+			};*/
+		}
+	}
+
 	fn flush_submission(&mut self)
 	{
 		let mut active_submission_encoding_state = None;
@@ -233,7 +269,7 @@ impl<'program> CodeGenerator<'program>
 					Command::DispatchCompute{external_function_id, dimension_vars, argument_vars, output_vars} =>
 					{
 						self.make_local(dimension_vars);
-						self.make_local(argument_vars);
+						self.make_on_gpu(argument_vars);
 
 						let external_gpu_function = & self.external_gpu_functions[* external_function_id];
 						assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
@@ -297,7 +333,8 @@ impl<'program> CodeGenerator<'program>
 						for input_index in 0 .. external_gpu_function.input_types.len()
 						{
 							let type_id = external_gpu_function.input_types[input_index];
-							let variable_id = self.build_create_buffer_with_data(argument_vars[input_index], type_id);
+							//let variable_id = self.build_create_buffer_with_data(argument_vars[input_index], type_id);
+							let variable_id = argument_vars[input_index];
 							input_staging_variables.push(variable_id);
 						}
 
@@ -307,6 +344,7 @@ impl<'program> CodeGenerator<'program>
 							let binding = output_binding_map[& output_index];
 							if let (Some(input), _) = bindings[& binding]
 							{
+								// There might be a bug here with the reuse across gpu -> gpu boundaries
 								let variable_id = input_staging_variables[input];
 								output_staging_variables.push(variable_id);
 							}
@@ -416,8 +454,6 @@ impl<'program> CodeGenerator<'program>
 							self.variable_tracker.transition_to_on_gpu(* var_id);
 							//self.variable_tracker.transition_to_local(* var_id);
 						}
-
-						//output_variables.into_boxed_slice()
 					}
 				}
 			}
