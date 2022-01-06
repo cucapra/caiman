@@ -82,6 +82,8 @@ struct Task
 struct TaskToken
 {
 	task_id : TaskId,
+	local_variable_var_ids : Vec<usize>,
+	gpu_buffer_var_ids : Vec<usize>
 }
 
 impl NodeResultTracker
@@ -133,6 +135,7 @@ impl NodeResultTracker
 	{
 		// Doesn't account for nodes that need to be in two states
 
+		let mut local_variable_var_ids = Vec::<usize>::new();
 		for node_id in local_variable_node_ids
 		{
 			match &mut self.node_results[* node_id]
@@ -144,15 +147,18 @@ impl NodeResultTracker
 						Value::LocalVariable(id) =>
 						{
 							code_generator.require_local(&[* id]);
+							local_variable_var_ids.push(* id);
 						}
 						Value::GpuBuffer(id) =>
 						{
 							if let Some(new_id) = code_generator.make_local_copy(* id)
 							{
+								local_variable_var_ids.push(new_id);
 								* value = Value::LocalVariable(new_id);
 							}
 							else
 							{
+								local_variable_var_ids.push(* id);
 								* value = Value::LocalVariable(* id);
 							}
 						}
@@ -160,10 +166,12 @@ impl NodeResultTracker
 						{
 							if let Some(new_id) = code_generator.make_local_copy(* id)
 							{
+								local_variable_var_ids.push(new_id);
 								* value = Value::LocalVariable(new_id);
 							}
 							else
 							{
+								local_variable_var_ids.push(* id);
 								* value = Value::LocalVariable(* id);
 							}
 						}
@@ -173,6 +181,7 @@ impl NodeResultTracker
 			}
 		}
 
+		let mut gpu_buffer_var_ids = Vec::<usize>::new();
 		for node_id in gpu_buffer_node_ids
 		{
 			match &mut self.node_results[* node_id]
@@ -185,25 +194,30 @@ impl NodeResultTracker
 						{
 							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
 							{
+								gpu_buffer_var_ids.push(new_id);
 								* value = Value::GpuBuffer(new_id);
 							}
 							else
 							{
+								gpu_buffer_var_ids.push(* id);
 								* value = Value::GpuBuffer(* id);
 							}
 						}
 						Value::GpuBuffer(id) =>
 						{
 							code_generator.require_on_gpu(&[* id]);
+							gpu_buffer_var_ids.push(* id);
 						}
 						Value::Unknown(id) =>
 						{
 							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
 							{
+								gpu_buffer_var_ids.push(new_id);
 								* value = Value::GpuBuffer(new_id);
 							}
 							else
 							{
+								gpu_buffer_var_ids.push(* id);
 								* value = Value::GpuBuffer(* id);
 							}
 						}
@@ -213,7 +227,7 @@ impl NodeResultTracker
 			}
 		}
 
-		let token = TaskToken{ task_id : TaskId(self.tasks.len()) };
+		let token = TaskToken{ task_id : TaskId(self.tasks.len()), local_variable_var_ids, gpu_buffer_var_ids };
 		let task = Task{ dependencies : BTreeSet::<TaskId>::new() };
 		self.tasks.push(task);
 		token
@@ -314,12 +328,7 @@ impl<'program> CodeGen<'program>
 				{
 					let token = node_result_tracker.begin_task(&mut self.code_generator, arguments, &[]);
 
-					let mut argument_vars = Vec::<usize>::new();
-					for (index, argument) in arguments.iter().enumerate()
-					{
-						argument_vars.push(force_var(node_result_tracker.get_node_output_value(* argument)));
-					}
-					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, argument_vars.as_slice());
+					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, token.local_variable_var_ids.as_slice());
 					let mut outputs = Vec::<Value>::new();
 					for output in raw_outputs.iter()
 					{
@@ -332,21 +341,11 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
+					use std::convert::TryInto;
+
 					let token = node_result_tracker.begin_task(&mut self.code_generator, dimensions, arguments);
 
-					let dimension_vars = [
-						force_var(node_result_tracker.get_node_output_value(dimensions[0])),
-						force_var(node_result_tracker.get_node_output_value(dimensions[1])),
-						force_var(node_result_tracker.get_node_output_value(dimensions[2]))
-					];
-
-					let mut argument_vars = Vec::<usize>::new();
-					for argument in arguments.iter()
-					{
-						argument_vars.push(force_var(node_result_tracker.get_node_output_value(* argument)));
-					}
-
-					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, & dimension_vars, argument_vars.as_slice());
+					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, token.local_variable_var_ids.as_slice().try_into().expect("Expected 3 elements for dimensions"), token.gpu_buffer_var_ids.as_slice());
 					let mut outputs = Vec::<Value>::new();
 					for output in raw_outputs.iter()
 					{
