@@ -15,31 +15,7 @@ enum Value
 	Retired,
 	LocalVariable(usize),
 	GpuBuffer(usize),
-	//Unknown(usize), // Temporary while resources are pulled out of the code generator
 }
-
-/*#[derive(Default)]
-struct VariableTracker
-{
-	id_generator : IdGenerator,
-	variable_values : HashMap<usize, VariableValue>,
-	variable_types : HashMap<usize, ir::TypeId>
-}
-
-impl VariableTracker
-{
-	fn new() -> Self
-	{
-		Self { id_generator : IdGenerator::new(), variable_states : HashMap::<usize, VariableState>::new(), variable_types : HashMap::<usize, ir::TypeId>::new() }
-	}
-
-	fn create(&mut self, state : VariableState, type_id : ir::TypeId) -> usize
-	{
-		let id = self.id_generator.generate();
-		self.variable_states.insert(id, state);
-		id
-	}
-}*/
 
 enum Location
 {
@@ -138,12 +114,21 @@ impl NodeResultTracker
 	fn begin_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]) -> TaskToken
 	{
 		self.check_sanity();
+		let mut dependencies = BTreeSet::<TaskId>::new();
 
-		// Doesn't account for nodes that need to be in two states
-
+		// To do: Task tracking isn't yet correct for tasks that depend on a copy created later
+		// This is something that submission nodes are supposed to solve
+		// Otherwise, we get implicit and invisible dependencies between tasks
+		 
 		let mut local_variable_var_ids = Vec::<usize>::new();
 		for node_id in local_variable_node_ids
 		{
+			assert!(* node_id < self.node_results.len());
+			if let Some(dependency_task_id) = self.node_task_ids[* node_id]
+			{
+				dependencies.insert(dependency_task_id);
+			}
+
 			if let Some(& var_id) = self.node_local_variables.get(node_id)
 			{
 				local_variable_var_ids.push(var_id);
@@ -172,43 +157,6 @@ impl NodeResultTracker
 				{
 					match value
 					{
-						/*Value::LocalVariable(id) =>
-						{
-							code_generator.require_local(&[* id]);
-							local_variable_var_ids.push(* id);
-							let v = * value;
-							self.register_value(* node_id, & v);
-						}
-						Value::GpuBuffer(id) =>
-						{
-							if let Some(new_id) = code_generator.make_local_copy(* id)
-							{
-								local_variable_var_ids.push(new_id);
-								* value = Value::LocalVariable(new_id);
-							}
-							else
-							{
-								local_variable_var_ids.push(* id);
-								* value = Value::LocalVariable(* id);
-							}
-							let v = * value;
-							self.register_value(* node_id, & v);
-						}*/
-						/*Value::Unknown(id) =>
-						{
-							if let Some(new_id) = code_generator.make_local_copy(* id)
-							{
-								local_variable_var_ids.push(new_id);
-								* value = Value::LocalVariable(new_id);
-							}
-							else
-							{
-								local_variable_var_ids.push(* id);
-								* value = Value::LocalVariable(* id);
-							}
-							let v = * value;
-							self.register_value(* node_id, & v);
-						}*/
 						_ => panic!("Unexpected value {:?}", value)
 					}
 				}
@@ -219,6 +167,12 @@ impl NodeResultTracker
 		let mut gpu_buffer_var_ids = Vec::<usize>::new();
 		for node_id in gpu_buffer_node_ids
 		{
+			assert!(* node_id < self.node_results.len());
+			if let Some(dependency_task_id) = self.node_task_ids[* node_id]
+			{
+				dependencies.insert(dependency_task_id);
+			}
+
 			if let Some(& var_id) = self.node_gpu_buffers.get(node_id)
 			{
 				gpu_buffer_var_ids.push(var_id);
@@ -247,43 +201,6 @@ impl NodeResultTracker
 				{
 					match value
 					{
-						/*Value::LocalVariable(id) =>
-						{
-							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
-							{
-								gpu_buffer_var_ids.push(new_id);
-								* value = Value::GpuBuffer(new_id);
-							}
-							else
-							{
-								gpu_buffer_var_ids.push(* id);
-								* value = Value::GpuBuffer(* id);
-							}
-							let v = * value;
-							self.register_value(* node_id, & v);
-						}
-						Value::GpuBuffer(id) =>
-						{
-							code_generator.require_on_gpu(&[* id]);
-							gpu_buffer_var_ids.push(* id);
-							let v = * value;
-							self.register_value(* node_id, & v);
-						}*/
-						/*Value::Unknown(id) =>
-						{
-							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
-							{
-								gpu_buffer_var_ids.push(new_id);
-								* value = Value::GpuBuffer(new_id);
-							}
-							else
-							{
-								gpu_buffer_var_ids.push(* id);
-								* value = Value::GpuBuffer(* id);
-							}
-							let v = * value;
-							self.register_value(* node_id, & v);
-						}*/
 						_ => panic!("Unexpected value {:?}", value)
 					}
 				}
@@ -292,7 +209,7 @@ impl NodeResultTracker
 		}
 
 		let token = TaskToken{ task_id : TaskId(self.tasks.len()), local_variable_var_ids, gpu_buffer_var_ids };
-		let task = Task{ dependencies : BTreeSet::<TaskId>::new() };
+		let task = Task{ dependencies };
 		self.tasks.push(task);
 		token
 	}
@@ -413,18 +330,6 @@ impl<'program> CodeGen<'program>
 
 		let mut node_result_tracker = NodeResultTracker::new();
 
-
-		/*fn force_var(value : Value) -> usize
-		{
-			match value
-			{
-				//Value::Unknown(id) => id,
-				Value::LocalVariable(id) => id,
-				Value::GpuBuffer(id) => id,
-				_ => panic!("Wrong type")
-			}
-		}*/
-
 		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);		
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
@@ -497,12 +402,6 @@ impl<'program> CodeGen<'program>
 			{
 				let token = node_result_tracker.begin_task(&mut self.code_generator, return_values, &[]);
 
-				/*assert_eq!(return_values.len(), funclet.output_types.len());
-				let mut output_var_ids = Vec::<usize>::new();
-				for (return_index, node_index) in return_values.iter().enumerate()
-				{
-					output_var_ids.push(force_var(node_result_tracker.get_node_output_value(* node_index)));
-				}*/
 				self.code_generator.build_return(token.local_variable_var_ids.as_slice());
 
 				node_result_tracker.end_task(token);
