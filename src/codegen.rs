@@ -12,9 +12,10 @@ use std::fmt::Write;
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum Value
 {
+	Retired,
 	LocalVariable(usize),
 	GpuBuffer(usize),
-	Unknown(usize), // Temporary while resources are pulled out of the code generator
+	//Unknown(usize), // Temporary while resources are pulled out of the code generator
 }
 
 /*#[derive(Default)]
@@ -59,6 +60,7 @@ enum SubmissionState
 enum NodeResult
 {
 	Error,
+	Retired,
 	SingleOutput(Value),
 	MultipleOutput(Box<[Value]>),
 }
@@ -192,7 +194,7 @@ impl NodeResultTracker
 							let v = * value;
 							self.register_value(* node_id, & v);
 						}*/
-						Value::Unknown(id) =>
+						/*Value::Unknown(id) =>
 						{
 							if let Some(new_id) = code_generator.make_local_copy(* id)
 							{
@@ -206,7 +208,7 @@ impl NodeResultTracker
 							}
 							let v = * value;
 							self.register_value(* node_id, & v);
-						}
+						}*/
 						_ => panic!("Unexpected value {:?}", value)
 					}
 				}
@@ -267,7 +269,7 @@ impl NodeResultTracker
 							let v = * value;
 							self.register_value(* node_id, & v);
 						}*/
-						Value::Unknown(id) =>
+						/*Value::Unknown(id) =>
 						{
 							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
 							{
@@ -281,7 +283,7 @@ impl NodeResultTracker
 							}
 							let v = * value;
 							self.register_value(* node_id, & v);
-						}
+						}*/
 						_ => panic!("Unexpected value {:?}", value)
 					}
 				}
@@ -305,6 +307,7 @@ impl NodeResultTracker
 	{
 		match value
 		{
+			Value::Retired => panic!("Should not register a retired value"),
 			Value::LocalVariable(id) =>
 			{
 				self.node_local_variables.insert(node_id, *id);
@@ -313,7 +316,7 @@ impl NodeResultTracker
 			{
 				self.node_gpu_buffers.insert(node_id, *id);
 			}
-			Value::Unknown(id) => ()
+			//Value::Unknown(id) => ()
 		}
 	}
 
@@ -341,6 +344,13 @@ impl NodeResultTracker
 		self.check_sanity();
 	}
 
+	fn retire_node(&mut self, node_id : usize)
+	{
+		self.node_local_variables.remove(& node_id);
+		self.node_gpu_buffers.remove(& node_id);
+		self.node_results[node_id] = NodeResult::Retired;
+	}
+
 	fn check_sanity(&self)
 	{
 		for (node_id, node_result) in self.node_results.iter().enumerate()
@@ -351,6 +361,11 @@ impl NodeResultTracker
 				{
 					match value
 					{
+						Value::Retired =>
+						{
+							assert!(self.node_local_variables.get(& node_id).is_none(), "Should not have local copy of {}", node_id);
+							assert!(self.node_gpu_buffers.get(& node_id).is_none(), "Should not have gpu copy of {}", node_id);
+						}
 						Value::LocalVariable(_) =>
 						{
 							assert!(self.node_local_variables.get(& node_id).is_some(), "Does not have node id {}", node_id);
@@ -362,7 +377,11 @@ impl NodeResultTracker
 						_ => panic!("Should not have this case")
 					}
 				}
-				_ => ()
+				_ =>
+				{
+					assert!(self.node_local_variables.get(& node_id).is_none(), "Should not have local copy of {}", node_id);
+					assert!(self.node_gpu_buffers.get(& node_id).is_none(), "Should not have gpu copy of {}", node_id);
+				}
 			}
 		}
 	}
@@ -395,16 +414,16 @@ impl<'program> CodeGen<'program>
 		let mut node_result_tracker = NodeResultTracker::new();
 
 
-		fn force_var(value : Value) -> usize
+		/*fn force_var(value : Value) -> usize
 		{
 			match value
 			{
-				Value::Unknown(id) => id,
+				//Value::Unknown(id) => id,
 				Value::LocalVariable(id) => id,
 				Value::GpuBuffer(id) => id,
 				_ => panic!("Wrong type")
 			}
-		}
+		}*/
 
 		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);		
 
