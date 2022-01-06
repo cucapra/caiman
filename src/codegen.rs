@@ -147,13 +147,25 @@ impl NodeResultTracker
 						}
 						Value::GpuBuffer(id) =>
 						{
-							code_generator.make_local(&[* id]);
-							* value = Value::LocalVariable(* id);
+							if let Some(new_id) = code_generator.make_local_copy(* id)
+							{
+								* value = Value::LocalVariable(new_id);
+							}
+							else
+							{
+								* value = Value::LocalVariable(* id);
+							}
 						}
 						Value::Unknown(id) =>
 						{
-							code_generator.make_local(&[* id]);
-							* value = Value::LocalVariable(* id);
+							if let Some(new_id) = code_generator.make_local_copy(* id)
+							{
+								* value = Value::LocalVariable(new_id);
+							}
+							else
+							{
+								* value = Value::LocalVariable(* id);
+							}
 						}
 					}
 				}
@@ -171,8 +183,14 @@ impl NodeResultTracker
 					{
 						Value::LocalVariable(id) =>
 						{
-							code_generator.make_on_gpu(&[* id]);
-							* value = Value::GpuBuffer(* id);
+							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
+							{
+								* value = Value::GpuBuffer(new_id);
+							}
+							else
+							{
+								* value = Value::GpuBuffer(* id);
+							}
 						}
 						Value::GpuBuffer(id) =>
 						{
@@ -180,8 +198,14 @@ impl NodeResultTracker
 						}
 						Value::Unknown(id) =>
 						{
-							code_generator.make_on_gpu(&[* id]);
-							* value = Value::GpuBuffer(* id);
+							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
+							{
+								* value = Value::GpuBuffer(new_id);
+							}
+							else
+							{
+								* value = Value::GpuBuffer(* id);
+							}
 						}
 					}
 				}
