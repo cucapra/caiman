@@ -69,6 +69,8 @@ struct NodeResultTracker
 	node_results : Vec<NodeResult>,
 	tasks : Vec<Task>,
 	node_task_ids : Vec<Option<TaskId>>,
+	node_gpu_buffers : HashMap<usize, usize>,
+	node_local_variables : HashMap<usize, usize>,
 }
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -90,7 +92,7 @@ impl NodeResultTracker
 {
 	fn new() -> Self
 	{
-		Self { node_results : vec![], tasks : vec![], node_task_ids : vec![] }
+		Self { node_results : vec![], tasks : vec![], node_task_ids : vec![], node_gpu_buffers : HashMap::<usize, usize>::new(), node_local_variables : HashMap::<usize, usize>::new() }
 	}
 
 	fn get_node_result(&self, node_id : usize) -> &NodeResult
@@ -133,21 +135,47 @@ impl NodeResultTracker
 
 	fn begin_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]) -> TaskToken
 	{
+		self.check_sanity();
+
 		// Doesn't account for nodes that need to be in two states
 
 		let mut local_variable_var_ids = Vec::<usize>::new();
 		for node_id in local_variable_node_ids
 		{
+			if let Some(& var_id) = self.node_local_variables.get(node_id)
+			{
+				local_variable_var_ids.push(var_id);
+				continue;
+			}
+
+			if let Some(id) = self.node_gpu_buffers.get(node_id)
+			{
+				if let Some(new_id) = code_generator.make_local_copy(* id)
+				{
+					local_variable_var_ids.push(new_id);
+					self.register_value(* node_id, & Value::LocalVariable(new_id));
+				}
+				else
+				{
+					panic!("Couldn't make local copy of data");
+					local_variable_var_ids.push(* id);
+					self.register_value(* node_id, & Value::LocalVariable(* id));
+				}
+				continue;
+			}
+
 			match &mut self.node_results[* node_id]
 			{
 				NodeResult::SingleOutput(value) =>
 				{
 					match value
 					{
-						Value::LocalVariable(id) =>
+						/*Value::LocalVariable(id) =>
 						{
 							code_generator.require_local(&[* id]);
 							local_variable_var_ids.push(* id);
+							let v = * value;
+							self.register_value(* node_id, & v);
 						}
 						Value::GpuBuffer(id) =>
 						{
@@ -161,7 +189,9 @@ impl NodeResultTracker
 								local_variable_var_ids.push(* id);
 								* value = Value::LocalVariable(* id);
 							}
-						}
+							let v = * value;
+							self.register_value(* node_id, & v);
+						}*/
 						Value::Unknown(id) =>
 						{
 							if let Some(new_id) = code_generator.make_local_copy(* id)
@@ -174,7 +204,10 @@ impl NodeResultTracker
 								local_variable_var_ids.push(* id);
 								* value = Value::LocalVariable(* id);
 							}
+							let v = * value;
+							self.register_value(* node_id, & v);
 						}
+						_ => panic!("Unexpected value {:?}", value)
 					}
 				}
 				_ => panic!("Node isn't a single output node!")
@@ -184,13 +217,35 @@ impl NodeResultTracker
 		let mut gpu_buffer_var_ids = Vec::<usize>::new();
 		for node_id in gpu_buffer_node_ids
 		{
+			if let Some(& var_id) = self.node_gpu_buffers.get(node_id)
+			{
+				gpu_buffer_var_ids.push(var_id);
+				continue;
+			}
+
+			if let Some(id) = self.node_local_variables.get(node_id)
+			{
+				if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
+				{
+					gpu_buffer_var_ids.push(new_id);
+					self.register_value(* node_id, & Value::GpuBuffer(new_id));
+				}
+				else
+				{
+					panic!("Couldn't make gpu copy of data");
+					gpu_buffer_var_ids.push(* id);
+					self.register_value(* node_id, & Value::GpuBuffer(* id));
+				}
+				continue;
+			}
+
 			match &mut self.node_results[* node_id]
 			{
 				NodeResult::SingleOutput(value) =>
 				{
 					match value
 					{
-						Value::LocalVariable(id) =>
+						/*Value::LocalVariable(id) =>
 						{
 							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
 							{
@@ -202,12 +257,16 @@ impl NodeResultTracker
 								gpu_buffer_var_ids.push(* id);
 								* value = Value::GpuBuffer(* id);
 							}
+							let v = * value;
+							self.register_value(* node_id, & v);
 						}
 						Value::GpuBuffer(id) =>
 						{
 							code_generator.require_on_gpu(&[* id]);
 							gpu_buffer_var_ids.push(* id);
-						}
+							let v = * value;
+							self.register_value(* node_id, & v);
+						}*/
 						Value::Unknown(id) =>
 						{
 							if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
@@ -220,7 +279,10 @@ impl NodeResultTracker
 								gpu_buffer_var_ids.push(* id);
 								* value = Value::GpuBuffer(* id);
 							}
+							let v = * value;
+							self.register_value(* node_id, & v);
 						}
+						_ => panic!("Unexpected value {:?}", value)
 					}
 				}
 				_ => panic!("Node isn't a single output node!")
@@ -239,9 +301,30 @@ impl NodeResultTracker
 		assert_eq!(token.task_id.0 + 1, self.tasks.len());
 	}
 
+	fn register_value(&mut self, node_id : usize, value : & Value)
+	{
+		match value
+		{
+			Value::LocalVariable(id) =>
+			{
+				self.node_local_variables.insert(node_id, *id);
+			}
+			Value::GpuBuffer(id) =>
+			{
+				self.node_gpu_buffers.insert(node_id, *id);
+			}
+			Value::Unknown(id) => ()
+		}
+	}
+
 	fn store_node_result(&mut self, node_id : usize, node_result : NodeResult, active_task : Option<&TaskToken>)
 	{
 		assert_eq!(node_id, self.node_results.len());
+		match & node_result
+		{
+			NodeResult::SingleOutput(value) => self.register_value(node_id, value),
+			_ => ()
+		}
 		self.node_results.push(node_result);
 
 		let task_id_opt = if let Some(task_token) = active_task
@@ -254,6 +337,34 @@ impl NodeResultTracker
 		};
 
 		self.node_task_ids.push(task_id_opt);
+
+		self.check_sanity();
+	}
+
+	fn check_sanity(&self)
+	{
+		for (node_id, node_result) in self.node_results.iter().enumerate()
+		{
+			match node_result
+			{
+				NodeResult::SingleOutput(value) =>
+				{
+					match value
+					{
+						Value::LocalVariable(_) =>
+						{
+							assert!(self.node_local_variables.get(& node_id).is_some(), "Does not have node id {}", node_id);
+						}
+						Value::GpuBuffer(_) =>
+						{
+							assert!(self.node_gpu_buffers.get(& node_id).is_some(), "Does not have node id {}", node_id);
+						}
+						_ => panic!("Should not have this case")
+					}
+				}
+				_ => ()
+			}
+		}
 	}
 }
 
@@ -304,7 +415,7 @@ impl<'program> CodeGen<'program>
 			{
 				ir::Node::Phi {index} =>
 				{
-					let node_result = NodeResult::SingleOutput(Value::Unknown(argument_variable_ids[*index as usize]));
+					let node_result = NodeResult::SingleOutput(Value::LocalVariable(argument_variable_ids[*index as usize]));
 					node_result_tracker.store_node_result(current_node_id, node_result, None);
 				}
 				ir::Node::ExtractResult { node_id, index } =>
@@ -367,13 +478,13 @@ impl<'program> CodeGen<'program>
 			{
 				let token = node_result_tracker.begin_task(&mut self.code_generator, return_values, &[]);
 
-				assert_eq!(return_values.len(), funclet.output_types.len());
+				/*assert_eq!(return_values.len(), funclet.output_types.len());
 				let mut output_var_ids = Vec::<usize>::new();
 				for (return_index, node_index) in return_values.iter().enumerate()
 				{
 					output_var_ids.push(force_var(node_result_tracker.get_node_output_value(* node_index)));
-				}
-				self.code_generator.build_return(output_var_ids.as_slice());
+				}*/
+				self.code_generator.build_return(token.local_variable_var_ids.as_slice());
 
 				node_result_tracker.end_task(token);
 			}
