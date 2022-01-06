@@ -317,7 +317,41 @@ impl<'program> CodeGenerator<'program>
 
 	}*/
 
-	fn require_local(&mut self, variable_ids : &[usize])
+
+	pub fn require_local(&mut self, variable_ids : &[usize])
+	{
+		for variable_id in variable_ids.iter()
+		{
+			match self.variable_tracker.variable_states[variable_id]
+			{
+				VariableState::InEncoding => self.flush_submission(),
+				_ => ()
+			}
+
+			match self.variable_tracker.variable_states[variable_id]
+			{
+				VariableState::Local => (),
+				VariableState::OnGpu => panic!("Not already local"),
+				_ => panic!("Unimplemented")
+			}
+		}
+	}
+
+	pub fn require_on_gpu(&mut self, variable_ids : &[usize])
+	{
+		for variable_id in variable_ids.iter()
+		{
+			match self.variable_tracker.variable_states[variable_id]
+			{
+				VariableState::InEncoding => (),
+				VariableState::Local => panic!("Not already on gpu"),
+				VariableState::OnGpu => (),
+				_ => panic!("Unimplemented")
+			}
+		}
+	}
+
+	pub fn make_local(&mut self, variable_ids : &[usize])
 	{
 		for variable_id in variable_ids.iter()
 		{
@@ -358,7 +392,7 @@ impl<'program> CodeGenerator<'program>
 		}
 	}
 
-	fn require_on_gpu(&mut self, variable_ids : &[usize])
+	pub fn make_on_gpu(&mut self, variable_ids : &[usize])
 	{
 		for variable_id in variable_ids.iter()
 		{
@@ -380,12 +414,11 @@ impl<'program> CodeGenerator<'program>
 					self.code_writer.write(format!("let mut var_{} = device.create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", temp_id, type_binding_info.size));
 					self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", temp_id, variable_id));
 					self.code_writer.write(format!("let var_{} = var_{};\n", variable_id, temp_id));
+					self.variable_tracker.variable_states.insert(* variable_id, VariableState::OnGpu);
 				}
 				VariableState::OnGpu => (),
 				_ => panic!("Unimplemented")
 			}
-
-			self.variable_tracker.variable_states.insert(* variable_id, VariableState::Local);
 			/*let type_id = match variable_state
 			{
 
@@ -778,7 +811,7 @@ impl<'program> CodeGenerator<'program>
 	{
 		if let Some(output_vars) = self.enqueue_compute_dispatch(external_function_id, dimension_vars, argument_vars)
 		{
-			//self.flush_submission();
+			self.flush_submission();
 			return output_vars;
 		}
 

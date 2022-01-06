@@ -129,7 +129,7 @@ impl NodeResultTracker
 		}
 	}
 
-	fn begin_task(&mut self, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]) -> TaskToken
+	fn begin_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]) -> TaskToken
 	{
 		// Doesn't account for nodes that need to be in two states
 
@@ -141,9 +141,20 @@ impl NodeResultTracker
 				{
 					match value
 					{
-						Value::LocalVariable(_) => (),
-						Value::GpuBuffer(id) => * value = Value::LocalVariable(* id),
-						Value::Unknown(id) => * value = Value::LocalVariable(* id),
+						Value::LocalVariable(id) =>
+						{
+							code_generator.require_local(&[* id]);
+						}
+						Value::GpuBuffer(id) =>
+						{
+							code_generator.make_local(&[* id]);
+							* value = Value::LocalVariable(* id);
+						}
+						Value::Unknown(id) =>
+						{
+							code_generator.make_local(&[* id]);
+							* value = Value::LocalVariable(* id);
+						}
 					}
 				}
 				_ => panic!("Node isn't a single output node!")
@@ -158,9 +169,20 @@ impl NodeResultTracker
 				{
 					match value
 					{
-						Value::LocalVariable(id) => * value = Value::GpuBuffer(* id),
-						Value::GpuBuffer(_) => (),
-						Value::Unknown(id) => * value = Value::GpuBuffer(* id),
+						Value::LocalVariable(id) =>
+						{
+							code_generator.make_on_gpu(&[* id]);
+							* value = Value::GpuBuffer(* id);
+						}
+						Value::GpuBuffer(id) =>
+						{
+							code_generator.require_on_gpu(&[* id]);
+						}
+						Value::Unknown(id) =>
+						{
+							code_generator.make_on_gpu(&[* id]);
+							* value = Value::GpuBuffer(* id);
+						}
 					}
 				}
 				_ => panic!("Node isn't a single output node!")
@@ -266,7 +288,7 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
-					let token = node_result_tracker.begin_task(arguments, &[]);
+					let token = node_result_tracker.begin_task(&mut self.code_generator, arguments, &[]);
 
 					let mut argument_vars = Vec::<usize>::new();
 					for (index, argument) in arguments.iter().enumerate()
@@ -286,7 +308,7 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
-					let token = node_result_tracker.begin_task(dimensions, arguments);
+					let token = node_result_tracker.begin_task(&mut self.code_generator, dimensions, arguments);
 
 					let dimension_vars = [
 						force_var(node_result_tracker.get_node_output_value(dimensions[0])),
@@ -320,7 +342,7 @@ impl<'program> CodeGen<'program>
 		{
 			ir::TailEdge::Return { return_values } =>
 			{
-				let token = node_result_tracker.begin_task(return_values, &[]);
+				let token = node_result_tracker.begin_task(&mut self.code_generator, return_values, &[]);
 
 				assert_eq!(return_values.len(), funclet.output_types.len());
 				let mut output_var_ids = Vec::<usize>::new();
