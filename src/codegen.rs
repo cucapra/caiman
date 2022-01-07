@@ -323,12 +323,12 @@ struct SubnodeUsage
 struct SubnodePath(usize, Option<usize>);
 
 // Answers the question: For a given node, how will it be used in the future?
-struct NodeUsagePredictor
+struct NodeUsageAnalysis
 {
 	subnode_usages : HashMap<SubnodePath, SubnodeUsage>
 }
 
-impl NodeUsagePredictor
+impl NodeUsageAnalysis
 {
 	fn new() -> Self
 	{
@@ -389,7 +389,7 @@ impl NodeUsagePredictor
 
 	fn from_funclet(funclet : & ir::Funclet) -> Self
 	{
-		let mut predictor = Self::new();
+		let mut analysis = Self::new();
 		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
 
 		match & funclet.tail_edge
@@ -398,14 +398,14 @@ impl NodeUsagePredictor
 			{
 				for & node_id in return_values.iter()
 				{
-					predictor.use_node(node_id, Usage::LocalVariable);
+					analysis.use_node(node_id, Usage::LocalVariable);
 				}
 			}
 		}
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate().rev()
 		{
-			if ! predictor.is_node_used(current_node_id)
+			if ! analysis.is_node_used(current_node_id)
 			{
 				continue;
 			}
@@ -415,7 +415,7 @@ impl NodeUsagePredictor
 				ir::Node::Phi {index} => (),
 				ir::Node::ExtractResult { node_id, index } =>
 				{
-					predictor.use_node(* node_id, Usage::Extraction(current_node_id));
+					analysis.use_node(* node_id, Usage::Extraction(current_node_id));
 				}
 				ir::Node::ConstantInteger(value, type_id) => (),
 				ir::Node::ConstantUnsignedInteger(value, type_id) => (),
@@ -423,26 +423,26 @@ impl NodeUsagePredictor
 				{
 					for & node_id in arguments.iter()
 					{
-						predictor.use_node(node_id, Usage::LocalVariable)
+						analysis.use_node(node_id, Usage::LocalVariable)
 					}
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
 					for & node_id in dimensions.iter()
 					{
-						predictor.use_node(node_id, Usage::LocalVariable)
+						analysis.use_node(node_id, Usage::LocalVariable)
 					}
 
 					for & node_id in arguments.iter()
 					{
-						predictor.use_node(node_id, Usage::GpuBuffer)
+						analysis.use_node(node_id, Usage::GpuBuffer)
 					}
 				}
 				_ => panic!("Unimplemented node")
 			}
 		}
 		
-		predictor
+		analysis
 	}
 }
 
@@ -464,7 +464,7 @@ impl<'program> CodeGen<'program>
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
 
-		let node_usage_predictor = NodeUsagePredictor::from_funclet(funclet);
+		let node_usage_analysis = NodeUsageAnalysis::from_funclet(funclet);
 		let mut node_result_tracker = NodeResultTracker::new();
 
 		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);		
@@ -472,8 +472,8 @@ impl<'program> CodeGen<'program>
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
 		{
 			self.code_generator.insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
-			
-			if ! node_usage_predictor.is_node_used(current_node_id)
+
+			if ! node_usage_analysis.is_node_used(current_node_id)
 			{
 				self.code_generator.insert_comment(" unused");
 				node_result_tracker.store_node_result(current_node_id, NodeResult::Retired, None);
