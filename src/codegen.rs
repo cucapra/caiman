@@ -304,10 +304,146 @@ impl NodeResultTracker
 	}
 }
 
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+enum Usage
+{
+	LocalVariable,
+	GpuBuffer,
+	Extraction(usize),
+}
+
+struct SubnodeUsage
+{
+	//user_node_ids : BTreeSet<usize>,
+	total_usage_count : usize,
+	usages : HashMap<Usage, usize>
+}
+
+#[derive(Clone, Copy, PartialOrd, Ord, Hash, PartialEq, Eq)]
+struct SubnodePath(usize, Option<usize>);
+
 // Answers the question: For a given node, how will it be used in the future?
 struct NodeUsagePredictor
 {
+	subnode_usages : HashMap<SubnodePath, SubnodeUsage>
+}
 
+impl NodeUsagePredictor
+{
+	fn new() -> Self
+	{
+		Self { subnode_usages : HashMap::<SubnodePath, SubnodeUsage>::new() }
+	}
+
+	fn use_subnode_raw(&mut self, used_subnode_path : SubnodePath, usage : Usage)
+	{
+		if ! self.subnode_usages.contains_key(& used_subnode_path)
+		{
+			let node_usage = SubnodeUsage { total_usage_count : 0, usages : HashMap::<Usage, usize>::new() };
+			self.subnode_usages.insert(used_subnode_path, node_usage);
+		}
+
+		let subnode_usage = self.subnode_usages.get_mut(& used_subnode_path).unwrap();
+		subnode_usage.total_usage_count += 1;
+		if let Some(usage_count) = subnode_usage.usages.get_mut(& usage)
+		{
+			* usage_count += 1;
+		}
+		else
+		{
+			subnode_usage.usages.insert(usage, 1);
+		}
+	}
+
+	fn use_subnode(&mut self, used_subnode_path : SubnodePath, usage : Usage)
+	{
+		let SubnodePath(node_id, subnode_id_opt) = used_subnode_path;
+		self.use_subnode_raw(SubnodePath(node_id, None), usage);
+		if subnode_id_opt.is_some()
+		{
+			self.use_subnode_raw(SubnodePath(node_id, subnode_id_opt), usage);
+		}
+	}
+
+	fn use_node(&mut self, node_id : usize, usage : Usage)
+	{
+		self.use_subnode(SubnodePath(node_id, None), usage)
+	}
+
+	fn is_subnode_used(& self, used_subnode_path : SubnodePath) -> bool
+	{
+		if let Some(subnode_usage) = self.subnode_usages.get(& used_subnode_path)
+		{
+			subnode_usage.total_usage_count > 0
+		}
+		else
+		{
+			false
+		}
+	}
+
+	fn is_node_used(& self, node_id : usize) -> bool
+	{
+		self.is_subnode_used(SubnodePath(node_id, None))
+	}
+
+	fn from_funclet(funclet : & ir::Funclet) -> Self
+	{
+		let mut predictor = Self::new();
+		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
+
+		match & funclet.tail_edge
+		{
+			ir::TailEdge::Return { return_values } =>
+			{
+				for & node_id in return_values.iter()
+				{
+					predictor.use_node(node_id, Usage::LocalVariable);
+				}
+			}
+		}
+
+		for (current_node_id, node) in funclet.nodes.iter().enumerate().rev()
+		{
+			if ! predictor.is_node_used(current_node_id)
+			{
+				continue;
+			}
+			
+			match node
+			{
+				ir::Node::Phi {index} => (),
+				ir::Node::ExtractResult { node_id, index } =>
+				{
+					predictor.use_node(* node_id, Usage::Extraction(current_node_id));
+				}
+				ir::Node::ConstantInteger(value, type_id) => (),
+				ir::Node::ConstantUnsignedInteger(value, type_id) => (),
+				ir::Node::CallExternalCpu { external_function_id, arguments } =>
+				{
+					for & node_id in arguments.iter()
+					{
+						predictor.use_node(node_id, Usage::LocalVariable)
+					}
+				}
+				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
+				{
+					for & node_id in dimensions.iter()
+					{
+						predictor.use_node(node_id, Usage::LocalVariable)
+					}
+
+					for & node_id in arguments.iter()
+					{
+						predictor.use_node(node_id, Usage::GpuBuffer)
+					}
+				}
+				_ => panic!("Unimplemented node")
+			}
+		}
+		
+		predictor
+	}
 }
 
 pub struct CodeGen<'program>
@@ -328,6 +464,7 @@ impl<'program> CodeGen<'program>
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
 
+		let node_usage_predictor = NodeUsagePredictor::from_funclet(funclet);
 		let mut node_result_tracker = NodeResultTracker::new();
 
 		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);		
@@ -335,6 +472,14 @@ impl<'program> CodeGen<'program>
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
 		{
 			self.code_generator.insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
+			
+			if ! node_usage_predictor.is_node_used(current_node_id)
+			{
+				self.code_generator.insert_comment(" unused");
+				node_result_tracker.store_node_result(current_node_id, NodeResult::Retired, None);
+				continue;
+			}
+
 			match node
 			{
 				ir::Node::Phi {index} =>
