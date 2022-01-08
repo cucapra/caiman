@@ -49,15 +49,29 @@ struct NodeResultTracker
 	node_task_ids : Vec<Option<TaskId>>,
 	node_gpu_buffers : HashMap<usize, usize>,
 	node_local_variables : HashMap<usize, usize>,
+	encoding_task_ids : BTreeSet<TaskId>,
+	next_submission_id : SubmissionId,
+	submission_queues : Vec<SubmissionQueue>,
+	active_task_token : Option<TaskToken>
 }
 
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+// Tasks are logical units of work that represent regions where resources are in a known state
+// These mostly correspond to nodes in the IR, but make explicit information that we'd otherwise want to be implicit in the IR
+
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
 struct TaskId(usize);
 
 struct Task
 {
 	dependencies : BTreeSet<TaskId>,
-	node_ids : Vec<usize>
+	node_ids : Vec<usize>,
+	task_submission : Option<TaskSubmission> // None if not yet submitted
+}
+
+struct TaskSubmission
+{
+	queue_id : QueueId,
+	submission_id : SubmissionId
 }
 
 struct TaskToken
@@ -67,11 +81,74 @@ struct TaskToken
 	gpu_buffer_var_ids : Vec<usize>,
 }
 
+// Submissions represent groups of tasks that are executing in a logical sequence
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
+struct SubmissionId(usize);
+
+// A logical queue represents a logical sequence of tasks
+// Tasks that in order on the same queue can be logically viewed as if they start and complete in that order
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
+struct QueueId(usize);
+
+struct SubmissionQueue
+{
+	most_recently_synchronized_submission_id : Option<SubmissionId>
+}
+
 impl NodeResultTracker
 {
 	fn new() -> Self
 	{
-		Self { node_results : vec![], tasks : vec![], node_task_ids : vec![], node_gpu_buffers : HashMap::<usize, usize>::new(), node_local_variables : HashMap::<usize, usize>::new() }
+		let mut submission_queues = Vec::<SubmissionQueue>::new();
+		submission_queues.push(SubmissionQueue{most_recently_synchronized_submission_id : None});
+		Self { node_results : vec![], tasks : vec![], node_task_ids : vec![], node_gpu_buffers : HashMap::<usize, usize>::new(), node_local_variables : HashMap::<usize, usize>::new(), encoding_task_ids : BTreeSet::<TaskId>::new(), next_submission_id : SubmissionId(0), submission_queues, active_task_token : None }
+	}
+
+	fn submission_queue_at_mut(&mut self, queue_id : QueueId) -> &mut SubmissionQueue
+	{
+		&mut self.submission_queues[queue_id.0]
+	}
+
+	fn submission_queue_at(& self, queue_id : QueueId) -> & SubmissionQueue
+	{
+		& self.submission_queues[queue_id.0]
+	}
+
+	fn task_at(& self, task_id : TaskId) -> & Task
+	{
+		& self.tasks[task_id.0]
+	}
+
+	fn task_at_mut(&mut self, task_id : TaskId) -> &mut Task
+	{
+		&mut self.tasks[task_id.0]
+	}
+
+	fn queue_for_submitted_task(& self, task_id : TaskId) -> Option<QueueId>
+	{
+		if let Some(task_submission) = & self.task_at(task_id).task_submission
+		{
+			Some(task_submission.queue_id)
+		}
+		else
+		{
+			None
+		}
+	}
+
+	fn task_has_synchronized_local(& self, task_id : TaskId) -> bool
+	{
+		if let Some(task_submission) = & self.task_at(task_id).task_submission
+		{
+			assert_eq!(task_submission.queue_id, QueueId(0));
+			let queue = self.submission_queue_at(task_submission.queue_id);
+			if let Some(last_submission_id) = queue.most_recently_synchronized_submission_id
+			{
+				return last_submission_id > task_submission.submission_id;
+			}
+		}
+		
+		false
 	}
 
 	fn get_node_result(&self, node_id : usize) -> &NodeResult
@@ -110,6 +187,26 @@ impl NodeResultTracker
 		{
 			panic!("Not a single output node result");
 		}
+	}
+
+	fn get_node_local<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_id : usize) -> Option<usize>
+	{
+		if let Some(& var_id) = self.node_local_variables.get(& node_id)
+		{
+			return Some(var_id);
+		}
+
+		None
+	}
+
+	fn get_node_on_gpu<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_id : usize) -> Option<usize>
+	{
+		if let Some(& var_id) = self.node_gpu_buffers.get(& node_id)
+		{
+			return Some(var_id);
+		}
+
+		None
 	}
 
 	fn make_node_local<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_id : usize) -> Option<usize>
@@ -184,6 +281,44 @@ impl NodeResultTracker
 		None
 	}
 
+	fn begin_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis) -> TaskToken
+	{
+		let mut active_task_token_opt = None;
+		std::mem::swap(&mut active_task_token_opt, &mut self.active_task_token);
+
+		if let Some(mut active_task_token) = active_task_token_opt
+		{
+			let defer_gpu_ordering_checks_to_submit = false;
+			if self.append_task(&mut active_task_token, code_generator, local_variable_node_ids, gpu_buffer_node_ids, defer_gpu_ordering_checks_to_submit)
+			{
+				return active_task_token;
+			}
+			else
+			{
+				self.end_task(active_task_token, code_generator, node_usage_analysis);
+			}
+		}
+
+		return self.begin_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids)
+	}
+
+	fn end_node_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	{
+		assert!(self.active_task_token.is_none());
+		self.active_task_token = Some(token);
+	}
+
+	fn flush_tasks<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	{
+		let mut active_task_token_opt = None;
+		std::mem::swap(&mut active_task_token_opt, &mut self.active_task_token);
+
+		if let Some(active_task_token) = active_task_token_opt
+		{
+			self.end_task(active_task_token, code_generator, node_usage_analysis);
+		}
+	}
+
 	fn begin_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]) -> TaskToken
 	{
 		self.check_sanity();
@@ -193,6 +328,8 @@ impl NodeResultTracker
 		// This is something that submission nodes are supposed to solve
 		// Otherwise, we get implicit and invisible dependencies between tasks
 		 
+		// To do: Reuse tasks still in encoding if possible.  Use commit number on queue?
+
 		let mut local_variable_var_ids = Vec::<usize>::new();
 		for node_id in local_variable_node_ids
 		{
@@ -210,40 +347,6 @@ impl NodeResultTracker
 			{
 				panic!("Failed to make the data local");
 			}
-
-			/*if let Some(& var_id) = self.node_local_variables.get(node_id)
-			{
-				local_variable_var_ids.push(var_id);
-				continue;
-			}
-
-			if let Some(id) = self.node_gpu_buffers.get(node_id)
-			{
-				if let Some(new_id) = code_generator.make_local_copy(* id)
-				{
-					local_variable_var_ids.push(new_id);
-					self.register_value(* node_id, & Value::LocalVariable(new_id));
-				}
-				else
-				{
-					panic!("Couldn't make local copy of data");
-					local_variable_var_ids.push(* id);
-					self.register_value(* node_id, & Value::LocalVariable(* id));
-				}
-				continue;
-			}
-
-			match &mut self.node_results[* node_id]
-			{
-				NodeResult::SingleOutput(value) =>
-				{
-					match value
-					{
-						_ => panic!("Unexpected value {:?}", value)
-					}
-				}
-				_ => panic!("Node isn't a single output node!")
-			}*/
 		}
 
 		let mut gpu_buffer_var_ids = Vec::<usize>::new();
@@ -263,52 +366,108 @@ impl NodeResultTracker
 			{
 				panic!("Failed to make the data gpu resident");
 			}
-
-			/*if let Some(& var_id) = self.node_gpu_buffers.get(node_id)
-			{
-				gpu_buffer_var_ids.push(var_id);
-				continue;
-			}
-
-			if let Some(id) = self.node_local_variables.get(node_id)
-			{
-				if let Some(new_id) = code_generator.make_on_gpu_copy(* id)
-				{
-					gpu_buffer_var_ids.push(new_id);
-					self.register_value(* node_id, & Value::GpuBuffer(new_id));
-				}
-				else
-				{
-					panic!("Couldn't make gpu copy of data");
-					gpu_buffer_var_ids.push(* id);
-					self.register_value(* node_id, & Value::GpuBuffer(* id));
-				}
-				continue;
-			}
-
-			match &mut self.node_results[* node_id]
-			{
-				NodeResult::SingleOutput(value) =>
-				{
-					match value
-					{
-						_ => panic!("Unexpected value {:?}", value)
-					}
-				}
-				_ => panic!("Node isn't a single output node!")
-			}*/
 		}
 
 		let token = TaskToken{ task_id : TaskId(self.tasks.len()), local_variable_var_ids, gpu_buffer_var_ids };
-		let task = Task{ dependencies, node_ids : vec![] };
+		let task = Task{ dependencies, node_ids : vec![], task_submission : None };
 		self.tasks.push(task);
 		token
+	}
+
+	// Append is not allowed to add new coordinator synchronization (gpu -> local resource transitions)
+	// It's also not allowed to introduce local -> gpu ordering issues on submit
+	fn append_task<'program>(&mut self, token : &mut TaskToken, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], defer_gpu_ordering_checks_to_submit : bool) -> bool
+	{
+		for node_id in local_variable_node_ids
+		{
+			assert!(* node_id < self.node_results.len());
+
+			if self.get_node_local(code_generator, * node_id).is_none()
+			{
+				return false;
+			}
+		}
+
+		for node_id in gpu_buffer_node_ids
+		{
+			assert!(* node_id < self.node_results.len());
+
+			if self.get_node_on_gpu(code_generator, * node_id).is_none()
+			{
+				return false;
+			}
+
+			if let Some(dependency_task_id) = self.node_task_ids[* node_id]
+			{
+				// This is more aggressive than necessary
+				// The append can happen if gpu dependencies are within the current task or on already submitted work
+				// The real requirement is that the submit for this this task needs to happen after the submit for the other task
+				// This might be hard to verify in append
+
+				// This gets more complicated with more queues
+				assert_eq!(self.submission_queues.len(), 1);
+				let queue_id_opt = self.queue_for_submitted_task(dependency_task_id);
+				let known_to_submit_after = dependency_task_id == token.task_id || queue_id_opt.is_some();
+				
+				if ! known_to_submit_after && ! defer_gpu_ordering_checks_to_submit
+				{
+					return false;
+				}
+			}
+		}
+
+		// To do: Need to be careful about cyclic task dependencies when more than one task token can be active
+
+		let mut local_variable_var_ids = Vec::<usize>::new();
+		for node_id in local_variable_node_ids
+		{
+			assert!(* node_id < self.node_results.len());
+
+			let var_id = self.get_node_local(code_generator, * node_id).unwrap();
+			local_variable_var_ids.push(var_id);
+
+			if let Some(dependency_task_id) = self.node_task_ids[* node_id]
+			{
+				if dependency_task_id != token.task_id
+				{
+					self.task_at_mut(dependency_task_id).dependencies.insert(dependency_task_id);
+				}
+			}
+		}
+
+		let mut gpu_buffer_var_ids = Vec::<usize>::new();
+		for node_id in gpu_buffer_node_ids
+		{
+			assert!(* node_id < self.node_results.len());
+
+			let var_id = self.get_node_on_gpu(code_generator, * node_id).unwrap();
+
+			gpu_buffer_var_ids.push(var_id);
+
+			if let Some(dependency_task_id) = self.node_task_ids[* node_id]
+			{
+				if dependency_task_id != token.task_id
+				{
+					self.task_at_mut(dependency_task_id).dependencies.insert(dependency_task_id);
+				}
+			}
+		}
+
+		token.local_variable_var_ids = local_variable_var_ids;
+		token.gpu_buffer_var_ids = gpu_buffer_var_ids;
+
+		true
 	}
 
 	fn end_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
 	{
 		// To do: Support other patterns
 		assert_eq!(token.task_id.0 + 1, self.tasks.len());
+
+		for & dependency_task_id in self.task_at(token.task_id).dependencies.iter()
+		{
+			assert_eq!(self.queue_for_submitted_task(dependency_task_id), Some(QueueId(0)));
+		}
 
 		// The frustrations of rust not being able to partition mutable ownership at a granularity finer than a struct
 		let node_ids = self.tasks[token.task_id.0].node_ids.clone();
@@ -341,6 +500,15 @@ impl NodeResultTracker
 					Usage::Extraction(_extraction_node_id) => (),
 				}
 			}
+		}
+
+		// Not doing anything sophisticated here yet
+		let submission_id = self.next_submission_id;
+		self.next_submission_id.0 += 1;
+		{
+			let task = &mut self.tasks[token.task_id.0];
+			let task_submission = TaskSubmission{queue_id : QueueId(0), submission_id : submission_id};
+			task.task_submission = Some(task_submission);
 		}
 	}
 
@@ -607,7 +775,7 @@ impl<'program> CodeGen<'program>
 		let node_usage_analysis = NodeUsageAnalysis::from_funclet(funclet);
 		let mut node_result_tracker = NodeResultTracker::new();
 
-		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);		
+		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
 		{
@@ -624,37 +792,37 @@ impl<'program> CodeGen<'program>
 			{
 				ir::Node::Phi {index} =>
 				{
-					let token = node_result_tracker.begin_task(&mut self.code_generator, &[], &[]);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
 					let node_result = NodeResult::SingleOutput(Value::LocalVariable(argument_variable_ids[*index as usize]));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
-					let token = node_result_tracker.begin_task(&mut self.code_generator, &[], &[]);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
 					let node_result = NodeResult::SingleOutput(node_result_tracker.get_node_output_subvalue(* node_id, * index));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
 				ir::Node::ConstantInteger(value, type_id) =>
 				{
-					let token = node_result_tracker.begin_task(&mut self.code_generator, &[], &[]);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
 					let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
 					let node_result = NodeResult::SingleOutput(Value::LocalVariable(variable_id));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
 				ir::Node::ConstantUnsignedInteger(value, type_id) =>
 				{
-					let token = node_result_tracker.begin_task(&mut self.code_generator, &[], &[]);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
 					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
 					let node_result = NodeResult::SingleOutput(Value::LocalVariable(variable_id));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
-					let token = node_result_tracker.begin_task(&mut self.code_generator, arguments, &[]);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, arguments, &[], & node_usage_analysis);
 
 					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, token.local_variable_var_ids.as_slice());
 					let mut outputs = Vec::<Value>::new();
@@ -665,13 +833,13 @@ impl<'program> CodeGen<'program>
 
 					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
 					use std::convert::TryInto;
 
-					let token = node_result_tracker.begin_task(&mut self.code_generator, dimensions, arguments);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, dimensions, arguments, & node_usage_analysis);
 
 					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, token.local_variable_var_ids.as_slice().try_into().expect("Expected 3 elements for dimensions"), token.gpu_buffer_var_ids.as_slice());
 					let mut outputs = Vec::<Value>::new();
@@ -683,7 +851,7 @@ impl<'program> CodeGen<'program>
 					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
 
-					node_result_tracker.end_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
 				_ => panic!("Unknown node")
 			};
@@ -693,13 +861,15 @@ impl<'program> CodeGen<'program>
 		{
 			ir::TailEdge::Return { return_values } =>
 			{
-				let token = node_result_tracker.begin_task(&mut self.code_generator, return_values, &[]);
+				let token = node_result_tracker.begin_node_task(&mut self.code_generator, return_values, &[], & node_usage_analysis);
 
 				self.code_generator.build_return(token.local_variable_var_ids.as_slice());
 
-				node_result_tracker.end_task(token, &mut self.code_generator, & node_usage_analysis);
+				node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 			}
 		}
+
+		node_result_tracker.flush_tasks(&mut self.code_generator, & node_usage_analysis);
 
 		self.code_generator.end_pipeline();
 	}
