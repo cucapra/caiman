@@ -5,6 +5,7 @@ use std::default::Default;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
 use std::fmt::Write;
 
@@ -47,12 +48,14 @@ struct NodeResultTracker
 	node_results : Vec<NodeResult>,
 	tasks : Vec<Task>,
 	node_task_ids : Vec<Option<TaskId>>,
+	node_explicit_task_ids : Vec<Option<TaskId>>,
 	node_gpu_buffers : HashMap<usize, usize>,
 	node_local_variables : HashMap<usize, usize>,
 	encoding_task_ids : BTreeSet<TaskId>,
 	next_submission_id : SubmissionId,
 	submission_queues : Vec<SubmissionQueue>,
-	active_task_token : Option<TaskToken>
+	active_task_token : Option<TaskToken>,
+	active_explicit_task_tokens : BTreeMap<TaskId, TaskToken>
 }
 
 // Tasks are logical units of work that represent regions where resources are in a known state
@@ -76,6 +79,7 @@ struct TaskSubmission
 
 struct TaskToken
 {
+	explicit_introduction_node_id : Option<usize>,
 	task_id : TaskId,
 	local_variable_var_ids : Vec<usize>,
 	gpu_buffer_var_ids : Vec<usize>,
@@ -95,13 +99,27 @@ struct SubmissionQueue
 	most_recently_synchronized_submission_id : Option<SubmissionId>
 }
 
+/*#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
+struct ScopeId(usize);
+
+struct Scope
+{
+
+}*/
+
+struct TaskAppendOptions
+{
+	defer_gpu_ordering_checks_to_submit : bool,
+	task_internal_dependencies_only : bool,
+}
+
 impl NodeResultTracker
 {
 	fn new() -> Self
 	{
 		let mut submission_queues = Vec::<SubmissionQueue>::new();
 		submission_queues.push(SubmissionQueue{most_recently_synchronized_submission_id : None});
-		Self { node_results : vec![], tasks : vec![], node_task_ids : vec![], node_gpu_buffers : HashMap::<usize, usize>::new(), node_local_variables : HashMap::<usize, usize>::new(), encoding_task_ids : BTreeSet::<TaskId>::new(), next_submission_id : SubmissionId(0), submission_queues, active_task_token : None }
+		Self { node_results : vec![], tasks : vec![], node_task_ids : vec![], node_explicit_task_ids : vec![], node_gpu_buffers : HashMap::<usize, usize>::new(), node_local_variables : HashMap::<usize, usize>::new(), encoding_task_ids : BTreeSet::<TaskId>::new(), next_submission_id : SubmissionId(0), submission_queues, active_task_token : None, active_explicit_task_tokens : BTreeMap::<TaskId, TaskToken>::new() }
 	}
 
 	fn submission_queue_at_mut(&mut self, queue_id : QueueId) -> &mut SubmissionQueue
@@ -281,15 +299,16 @@ impl NodeResultTracker
 		None
 	}
 
-	fn begin_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis) -> TaskToken
+	fn begin_dyn_scoped_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis) -> TaskToken
 	{
 		let mut active_task_token_opt = None;
 		std::mem::swap(&mut active_task_token_opt, &mut self.active_task_token);
 
 		if let Some(mut active_task_token) = active_task_token_opt
 		{
-			let defer_gpu_ordering_checks_to_submit = false;
-			if self.append_task(&mut active_task_token, code_generator, local_variable_node_ids, gpu_buffer_node_ids, defer_gpu_ordering_checks_to_submit)
+			assert!(active_task_token.explicit_introduction_node_id.is_none());
+			let options = TaskAppendOptions{defer_gpu_ordering_checks_to_submit : false, task_internal_dependencies_only : false};
+			if self.append_task(&mut active_task_token, code_generator, local_variable_node_ids, gpu_buffer_node_ids, options)
 			{
 				return active_task_token;
 			}
@@ -299,13 +318,75 @@ impl NodeResultTracker
 			}
 		}
 
-		return self.begin_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids)
+		return self.begin_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids, None);
+	}
+
+	fn end_dyn_scoped_node_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	{
+		assert!(self.active_task_token.is_none());
+		assert!(token.explicit_introduction_node_id.is_none());
+		self.active_task_token = Some(token);
+	}
+
+	fn begin_node_task_opening_scope<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis, explicit_introduction_node_id : usize) -> TaskToken
+	{
+		let token = self.begin_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids, Some(explicit_introduction_node_id));
+		self.node_explicit_task_ids.push(Some(token.task_id));
+		return token;
+	}
+
+	fn begin_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis) -> TaskToken
+	{
+		// Detect if there are active static scopes
+		let scope_inference_result = self.infer_single_explicit_scope(None, local_variable_node_ids).and_then(|base| self.infer_single_explicit_scope(base, local_variable_node_ids));
+
+		match & scope_inference_result
+		{
+			Err(()) => panic!("Inferred multiple explicit scopes"),
+			Ok(None) =>
+			{
+				// Handle unscoped nodes
+				self.node_explicit_task_ids.push(None);
+				return self.begin_dyn_scoped_node_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids, node_usage_analysis);
+			}
+			Ok(Some(task_id)) =>
+			{
+				self.node_explicit_task_ids.push(Some(* task_id));
+				if let Some(mut token) = self.active_explicit_task_tokens.remove(task_id)
+				{
+					assert!(token.explicit_introduction_node_id.is_some());
+					let options = TaskAppendOptions{defer_gpu_ordering_checks_to_submit : false, task_internal_dependencies_only : true};
+					let succeeded = self.append_task(&mut token, code_generator, local_variable_node_ids, gpu_buffer_node_ids, options);
+					assert!(succeeded);
+					return token;
+				}
+				else
+				{
+					panic!("Token was not available")
+				}
+			}
+		}
 	}
 
 	fn end_node_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
 	{
-		assert!(self.active_task_token.is_none());
-		self.active_task_token = Some(token);
+		//let explicit_task_id_opt = self.node_explicit_task_ids.last().unwrap();
+		match & token.explicit_introduction_node_id
+		{
+			None => self.end_dyn_scoped_node_task(token, code_generator, node_usage_analysis),
+			Some(_) =>
+			{
+				assert!(token.explicit_introduction_node_id.is_some());
+				assert!(! self.active_explicit_task_tokens.contains_key(& token.task_id));
+				self.active_explicit_task_tokens.insert(token.task_id, token);
+			}
+		}
+	}
+
+	fn end_node_task_closing_scope<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	{
+		assert!(token.explicit_introduction_node_id.is_some());
+		assert!(! self.active_explicit_task_tokens.contains_key(& token.task_id));
 	}
 
 	fn flush_tasks<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
@@ -319,7 +400,7 @@ impl NodeResultTracker
 		}
 	}
 
-	fn begin_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]) -> TaskToken
+	fn begin_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], explicit_introduction_node_id : Option<usize>) -> TaskToken
 	{
 		self.check_sanity();
 		let mut dependencies = BTreeSet::<TaskId>::new();
@@ -368,15 +449,38 @@ impl NodeResultTracker
 			}
 		}
 
-		let token = TaskToken{ task_id : TaskId(self.tasks.len()), local_variable_var_ids, gpu_buffer_var_ids };
+		let token = TaskToken{ explicit_introduction_node_id, task_id : TaskId(self.tasks.len()), local_variable_var_ids, gpu_buffer_var_ids };
 		let task = Task{ dependencies, node_ids : vec![], task_submission : None };
 		self.tasks.push(task);
 		token
 	}
 
+	// Is there a single scope this set of dependencies can belong to?
+	// With the current type system, this means that all dependencies come from the same task
+	fn infer_single_explicit_scope(&self, mut previous_task_id : Option<TaskId>, node_ids : &[usize]) -> Result<Option<TaskId>, ()>
+	{
+		for node_id in node_ids
+		{
+			assert!(* node_id < self.node_results.len());
+			let node_task_id = self.node_explicit_task_ids[* node_id];
+
+			if previous_task_id.is_none()
+			{
+				previous_task_id = node_task_id;
+			}
+			else if previous_task_id != node_task_id
+			{
+				return Err(());
+			}
+		}
+		Ok(previous_task_id)
+	}
+
 	// Append is not allowed to add new coordinator synchronization (gpu -> local resource transitions)
 	// It's also not allowed to introduce local -> gpu ordering issues on submit
-	fn append_task<'program>(&mut self, token : &mut TaskToken, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], defer_gpu_ordering_checks_to_submit : bool) -> bool
+	// This means that all resource dependencies must be within the current task
+	// This disallows some important patterns
+	fn append_task<'program>(&mut self, token : &mut TaskToken, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], options : TaskAppendOptions) -> bool
 	{
 		for node_id in local_variable_node_ids
 		{
@@ -385,6 +489,14 @@ impl NodeResultTracker
 			if self.get_node_local(code_generator, * node_id).is_none()
 			{
 				return false;
+			}
+
+			if let Some(dependency_task_id) = self.node_task_ids[* node_id]
+			{
+				if options.task_internal_dependencies_only && dependency_task_id != token.task_id
+				{
+					return false;
+				}
 			}
 		}
 
@@ -399,6 +511,11 @@ impl NodeResultTracker
 
 			if let Some(dependency_task_id) = self.node_task_ids[* node_id]
 			{
+				if options.task_internal_dependencies_only && dependency_task_id != token.task_id
+				{
+					return false;
+				}
+
 				// This is more aggressive than necessary
 				// The append can happen if gpu dependencies are within the current task or on already submitted work
 				// The real requirement is that the submit for this this task needs to happen after the submit for the other task
@@ -409,7 +526,7 @@ impl NodeResultTracker
 				let queue_id_opt = self.queue_for_submitted_task(dependency_task_id);
 				let known_to_submit_after = dependency_task_id == token.task_id || queue_id_opt.is_some();
 				
-				if ! known_to_submit_after && ! defer_gpu_ordering_checks_to_submit
+				if ! known_to_submit_after && ! options.defer_gpu_ordering_checks_to_submit
 				{
 					return false;
 				}
@@ -498,6 +615,7 @@ impl NodeResultTracker
 						}
 					}
 					Usage::Extraction(_extraction_node_id) => (),
+					Usage::TaskSubmission(_introduction_node_id) => (),
 				}
 			}
 		}
@@ -603,6 +721,7 @@ enum Usage
 	LocalVariable,
 	GpuBuffer,
 	Extraction(usize),
+	TaskSubmission(usize)
 }
 
 struct SubnodeUsage
@@ -727,6 +846,38 @@ impl NodeUsageAnalysis
 				}
 				ir::Node::ConstantInteger(value, type_id) => (),
 				ir::Node::ConstantUnsignedInteger(value, type_id) => (),
+
+				// Task nodes are a bit weird in that they use nodes, but will take them in any state
+				// They just decide what state they are in afterwards
+				// The forward pass gets to decide which state they are in initially
+				// As such, these rules aren't really correct since they propagate the synchronization requirement to outside
+				ir::Node::GpuTaskStart{local_variable_node_ids, gpu_resident_node_ids} =>
+				{
+					for & node_id in local_variable_node_ids.iter()
+					{
+						analysis.use_node(node_id, Usage::LocalVariable)
+					}
+
+					for & node_id in gpu_resident_node_ids.iter()
+					{
+						analysis.use_node(node_id, Usage::GpuBuffer)
+					}
+				}
+				ir::Node::GpuTaskEnd{task_node_id, local_variable_node_ids, gpu_resident_node_ids} =>
+				{
+					analysis.use_node(* task_node_id, Usage::TaskSubmission(current_node_id));
+
+					for & node_id in local_variable_node_ids.iter()
+					{
+						analysis.use_node(node_id, Usage::LocalVariable)
+					}
+
+					for & node_id in gpu_resident_node_ids.iter()
+					{
+						analysis.use_node(node_id, Usage::GpuBuffer)
+					}
+				}
+
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
 					for & node_id in arguments.iter()
@@ -819,6 +970,45 @@ impl<'program> CodeGen<'program>
 					let node_result = NodeResult::SingleOutput(Value::LocalVariable(variable_id));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
 					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+				}
+				ir::Node::GpuTaskStart{ local_variable_node_ids, gpu_resident_node_ids } =>
+				{
+					let token = node_result_tracker.begin_node_task_opening_scope(&mut self.code_generator, local_variable_node_ids, gpu_resident_node_ids, & node_usage_analysis, current_node_id);
+					let mut outputs = Vec::<Value>::new();
+					
+					for (index, node_id) in local_variable_node_ids.iter().enumerate()
+					{
+						outputs.push(Value::LocalVariable(token.local_variable_var_ids[index]));
+					}
+
+					for (index, node_id) in gpu_resident_node_ids.iter().enumerate()
+					{
+						outputs.push(Value::GpuBuffer(token.gpu_buffer_var_ids[index]));
+					}
+
+					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
+					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
+					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+				}
+				ir::Node::GpuTaskEnd{ task_node_id, local_variable_node_ids, gpu_resident_node_ids } =>
+				{
+					// This doesn't work quite the way one would expect
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, local_variable_node_ids, gpu_resident_node_ids, & node_usage_analysis);
+					let mut outputs = Vec::<Value>::new();
+					
+					for (index, node_id) in local_variable_node_ids.iter().enumerate()
+					{
+						outputs.push(Value::LocalVariable(token.local_variable_var_ids[index]));
+					}
+
+					for (index, node_id) in gpu_resident_node_ids.iter().enumerate()
+					{
+						outputs.push(Value::GpuBuffer(token.gpu_buffer_var_ids[index]));
+					}
+
+					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
+					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
+					node_result_tracker.end_node_task_closing_scope(token, &mut self.code_generator, & node_usage_analysis);
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{

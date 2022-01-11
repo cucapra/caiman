@@ -128,8 +128,8 @@ pub enum Node
 	//ReadBuffer { node_id : NodeId, type_id : TypeId, byte_offset : usize },
 
 	// Scopes
-	//GpuSubmissionStart{ cpu_resident_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
-	//GpuSubmissionEnd{ cpu_resident_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
+	GpuTaskStart{ local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
+	GpuTaskEnd{ task_node_id : NodeId, local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
 
 	// High Level Coordinator Language
 	CallExternalCpu { external_function_id : ExternalCpuFunctionId, arguments : Box<[NodeId]> },
