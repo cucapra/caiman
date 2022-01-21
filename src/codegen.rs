@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use std::collections::BTreeMap;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
 use std::fmt::Write;
+use crate::node_usage_analysis::*;
 
 // This is a temporary hack
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -715,6 +716,7 @@ impl NodeResultTracker
 	}
 }
 
+/*
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 enum Usage
 {
@@ -903,7 +905,7 @@ impl NodeUsageAnalysis
 		
 		analysis
 	}
-}
+}*/
 
 pub struct CodeGen<'program>
 {
