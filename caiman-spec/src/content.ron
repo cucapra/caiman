@@ -1,0 +1,41 @@
+(
+	operations : [
+		(
+			name : "ConstantInteger",
+			inputs : [
+				(name : "value", kind : ImmediateI64, is_array : false),
+				(name : "type_id", kind : Type, is_array : false),
+			],
+			output : Single(assured_place_kind : Some(Local)),
+			language_set : (implicit : true, explicit: true)
+		),
+		(
+			name : "ConstantUnsignedInteger",
+			inputs : [
+				(name : "value", kind : ImmediateU64, is_array : false),
+				(name : "type_id", kind : Type, is_array : false),
+			],
+			output : Single(assured_place_kind : Some(Local)),
+			language_set : (implicit : true, explicit: true)
+		),
+		(
+			name : "CallExternalCpu",
+			inputs : [
+				(name : "external_function_id", kind : ExternalCpuFunction, is_array : false),
+				(name : "arguments", kind : Operation(required_place_kind : Some(Local)), is_array : true)
+			],
+			output : Multiple(assured_place_kind : Some(Local)),
+			language_set : (implicit : true, explicit: true)
+		),
+		(
+			name : "CallExternalGpuCompute",
+			inputs : [
+				(name : "external_function_id", kind : ExternalGpuFunction, is_array : false),
+				(name : "dimensions", kind : Operation(required_place_kind : Some(Local)), is_array : true),
+				(name : "arguments", kind : Operation(required_place_kind : Some(Gpu)), is_array : true)
+			],
+			output : Multiple(assured_place_kind : Some(Gpu)),
+			language_set : (implicit : true, explicit: true)
+		)
+	]
+)

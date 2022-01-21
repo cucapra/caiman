@@ -844,8 +844,8 @@ impl NodeUsageAnalysis
 				{
 					analysis.use_node(* node_id, Usage::Extraction(current_node_id));
 				}
-				ir::Node::ConstantInteger(value, type_id) => (),
-				ir::Node::ConstantUnsignedInteger(value, type_id) => (),
+				ir::Node::ConstantInteger{value, type_id} => (),
+				ir::Node::ConstantUnsignedInteger{value, type_id} => (),
 
 				// Task nodes are a bit weird in that they use nodes, but will take them in any state
 				// They just decide what state they are in afterwards
@@ -955,7 +955,7 @@ impl<'program> CodeGen<'program>
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
 					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
-				ir::Node::ConstantInteger(value, type_id) =>
+				ir::Node::ConstantInteger{value, type_id} =>
 				{
 					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
 					let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
@@ -963,7 +963,7 @@ impl<'program> CodeGen<'program>
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
 					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
 				}
-				ir::Node::ConstantUnsignedInteger(value, type_id) =>
+				ir::Node::ConstantUnsignedInteger{value, type_id} =>
 				{
 					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
 					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);

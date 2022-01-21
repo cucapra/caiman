@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::default::Default;
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
-use bitflags::bitflags;
+//use bitflags::bitflags;
 use crate::arena::Arena;
 
 /*#[derive(Serialize, Deserialize, Debug, Default)]
@@ -28,7 +28,7 @@ pub enum Scope
 	//CpuOrGpu
 }
 
-bitflags!
+/*bitflags!
 {
 	#[derive(Serialize, Deserialize, Default)]
 	pub struct ScopeSet : u32
@@ -39,7 +39,7 @@ bitflags!
 		const GpuWorker = 0b100;
 		const Gpu = Self::GpuCoordinator.bits | Self::GpuWorker.bits;
 	}
-}
+}*/
 
 /*
 #[derive(Debug)]
@@ -76,7 +76,14 @@ pub type ExternalCpuFunctionId = usize;
 pub type ExternalGpuFunctionId = usize;
 pub type FuncletId = usize;
 pub type NodeId = usize;
+pub type OperationId = NodeId;
 pub type TypeId = usize;
+
+mod generated
+{
+	use super::*;
+	include!(concat!(env!("OUT_DIR"), "/generated/ir.txt"));
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StructField
@@ -116,7 +123,9 @@ pub enum Type
 	//GpuFragmentWorkerState,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+pub use generated::Node;
+
+/*#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Node
 {
 	// Core
@@ -173,7 +182,7 @@ pub enum Node
 	//OutputVertex { state : NodeId, coords : [NodeId; 4] }
 	// GPU Fragment Worker Only
 	//OutputFragment { state : NodeId, coords : [NodeId; 4] }
-}
+}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
