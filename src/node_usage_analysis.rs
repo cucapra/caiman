@@ -186,7 +186,10 @@ impl NodeUsageAnalysis
 						analysis.use_node(node_id, Usage::GpuBuffer)
 					}
 				}
-				_ => panic!("Unimplemented node")
+				_ =>
+				{
+					panic!("Unimplemented node")
+				}
 			}
 		}
 		

@@ -66,6 +66,6 @@ fn main()
 	let out_dir = std::env::var("OUT_DIR").unwrap();
 	let generated_path = format!("{}/generated", out_dir);
 	std::fs::create_dir(&generated_path);
-	let mut output_file = File::create(format!("{}/generated/ir.txt", out_dir)).unwrap();
-	write_ir_definition(&mut output_file, & specification);
+	let mut ir_output_file = File::create(format!("{}/generated/ir.txt", out_dir)).unwrap();
+	write_ir_definition(&mut ir_output_file, & specification);
 }

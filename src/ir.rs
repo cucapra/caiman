@@ -78,6 +78,7 @@ pub type FuncletId = usize;
 pub type NodeId = usize;
 pub type OperationId = NodeId;
 pub type TypeId = usize;
+pub type PlaceId = usize;
 
 mod generated
 {
@@ -210,11 +211,6 @@ pub struct Funclet
 	pub tail_edge : TailEdge
 }
 
-impl Funclet
-{
-	//fn is_gpu_executable()
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalCpuFunction
 {
@@ -293,78 +289,5 @@ impl ProgramBuilder
 	fn new() -> Self
 	{
 		Default::default()
-	}
-}*/
-
-/*
-	/*struct FuncletLegalizationState
-	{
-		//is_gpu_compute_worker_legal : bool,
-		legal_executor_set : ExecutorSet,
-	}
-
-	struct LegalizationState
-	{
-		remapped_funclets : HashMap<FuncletId, FuncletId>,
-		funclet_states : HashMap<FuncletId, FuncletLegalizationState>,
-	}*/
-
-	fn legalize(state : &mut LegalizationState, program : &mut Program, funclet_id : FuncletId) -> FuncletId
-	{
-		/*if let Some(&new_funclet_id) = state.remapped_funclets.get(&funclet_id)
-		{
-			return new_funclet_id;
-		}
-
-		if state.funclet_states.contains_key(&funclet_id)
-		{
-			return funclet_id;
-		}*/
-
-		let fullExectorSet = ExecutorSet::Cpu | ExecutorSet::GpuCoordinator;
-
-		let mut node_executor_sets  = HashMap::<NodeId, ExecutorSet>::new();
-
-		let funclet = & program.funclets[&funclet_id];
-		for current_node_id in 0 .. funclet.nodes.len()
-		{
-			let node = & funclet.nodes[current_node_id];
-			let executor_set = match node
-			{
-				Node::Phi { index } => fullExectorSet,
-				Node::Extract { node_id, index } => *node_executor_sets.get(node_id).unwrap(),
-				ReadBuffer { node_id, type_id, byte_offset } => *node_executor_sets.get(node_id).unwrap(),
-				CallExternalCpu { external_function_id, arguments } => ExecutorSet::Cpu,
-				CallExternalGpuCompute { external_function_id, arguments } => ExecutorSet::Cpu,
-				_ => ExecutorSet::empty() //CallExternalCpu { _ }
-			};
-			node_executor_sets.insert(current_node_id, executor_set);
-		}
-
-		panic!("Unfinished function");
-		return 0;
-	}
-*/
-
-/*od evaluation
-{
-	use crate::ir::*;
-
-	enum Value
-	{
-		None
-	}
-
-	struct Context<'program>
-	{
-		program : & 'program Program,
-	}
-
-	impl<'program> Context<'program>
-	{
-		fn new(program : & 'program Program) -> Self
-		{
-			Self { program : program }
-		}
 	}
 }*/
