@@ -19,22 +19,6 @@ enum Value
 	GpuBuffer(usize),
 }
 
-enum Location
-{
-	Constant,
-	Local,
-	Gpu,
-}
-
-/*
-enum SubmissionState
-{
-	Encoding,
-	Submitted,
-	Done
-}
-*/
-
 enum NodeResult
 {
 	Error,
@@ -99,14 +83,6 @@ struct SubmissionQueue
 {
 	most_recently_synchronized_submission_id : Option<SubmissionId>
 }
-
-/*#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
-struct ScopeId(usize);
-
-struct Scope
-{
-
-}*/
 
 struct TaskAppendOptions
 {
@@ -300,7 +276,7 @@ impl NodeResultTracker
 		None
 	}
 
-	fn begin_dyn_scoped_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis) -> TaskToken
+	fn begin_dyn_scoped_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]/*, node_usage_analysis : & NodeUsageAnalysis*/) -> TaskToken
 	{
 		let mut active_task_token_opt = None;
 		std::mem::swap(&mut active_task_token_opt, &mut self.active_task_token);
@@ -315,28 +291,28 @@ impl NodeResultTracker
 			}
 			else
 			{
-				self.end_task(active_task_token, code_generator, node_usage_analysis);
+				self.end_task(active_task_token, code_generator/*, node_usage_analysis*/);
 			}
 		}
 
 		return self.begin_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids, None);
 	}
 
-	fn end_dyn_scoped_node_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	fn end_dyn_scoped_node_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>/*, node_usage_analysis : & NodeUsageAnalysis*/)
 	{
 		assert!(self.active_task_token.is_none());
 		assert!(token.explicit_introduction_node_id.is_none());
 		self.active_task_token = Some(token);
 	}
 
-	fn begin_node_task_opening_scope<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis, explicit_introduction_node_id : usize) -> TaskToken
+	/*fn begin_node_task_opening_scope<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis, explicit_introduction_node_id : usize) -> TaskToken
 	{
 		let token = self.begin_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids, Some(explicit_introduction_node_id));
 		self.node_explicit_task_ids.push(Some(token.task_id));
 		return token;
-	}
+	}*/
 
-	fn begin_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize], node_usage_analysis : & NodeUsageAnalysis) -> TaskToken
+	fn begin_node_task<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, local_variable_node_ids : &[usize], gpu_buffer_node_ids : &[usize]/*, node_usage_analysis : & NodeUsageAnalysis*/) -> TaskToken
 	{
 		// Detect if there are active static scopes
 		let scope_inference_result = self.infer_single_explicit_scope(None, local_variable_node_ids).and_then(|base| self.infer_single_explicit_scope(base, local_variable_node_ids));
@@ -348,7 +324,7 @@ impl NodeResultTracker
 			{
 				// Handle unscoped nodes
 				self.node_explicit_task_ids.push(None);
-				return self.begin_dyn_scoped_node_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids, node_usage_analysis);
+				return self.begin_dyn_scoped_node_task(code_generator, local_variable_node_ids, gpu_buffer_node_ids/*, node_usage_analysis*/);
 			}
 			Ok(Some(task_id)) =>
 			{
@@ -369,12 +345,12 @@ impl NodeResultTracker
 		}
 	}
 
-	fn end_node_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	fn end_node_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>/*, node_usage_analysis : & NodeUsageAnalysis*/)
 	{
 		//let explicit_task_id_opt = self.node_explicit_task_ids.last().unwrap();
 		match & token.explicit_introduction_node_id
 		{
-			None => self.end_dyn_scoped_node_task(token, code_generator, node_usage_analysis),
+			None => self.end_dyn_scoped_node_task(token, code_generator/*, node_usage_analysis*/),
 			Some(_) =>
 			{
 				assert!(token.explicit_introduction_node_id.is_some());
@@ -384,20 +360,20 @@ impl NodeResultTracker
 		}
 	}
 
-	fn end_node_task_closing_scope<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	/*fn end_node_task_closing_scope<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
 	{
 		assert!(token.explicit_introduction_node_id.is_some());
 		assert!(! self.active_explicit_task_tokens.contains_key(& token.task_id));
-	}
+	}*/
 
-	fn flush_tasks<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	fn flush_tasks<'program>(&mut self, code_generator : &mut CodeGenerator<'program>/*, node_usage_analysis : & NodeUsageAnalysis*/)
 	{
 		let mut active_task_token_opt = None;
 		std::mem::swap(&mut active_task_token_opt, &mut self.active_task_token);
 
 		if let Some(active_task_token) = active_task_token_opt
 		{
-			self.end_task(active_task_token, code_generator, node_usage_analysis);
+			self.end_task(active_task_token, code_generator/*, node_usage_analysis*/);
 		}
 	}
 
@@ -577,7 +553,7 @@ impl NodeResultTracker
 		true
 	}
 
-	fn end_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>, node_usage_analysis : & NodeUsageAnalysis)
+	fn end_task<'program>(&mut self, token : TaskToken, code_generator : &mut CodeGenerator<'program>/*, node_usage_analysis : & NodeUsageAnalysis*/)
 	{
 		// To do: Support other patterns
 		assert_eq!(token.task_id.0 + 1, self.tasks.len());
@@ -587,7 +563,7 @@ impl NodeResultTracker
 			assert_eq!(self.queue_for_submitted_task(dependency_task_id), Some(QueueId(0)));
 		}
 
-		// The frustrations of rust not being able to partition mutable ownership at a granularity finer than a struct
+		/*// The frustrations of rust not being able to partition mutable ownership at a granularity finer than a struct
 		let node_ids = self.tasks[token.task_id.0].node_ids.clone();
 		for & node_id in node_ids.iter()
 		{
@@ -619,7 +595,7 @@ impl NodeResultTracker
 					Usage::TaskSubmission(_introduction_node_id) => (),
 				}
 			}
-		}
+		}*/
 
 		// Not doing anything sophisticated here yet
 		let submission_id = self.next_submission_id;
@@ -628,6 +604,34 @@ impl NodeResultTracker
 			let task = &mut self.tasks[token.task_id.0];
 			let task_submission = TaskSubmission{queue_id : QueueId(0), submission_id : submission_id};
 			task.task_submission = Some(task_submission);
+		}
+	}
+
+	fn submit_gpu<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_ids : &[usize])
+	{
+		for & node_id in node_ids.iter()
+		{
+			if let Some(_var_id) = self.make_node_on_gpu(code_generator, node_id)
+			{
+			}
+			else
+			{
+				panic!("Failed to make the data gpu resident");
+			}
+		}
+	}
+
+	fn sync_local<'program>(&mut self, code_generator : &mut CodeGenerator<'program>, node_ids : &[usize])
+	{
+		for & node_id in node_ids.iter()
+		{
+			if let Some(_var_id) = self.make_node_local(code_generator, node_id)
+			{
+			}
+			else
+			{
+				panic!("Failed to make the data local");
+			}
 		}
 	}
 
@@ -716,197 +720,6 @@ impl NodeResultTracker
 	}
 }
 
-/*
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-enum Usage
-{
-	LocalVariable,
-	GpuBuffer,
-	Extraction(usize),
-	TaskSubmission(usize)
-}
-
-struct SubnodeUsage
-{
-	//user_node_ids : BTreeSet<usize>,
-	total_usage_count : usize,
-	usages : HashMap<Usage, usize>
-}
-
-#[derive(Clone, Copy, PartialOrd, Ord, Hash, PartialEq, Eq)]
-struct SubnodePath(usize, Option<usize>);
-
-// Answers the question: For a given node, how will it be used in the future?
-struct NodeUsageAnalysis
-{
-	subnode_usages : HashMap<SubnodePath, SubnodeUsage>
-}
-
-impl NodeUsageAnalysis
-{
-	fn new() -> Self
-	{
-		Self { subnode_usages : HashMap::<SubnodePath, SubnodeUsage>::new() }
-	}
-
-	fn use_subnode_raw(&mut self, used_subnode_path : SubnodePath, usage : Usage)
-	{
-		if ! self.subnode_usages.contains_key(& used_subnode_path)
-		{
-			let node_usage = SubnodeUsage { total_usage_count : 0, usages : HashMap::<Usage, usize>::new() };
-			self.subnode_usages.insert(used_subnode_path, node_usage);
-		}
-
-		let subnode_usage = self.subnode_usages.get_mut(& used_subnode_path).unwrap();
-		subnode_usage.total_usage_count += 1;
-		if let Some(usage_count) = subnode_usage.usages.get_mut(& usage)
-		{
-			* usage_count += 1;
-		}
-		else
-		{
-			subnode_usage.usages.insert(usage, 1);
-		}
-	}
-
-	fn use_subnode(&mut self, used_subnode_path : SubnodePath, usage : Usage)
-	{
-		let SubnodePath(node_id, subnode_id_opt) = used_subnode_path;
-		self.use_subnode_raw(SubnodePath(node_id, None), usage);
-		if subnode_id_opt.is_some()
-		{
-			self.use_subnode_raw(SubnodePath(node_id, subnode_id_opt), usage);
-		}
-	}
-
-	fn use_node(&mut self, node_id : usize, usage : Usage)
-	{
-		self.use_subnode(SubnodePath(node_id, None), usage)
-	}
-
-	fn is_subnode_used(& self, used_subnode_path : SubnodePath) -> bool
-	{
-		if let Some(subnode_usage) = self.subnode_usages.get(& used_subnode_path)
-		{
-			subnode_usage.total_usage_count > 0
-		}
-		else
-		{
-			false
-		}
-	}
-
-	fn get_node_usages(& self, node_id : usize) -> Box<[(Usage, usize)]>
-	{
-		let mut usages = Vec::<(Usage, usize)>::new();
-
-		if let Some(subnode_usage) = self.subnode_usages.get(& SubnodePath(node_id, None))
-		{
-			for (usage, usage_count) in subnode_usage.usages.iter()
-			{
-				usages.push((* usage, * usage_count));
-			}
-		}
-		
-		usages.into_boxed_slice()
-	}
-
-	fn is_node_used(& self, node_id : usize) -> bool
-	{
-		self.is_subnode_used(SubnodePath(node_id, None))
-	}
-
-	fn from_funclet(funclet : & ir::Funclet) -> Self
-	{
-		let mut analysis = Self::new();
-		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
-
-		match & funclet.tail_edge
-		{
-			ir::TailEdge::Return { return_values } =>
-			{
-				for & node_id in return_values.iter()
-				{
-					analysis.use_node(node_id, Usage::LocalVariable);
-				}
-			}
-		}
-
-		for (current_node_id, node) in funclet.nodes.iter().enumerate().rev()
-		{
-			if ! analysis.is_node_used(current_node_id)
-			{
-				continue;
-			}
-			
-			match node
-			{
-				ir::Node::Phi {index} => (),
-				ir::Node::ExtractResult { node_id, index } =>
-				{
-					analysis.use_node(* node_id, Usage::Extraction(current_node_id));
-				}
-				ir::Node::ConstantInteger{value, type_id} => (),
-				ir::Node::ConstantUnsignedInteger{value, type_id} => (),
-
-				// Task nodes are a bit weird in that they use nodes, but will take them in any state
-				// They just decide what state they are in afterwards
-				// The forward pass gets to decide which state they are in initially
-				// As such, these rules aren't really correct since they propagate the synchronization requirement to outside
-				ir::Node::GpuTaskStart{local_variable_node_ids, gpu_resident_node_ids} =>
-				{
-					for & node_id in local_variable_node_ids.iter()
-					{
-						analysis.use_node(node_id, Usage::LocalVariable)
-					}
-
-					for & node_id in gpu_resident_node_ids.iter()
-					{
-						analysis.use_node(node_id, Usage::GpuBuffer)
-					}
-				}
-				ir::Node::GpuTaskEnd{task_node_id, local_variable_node_ids, gpu_resident_node_ids} =>
-				{
-					analysis.use_node(* task_node_id, Usage::TaskSubmission(current_node_id));
-
-					for & node_id in local_variable_node_ids.iter()
-					{
-						analysis.use_node(node_id, Usage::LocalVariable)
-					}
-
-					for & node_id in gpu_resident_node_ids.iter()
-					{
-						analysis.use_node(node_id, Usage::GpuBuffer)
-					}
-				}
-
-				ir::Node::CallExternalCpu { external_function_id, arguments } =>
-				{
-					for & node_id in arguments.iter()
-					{
-						analysis.use_node(node_id, Usage::LocalVariable)
-					}
-				}
-				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
-				{
-					for & node_id in dimensions.iter()
-					{
-						analysis.use_node(node_id, Usage::LocalVariable)
-					}
-
-					for & node_id in arguments.iter()
-					{
-						analysis.use_node(node_id, Usage::GpuBuffer)
-					}
-				}
-				_ => panic!("Unimplemented node")
-			}
-		}
-		
-		analysis
-	}
-}*/
-
 pub struct CodeGen<'program>
 {
 	program : & 'program ir::Program,
@@ -945,35 +758,35 @@ impl<'program> CodeGen<'program>
 			{
 				ir::Node::Phi {index} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]/*, & node_usage_analysis*/);
 					let node_result = NodeResult::SingleOutput(Value::LocalVariable(argument_variable_ids[*index as usize]));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator/*, & node_usage_analysis*/);
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]/*, & node_usage_analysis*/);
 					let node_result = NodeResult::SingleOutput(node_result_tracker.get_node_output_subvalue(* node_id, * index));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator/*, & node_usage_analysis*/);
 				}
 				ir::Node::ConstantInteger{value, type_id} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]/*, & node_usage_analysis*/);
 					let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
 					let node_result = NodeResult::SingleOutput(Value::LocalVariable(variable_id));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator/*, & node_usage_analysis*/);
 				}
 				ir::Node::ConstantUnsignedInteger{value, type_id} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[], & node_usage_analysis);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]/*, & node_usage_analysis*/);
 					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
 					let node_result = NodeResult::SingleOutput(Value::LocalVariable(variable_id));
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator/*, & node_usage_analysis*/);
 				}
-				ir::Node::GpuTaskStart{ local_variable_node_ids, gpu_resident_node_ids } =>
+				/*ir::Node::GpuTaskStart{ local_variable_node_ids, gpu_resident_node_ids } =>
 				{
 					let token = node_result_tracker.begin_node_task_opening_scope(&mut self.code_generator, local_variable_node_ids, gpu_resident_node_ids, & node_usage_analysis, current_node_id);
 					let mut outputs = Vec::<Value>::new();
@@ -1011,10 +824,10 @@ impl<'program> CodeGen<'program>
 					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
 					node_result_tracker.end_node_task_closing_scope(token, &mut self.code_generator, & node_usage_analysis);
-				}
+				}*/
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, arguments, &[], & node_usage_analysis);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, arguments, &[]/*, & node_usage_analysis*/);
 
 					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, token.local_variable_var_ids.as_slice());
 					let mut outputs = Vec::<Value>::new();
@@ -1025,13 +838,13 @@ impl<'program> CodeGen<'program>
 
 					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator/*, & node_usage_analysis*/);
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
 					use std::convert::TryInto;
 
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, dimensions, arguments, & node_usage_analysis);
+					let token = node_result_tracker.begin_node_task(&mut self.code_generator, dimensions, arguments/*, & node_usage_analysis*/);
 
 					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, token.local_variable_var_ids.as_slice().try_into().expect("Expected 3 elements for dimensions"), token.gpu_buffer_var_ids.as_slice());
 					let mut outputs = Vec::<Value>::new();
@@ -1043,7 +856,7 @@ impl<'program> CodeGen<'program>
 					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
 					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
 
-					node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+					node_result_tracker.end_node_task(token, &mut self.code_generator/*, & node_usage_analysis*/);
 				}
 				_ => panic!("Unknown node")
 			};
@@ -1053,15 +866,17 @@ impl<'program> CodeGen<'program>
 		{
 			ir::TailEdge::Return { return_values } =>
 			{
-				let token = node_result_tracker.begin_node_task(&mut self.code_generator, return_values, &[], & node_usage_analysis);
+				let token = node_result_tracker.begin_node_task(&mut self.code_generator, return_values, &[]/*, & node_usage_analysis*/);
 
 				self.code_generator.build_return(token.local_variable_var_ids.as_slice());
 
-				node_result_tracker.end_node_task(token, &mut self.code_generator, & node_usage_analysis);
+				node_result_tracker.end_node_task(token, &mut self.code_generator/*, & node_usage_analysis*/);
+
+				node_result_tracker.sync_local(&mut self.code_generator, return_values);
 			}
 		}
 
-		node_result_tracker.flush_tasks(&mut self.code_generator, & node_usage_analysis);
+		node_result_tracker.flush_tasks(&mut self.code_generator/*, & node_usage_analysis*/);
 
 		self.code_generator.end_pipeline();
 	}
