@@ -3,8 +3,8 @@ use serde_derive::{Serialize, Deserialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LanguageSet
 {
-	pub implicit : bool,
-	pub explicit : bool
+	pub functional : bool,
+	pub scheduling : bool
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -40,6 +40,7 @@ pub enum OperationOutput
 {
 	Single{assured_place_kind : Option<PlaceKind>},
 	Multiple{assured_place_kind : Option<PlaceKind>},
+	None,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -48,7 +49,8 @@ pub struct Operation
 	pub name : String,
 	pub inputs : Vec<OperationInput>,
 	pub output : OperationOutput,
-	pub language_set : LanguageSet
+	pub language_set : LanguageSet,
+	pub has_local_side_effect : bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

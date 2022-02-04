@@ -7,7 +7,8 @@
 				(name : "type_id", kind : Type, is_array : false),
 			],
 			output : Single(assured_place_kind : Some(Local)),
-			language_set : (implicit : true, explicit: true)
+			language_set : (functional : true, scheduling: false),
+			has_local_side_effect : false
 		),
 		(
 			name : "ConstantUnsignedInteger",
@@ -16,7 +17,8 @@
 				(name : "type_id", kind : Type, is_array : false),
 			],
 			output : Single(assured_place_kind : Some(Local)),
-			language_set : (implicit : true, explicit: true)
+			language_set : (functional : true, scheduling: false),
+			has_local_side_effect : false
 		),
 		(
 			name : "CallExternalCpu",
@@ -25,7 +27,8 @@
 				(name : "arguments", kind : Operation(required_place_kind : Some(Local)), is_array : true)
 			],
 			output : Multiple(assured_place_kind : Some(Local)),
-			language_set : (implicit : true, explicit: true)
+			language_set : (functional : true, scheduling: false),
+			has_local_side_effect : false
 		),
 		(
 			name : "CallExternalGpuCompute",
@@ -35,7 +38,26 @@
 				(name : "arguments", kind : Operation(required_place_kind : Some(Gpu)), is_array : true)
 			],
 			output : Multiple(assured_place_kind : Some(Gpu)),
-			language_set : (implicit : true, explicit: true)
-		)
+			language_set : (functional : true, scheduling: false),
+			has_local_side_effect : false
+		),
+		(
+			name : "SubmitGpu",
+			inputs : [
+				(name : "values", kind : Operation(required_place_kind : Some(Gpu)), is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true),
+			has_local_side_effect : true
+		),
+		(
+			name : "SyncLocal",
+			inputs : [
+				(name : "values", kind : Operation(required_place_kind : Some(Local)), is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true),
+			has_local_side_effect : true
+		),
 	]
 )

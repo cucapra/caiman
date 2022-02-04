@@ -121,7 +121,14 @@ impl NodeUsageAnalysis
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate().rev()
 		{
-			if ! analysis.is_node_used(current_node_id)
+			let is_always_used = match node
+			{
+				ir::Node::SubmitGpu{values} => true,
+				ir::Node::SyncLocal{values} => true,
+				_ => false
+			};
+			
+			if ! is_always_used && ! analysis.is_node_used(current_node_id)
 			{
 				continue;
 			}
@@ -140,7 +147,7 @@ impl NodeUsageAnalysis
 				// They just decide what state they are in afterwards
 				// The forward pass gets to decide which state they are in initially
 				// As such, these rules aren't really correct since they propagate the synchronization requirement to outside
-				ir::Node::GpuTaskStart{local_variable_node_ids, gpu_resident_node_ids} =>
+				/*ir::Node::GpuTaskStart{local_variable_node_ids, gpu_resident_node_ids} =>
 				{
 					for & node_id in local_variable_node_ids.iter()
 					{
@@ -165,8 +172,15 @@ impl NodeUsageAnalysis
 					{
 						analysis.use_node(node_id, Usage::GpuBuffer)
 					}
+				}*/
+				ir::Node::SubmitGpu{values} =>
+				{
+					// Doesn't contribute to the usage of a node
 				}
-
+				ir::Node::SyncLocal{values} =>
+				{
+					// Doesn't contribute to the usage of a node
+				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
 					for & node_id in arguments.iter()
