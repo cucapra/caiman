@@ -1,4 +1,4 @@
-use crate::{ir, codegen};
+use crate::{ir, codegen, explicate_scheduling};
 use std::collections::HashMap;
 use std::default::Default;
 use serde_derive::{Serialize, Deserialize};
@@ -44,6 +44,24 @@ pub fn compile_ron_definition(input_string : &str, options : Option<CompileOptio
 			let mut codegen = codegen::CodeGen::new(& definition.program);
 			let output_string = codegen.generate();
 			Ok(output_string)
+		}
+	}
+}
+
+pub fn explicate_ron_definition(input_string : &str, options : Option<CompileOptions>) -> Result<String, CompileError>
+{
+	let pretty = ron::ser::PrettyConfig::new();
+
+	let mut result : Result<Definition, ron::de::Error> = ron::from_str(& input_string);
+	match result
+	{
+		Err(why) => Err(CompileError{ message: format!("Parse error: {}", why)}),
+		Ok(mut definition) =>
+		{
+			assert_eq!(definition.version, (0, 0, 1));
+			explicate_scheduling::explicate_scheduling(&mut definition.program);
+			let output_string_result = ron::ser::to_string_pretty(& definition, pretty);
+			Ok(output_string_result.unwrap())
 		}
 	}
 }

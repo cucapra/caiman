@@ -123,6 +123,7 @@ impl NodeUsageAnalysis
 		{
 			let is_always_used = match node
 			{
+				ir::Node::EncodeGpu{values} => true,
 				ir::Node::SubmitGpu{values} => true,
 				ir::Node::SyncLocal{values} => true,
 				_ => false
@@ -173,6 +174,10 @@ impl NodeUsageAnalysis
 						analysis.use_node(node_id, Usage::GpuBuffer)
 					}
 				}*/
+				ir::Node::EncodeGpu{values} =>
+				{
+					// Doesn't contribute to the usage of a node
+				}
 				ir::Node::SubmitGpu{values} =>
 				{
 					// Doesn't contribute to the usage of a node

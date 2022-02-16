@@ -59,5 +59,14 @@
 			language_set : (functional : false, scheduling: true),
 			has_local_side_effect : true
 		),
+		(
+			name : "EncodeGpu",
+			inputs : [
+				(name : "values", kind : Operation(required_place_kind : Some(Gpu)), is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true),
+			has_local_side_effect : true
+		),
 	]
 )

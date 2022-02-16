@@ -9,7 +9,8 @@ use std::path::Path;
 struct Arguments
 {
 	input_path : String,
-	output_path : Option<String>
+	output_path : Option<String>,
+	explicate_only : bool
 }
 
 fn compile(input_file : &mut File, output_file : &mut File)
@@ -23,6 +24,27 @@ fn compile(input_file : &mut File, output_file : &mut File)
 	};
 
 	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, None);
+	match result
+	{
+		Err(why) => panic!("Parse error: {}", why),
+		Ok(output_string) =>
+		{
+			write!(output_file, "{}", output_string);
+		}
+	}
+}
+
+fn explicate(input_file : &mut File, output_file : &mut File)
+{
+
+	let mut input_string = String::new();
+	match input_file.read_to_string(&mut input_string)
+	{
+		Err(why) => panic!("Couldn't read file: {}", why),
+		Ok(_) => ()
+	};
+
+	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::explicate_ron_definition(& input_string, None);
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
@@ -58,6 +80,14 @@ fn main()
 					.help("Path to output code (rust)")
 					.takes_value(true)
 			)
+			.arg
+			(
+				Arg::with_name("explicate_only")
+					.short("x")
+					.long("explicate_only")
+					.help("Only run schedule explication")
+					.takes_value(false)
+			)
 			.get_matches();
 		let input_match = matches.value_of("input");
 		if input_match.is_none()
@@ -69,7 +99,8 @@ fn main()
 			Some(path) => Some(path.to_string()),
 			None => None
 		};
-		Arguments {input_path : input_match.unwrap().to_string(), output_path}
+		let explicate_only = matches.is_present("explicate_only");
+		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only}
 	};
 
 	let input_path = Path::new(& arguments.input_path);
@@ -86,5 +117,12 @@ fn main()
 	};
 
 	let mut output_file = File::create(output_path).unwrap();
-	compile(&mut input_file, &mut output_file);
+	if arguments.explicate_only
+	{
+		explicate(&mut input_file, &mut output_file);
+	}
+	else
+	{
+		compile(&mut input_file, &mut output_file);
+	}
 }

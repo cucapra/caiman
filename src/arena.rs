@@ -57,6 +57,11 @@ impl<T> Arena<T>
 	{
 		Iterator::<'m, T>{iter : self.elements.iter()}
 	}
+
+	pub fn iter_mut<'m> (& 'm mut self) -> IteratorMut<'m, T>
+	{
+		IteratorMut::<'m, T>{iter : self.elements.iter_mut()}
+	}
 }
 
 impl <T> Default for Arena<T>
@@ -73,6 +78,14 @@ impl<T> core::ops::Index<&usize> for Arena<T>
 	fn index(&self, index: &usize) -> &Self::Output
 	{
 		& self.elements.index(index)
+	}
+}
+
+impl<T> core::ops::IndexMut<&usize> for Arena<T>
+{
+	fn index_mut(&mut self, index: &usize) -> &mut Self::Output
+	{
+		self.elements.get_mut(index).unwrap()
 	}
 }
 
@@ -105,6 +118,21 @@ pub struct Iterator<'m, T>
 impl<'m, T> std::iter::Iterator for Iterator<'m, T>
 {
 	type Item = (& 'm usize, & 'm T);
+
+	fn next(&mut self) -> Option<Self::Item>
+	{
+		self.iter.next()
+	}
+}
+
+pub struct IteratorMut<'m, T>
+{
+	iter : std::collections::hash_map::IterMut<'m, usize, T>
+}
+
+impl<'m, T> std::iter::Iterator for IteratorMut<'m, T>
+{
+	type Item = (& 'm usize, & 'm mut T);
 
 	fn next(&mut self) -> Option<Self::Item>
 	{

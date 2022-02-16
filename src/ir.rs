@@ -263,7 +263,7 @@ pub struct Program
 {
 	//pub types : HashMap<usize, Type>,
 	pub types : Arena<Type>,
-	pub funclets : HashMap<usize, Funclet>,
+	pub funclets : Arena<Funclet>,
 	pub external_cpu_functions : Vec<ExternalCpuFunction>,
 	pub external_gpu_functions : Vec<ExternalGpuFunction>,
 	pub pipelines : Vec<Pipeline>,
