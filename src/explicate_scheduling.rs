@@ -883,11 +883,27 @@ impl NodeResourceTracker
 
 	fn sync_local(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
 	{
-		// This isn't right yet
-		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Useable);
+		let mut gpu_resident_node_dependencies = Vec::<ir::NodeId>::new();
+		
 		for & node_id in node_ids.iter()
 		{
-			self.locally_resident_node_set.insert(node_id);
+			assert!(self.registered_node_set.contains(& node_id));
+			let is_locally_resident = self.locally_resident_node_set.contains(& node_id);
+			let gpu_residency_state = & self.node_gpu_residency_state.get(& node_id);
+			if ! is_locally_resident
+			{
+				assert!(gpu_residency_state.is_some());
+				gpu_resident_node_dependencies.push(node_id);
+			}
+		}
+
+		if gpu_resident_node_dependencies.len() > 0
+		{
+			self.transition_gpu(gpu_resident_node_dependencies.as_slice(), funclet_builder, GpuResidencyState::Useable);
+			for & node_id in gpu_resident_node_dependencies.iter()
+			{
+				self.locally_resident_node_set.insert(node_id);
+			}
 		}
 	}
 }
