@@ -50,7 +50,7 @@ pub fn compile_ron_definition(input_string : &str, options : Option<CompileOptio
 
 pub fn explicate_ron_definition(input_string : &str, options : Option<CompileOptions>) -> Result<String, CompileError>
 {
-	let pretty = ron::ser::PrettyConfig::new();
+	let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
 
 	let mut result : Result<Definition, ron::de::Error> = ron::from_str(& input_string);
 	match result

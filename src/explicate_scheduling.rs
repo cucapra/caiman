@@ -682,7 +682,7 @@ enum GpuResidencyState
 {
 	Useable,
 	Encoded,
-	Submitted{submission_node_id : ir::NodeId}
+	Submitted
 }
 
 #[derive(Debug, Default)]
@@ -728,13 +728,39 @@ impl NodeResourceTracker
 		}
 	}
 
-	fn submit_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
+	fn transition_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder, min_required_state : GpuResidencyState)
 	{
+		let mut should_submit = false;
+		let mut should_encode = false;
+		let mut should_sync = false;
+		match min_required_state
+		{
+			GpuResidencyState::Useable =>
+			{
+				should_submit = true;
+				should_encode = true;
+				should_sync = true;
+			}
+			GpuResidencyState::Submitted =>
+			{
+				should_submit = true;
+				should_encode = true;
+				should_sync = false;
+			}
+			GpuResidencyState::Encoded =>
+			{
+				should_submit = false;
+				should_encode = true;
+				should_sync = false;
+			}
+		}
+
 		let mut encoded_node_depedencies = Vec::<ir::NodeId>::new();
 		let mut local_node_depedencies = Vec::<ir::NodeId>::new();
 		let mut submitted_node_dependencies = Vec::<ir::NodeId>::new();
 		//let mut collateral_encoded_node_dependencies = Vec::<ir::NodeId>::new();
 		let mut node_dependency_set = HashSet::<ir::NodeId>::new();
+		let mut sync_node_dependencies = Vec::<ir::NodeId>::new();
 
 		for & node_id in node_ids.iter()
 		{
@@ -777,48 +803,107 @@ impl NodeResourceTracker
 				{
 					assert!(self.active_encoding_node_set.contains(& node_id));
 					encoded_node_depedencies.push(node_id);
+					sync_node_dependencies.push(node_id);
 				}
-				Some(GpuResidencyState::Submitted{submission_node_id}) =>
+				Some(GpuResidencyState::Submitted) =>
 				{
 					submitted_node_dependencies.push(node_id);
+					sync_node_dependencies.push(node_id);
 				}
 			}
 		}
 
-		/*for & node_id in local_node_depedencies.iter()
+		if should_encode && local_node_depedencies.len() > 0
 		{
-			// To do: Emit local -> gpu encoding
-
-			//encoded_node_depedencies.push(node_id);
-		}*/
-
-		funclet_builder.add_node(ir::Node::EncodeGpu{values : local_node_depedencies.into_boxed_slice()});
-
-		for & node_id in self.active_encoding_node_set.iter()
-		{
-			if node_dependency_set.contains(& node_id)
+			for & node_id in local_node_depedencies.iter()
 			{
-				continue;
+				self.node_gpu_residency_state.insert(node_id, GpuResidencyState::Encoded);
 			}
 
-			//collateral_encoded_node_dependencies.push(node_id);
-			encoded_node_depedencies.push(node_id);
+			funclet_builder.add_node(ir::Node::EncodeGpu{values : local_node_depedencies.into_boxed_slice()});
 		}
 
-		funclet_builder.add_node(ir::Node::SubmitGpu{values : encoded_node_depedencies.into_boxed_slice()});
+		let mut has_collateral_encoded_nodes = false;
+		if encoded_node_depedencies.len() > 0
+		{
+			has_collateral_encoded_nodes = true;
+			for & node_id in self.active_encoding_node_set.iter()
+			{
+				if node_dependency_set.contains(& node_id)
+				{
+					continue;
+				}
 
-		self.active_encoding_node_set.clear();
+				//collateral_encoded_node_dependencies.push(node_id);
+				encoded_node_depedencies.push(node_id);
+			}
+		}
+
+		if should_submit && encoded_node_depedencies.len() > 0
+		{
+			for & node_id in encoded_node_depedencies.iter()
+			{
+				self.node_gpu_residency_state.insert(node_id, GpuResidencyState::Submitted);
+			}
+
+			if has_collateral_encoded_nodes
+			{
+				self.active_encoding_node_set.clear();
+			}
+			else
+			{
+				for & node_id in encoded_node_depedencies.iter()
+				{
+					self.active_encoding_node_set.remove(& node_id);
+				}
+			}
+
+			funclet_builder.add_node(ir::Node::SubmitGpu{values : encoded_node_depedencies.into_boxed_slice()});
+		}
+
+		if should_sync && sync_node_dependencies.len() > 0
+		{
+			for & node_id in sync_node_dependencies.iter()
+			{
+				self.node_gpu_residency_state.insert(node_id, GpuResidencyState::Useable);
+			}
+			funclet_builder.add_node(ir::Node::SyncLocal{values : sync_node_dependencies.into_boxed_slice()});
+		}
+	}
+
+	fn encode_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
+	{
+		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Encoded);
+	}
+
+	fn submit_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
+	{
+		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Submitted);
 	}
 
 	fn sync_local(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
 	{
-
+		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Useable);
+		for & node_id in node_ids.iter()
+		{
+			self.locally_resident_node_set.insert(node_id);
+		}
 	}
 }
 
 struct Explicator<'program>
 {
 	program : &'program mut ir::Program
+}
+
+fn remap_nodes(funclet_builder : & ir_builders::FuncletBuilder, node_ids : &[ir::NodeId]) -> Box<[ir::NodeId]>
+{
+	let mut remapped_node_ids = Vec::<ir::NodeId>::new();
+	for & node_id in node_ids.iter()
+	{
+		remapped_node_ids.push(funclet_builder.get_remapped_node_id(node_id).unwrap());
+	}
+	return remapped_node_ids.into_boxed_slice();
 }
 
 impl<'program> Explicator<'program>
@@ -874,51 +959,52 @@ impl<'program> Explicator<'program>
 				{
 					ir::Node::Phi {index} =>
 					{
-						node_resource_tracker.register_local_nodes(&[current_node_id]);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
+						node_resource_tracker.register_local_nodes(&[new_node_id]);
 					}
 					ir::Node::ExtractResult { node_id, index } =>
 					{
-						node_resource_tracker.register_local_nodes(&[current_node_id]);
-						node_resource_tracker.sync_local(&[* node_id], &mut funclet_builder);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						// This isn't right
+						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, &[* node_id]), &mut funclet_builder);
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
+						node_resource_tracker.register_local_nodes(&[new_node_id]);
 					}
 					ir::Node::ConstantInteger{value, type_id} =>
 					{
-						node_resource_tracker.register_local_nodes(&[current_node_id]);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
+						node_resource_tracker.register_local_nodes(&[new_node_id]);
 					}
 					ir::Node::ConstantUnsignedInteger{value, type_id} =>
 					{
-						node_resource_tracker.register_local_nodes(&[current_node_id]);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
+						node_resource_tracker.register_local_nodes(&[new_node_id]);
 					}
 					ir::Node::CallExternalCpu { external_function_id, arguments } =>
 					{
-						node_resource_tracker.register_local_nodes(&[current_node_id]);
-						node_resource_tracker.sync_local(arguments, &mut funclet_builder);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, arguments), &mut funclet_builder);
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
+						node_resource_tracker.register_local_nodes(&[new_node_id]);
 					}
 					ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 					{
-						node_resource_tracker.register_gpu_encoded_nodes(&[current_node_id]);
-						node_resource_tracker.submit_gpu(arguments, &mut funclet_builder);
-						node_resource_tracker.sync_local(dimensions, &mut funclet_builder);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						node_resource_tracker.encode_gpu(& remap_nodes(& funclet_builder, arguments), &mut funclet_builder);
+						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, dimensions), &mut funclet_builder);
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
+						node_resource_tracker.register_gpu_encoded_nodes(&[new_node_id]);
 					}
 					ir::Node::EncodeGpu{values} =>
 					{
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
 					}
 					ir::Node::SubmitGpu{values} =>
 					{
-						node_resource_tracker.submit_gpu(values, &mut funclet_builder);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						node_resource_tracker.encode_gpu(& remap_nodes(& funclet_builder, values), &mut funclet_builder);
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
 					}
 					ir::Node::SyncLocal{values} =>
 					{
-						node_resource_tracker.sync_local(values, &mut funclet_builder);
-						funclet_builder.add_node_from_old(current_node_id, & node)
+						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, values), &mut funclet_builder);
+						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
 					}
 					_ => panic!("Unknown node")
 				};

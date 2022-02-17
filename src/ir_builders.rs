@@ -40,6 +40,11 @@ impl FuncletBuilder
 		self.nodes.len() - 1
 	}
 
+	pub fn get_remapped_node_id(& self, old_node_id : NodeId) -> Option<NodeId>
+	{
+		self.node_remapping.get(& old_node_id).map(|x| * x)
+	}
+
 	pub fn add_node_from_old(&mut self, old_node_id : NodeId, old_node : &Node) -> NodeId
 	{
 		let node = match old_node
