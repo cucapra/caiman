@@ -883,6 +883,7 @@ impl NodeResourceTracker
 
 	fn sync_local(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
 	{
+		// This isn't right yet
 		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Useable);
 		for & node_id in node_ids.iter()
 		{
