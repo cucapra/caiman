@@ -689,6 +689,8 @@ enum GpuResidencyState
 struct NodeResourceTracker
 {
 	registered_node_set : HashSet<ir::NodeId>,
+	//deferred_node_dependencies : HashMap<ir::NodeId, BTreeSet<ir::NodeId>>,
+	proxy_node_map : HashMap::<ir::NodeId, ir::NodeId>,
 	active_encoding_node_set : BTreeSet::<ir::NodeId>,
 	//submitted_node_map : HashMap::<ir::NodeId, ir::NodeId>,
 	node_gpu_residency_state : HashMap<ir::NodeId, GpuResidencyState>,
@@ -701,6 +703,29 @@ impl NodeResourceTracker
 	{
 		Default::default()
 	}
+
+	fn register_proxy_node(&mut self, node_id : ir::NodeId, proxied_node_id : ir::NodeId)
+	{
+		let was_newly_registered = self.registered_node_set.insert(node_id);
+		assert!(was_newly_registered);
+		let was_newly_proxy = self.proxy_node_map.insert(node_id, proxied_node_id).is_none();
+		assert!(was_newly_proxy);
+	}
+
+	/*fn add_deferred_node_dependencies(&mut self, node_ids : &[ir::NodeId], dependency_node_ids : &[ir::NodeId])
+	{
+		for & dependency_node_id in dependency_node_ids.iter()
+		{
+			for & node_id in node_ids.iter()
+			{
+				assert!(dependency_node_id < node_id);
+				if ! self.deferred_node_dependencies.contains_key(& node_id)
+				{
+					
+				}
+			}
+		}
+	}*/
 
 	fn register_local_nodes(&mut self, node_ids : &[ir::NodeId])
 	{
@@ -762,7 +787,14 @@ impl NodeResourceTracker
 		let mut node_dependency_set = HashSet::<ir::NodeId>::new();
 		let mut sync_node_dependencies = Vec::<ir::NodeId>::new();
 
-		for & node_id in node_ids.iter()
+		let mut frontier_node_ids = Vec::<ir::NodeId>::new();
+		for & node_id in node_ids.iter().rev()
+		{
+			frontier_node_ids.push(node_id);
+		}
+
+		//for & node_id in node_ids.iter()
+		while let Some(node_id) = frontier_node_ids.pop()
 		{
 			if node_dependency_set.contains(& node_id)
 			{
@@ -772,6 +804,12 @@ impl NodeResourceTracker
 			node_dependency_set.insert(node_id);
 
 			assert!(self.registered_node_set.contains(& node_id));
+
+			if self.proxy_node_map.contains_key(& node_id)
+			{
+				frontier_node_ids.push(self.proxy_node_map[& node_id]);
+			}
+
 			let is_locally_resident = self.locally_resident_node_set.contains(& node_id);
 			/*let is_gpu_resident = self.gpu_resident_node_set.contains(& node_id);
 			let is_locally_resident = self.locally_resident_node_set.contains(& node_id);
@@ -791,9 +829,11 @@ impl NodeResourceTracker
 			{
 				None =>
 				{
-					assert!(is_locally_resident);
-					local_node_depedencies.push(node_id);
-					encoded_node_depedencies.push(node_id);
+					if is_locally_resident
+					{
+						local_node_depedencies.push(node_id);
+						encoded_node_depedencies.push(node_id);
+					}
 				}
 				Some(GpuResidencyState::Useable) =>
 				{
@@ -885,15 +925,31 @@ impl NodeResourceTracker
 	{
 		let mut gpu_resident_node_dependencies = Vec::<ir::NodeId>::new();
 		
-		for & node_id in node_ids.iter()
+		let mut frontier_node_ids = Vec::<ir::NodeId>::new();
+		//frontier_node_ids.extend_from_slice(& node_ids);
+		for & node_id in node_ids.iter().rev()
+		{
+			frontier_node_ids.push(node_id);
+		}
+
+		//for & node_id in node_ids.iter()
+		while let Some(node_id) = frontier_node_ids.pop()
 		{
 			assert!(self.registered_node_set.contains(& node_id));
 			let is_locally_resident = self.locally_resident_node_set.contains(& node_id);
 			let gpu_residency_state = & self.node_gpu_residency_state.get(& node_id);
+
+			if self.proxy_node_map.contains_key(& node_id)
+			{
+				frontier_node_ids.push(self.proxy_node_map[& node_id]);
+			}
+
 			if ! is_locally_resident
 			{
-				assert!(gpu_residency_state.is_some());
-				gpu_resident_node_dependencies.push(node_id);
+				if gpu_residency_state.is_some()
+				{
+					gpu_resident_node_dependencies.push(node_id);
+				}
 			}
 		}
 
@@ -982,9 +1038,10 @@ impl<'program> Explicator<'program>
 					ir::Node::ExtractResult { node_id, index } =>
 					{
 						// This isn't right
-						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, &[* node_id]), &mut funclet_builder);
+						//node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, &[* node_id]), &mut funclet_builder);
 						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-						node_resource_tracker.register_local_nodes(&[new_node_id]);
+						//node_resource_tracker.register_local_nodes(&[new_node_id]);
+						node_resource_tracker.register_proxy_node(new_node_id, funclet_builder.get_remapped_node_id(* node_id).unwrap());
 					}
 					ir::Node::ConstantInteger{value, type_id} =>
 					{
