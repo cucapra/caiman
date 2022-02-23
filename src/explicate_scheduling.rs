@@ -677,7 +677,7 @@ impl NodeResultTracker
 	}
 }*/
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum GpuResidencyState
 {
 	Useable,
@@ -710,6 +710,38 @@ impl NodeResourceTracker
 		assert!(was_newly_registered);
 		let was_newly_proxy = self.proxy_node_map.insert(node_id, proxied_node_id).is_none();
 		assert!(was_newly_proxy);
+	}
+
+	fn register_passthrough_node(&mut self, node_id : ir::NodeId, passthrough_node_id : ir::NodeId)
+	{
+		let was_newly_registered = self.registered_node_set.insert(node_id);
+		assert!(was_newly_registered);
+
+		if self.proxy_node_map.contains_key(& passthrough_node_id)
+		{
+			let is_new = self.proxy_node_map.insert(node_id, self.proxy_node_map[& passthrough_node_id]).is_none();
+			assert!(is_new);
+		}
+
+		if self.active_encoding_node_set.contains(& passthrough_node_id)
+		{
+			let is_new = self.active_encoding_node_set.insert(node_id);
+			assert!(is_new);
+		}
+
+		if self.node_gpu_residency_state.contains_key(& passthrough_node_id)
+		{
+			let is_new = self.node_gpu_residency_state.insert(node_id, self.node_gpu_residency_state[& passthrough_node_id]).is_none();
+			assert!(is_new);
+		}
+
+		if self.locally_resident_node_set.contains(& passthrough_node_id)
+		{
+			let is_new = self.locally_resident_node_set.insert(node_id);
+			assert!(is_new);
+		}
+
+
 	}
 
 	/*fn add_deferred_node_dependencies(&mut self, node_ids : &[ir::NodeId], dependency_node_ids : &[ir::NodeId])
@@ -1041,7 +1073,7 @@ impl<'program> Explicator<'program>
 						//node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, &[* node_id]), &mut funclet_builder);
 						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
 						//node_resource_tracker.register_local_nodes(&[new_node_id]);
-						node_resource_tracker.register_proxy_node(new_node_id, funclet_builder.get_remapped_node_id(* node_id).unwrap());
+						node_resource_tracker.register_passthrough_node(new_node_id, funclet_builder.get_remapped_node_id(* node_id).unwrap());
 					}
 					ir::Node::ConstantInteger{value, type_id} =>
 					{
