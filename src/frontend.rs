@@ -38,12 +38,23 @@ pub fn compile_ron_definition(input_string : &str, options : Option<CompileOptio
 	match result
 	{
 		Err(why) => Err(CompileError{ message: format!("Parse error: {}", why)}),
-		Ok(definition) =>
+		Ok(mut definition) =>
 		{
 			assert_eq!(definition.version, (0, 0, 1));
-			let mut codegen = codegen::CodeGen::new(& definition.program);
-			let output_string = codegen.generate();
-			Ok(output_string)
+			let use_old_codegen = true;
+			if use_old_codegen
+			{
+				let mut codegen = codegen::CodeGen::new(& definition.program);
+				let output_string = codegen.generate();
+				Ok(output_string)
+			}
+			else
+			{
+				explicate_scheduling::explicate_scheduling(&mut definition.program);
+				let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
+				let output_string = codegen.generate();
+				Ok(output_string)
+			}
 		}
 	}
 }

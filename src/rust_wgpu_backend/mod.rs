@@ -1,3 +1,3 @@
 mod code_writer;
 pub mod code_generator;
-mod codegen;
+pub mod codegen;

@@ -28,7 +28,7 @@ enum NodeResult
 	MultipleOutput(Box<[Value]>),
 }
 
-// Answers the question: Given a node at the current time, where is my data and what state is it in?
+/*// Answers the question: Given a node at the current time, where is my data and what state is it in?
 struct NodeResultTracker
 {
 	node_results : Vec<NodeResult>,
@@ -685,6 +685,105 @@ impl NodeResultTracker
 			}
 		}
 	}
+}*/
+
+#[derive(Debug, Clone, Copy)]
+enum GpuResidencyState
+{
+	Useable(usize),
+	Encoded(usize),
+	Submitted(usize)
+}
+
+// A hack
+fn gpu_residency_state_with_var_replaced(state : &GpuResidencyState, variable_id : usize) -> GpuResidencyState
+{
+	use GpuResidencyState::*;
+	match state
+	{
+		Useable(_) => Useable(variable_id),
+		Encoded(_) => Encoded(variable_id),
+		Submitted(_) => Submitted(variable_id),
+	}
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LocalResidencyState
+{
+	Useable(usize),
+}
+
+fn local_residency_state_with_var_replaced(state : &LocalResidencyState, variable_id : usize) -> LocalResidencyState
+{
+	use LocalResidencyState::*;
+	match state
+	{
+		Useable(_) => Useable(variable_id),
+	}
+}
+
+#[derive(Debug, Default)]
+struct PlacementState
+{
+	node_gpu_residency_states : HashMap<ir::NodeId, GpuResidencyState>,
+	node_local_residency_states : HashMap<ir::NodeId, LocalResidencyState>,
+	// A hack to match with the old code generator
+	node_call_states : HashMap<ir::NodeId, Box<[usize]>>
+}
+
+impl PlacementState
+{
+	fn new() -> Self
+	{
+		Default::default()
+	}
+
+	fn get_local_state_var_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[usize]>>
+	{
+		let mut var_ids = Vec::<usize>::new();
+		for node_id in node_ids.iter()
+		{
+			let var_id = match self.node_local_residency_states.get(node_id)
+			{
+				Some(LocalResidencyState::Useable(variable_id)) => *variable_id,
+				None => return None
+			};
+			var_ids.push(var_id);
+		}
+		Some(var_ids.into_boxed_slice())
+	}
+
+	fn get_gpu_state_var_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[usize]>>
+	{
+		let mut var_ids = Vec::<usize>::new();
+		for node_id in node_ids.iter()
+		{
+			let var_id = match self.node_gpu_residency_states.get(node_id)
+			{
+				Some(GpuResidencyState::Useable(variable_id)) => *variable_id,
+				Some(GpuResidencyState::Encoded(variable_id)) => *variable_id,
+				Some(GpuResidencyState::Submitted(variable_id)) => *variable_id,
+				None => return None
+			};
+			var_ids.push(var_id);
+		}
+		Some(var_ids.into_boxed_slice())
+	}
+
+	/*fn encode_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
+	{
+		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Encoded);
+	}
+
+	fn submit_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
+	{
+		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Submitted);
+	}
+
+	fn sync_local(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
+	{
+
+	}*/
 }
 
 pub struct CodeGen<'program>
@@ -705,8 +804,11 @@ impl<'program> CodeGen<'program>
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
 
-		let node_usage_analysis = NodeUsageAnalysis::from_funclet(funclet);
-		let mut node_result_tracker = NodeResultTracker::new();
+		//let node_usage_analysis = NodeUsageAnalysis::from_funclet(funclet);
+		//let mut node_result_tracker = NodeResultTracker::new();
+
+		// Placement state
+		let mut placement_state = PlacementState::new();
 
 		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);
 
@@ -714,91 +816,102 @@ impl<'program> CodeGen<'program>
 		{
 			self.code_generator.insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
 
-			if ! node_usage_analysis.is_node_used(current_node_id)
-			{
-				self.code_generator.insert_comment(" unused");
-				node_result_tracker.store_node_result(current_node_id, NodeResult::Retired, None);
-				continue;
-			}
-
 			match node
 			{
 				ir::Node::Phi {index} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]);
-					let node_result = NodeResult::SingleOutput(Value::LocalVariable(argument_variable_ids[*index as usize]));
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
+					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(argument_variable_ids[*index as usize]));
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]);
-					let node_result = NodeResult::SingleOutput(node_result_tracker.get_node_output_subvalue(* node_id, * index));
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
+					let node_call_state = placement_state.node_call_states.get(node_id).unwrap();
+
+					if let Some(local_residency_state) = placement_state.node_local_residency_states.get(node_id).map(|x| *x)
+					{
+						placement_state.node_local_residency_states.insert(current_node_id, local_residency_state_with_var_replaced(& local_residency_state, node_call_state[* index as usize]));
+					}
+
+					if let Some(gpu_residency_state) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
+					{
+						placement_state.node_gpu_residency_states.insert(current_node_id, gpu_residency_state_with_var_replaced(& gpu_residency_state, node_call_state[* index as usize]));
+					}
 				}
 				ir::Node::ConstantInteger{value, type_id} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]);
 					let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
-					let node_result = NodeResult::SingleOutput(Value::LocalVariable(variable_id));
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
+					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(variable_id));
 				}
 				ir::Node::ConstantUnsignedInteger{value, type_id} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], &[]);
 					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
-					let node_result = NodeResult::SingleOutput(Value::LocalVariable(variable_id));
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
+					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(variable_id));
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, arguments, &[]);
-
-					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, token.local_variable_var_ids.as_slice());
-					let mut outputs = Vec::<Value>::new();
-					for output in raw_outputs.iter()
-					{
-						outputs.push(Value::LocalVariable(* output));
-					}
-
-					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
+					let argument_var_ids = placement_state.get_local_state_var_ids(arguments).unwrap();
+					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, & argument_var_ids);
+					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(usize::MAX));
+					placement_state.node_call_states.insert(current_node_id, raw_outputs);
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
 					use std::convert::TryInto;
+					//use core::slice::SlicePattern;
 
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, dimensions, arguments);
+					let dimension_var_ids = placement_state.get_local_state_var_ids(dimensions).unwrap();
+					let argument_var_ids = placement_state.get_gpu_state_var_ids(arguments).unwrap();
+					let dimensions_slice : &[usize] = & dimension_var_ids;
+					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
 
-					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, token.local_variable_var_ids.as_slice().try_into().expect("Expected 3 elements for dimensions"), token.gpu_buffer_var_ids.as_slice());
-					let mut outputs = Vec::<Value>::new();
-					for output in raw_outputs.iter()
+					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(usize::MAX));
+					placement_state.node_call_states.insert(current_node_id, raw_outputs);
+				}
+				ir::Node::EncodeGpu{values} =>
+				{
+					for node_id in values.iter()
 					{
-						outputs.push(Value::GpuBuffer(* output));
+						if let Some(LocalResidencyState::Useable(variable_id)) = placement_state.node_local_residency_states.get(node_id).map(|x| *x)
+						{
+							let new_variable_id = self.code_generator.make_on_gpu_copy(variable_id).unwrap();
+							let old = placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Encoded(new_variable_id));
+							assert!(old.is_none());
+						}
+						else
+						{
+							panic!("Encoded node is not locally resident");
+						}
 					}
-
-					let node_result = NodeResult::MultipleOutput(outputs.into_boxed_slice());
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
 				}
 				ir::Node::SubmitGpu{values} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, &[], values);
-					let node_result = NodeResult::None;
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
+					for node_id in values.iter()
+					{
+						if let Some(GpuResidencyState::Encoded(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
+						{
+							placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Encoded(variable_id));
+						}
+						else
+						{
+							panic!("Submitted node is not gpu encoded");
+						}
+					}
 				}
 				ir::Node::SyncLocal{values} =>
 				{
-					let token = node_result_tracker.begin_node_task(&mut self.code_generator, values, &[]);
-					let node_result = NodeResult::None;
-					node_result_tracker.store_node_result(current_node_id, node_result, Some(&token));
-					node_result_tracker.end_node_task(token, &mut self.code_generator);
+					for node_id in values.iter()
+					{
+						if let Some(GpuResidencyState::Submitted(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
+						{
+							placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Useable(variable_id));
+							let new_variable_id = self.code_generator.make_local_copy(variable_id).unwrap();
+							let old = placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(new_variable_id));
+							assert!(old.is_none());
+						}
+						else
+						{
+							panic!("Locally synced node is not gpu submitted");
+						}
+					}
 				}
 				_ => panic!("Unknown node")
 			};
@@ -808,17 +921,10 @@ impl<'program> CodeGen<'program>
 		{
 			ir::TailEdge::Return { return_values } =>
 			{
-				let token = node_result_tracker.begin_node_task(&mut self.code_generator, return_values, &[]);
-
-				self.code_generator.build_return(token.local_variable_var_ids.as_slice());
-
-				node_result_tracker.end_node_task(token, &mut self.code_generator);
-
-				node_result_tracker.sync_local(&mut self.code_generator, return_values);
+				let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
+				self.code_generator.build_return(& return_var_ids);
 			}
 		}
-
-		node_result_tracker.flush_tasks(&mut self.code_generator);
 
 		self.code_generator.end_pipeline();
 	}
