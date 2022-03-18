@@ -14,7 +14,7 @@ struct Definition
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct CompileOptions
 {
-	print_codegen_debug_info : bool
+	pub print_codegen_debug_info : bool
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

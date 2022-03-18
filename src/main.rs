@@ -14,7 +14,7 @@ struct Arguments
 	print_codegen_debug_info : bool
 }
 
-fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option<CompileOptions>)
+fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option<caiman::frontend::CompileOptions>)
 {
 
 	let mut input_string = String::new();
@@ -132,7 +132,7 @@ fn main()
 	}
 	else
 	{
-		let options = CompileOptions{print_codegen_debug_info};
+		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
 		compile(&mut input_file, &mut output_file, Some(options));
 	}
 }
