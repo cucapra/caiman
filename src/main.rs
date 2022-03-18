@@ -10,10 +10,11 @@ struct Arguments
 {
 	input_path : String,
 	output_path : Option<String>,
-	explicate_only : bool
+	explicate_only : bool,
+	print_codegen_debug_info : bool
 }
 
-fn compile(input_file : &mut File, output_file : &mut File)
+fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option<CompileOptions>)
 {
 
 	let mut input_string = String::new();
@@ -23,7 +24,7 @@ fn compile(input_file : &mut File, output_file : &mut File)
 		Ok(_) => ()
 	};
 
-	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, None);
+	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, options_opt);
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
@@ -88,6 +89,13 @@ fn main()
 					.help("Only run schedule explication")
 					.takes_value(false)
 			)
+			.arg
+			(
+				Arg::with_name("print_codegen_debug_info")
+					.long("print_codegen_debug_info")
+					.help("Print Codegen Debug Info")
+					.takes_value(false)
+			)
 			.get_matches();
 		let input_match = matches.value_of("input");
 		if input_match.is_none()
@@ -100,7 +108,8 @@ fn main()
 			None => None
 		};
 		let explicate_only = matches.is_present("explicate_only");
-		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only}
+		let print_codegen_debug_info = matches.is_present("print_codegen_debug_info");
+		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only, print_codegen_debug_info}
 	};
 
 	let input_path = Path::new(& arguments.input_path);
@@ -123,6 +132,7 @@ fn main()
 	}
 	else
 	{
-		compile(&mut input_file, &mut output_file);
+		let options = CompileOptions{print_codegen_debug_info};
+		compile(&mut input_file, &mut output_file, Some(options));
 	}
 }

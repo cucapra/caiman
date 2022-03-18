@@ -14,9 +14,8 @@ struct Definition
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct CompileOptions
 {
-
+	print_codegen_debug_info : bool
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct CompileError
@@ -32,7 +31,7 @@ impl std::fmt::Display for CompileError
 	}
 }
 
-pub fn compile_ron_definition(input_string : &str, options : Option<CompileOptions>) -> Result<String, CompileError>
+pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileOptions>) -> Result<String, CompileError>
 {
 	let result : Result<Definition, ron::de::Error> = ron::from_str(& input_string);
 	match result
@@ -41,7 +40,7 @@ pub fn compile_ron_definition(input_string : &str, options : Option<CompileOptio
 		Ok(mut definition) =>
 		{
 			assert_eq!(definition.version, (0, 0, 1));
-			let use_old_codegen = true;
+			let use_old_codegen = false;
 			if use_old_codegen
 			{
 				let mut codegen = codegen::CodeGen::new(& definition.program);
@@ -52,6 +51,10 @@ pub fn compile_ron_definition(input_string : &str, options : Option<CompileOptio
 			{
 				explicate_scheduling::explicate_scheduling(&mut definition.program);
 				let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
+				if let Some(options) = options_opt
+				{
+					codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
+				}
 				let output_string = codegen.generate();
 				Ok(output_string)
 			}

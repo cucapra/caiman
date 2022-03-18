@@ -145,6 +145,15 @@ impl FuncletBuilder
 		self.tail_edge = Some(tail_edge);
 	}
 
+	pub fn set_output_types(&mut self, output_types : &[TypeId])
+	{
+		assert_eq!(self.output_types.len(), 0);
+		for & type_id in output_types.iter()
+		{
+			self.output_types.push(type_id);
+		}
+	}
+
 	pub fn build(mut self) -> Funclet
 	{
 		Funclet{input_types : self.input_types.into_boxed_slice(), execution_scope : self.execution_scope, output_types : self.output_types.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap()}

@@ -789,14 +789,20 @@ impl PlacementState
 pub struct CodeGen<'program>
 {
 	program : & 'program ir::Program,
-	code_generator : CodeGenerator<'program>
+	code_generator : CodeGenerator<'program>,
+	print_codegen_debug_info : bool
 }
 
 impl<'program> CodeGen<'program>
 {
 	pub fn new(program : & 'program ir::Program) -> Self
 	{
-		Self { program : & program, code_generator : CodeGenerator::new(program.types.clone(), program.external_cpu_functions.as_slice(), program.external_gpu_functions.as_slice()) }
+		Self { program : & program, code_generator : CodeGenerator::new(program.types.clone(), program.external_cpu_functions.as_slice(), program.external_gpu_functions.as_slice()), print_codegen_debug_info : false }
+	}
+
+	pub fn set_print_codgen_debug_info(&mut self, to : bool)
+	{
+		self.print_codegen_debug_info = to;
 	}
 
 	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId, pipeline_name : &str)
@@ -816,6 +822,11 @@ impl<'program> CodeGen<'program>
 		{
 			self.code_generator.insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
 
+			if self.print_codegen_debug_info
+			{
+				println!("#{} {:?} : {:?}", current_node_id, node, placement_state);
+			}
+
 			match node
 			{
 				ir::Node::Phi {index} =>
@@ -824,7 +835,9 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
-					let node_call_state = placement_state.node_call_states.get(node_id).unwrap();
+					let node_call_state_opt = placement_state.node_call_states.get(node_id);
+					assert!(node_call_state_opt.is_some(), "#{} {:?}: Node #{} is not the result of a call {:?}", current_node_id, node, node_id, placement_state);
+					let node_call_state = node_call_state_opt.unwrap();
 
 					if let Some(local_residency_state) = placement_state.node_local_residency_states.get(node_id).map(|x| *x)
 					{
@@ -848,7 +861,9 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
-					let argument_var_ids = placement_state.get_local_state_var_ids(arguments).unwrap();
+					let argument_var_ids_opt = placement_state.get_local_state_var_ids(arguments);
+					assert!(argument_var_ids_opt.is_some(), "#{} {:?}: Not all arguments are local {:?} {:?}", current_node_id, node, arguments, placement_state);
+					let argument_var_ids = argument_var_ids_opt.unwrap();
 					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, & argument_var_ids);
 					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(usize::MAX));
 					placement_state.node_call_states.insert(current_node_id, raw_outputs);
@@ -857,13 +872,17 @@ impl<'program> CodeGen<'program>
 				{
 					use std::convert::TryInto;
 					//use core::slice::SlicePattern;
+					let dimension_var_ids_opt = placement_state.get_local_state_var_ids(dimensions);
+					let argument_var_ids_opt = placement_state.get_gpu_state_var_ids(arguments);
+					assert!(dimension_var_ids_opt.is_some(), "#{} {:?}: Not all dimensions are local {:?} {:?}", current_node_id, node, dimensions, placement_state);
+					assert!(argument_var_ids_opt.is_some(), "#{} {:?}: Not all arguments are gpu {:?} {:?}", current_node_id, node, arguments, placement_state);
 
-					let dimension_var_ids = placement_state.get_local_state_var_ids(dimensions).unwrap();
-					let argument_var_ids = placement_state.get_gpu_state_var_ids(arguments).unwrap();
+					let dimension_var_ids = dimension_var_ids_opt.unwrap();
+					let argument_var_ids = argument_var_ids_opt.unwrap();
 					let dimensions_slice : &[usize] = & dimension_var_ids;
 					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
 
-					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(usize::MAX));
+					placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Encoded(usize::MAX));
 					placement_state.node_call_states.insert(current_node_id, raw_outputs);
 				}
 				ir::Node::EncodeGpu{values} =>
@@ -873,7 +892,7 @@ impl<'program> CodeGen<'program>
 						if let Some(LocalResidencyState::Useable(variable_id)) = placement_state.node_local_residency_states.get(node_id).map(|x| *x)
 						{
 							let new_variable_id = self.code_generator.make_on_gpu_copy(variable_id).unwrap();
-							let old = placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Encoded(new_variable_id));
+							let old = placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Encoded(new_variable_id));
 							assert!(old.is_none());
 						}
 						else
@@ -888,7 +907,7 @@ impl<'program> CodeGen<'program>
 					{
 						if let Some(GpuResidencyState::Encoded(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
 						{
-							placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Encoded(variable_id));
+							placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(variable_id));
 						}
 						else
 						{
@@ -902,9 +921,9 @@ impl<'program> CodeGen<'program>
 					{
 						if let Some(GpuResidencyState::Submitted(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
 						{
-							placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Useable(variable_id));
+							placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Useable(variable_id));
 							let new_variable_id = self.code_generator.make_local_copy(variable_id).unwrap();
-							let old = placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(new_variable_id));
+							let old = placement_state.node_local_residency_states.insert(* node_id, LocalResidencyState::Useable(new_variable_id));
 							assert!(old.is_none());
 						}
 						else
