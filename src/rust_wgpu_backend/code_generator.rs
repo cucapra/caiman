@@ -318,13 +318,13 @@ impl<'program> CodeGenerator<'program>
 	}*/
 
 
-	pub fn require_local(&mut self, variable_ids : &[usize])
+	pub fn require_local(&self, variable_ids : &[usize])
 	{
 		for variable_id in variable_ids.iter()
 		{
 			match self.variable_tracker.variable_states[variable_id]
 			{
-				VariableState::InEncoding => self.flush_submission(),
+				//VariableState::InEncoding => self.flush_submission(),
 				_ => ()
 			}
 
@@ -337,7 +337,7 @@ impl<'program> CodeGenerator<'program>
 		}
 	}
 
-	pub fn require_on_gpu(&mut self, variable_ids : &[usize])
+	pub fn require_on_gpu(&self, variable_ids : &[usize])
 	{
 		for variable_id in variable_ids.iter()
 		{
