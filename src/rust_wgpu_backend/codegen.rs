@@ -962,6 +962,6 @@ impl<'program> CodeGen<'program>
 #[cfg(test)]
 mod tests
 {
-	use crate::codegen;
+	use super::*;
 	use crate::ir;
 }

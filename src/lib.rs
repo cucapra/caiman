@@ -2,7 +2,6 @@ mod id_generator;
 mod arena;
 mod ir;
 mod ir_builders;
-mod codegen;
 mod shadergen;
 mod pipeline_analysis;
 pub mod frontend;

@@ -1,4 +1,4 @@
-use crate::{ir, codegen, explicate_scheduling};
+use crate::{ir, explicate_scheduling};
 use std::collections::HashMap;
 use std::default::Default;
 use serde_derive::{Serialize, Deserialize};
@@ -40,24 +40,14 @@ pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileO
 		Ok(mut definition) =>
 		{
 			assert_eq!(definition.version, (0, 0, 1));
-			let use_old_codegen = false;
-			if use_old_codegen
+			explicate_scheduling::explicate_scheduling(&mut definition.program);
+			let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
+			if let Some(options) = options_opt
 			{
-				let mut codegen = codegen::CodeGen::new(& definition.program);
-				let output_string = codegen.generate();
-				Ok(output_string)
+				codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
 			}
-			else
-			{
-				explicate_scheduling::explicate_scheduling(&mut definition.program);
-				let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
-				if let Some(options) = options_opt
-				{
-					codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
-				}
-				let output_string = codegen.generate();
-				Ok(output_string)
-			}
+			let output_string = codegen.generate();
+			Ok(output_string)
 		}
 	}
 }
