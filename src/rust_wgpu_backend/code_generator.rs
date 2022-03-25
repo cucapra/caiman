@@ -355,7 +355,7 @@ impl<'program> CodeGenerator<'program>
 	{
 		match self.variable_tracker.variable_states[& variable_id]
 		{
-			VariableState::InEncoding => self.flush_submission(),
+			//VariableState::InEncoding => self.flush_submission(),
 			_ => ()
 		}
 
@@ -417,6 +417,11 @@ impl<'program> CodeGenerator<'program>
 	{
 
 	}
+
+	/*fn encode_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
+	{
+
+	}*/
 
 	fn generate_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
 	{
@@ -496,7 +501,7 @@ impl<'program> CodeGenerator<'program>
 		}
 	}
 
-	fn flush_submission(&mut self)
+	pub fn flush_submission(&mut self)
 	{
 		let mut active_submission_encoding_state = None;
 		std::mem::swap(&mut self.active_submission_encoding_state, &mut active_submission_encoding_state);
@@ -798,7 +803,7 @@ impl<'program> CodeGenerator<'program>
 	{
 		if let Some(output_vars) = self.enqueue_compute_dispatch(external_function_id, dimension_vars, argument_vars)
 		{
-			self.flush_submission();
+			//self.flush_submission();
 			return output_vars;
 		}
 

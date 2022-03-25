@@ -907,6 +907,7 @@ impl<'program> CodeGen<'program>
 					{
 						if let Some(GpuResidencyState::Encoded(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
 						{
+							self.code_generator.flush_submission();
 							placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(variable_id));
 						}
 						else
