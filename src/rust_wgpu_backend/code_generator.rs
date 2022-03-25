@@ -9,6 +9,17 @@ use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use std::fmt::Write;
 use crate::id_generator::IdGenerator;
 
+// Submissions represent groups of tasks that are executing in a logical sequence
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
+pub struct SubmissionId(usize);
+
+#[derive(Debug, Default)]
+struct SubmissionQueue
+{
+	//most_recently_synchronized_submission_id : Option<SubmissionId>,
+	next_submission_id : SubmissionId
+}
+
 enum ResourceUsage
 {
 
@@ -130,7 +141,8 @@ pub struct CodeGenerator<'program>
 	use_recording : bool,
 	active_submission_encoding_state : Option<SubmissionEncodingState>,
 	active_external_gpu_function_id : Option<ir::ExternalGpuFunctionId>,
-	active_shader_module : Option<shadergen::ShaderModule>
+	active_shader_module : Option<shadergen::ShaderModule>,
+	submission_queue : SubmissionQueue
 }
 
 impl<'program> CodeGenerator<'program>
@@ -141,7 +153,7 @@ impl<'program> CodeGenerator<'program>
 		let type_code_writer = CodeWriter::new();
 		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module : None}
+		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module : None, submission_queue : Default::default()}
 	}
 
 	pub fn finish(&mut self) -> String
@@ -418,10 +430,10 @@ impl<'program> CodeGenerator<'program>
 
 	}
 
-	/*fn encode_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
+	fn encode_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
 	{
 
-	}*/
+	}
 
 	fn generate_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
 	{
@@ -458,8 +470,8 @@ impl<'program> CodeGenerator<'program>
 
 		self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
 		self.code_writer.write("queue.submit([command_buffer]);\n".to_string());
-		self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
-		self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
+		//self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
+		//self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
 
 		let mut output_temp_variables = Vec::<usize>::new();
 		for output_index in 0 .. external_gpu_function.output_types.len()
@@ -501,7 +513,7 @@ impl<'program> CodeGenerator<'program>
 		}
 	}
 
-	pub fn flush_submission(&mut self)
+	pub fn flush_submission(&mut self) -> SubmissionId
 	{
 		let mut active_submission_encoding_state = None;
 		std::mem::swap(&mut self.active_submission_encoding_state, &mut active_submission_encoding_state);
@@ -522,6 +534,21 @@ impl<'program> CodeGenerator<'program>
 		}
 
 		//self.active_submission_encoding_state = None;
+		let submission_id = self.submission_queue.next_submission_id;
+		self.submission_queue.next_submission_id.0 += 1;
+
+		self.code_writer.write(format!("let future_var_{} = queue.on_submitted_work_done();\n", submission_id.0));
+
+		submission_id
+	}
+
+	pub fn sync_submission(&mut self, submission_id : SubmissionId)
+	//pub fn sync_submissions(&mut self)
+	{
+		//self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
+		self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
+		self.code_writer.write(format!("futures::executor::block_on(future_var_{});\n", submission_id.0));
+		//self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
 	}
 
 	pub fn insert_comment(&mut self, comment_string : &str)

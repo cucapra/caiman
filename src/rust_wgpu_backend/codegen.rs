@@ -7,8 +7,11 @@ use std::collections::HashSet;
 use std::collections::BTreeSet;
 use std::collections::BTreeMap;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
+use crate::rust_wgpu_backend::code_generator::SubmissionId;
 use std::fmt::Write;
 use crate::node_usage_analysis::*;
+use std::collections::BinaryHeap;
+use std::cmp::Reverse;
 
 // This is a temporary hack
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -728,7 +731,10 @@ struct PlacementState
 	node_gpu_residency_states : HashMap<ir::NodeId, GpuResidencyState>,
 	node_local_residency_states : HashMap<ir::NodeId, LocalResidencyState>,
 	// A hack to match with the old code generator
-	node_call_states : HashMap<ir::NodeId, Box<[usize]>>
+	node_call_states : HashMap<ir::NodeId, Box<[usize]>>,
+	submit_node_submission_ids : HashMap<ir::NodeId, Option<SubmissionId>>,
+	pending_submission_node_ids : BinaryHeap<Reverse<ir::NodeId>>,
+	node_submission_node_ids : HashMap<ir::NodeId, ir::NodeId>
 }
 
 impl PlacementState
@@ -907,7 +913,8 @@ impl<'program> CodeGen<'program>
 					{
 						if let Some(GpuResidencyState::Encoded(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
 						{
-							self.code_generator.flush_submission();
+							let old = placement_state.node_submission_node_ids.insert(* node_id, current_node_id);
+							assert!(old.is_none());
 							placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(variable_id));
 						}
 						else
@@ -915,9 +922,48 @@ impl<'program> CodeGen<'program>
 							panic!("Submitted node is not gpu encoded");
 						}
 					}
+
+					let submission_id = self.code_generator.flush_submission();
+					placement_state.submit_node_submission_ids.insert(current_node_id, Some(submission_id));
+					placement_state.pending_submission_node_ids.push(Reverse(current_node_id));
 				}
 				ir::Node::SyncLocal{values} =>
 				{
+					let mut latest_submission_node_id_opt = None;
+					for node_id in values.iter()
+					{
+						let submission_node_id = *placement_state.node_submission_node_ids.get(node_id).unwrap();
+						while placement_state.pending_submission_node_ids.len() > 0
+						{
+							if let Some(Reverse(pending_submission_node_id)) = placement_state.pending_submission_node_ids.peek().map(|x| *x)
+							{
+								if pending_submission_node_id < submission_node_id
+								{
+									placement_state.pending_submission_node_ids.pop();
+								}
+								else if pending_submission_node_id == submission_node_id
+								{
+									placement_state.pending_submission_node_ids.pop();
+									latest_submission_node_id_opt = Some(pending_submission_node_id);
+									break
+								}
+							}
+							else
+							{
+								break
+							}
+						}
+					}
+					
+					if let Some(submission_node_id) = latest_submission_node_id_opt
+					{
+						if let Some(submission_id) = placement_state.submit_node_submission_ids[& submission_node_id]
+						{
+							self.code_generator.sync_submission(submission_id);
+						}
+						placement_state.submit_node_submission_ids.insert(submission_node_id, None);
+					}
+
 					for node_id in values.iter()
 					{
 						if let Some(GpuResidencyState::Submitted(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
