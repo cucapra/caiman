@@ -541,9 +541,14 @@ impl<'program> CodeGenerator<'program>
 
 		if let Some(submission_encoding_state) = active_submission_encoding_state
 		{
-			for & command_buffer_id in submission_encoding_state.command_buffer_ids.iter()
+			if submission_encoding_state.command_buffer_ids.len() > 0
 			{
-				self.code_writer.write(format!("queue.submit([command_buffer_{}]);\n", command_buffer_id));
+				self.code_writer.write("queue.submit([".to_string());
+				for & command_buffer_id in submission_encoding_state.command_buffer_ids.iter()
+				{
+					self.code_writer.write(format!("command_buffer_{}, ", command_buffer_id));
+				}
+				self.code_writer.write("]);\n".to_string());
 			}
 
 			/*for command in submission_encoding_state.commands.iter()
