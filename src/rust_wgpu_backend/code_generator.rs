@@ -13,6 +13,9 @@ use crate::id_generator::IdGenerator;
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 pub struct SubmissionId(usize);
 
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
+pub struct CommandBufferId(usize);
+
 #[derive(Debug, Default)]
 struct SubmissionQueue
 {
@@ -120,7 +123,7 @@ struct SubmissionEncodingState
 	//shader_module : shadergen::ShaderModule,
 	//bindings : BTreeMap<(usize, usize), Binding>,
 	//commands : Vec<Command>,
-	command_buffer_ids : Vec<usize>
+	command_buffer_ids : Vec<CommandBufferId>
 }
 
 struct TypeBindingInfo
@@ -144,7 +147,7 @@ pub struct CodeGenerator<'program>
 	active_external_gpu_function_id : Option<ir::ExternalGpuFunctionId>,
 	active_shader_module : Option<shadergen::ShaderModule>,
 	submission_queue : SubmissionQueue,
-	next_command_buffer_id : usize
+	next_command_buffer_id : CommandBufferId
 }
 
 impl<'program> CodeGenerator<'program>
@@ -155,7 +158,7 @@ impl<'program> CodeGenerator<'program>
 		let type_code_writer = CodeWriter::new();
 		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module : None, submission_queue : Default::default(), next_command_buffer_id : 0}
+		Self {type_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module : None, submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0)}
 	}
 
 	pub fn finish(&mut self) -> String
@@ -321,7 +324,20 @@ impl<'program> CodeGenerator<'program>
 		output_staging_variables.into_boxed_slice()
 	}
 
-	fn enqueue_command_buffer(&mut self, command_buffer_id : usize)
+	fn begin_command_encoding(&mut self)
+	{
+		self.code_writer.write("let mut command_encoder = device.create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
+	}
+
+	fn end_command_encoding(&mut self) -> CommandBufferId
+	{
+		let command_buffer_id = self.next_command_buffer_id;
+		self.next_command_buffer_id.0 += 1;
+		self.code_writer.write(format!("let command_buffer_{} = command_encoder.finish();\n", command_buffer_id.0));
+		return command_buffer_id;
+	}
+
+	fn enqueue_command_buffer(&mut self, command_buffer_id : CommandBufferId)
 	{
 		if self.active_submission_encoding_state.is_none()
 		{
@@ -462,10 +478,11 @@ impl<'program> CodeGenerator<'program>
 		self.set_active_external_gpu_function(external_function_id);
 		let output_staging_variables = self.set_active_bindings(argument_vars, output_vars);
 		
+		self.begin_command_encoding();
+
 		//let mut output_variables = Vec::<usize>::new();
-		let command_buffer_id = self.next_command_buffer_id;
-		self.next_command_buffer_id += 1;
-		self.code_writer.write(format!("let (command_buffer_{}, ", command_buffer_id));
+		self.code_writer.write(format!("let ("));
+		//self.code_writer.write(format!("let (old_command_buffer_{}, ", command_buffer_id));
 		for output_index in 0 .. external_gpu_function.output_types.len()
 		{
 			//let var_id = self.variable_tracker.generate();
@@ -476,8 +493,6 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!(") = "));
 
 		self.code_writer.write("{\n".to_string());
-
-		self.code_writer.write("let mut command_encoder = device.create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
 		
 		self.code_writer.write_str("{\n");
 		self.code_writer.write("let mut compute_pass = command_encoder.begin_compute_pass(& wgpu::ComputePassDescriptor {label : None});\n".to_string());
@@ -486,7 +501,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!("compute_pass.dispatch(var_{}.try_into().unwrap(), var_{}.try_into().unwrap(), var_{}.try_into().unwrap());\n", dimension_vars[0], dimension_vars[1], dimension_vars[2]));
 		self.code_writer.write_str("}\n");
 
-		self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
+		//self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
 		//self.code_writer.write("queue.submit([command_buffer]);\n".to_string());
 		//self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
 		//self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
@@ -514,7 +529,7 @@ impl<'program> CodeGenerator<'program>
 			self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_temp_var_id, type_name, range_var_id));*/
 		}
 
-		self.code_writer.write(format!("(command_buffer, "));
+		self.code_writer.write(format!("("));
 		for output_temp_var_id in output_temp_variables.iter()
 		{
 			self.code_writer.write(format!("var_{}, ", output_temp_var_id));
@@ -523,6 +538,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.code_writer.write("};\n".to_string());
 
+		let command_buffer_id = self.end_command_encoding();
 		self.enqueue_command_buffer(command_buffer_id);
 
 		for var_id in output_vars.iter()
@@ -546,7 +562,7 @@ impl<'program> CodeGenerator<'program>
 				self.code_writer.write("queue.submit([".to_string());
 				for & command_buffer_id in submission_encoding_state.command_buffer_ids.iter()
 				{
-					self.code_writer.write(format!("command_buffer_{}, ", command_buffer_id));
+					self.code_writer.write(format!("command_buffer_{}, ", command_buffer_id.0));
 				}
 				self.code_writer.write("]);\n".to_string());
 			}
