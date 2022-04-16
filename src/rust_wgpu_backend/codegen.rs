@@ -792,6 +792,19 @@ impl PlacementState
 	}*/
 }
 
+struct PipelineContext
+{
+	
+}
+
+impl PipelineContext
+{
+	fn new() -> Self
+	{
+		Self {}
+	}
+}
+
 pub struct CodeGen<'program>
 {
 	program : & 'program ir::Program,
@@ -811,18 +824,12 @@ impl<'program> CodeGen<'program>
 		self.print_codegen_debug_info = to;
 	}
 
-	fn generate_cpu_function(&mut self, funclet_id : ir::FuncletId, pipeline_name : &str)
+	fn compile_funclet(&mut self, funclet_id : ir::FuncletId, argument_variable_ids : &[usize], pipeline_context : &mut PipelineContext)
 	{
-		let funclet = & self.program.funclets[& funclet_id];
-		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
-
-		//let node_usage_analysis = NodeUsageAnalysis::from_funclet(funclet);
-		//let mut node_result_tracker = NodeResultTracker::new();
-
-		// Placement state
 		let mut placement_state = PlacementState::new();
 
-		let argument_variable_ids = self.code_generator.begin_pipeline(pipeline_name, &funclet.input_types, &funclet.output_types);
+		let funclet = & self.program.funclets[& funclet_id];
+		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
 		{
@@ -990,7 +997,40 @@ impl<'program> CodeGen<'program>
 				let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
 				self.code_generator.build_return(& return_var_ids);
 			}
+			ir::TailEdge::Yield { funclet_id_opt, captured_arguments, return_values } =>
+			{
+				let captured_argument_var_ids = placement_state.get_local_state_var_ids(captured_arguments).unwrap();
+				let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
+				// Proper codegen is a lot more complicated than this
+				// self.code_generator.build_yield(& captured_argument_var_ids, & return_var_ids);
+			}
 		}
+	}
+
+	fn generate_cpu_function(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)
+	{
+		let entry_funclet = & self.program.funclets[& entry_funclet_id];
+		assert_eq!(entry_funclet.execution_scope, Some(ir::Scope::Cpu));
+
+		let mut pipeline_context = PipelineContext::new();
+
+		self.code_generator.begin_pipeline(pipeline_name);
+
+		match & entry_funclet.tail_edge
+		{
+			ir::TailEdge::Return {return_values : _} =>
+			{
+				let argument_variable_ids = self.code_generator.begin_oneshot_entry_funclet(&entry_funclet.input_types, &entry_funclet.output_types);
+				self.compile_funclet(entry_funclet_id, & argument_variable_ids, &mut pipeline_context);
+				self.code_generator.end_funclet();
+			}
+
+			ir::TailEdge::Yield {funclet_id_opt : _, captured_arguments : _, return_values : _} => 
+			{
+				()
+			}
+			//self.code_generator.begin_corecursive_base_funclet(pipeline_name, &entry_funclet.input_types, &entry_funclet.output_types),
+		};
 
 		self.code_generator.end_pipeline();
 	}

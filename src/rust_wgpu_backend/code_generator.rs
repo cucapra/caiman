@@ -654,7 +654,7 @@ impl<'program> CodeGenerator<'program>
 		write!(self.state_code_writer, "{}", code_string);
 	}
 
-	pub fn begin_pipeline(&mut self, pipeline_name : &str, input_types : &[ir::TypeId], output_types : &[ir::TypeId]) -> Box<[usize]>
+	pub fn begin_pipeline(&mut self, pipeline_name : &str)
 	{
 		self.reset_pipeline();
 
@@ -674,16 +674,6 @@ impl<'program> CodeGenerator<'program>
 				self.generate_type_definition(type_id);
 				write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
 			}
-
-			let mut tuple_fields = Vec::<ir::TypeId>::new();
-			for output_index in 0 .. output_types.len()
-			{
-				let output_type = output_types[output_index];
-				tuple_fields.push(output_type);
-			}
-			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
-			self.generate_type_definition(type_id);
-			write!(self.code_writer, "pub type {} = super::super::{};\n", pipeline_name, self.get_type_name(type_id));
 		}
 		self.code_writer.end_module();
 
@@ -698,6 +688,23 @@ impl<'program> CodeGenerator<'program>
 			self.code_writer.write(format!(") -> outputs::{};\n", external_cpu_function.name));
 		}
 		self.code_writer.write(format!("}}\n"));
+	}
+
+	pub fn begin_oneshot_entry_funclet(&mut self, input_types : &[ir::TypeId], output_types : &[ir::TypeId]) -> Box<[usize]>
+	{
+		self.code_writer.begin_module("pipeline_outputs");
+		{
+			let mut tuple_fields = Vec::<ir::TypeId>::new();
+			for output_index in 0 .. output_types.len()
+			{
+				let output_type = output_types[output_index];
+				tuple_fields.push(output_type);
+			}
+			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			self.generate_type_definition(type_id);
+			write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
+		}
+		self.code_writer.end_module();
 
 		let mut argument_variable_ids = Vec::<usize>::new();
 		self.code_writer.write(format!("pub fn run<F>(state : &mut super::State, cpu_functions : & F"));
@@ -718,7 +725,7 @@ impl<'program> CodeGenerator<'program>
 			}*/
 		}
 
-		self.code_writer.write(format!(" ) -> outputs::{}\n\twhere F : CpuFunctions", pipeline_name));
+		self.code_writer.write(format!(" ) -> pipeline_outputs::{}\n\twhere F : CpuFunctions", self.active_pipeline_name.as_ref().unwrap().as_str()));
 		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
 		argument_variable_ids.into_boxed_slice()
 	}
@@ -726,7 +733,7 @@ impl<'program> CodeGenerator<'program>
 	pub fn build_return(&mut self, output_var_ids : &[usize])
 	{
 		self.require_local(output_var_ids);
-		self.code_writer.write(format!("return outputs::{} {{", self.active_pipeline_name.as_ref().unwrap().as_str()));
+		self.code_writer.write(format!("return pipeline_outputs::{} {{", self.active_pipeline_name.as_ref().unwrap().as_str()));
 		for (return_index, var_id) in output_var_ids.iter().enumerate()
 		{
 			self.code_writer.write(format!("field_{} : var_{}, ", return_index, var_id));
@@ -734,9 +741,13 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!("}};"));
 	}
 
-	pub fn end_pipeline(&mut self)
+	pub fn end_funclet(&mut self)
 	{
 		self.code_writer.write("}\n".to_string());
+	}
+
+	pub fn end_pipeline(&mut self)
+	{
 		self.code_writer.end_module();
 		self.active_pipeline_name = None;
 		self.reset_pipeline();
