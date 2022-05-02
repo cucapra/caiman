@@ -1124,7 +1124,7 @@ impl<'program> Explicator<'program>
 					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, return_values), &mut funclet_builder);
 					funclet_builder.set_tail_edge_from_old(& original_funclet.tail_edge)
 				}
-				ir::TailEdge::Yield { funclet_id_opt, captured_arguments, return_values } =>
+				ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 				{
 					funclet_builder.set_output_types(& original_funclet.output_types);
 					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, captured_arguments), &mut funclet_builder); // Not ideal, but required for now

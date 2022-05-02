@@ -141,7 +141,7 @@ impl FuncletBuilder
 				}
 				TailEdge::Return{return_values : new_return_values.into_boxed_slice()}
 			}
-			TailEdge::Yield { funclet_id_opt, captured_arguments, return_values } =>
+			TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
 				let mut new_captured_arguments = Vec::<NodeId>::new();
 				for value in captured_arguments.iter()
@@ -155,7 +155,7 @@ impl FuncletBuilder
 					new_return_values.push(self.node_remapping[value]);
 				}
 
-				TailEdge::Yield { funclet_id_opt : * funclet_id_opt, captured_arguments : new_captured_arguments.into_boxed_slice(), return_values : new_return_values.into_boxed_slice() }
+				TailEdge::Yield { funclet_ids : funclet_ids.clone(), captured_arguments : new_captured_arguments.into_boxed_slice(), return_values : new_return_values.into_boxed_slice() }
 			}
 		};
 		self.tail_edge = Some(tail_edge);

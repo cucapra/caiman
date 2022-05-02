@@ -792,16 +792,38 @@ impl PlacementState
 	}*/
 }
 
+/*#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+struct PipelineStageKey
+{
+	funclet_id : ir::FuncletId,
+	funclet_stage_id : Option<usize>,
+}
+
+// When pipeline stages surface to the outside world (the calling function) entry points don't strictly correspond to funclets (nodes), but instead correspond to the prior stage and the next funclet (paths)
+// This can introduce potentially infinite cycles, so it's important that we not try to do placement inference across funclets lest we wake the sleeping halting problem
+// For now we dodge this by forcing local on entry and exit, but this will have to change and it's important to be careful when it does
+// Ignore the above
+struct PipelineStageData
+{
+	placement_state_opt : Option<PlacementState>,
+	//captured_argument_count : usize,
+	//prior_stage_id_opt : Option<usize>
+}*/
+
+// PipelineContext tracks traversal through the funclet graph
+#[derive(Default)]
 struct PipelineContext
 {
-	
+	//pipeline_stages : HashMap<PipelineStageKey, PipelineStageData>
+	funclet_placement_states : HashMap<ir::FuncletId, PlacementState>,
+	pending_funclet_ids : Vec<ir::FuncletId>
 }
 
 impl PipelineContext
 {
 	fn new() -> Self
 	{
-		Self {}
+		Default::default()
 	}
 }
 
@@ -849,7 +871,7 @@ impl<'program> CodeGen<'program>
 				ir::Node::ExtractResult { node_id, index } =>
 				{
 					let node_call_state_opt = placement_state.node_call_states.get(node_id);
-					assert!(node_call_state_opt.is_some(), "#{} {:?}: Node #{} is not the result of a call {:?}", current_node_id, node, node_id, placement_state);
+					assert!(node_call_state_opt.is_some(), "Funclet #{} at node #{} {:?}: Node #{} is not the result of a call {:?}", funclet_id, current_node_id, node, node_id, placement_state);
 					let node_call_state = node_call_state_opt.unwrap();
 
 					if let Some(local_residency_state) = placement_state.node_local_residency_states.get(node_id).map(|x| *x)
@@ -995,17 +1017,43 @@ impl<'program> CodeGen<'program>
 			ir::TailEdge::Return { return_values } =>
 			{
 				let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
+
 				self.code_generator.build_return(& return_var_ids);
 			}
-			ir::TailEdge::Yield { funclet_id_opt, captured_arguments, return_values } =>
+			ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
 				let captured_argument_var_ids = placement_state.get_local_state_var_ids(captured_arguments).unwrap();
 				let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
+
+				let mut next_funclet_input_types = Vec::<Box<[ir::TypeId]>>::new();
+				let mut next_funclet_names = Vec::<String>::new();
+				for & next_funclet_id in funclet_ids.iter()
+				{
+					pipeline_context.pending_funclet_ids.push(next_funclet_id);
+					/*if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
+					{
+					}*/
+					let funclet_name = format!("Funclet{}", next_funclet_id);
+					next_funclet_names.push(funclet_name);
+					let input_types = self.program.funclets[& next_funclet_id].input_types.to_vec();
+					//let input_types = Vec::<ir::TypeId>::new();
+					next_funclet_input_types.push(input_types.into_boxed_slice());
+				}
 				// Proper codegen is a lot more complicated than this
 				// self.code_generator.build_yield(& captured_argument_var_ids, & return_var_ids);
+				// This is disgusting
+				self.code_generator.build_yield(next_funclet_names.into_boxed_slice(), next_funclet_input_types.into_boxed_slice(), & captured_argument_var_ids, & return_var_ids);
 			}
 		}
+
+		let old = pipeline_context.funclet_placement_states.insert(funclet_id, placement_state);
+		assert!(old.is_none());
 	}
+
+	/*fn generate_pipeline_stage(&mut self, pipeline_context : &mut PipelineContext, parent_stage_id_opt : Option<usize>) -> usize
+	{
+
+	}*/
 
 	fn generate_cpu_function(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
@@ -1013,10 +1061,25 @@ impl<'program> CodeGen<'program>
 		assert_eq!(entry_funclet.execution_scope, Some(ir::Scope::Cpu));
 
 		let mut pipeline_context = PipelineContext::new();
+		pipeline_context.pending_funclet_ids.push(entry_funclet_id);
 
 		self.code_generator.begin_pipeline(pipeline_name);
 
-		match & entry_funclet.tail_edge
+		while let Some(funclet_id) = pipeline_context.pending_funclet_ids.pop()
+		{
+			if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
+			{
+				let funclet = & self.program.funclets[& funclet_id];
+				assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
+
+				let funclet_name = format!("Funclet{}", funclet_id);
+				let argument_variable_ids = self.code_generator.begin_funclet(funclet_name.as_str(), &funclet.input_types, &funclet.output_types);
+				self.compile_funclet(funclet_id, & argument_variable_ids, &mut pipeline_context);
+				self.code_generator.end_funclet();
+			}
+		}
+
+		/*match & entry_funclet.tail_edge
 		{
 			ir::TailEdge::Return {return_values : _} =>
 			{
@@ -1025,11 +1088,25 @@ impl<'program> CodeGen<'program>
 				self.code_generator.end_funclet();
 			}
 
-			ir::TailEdge::Yield {funclet_id_opt : _, captured_arguments : _, return_values : _} => 
+			ir::TailEdge::Yield {funclet_ids : _, captured_arguments : _, return_values : _} => 
 			{
 				()
 			}
 			//self.code_generator.begin_corecursive_base_funclet(pipeline_name, &entry_funclet.input_types, &entry_funclet.output_types),
+		};*/
+
+		match & entry_funclet.tail_edge
+		{
+			ir::TailEdge::Return {return_values : _} =>
+			{
+				let entry_funclet_name = format!("Funclet{}", entry_funclet_id);
+				self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_name.as_str(), &entry_funclet.input_types, &entry_funclet.output_types);
+			}
+
+			ir::TailEdge::Yield {funclet_ids : _, captured_arguments : _, return_values : _} => 
+			{
+				()
+			}
 		};
 
 		self.code_generator.end_pipeline();

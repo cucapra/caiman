@@ -117,7 +117,7 @@ impl NodeUsageAnalysis
 					analysis.use_node(node_id, Usage::LocalVariable);
 				}
 			}
-			ir::TailEdge::Yield {funclet_id_opt : _, captured_arguments, return_values} => 
+			ir::TailEdge::Yield {funclet_ids : _, captured_arguments, return_values} => 
 			{
 				for & node_id in captured_arguments.iter()
 				{

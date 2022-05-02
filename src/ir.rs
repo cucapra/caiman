@@ -189,7 +189,7 @@ pub enum Node
 pub enum TailEdge
 {
 	Return { return_values : Box<[NodeId]> },
-	Yield { funclet_id_opt : Option<FuncletId>, captured_arguments : Box<[NodeId]>, return_values : Box<[NodeId]> }, // funclet_id_opt is None if self funclet
+	Yield { funclet_ids : Box<[FuncletId]>, captured_arguments : Box<[NodeId]>, return_values : Box<[NodeId]> },
 	// invokes and waits on the gpu
 	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
 	//Wait { required_scope_set : ScopeSet, funclet_id : usize, arguments : Box<[usize]> }
