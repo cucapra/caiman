@@ -765,14 +765,14 @@ impl<'program> CodeGenerator<'program>
 
 		self.active_funclet_result_type_id = Some(funclet_result_type_id);
 
-		self.code_writer.write(format!("pub struct Funclet{} (super::{});", funclet_id, self.get_type_name(funclet_result_type_id)));
+		self.code_writer.write(format!("pub struct Funclet{}<'state> {{state : & 'state mut super::State, intermediates : super::{}}}", funclet_id, self.get_type_name(funclet_result_type_id)));
 
 		//self.code_writer.write(format!("}}"));
 
-		self.code_writer.write(format!("impl Funclet{}\n{{\n", funclet_id));
+		self.code_writer.write(format!("impl<'state> Funclet{}<'state>\n{{\n", funclet_id));
 
 		let mut argument_variable_ids = Vec::<usize>::new();
-		self.code_writer.write(format!("pub fn new<'state, F>(state : & 'state mut super::State, cpu_functions : & F"));
+		self.code_writer.write(format!("pub fn new<F>(state : & 'state mut super::State, cpu_functions : & F"));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in input_types.iter().enumerate()
 		{
@@ -856,12 +856,12 @@ impl<'program> CodeGenerator<'program>
 	pub fn build_return(&mut self, output_var_ids : &[usize])
 	{
 		self.require_local(output_var_ids);
-		self.code_writer.write(format!("return Funclet{} (super::{} {{", self.active_funclet_state.as_ref().unwrap().funclet_id, self.get_type_name(self.active_funclet_result_type_id.unwrap())));
+		self.code_writer.write(format!("return Funclet{} {{state, intermediates : super::{} {{", self.active_funclet_state.as_ref().unwrap().funclet_id, self.get_type_name(self.active_funclet_result_type_id.unwrap())));
 		for (return_index, var_id) in output_var_ids.iter().enumerate()
 		{
 			self.code_writer.write(format!("field_{} : var_{}, ", return_index, var_id));
 		}
-		self.code_writer.write(format!("}});"));
+		self.code_writer.write(format!("}}}};"));
 	}
 
 	pub fn build_yield(&mut self, next_funclet_ids : &[ir::FuncletId], next_funclet_input_types : Box<[Box<[ir::TypeId]>]>, capture_var_ids : &[usize], output_var_ids : &[usize])
@@ -870,7 +870,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.require_local(capture_var_ids);
 		self.require_local(output_var_ids);
-		self.code_writer.write(format!("return Funclet{} (super::{} {{", self.active_funclet_state.as_ref().unwrap().funclet_id, self.get_type_name(self.active_funclet_result_type_id.unwrap())));
+		self.code_writer.write(format!("return Funclet{} {{state, intermediates : super::{} {{", self.active_funclet_state.as_ref().unwrap().funclet_id, self.get_type_name(self.active_funclet_result_type_id.unwrap())));
 		for (return_index, var_id) in capture_var_ids.iter().enumerate()
 		{
 			self.code_writer.write(format!("field_{} : var_{}, ", return_index, var_id));
@@ -882,7 +882,7 @@ impl<'program> CodeGenerator<'program>
 		self.active_funclet_state.as_mut().unwrap().capture_count = capture_var_ids.len();
 		self.active_funclet_state.as_mut().unwrap().output_count = output_var_ids.len();
 		self.active_funclet_state.as_mut().unwrap().next_funclet_input_types = Some(next_funclet_input_types);
-		self.code_writer.write(format!("}});"));
+		self.code_writer.write(format!("}}}};"));
 	}
 
 	//fn build_oneshot_entry_point()
@@ -908,7 +908,7 @@ impl<'program> CodeGenerator<'program>
 
 				for index in active_funclet_state.capture_count .. active_funclet_state.output_type_ids.len()
 				{
-					write!(self.code_writer, "self.0.field_{}, ", index);
+					write!(self.code_writer, "self.intermediates.field_{}, ", index);
 				}
 
 				self.code_writer.write(format!(") }}\n"));
@@ -916,7 +916,7 @@ impl<'program> CodeGenerator<'program>
 				for (funclet_index, next_funclet_id) in next_funclet_ids.iter().enumerate()
 				{
 					let input_types = & active_funclet_state.next_funclet_input_types.as_ref().unwrap()[funclet_index];
-					self.code_writer.write(format!("\tpub fn step_{}<'next_state, F : CpuFunctions>(mut self, state : & 'next_state mut super::State, cpu_functions : & F", next_funclet_id));
+					self.code_writer.write(format!("\tpub fn step_{}<F : CpuFunctions>(mut self, cpu_functions : & F", next_funclet_id));
 					//for index in  0 .. active_funclet_state.capture_count
 					//{
 					//	write!(self.code_writer, ", input_{} : {}", index, active_funclet_state.output_type_ids[index]);
@@ -933,10 +933,10 @@ impl<'program> CodeGenerator<'program>
 						let input_type = & input_types[index];
 						write!(self.code_writer, ", input_{} : {}", index, self.get_type_name(*input_type));
 					}
-					write!(self.code_writer, ") -> Funclet{} \n{{\n\treturn Funclet{}::new(state, cpu_functions", next_funclet_id, next_funclet_id);
+					write!(self.code_writer, ") -> Funclet{}<'state> \n{{\n\treturn Funclet{}::<'state>::new(self.state, cpu_functions", next_funclet_id, next_funclet_id);
 					for index in 0 .. active_funclet_state.capture_count
 					{
-						write!(self.code_writer, ", self.0.field_{}", index);
+						write!(self.code_writer, ", self.intermediates.field_{}", index);
 					}
 					for index in active_funclet_state.capture_count .. input_types.len()
 					{
@@ -947,7 +947,7 @@ impl<'program> CodeGenerator<'program>
 			}
 			else
 			{
-				self.code_writer.write(format!("\tpub fn complete(self) -> super::{} {{ self.0 }}", self.get_type_name(self.active_funclet_result_type_id.unwrap())));
+				self.code_writer.write(format!("\tpub fn complete(self) -> super::{} {{ self.intermediates }}", self.get_type_name(self.active_funclet_result_type_id.unwrap())));
 			}
 		}
 
