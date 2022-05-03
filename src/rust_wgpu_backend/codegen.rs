@@ -1026,15 +1026,12 @@ impl<'program> CodeGen<'program>
 				let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
 
 				let mut next_funclet_input_types = Vec::<Box<[ir::TypeId]>>::new();
-				let mut next_funclet_names = Vec::<String>::new();
 				for & next_funclet_id in funclet_ids.iter()
 				{
 					pipeline_context.pending_funclet_ids.push(next_funclet_id);
 					/*if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
 					{
 					}*/
-					let funclet_name = format!("Funclet{}", next_funclet_id);
-					next_funclet_names.push(funclet_name);
 					let input_types = self.program.funclets[& next_funclet_id].input_types.to_vec();
 					//let input_types = Vec::<ir::TypeId>::new();
 					next_funclet_input_types.push(input_types.into_boxed_slice());
@@ -1042,7 +1039,7 @@ impl<'program> CodeGen<'program>
 				// Proper codegen is a lot more complicated than this
 				// self.code_generator.build_yield(& captured_argument_var_ids, & return_var_ids);
 				// This is disgusting
-				self.code_generator.build_yield(next_funclet_names.into_boxed_slice(), next_funclet_input_types.into_boxed_slice(), & captured_argument_var_ids, & return_var_ids);
+				self.code_generator.build_yield(funclet_ids, next_funclet_input_types.into_boxed_slice(), & captured_argument_var_ids, & return_var_ids);
 			}
 		}
 
@@ -1072,8 +1069,7 @@ impl<'program> CodeGen<'program>
 				let funclet = & self.program.funclets[& funclet_id];
 				assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
 
-				let funclet_name = format!("Funclet{}", funclet_id);
-				let argument_variable_ids = self.code_generator.begin_funclet(funclet_name.as_str(), &funclet.input_types, &funclet.output_types);
+				let argument_variable_ids = self.code_generator.begin_funclet(funclet_id, &funclet.input_types, &funclet.output_types);
 				self.compile_funclet(funclet_id, & argument_variable_ids, &mut pipeline_context);
 				self.code_generator.end_funclet();
 			}
@@ -1099,8 +1095,7 @@ impl<'program> CodeGen<'program>
 		{
 			ir::TailEdge::Return {return_values : _} =>
 			{
-				let entry_funclet_name = format!("Funclet{}", entry_funclet_id);
-				self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_name.as_str(), &entry_funclet.input_types, &entry_funclet.output_types);
+				self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
 			}
 
 			ir::TailEdge::Yield {funclet_ids : _, captured_arguments : _, return_values : _} => 
