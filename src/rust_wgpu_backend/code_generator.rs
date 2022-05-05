@@ -772,7 +772,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!("impl<'state,  'cpu_functions, F : CpuFunctions> Funclet{}<'state,  'cpu_functions, F>\n{{\n", funclet_id));
 
 		let mut argument_variable_ids = Vec::<usize>::new();
-		self.code_writer.write(format!("pub fn new(state : & 'state mut super::State, cpu_functions : & 'cpu_functions F"));
+		self.code_writer.write(format!("fn new(state : & 'state mut super::State, cpu_functions : & 'cpu_functions F"));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in input_types.iter().enumerate()
 		{
@@ -851,6 +851,112 @@ impl<'program> CodeGenerator<'program>
 			write!(self.code_writer, "field_{} : result.field_{}", output_index, output_index);
 		}
 		write!(self.code_writer, "}};\n}}\n");
+	}
+
+	pub fn emit_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ir::TypeId], output_types : &[ir::TypeId])
+	{
+		let pipeline_name = self.active_pipeline_name.as_ref().unwrap();
+
+		// Write the instance state
+		write!(self.code_writer, "pub struct Instance<'state, 'cpu_functions, F : CpuFunctions>{{state : & 'state mut dyn super::State, cpu_functions : & 'cpu_functions F}}\n");
+
+		write!(self.code_writer, "{}", "
+		impl<'state, 'cpu_functions, F : CpuFunctions> Instance<'state, 'cpu_functions, F> 
+		{
+			pub fn new(state : & 'state mut dyn super::State, cpu_functions : & 'cpu_functions F) -> Self
+			{
+				Self{state, cpu_functions}
+			}
+
+		");
+
+		write!(self.code_writer, "\t\tpub fn start(mut self");
+
+		for (input_index, input_type) in input_types.iter().enumerate()
+		{
+			let type_name = self.get_type_name(*input_type);
+			self.code_writer.write(format!(", input_{} : {}", input_index, type_name));
+		}
+
+		write!(self.code_writer, ") -> Funclet{}<'state, 'cpu_functions, F> \n{{\n\t Funclet{}::new(self.state, self.cpu_functions", funclet_id, funclet_id);
+
+		for (input_index, input_type) in input_types.iter().enumerate()
+		{
+			self.code_writer.write(format!(", input_{}", input_index));
+		}
+
+		write!(self.code_writer, ")\n}}\n");
+
+		write!(self.code_writer, "{}", "
+		}
+		");
+
+
+
+		/*write!(self.code_writer, "{}", "
+		impl<'parent_state, 'cpu_functions> Instance<'parent_state, 'cpu_functions> 
+		{
+			fn new(parent : &mut 'parent_state dyn super::State, cpu_functions : & 'cpu_functions dyn CpuFunctions) -> Self
+			{
+				Self{parent, cpu_functions}
+			}
+		}
+
+		"impl<'parent_state, 'cpu_functions> super::State for Instance<'parent_state, 'cpu_functions>
+		{
+			fn get_device_mut(&mut self) -> &mut wgpu::Device
+			{
+				self.parent_state.get_device_mut()
+			}
+
+			fn get_queue_mut(&mut self) -> &mut wgpu::Queue
+			{
+				self.parent_state.get_queue_mut()
+			}
+
+		");*/
+
+		//write!(self.code_writer, "\n}}\n");
+
+		// Write the template
+
+		/*write!(self.code_writer, "pub struct Template<'root_state, 'cpu_functions, F : CpuFunctions>{{phantom : std::marker::PhantomData<& 'root_state dyn State>, cpu_functions : & 'cpu_functions F}};\n");
+
+		write!(self.code_writer, "impl<'root_state> Template<'root_state>\n{{\n");
+
+		let mut argument_variable_ids = Vec::<usize>::new();
+		self.code_writer.write(format!("pub fn new<F>(state : &mut 'root_state super::State, cpu_functions : & 'cpu_functions F) -> Self"));
+		self.code_writer.write("\n{\nSelf\t}\n".to_string());
+
+		//InstanceState<'state, 'cpu_functions, F>
+		write!(self.code_writer, "pub fn instantiate<'template, 'state>(& 'template self, state : &mut 'state super::State) -> {}\n{{\n", );
+		write!(self.code_writer, "\tlet instance_state = InstanceState::<'state, 'cpu_functions, F>::new(self, state);\n");
+		write!(self.code_writer, "\n}}\n");
+
+
+		write!(self.code_writer, "\n}}\n");
+		// Idk
+
+		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
+		//self.code_writer.write("{\n".to_string());
+		write!(self.code_writer, "\treturn Funclet{}::new(state, cpu_functions", funclet_id);
+		for (_, var_id) in argument_variable_ids.iter().enumerate()
+		{
+			write!(self.code_writer, ", var_{}", *var_id);
+		}
+		write!(self.code_writer, ").complete();\n");
+		write!(self.code_writer, "return pipeline_outputs::{} {{", self.active_pipeline_name.as_ref().unwrap().as_str());
+		for (output_index, output_type) in output_types.iter().enumerate()
+		{
+			if output_index != 0
+			{
+				write!(self.code_writer, ", ");
+			}
+			write!(self.code_writer, "field_{} : result.field_{}", output_index, output_index);
+		}
+		write!(self.code_writer, "}};\n}}\n");
+
+		write!(self.code_writer, "\n}}\n");*/
 	}
 
 	pub fn build_return(&mut self, output_var_ids : &[usize])

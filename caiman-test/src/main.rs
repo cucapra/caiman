@@ -148,7 +148,7 @@ mod tests
 		let (mut device, mut queue) = futures::executor::block_on(adapter.request_device(& std::default::Default::default(), None)).unwrap();
 		let callbacks = crate::Callbacks;
 		let mut root_state = crate::pipelines::RootState::new(&mut device, &mut queue);
-		let result = crate::pipelines::pipeline_with_yield_enter_loop_exit::Funclet6::new(&mut root_state, & callbacks, 1).step_7(1).step_8().complete();
+		let result = crate::pipelines::pipeline_with_yield_enter_loop_exit::Instance::new(&mut root_state, & callbacks).start(1).step_7(1).step_8().complete();
 		assert_eq!(3, result.field_0);
 	}
 }

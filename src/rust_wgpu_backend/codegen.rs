@@ -1091,6 +1091,8 @@ impl<'program> CodeGen<'program>
 			//self.code_generator.begin_corecursive_base_funclet(pipeline_name, &entry_funclet.input_types, &entry_funclet.output_types),
 		};*/
 
+		self.code_generator.emit_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
+		
 		match & entry_funclet.tail_edge
 		{
 			ir::TailEdge::Return {return_values : _} =>
