@@ -157,6 +157,41 @@ impl ShaderModuleKey
 	}
 }
 
+/*#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
+struct BindGroupLayoutKey
+{
+	external_gpu_function_id : ir::ExternalGpuFunctionId
+}
+
+impl BindGroupLayoutKey
+{
+	fn instance_field_name(&self) -> String
+	{
+		format!("external_gpu_function_{}_bind_group_layout", self.external_gpu_function_id)
+	}
+}
+
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
+struct PipelineLayoutKey
+{
+	external_gpu_function_id : ir::ExternalGpuFunctionId
+}
+
+impl PipelineLayoutKey
+{
+	fn instance_field_name(&self) -> String
+	{
+		format!("external_gpu_function_{}_pipeline_layout", self.external_gpu_function_id)
+	}
+}*/
+
+struct GpuFunctionInvocation
+{
+	external_gpu_function_id : ir::ExternalGpuFunctionId,
+	bindings : BTreeMap<usize, (Option<usize>, Option<usize>)>,
+	shader_module_key : ShaderModuleKey,
+}
+
 pub struct CodeGenerator<'program>
 {
 	type_code_writer : CodeWriter,
@@ -176,7 +211,8 @@ pub struct CodeGenerator<'program>
 	active_shader_module_key : Option<ShaderModuleKey>,
 	shader_modules : BTreeMap<ShaderModuleKey, shadergen::ShaderModule>,
 	submission_queue : SubmissionQueue,
-	next_command_buffer_id : CommandBufferId
+	next_command_buffer_id : CommandBufferId,
+	gpu_function_invocations : Vec<GpuFunctionInvocation>
 }
 
 impl<'program> CodeGenerator<'program>
@@ -188,7 +224,7 @@ impl<'program> CodeGenerator<'program>
 		let state_code_writer = CodeWriter::new();
 		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		Self {type_code_writer, state_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, active_funclet_result_type_id : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0)}
+		Self {type_code_writer, state_code_writer, code_writer, types, has_been_generated, variable_tracker, external_cpu_functions, external_gpu_functions, active_pipeline_name : None, active_funclet_result_type_id : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0), gpu_function_invocations : Vec::new()}
 	}
 
 	pub fn finish(&mut self) -> String
@@ -348,7 +384,10 @@ impl<'program> CodeGenerator<'program>
 			}
 		};
 
-		self.code_writer.write("let bind_group_layout_entries = [".to_string());
+		let invocation_id = self.gpu_function_invocations.len();
+		self.gpu_function_invocations.push(GpuFunctionInvocation{external_gpu_function_id : external_function_id, bindings, shader_module_key : self.active_shader_module_key.unwrap()});
+		let gpu_function_invocation = & self.gpu_function_invocations[invocation_id];
+		/*self.code_writer.write("let bind_group_layout_entries = [".to_string());
 		for (binding, (_input_opt, output_opt)) in bindings.iter()
 		{
 			let is_read_only : bool = output_opt.is_none();
@@ -382,7 +421,29 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write("let bind_group = instance.state.get_device_mut().create_bind_group(& wgpu::BindGroupDescriptor {label : None, layout : & bind_group_layout, entries : & entries});\n".to_string());
 
 		self.code_writer.write("let pipeline_layout = instance.state.get_device_mut().create_pipeline_layout(& wgpu::PipelineLayoutDescriptor { label : None, bind_group_layouts : & [& bind_group_layout], push_constant_ranges : & []});\n".to_string());
-		self.code_writer.write("let pipeline = instance.state.get_device_mut().create_compute_pipeline(& wgpu::ComputePipelineDescriptor {label : None, layout : Some(& pipeline_layout), module : & module, entry_point : & \"main\"});\n".to_string());
+		self.code_writer.write("let pipeline = instance.state.get_device_mut().create_compute_pipeline(& wgpu::ComputePipelineDescriptor {label : None, layout : Some(& pipeline_layout), module : & module, entry_point : & \"main\"});\n".to_string());*/
+
+		self.code_writer.write("let entries = [".to_string());
+		for (binding, (input_opt, output_opt)) in gpu_function_invocation.bindings.iter()
+		{
+			let mut variable_id : Option<usize> = None;
+			
+			if let Some(input) = input_opt
+			{
+				variable_id = Some(input_staging_variables[*input]);
+			}
+
+			if let Some(output) = output_opt
+			{
+				variable_id = Some(output_staging_variables[*output]);
+			}
+
+			assert_eq!(variable_id.is_some(), true, "Binding must be input or output");
+			self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, variable_id.unwrap()));
+		}
+		self.code_writer.write("];\n".to_string());
+		write!(self.code_writer, "let bind_group = instance.state.get_device_mut().create_bind_group(& wgpu::BindGroupDescriptor {{label : None, layout : & instance.static_bind_group_layout_{}, entries : & entries}});\n", invocation_id);
+		write!(self.code_writer, "let pipeline = & instance.static_pipeline_{};\n", invocation_id);
 
 		output_staging_variables.into_boxed_slice()
 	}
@@ -912,8 +973,13 @@ impl<'program> CodeGenerator<'program>
 			write!(self.code_writer, ", {} : wgpu::ShaderModule", shader_module_key.instance_field_name());
 		}
 
-		write!(self.code_writer, "}}\n");
+		for (gpu_function_invocation_id, gpu_function_invocation) in self.gpu_function_invocations.iter().enumerate()
+		{
+			write!(self.code_writer, ", static_bind_group_layout_{} : wgpu::BindGroupLayout, static_pipeline_layout_{} : wgpu::PipelineLayout, static_pipeline_{} : wgpu::ComputePipeline", gpu_function_invocation_id, gpu_function_invocation_id, gpu_function_invocation_id);
+		}
 
+		write!(self.code_writer, "}}\n");
+		
 /*
 		if ! self.shader_modules.contains_key(& shader_module_key)
 		{
@@ -946,12 +1012,35 @@ impl<'program> CodeGenerator<'program>
 			write!(self.code_writer, "let {} = state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor {{ label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"{}\"))}});\n", shader_module_key.instance_field_name(), shader_module.compile_wgsl_text().as_str());
 		}
 
+		for (gpu_function_invocation_id, gpu_function_invocation) in self.gpu_function_invocations.iter().enumerate()
+		{
+			self.code_writer.write("let bind_group_layout_entries = [".to_string());
+			for (binding, (_input_opt, output_opt)) in gpu_function_invocation.bindings.iter()
+			{
+				let is_read_only : bool = output_opt.is_none();
+				self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
+				self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : {} }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding, is_read_only));
+				self.code_writer.write(" }, ".to_string());
+			}
+			self.code_writer.write("];\n".to_string());
+
+			write!(self.code_writer, "let static_bind_group_layout_{} = state.get_device_mut().create_bind_group_layout(& wgpu::BindGroupLayoutDescriptor {{ label : None, entries : & bind_group_layout_entries}});\n", gpu_function_invocation_id);
+
+			write!(self.code_writer, "let static_pipeline_layout_{} = state.get_device_mut().create_pipeline_layout(& wgpu::PipelineLayoutDescriptor {{ label : None, bind_group_layouts : & [& static_bind_group_layout_{}], push_constant_ranges : & []}});\n", gpu_function_invocation_id, gpu_function_invocation_id);
+			write!(self.code_writer, "let static_pipeline_{} = state.get_device_mut().create_compute_pipeline(& wgpu::ComputePipelineDescriptor {{label : None, layout : Some(& static_pipeline_layout_{}), module : & {}, entry_point : & \"main\"}});\n", gpu_function_invocation_id, gpu_function_invocation_id, gpu_function_invocation.shader_module_key.instance_field_name());
+		}
+
 		write!(self.code_writer, "{}", "
 				Self{state, cpu_functions");
 
 		for (shader_module_key, shader_module) in self.shader_modules.iter()
 		{
 			write!(self.code_writer, ", {}", shader_module_key.instance_field_name());
+		}
+
+		for (gpu_function_invocation_id, gpu_function_invocation) in self.gpu_function_invocations.iter().enumerate()
+		{
+			write!(self.code_writer, ", static_bind_group_layout_{}, static_pipeline_layout_{}, static_pipeline_{}", gpu_function_invocation_id, gpu_function_invocation_id, gpu_function_invocation_id);
 		}
 
 		write!(self.code_writer, "{}", "}
