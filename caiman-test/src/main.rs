@@ -148,7 +148,29 @@ mod tests
 		let (mut device, mut queue) = futures::executor::block_on(adapter.request_device(& std::default::Default::default(), None)).unwrap();
 		let callbacks = crate::Callbacks;
 		let mut root_state = crate::pipelines::RootState::new(&mut device, &mut queue);
-		let result = crate::pipelines::pipeline_with_yield_enter_loop_exit::Instance::new(&mut root_state, & callbacks).start(1).step_7(1).step_8().complete();
+		let mut stage = crate::pipelines::pipeline_with_yield_enter_loop_exit::Instance::new(&mut root_state, & callbacks).start(1).step_7(1);
+		assert!(stage.can_step_7());
+		let result = stage.step_8().complete();
 		assert_eq!(3, result.field_0);
+	}
+
+
+	#[test]
+	fn test_pipeline_with_yield_enter_loop_exit_iterated()
+	{
+		let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+		let adapter = futures::executor::block_on(instance.request_adapter(& wgpu::RequestAdapterOptions { power_preference : wgpu::PowerPreference::default(), compatible_surface : None, force_fallback_adapter : false })).unwrap();
+		let (mut device, mut queue) = futures::executor::block_on(adapter.request_device(& std::default::Default::default(), None)).unwrap();
+		let callbacks = crate::Callbacks;
+		let mut root_state = crate::pipelines::RootState::new(&mut device, &mut queue);
+		let mut loop_stage = crate::pipelines::pipeline_with_yield_enter_loop_exit::Instance::new(&mut root_state, & callbacks).start(1).step_7(1);
+		let iterations = 16;
+		for i in 0 .. iterations
+		{
+			assert!(loop_stage.can_step_7());
+			loop_stage = loop_stage.step_7(1)
+		}
+		let result = loop_stage.step_8().complete();
+		assert_eq!(3 + iterations, result.field_0);
 	}
 }

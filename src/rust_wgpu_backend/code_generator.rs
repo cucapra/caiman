@@ -1200,6 +1200,9 @@ impl<'program> CodeGenerator<'program>
 				for (funclet_index, next_funclet_id) in next_funclet_ids.iter().enumerate()
 				{
 					let input_types = & active_funclet_state.next_funclet_input_types.as_ref().unwrap()[funclet_index];
+
+					self.code_writer.write(format!("\tpub fn can_step_{}(&mut self) -> bool {{ true }}", next_funclet_id));
+
 					self.code_writer.write(format!("\tpub fn step_{}(mut self", next_funclet_id));
 					//for index in  0 .. active_funclet_state.capture_count
 					//{
