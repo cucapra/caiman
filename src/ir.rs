@@ -1,45 +1,40 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::default::Default;
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
 use crate::arena::Arena;
 
-/*#[derive(Serialize, Deserialize, Debug, Default)]
-struct Scope
-{
-	//const None = 0b0;
-	Cpu,
-	Gpu,
-}*/
-
-/*
-Scope works like a union type.
-Constant is the bottom of the lattice and CpuOrGpu is the top.
-Unknown is unknown.
-*/
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Scope
 {
-	//Unknown,
-	//Constant,
+	Local,
 	Cpu,
 	Gpu,
-	//CpuOrGpu
 }
 
-/*bitflags!
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Place
 {
-	#[derive(Serialize, Deserialize, Default)]
-	pub struct ScopeSet : u32
-	{
-		//const None = 0b0;
-		const Cpu = 0b1;
-		const GpuCoordinator = 0b10;
-		const GpuWorker = 0b100;
-		const Gpu = Self::GpuCoordinator.bits | Self::GpuWorker.bits;
-	}
-}*/
+	Simple{scope : Scope}
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub enum ResourceQueueStage
+{
+	None,
+	Encoded,
+	Submitted,
+	Ready,
+	Dead,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct ResourceState
+{
+	pub stage : ResourceQueueStage,
+	pub is_exclusive : bool
+}
 
 /*
 #[derive(Debug)]
@@ -118,8 +113,8 @@ pub enum Type
 
 	//Scoped { scope : Scope },
 
-	Buffer,
-	Texture
+	//Buffer,
+	//Texture
 	//GpuVertexWorkerState,
 	//GpuFragmentWorkerState,
 }
@@ -204,10 +199,12 @@ pub enum TailEdge
 pub struct Funclet
 {
 	pub input_types : Box<[TypeId]>,
-	//input_scopes : Box<[ScopeSet]>,
+	#[serde(default)]
+	pub input_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
 	pub execution_scope : Option<Scope>,
 	pub output_types : Box<[TypeId]>,
-	//output_scopes : Box<[ScopeSet]>,
+	#[serde(default)]
+	pub output_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
 	pub nodes : Box<[Node]>,
 	pub tail_edge : TailEdge
 }

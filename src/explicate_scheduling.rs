@@ -785,6 +785,32 @@ impl NodeResourceTracker
 		}
 	}
 
+	fn register_gpu_submitted_nodes(&mut self, node_ids : &[ir::NodeId])
+	{
+		for & node_id in node_ids.iter()
+		{
+			let was_newly_registered = self.registered_node_set.insert(node_id);
+			assert!(was_newly_registered);
+			/*let was_newly_gpu = self.gpu_resident_node_set.insert(node_id);
+			assert!(was_newly_gpu);*/
+			let was_newly_gpu_resident = self.node_gpu_residency_state.insert(node_id, GpuResidencyState::Submitted);
+			assert!(was_newly_gpu_resident.is_none());
+		}
+	}
+
+	fn register_gpu_ready_nodes(&mut self, node_ids : &[ir::NodeId])
+	{
+		for & node_id in node_ids.iter()
+		{
+			let was_newly_registered = self.registered_node_set.insert(node_id);
+			assert!(was_newly_registered);
+			/*let was_newly_gpu = self.gpu_resident_node_set.insert(node_id);
+			assert!(was_newly_gpu);*/
+			let was_newly_gpu_resident = self.node_gpu_residency_state.insert(node_id, GpuResidencyState::Useable);
+			assert!(was_newly_gpu_resident.is_none());
+		}
+	}
+
 	fn transition_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder, min_required_state : GpuResidencyState)
 	{
 		let mut should_submit = false;
@@ -1039,9 +1065,29 @@ impl<'program> Explicator<'program>
 				None => ir_builders::FuncletBuilder::new()
 			};
 
-			for input_type in original_funclet.input_types.iter()
+			let mut per_input_input_resource_states = Vec::<BTreeMap<ir::Place, ir::ResourceState>>::new();
+
+			for (input_index, input_type) in original_funclet.input_types.iter().enumerate()
 			{
 				funclet_builder.add_input(* input_type);
+
+				per_input_input_resource_states.push(BTreeMap::new());
+
+				if let Some(input_resource_states) = original_funclet.input_resource_states.get(input_index)
+				{
+					for (&place, &resource_state) in input_resource_states.iter()
+					{
+						funclet_builder.place_input(input_index, place, resource_state);
+						per_input_input_resource_states[input_index].insert(place, resource_state);
+					}
+				}
+				else
+				{
+					let place = ir::Place::Simple{scope : ir::Scope::Local};
+					let resource_state = ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false};
+					per_input_input_resource_states[input_index].insert(place, resource_state);
+					funclet_builder.place_input(input_index, place, resource_state);
+				}
 			}
 
 			let mut node_resource_tracker = NodeResourceTracker::new();
@@ -1065,7 +1111,27 @@ impl<'program> Explicator<'program>
 					ir::Node::Phi {index} =>
 					{
 						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-						node_resource_tracker.register_local_nodes(&[new_node_id]);
+						for (&place, &resource_state) in per_input_input_resource_states[* index].iter()
+						{
+							match place
+							{
+								ir::Place::Simple{scope : ir::Scope::Local} => node_resource_tracker.register_local_nodes(&[new_node_id]),
+								ir::Place::Simple{scope : ir::Scope::Gpu} =>
+								{
+									// Doesn't handle exclusivity yet
+									match resource_state.stage
+									{
+										ir::ResourceQueueStage::None => (),
+										ir::ResourceQueueStage::Encoded => node_resource_tracker.register_gpu_encoded_nodes(&[new_node_id]),
+										ir::ResourceQueueStage::Submitted => node_resource_tracker.register_gpu_submitted_nodes(&[new_node_id]),
+										ir::ResourceQueueStage::Ready => node_resource_tracker.register_gpu_ready_nodes(&[new_node_id]),
+										ir::ResourceQueueStage::Dead => (),
+									}
+								}
+								_ => panic!("Unimplemented placement for explication of phi nodes")
+							}
+							
+						}
 					}
 					ir::Node::ExtractResult { node_id, index } =>
 					{
@@ -1116,21 +1182,72 @@ impl<'program> Explicator<'program>
 				};
 			}
 	
+			let mut output_nodes = Vec::<ir::NodeId>::new();
+
 			match & original_funclet.tail_edge
 			{
 				ir::TailEdge::Return { return_values } =>
 				{
 					funclet_builder.set_output_types(& original_funclet.output_types);
+					output_nodes.extend_from_slice(& return_values);
 					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, return_values), &mut funclet_builder);
 					funclet_builder.set_tail_edge_from_old(& original_funclet.tail_edge)
 				}
 				ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 				{
 					funclet_builder.set_output_types(& original_funclet.output_types);
+					output_nodes.extend_from_slice(& captured_arguments);
+					output_nodes.extend_from_slice(& return_values);
 					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, captured_arguments), &mut funclet_builder); // Not ideal, but required for now
 					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, return_values), &mut funclet_builder);
 					funclet_builder.set_tail_edge_from_old(& original_funclet.tail_edge)
 				}
+			}
+
+			{
+				let mut gpu_encoded_nodes = Vec::<ir::NodeId>::new();
+				let mut gpu_submitted_nodes = Vec::<ir::NodeId>::new();
+				let mut gpu_ready_nodes = Vec::<ir::NodeId>::new();
+				let mut local_nodes = Vec::<ir::NodeId>::new();
+
+				for (output_index, & node_id) in output_nodes.iter().enumerate()
+				{
+					if let Some(output_resource_states) = original_funclet.output_resource_states.get(output_index)
+					{
+						// This will be a problem if we can ever have more than one gpu or local placement for a node
+						for (&place, &resource_state) in output_resource_states.iter()
+						{
+							funclet_builder.place_output(output_index, place, resource_state);
+							match place
+							{
+								ir::Place::Simple{scope : ir::Scope::Local} => local_nodes.push(node_id),
+								ir::Place::Simple{scope : ir::Scope::Gpu} =>
+								{
+									match resource_state.stage
+									{
+										ir::ResourceQueueStage::None => (),
+										ir::ResourceQueueStage::Encoded => gpu_encoded_nodes.push(node_id),
+										ir::ResourceQueueStage::Submitted => gpu_submitted_nodes.push(node_id),
+										ir::ResourceQueueStage::Ready => gpu_ready_nodes.push(node_id),
+										ir::ResourceQueueStage::Dead => (),
+									}
+								}
+								_ => panic!("Unimplemented")
+							}
+						}
+					}
+					else
+					{
+						local_nodes.push(node_id);
+						funclet_builder.place_output(output_index, ir::Place::Simple{scope : ir::Scope::Local}, ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false});
+					}
+				}
+
+				node_resource_tracker.encode_gpu(& remap_nodes(& funclet_builder, gpu_encoded_nodes.as_slice()), &mut funclet_builder);
+				node_resource_tracker.submit_gpu(& remap_nodes(& funclet_builder, gpu_submitted_nodes.as_slice()), &mut funclet_builder);
+				// Should really be a sync_gpu, but that doesn't exist yet
+				node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, gpu_ready_nodes.as_slice()), &mut funclet_builder);
+				node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, local_nodes.as_slice()), &mut funclet_builder);
 			}
 
 			return funclet_builder.build();

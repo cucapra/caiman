@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::default::Default;
 use crate::arena::Arena;
 use crate::ir::*;
@@ -7,8 +7,10 @@ use crate::ir::*;
 pub struct FuncletBuilder
 {
 	input_types : Vec<TypeId>,
+	input_resource_states : Vec<BTreeMap<Place, ResourceState>>,
 	execution_scope : Option<Scope>,
 	output_types : Vec<TypeId>,
+	output_resource_states : Vec<BTreeMap<Place, ResourceState>>,
 	nodes : Vec<Node>,
 	tail_edge : Option<TailEdge>,
 	node_remapping : HashMap<NodeId, NodeId>
@@ -31,6 +33,7 @@ impl FuncletBuilder
 	pub fn add_input(&mut self, type_id : TypeId) -> usize
 	{
 		self.input_types.push(type_id);
+		self.input_resource_states.push(BTreeMap::new());
 		self.input_types.len() - 1
 	}
 
@@ -38,6 +41,18 @@ impl FuncletBuilder
 	{
 		self.nodes.push(node);
 		self.nodes.len() - 1
+	}
+	
+	pub fn place_input(&mut self, input_index : usize, place : Place, resource_state : ResourceState)
+	{
+		let is_new = self.input_resource_states[input_index].insert(place, resource_state).is_none();
+		assert!(is_new);
+	}
+
+	pub fn place_output(&mut self, output_index : usize, place : Place, resource_state : ResourceState)
+	{
+		let is_new = self.output_resource_states[output_index].insert(place, resource_state).is_none();
+		assert!(is_new);
 	}
 
 	pub fn get_remapped_node_id(& self, old_node_id : NodeId) -> Option<NodeId>
@@ -167,11 +182,12 @@ impl FuncletBuilder
 		for & type_id in output_types.iter()
 		{
 			self.output_types.push(type_id);
+			self.output_resource_states.push(BTreeMap::new());
 		}
 	}
 
 	pub fn build(mut self) -> Funclet
 	{
-		Funclet{input_types : self.input_types.into_boxed_slice(), execution_scope : self.execution_scope, output_types : self.output_types.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap()}
+		Funclet{input_types : self.input_types.into_boxed_slice(), input_resource_states : self.input_resource_states.into_boxed_slice(), execution_scope : self.execution_scope, output_types : self.output_types.into_boxed_slice(), output_resource_states : self.output_resource_states.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap()}
 	}
 }
