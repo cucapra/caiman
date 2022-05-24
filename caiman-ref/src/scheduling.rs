@@ -50,6 +50,7 @@ struct Buffer
 {
 	queue_state : QueueState,
 	map_count : usize,
+	other_use_count : usize,
 	allocated_ranges : BTreeMap<usize, usize>,
 	wgpu_buffer : wgpu::Buffer
 }
@@ -134,6 +135,22 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 	{
 		for slot_id in slot_ids.iter()
 		{
+			let (buffer_id, is_a_mapping) = match self.slot_per_place_bindings[& slot_id][& place]
+			{
+				Binding::ReadOnlyMappedBuffer{buffer_id, start, size, nasty_raw_pointer} => (buffer_id, true),
+				Binding::WriteableMappedBuffer{buffer_id, start, size, nasty_raw_pointer} => (buffer_id, true),
+				Binding::Buffer {buffer_id, ..} => (buffer_id, false),
+			};
+			if is_a_mapping
+			{
+				let buffer : &mut Buffer = self.buffers.get_mut(& buffer_id).unwrap();
+				assert!(buffer.map_count > 0);
+				buffer.map_count -= 1;
+				if buffer.map_count == 0
+				{
+					buffer.wgpu_buffer.unmap();
+				}
+			}
 			self.slot_per_place_bindings.get_mut(& slot_id).unwrap().remove(& place);
 		}
 	}
@@ -207,7 +224,6 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		};
 		
 		let buffer : &mut Buffer = self.buffers.get_mut(& buffer_id).unwrap();
-		assert_eq!(buffer.queue_state, QueueState::None);
 
 		let wgpu_map_mode = match map_mode
 		{
@@ -215,18 +231,24 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 			MapMode::WriteOnly => wgpu::MapMode::Write,
 		};
 
-		//Dynamic part
+		// (Mostly) Dynamic part
 		let slice = buffer.wgpu_buffer.slice((start as u64) .. (start + size) as u64);
 		futures::executor::block_on(slice.map_async(wgpu_map_mode));
 		let binding = match map_mode
 		{
 			MapMode::ReadOnly =>
 			{
+				assert_eq!(buffer.queue_state, QueueState::Ready);
+				buffer.map_count += 1;
 				let nasty_raw_pointer = slice.get_mapped_range().as_ptr();
 				Binding::ReadOnlyMappedBuffer{buffer_id, start, size, nasty_raw_pointer}
 			}
 			MapMode::WriteOnly =>
 			{
+				assert_eq!(buffer.other_use_count, 0);
+				assert_eq!(buffer.queue_state, QueueState::None);
+				assert_eq!(buffer.map_count, 0);
+				buffer.map_count += 1;
 				let nasty_raw_pointer = slice.get_mapped_range_mut().as_mut_ptr();
 				Binding::WriteableMappedBuffer{buffer_id, start, size, nasty_raw_pointer}
 			}
