@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::pin::Pin;
 use crate::functional;
 
@@ -12,6 +12,23 @@ struct SubmissionId(usize);
 struct FuncletInstanceId(usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct SlotId(FuncletInstanceId, functional::NodeId);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct LogicalTimestamp(usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct FenceId(usize);
+
+impl LogicalTimestamp
+{
+	fn new() -> Self
+	{
+		Self(0)
+	}
+
+	fn step(&mut self)
+	{
+		self.0 += 1;
+	}
+}
 
 // It is ok if this is horrible (performance-wise) because the goal is to formalize the semantics of the caiman scheduler in terms of the wgpu api and not to be useful for anything else
 
@@ -60,16 +77,17 @@ struct CommandList
 	queue_state : QueueState,
 	buffer_ids : BTreeSet<BufferId>,
 	wgpu_command_encoder_opt : Option<wgpu::CommandEncoder>,
+	time_submitted_opt : Option<LogicalTimestamp>
+}
+
+struct Fence
+{
+	time_inserted_opt : Option<LogicalTimestamp>,
 	// This is disgusting in so many ways
 	completion_future : Option<Pin<Box<dyn futures::Future<Output = ()> + Send>>>
 }
 
-/*struct Submission
-{
-	queue_state : QueueState,
-}
-
-struct Placement
+/*struct Placement
 {
 	
 }
@@ -86,7 +104,10 @@ struct SchedulerState<'device, 'queue>
 	buffers : BTreeMap<BufferId, Buffer>,
 	command_lists : BTreeMap<CommandListId, CommandList>,
 	//submissions : BTreeMap<SubmissionId, Submission>,
+	fences : BTreeMap<FenceId, Fence>,
 	slot_per_place_bindings : BTreeMap<SlotId, BTreeMap<Place, Binding>>,
+	local_logical_timestamp : LogicalTimestamp,
+	latest_gpu_synchronized_logical_timestamp : LogicalTimestamp,
 }
 
 // Essentially just a thin layer over wgpu
@@ -97,8 +118,9 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		let mut buffers = BTreeMap::<BufferId, Buffer>::new();
 		let mut command_lists = BTreeMap::<CommandListId, CommandList>::new();
 		//let mut submissions = BTreeMap::<SubmissionId, Submission>::new();
+		let mut fences = BTreeMap::<FenceId, Fence>::new();
 		let slot_per_place_bindings = BTreeMap::<SlotId, BTreeMap<Place, Binding>>::new();
-		Self{device, queue, buffers, command_lists, /*submissions,*/ slot_per_place_bindings}
+		Self{device, queue, buffers, command_lists, /*submissions,*/ fences, slot_per_place_bindings, local_logical_timestamp : LogicalTimestamp::new(), latest_gpu_synchronized_logical_timestamp : LogicalTimestamp::new()}
 	}
 
 	fn queue_state_of_binding(&self, binding : & Binding) -> QueueState
@@ -155,6 +177,74 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		}
 	}
 
+	// Self note: fences + queues implement an asynchronous reliable message passing system
+
+	// Inserts a fence into the queue of fenced_place
+	pub fn insert_fence(&mut self, fenced_place : Place, fence_id : FenceId)
+	{
+		// Only gpu -> local sync is implemented (because only local -> gpu submission is implemented)
+		assert_eq!(fenced_place, Place::Gpu);
+		let fence : &mut Fence = self.fences.get_mut(& fence_id).unwrap();
+		assert!(fence.time_inserted_opt.is_none());
+		fence.time_inserted_opt = Some(self.local_logical_timestamp);
+		fence.completion_future = Some(Box::pin(self.queue.on_submitted_work_done()));
+	}
+
+	// Stalls the queue of synced_place until signaled through the given fence
+	pub fn sync_fence(&mut self, synced_place : Place, fence_id : FenceId)
+	{
+		self.local_logical_timestamp.step();
+
+		// Only gpu -> local sync is implemented (because only local -> gpu submission is implemented)
+		assert_eq!(synced_place, Place::Local);
+
+		let fence : &mut Fence = self.fences.get_mut(& fence_id).unwrap();
+
+		assert!(fence.time_inserted_opt.is_some());
+		let time_inserted = fence.time_inserted_opt.unwrap();
+
+		let mut completion_future = None;
+		std::mem::swap(&mut completion_future, &mut fence.completion_future);
+
+		if time_inserted >= self.latest_gpu_synchronized_logical_timestamp
+		{
+			futures::executor::block_on(completion_future.unwrap());
+			self.latest_gpu_synchronized_logical_timestamp = time_inserted;
+		}
+
+		for (command_list_id, command_list) in self.command_lists.iter_mut()
+		{
+			if command_list.queue_state != QueueState::Submitted
+			{
+				continue;
+			}
+
+			command_list.time_submitted_opt = None;
+			command_list.queue_state = QueueState::Ready;
+
+			for buffer_id in command_list.buffer_ids.iter()
+			{
+				let buffer : &mut Buffer = self.buffers.get_mut(& buffer_id).unwrap();
+
+				assert!(buffer.other_use_count > 0);
+				buffer.other_use_count -= 1;
+
+				buffer.queue_state = match buffer.queue_state
+				{
+					QueueState::None => panic!("Buffer was not properly encoded or submitted"),
+					QueueState::Encoded => panic!("Buffer was not properly submitted"),
+					QueueState::Submitted => QueueState::Ready,
+					QueueState::Ready => QueueState::Ready,
+				};
+			}
+		}
+	}
+
+	pub fn poll(&mut self)
+	{
+
+	}
+
 	/*pub fn do_local(&mut self, slot_ids : &[SlotId])
 	{
 
@@ -164,6 +254,8 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 	pub fn submit_gpu(&mut self, command_list_id : CommandListId)
 	{
+		self.local_logical_timestamp.step();
+
 		let command_list : &mut CommandList = self.command_lists.get_mut(& command_list_id).unwrap();
 		assert_eq!(command_list.queue_state, QueueState::Encoded);
 		let mut command_encoder = None;
@@ -171,7 +263,6 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 		// Dynamic part
 		self.queue.submit([command_encoder.unwrap().finish()]);
-		command_list.completion_future = Some(Box::pin(self.queue.on_submitted_work_done()));
 
 		for buffer_id in command_list.buffer_ids.iter()
 		{
@@ -183,34 +274,6 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 				QueueState::Submitted => QueueState::Submitted,
 				QueueState::Ready => QueueState::Ready,
 			};
-		}
-	}
-
-	pub fn sync_gpu(&mut self, command_list_ids : &[CommandListId])
-	{
-		for command_list_id in command_list_ids.iter()
-		{
-			let command_list : &mut CommandList = self.command_lists.get_mut(& command_list_id).unwrap();
-			assert_eq!(command_list.queue_state, QueueState::Submitted);
-			let mut completion_future = None;
-			std::mem::swap(&mut completion_future, &mut command_list.completion_future);
-			
-			// Dynamic part
-			futures::executor::block_on(completion_future.unwrap());
-
-			command_list.queue_state = QueueState::Ready;
-
-			for buffer_id in command_list.buffer_ids.iter()
-			{
-				let buffer : &mut Buffer = self.buffers.get_mut(& buffer_id).unwrap();
-				buffer.queue_state = match buffer.queue_state
-				{
-					QueueState::None => panic!("Buffer was not properly encoded or submitted"),
-					QueueState::Encoded => panic!("Buffer was not properly submitted"),
-					QueueState::Submitted => QueueState::Ready,
-					QueueState::Ready => QueueState::Ready,
-				};
-			}
 		}
 	}
 
