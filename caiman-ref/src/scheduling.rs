@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::pin::Pin;
+use std::any::Any;
 use crate::functional;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -57,9 +58,10 @@ enum MapMode
 
 enum Binding
 {
+	LocalVariable{ value_box : Box<dyn Any> },
 	Buffer{ buffer_id : BufferId, start : usize, size : usize },
 	ReadOnlyMappedBuffer{ buffer_id : BufferId, start : usize, size : usize, nasty_raw_pointer : *const u8 },
-	WriteableMappedBuffer{ buffer_id : BufferId, start : usize, size : usize, nasty_raw_pointer : *mut u8 }
+	WriteableMappedBuffer{ buffer_id : BufferId, start : usize, size : usize, nasty_raw_pointer : *mut u8 },
 }
 
 // For now, it's assumed that all buffers live on the gpu (this isn't at all true) and can be mapped local (this isn't true either)
@@ -92,23 +94,17 @@ struct Fence
 	completion_future : Option<Pin<Box<dyn futures::Future<Output = ()> + Send>>>
 }
 
-/*struct Placement
+struct FuncletInstance
 {
-	
+	funclet_id : functional::FuncletId,
 }
-
-struct SlotPlacement
-{
-	
-}*/
 
 struct SchedulerState<'device, 'queue>
 {
 	device : & 'device mut wgpu::Device,
 	queue : & 'queue mut wgpu::Queue,
 	buffers : BTreeMap<BufferId, Buffer>,
-	//command_lists : BTreeMap<CommandListId, CommandList>,
-	//submissions : BTreeMap<SubmissionId, Submission>,
+	funclet_instances : Vec<FuncletInstance>,
 	pending_command_lists : VecDeque<CommandList>,
 	active_command_encoder_opt : Option<CommandEncoder>,
 	fences : BTreeMap<FenceId, Fence>,
@@ -123,23 +119,29 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 	fn new(device : & 'device mut wgpu::Device, queue : & 'queue mut wgpu::Queue) -> Self
 	{
 		let mut buffers = BTreeMap::<BufferId, Buffer>::new();
-		//let mut command_lists = BTreeMap::<CommandListId, CommandList>::new();
-		//let mut submissions = BTreeMap::<SubmissionId, Submission>::new();
 		let mut fences = BTreeMap::<FenceId, Fence>::new();
+		let funclet_instances = Vec::<FuncletInstance>::new();
 		let slot_per_place_bindings = BTreeMap::<SlotId, BTreeMap<Place, Binding>>::new();
 		let pending_command_lists = VecDeque::<CommandList>::new();
-		Self{device, queue, buffers, active_command_encoder_opt : None, pending_command_lists, /*submissions,*/ fences, slot_per_place_bindings, local_logical_timestamp : LogicalTimestamp::new(), latest_gpu_synchronized_logical_timestamp : LogicalTimestamp::new()}
+		Self{device, queue, buffers, funclet_instances, active_command_encoder_opt : None, pending_command_lists, /*submissions,*/ fences, slot_per_place_bindings, local_logical_timestamp : LogicalTimestamp::new(), latest_gpu_synchronized_logical_timestamp : LogicalTimestamp::new()}
 	}
 
 	fn queue_state_of_binding(&self, binding : & Binding) -> QueueState
 	{
 		match binding
 		{
+			Binding::LocalVariable {value_box} => panic!("Not implemented"),
 			Binding::Buffer{buffer_id, start, size} => self.buffers[buffer_id].queue_state,
 			Binding::ReadOnlyMappedBuffer{ buffer_id, start, size, nasty_raw_pointer } => self.buffers[buffer_id].queue_state,
 			Binding::WriteableMappedBuffer{ buffer_id, start, size, nasty_raw_pointer } => self.buffers[buffer_id].queue_state,
 		}
 	}
+
+	/*fn instance_funclet(&mut self, funclet_id : functional::FuncletId) -> FuncletInstanceId
+	{
+		self.funclet_instances.push(FuncletInstance{funclet_id});
+		FuncletInstanceId(self.funclet_instances.len() - 1)
+	}*/
 
 	pub fn assert(&mut self, slot_ids : &[SlotId], place_and_queue_state_pairs : &[(Place, QueueState)])
 	{
@@ -167,6 +169,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		{
 			let (buffer_id, is_a_mapping) = match self.slot_per_place_bindings[& slot_id][& place]
 			{
+				Binding::LocalVariable {ref value_box} => panic!("Not implemented"),
 				Binding::ReadOnlyMappedBuffer{buffer_id, start, size, nasty_raw_pointer} => (buffer_id, true),
 				Binding::WriteableMappedBuffer{buffer_id, start, size, nasty_raw_pointer} => (buffer_id, true),
 				Binding::Buffer {buffer_id, ..} => (buffer_id, false),
@@ -247,11 +250,43 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		}
 	}
 
+	fn do_local_constant_unsigned_integer(&mut self, slot_id : SlotId, value : u64)
+	{
+		let value_box : Box<dyn Any> = Box::new(value);
+		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
+	}
+
+	fn do_local_constant_integer(&mut self, slot_id : SlotId, value : i64)
+	{
+		let value_box : Box<dyn Any> = Box::new(value);
+		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
+	}
+
+	fn encode_gpu_call_gpu_external(&mut self, slot_id : SlotId, dimensions : &[SlotId], arguments : &[SlotId], outputs : &[SlotId])
+	{
+		
+	}
+
 	/*pub fn do_local(&mut self, slot_ids : &[SlotId])
 	{
 	}*/
 
 	/*pub fn encode_gpu(&mut self, command_list_id : CommandListId, slot_ids : &[SlotId]);*/
+
+	fn begin_command_encoding(&mut self)
+	{
+		if self.active_command_encoder_opt.is_none()
+		{
+			let active_command_encoder = CommandEncoder{buffer_ids : BTreeSet::new(), wgpu_command_encoder_opt : None, wgpu_command_buffers : vec![]};
+			self.active_command_encoder_opt = Some(active_command_encoder);
+		}
+
+		let active_command_encoder = self.active_command_encoder_opt.as_mut().unwrap();
+		if active_command_encoder.wgpu_command_encoder_opt.is_none()
+		{
+			active_command_encoder.wgpu_command_encoder_opt = Some(self.device.create_command_encoder(& wgpu::CommandEncoderDescriptor{label : None}));
+		}
+	}
 
 	fn end_command_encoding(&mut self)
 	{
