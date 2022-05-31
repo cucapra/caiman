@@ -191,7 +191,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 	}
 
 	// Stalls the queue of synced_place until signaled through the given fence
-	pub fn sync_fence(&mut self, synced_place : Place, fence_id : FenceId)
+	pub async fn sync_fence(&mut self, synced_place : Place, fence_id : FenceId)
 	{
 		self.local_logical_timestamp.step();
 
@@ -208,7 +208,8 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 		if time_inserted >= self.latest_gpu_synchronized_logical_timestamp
 		{
-			futures::executor::block_on(completion_future.unwrap());
+			completion_future.unwrap().await;
+			//futures::executor::block_on(completion_future.unwrap());
 			self.latest_gpu_synchronized_logical_timestamp = time_inserted;
 		}
 
@@ -277,7 +278,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		}
 	}
 
-	pub fn map_local(&mut self, slot_id : SlotId, map_mode : MapMode)
+	pub async fn map_local(&mut self, slot_id : SlotId, map_mode : MapMode)
 	{
 		assert!(! self.slot_per_place_bindings[& slot_id].contains_key(& Place::Local));
 		let (buffer_id, start, size) = match self.slot_per_place_bindings[& slot_id][& Place::Gpu]
@@ -290,27 +291,42 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 		let wgpu_map_mode = match map_mode
 		{
-			MapMode::ReadOnly => wgpu::MapMode::Read,
-			MapMode::WriteOnly => wgpu::MapMode::Write,
-		};
-
-		// (Mostly) Dynamic part
-		let slice = buffer.wgpu_buffer.slice((start as u64) .. (start + size) as u64);
-		futures::executor::block_on(slice.map_async(wgpu_map_mode));
-		let binding = match map_mode
-		{
 			MapMode::ReadOnly =>
 			{
 				assert_eq!(buffer.queue_state, QueueState::Ready);
-				buffer.map_count += 1;
-				let nasty_raw_pointer = slice.get_mapped_range().as_ptr();
-				Binding::ReadOnlyMappedBuffer{buffer_id, start, size, nasty_raw_pointer}
+				wgpu::MapMode::Read
 			}
 			MapMode::WriteOnly =>
 			{
 				assert_eq!(buffer.other_use_count, 0);
 				assert_eq!(buffer.queue_state, QueueState::None);
 				assert_eq!(buffer.map_count, 0);
+				wgpu::MapMode::Write
+			}
+		};
+
+		// (Mostly) Dynamic part
+		let slice = buffer.wgpu_buffer.slice((start as u64) .. (start + size) as u64);
+
+		// The correctness of this depends on all gpu users of the buffer having completed beforehand
+		// This should be captured by the above checks
+		// This goes wrong by deadlocking
+		// This is all very silly because wgpu is checking to maintain properties that we should have already guaranteed 
+		//self.device.poll(wgpu::Maintain::Poll);
+
+		// The host rust code is expected to invoke polling interleaved with this
+		slice.map_async(wgpu_map_mode).await;
+		//futures::executor::block_on(slice.map_async(wgpu_map_mode));
+		let binding = match map_mode
+		{
+			MapMode::ReadOnly =>
+			{
+				buffer.map_count += 1;
+				let nasty_raw_pointer = slice.get_mapped_range().as_ptr();
+				Binding::ReadOnlyMappedBuffer{buffer_id, start, size, nasty_raw_pointer}
+			}
+			MapMode::WriteOnly =>
+			{
 				buffer.map_count += 1;
 				let nasty_raw_pointer = slice.get_mapped_range_mut().as_mut_ptr();
 				Binding::WriteableMappedBuffer{buffer_id, start, size, nasty_raw_pointer}
