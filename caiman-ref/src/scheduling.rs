@@ -72,12 +72,17 @@ struct Buffer
 	wgpu_buffer : wgpu::Buffer
 }
 
-struct CommandList
+struct CommandEncoder
 {
 	buffer_ids : BTreeSet<BufferId>,
 	wgpu_command_encoder_opt : Option<wgpu::CommandEncoder>,
 	wgpu_command_buffers : Vec<wgpu::CommandBuffer>,
-	time_submitted_opt : Option<LogicalTimestamp>
+}
+
+struct CommandList
+{
+	buffer_ids : BTreeSet<BufferId>,
+	time_submitted : LogicalTimestamp
 }
 
 struct Fence
@@ -105,7 +110,7 @@ struct SchedulerState<'device, 'queue>
 	//command_lists : BTreeMap<CommandListId, CommandList>,
 	//submissions : BTreeMap<SubmissionId, Submission>,
 	pending_command_lists : VecDeque<CommandList>,
-	active_command_list : Option<CommandList>,
+	active_command_encoder_opt : Option<CommandEncoder>,
 	fences : BTreeMap<FenceId, Fence>,
 	slot_per_place_bindings : BTreeMap<SlotId, BTreeMap<Place, Binding>>,
 	local_logical_timestamp : LogicalTimestamp,
@@ -123,7 +128,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		let mut fences = BTreeMap::<FenceId, Fence>::new();
 		let slot_per_place_bindings = BTreeMap::<SlotId, BTreeMap<Place, Binding>>::new();
 		let pending_command_lists = VecDeque::<CommandList>::new();
-		Self{device, queue, buffers, active_command_list : None, pending_command_lists, /*submissions,*/ fences, slot_per_place_bindings, local_logical_timestamp : LogicalTimestamp::new(), latest_gpu_synchronized_logical_timestamp : LogicalTimestamp::new()}
+		Self{device, queue, buffers, active_command_encoder_opt : None, pending_command_lists, /*submissions,*/ fences, slot_per_place_bindings, local_logical_timestamp : LogicalTimestamp::new(), latest_gpu_synchronized_logical_timestamp : LogicalTimestamp::new()}
 	}
 
 	fn queue_state_of_binding(&self, binding : & Binding) -> QueueState
@@ -218,8 +223,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 		while let Some(mut command_list) = self.pending_command_lists.pop_front()
 		{
-			assert!(command_list.time_submitted_opt.is_some());
-			if command_list.time_submitted_opt.unwrap() > time_inserted
+			if command_list.time_submitted > time_inserted
 			{
 				self.pending_command_lists.push_front(command_list);
 				break;
@@ -249,15 +253,15 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 	/*pub fn encode_gpu(&mut self, command_list_id : CommandListId, slot_ids : &[SlotId]);*/
 
-	fn flush_active_command_list_encoder(&mut self)
+	fn end_command_encoding(&mut self)
 	{
-		if let Some(command_list) = self.active_command_list.as_mut()
+		if let Some(active_command_encoder) = self.active_command_encoder_opt.as_mut()
 		{
-			let mut command_encoder_opt = None;
-			std::mem::swap(&mut command_encoder_opt, &mut command_list.wgpu_command_encoder_opt);
-			if let Some(command_encoder) = command_encoder_opt
+			let mut wgpu_command_encoder_opt = None;
+			std::mem::swap(&mut wgpu_command_encoder_opt, &mut active_command_encoder.wgpu_command_encoder_opt);
+			if let Some(wgpu_command_encoder) = wgpu_command_encoder_opt
 			{
-				command_list.wgpu_command_buffers.push(command_encoder.finish());
+				active_command_encoder.wgpu_command_buffers.push(wgpu_command_encoder.finish());
 			}
 		}
 	}
@@ -266,18 +270,14 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 	{
 		self.local_logical_timestamp.step();
 
-		self.flush_active_command_list_encoder();
+		self.end_command_encoding();
 
-		let mut active_command_list_opt = None;
-		std::mem::swap(&mut active_command_list_opt, &mut self.active_command_list);
-		if let Some(mut command_list) = active_command_list_opt
+		let mut active_command_encoder_opt = None;
+		std::mem::swap(&mut active_command_encoder_opt, &mut self.active_command_encoder_opt);
+		if let Some(mut active_command_encoder) = active_command_encoder_opt
 		{
-			let mut wgpu_command_buffers = Vec::new();
-			std::mem::swap(&mut wgpu_command_buffers, &mut command_list.wgpu_command_buffers);
-
-			self.queue.submit(wgpu_command_buffers);
-
-			command_list.time_submitted_opt = Some(self.local_logical_timestamp);
+			let command_list = CommandList{buffer_ids : active_command_encoder.buffer_ids, time_submitted : self.local_logical_timestamp};
+			self.queue.submit(active_command_encoder.wgpu_command_buffers);
 
 			for buffer_id in command_list.buffer_ids.iter()
 			{
