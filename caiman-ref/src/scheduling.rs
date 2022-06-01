@@ -252,20 +252,41 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 	fn do_local_constant_unsigned_integer(&mut self, slot_id : SlotId, value : u64)
 	{
+		// Need to check that there is no value elsewhere
 		let value_box : Box<dyn Any> = Box::new(value);
 		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
 	}
 
 	fn do_local_constant_integer(&mut self, slot_id : SlotId, value : i64)
 	{
+		// Need to check that there is no value elsewhere
 		let value_box : Box<dyn Any> = Box::new(value);
 		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
 	}
 
-	fn encode_gpu_call_gpu_external(&mut self, slot_id : SlotId, dimensions : &[SlotId], arguments : &[SlotId], outputs : &[SlotId])
+	fn encode_gpu_from_local<T : 'static + Copy>(&mut self, slot_id : SlotId)
+	{
+		let (buffer_id, start, size) = match self.slot_per_place_bindings[& slot_id][& Place::Gpu]
+		{
+			Binding::Buffer{buffer_id, start, size} => (buffer_id, start, size),
+			_ => panic!("Incorrect binding for slot")
+		};
+
+		let value_ref : &T = match self.slot_per_place_bindings[& slot_id][& Place::Local]
+		{
+			Binding::LocalVariable{ref value_box} => value_box.downcast_ref::<T>().unwrap(),
+			_ => panic!("Incorrect binding for slot")
+		};
+
+		assert_eq!(size, std::mem::size_of::<T>());
+		let bytes : &[u8] = unsafe { std::slice::from_raw_parts( std::mem::transmute::<*const T, *const u8>(value_ref), std::mem::size_of::<T>()) };
+		self.queue.write_buffer(& self.buffers[& buffer_id].wgpu_buffer, start.try_into().unwrap(), bytes);
+	}
+
+	/*fn encode_gpu_call_gpu_external(&mut self, slot_id : SlotId, dimensions : &[SlotId], arguments : &[SlotId], outputs : &[SlotId])
 	{
 		
-	}
+	}*/
 
 	/*pub fn do_local(&mut self, slot_ids : &[SlotId])
 	{
@@ -386,6 +407,23 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		};
 
 		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, binding);
+	}
+
+	fn convert_locally_mapped_to_variable<T : 'static + Copy>(&mut self, slot_id : SlotId)
+	{
+		let (size, nasty_raw_pointer) = match self.slot_per_place_bindings[& slot_id][& Place::Local]
+		{
+			Binding::ReadOnlyMappedBuffer{buffer_id : _, start : _, size, nasty_raw_pointer} => (size, nasty_raw_pointer),
+			//Binding::WriteableMappedBuffer{buffer_id : _, start : _, size, nasty_raw_pointer} => (size, nasty_raw_pointer as (*const u8)),
+			_ => panic!("Incorrect binding for slot")
+		};
+
+		assert_eq!(size, std::mem::size_of::<T>());
+		let value : T = unsafe { * std::mem::transmute::<*const u8, *const T>(nasty_raw_pointer) };
+
+		let value_box : Box<dyn Any> = Box::new(value);
+		self.unbind(&[slot_id], Place::Local);
+		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
 	}
 }
 
