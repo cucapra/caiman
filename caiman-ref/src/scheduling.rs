@@ -99,6 +99,11 @@ struct FuncletInstance
 	funclet_id : functional::FuncletId,
 }
 
+/*trait GpuComputeFunction
+{
+
+}*/
+
 struct SchedulerState<'device, 'queue>
 {
 	device : & 'device mut wgpu::Device,
@@ -158,6 +163,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 	pub fn bind_buffer(&mut self, slot_id : SlotId, place : Place, buffer_id : BufferId, offset : usize, size : usize)
 	{
 		// For now, it only makes sense to treat buffers as if they exist on the gpu
+		assert!(! self.slot_per_place_bindings[& slot_id].contains_key(& Place::Local));
 		assert_eq!(place, Place::Gpu);
 		assert_eq!(self.buffers[& buffer_id].queue_state, QueueState::None);
 		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(place, Binding::Buffer{buffer_id, start : offset, size});
@@ -250,18 +256,28 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		}
 	}
 
-	fn do_local_constant_unsigned_integer(&mut self, slot_id : SlotId, value : u64)
+	fn do_local_constant<T : 'static + Copy>(&mut self, slot_id : SlotId, value_ref : &T)
 	{
-		// Need to check that there is no value elsewhere
-		let value_box : Box<dyn Any> = Box::new(value);
-		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
-	}
+		match self.slot_per_place_bindings[& slot_id].get(& Place::Local).as_ref()
+		{
+			None =>
+			{
+				assert!(! self.slot_per_place_bindings[& slot_id].contains_key(& Place::Gpu));
+				let value_box : Box<dyn Any> = Box::new(* value_ref);
+				self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
+			}
+			Some(& Binding::WriteableMappedBuffer{buffer_id, start : _, size, nasty_raw_pointer}) =>
+			{
+				let buffer : &mut Buffer = self.buffers.get_mut(& buffer_id).unwrap();
+				assert_eq!(buffer.map_count, 1);
 
-	fn do_local_constant_integer(&mut self, slot_id : SlotId, value : i64)
-	{
-		// Need to check that there is no value elsewhere
-		let value_box : Box<dyn Any> = Box::new(value);
-		self.slot_per_place_bindings.get_mut(& slot_id).unwrap().insert(Place::Local, Binding::LocalVariable{value_box});
+				assert_eq!(* size, std::mem::size_of::<T>());
+				let source_bytes : &[u8] = unsafe { std::slice::from_raw_parts( std::mem::transmute::<*const T, *const u8>(value_ref), std::mem::size_of::<T>()) };
+				let destination_bytes : &mut [u8] = unsafe { std::slice::from_raw_parts_mut::<u8>( *nasty_raw_pointer, std::mem::size_of::<T>()) };
+				destination_bytes.clone_from_slice(source_bytes);
+			}
+			_ => panic!("Incorrect binding for slot")
+		};
 	}
 
 	fn encode_gpu_from_local<T : 'static + Copy>(&mut self, slot_id : SlotId)
@@ -283,9 +299,9 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 		self.queue.write_buffer(& self.buffers[& buffer_id].wgpu_buffer, start.try_into().unwrap(), bytes);
 	}
 
-	/*fn encode_gpu_call_gpu_external(&mut self, slot_id : SlotId, dimensions : &[SlotId], arguments : &[SlotId], outputs : &[SlotId])
+	/*fn encode_gpu_call_gpu_compute_function<F : GpuComputeFunction>(&mut self, slot_id : SlotId, function : &F, dimensions : &[SlotId], arguments : &[SlotId], outputs : &[SlotId])
 	{
-		
+
 	}*/
 
 	/*pub fn do_local(&mut self, slot_ids : &[SlotId])
@@ -411,9 +427,15 @@ impl<'device, 'queue> SchedulerState<'device, 'queue>
 
 	fn convert_locally_mapped_to_variable<T : 'static + Copy>(&mut self, slot_id : SlotId)
 	{
+
 		let (size, nasty_raw_pointer) = match self.slot_per_place_bindings[& slot_id][& Place::Local]
 		{
-			Binding::ReadOnlyMappedBuffer{buffer_id : _, start : _, size, nasty_raw_pointer} => (size, nasty_raw_pointer),
+			Binding::ReadOnlyMappedBuffer{buffer_id, start : _, size, nasty_raw_pointer} =>
+			{
+				let buffer : &mut Buffer = self.buffers.get_mut(& buffer_id).unwrap();
+				assert_eq!(buffer.map_count, 1);
+				(size, nasty_raw_pointer)
+			}
 			//Binding::WriteableMappedBuffer{buffer_id : _, start : _, size, nasty_raw_pointer} => (size, nasty_raw_pointer as (*const u8)),
 			_ => panic!("Incorrect binding for slot")
 		};
