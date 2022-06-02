@@ -35,7 +35,7 @@ binop := {+,-,*,/,&&,||,==}
 unop := {!, -}
 
 program := c
-c := c1;c2 | let x = e | if (e) {c1;} c2
+c := c1;c2 | let x = e | if (e) {c}
 e := x | n | true | false | input() | e1 binop e2 | unop e
 ```
 
@@ -51,8 +51,8 @@ The scheduling language for Caiman should be relatively simple, but syntacticall
 x := {variables}
 
 program := b
-b := CPU {c;} b | GPU {c;} b | b
-c := c1;c2 | x | --- x | sync(x) | if (x1) {c1} c2 | print(x)
+b := CPU {c} | GPU {c} | b
+c := c1;c2 | x | --- x | sync(x) | if (x) {c} | print(x)
 ```
 
 The objective of this syntax is to be both minimal and unambiguous.  All operations must be in either CPU or GPU "blocks", and a program is simply a series of blocks.
@@ -90,12 +90,12 @@ CPU {
     x;
     --- write;
     sync(write);
-}
+};
 GPU {
     y;
     --- read;
     sync(read);
-}
+};
 CPU {
     z;
     print(z);
