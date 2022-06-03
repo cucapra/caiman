@@ -77,7 +77,7 @@ Here we outline a rough plan of what a 12-week summer of research could look lik
 | 1-2  | review Caiman backend, value, and scheduling language |
 | 3-4  | develop core AST tools from the frontend / communicate about frontend design |
 | 5-6  | may overlap with previous, but design scheduling algorithm and research necessary tools |
-| 7-10 | design and implement the resulting middle-end algorithm |
+| 7-10 | design and implement the resulting frontend algorithm |
 | 11   | implement codegen for backend, may need more time |
 | 12   | writeup results |
 
