@@ -14,7 +14,7 @@ fn get_input_kind_type_name(kind : &spec::OperationInputKind) -> String
 		OperationInputKind::ImmediateU64 => String::from("u64"),
 		OperationInputKind::ExternalCpuFunction => String::from("ExternalCpuFunctionId"),
 		OperationInputKind::ExternalGpuFunction => String::from("ExternalGpuFunctionId"),
-		OperationInputKind::Operation{ required_place_kind } => String::from("OperationId"),
+		OperationInputKind::Operation{ .. } => String::from("OperationId"),
 		_ => panic!("Unimplemented input kind: {:?}", kind)
 	}
 }

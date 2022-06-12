@@ -22,7 +22,7 @@ pub enum OperationInputKind
 	Place,
 	ImmediateI64,
 	ImmediateU64,
-	Operation{ required_place_kind : Option<PlaceKind> },
+	Operation,
 	ExternalCpuFunction,
 	ExternalGpuFunction,
 }
@@ -38,8 +38,8 @@ pub struct OperationInput
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum OperationOutput
 {
-	Single{assured_place_kind : Option<PlaceKind>},
-	Multiple{assured_place_kind : Option<PlaceKind>},
+	Single,
+	Multiple,
 	None,
 }
 
@@ -52,6 +52,19 @@ pub struct Operation
 	pub language_set : LanguageSet,
 	pub has_local_side_effect : bool,
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ValueType
+{
+
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ResourceType
+{
+	
+}
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Spec

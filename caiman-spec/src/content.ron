@@ -6,7 +6,7 @@
 				(name : "value", kind : ImmediateI64, is_array : false),
 				(name : "type_id", kind : Type, is_array : false),
 			],
-			output : Single(assured_place_kind : Some(Local)),
+			output : Single,
 			language_set : (functional : true, scheduling: false),
 			has_local_side_effect : false
 		),
@@ -16,7 +16,7 @@
 				(name : "value", kind : ImmediateU64, is_array : false),
 				(name : "type_id", kind : Type, is_array : false),
 			],
-			output : Single(assured_place_kind : Some(Local)),
+			output : Single,
 			language_set : (functional : true, scheduling: false),
 			has_local_side_effect : false
 		),
@@ -24,9 +24,9 @@
 			name : "CallExternalCpu",
 			inputs : [
 				(name : "external_function_id", kind : ExternalCpuFunction, is_array : false),
-				(name : "arguments", kind : Operation(required_place_kind : Some(Local)), is_array : true)
+				(name : "arguments", kind : Operation, is_array : true)
 			],
-			output : Multiple(assured_place_kind : Some(Local)),
+			output : Multiple,
 			language_set : (functional : true, scheduling: false),
 			has_local_side_effect : false
 		),
@@ -34,17 +34,17 @@
 			name : "CallExternalGpuCompute",
 			inputs : [
 				(name : "external_function_id", kind : ExternalGpuFunction, is_array : false),
-				(name : "dimensions", kind : Operation(required_place_kind : Some(Local)), is_array : true),
-				(name : "arguments", kind : Operation(required_place_kind : Some(Gpu)), is_array : true)
+				(name : "dimensions", kind : Operation, is_array : true),
+				(name : "arguments", kind : Operation, is_array : true)
 			],
-			output : Multiple(assured_place_kind : Some(Gpu)),
+			output : Multiple,
 			language_set : (functional : true, scheduling: false),
 			has_local_side_effect : false
 		),
 		(
 			name : "SubmitGpu",
 			inputs : [
-				(name : "values", kind : Operation(required_place_kind : Some(Gpu)), is_array : true)
+				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
 			language_set : (functional : false, scheduling: true),
@@ -53,7 +53,7 @@
 		(
 			name : "SyncLocal",
 			inputs : [
-				(name : "values", kind : Operation(required_place_kind : Some(Local)), is_array : true)
+				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
 			language_set : (functional : false, scheduling: true),
@@ -62,9 +62,28 @@
 		(
 			name : "EncodeGpu",
 			inputs : [
-				(name : "values", kind : Operation(required_place_kind : Some(Gpu)), is_array : true)
+				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
+			language_set : (functional : false, scheduling: true),
+			has_local_side_effect : true
+		),
+
+		(
+			name : "EncodeDo",
+			inputs : [
+				(name : "value", kind : Operation, is_array : false)
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true),
+			has_local_side_effect : true
+		),
+		(
+			name : "EncodeCopy",
+			inputs : [
+				(name : "values", kind : Operation, is_array : true)
+			],
+			output : Single,
 			language_set : (functional : false, scheduling: true),
 			has_local_side_effect : true
 		),

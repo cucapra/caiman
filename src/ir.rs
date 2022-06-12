@@ -5,18 +5,20 @@ use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
 use crate::arena::Arena;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/*#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Scope
 {
 	Local,
 	Cpu,
 	Gpu,
-}
+}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Place
 {
-	Simple{scope : Scope}
+	Local,
+	Cpu,
+	Gpu,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -62,6 +64,8 @@ pub struct StructField
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
+	// Value types
+
 	F32,
 	F64,
 	U8,
@@ -76,7 +80,7 @@ pub enum Type
 	Struct { fields : Box<[StructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
 	Tuple { fields : Box<[TypeId]> },
 
-	//Scoped { scope : Scope },
+	// Resource types
 
 	ConstRef { element_type : TypeId },
 	MutRef { element_type : TypeId },
@@ -84,8 +88,10 @@ pub enum Type
 	MutSlice { element_type : TypeId },
 	Buffer,
 	//Texture
-	//GpuVertexWorkerState,
-	//GpuFragmentWorkerState,
+
+	Fence { place : Place, previous_fence_input_id : Option<usize> },
+
+	AnonymousSlot{ value_type : TypeId, resource_input_id : Option<usize>, fence_input_id : Option<usize> }
 }
 
 pub use generated::Node;
@@ -126,7 +132,6 @@ pub struct Funclet
 	#[serde(default = "FuncletKind::easy_default")]
 	pub kind : FuncletKind,
 	pub input_types : Box<[TypeId]>,
-	//pub execution_scope : Option<Scope>,
 	pub output_types : Box<[TypeId]>,
 	pub nodes : Box<[Node]>,
 	pub tail_edge : TailEdge,
@@ -142,7 +147,6 @@ pub struct ExternalCpuFunction
 {
 	pub name : String,
 	pub input_types : Box<[TypeId]>,
-	// Scopes are always CPU (for now)
 	pub output_types : Box<[TypeId]>,
 }
 

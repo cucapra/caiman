@@ -90,7 +90,7 @@ The scheduling language provides the following operations in almost all contexts
 - `encode_do (place : Place, value_tag : (InstanceId, SubexpressionId),  input_slots : [SlotId], output_slots : [SlotId])`
 	- schedules to `place` the execution of the subexpression specified by `value_tag` with inputs bound to `input_slots` and outputs bound to `output_slots`
 	- For most value nodes, `value_tag` will also be the type of the (usually one) slot in `output_slots` and could theoretically be implied by the value part of the type of the output slot.  The reason this parameter is necessary at all is for nodes with multiple returns, which are modeled as returning a fake tuple of outputs (and is therefore not a real node with resource needs).  Each component of the return value in such a case is then a separate node in the value graph.
-	- To do: Explain why it's a fake tuple and why `encode_do` can't be split
+	- Since output memory is usually allocated ahead of time and passed by reference into the called function, the various outputs of function calls are not stored adjacently in memory as its pseudo-tuple type might suggest.  Therefore `encode_do` needs all inputs and outputs specified upfront so codegen can emit code correctly without implicitly allocating and copying or predicting the future.
 - `encode_map_read_only (place : Place, mapped_slot : SlotId) -> SlotId`
 	- schedules to `place` the creation of a slot containing a read-only reference to a bound buffer region referenced by `mapped_slot`
 	- the created slot will have the same value as `mapped_slot`
@@ -120,7 +120,7 @@ Leaf (input) nodes of a value function behave in a special way when read.  Rathe
 
 Offsets provided for some hardware may be illegal for others based on alignment.
 
-Under webgpu, reads from slots bound to a buffer may force an implicit synchronization if any slot bound to that buffer may be written to by the GPU.  This is an unfortunate possibility handed down from webgpu that would be unnecessary on most other APIs since caiman statically enforces the constraint at a finer granularity.
+Under webgpu, reads or writes (`encode_map_*`) from or to slots bound to a buffer may force an implicit synchronization if any slot bound to that buffer may be in use by the GPU.  This is an unfortunate possibility handed down from webgpu that would be unnecessary on most other APIs since caiman statically enforces the constraint at a finer granularity.
 
 Encoding to the local queue immediately evaluates the relevant node and transitions slots directly to `Ready` instead of `Encoded` since the Coordinator is always synchronized with the local queue.
 
@@ -136,7 +136,7 @@ The process of inferring a schedule from a partially given one is called "schedu
 
 A couple points of the scheduling language facilitate explication:
 - The queue states form a total ordering that unambiguously implies a path for the explicator to generate when the schedule is left implicit.
-	- The canonical path is `None` -> `Encoded` via `encode_local` (if the data already exists) or `encode_do` scheduled immediately (necessary to preserve ordering), `Encoded` -> `Submitted` via `submit` as late as legally possible, `Submitted` -> `Ready` via synchronization as late as possible on a fence inserted as late as possible.  Each of the inserted operations is performed as late as possible to be  manually written operations to make them unnecessary.
+	- The canonical path is `None` -> `Encoded` via `encode_copy` (if the data already exists) or `encode_do` scheduled immediately (necessary to preserve ordering), `Encoded` -> `Submitted` via `submit` as late as legally possible, `Submitted` -> `Ready` via synchronization as late as possible on a fence inserted as late as possible.  Each of the inserted operations is performed as late as possible to be  manually written operations to make them unnecessary.
 - `discard` is never inserted
 - `alloc_temporary` and `bind_buffer` always bump allocate and never fill holes, even if memory in lower regions has been made available via discard
 	- Additionally, `bind_buffer` will always allocate from a buffer that is visible only to the explicator (one for each place)
@@ -167,7 +167,11 @@ To do
 
 
 To do: Describe the scheduler state more formally and what a variable is in the scheduling language
+
 To do: More on why state machines are (probably) the right model and how control flow works in Caiman
+
 To do: More on where expanded control flow would make sense
+
 To do: Actual comparison
+
 To do: Comment (rant) on problems in opengl, vulkan/dx12, and webgpu motivating parts of caiman's design.  Also, more on why just copying the CUDA model cannot fix it.

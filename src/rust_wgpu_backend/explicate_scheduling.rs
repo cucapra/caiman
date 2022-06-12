@@ -425,7 +425,7 @@ impl<'program> Explicator<'program>
 				}
 				else
 				{
-					let place = ir::Place::Simple{scope : ir::Scope::Local};
+					let place = ir::Place::Local;
 					let resource_state = ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false};
 					per_input_input_resource_states[input_index].insert(place, resource_state);
 					funclet_builder.place_input(input_index, place, resource_state);
@@ -457,8 +457,8 @@ impl<'program> Explicator<'program>
 						{
 							match place
 							{
-								ir::Place::Simple{scope : ir::Scope::Local} => node_resource_tracker.register_local_nodes(&[new_node_id]),
-								ir::Place::Simple{scope : ir::Scope::Gpu} =>
+								ir::Place::Local => node_resource_tracker.register_local_nodes(&[new_node_id]),
+								ir::Place::Gpu =>
 								{
 									// Doesn't handle exclusivity yet
 									match resource_state.stage
@@ -562,8 +562,8 @@ impl<'program> Explicator<'program>
 							funclet_builder.place_output(output_index, place, resource_state);
 							match place
 							{
-								ir::Place::Simple{scope : ir::Scope::Local} => local_nodes.push(node_id),
-								ir::Place::Simple{scope : ir::Scope::Gpu} =>
+								ir::Place::Local => local_nodes.push(node_id),
+								ir::Place::Gpu =>
 								{
 									match resource_state.stage
 									{
@@ -581,7 +581,7 @@ impl<'program> Explicator<'program>
 					else
 					{
 						local_nodes.push(node_id);
-						funclet_builder.place_output(output_index, ir::Place::Simple{scope : ir::Scope::Local}, ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false});
+						funclet_builder.place_output(output_index, ir::Place::Local, ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false});
 					}
 				}
 

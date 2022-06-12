@@ -6,7 +6,6 @@
 			0 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
@@ -21,7 +20,6 @@
 			1 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
@@ -36,7 +34,6 @@
 			2 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
@@ -48,7 +45,6 @@
 			3 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
@@ -63,7 +59,6 @@
 			4 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
@@ -78,7 +73,6 @@
 			5 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
@@ -91,7 +85,6 @@
 			6 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0, 0],
 				nodes : [
 					Phi(index : 0),
@@ -104,7 +97,6 @@
 			7 : (
 				kind : MixedImplicit,
 				input_types : [0, 0],
-				execution_scope : Some(Cpu),
 				output_types : [0, 0],
 				nodes : [
 					Phi(index : 0),
@@ -118,7 +110,6 @@
 			8 : (
 				kind : MixedImplicit,
 				input_types : [0],
-				execution_scope : Some(Cpu),
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
