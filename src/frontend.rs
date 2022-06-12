@@ -1,4 +1,4 @@
-use crate::{ir, explicate_scheduling};
+use crate::ir;
 use std::collections::HashMap;
 use std::default::Default;
 use serde_derive::{Serialize, Deserialize};
@@ -40,7 +40,7 @@ pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileO
 		Ok(mut definition) =>
 		{
 			assert_eq!(definition.version, (0, 0, 1));
-			explicate_scheduling::explicate_scheduling(&mut definition.program);
+			crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
 			let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
 			if let Some(options) = options_opt
 			{
@@ -63,7 +63,7 @@ pub fn explicate_ron_definition(input_string : &str, options : Option<CompileOpt
 		Ok(mut definition) =>
 		{
 			assert_eq!(definition.version, (0, 0, 1));
-			explicate_scheduling::explicate_scheduling(&mut definition.program);
+			crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
 			let output_string_result = ron::ser::to_string_pretty(& definition, pretty);
 			Ok(output_string_result.unwrap())
 		}

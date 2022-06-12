@@ -36,36 +36,16 @@ pub struct ResourceState
 	pub is_exclusive : bool
 }
 
-/*
-#[derive(Debug)]
-struct ExternalCpuFunctionId
+pub struct NodePlacement
 {
-	id : usize
+	resource_id : usize
 }
 
-#[derive(Debug)]
-struct ExternalGpuFunctionId
+pub enum Resource
 {
-	id : usize
+	Buffer{size : usize},
+	CommandBuffer{size : usize},
 }
-
-#[derive(Debug)]
-struct FuncletId
-{
-	id : usize
-}
-
-#[derive(Debug)]
-struct NodeId
-{
-	id : usize
-}
-
-#[derive(Debug)]
-struct TypeId
-{
-	id : usize
-}*/
 
 pub type ExternalCpuFunctionId = usize;
 pub type ExternalGpuFunctionId = usize;
@@ -120,65 +100,6 @@ pub enum Type
 }
 
 pub use generated::Node;
-
-/*#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Node
-{
-	// Core
-	Phi { index : usize },
-	ConstantInteger (i64, TypeId),
-	ConstantUnsignedInteger (u64, TypeId),
-	ComputedResult { node_ids : Box<[NodeId]> }, // Tuple produced as a result of inlining
-	ExtractResult { node_id : NodeId, index : usize },
-	//ReadBuffer { node_id : NodeId, type_id : TypeId, byte_offset : usize },
-
-	// Scopes
-	GpuTaskStart{ local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
-	GpuTaskEnd{ task_node_id : NodeId, local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
-
-	// High Level Coordinator Language
-	CallExternalCpu { external_function_id : ExternalCpuFunctionId, arguments : Box<[NodeId]> },
-	CallExternalGpuRaster
-	{
-		external_function : ExternalGpuFunctionId,
-		arguments : Box<[NodeId]>,
-		// These can be set via GPU state
-		vertex_count : NodeId,
-		instance_count : NodeId,
-		first_vertex : NodeId,
-		first_instance : NodeId,
-		// Not a complete list
-		// Setting these with GPU state will force a GPU -> CPU sync
-		viewport_x : NodeId,
-		viewport_y : NodeId,
-		viewport_width : NodeId,
-		viewport_height : NodeId,
-		viewport_min_depth : NodeId,
-		viewport_max_depth : NodeId,
-		scissor_rect_x : NodeId,
-		scissor_rect_y : NodeId,
-		scissor_rect_width : NodeId,
-		scissor_rect_height : NodeId,
-		blend_constant : NodeId,
-		stencil_reference : NodeId
-	},
-	CallExternalGpuCompute { external_function_id : ExternalGpuFunctionId, arguments : Box<[NodeId]>, dimensions : [NodeId; 3] },
-
-	// CPU, GPU Coordinator, GPU Worker split
-	CallGpuCoordinator { funclet_id : FuncletId, arguments : Box<[NodeId]> },
-	//CallGpuCoordinatorAndCpuAsync { gpu_funclet_id : FuncletId, gpu_arguments : Box<[NodeId]>, cpu_funclet_id : FuncletId, cpu_arguments },
-
-	//Call { callee : FuncletId, arguments : Box<[NodeId]> },
-	// CPU Only
-	// GPU Coordinator Only
-	//DispatchCompute { kernel : FuncletId, dimensions : [NodeId; 3], arguments : Box<[NodeId]> },
-	//CopyBuffer { destination : NodeId, source : NodeId, destination_offset : NodeId, source_offset : NodeId, size : NodeId },
-	// GPU Kernel Worker Only
-	// GPU Vertex Worker Only
-	//OutputVertex { state : NodeId, coords : [NodeId; 4] }
-	// GPU Fragment Worker Only
-	//OutputFragment { state : NodeId, coords : [NodeId; 4] }
-}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
@@ -247,6 +168,12 @@ pub struct ExternalGpuFunction
 	pub resource_bindings : Box<[ExternalGpuFunctionResourceBinding]>,
 	pub shader_module_content : ShaderModuleContent,
 	//pub shader_module : usize,
+}
+
+// A user-facing entry point into the pipeline
+pub enum PipelineMethod
+{
+	
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -26,8 +26,8 @@ fn write_ir_definition(output_file : &mut File, specification : &spec::Spec)
 	ComputedResult { node_ids : Box<[NodeId]> },
 	ExtractResult { node_id : NodeId, index : usize },
 
-	GpuTaskStart{ local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
-	GpuTaskEnd{ task_node_id : NodeId, local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
+	//GpuTaskStart{ local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
+	//GpuTaskEnd{ task_node_id : NodeId, local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
 ";
 
 	write!(output_file, "#[derive(Serialize, Deserialize, Debug, Clone)]\n");
