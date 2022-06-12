@@ -106,7 +106,6 @@ impl NodeUsageAnalysis
 	pub fn from_funclet(funclet : & ir::Funclet) -> Self
 	{
 		let mut analysis = Self::new();
-		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
 
 		match & funclet.tail_edge
 		{

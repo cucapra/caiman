@@ -192,7 +192,7 @@ impl<'program> CodeGen<'program>
 		let mut placement_state = PlacementState::new();
 
 		let funclet = & self.program.funclets[& funclet_id];
-		assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
+		assert_eq!(funclet.kind, ir::FuncletKind::MixedExplicit);
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
 		{
@@ -396,7 +396,7 @@ impl<'program> CodeGen<'program>
 	fn generate_cpu_function(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
 		let entry_funclet = & self.program.funclets[& entry_funclet_id];
-		assert_eq!(entry_funclet.execution_scope, Some(ir::Scope::Cpu));
+		assert_eq!(entry_funclet.kind, ir::FuncletKind::MixedExplicit);
 
 		let mut pipeline_context = PipelineContext::new();
 		pipeline_context.pending_funclet_ids.push(entry_funclet_id);
@@ -408,7 +408,7 @@ impl<'program> CodeGen<'program>
 			if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
 			{
 				let funclet = & self.program.funclets[& funclet_id];
-				assert_eq!(funclet.execution_scope, Some(ir::Scope::Cpu));
+				assert_eq!(funclet.kind, ir::FuncletKind::MixedExplicit);
 
 				let argument_variable_ids = self.code_generator.begin_funclet(funclet_id, &funclet.input_types, &funclet.output_types);
 				self.compile_funclet(funclet_id, & argument_variable_ids, &mut pipeline_context);

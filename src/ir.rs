@@ -26,7 +26,7 @@ pub enum ResourceQueueStage
 	Encoded,
 	Submitted,
 	Ready,
-	Dead,
+	Dead
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -34,17 +34,6 @@ pub struct ResourceState
 {
 	pub stage : ResourceQueueStage,
 	pub is_exclusive : bool
-}
-
-pub struct NodePlacement
-{
-	resource_id : usize
-}
-
-pub enum Resource
-{
-	Buffer{size : usize},
-	CommandBuffer{size : usize},
 }
 
 pub type ExternalCpuFunctionId = usize;
@@ -83,17 +72,17 @@ pub enum Type
 	I16,
 	I32,
 	I64,
-	ConstRef { element_type : TypeId },
-	MutRef { element_type : TypeId },
-	ConstSlice { element_type : TypeId },
-	MutSlice { element_type : TypeId },
 	Array { element_type : TypeId, length : usize },
 	Struct { fields : Box<[StructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
 	Tuple { fields : Box<[TypeId]> },
 
 	//Scoped { scope : Scope },
 
-	//Buffer,
+	ConstRef { element_type : TypeId },
+	MutRef { element_type : TypeId },
+	ConstSlice { element_type : TypeId },
+	MutSlice { element_type : TypeId },
+	Buffer,
 	//Texture
 	//GpuVertexWorkerState,
 	//GpuFragmentWorkerState,
@@ -116,18 +105,36 @@ pub enum TailEdge
 	//CallGpuWorker{ callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum FuncletKind
+{
+	MixedImplicit,
+	MixedExplicit,
+}
+
+impl FuncletKind
+{
+	fn easy_default() -> Self
+	{
+		FuncletKind::MixedImplicit
+	}
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet
 {
+	#[serde(default = "FuncletKind::easy_default")]
+	pub kind : FuncletKind,
 	pub input_types : Box<[TypeId]>,
+	//pub execution_scope : Option<Scope>,
+	pub output_types : Box<[TypeId]>,
+	pub nodes : Box<[Node]>,
+	pub tail_edge : TailEdge,
+
 	#[serde(default)]
 	pub input_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
-	pub execution_scope : Option<Scope>,
-	pub output_types : Box<[TypeId]>,
 	#[serde(default)]
 	pub output_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
-	pub nodes : Box<[Node]>,
-	pub tail_edge : TailEdge
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

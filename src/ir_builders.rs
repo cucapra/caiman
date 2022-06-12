@@ -6,9 +6,9 @@ use crate::ir::*;
 #[derive(Debug, Default)]
 pub struct FuncletBuilder
 {
+	kind : Option<FuncletKind>,
 	input_types : Vec<TypeId>,
 	input_resource_states : Vec<BTreeMap<Place, ResourceState>>,
-	execution_scope : Option<Scope>,
 	output_types : Vec<TypeId>,
 	output_resource_states : Vec<BTreeMap<Place, ResourceState>>,
 	nodes : Vec<Node>,
@@ -18,16 +18,9 @@ pub struct FuncletBuilder
 
 impl FuncletBuilder
 {
-	pub fn new() -> Self
+	pub fn new(kind : FuncletKind) -> Self
 	{
-		Default::default()
-	}
-
-	pub fn new_with_execution_scope(execution_scope : Scope) -> Self
-	{
-		let mut builder = Self::new();
-		builder.execution_scope = Some(execution_scope);
-		builder
+		FuncletBuilder { kind : Some(kind), .. Default::default()}
 	}
 
 	pub fn add_input(&mut self, type_id : TypeId) -> usize
@@ -188,6 +181,6 @@ impl FuncletBuilder
 
 	pub fn build(mut self) -> Funclet
 	{
-		Funclet{input_types : self.input_types.into_boxed_slice(), input_resource_states : self.input_resource_states.into_boxed_slice(), execution_scope : self.execution_scope, output_types : self.output_types.into_boxed_slice(), output_resource_states : self.output_resource_states.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap()}
+		Funclet{kind : self.kind.unwrap(), input_types : self.input_types.into_boxed_slice(), input_resource_states : self.input_resource_states.into_boxed_slice(), output_types : self.output_types.into_boxed_slice(), output_resource_states : self.output_resource_states.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap()}
 	}
 }

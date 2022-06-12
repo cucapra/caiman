@@ -383,22 +383,29 @@ impl<'program> Explicator<'program>
 	{
 		for (funclet_id, funclet) in self.program.funclets.iter_mut()
 		{
-			*funclet = Self::explicate_funclet(funclet);
+
+			match funclet.kind
+			{
+				ir::FuncletKind::MixedExplicit => (),
+				ir::FuncletKind::MixedImplicit => *funclet = Self::explicate_funclet(funclet),
+			}
 		}
 	}
 
 	fn explicate_funclet(original_funclet : & ir::Funclet) -> ir::Funclet
 	{
+		match original_funclet.kind
+		{
+			ir::FuncletKind::MixedExplicit => panic!("Should not be here"),
+			ir::FuncletKind::MixedImplicit => (),
+		}
+
 		// funclet_id : ir::FuncletId
 		{
 			//let original_funclet = & self.program.funclets[& funclet_id];
 			//let original_funclet = & program.funclets[& funclet_id];
 
-			let mut funclet_builder = match original_funclet.execution_scope
-			{
-				Some(scope) => ir_builders::FuncletBuilder::new_with_execution_scope(scope),
-				None => ir_builders::FuncletBuilder::new()
-			};
+			let mut funclet_builder = ir_builders::FuncletBuilder::new(ir::FuncletKind::MixedExplicit);
 
 			let mut per_input_input_resource_states = Vec::<BTreeMap<ir::Place, ir::ResourceState>>::new();
 
