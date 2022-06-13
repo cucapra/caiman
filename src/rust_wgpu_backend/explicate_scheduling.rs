@@ -493,6 +493,10 @@ impl<'program> Explicator<'program>
 						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
 						node_resource_tracker.register_local_nodes(&[new_node_id]);
 					}
+					ir::Node::CallValueFunction { function_id, arguments } =>
+					{
+						panic!("Not yet implemented")
+					}
 					ir::Node::CallExternalCpu { external_function_id, arguments } =>
 					{
 						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, arguments), &mut funclet_builder);

@@ -235,6 +235,10 @@ impl<'program> CodeGen<'program>
 					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
 					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(variable_id));
 				}
+				ir::Node::CallValueFunction { function_id, arguments } =>
+				{
+					panic!("Not yet implemented")
+				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
 					let argument_var_ids_opt = placement_state.get_local_state_var_ids(arguments);

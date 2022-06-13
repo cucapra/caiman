@@ -21,6 +21,17 @@
 			has_local_side_effect : false
 		),
 		(
+			name : "CallValueFunction",
+			inputs : [
+				(name : "function_id", kind : ValueFunction, is_array : false),
+				(name : "arguments", kind : Operation, is_array : true)
+			],
+			output : Multiple,
+			language_set : (functional : true, scheduling: false),
+			has_local_side_effect : false
+		),
+
+		(
 			name : "CallExternalCpu",
 			inputs : [
 				(name : "external_function_id", kind : ExternalCpuFunction, is_array : false),

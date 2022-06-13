@@ -45,6 +45,7 @@ pub type NodeId = usize;
 pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
+pub type ValueFunctionId = usize;
 
 mod generated
 {
@@ -172,13 +173,32 @@ pub struct ExternalGpuFunction
 {
 	pub name : String,
 	pub input_types : Box<[TypeId]>,
-	// Scopes are always GPU (for now)
 	pub output_types : Box<[TypeId]>,
 	// Contains pipeline and single render pass state
 	pub entry_point : String,
 	pub resource_bindings : Box<[ExternalGpuFunctionResourceBinding]>,
 	pub shader_module_content : ShaderModuleContent,
 	//pub shader_module : usize,
+}
+
+// A value function is just an equivalence class over functions that behave identically at the value level
+// A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ValueFunction
+{
+	pub name : String,
+	pub input_types : Box<[TypeId]>,
+	pub output_types : Box<[TypeId]>,
+	pub default_binding : Option<ValueFunctionBinding>
+}
+
+// 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ValueFunctionBinding
+{
+	ExternalCpu{ external_cpu_function_id : ExternalCpuFunctionId, input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
+	ExternalGpuComputeDispatchFixedWorkgroups{ external_gpu_function_id : ExternalGpuFunctionId, dimensions : [u32; 3], input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
+	ExternalGpuComputeDispatch{ external_gpu_function_id : ExternalGpuFunctionId, dimension_arguments : [usize; 3], input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
 }
 
 // A user-facing entry point into the pipeline
@@ -198,10 +218,17 @@ pub struct Pipeline
 pub struct Program
 {
 	//pub types : HashMap<usize, Type>,
+	#[serde(default)]
 	pub types : Arena<Type>,
+	#[serde(default)]
 	pub funclets : Arena<Funclet>,
+	#[serde(default)]
 	pub external_cpu_functions : Vec<ExternalCpuFunction>,
+	#[serde(default)]
 	pub external_gpu_functions : Vec<ExternalGpuFunction>,
+	#[serde(default)]
+	pub value_functions : Vec<ValueFunction>,
+	#[serde(default)]
 	pub pipelines : Vec<Pipeline>,
 	//pub shader_modules : HashMap<usize, ShaderModule>
 }

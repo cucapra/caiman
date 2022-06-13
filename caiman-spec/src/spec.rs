@@ -25,6 +25,7 @@ pub enum OperationInputKind
 	Operation,
 	ExternalCpuFunction,
 	ExternalGpuFunction,
+	ValueFunction,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
