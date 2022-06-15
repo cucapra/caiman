@@ -357,17 +357,35 @@ impl NodeResourceTracker
 	}
 }
 
-struct Explicator<'program>
+// Tracking the state for an entire externally-visible unit and not just an individual funclet
+struct FunctionState
 {
-	program : &'program mut ir::Program
+	funclet_builder : ir_builders::FuncletBuilder,
+	node_resource_tracker : NodeResourceTracker,
+	currently_inlining_funclet_ids : HashSet<ir::FuncletId>,
+	//stack_frames : Vec<FrameState> // Will probably want this eventually, but for now, laziness is good
 }
 
-fn remap_nodes(funclet_builder : & ir_builders::FuncletBuilder, node_ids : &[ir::NodeId]) -> Box<[ir::NodeId]>
+// Per-funclet resources for each frame of the inlining call stack
+struct FrameState
+{
+	funclet_id : ir::FuncletId,
+	funclet_builder_frame_id : ir_builders::FuncletBuilderFrameId,
+	input_nodes_opt : Option<Box<[ir::NodeId]>>,
+	per_input_input_resource_states_opt : Option<Vec<BTreeMap<ir::Place, ir::ResourceState>>>
+}
+
+struct Explicator<'program>
+{
+	program : &'program mut ir::Program,
+}
+
+fn remap_nodes(funclet_builder : & ir_builders::FuncletBuilder, frame_id : ir_builders::FuncletBuilderFrameId, node_ids : &[ir::NodeId]) -> Box<[ir::NodeId]>
 {
 	let mut remapped_node_ids = Vec::<ir::NodeId>::new();
 	for & node_id in node_ids.iter()
 	{
-		remapped_node_ids.push(funclet_builder.get_remapped_node_id(node_id).unwrap());
+		remapped_node_ids.push(funclet_builder.get_remapped_node_id(frame_id, node_id).unwrap());
 	}
 	return remapped_node_ids.into_boxed_slice();
 }
@@ -381,223 +399,288 @@ impl<'program> Explicator<'program>
 
 	pub fn run(&mut self)
 	{
-		for (funclet_id, funclet) in self.program.funclets.iter_mut()
+		let mut new_funclets = HashMap::<ir::FuncletId, ir::Funclet>::new();
+		for (funclet_id, funclet) in self.program.funclets.iter()
 		{
-
+			// This isn't smart about which funclets we really want entry points for, so we do a lot of wasted work
 			match funclet.kind
 			{
 				ir::FuncletKind::MixedExplicit => (),
-				ir::FuncletKind::MixedImplicit => *funclet = Self::explicate_funclet(funclet),
+				ir::FuncletKind::MixedImplicit =>
+				{
+					new_funclets.insert(* funclet_id, self.explicate_entry_point_funclet(* funclet_id));
+				}
+				// Explication erases the funclet currently.  This isn't right long-term.
+				ir::FuncletKind::Inline => (),
 			}
 		}
+		self.program.funclets = Arena::<ir::Funclet>::from_hash_map(new_funclets);
 	}
 
-	fn explicate_funclet(original_funclet : & ir::Funclet) -> ir::Funclet
+	pub fn explicate_entry_point_funclet(&self, funclet_id : ir::FuncletId) -> ir::Funclet
 	{
+		let original_funclet : & ir::Funclet = & self.program.funclets[& funclet_id];
+
 		match original_funclet.kind
 		{
 			ir::FuncletKind::MixedExplicit => panic!("Should not be here"),
 			ir::FuncletKind::MixedImplicit => (),
+			ir::FuncletKind::Inline =>  panic!("Cannot use inline funclet as an entry point"),
 		}
 
-		// funclet_id : ir::FuncletId
+		let mut funclet_builder = ir_builders::FuncletBuilder::new(ir::FuncletKind::MixedExplicit);
+		let mut node_resource_tracker = NodeResourceTracker::new();
+		let mut function_state = FunctionState {funclet_builder, node_resource_tracker, currently_inlining_funclet_ids : HashSet::new()};
+
+		let mut per_input_input_resource_states = Vec::<BTreeMap<ir::Place, ir::ResourceState>>::new();
+
+		for (input_index, input_type) in original_funclet.input_types.iter().enumerate()
 		{
-			//let original_funclet = & self.program.funclets[& funclet_id];
-			//let original_funclet = & program.funclets[& funclet_id];
+			function_state.funclet_builder.add_input(* input_type);
 
-			let mut funclet_builder = ir_builders::FuncletBuilder::new(ir::FuncletKind::MixedExplicit);
+			per_input_input_resource_states.push(BTreeMap::new());
 
-			let mut per_input_input_resource_states = Vec::<BTreeMap<ir::Place, ir::ResourceState>>::new();
-
-			for (input_index, input_type) in original_funclet.input_types.iter().enumerate()
+			if let Some(input_resource_states) = original_funclet.input_resource_states.get(input_index)
 			{
-				funclet_builder.add_input(* input_type);
-
-				per_input_input_resource_states.push(BTreeMap::new());
-
-				if let Some(input_resource_states) = original_funclet.input_resource_states.get(input_index)
+				for (&place, &resource_state) in input_resource_states.iter()
 				{
-					for (&place, &resource_state) in input_resource_states.iter()
+					function_state.funclet_builder.place_input(input_index, place, resource_state);
+					per_input_input_resource_states[input_index].insert(place, resource_state);
+				}
+			}
+			else
+			{
+				let place = ir::Place::Local;
+				let resource_state = ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false};
+				per_input_input_resource_states[input_index].insert(place, resource_state);
+				function_state.funclet_builder.place_input(input_index, place, resource_state);
+			}
+		}
+
+		let frame_id = function_state.funclet_builder.create_frame();
+		let mut frame = FrameState{funclet_id, funclet_builder_frame_id : frame_id, input_nodes_opt : None, per_input_input_resource_states_opt : Some(per_input_input_resource_states)};
+
+		self.explicate_funclet_body(&mut function_state, &mut frame);
+		let mut output_nodes = Vec::<ir::NodeId>::new();
+		//explicate_subfunclet(&mut function_state, & original_funclet, & input_nodes);
+
+		match & original_funclet.tail_edge
+		{
+			ir::TailEdge::Return { return_values } =>
+			{
+				function_state.funclet_builder.set_output_types(& original_funclet.output_types);
+				output_nodes.extend_from_slice(& return_values);
+				function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, return_values), &mut function_state.funclet_builder);
+				function_state.funclet_builder.set_tail_edge_from_old(frame_id, & original_funclet.tail_edge)
+			}
+			ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
+			{
+				function_state.funclet_builder.set_output_types(& original_funclet.output_types);
+				output_nodes.extend_from_slice(& captured_arguments);
+				output_nodes.extend_from_slice(& return_values);
+				function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, captured_arguments), &mut function_state.funclet_builder); // Not ideal, but required for now
+				function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, return_values), &mut function_state.funclet_builder);
+				function_state.funclet_builder.set_tail_edge_from_old(frame_id, & original_funclet.tail_edge)
+			}
+		}
+
+		{
+			let mut gpu_encoded_nodes = Vec::<ir::NodeId>::new();
+			let mut gpu_submitted_nodes = Vec::<ir::NodeId>::new();
+			let mut gpu_ready_nodes = Vec::<ir::NodeId>::new();
+			let mut local_nodes = Vec::<ir::NodeId>::new();
+
+			for (output_index, & node_id) in output_nodes.iter().enumerate()
+			{
+				if let Some(output_resource_states) = original_funclet.output_resource_states.get(output_index)
+				{
+					// This will be a problem if we can ever have more than one gpu or local placement for a node
+					for (&place, &resource_state) in output_resource_states.iter()
 					{
-						funclet_builder.place_input(input_index, place, resource_state);
-						per_input_input_resource_states[input_index].insert(place, resource_state);
+						function_state.funclet_builder.place_output(output_index, place, resource_state);
+						match place
+						{
+							ir::Place::Local => local_nodes.push(node_id),
+							ir::Place::Gpu =>
+							{
+								match resource_state.stage
+								{
+									ir::ResourceQueueStage::None => (),
+									ir::ResourceQueueStage::Encoded => gpu_encoded_nodes.push(node_id),
+									ir::ResourceQueueStage::Submitted => gpu_submitted_nodes.push(node_id),
+									ir::ResourceQueueStage::Ready => gpu_ready_nodes.push(node_id),
+									ir::ResourceQueueStage::Dead => (),
+								}
+							}
+							_ => panic!("Unimplemented")
+						}
 					}
 				}
 				else
 				{
-					let place = ir::Place::Local;
-					let resource_state = ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false};
-					per_input_input_resource_states[input_index].insert(place, resource_state);
-					funclet_builder.place_input(input_index, place, resource_state);
+					local_nodes.push(node_id);
+					function_state.funclet_builder.place_output(output_index, ir::Place::Local, ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false});
 				}
 			}
 
-			let mut node_resource_tracker = NodeResourceTracker::new();
-			let node_usage_analysis = NodeUsageAnalysis::from_funclet(original_funclet);
-			//let node_remapping = HashMap::<ir::NodeId, ir::NodeId>::new();
+			function_state.node_resource_tracker.encode_gpu(& remap_nodes(& function_state.funclet_builder, frame_id, gpu_encoded_nodes.as_slice()), &mut function_state.funclet_builder);
+			function_state.node_resource_tracker.submit_gpu(& remap_nodes(& function_state.funclet_builder, frame_id, gpu_submitted_nodes.as_slice()), &mut function_state.funclet_builder);
+			// Should really be a sync_gpu, but that doesn't exist yet
+			function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, gpu_ready_nodes.as_slice()), &mut function_state.funclet_builder);
+			function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, local_nodes.as_slice()), &mut function_state.funclet_builder);
+		}
 
-			//let encoded_node_set = HashSet::<ir::NodeId>::new();
-			//let gpu_resident_node_set = HashSet::<ir::NodeId>::new();
-			//let local_resident_node_set = HashSet::<ir::NodeId>::new();
-	
-			for (current_node_id, node) in original_funclet.nodes.iter().enumerate()
+		return function_state.funclet_builder.build();
+	}
+
+	fn explicate_funclet_body(&self, function_state : &mut FunctionState, frame : &mut FrameState)
+	{
+		let frame_id = frame.funclet_builder_frame_id;
+		let funclet_id = frame.funclet_id;
+		let original_funclet : & ir::Funclet = & self.program.funclets[& funclet_id];
+
+		let mut inlined_node_results = HashMap::<ir::NodeId, Box<[ir::NodeId]>>::new();
+
+		for (current_node_id, node) in original_funclet.nodes.iter().enumerate()
+		{
+			match node
 			{
-				if ! node_usage_analysis.is_node_used(current_node_id)
+				ir::Node::Phi {index} =>
 				{
-					//node_result_tracker.store_node_result(current_node_id, NodeResult::Retired, None);
-					continue;
-				}
-	
-				match node
-				{
-					ir::Node::Phi {index} =>
+					if let Some(input_nodes) = frame.input_nodes_opt.as_ref()
 					{
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
+						function_state.funclet_builder.remap_node(frame_id, current_node_id, input_nodes[* index]);
+					}
+					else if let Some(per_input_input_resource_states) = frame.per_input_input_resource_states_opt.as_ref()
+					{
+						let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+
 						for (&place, &resource_state) in per_input_input_resource_states[* index].iter()
 						{
 							match place
 							{
-								ir::Place::Local => node_resource_tracker.register_local_nodes(&[new_node_id]),
+								ir::Place::Local => function_state.node_resource_tracker.register_local_nodes(&[new_node_id]),
 								ir::Place::Gpu =>
 								{
 									// Doesn't handle exclusivity yet
 									match resource_state.stage
 									{
 										ir::ResourceQueueStage::None => (),
-										ir::ResourceQueueStage::Encoded => node_resource_tracker.register_gpu_encoded_nodes(&[new_node_id]),
-										ir::ResourceQueueStage::Submitted => node_resource_tracker.register_gpu_submitted_nodes(&[new_node_id]),
-										ir::ResourceQueueStage::Ready => node_resource_tracker.register_gpu_ready_nodes(&[new_node_id]),
+										ir::ResourceQueueStage::Encoded => function_state.node_resource_tracker.register_gpu_encoded_nodes(&[new_node_id]),
+										ir::ResourceQueueStage::Submitted => function_state.node_resource_tracker.register_gpu_submitted_nodes(&[new_node_id]),
+										ir::ResourceQueueStage::Ready => function_state.node_resource_tracker.register_gpu_ready_nodes(&[new_node_id]),
 										ir::ResourceQueueStage::Dead => (),
 									}
 								}
 								_ => panic!("Unimplemented placement for explication of phi nodes")
 							}
-							
 						}
 					}
-					ir::Node::ExtractResult { node_id, index } =>
-					{
-						// This isn't right
-						//node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, &[* node_id]), &mut funclet_builder);
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-						//node_resource_tracker.register_local_nodes(&[new_node_id]);
-						node_resource_tracker.register_passthrough_node(new_node_id, funclet_builder.get_remapped_node_id(* node_id).unwrap());
-					}
-					ir::Node::ConstantInteger{value, type_id} =>
-					{
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-						node_resource_tracker.register_local_nodes(&[new_node_id]);
-					}
-					ir::Node::ConstantUnsignedInteger{value, type_id} =>
-					{
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-						node_resource_tracker.register_local_nodes(&[new_node_id]);
-					}
-					ir::Node::CallValueFunction { function_id, arguments } =>
-					{
-						panic!("Not yet implemented")
-					}
-					ir::Node::CallExternalCpu { external_function_id, arguments } =>
-					{
-						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, arguments), &mut funclet_builder);
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-						node_resource_tracker.register_local_nodes(&[new_node_id]);
-					}
-					ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
-					{
-						node_resource_tracker.encode_gpu(& remap_nodes(& funclet_builder, arguments), &mut funclet_builder);
-						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, dimensions), &mut funclet_builder);
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-						node_resource_tracker.register_gpu_encoded_nodes(&[new_node_id]);
-					}
-					ir::Node::EncodeGpu{values} =>
-					{
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-					}
-					ir::Node::SubmitGpu{values} =>
-					{
-						node_resource_tracker.encode_gpu(& remap_nodes(& funclet_builder, values), &mut funclet_builder);
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-					}
-					ir::Node::SyncLocal{values} =>
-					{
-						node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, values), &mut funclet_builder);
-						let new_node_id = funclet_builder.add_node_from_old(current_node_id, & node);
-					}
-					_ => panic!("Unknown node")
-				};
-			}
-	
-			let mut output_nodes = Vec::<ir::NodeId>::new();
-
-			match & original_funclet.tail_edge
-			{
-				ir::TailEdge::Return { return_values } =>
-				{
-					funclet_builder.set_output_types(& original_funclet.output_types);
-					output_nodes.extend_from_slice(& return_values);
-					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, return_values), &mut funclet_builder);
-					funclet_builder.set_tail_edge_from_old(& original_funclet.tail_edge)
 				}
-				ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
+				ir::Node::ExtractResult { node_id, index } =>
 				{
-					funclet_builder.set_output_types(& original_funclet.output_types);
-					output_nodes.extend_from_slice(& captured_arguments);
-					output_nodes.extend_from_slice(& return_values);
-					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, captured_arguments), &mut funclet_builder); // Not ideal, but required for now
-					node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, return_values), &mut funclet_builder);
-					funclet_builder.set_tail_edge_from_old(& original_funclet.tail_edge)
-				}
-			}
-
-			{
-				let mut gpu_encoded_nodes = Vec::<ir::NodeId>::new();
-				let mut gpu_submitted_nodes = Vec::<ir::NodeId>::new();
-				let mut gpu_ready_nodes = Vec::<ir::NodeId>::new();
-				let mut local_nodes = Vec::<ir::NodeId>::new();
-
-				for (output_index, & node_id) in output_nodes.iter().enumerate()
-				{
-					if let Some(output_resource_states) = original_funclet.output_resource_states.get(output_index)
+					if inlined_node_results.contains_key(node_id)
 					{
-						// This will be a problem if we can ever have more than one gpu or local placement for a node
-						for (&place, &resource_state) in output_resource_states.iter()
-						{
-							funclet_builder.place_output(output_index, place, resource_state);
-							match place
-							{
-								ir::Place::Local => local_nodes.push(node_id),
-								ir::Place::Gpu =>
-								{
-									match resource_state.stage
-									{
-										ir::ResourceQueueStage::None => (),
-										ir::ResourceQueueStage::Encoded => gpu_encoded_nodes.push(node_id),
-										ir::ResourceQueueStage::Submitted => gpu_submitted_nodes.push(node_id),
-										ir::ResourceQueueStage::Ready => gpu_ready_nodes.push(node_id),
-										ir::ResourceQueueStage::Dead => (),
-									}
-								}
-								_ => panic!("Unimplemented")
-							}
-						}
+						function_state.funclet_builder.remap_node(frame_id, current_node_id, inlined_node_results[node_id][* index]);
 					}
 					else
 					{
-						local_nodes.push(node_id);
-						funclet_builder.place_output(output_index, ir::Place::Local, ir::ResourceState{stage : ir::ResourceQueueStage::Ready, is_exclusive : false});
+						// This isn't right
+						//node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, &[* node_id]), &mut funclet_builder);
+						let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+						//node_resource_tracker.register_local_nodes(&[new_node_id]);
+						function_state.node_resource_tracker.register_passthrough_node(new_node_id, function_state.funclet_builder.get_remapped_node_id(frame_id, * node_id).unwrap());
 					}
 				}
-
-				node_resource_tracker.encode_gpu(& remap_nodes(& funclet_builder, gpu_encoded_nodes.as_slice()), &mut funclet_builder);
-				node_resource_tracker.submit_gpu(& remap_nodes(& funclet_builder, gpu_submitted_nodes.as_slice()), &mut funclet_builder);
-				// Should really be a sync_gpu, but that doesn't exist yet
-				node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, gpu_ready_nodes.as_slice()), &mut funclet_builder);
-				node_resource_tracker.sync_local(& remap_nodes(& funclet_builder, local_nodes.as_slice()), &mut funclet_builder);
-			}
-
-			return funclet_builder.build();
+				ir::Node::ConstantInteger{value, type_id} =>
+				{
+					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+					function_state.node_resource_tracker.register_local_nodes(&[new_node_id]);
+				}
+				ir::Node::ConstantUnsignedInteger{value, type_id} =>
+				{
+					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+					function_state.node_resource_tracker.register_local_nodes(&[new_node_id]);
+				}
+				ir::Node::CallValueFunction { function_id, arguments } =>
+				{
+					let default_funclet_id = self.program.value_functions[function_id].default_funclet_id.expect("Value function must have a default implementation if no binding is specified");
+					let output_nodes = self.explicate_inline_funclet(function_state, default_funclet_id, arguments);
+					inlined_node_results.insert(current_node_id, output_nodes);
+					//function_state.node_resource_tracker.register_local_nodes(&[new_node_id]);
+				}
+				ir::Node::CallExternalCpu { external_function_id, arguments } =>
+				{
+					function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, arguments), &mut function_state.funclet_builder);
+					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+					function_state.node_resource_tracker.register_local_nodes(&[new_node_id]);
+				}
+				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
+				{
+					function_state.node_resource_tracker.encode_gpu(& remap_nodes(& function_state.funclet_builder, frame_id, arguments), &mut function_state.funclet_builder);
+					function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, dimensions), &mut function_state.funclet_builder);
+					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+					function_state.node_resource_tracker.register_gpu_encoded_nodes(&[new_node_id]);
+				}
+				ir::Node::EncodeGpu{values} =>
+				{
+					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+				}
+				ir::Node::SubmitGpu{values} =>
+				{
+					function_state.node_resource_tracker.encode_gpu(& remap_nodes(& function_state.funclet_builder, frame_id, values), &mut function_state.funclet_builder);
+					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+				}
+				ir::Node::SyncLocal{values} =>
+				{
+					function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, values), &mut function_state.funclet_builder);
+					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
+				}
+				_ => panic!("Unknown node")
+			};
 		}
+	}
+
+	fn explicate_inline_funclet(&self, function_state : &mut FunctionState, funclet_id : ir::FuncletId, input_nodes : &[ir::NodeId]) -> Box<[ir::NodeId]>
+	{
+		if function_state.currently_inlining_funclet_ids.contains(& funclet_id)
+		{
+			panic!("Cannot have circular invocations in inlined funclets");
+		}
+
+		function_state.currently_inlining_funclet_ids.insert(funclet_id);
+
+		let original_funclet : & ir::Funclet = & self.program.funclets[& funclet_id];
+
+		match original_funclet.kind
+		{
+			ir::FuncletKind::MixedExplicit => panic!("Should not be here"),
+			ir::FuncletKind::MixedImplicit => panic!("Cannot use mixed funclet as inline"),
+			ir::FuncletKind::Inline =>  (),
+		}
+
+		let mut frame = FrameState{funclet_id, funclet_builder_frame_id : function_state.funclet_builder.create_frame(), input_nodes_opt : Some(input_nodes.to_vec().into_boxed_slice()), per_input_input_resource_states_opt : None};
+		let frame_id = frame.funclet_builder_frame_id;
+
+		self.explicate_funclet_body(function_state, &mut frame);
+
+		let mut output_nodes = Vec::<ir::NodeId>::new();
+
+		match & original_funclet.tail_edge
+		{
+			ir::TailEdge::Return { return_values } =>
+			{
+				output_nodes.extend_from_slice(& remap_nodes(& function_state.funclet_builder, frame_id, return_values));
+			}
+			ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
+			{
+				panic!("Inline funclets cannot yield")
+			}
+		}
+
+		function_state.currently_inlining_funclet_ids.remove(& funclet_id);
+
+		return output_nodes.into_boxed_slice();
 	}
 }
 

@@ -3,8 +3,6 @@ mod arena;
 mod ir;
 mod ir_builders;
 mod shadergen;
-mod pipeline_analysis;
 pub mod frontend;
 mod rust_wgpu_backend;
 mod node_usage_analysis;
-//mod explicate_scheduling;

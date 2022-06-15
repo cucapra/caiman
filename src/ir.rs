@@ -5,14 +5,6 @@ use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
 use crate::arena::Arena;
 
-/*#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Scope
-{
-	Local,
-	Cpu,
-	Gpu,
-}*/
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Place
 {
@@ -46,6 +38,7 @@ pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
+pub type LocalMetaVariableId = usize;
 
 mod generated
 {
@@ -60,6 +53,11 @@ pub struct StructField
 	pub type_id : TypeId,
 	pub byte_offset : usize,
 	pub byte_size : usize,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LocalValueTag
+{
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -87,12 +85,23 @@ pub enum Type
 	MutRef { element_type : TypeId },
 	ConstSlice { element_type : TypeId },
 	MutSlice { element_type : TypeId },
-	Buffer,
+	Buffer {local_resource_id : LocalMetaVariableId},
+	BufferRef {local_resource_id : LocalMetaVariableId},
+	BufferMutRef {local_resource_id : LocalMetaVariableId},
 	//Texture
 
-	Fence { place : Place, previous_fence_input_id : Option<usize> },
+	Fence { id : LocalMetaVariableId, prior_fence_ids : Box<[LocalMetaVariableId]>, place : Place },
 
-	AnonymousSlot{ value_type : TypeId, resource_input_id : Option<usize>, fence_input_id : Option<usize> }
+	Slot{ value_type : TypeId, value_tag : Option<LocalValueTag>, local_resource_id : LocalMetaVariableId, queue_stage : ResourceQueueStage, place : Place, fence_id : LocalMetaVariableId },
+}
+
+// Local Meta Variables are used to serve as ids for when types need to relate to each other
+// This allows them to do so without refering directly to an input, output, or node position
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum LocalMetaVariable
+{
+	Resource,
+	Fence,
 }
 
 pub use generated::Node;
@@ -117,6 +126,7 @@ pub enum FuncletKind
 {
 	MixedImplicit,
 	MixedExplicit,
+	Inline // Adopts the constraints of the calling funclet
 }
 
 impl FuncletKind
@@ -141,6 +151,9 @@ pub struct Funclet
 	pub input_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
 	#[serde(default)]
 	pub output_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
+
+	#[serde(default)]
+	pub local_meta_variables : BTreeMap<LocalMetaVariableId, LocalMetaVariable>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -189,17 +202,17 @@ pub struct ValueFunction
 	pub name : String,
 	pub input_types : Box<[TypeId]>,
 	pub output_types : Box<[TypeId]>,
-	pub default_binding : Option<ValueFunctionBinding>
+	pub default_funclet_id : Option<FuncletId>
 }
 
 // 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/*#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ValueFunctionBinding
 {
 	ExternalCpu{ external_cpu_function_id : ExternalCpuFunctionId, input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
 	ExternalGpuComputeDispatchFixedWorkgroups{ external_gpu_function_id : ExternalGpuFunctionId, dimensions : [u32; 3], input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
 	ExternalGpuComputeDispatch{ external_gpu_function_id : ExternalGpuFunctionId, dimension_arguments : [usize; 3], input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
-}
+}*/
 
 // A user-facing entry point into the pipeline
 pub enum PipelineMethod
@@ -227,7 +240,7 @@ pub struct Program
 	#[serde(default)]
 	pub external_gpu_functions : Vec<ExternalGpuFunction>,
 	#[serde(default)]
-	pub value_functions : Vec<ValueFunction>,
+	pub value_functions : Arena<ValueFunction>,
 	#[serde(default)]
 	pub pipelines : Vec<Pipeline>,
 	//pub shader_modules : HashMap<usize, ShaderModule>

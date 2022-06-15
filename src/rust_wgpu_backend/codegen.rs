@@ -194,6 +194,11 @@ impl<'program> CodeGen<'program>
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::MixedExplicit);
 
+		if self.print_codegen_debug_info
+		{
+			println!("Compiling Funclet #{}...\n{:?}\n", funclet_id, funclet);
+		}
+
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
 		{
 			self.code_generator.insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
@@ -237,7 +242,12 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::CallValueFunction { function_id, arguments } =>
 				{
-					panic!("Not yet implemented")
+					panic!("Not yet implemented");
+					let function = & self.program.value_functions[function_id];
+					assert!(function.default_funclet_id.is_some(), "Codegen doesn't know how to handle value functions with no default binding yet");
+					let default_funclet_id = function.default_funclet_id.unwrap();
+					
+					
 				}
 				ir::Node::CallExternalCpu { external_function_id, arguments } =>
 				{
@@ -342,6 +352,9 @@ impl<'program> CodeGen<'program>
 					{
 						if let Some(GpuResidencyState::Submitted(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
 						{
+							// This is a wart with how this code is designed...
+							// It should eventually get cleaned up once the scheduling language implementationm is reworked
+							assert!(variable_id != usize::MAX, "Cannot synchronize directly on a gpu call because there is no value.  This is a wart resulting from the old scheduling language being value-centric.  This will get fixed.");
 							placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Useable(variable_id));
 							let new_variable_id = self.code_generator.make_local_copy(variable_id).unwrap();
 							let old = placement_state.node_local_residency_states.insert(* node_id, LocalResidencyState::Useable(new_variable_id));

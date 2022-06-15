@@ -3,6 +3,13 @@ use std::default::Default;
 use crate::arena::Arena;
 use crate::ir::*;
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FuncletBuilderFrameId(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct FuncletBuilderFramedNodeId(FuncletBuilderFrameId, NodeId);
+
 #[derive(Debug, Default)]
 pub struct FuncletBuilder
 {
@@ -13,14 +20,15 @@ pub struct FuncletBuilder
 	output_resource_states : Vec<BTreeMap<Place, ResourceState>>,
 	nodes : Vec<Node>,
 	tail_edge : Option<TailEdge>,
-	node_remapping : HashMap<NodeId, NodeId>
+	node_remapping : HashMap<FuncletBuilderFramedNodeId, NodeId>,
+	next_frame_id : usize
 }
 
 impl FuncletBuilder
 {
 	pub fn new(kind : FuncletKind) -> Self
 	{
-		FuncletBuilder { kind : Some(kind), .. Default::default()}
+		FuncletBuilder { kind : Some(kind), next_frame_id : 0, .. Default::default()}
 	}
 
 	pub fn add_input(&mut self, type_id : TypeId) -> usize
@@ -48,12 +56,24 @@ impl FuncletBuilder
 		assert!(is_new);
 	}
 
-	pub fn get_remapped_node_id(& self, old_node_id : NodeId) -> Option<NodeId>
+	pub fn create_frame(&mut self) -> FuncletBuilderFrameId
 	{
-		self.node_remapping.get(& old_node_id).map(|x| * x)
+		let id = self.next_frame_id;
+		self.next_frame_id += 1;
+		return FuncletBuilderFrameId(id);
 	}
 
-	pub fn add_node_from_old(&mut self, old_node_id : NodeId, old_node : &Node) -> NodeId
+	pub fn remap_node(&mut self, frame_id : FuncletBuilderFrameId, old_node_id : NodeId, new_node_id : NodeId)
+	{
+		self.node_remapping.insert(FuncletBuilderFramedNodeId(frame_id, old_node_id), new_node_id);
+	}
+
+	pub fn get_remapped_node_id(& self, frame_id : FuncletBuilderFrameId, old_node_id : NodeId) -> Option<NodeId>
+	{
+		self.node_remapping.get(& FuncletBuilderFramedNodeId(frame_id, old_node_id)).map(|x| * x)
+	}
+
+	pub fn add_node_from_old(&mut self, frame_id : FuncletBuilderFrameId, old_node_id : NodeId, old_node : &Node) -> NodeId
 	{
 		let node = match old_node
 		{
@@ -64,7 +84,7 @@ impl FuncletBuilder
 			}
 			Node::ExtractResult { node_id, index } =>
 			{
-				Node::ExtractResult{node_id : self.node_remapping[node_id], index : *index}
+				Node::ExtractResult{node_id : self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *node_id)], index : *index}
 			}
 			Node::ConstantInteger{value, type_id} =>
 			{
@@ -79,7 +99,7 @@ impl FuncletBuilder
 				let mut new_arguments = Vec::<NodeId>::new();
 				for argument in arguments.iter()
 				{
-					new_arguments.push(self.node_remapping[argument]);
+					new_arguments.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *argument)]);
 				}
 				Node::CallExternalCpu{external_function_id : *external_function_id, arguments : new_arguments.into_boxed_slice()}
 			}
@@ -88,12 +108,12 @@ impl FuncletBuilder
 				let mut new_arguments = Vec::<NodeId>::new();
 				for argument in arguments.iter()
 				{
-					new_arguments.push(self.node_remapping[argument]);
+					new_arguments.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *argument)]);
 				}
 				let mut new_dimensions = Vec::<NodeId>::new();
 				for dimension in dimensions.iter()
 				{
-					new_dimensions.push(self.node_remapping[dimension]);
+					new_dimensions.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *dimension)]);
 				}
 				Node::CallExternalGpuCompute{external_function_id : *external_function_id, arguments : new_arguments.into_boxed_slice(), dimensions : new_dimensions.into_boxed_slice()}
 			}
@@ -102,7 +122,7 @@ impl FuncletBuilder
 				let mut new_values = Vec::<NodeId>::new();
 				for value in values.iter()
 				{
-					new_values.push(self.node_remapping[value]);
+					new_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
 				}
 				Node::EncodeGpu{values : new_values.into_boxed_slice()}
 			}
@@ -111,7 +131,7 @@ impl FuncletBuilder
 				let mut new_values = Vec::<NodeId>::new();
 				for value in values.iter()
 				{
-					new_values.push(self.node_remapping[value]);
+					new_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
 				}
 				Node::SubmitGpu{values : new_values.into_boxed_slice()}
 			}
@@ -120,14 +140,14 @@ impl FuncletBuilder
 				let mut new_values = Vec::<NodeId>::new();
 				for value in values.iter()
 				{
-					new_values.push(self.node_remapping[value]);
+					new_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
 				}
 				Node::SubmitGpu{values : new_values.into_boxed_slice()}
 			}
 			_ => panic!("Unknown node")
 		};
 		let new_node_id = self.add_node(node);
-		self.node_remapping.insert(old_node_id, new_node_id);
+		self.node_remapping.insert(FuncletBuilderFramedNodeId(frame_id, old_node_id), new_node_id);
 		new_node_id
 	}
 
@@ -136,7 +156,7 @@ impl FuncletBuilder
 		self.tail_edge = Some(tail_edge);
 	}
 
-	pub fn set_tail_edge_from_old(&mut self, old_tail_edge : &TailEdge)
+	pub fn set_tail_edge_from_old(&mut self, frame_id : FuncletBuilderFrameId, old_tail_edge : &TailEdge)
 	{
 		let tail_edge = match old_tail_edge
 		{
@@ -145,7 +165,7 @@ impl FuncletBuilder
 				let mut new_return_values = Vec::<NodeId>::new();
 				for value in return_values.iter()
 				{
-					new_return_values.push(self.node_remapping[value]);
+					new_return_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
 				}
 				TailEdge::Return{return_values : new_return_values.into_boxed_slice()}
 			}
@@ -154,13 +174,13 @@ impl FuncletBuilder
 				let mut new_captured_arguments = Vec::<NodeId>::new();
 				for value in captured_arguments.iter()
 				{
-					new_captured_arguments.push(self.node_remapping[value]);
+					new_captured_arguments.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
 				}
 
 				let mut new_return_values = Vec::<NodeId>::new();
 				for value in return_values.iter()
 				{
-					new_return_values.push(self.node_remapping[value]);
+					new_return_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
 				}
 
 				TailEdge::Yield { funclet_ids : funclet_ids.clone(), captured_arguments : new_captured_arguments.into_boxed_slice(), return_values : new_return_values.into_boxed_slice() }
@@ -181,6 +201,6 @@ impl FuncletBuilder
 
 	pub fn build(mut self) -> Funclet
 	{
-		Funclet{kind : self.kind.unwrap(), input_types : self.input_types.into_boxed_slice(), input_resource_states : self.input_resource_states.into_boxed_slice(), output_types : self.output_types.into_boxed_slice(), output_resource_states : self.output_resource_states.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap()}
+		Funclet{kind : self.kind.unwrap(), input_types : self.input_types.into_boxed_slice(), input_resource_states : self.input_resource_states.into_boxed_slice(), output_types : self.output_types.into_boxed_slice(), output_resource_states : self.output_resource_states.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap(), local_meta_variables : BTreeMap::new()}
 	}
 }

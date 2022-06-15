@@ -12,6 +12,13 @@ pub struct Arena<T>
 
 impl<T> Arena<T>
 {
+	pub fn new() -> Self
+	{
+		let mut unused_ids = Vec::<usize>::new();
+		let mut next_id : usize = 0;
+		Self{elements : HashMap::<usize, T>::new(), unused_ids, next_id}
+	}
+
 	pub fn from_hash_map(elements : HashMap<usize, T>) -> Self
 	{
 		let mut unused_ids = Vec::<usize>::new();

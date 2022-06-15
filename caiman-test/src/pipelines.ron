@@ -116,6 +116,29 @@
 				],
 				tail_edge : Return(return_values : [0])
 			),
+			9 : (
+				kind : Inline,
+				input_types : [0],
+				output_types : [0],
+				nodes : [
+					Phi(index : 0),
+					ConstantInteger(value: 1, type_id : 0),
+					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
+					ExtractResult(node_id : 2, index : 0),
+				],
+				tail_edge : Return(return_values : [3])
+			),
+			10 : (
+				kind : MixedImplicit,
+				input_types : [0],
+				output_types : [0],
+				nodes : [
+					Phi(index : 0),
+					CallValueFunction(function_id : 0, arguments : [0]),
+					ExtractResult(node_id : 1, index : 0),
+				],
+				tail_edge : Return(return_values : [2])
+			),
 		},
 		external_cpu_functions : [
 			(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
@@ -145,6 +168,9 @@
 				")
 			)
 		],
+		value_functions : {
+			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9))
+		},
 		pipelines : [
 			(name : "pipeline_1", entry_funclet : 0), 
 			(name : "pipeline_with_gpu_gpu_communication", entry_funclet : 1),
@@ -153,6 +179,7 @@
 			(name : "pipeline_with_cpu_cpu_communication", entry_funclet : 4),
 			(name : "pipeline_with_single_gpu_call", entry_funclet : 5),
 			(name : "pipeline_with_yield_enter_loop_exit", entry_funclet : 6),
+			(name : "pipeline_with_value_function", entry_funclet : 10),
 			]
 	)
 )
