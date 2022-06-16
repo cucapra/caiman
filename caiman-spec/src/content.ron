@@ -1,13 +1,40 @@
 (
 	operations : [
 		(
+			name : "None",
+			inputs : [],
+			output : None,
+			language_set : (functional : true, scheduling: true, intrinsic : true),
+			has_local_side_effect : false
+		),
+		(
+			name : "Phi",
+			inputs : [
+				(name : "index", kind : Index, is_array : false),
+			],
+			output : Single,
+			language_set : (functional : true, scheduling: true, intrinsic : true),
+			has_local_side_effect : false
+		),
+		(
+			name : "ExtractResult",
+			inputs : [
+				(name : "node_id", kind : Operation, is_array : false),
+				(name : "index", kind : Index, is_array : false),
+			],
+			output : Single,
+			language_set : (functional : true, scheduling: true, intrinsic : true),
+			has_local_side_effect : false
+		),
+
+		(
 			name : "ConstantInteger",
 			inputs : [
 				(name : "value", kind : ImmediateI64, is_array : false),
 				(name : "type_id", kind : Type, is_array : false),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: false),
+			language_set : (functional : true, scheduling: false, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -17,7 +44,7 @@
 				(name : "type_id", kind : Type, is_array : false),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: false),
+			language_set : (functional : true, scheduling: false, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -27,7 +54,7 @@
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false),
+			language_set : (functional : true, scheduling: false, intrinsic : false),
 			has_local_side_effect : false
 		),
 
@@ -38,7 +65,7 @@
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false),
+			language_set : (functional : true, scheduling: false, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -49,7 +76,7 @@
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false),
+			language_set : (functional : true, scheduling: false, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -58,7 +85,7 @@
 				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true),
+			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
 		(
@@ -67,7 +94,7 @@
 				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true),
+			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
 		(
@@ -76,7 +103,7 @@
 				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true),
+			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
 
@@ -86,16 +113,42 @@
 				(name : "value", kind : Operation, is_array : false)
 			],
 			output : Single,
-			language_set : (functional : false, scheduling: true),
+			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
 		(
 			name : "EncodeCopy",
 			inputs : [
-				(name : "values", kind : Operation, is_array : true)
+				(name : "value", kind : Operation, is_array : false)
 			],
 			output : Single,
-			language_set : (functional : false, scheduling: true),
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "Submit",
+			inputs : [],
+			output : None,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "EncodeFence",
+			inputs : [
+				(name : "place", kind : Place, is_array : false)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "SyncFence",
+			inputs : [
+				(name : "place", kind : Place, is_array : false),
+				(name : "fence", kind : Operation, is_array : false)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
 	]

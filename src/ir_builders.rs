@@ -75,77 +75,7 @@ impl FuncletBuilder
 
 	pub fn add_node_from_old(&mut self, frame_id : FuncletBuilderFrameId, old_node_id : NodeId, old_node : &Node) -> NodeId
 	{
-		let node = match old_node
-		{
-			Node::Phi {index} =>
-			{
-				// Might want to rethink this
-				Node::Phi{index : *index}
-			}
-			Node::ExtractResult { node_id, index } =>
-			{
-				Node::ExtractResult{node_id : self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *node_id)], index : *index}
-			}
-			Node::ConstantInteger{value, type_id} =>
-			{
-				Node::ConstantInteger{value : *value, type_id : *type_id}
-			}
-			Node::ConstantUnsignedInteger{value, type_id} =>
-			{
-				Node::ConstantUnsignedInteger{value : *value, type_id : *type_id}
-			}
-			Node::CallExternalCpu { external_function_id, arguments } =>
-			{
-				let mut new_arguments = Vec::<NodeId>::new();
-				for argument in arguments.iter()
-				{
-					new_arguments.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *argument)]);
-				}
-				Node::CallExternalCpu{external_function_id : *external_function_id, arguments : new_arguments.into_boxed_slice()}
-			}
-			Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
-			{
-				let mut new_arguments = Vec::<NodeId>::new();
-				for argument in arguments.iter()
-				{
-					new_arguments.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *argument)]);
-				}
-				let mut new_dimensions = Vec::<NodeId>::new();
-				for dimension in dimensions.iter()
-				{
-					new_dimensions.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *dimension)]);
-				}
-				Node::CallExternalGpuCompute{external_function_id : *external_function_id, arguments : new_arguments.into_boxed_slice(), dimensions : new_dimensions.into_boxed_slice()}
-			}
-			Node::EncodeGpu{values} =>
-			{
-				let mut new_values = Vec::<NodeId>::new();
-				for value in values.iter()
-				{
-					new_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
-				}
-				Node::EncodeGpu{values : new_values.into_boxed_slice()}
-			}
-			Node::SubmitGpu{values} =>
-			{
-				let mut new_values = Vec::<NodeId>::new();
-				for value in values.iter()
-				{
-					new_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
-				}
-				Node::SubmitGpu{values : new_values.into_boxed_slice()}
-			}
-			Node::SyncLocal{values} =>
-			{
-				let mut new_values = Vec::<NodeId>::new();
-				for value in values.iter()
-				{
-					new_values.push(self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, *value)]);
-				}
-				Node::SubmitGpu{values : new_values.into_boxed_slice()}
-			}
-			_ => panic!("Unknown node")
-		};
+		let node = old_node.map_referenced_nodes(|node_id| self.node_remapping[& FuncletBuilderFramedNodeId(frame_id, node_id)]);
 		let new_node_id = self.add_node(node);
 		self.node_remapping.insert(FuncletBuilderFramedNodeId(frame_id, old_node_id), new_node_id);
 		new_node_id

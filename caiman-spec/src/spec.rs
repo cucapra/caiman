@@ -4,7 +4,8 @@ use serde_derive::{Serialize, Deserialize};
 pub struct LanguageSet
 {
 	pub functional : bool,
-	pub scheduling : bool
+	pub scheduling : bool,
+	pub intrinsic : bool
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -15,13 +16,14 @@ pub enum PlaceKind
 	Gpu,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum OperationInputKind
 {
 	Type,
 	Place,
 	ImmediateI64,
 	ImmediateU64,
+	Index,
 	Operation,
 	ExternalCpuFunction,
 	ExternalGpuFunction,
