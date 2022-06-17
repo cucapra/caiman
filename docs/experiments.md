@@ -123,4 +123,4 @@ Perhaps we could run an initial compute pass in `init()` and change `render()` t
 
 I'm unsure whether this would have a performance impact, but it might be worth exploring.
 
-Overall, I think we should try reordering render pass commands, and then develop a new example with more "back-and-forth" communication and try (de?)optimizing that. One potential example would be mipmap generation: given a dynamic, CPU-generated texture with no mipmaps, we would compute mipmap levels on the GPU, read them back onto the CPU and combine them into a mipmapped texture, then use them in a GPU render pass.
+Overall, I think we should try reordering render pass commands, and then try (de?)optimizing an example with more "back-and-forth" communication. One potential example would be `mipmap`, which computes mipmap levels on the GPU, reads them back onto the CPU, and combines them into a mipmapped texture, which it then uses in a GPU render pass. (Currently, it only generates the mipmaps once; we'd want to force it to generate mipmaps every frame, which could be justified by making the texture dynamic.)
