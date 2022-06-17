@@ -2,6 +2,7 @@ extern crate clap;
 use clap::{Arg, App, SubCommand};
 
 use caiman::frontend;
+use caiman::pretty_print;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -11,7 +12,8 @@ struct Arguments
 	input_path : String,
 	output_path : Option<String>,
 	explicate_only : bool,
-	print_codegen_debug_info : bool
+	print_codegen_debug_info : bool,
+    pretty_print : bool,
 }
 
 fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option<caiman::frontend::CompileOptions>)
@@ -56,6 +58,10 @@ fn explicate(input_file : &mut File, output_file : &mut File)
 	}
 }
 
+fn pretty_print(input_file : &mut File) {
+    caiman::pretty_print::print_file(input_file);
+}
+
 fn main()
 {
 	let arguments =
@@ -89,6 +95,13 @@ fn main()
 					.help("Only run schedule explication")
 					.takes_value(false)
 			)
+            .arg
+            (
+                Arg::with_name("pretty_print")
+                    .long("pretty")
+                    .help("Print a readable format of input file to stdout")
+                    .takes_value(false)
+            )
 			.arg
 			(
 				Arg::with_name("print_codegen_debug_info")
@@ -109,30 +122,42 @@ fn main()
 		};
 		let explicate_only = matches.is_present("explicate_only");
 		let print_codegen_debug_info = matches.is_present("print_codegen_debug_info");
-		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only, print_codegen_debug_info}
+		let pretty_print = matches.is_present("pretty_print");
+		Arguments {
+            input_path : input_match.unwrap().to_string(), 
+            output_path, 
+            explicate_only, 
+            print_codegen_debug_info, 
+            pretty_print,
+        }
 	};
 
 	let input_path = Path::new(& arguments.input_path);
-	let output_path = match & arguments.output_path
-	{
-		Some(output_path) => output_path.clone(),
-		None => String::from("a.out")
-	};
-	
+    let output_path = match & arguments.output_path
+    {
+        Some(output_path) => output_path.clone(),
+        None => String::from("a.out")
+    };
+
 	let mut input_file = match File::open(& input_path)
 	{
 		Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
 		Ok(file) => file
 	};
+    let mut output_file = File::create(output_path).unwrap();
 
-	let mut output_file = File::create(output_path).unwrap();
-	if arguments.explicate_only
-	{
-		explicate(&mut input_file, &mut output_file);
-	}
-	else
-	{
-		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
-		compile(&mut input_file, &mut output_file, Some(options));
-	}
+    if arguments.explicate_only
+    {
+        explicate(&mut input_file, &mut output_file);
+    }
+    else if arguments.pretty_print
+    {
+        pretty_print(&mut input_file);
+    }
+    else
+    {
+        let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
+        compile(&mut input_file, &mut output_file, Some(options));
+    }
+
 }

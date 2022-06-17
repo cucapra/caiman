@@ -4,10 +4,10 @@ use std::default::Default;
 use serde_derive::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct Definition
+pub struct Definition
 {
-	version : (u32, u32, u32),
-	program : ir::Program
+	pub version : (u32, u32, u32),
+	pub program : ir::Program
 }
 
 
