@@ -81,3 +81,46 @@ Broadly, our future experimental goals can be summarized into three categories:
 3) Examples written in Caiman itself
 
 TODO: Finish a description of each
+
+
+### Extending the WebGPU Experiments
+
+The WGPU examples `shadow`, `water`, and `boids` are more complex than the `cube` and `multicube` experiments. All three use multiple pipelines. `shadow` runs a shadow depth render pass for each light, then uses their depth attachments in the forward render pass to compute lighting. `water` uses three render passes: one to render the reflected terrain, one to render the normal terrain, and one to render the water. The water pass must read the color information written by the reflected terrain pass. Finally, `boids` runs a compute pass followed by a render pass; the render pass uses position and velocity information calculated in the compute pass. 
+
+I suspect that data dependencies between different passes make them these examples particularly sensitive to scheduling modifications. However, I believe most of the memory copies involved occur entirely within GPU memory, so I'm not sure whether they are relevant to Caiman. It may be worthwhile to develop an example with "back-and-forth" communication between the CPU and GPU.
+
+I believe we should investigate reordering render pass commands. Here's an example ordering from `shadow`: 
+```rust
+pass.set_bind_group(1, &self.entity_bind_group, &[entity.uniform_offset]);
+pass.set_index_buffer(entity.index_buf.slice(..), entity.index_format);
+pass.set_vertex_buffer(0, entity.vertex_buf.slice(..));
+pass.draw_indexed(0..entity.index_count as u32, 0, 0..1);
+```
+
+AFAIK the following ordering is equally correct: 
+```rust
+pass.set_index_buffer(entity.index_buf.slice(..), entity.index_format);
+pass.set_vertex_buffer(0, entity.vertex_buf.slice(..));
+pass.set_bind_group(1, &self.entity_bind_group, &[entity.uniform_offset]);
+pass.draw_indexed(0..entity.index_count as u32, 0, 0..1);
+```
+
+This may not have an impact if WGPU and/or the GPU driver are rescheduling the command buffers themselves. 
+
+One obvious deoptimization would be duplicating calls to `queue.write_buffer`, but I'm not a big fan of that idea since it's less of a scheduling change and more of a "do more work" change.
+
+Swapping `water`'s terrain pass order (doing normal terrain first, then reflected terrain) might impact performance, but I think such an impact would mostly result from changes in memory copies *within* the GPU.
+
+The `render()` method for `boids` looks like this: 
+ - The compute pass runs. The compute shader reads particle positions & velocities from an input buffer. It calculates new positions and velocities and writes them to an output buffer.
+ - The render pass runs. It reads positions and velocities for each instance from the output buffer.
+ - The input and output buffers are swapped (not physically, just logically by swapping bind groups)
+
+Perhaps we could run an initial compute pass in `init()` and change `render()` to the following:
+- The render pass runs.
+- The input and output buffers are swapped.
+- The compute pass runs. Its output will be used during the next frame's render pass.
+
+I'm unsure whether this would have a performance impact, but it might be worth exploring.
+
+Overall, I think we should try reordering render pass commands, and then develop a new example with more "back-and-forth" communication and try (de?)optimizing that. One potential example would be mipmap generation: given a dynamic, CPU-generated texture with no mipmaps, we would compute mipmap levels on the GPU, read them back onto the CPU and combine them into a mipmapped texture, then use them in a GPU render pass.
