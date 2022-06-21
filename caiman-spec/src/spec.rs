@@ -1,5 +1,15 @@
 use serde_derive::{Serialize, Deserialize};
 
+fn default_true() -> bool
+{
+	true
+}
+
+fn default_false() -> bool
+{
+	false
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LanguageSet
 {
@@ -35,7 +45,10 @@ pub struct OperationInput
 {
 	pub name : String,
 	pub kind : OperationInputKind,
-	pub is_array : bool
+	#[serde(default = "default_false")]
+	pub is_array : bool,
+	#[serde(default = "default_false")]
+	pub is_inferable : bool
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

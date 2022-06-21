@@ -17,16 +17,18 @@ use std::cmp::Reverse;
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum Value
 {
-	Retired,
-	LocalVariable(usize),
-	GpuBuffer(usize),
+	//Retired,
+	//LocalVariable(usize),
+	//GpuBuffer(usize),
+	Fence { place : ir::Place, submission_id : SubmissionId }
 }
 
+#[derive(Debug)]
 enum NodeResult
 {
-	Error,
-	Retired,
-	None,
+	//Error,
+	//Retired,
+	//None,
 	SingleOutput(Value),
 	MultipleOutput(Box<[Value]>),
 }
@@ -75,7 +77,9 @@ struct PlacementState
 	node_call_states : HashMap<ir::NodeId, Box<[usize]>>,
 	submit_node_submission_ids : HashMap<ir::NodeId, Option<SubmissionId>>,
 	pending_submission_node_ids : BinaryHeap<Reverse<ir::NodeId>>,
-	node_submission_node_ids : HashMap<ir::NodeId, ir::NodeId>
+	node_submission_node_ids : HashMap<ir::NodeId, ir::NodeId>,
+	last_submissions : HashMap<ir::Place, SubmissionId>,
+	node_results : HashMap<ir::NodeId, NodeResult>
 }
 
 impl PlacementState
@@ -210,6 +214,7 @@ impl<'program> CodeGen<'program>
 
 			match node
 			{
+				ir::Node::None => (),
 				ir::Node::Phi {index} =>
 				{
 					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(argument_variable_ids[*index as usize]));
@@ -291,26 +296,27 @@ impl<'program> CodeGen<'program>
 						}
 					}
 				}
-				ir::Node::SubmitGpu{values} =>
+				/*ir::Node::SubmitGpu{values} =>
 				{
-					for node_id in values.iter()
+					for (node_id, state) in placement_state.node_gpu_residency_states.iter_mut()
 					{
-						if let Some(GpuResidencyState::Encoded(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
+						* state = match state
 						{
-							let old = placement_state.node_submission_node_ids.insert(* node_id, current_node_id);
-							assert!(old.is_none());
-							placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(variable_id));
-						}
-						else
-						{
-							panic!("Submitted node is not gpu encoded");
+							GpuResidencyState::Encoded(variable_id) =>
+							{
+								let old = placement_state.node_submission_node_ids.insert(* node_id, current_node_id);
+								assert!(old.is_none());
+								//placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(* variable_id));
+								GpuResidencyState::Submitted(* variable_id)
+							}
+							_ => * state
 						}
 					}
 
 					let submission_id = self.code_generator.flush_submission();
 					placement_state.submit_node_submission_ids.insert(current_node_id, Some(submission_id));
 					placement_state.pending_submission_node_ids.push(Reverse(current_node_id));
-				}
+				}*/
 				ir::Node::SyncLocal{values} =>
 				{
 					let mut latest_submission_node_id_opt = None;
@@ -364,6 +370,59 @@ impl<'program> CodeGen<'program>
 						{
 							panic!("Locally synced node is not gpu submitted");
 						}
+					}
+				}
+
+				// New scheduling nodes
+				ir::Node::Submit { place } =>
+				{
+					match place
+					{
+						ir::Place::Gpu =>
+						{
+							for (node_id, state) in placement_state.node_gpu_residency_states.iter_mut()
+							{
+								* state = match state
+								{
+									GpuResidencyState::Encoded(variable_id) =>
+									{
+										let old = placement_state.node_submission_node_ids.insert(* node_id, current_node_id);
+										assert!(old.is_none());
+										//placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(* variable_id));
+										GpuResidencyState::Submitted(* variable_id)
+									}
+									_ => * state
+								}
+							}
+
+							let submission_id = self.code_generator.flush_submission();
+							placement_state.submit_node_submission_ids.insert(current_node_id, Some(submission_id));
+							placement_state.pending_submission_node_ids.push(Reverse(current_node_id));
+							
+							placement_state.last_submissions.insert(* place, submission_id);
+						}
+						_ => panic!("Unimplemented")
+					}
+				}
+				ir::Node::EncodeFence { place } =>
+				{
+					let fence_value = Value::Fence { place : * place, submission_id : placement_state.last_submissions[place] };
+					//self.last_submissions.insert()
+					placement_state.node_results.insert(current_node_id, NodeResult::SingleOutput(fence_value));
+				}
+				ir::Node::SyncFence { place : synced_place, fence } =>
+				{
+					// Only implemented for the local queue for now
+					assert_eq!(* synced_place, ir::Place::Local);
+					// To do: Need to update nodes
+					match placement_state.node_results.get(fence)
+					{
+						Some(NodeResult::SingleOutput(Value::Fence{place : fenced_place, submission_id})) =>
+						{
+							assert_eq!(* synced_place, ir::Place::Gpu);
+							self.code_generator.sync_submission(* submission_id);
+						}
+						_ => panic!("Expected fence")
 					}
 				}
 				_ => panic!("Unknown node")
