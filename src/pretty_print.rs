@@ -14,10 +14,13 @@ fn write_indent(oc: &mut dyn Write, indent: usize) -> std::io::Result<()>
     Ok(())
 }
 
-fn slice_to_string_delimiter<T>(
+fn slice_to_string_specific<T>(
     slice: &[T],
     to_string: &dyn Fn(&T) -> String,
     delimiter: String,
+    start: String,
+    end: String,
+    exclude_last: bool,
 ) -> String
 {
     let mut s = slice
@@ -25,17 +28,35 @@ fn slice_to_string_delimiter<T>(
         .map(to_string)
         .fold(String::new(), |acc, s| acc + &s + &delimiter);
     // Removing last delimiter
-    for i in 0..delimiter.len()
+    if exclude_last 
     {
-        s.pop();
+        for i in 0..delimiter.len()
+        {
+            s.pop();
+        }
     }
-    String::from("[") + &s + "]"
+    start + &s + end.as_str()
 }
 
 fn slice_to_string<T>(slice: &[T], to_string: &dyn Fn(&T) -> String)
     -> String
 {
-    slice_to_string_delimiter(slice, to_string, String::from(", "))
+    slice_to_string_specific(
+        slice, 
+        to_string, 
+        String::from(", "), 
+        String::from("["),
+        String::from("]"),
+        true,
+    )
+}
+
+fn funclet_name(num: usize) -> String {
+    format!("f{}", num)
+}
+
+fn node_name(num: usize) -> String {
+    format!("n{}", num)
 }
 
 fn write_function_type_generic<T>(
@@ -95,7 +116,8 @@ fn write_funclets(
 {
     for (num, funclet) in funclets.iter()
     {
-        write!(oc, "Funclet {} ({:?}) : ", num, funclet.kind)?;
+        let name = funclet_name(*num);
+        write!(oc, "Funclet {} ({:?}) : ", name, funclet.kind)?;
         if numbers_mode
         {
             write_function_type_numbers(
@@ -117,25 +139,35 @@ fn write_funclets(
         // There seem to be more things in the actual data
         // structure in ir.rs than there are in the RON file.
         // For now, I'll only print the nodes and tail edge.
-        write_indent(oc, 1)?;
-        write!(oc, "Nodes :\n")?;
-        for node in funclet.nodes.iter()
+        for (i, node) in funclet.nodes.iter().enumerate()
         {
-            write_indent(oc, 2)?;
+            write_indent(oc, 1)?;
             // Node-printing could be subject to change
-            write!(oc, "{:?}", node)?;
+            write!(oc, "{:?};", node)?;
             write!(oc, "\n")?;
         }
+        write_indent(oc, 1)?;
 
         write_indent(oc, 1)?;
-        let to_string = |b| slice_to_string(b, &|u: &usize| u.to_string());
+
+        let rv_to_string = |rv| 
+            slice_to_string(rv, &|u : &usize| u.to_string());
+        let f_to_string = |f| slice_to_string(f, &|u| funclet_name(*u));
+        let arg_to_string = |a| slice_to_string_specific(
+            a, 
+            &|u : &usize| u.to_string(),
+            String::from(", "), 
+            String::from("("), 
+            String::from(")"),
+            true,
+        );
         match &funclet.tail_edge
         {
             ir::TailEdge::Return {
                 return_values,
             } =>
             {
-                let return_vals_s = to_string(&return_values);
+                let return_vals_s = rv_to_string(&return_values);
                 write!(oc, "Return {}\n", &return_vals_s)?;
             }
             ir::TailEdge::Yield {
@@ -144,18 +176,16 @@ fn write_funclets(
                 return_values,
             } =>
             {
-                let funclet_ids_s = to_string(&funclet_ids);
-                let cap_args_s = to_string(&captured_arguments);
-                let return_vals_s = to_string(&return_values);
-                write!(oc, "Yield {}\n", return_vals_s)?;
-                write_indent(oc, 2)?;
-                write!(oc, "Funclet IDs: {} \n", funclet_ids_s)?;
-                write_indent(oc, 2)?;
-                write!(oc, "Captured Arguments: {} \n", cap_args_s)?;
+                let funclet_ids_s = f_to_string(&funclet_ids);
+                let cap_args_s = arg_to_string(&captured_arguments);
+                let return_vals_s = rv_to_string(&return_values);
+                write!(oc, "Yield {} ", return_vals_s)?;
+                write!(oc, "=> {}", funclet_ids_s)?;
+                write!(oc, "{}\n", cap_args_s)?;
             }
         }
 
-        write!(oc, "}}\n")?;
+        write!(oc, "}}\n\n")?;
     }
     Ok(())
 }
@@ -187,7 +217,7 @@ fn write_external_cpu_functions(
                 types_arena,
             )?;
         }
-        write!(oc, "\n")?;
+        write!(oc, ";\n")?;
     }
     Ok(())
 }
@@ -201,9 +231,8 @@ fn write_external_gpu_functions(
 {
     for func in funcs.iter()
     {
-        write!(oc, "GPU {} {{\n", func.name)?;
+        write!(oc, "GPU {} ({}) : ", func.name, func.entry_point)?;
 
-        write_indent(oc, 2)?;
         if numbers_mode
         {
             write_function_type_numbers(
@@ -221,32 +250,34 @@ fn write_external_gpu_functions(
                 types_arena,
             )?;
         }
-        write!(oc, "\n")?;
+        write!(oc, " {{\n")?;
 
-        write_indent(oc, 2)?;
-        write!(oc, "Entry point: {}\n", func.entry_point)?;
-
-        write_indent(oc, 2)?;
-        let resource_bindings_str = slice_to_string_delimiter(
+        let map_rb_type = |t : Option<usize>| 
+            t.map_or(String::from("_"), |u : usize| u.to_string());
+        write_indent(oc, 1)?;
+        let resource_bindings_str = slice_to_string_specific(
             &(*func.resource_bindings),
             &|rb| {
                 format!(
-                    "Group {}; Binding {}; {:?} -> {:?}",
-                    rb.group, rb.binding, rb.input, rb.output
+                    "[{}][{}] = {} -> {}",
+                    rb.group, rb.binding, 
+                    map_rb_type(rb.input), map_rb_type(rb.output),
                 )
             },
-            String::from(",\n    "),
+            String::from(";\n  "), 
+            String::from(""), 
+            String::from(""),
+            false,
         );
-        write!(oc, "{}\n", resource_bindings_str)?;
+        write!(oc, "{}", resource_bindings_str)?;
 
         // Shader module content seems inherently not pretty; it just looks
         // like a block of WGSL code, so I am not going to print it (for now)
-        //
+        
         //write_indent(oc, 2)?;
         //write!(oc, "Shader module content: {:?}\n",
         //func.shader_module_content)?;
-        write_indent(oc, 1)?;
-        write!(oc, "}}\n");
+        write!(oc, "\n}}\n");
     }
     Ok(())
 }
@@ -260,8 +291,11 @@ fn write_value_functions(
 {
     for (_, vf) in value_functions.iter()
     {
-        write_indent(oc, 1)?;
-        write!(oc, "ValueFunc {} : ", vf.name)?;
+        let default_funclet = vf.default_funclet_id.map_or(
+            String::from(""), 
+            funclet_name,
+        );
+        write!(oc, "ValueFunction {} ({}) : ", vf.name, default_funclet)?;
         if numbers_mode
         {
             write_function_type_numbers(
@@ -279,8 +313,7 @@ fn write_value_functions(
                 types_arena,
             )?;
         }
-        write!(oc, " (Default Funclet ID: {:?})", vf.default_funclet_id)?;
-        write!(oc, "\n")?;
+        write!(oc, ";\n")?;
     }
     Ok(())
 }
@@ -290,11 +323,10 @@ fn write_pipelines(
     pipelines: Vec<ir::Pipeline>,
 ) -> std::io::Result<()>
 {
-    write!(oc, "Pipelines:\n")?;
     for p in pipelines.iter()
     {
-        write_indent(oc, 1)?;
-        write!(oc, "{} [entry funclet {}]\n", p.name, p.entry_funclet)?;
+        let entry_funclet = funclet_name(p.entry_funclet);
+        write!(oc, "Pipeline {}({});\n", p.name, entry_funclet)?;
     }
     Ok(())
 }
@@ -306,7 +338,6 @@ fn write_program(
 ) -> std::io::Result<()>
 {
     write_funclets(oc, program.funclets, &program.types, numbers_mode)?;
-    write!(oc, "\n")?;
     write_external_cpu_functions(
         oc,
         program.external_cpu_functions,
@@ -342,7 +373,9 @@ fn write_definition(
     {
         write!(oc, "Warning: Version differs from pretty printer (0.0.1)")?;
     }
-    write!(oc, "Version: {}.{}.{}\n", v.0, v.1, v.2)?;
+    // Not going to write version for now (I imagine you wouldn't write
+    // a language's version name at the top of a file for it)
+    //write!(oc, "Version: {}.{}.{}\n", v.0, v.1, v.2)?;
     write_program(oc, definition.program, false);
     Ok(())
 }
