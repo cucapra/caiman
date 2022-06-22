@@ -1,3 +1,4 @@
+#![allow(warnings)]
 pub mod spec;
 mod spec_builder;
 pub mod content;

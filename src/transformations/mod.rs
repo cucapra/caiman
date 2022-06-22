@@ -1,3 +1,4 @@
+#![warn(warnings)]
 use crate::ir;
 use petgraph::prelude::*;
 use thiserror::Error;

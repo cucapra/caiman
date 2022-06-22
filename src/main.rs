@@ -1,3 +1,4 @@
+#![allow(warnings)]
 extern crate clap;
 use clap::{Arg, App, SubCommand};
 

@@ -1,3 +1,4 @@
+#![allow(warnings)]
 mod id_generator;
 mod arena;
 mod ir;
