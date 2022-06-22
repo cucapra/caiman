@@ -13,72 +13,69 @@ use crate::node_usage_analysis::*;
 use std::collections::BinaryHeap;
 use std::cmp::Reverse;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct LogicalTimestamp(usize);
+
+impl LogicalTimestamp
+{
+	fn new() -> Self
+	{
+		Self(0)
+	}
+
+	fn step(&mut self)
+	{
+		self.0 += 1;
+	}
+}
+
+impl Default for LogicalTimestamp
+{
+	fn default() -> Self
+	{
+		Self::new()
+	}
+}
+
 // This is a temporary hack
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum Value
 {
-	//Retired,
-	//LocalVariable(usize),
-	//GpuBuffer(usize),
-	Fence { place : ir::Place, submission_id : SubmissionId }
+	Slot,
+	Fence { place : ir::Place, timestamp : LogicalTimestamp }
 }
 
 #[derive(Debug)]
 enum NodeResult
 {
-	//Error,
-	//Retired,
-	//None,
+	None,
 	SingleOutput(Value),
 	MultipleOutput(Box<[Value]>),
 }
 
-#[derive(Debug, Clone, Copy)]
-enum GpuResidencyState
+// Records the most recent state of a place as known to the local coordinator
+#[derive(Debug, Default)]
+struct PlaceState
 {
-	Useable(usize),
-	Encoded(usize),
-	Submitted(usize)
-}
-
-// A hack
-fn gpu_residency_state_with_var_replaced(state : &GpuResidencyState, variable_id : usize) -> GpuResidencyState
-{
-	use GpuResidencyState::*;
-	match state
-	{
-		Useable(_) => Useable(variable_id),
-		Encoded(_) => Encoded(variable_id),
-		Submitted(_) => Submitted(variable_id),
-	}
-}
-
-#[derive(Debug, Clone, Copy)]
-enum LocalResidencyState
-{
-	Useable(usize),
-}
-
-fn local_residency_state_with_var_replaced(state : &LocalResidencyState, variable_id : usize) -> LocalResidencyState
-{
-	use LocalResidencyState::*;
-	match state
-	{
-		Useable(_) => Useable(variable_id),
-	}
+	timestamp : LogicalTimestamp,
+	//pending_submission_timestamps : BinaryHeap<Reverse<LogicalTimestamp>>,
+	pending_submissions : BTreeMap<LogicalTimestamp, SubmissionId>,
+	node_timestamps : BTreeMap<ir::NodeId, LogicalTimestamp>,
+	node_queue_stages : BTreeMap<ir::NodeId, ir::ResourceQueueStage>,
+	node_variable_ids : HashMap<ir::NodeId, usize>,
+	// A hack to match with the old code generator
+	node_call_states : HashMap<ir::NodeId, Box<[usize]>>,
+	//last_submission_timestamp_opt : Option<LogicalTimestamp>
 }
 
 #[derive(Debug, Default)]
 struct PlacementState
 {
-	node_gpu_residency_states : HashMap<ir::NodeId, GpuResidencyState>,
-	node_local_residency_states : HashMap<ir::NodeId, LocalResidencyState>,
-	// A hack to match with the old code generator
-	node_call_states : HashMap<ir::NodeId, Box<[usize]>>,
-	submit_node_submission_ids : HashMap<ir::NodeId, Option<SubmissionId>>,
-	pending_submission_node_ids : BinaryHeap<Reverse<ir::NodeId>>,
-	node_submission_node_ids : HashMap<ir::NodeId, ir::NodeId>,
-	last_submissions : HashMap<ir::Place, SubmissionId>,
+	//submit_node_submission_ids : HashMap<ir::NodeId, Option<SubmissionId>>,
+	//pending_submission_node_ids : BinaryHeap<Reverse<ir::NodeId>>,
+	//node_submission_node_ids : HashMap<ir::NodeId, ir::NodeId>,
+	//last_submissions : HashMap<ir::Place, SubmissionId>,
+	place_states : HashMap<ir::Place, PlaceState>, // as known to the coordinator
 	node_results : HashMap<ir::NodeId, NodeResult>
 }
 
@@ -86,55 +83,47 @@ impl PlacementState
 {
 	fn new() -> Self
 	{
-		Default::default()
+		let mut place_states = HashMap::<ir::Place, PlaceState>::new();
+		place_states.insert(ir::Place::Gpu, PlaceState{ timestamp : LogicalTimestamp(0), .. Default::default() });
+		place_states.insert(ir::Place::Local, PlaceState{ timestamp : LogicalTimestamp(0), .. Default::default() });
+		Self{ place_states, .. Default::default()}
+	}
+
+	fn update_node_state(&mut self, node_id : ir::NodeId, place : ir::Place, stage : ir::ResourceQueueStage, var_id : usize)
+	{
+		let place_state : &mut PlaceState = self.place_states.get_mut(& place).unwrap();
+		place_state.node_queue_stages.insert(node_id, stage);
+		place_state.node_variable_ids.insert(node_id, var_id);
+		place_state.node_timestamps.insert(node_id, place_state.timestamp);
+	}
+
+	fn get_var_ids(&self, node_ids : &[ir::NodeId], place : ir::Place) -> Option<Box<[usize]>>
+	{
+		let mut var_ids = Vec::<usize>::new();
+		let place_state : & PlaceState = self.place_states.get(& place).unwrap();
+		for node_id in node_ids.iter()
+		{
+			if let Some(& var_id) = place_state.node_variable_ids.get(node_id)
+			{
+				var_ids.push(var_id);
+			}
+			else
+			{
+				return None;
+			}
+		}
+		Some(var_ids.into_boxed_slice())
 	}
 
 	fn get_local_state_var_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[usize]>>
 	{
-		let mut var_ids = Vec::<usize>::new();
-		for node_id in node_ids.iter()
-		{
-			let var_id = match self.node_local_residency_states.get(node_id)
-			{
-				Some(LocalResidencyState::Useable(variable_id)) => *variable_id,
-				None => return None
-			};
-			var_ids.push(var_id);
-		}
-		Some(var_ids.into_boxed_slice())
+		self.get_var_ids(node_ids, ir::Place::Local)
 	}
 
 	fn get_gpu_state_var_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[usize]>>
 	{
-		let mut var_ids = Vec::<usize>::new();
-		for node_id in node_ids.iter()
-		{
-			let var_id = match self.node_gpu_residency_states.get(node_id)
-			{
-				Some(GpuResidencyState::Useable(variable_id)) => *variable_id,
-				Some(GpuResidencyState::Encoded(variable_id)) => *variable_id,
-				Some(GpuResidencyState::Submitted(variable_id)) => *variable_id,
-				None => return None
-			};
-			var_ids.push(var_id);
-		}
-		Some(var_ids.into_boxed_slice())
+		self.get_var_ids(node_ids, ir::Place::Gpu)
 	}
-
-	/*fn encode_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
-	{
-		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Encoded);
-	}
-
-	fn submit_gpu(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
-	{
-		self.transition_gpu(node_ids, funclet_builder, GpuResidencyState::Submitted);
-	}
-
-	fn sync_local(&mut self, node_ids : &[ir::NodeId], funclet_builder : &mut ir_builders::FuncletBuilder)
-	{
-
-	}*/
 }
 
 /*#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -191,6 +180,92 @@ impl<'program> CodeGen<'program>
 		self.print_codegen_debug_info = to;
 	}
 
+	fn advance_local_time(&mut self, placement_state : &mut PlacementState) -> LogicalTimestamp
+	{
+		placement_state.place_states.get_mut(& ir::Place::Local).unwrap().timestamp.step();
+		let local_timestamp = placement_state.place_states.get(& ir::Place::Local).unwrap().timestamp;
+		local_timestamp
+	}
+
+	fn advance_known_place_time(&mut self, placement_state : &mut PlacementState, place : ir::Place, known_timestamp : LogicalTimestamp) -> Option<LogicalTimestamp>
+	{
+		assert!(place != ir::Place::Local);
+		let local_timestamp = placement_state.place_states[& ir::Place::Local].timestamp;
+		// The local coordinator is always the latest time because all events are caused by the coordinator
+		assert!(known_timestamp <= local_timestamp);
+
+		let place_state : &mut PlaceState = placement_state.place_states.get_mut(& place).unwrap();
+
+		// Return if we already know of this or a later time
+
+		if place_state.timestamp >= known_timestamp
+		{
+			return Some(place_state.timestamp);
+		}
+		
+		place_state.timestamp = known_timestamp;
+
+		// Update submissions for this place
+		let mut last_submission_id_opt : Option<SubmissionId> = None;
+		let mut expired_timestamps = Vec::<LogicalTimestamp>::new();
+		for (& timestamp, & submission_id) in place_state.pending_submissions.iter()
+		{
+			if timestamp <= known_timestamp
+			{
+				expired_timestamps.push(timestamp);
+				//self.sync_submission(submission_id);
+				// Relies on iteration order of a BTreeMap
+				last_submission_id_opt = Some(submission_id);
+			}
+			else
+			{
+				// Also relies on iteration order
+				break
+			}
+		}
+
+		for & timestamp in expired_timestamps.iter()
+		{
+			place_state.pending_submissions.remove(& timestamp);
+		}
+
+		if let Some(submission_id) = last_submission_id_opt
+		{
+			self.code_generator.sync_submission(submission_id);
+		}
+
+		// Transition resource stages
+
+		let place_state = placement_state.place_states.get_mut(& place).unwrap();
+		for (node_id, stage) in place_state.node_queue_stages.iter_mut()
+		{
+			match stage
+			{
+				ir::ResourceQueueStage::Submitted if place_state.node_timestamps[node_id] <= known_timestamp =>
+				{
+					* stage = ir::ResourceQueueStage::Ready;
+					place_state.node_timestamps.insert(* node_id, local_timestamp);
+				}
+				_ => ()
+			}
+		}
+
+		None
+	}
+
+	/*fn transition_resource_stages(&mut self, placement_state : &mut PlacementState, place : ir::Place, from_stage : ir::ResourceQueueStage, to_stage : ir::ResourceQueueStage, timestamp : LogicalTimestamp)
+	{
+		let place_state = placement_state.place_states.get_mut(& place).unwrap();
+		for (node_id, stage) in place_state.node_queue_stages.iter_mut()
+		{
+			if * stage == from_stage
+			{
+				* stage = to_stage;
+				place_state.node_timestamps.insert(* node_id, timestamp);
+			}
+		}
+	}*/
+
 	fn compile_funclet(&mut self, funclet_id : ir::FuncletId, argument_variable_ids : &[usize], pipeline_context : &mut PipelineContext)
 	{
 		let mut placement_state = PlacementState::new();
@@ -217,33 +292,35 @@ impl<'program> CodeGen<'program>
 				ir::Node::None => (),
 				ir::Node::Phi {index} =>
 				{
-					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(argument_variable_ids[*index as usize]));
+					placement_state.update_node_state(current_node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, argument_variable_ids[*index as usize]);
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
-					let node_call_state_opt = placement_state.node_call_states.get(node_id);
-					assert!(node_call_state_opt.is_some(), "Funclet #{} at node #{} {:?}: Node #{} is not the result of a call {:?}", funclet_id, current_node_id, node, node_id, placement_state);
-					let node_call_state = node_call_state_opt.unwrap();
+					let mut exists = false;
 
-					if let Some(local_residency_state) = placement_state.node_local_residency_states.get(node_id).map(|x| *x)
+					for place in [ir::Place::Local, ir::Place::Gpu]
 					{
-						placement_state.node_local_residency_states.insert(current_node_id, local_residency_state_with_var_replaced(& local_residency_state, node_call_state[* index as usize]));
+						let place_state : &mut PlaceState = placement_state.place_states.get_mut(& place).unwrap();
+						if let Some(node_call_state) = place_state.node_call_states.get(node_id)
+						{
+							exists = true;
+							place_state.node_queue_stages.insert(current_node_id, place_state.node_queue_stages[node_id]);
+							place_state.node_variable_ids.insert(current_node_id, node_call_state[*index as usize]);
+							place_state.node_timestamps.insert(current_node_id, place_state.node_timestamps[node_id]);
+						}
 					}
-
-					if let Some(gpu_residency_state) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
-					{
-						placement_state.node_gpu_residency_states.insert(current_node_id, gpu_residency_state_with_var_replaced(& gpu_residency_state, node_call_state[* index as usize]));
-					}
+					
+					assert!(exists, "Funclet #{} at node #{} {:?}: Node #{} is not the result of a call {:?}", funclet_id, current_node_id, node, node_id, placement_state);
 				}
 				ir::Node::ConstantInteger{value, type_id} =>
 				{
 					let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
-					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(variable_id));
+					placement_state.update_node_state(current_node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, variable_id);
 				}
 				ir::Node::ConstantUnsignedInteger{value, type_id} =>
 				{
 					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
-					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(variable_id));
+					placement_state.update_node_state(current_node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, variable_id);
 				}
 				ir::Node::CallValueFunction { function_id, arguments } =>
 				{
@@ -260,8 +337,13 @@ impl<'program> CodeGen<'program>
 					assert!(argument_var_ids_opt.is_some(), "#{} {:?}: Not all arguments are local {:?} {:?}", current_node_id, node, arguments, placement_state);
 					let argument_var_ids = argument_var_ids_opt.unwrap();
 					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, & argument_var_ids);
-					placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(usize::MAX));
-					placement_state.node_call_states.insert(current_node_id, raw_outputs);
+					//placement_state.node_local_residency_states.insert(current_node_id, LocalResidencyState::Useable(usize::MAX));
+					//placement_state.node_call_states.insert(current_node_id, raw_outputs);
+
+					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Local).unwrap();
+					place_state.node_queue_stages.insert(current_node_id, ir::ResourceQueueStage::Ready);
+					place_state.node_call_states.insert(current_node_id, raw_outputs);
+					place_state.node_timestamps.insert(current_node_id, place_state.timestamp);
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
@@ -277,18 +359,19 @@ impl<'program> CodeGen<'program>
 					let dimensions_slice : &[usize] = & dimension_var_ids;
 					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
 
-					placement_state.node_gpu_residency_states.insert(current_node_id, GpuResidencyState::Encoded(usize::MAX));
-					placement_state.node_call_states.insert(current_node_id, raw_outputs);
+					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
+					place_state.node_queue_stages.insert(current_node_id, ir::ResourceQueueStage::Encoded);
+					place_state.node_call_states.insert(current_node_id, raw_outputs);
+					place_state.node_timestamps.insert(current_node_id, place_state.timestamp);
 				}
 				ir::Node::EncodeGpu{values} =>
 				{
 					for node_id in values.iter()
 					{
-						if let Some(LocalResidencyState::Useable(variable_id)) = placement_state.node_local_residency_states.get(node_id).map(|x| *x)
+						if let Some(variable_id) = placement_state.place_states[& ir::Place::Local].node_variable_ids.get(node_id).map(|x| *x)
 						{
 							let new_variable_id = self.code_generator.make_on_gpu_copy(variable_id).unwrap();
-							let old = placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Encoded(new_variable_id));
-							assert!(old.is_none());
+							placement_state.update_node_state(* node_id, ir::Place::Gpu, ir::ResourceQueueStage::Encoded, new_variable_id);
 						}
 						else
 						{
@@ -296,30 +379,39 @@ impl<'program> CodeGen<'program>
 						}
 					}
 				}
-				/*ir::Node::SubmitGpu{values} =>
+				ir::Node::SyncLocal{values} =>
 				{
-					for (node_id, state) in placement_state.node_gpu_residency_states.iter_mut()
+					let local_timestamp = self.advance_local_time(&mut placement_state);
+					let mut latest_timestamp = LogicalTimestamp(0);
 					{
-						* state = match state
+						let gpu_place_state = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
+						for node_id in values.iter()
 						{
-							GpuResidencyState::Encoded(variable_id) =>
-							{
-								let old = placement_state.node_submission_node_ids.insert(* node_id, current_node_id);
-								assert!(old.is_none());
-								//placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(* variable_id));
-								GpuResidencyState::Submitted(* variable_id)
-							}
-							_ => * state
+							latest_timestamp = latest_timestamp.max(gpu_place_state.node_timestamps[node_id]);
 						}
 					}
 
-					let submission_id = self.code_generator.flush_submission();
-					placement_state.submit_node_submission_ids.insert(current_node_id, Some(submission_id));
-					placement_state.pending_submission_node_ids.push(Reverse(current_node_id));
-				}*/
-				ir::Node::SyncLocal{values} =>
-				{
-					let mut latest_submission_node_id_opt = None;
+					assert!(latest_timestamp <= local_timestamp);
+
+					if let Some(newer_timestamp) = self.advance_known_place_time(&mut placement_state, ir::Place::Gpu, latest_timestamp)
+					{
+						assert!(newer_timestamp <= local_timestamp);
+						// nothing
+					}
+
+					for node_id in values.iter()
+					{
+						let new_variable_id = 
+						{
+							let gpu_place_state = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
+							self.code_generator.make_local_copy(gpu_place_state.node_variable_ids[node_id]).unwrap()
+						};
+
+						placement_state.update_node_state(* node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, new_variable_id);
+					}
+
+
+					/*let mut latest_submission_node_id_opt = None;
 					for node_id in values.iter()
 					{
 						let submission_node_id = *placement_state.node_submission_node_ids.get(node_id).unwrap();
@@ -356,73 +448,79 @@ impl<'program> CodeGen<'program>
 
 					for node_id in values.iter()
 					{
-						if let Some(GpuResidencyState::Submitted(variable_id)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
+						if let Some(GpuResidencyState::Submitted(variable_id, _)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
 						{
 							// This is a wart with how this code is designed...
 							// It should eventually get cleaned up once the scheduling language implementationm is reworked
 							assert!(variable_id != usize::MAX, "Cannot synchronize directly on a gpu call because there is no value.  This is a wart resulting from the old scheduling language being value-centric.  This will get fixed.");
-							placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Useable(variable_id));
+							placement_state.update_node_state(* node_id, ir::Place::Gpu, ir::ResourceQueueStage::Ready, variable_id);
 							let new_variable_id = self.code_generator.make_local_copy(variable_id).unwrap();
-							let old = placement_state.node_local_residency_states.insert(* node_id, LocalResidencyState::Useable(new_variable_id));
+							placement_state.update_node_state(* node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, new_variable_id);
 							assert!(old.is_none());
 						}
 						else
 						{
 							panic!("Locally synced node is not gpu submitted");
 						}
-					}
+					}*/
 				}
 
 				// New scheduling nodes
 				ir::Node::Submit { place } =>
 				{
+					let local_timestamp = self.advance_local_time(&mut placement_state);
 					match place
 					{
 						ir::Place::Gpu =>
 						{
-							for (node_id, state) in placement_state.node_gpu_residency_states.iter_mut()
+							let place_state = placement_state.place_states.get_mut(place).unwrap();
+							for (node_id, stage) in place_state.node_queue_stages.iter_mut()
 							{
-								* state = match state
+								match stage
 								{
-									GpuResidencyState::Encoded(variable_id) =>
+									ir::ResourceQueueStage::Encoded =>
 									{
-										let old = placement_state.node_submission_node_ids.insert(* node_id, current_node_id);
-										assert!(old.is_none());
-										//placement_state.node_gpu_residency_states.insert(* node_id, GpuResidencyState::Submitted(* variable_id));
-										GpuResidencyState::Submitted(* variable_id)
+										* stage = ir::ResourceQueueStage::Submitted;
+										place_state.node_timestamps.insert(* node_id, local_timestamp);
 									}
-									_ => * state
+									_ => ()
 								}
 							}
 
 							let submission_id = self.code_generator.flush_submission();
-							placement_state.submit_node_submission_ids.insert(current_node_id, Some(submission_id));
-							placement_state.pending_submission_node_ids.push(Reverse(current_node_id));
-							
-							placement_state.last_submissions.insert(* place, submission_id);
+							place_state.pending_submissions.insert(local_timestamp, submission_id);
 						}
 						_ => panic!("Unimplemented")
 					}
 				}
 				ir::Node::EncodeFence { place } =>
 				{
-					let fence_value = Value::Fence { place : * place, submission_id : placement_state.last_submissions[place] };
-					//self.last_submissions.insert()
+					let local_timestamp = self.advance_local_time(&mut placement_state);
+					let fence_value = Value::Fence { place : * place, timestamp : local_timestamp };
 					placement_state.node_results.insert(current_node_id, NodeResult::SingleOutput(fence_value));
 				}
 				ir::Node::SyncFence { place : synced_place, fence } =>
 				{
+					let local_timestamp = self.advance_local_time(&mut placement_state);
 					// Only implemented for the local queue for now
 					assert_eq!(* synced_place, ir::Place::Local);
 					// To do: Need to update nodes
-					match placement_state.node_results.get(fence)
+					let value_opt = match placement_state.node_results.get(fence)
 					{
-						Some(NodeResult::SingleOutput(Value::Fence{place : fenced_place, submission_id})) =>
+						Some(NodeResult::SingleOutput(Value::Fence{place, timestamp})) =>
 						{
-							assert_eq!(* synced_place, ir::Place::Gpu);
-							self.code_generator.sync_submission(* submission_id);
+							Some(Value::Fence{place : * place, timestamp : * timestamp})
 						}
 						_ => panic!("Expected fence")
+					};
+
+					if let Some(Value::Fence{place : fenced_place, timestamp}) = value_opt
+					{
+						assert_eq!(fenced_place, ir::Place::Gpu);
+						if let Some(newer_timestamp) = self.advance_known_place_time(&mut placement_state, fenced_place, timestamp)
+						{
+							panic!("Have already synced to a later time")
+						}
 					}
 				}
 				_ => panic!("Unknown node")
