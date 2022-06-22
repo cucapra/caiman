@@ -107,17 +107,93 @@ fn write_function_type_numbers(
     )
 }
 
+fn usize_slice_borders_string(arguments: &[usize], l: String, r: String) -> String 
+{
+    slice_to_string_specific(
+        arguments, 
+        &|u : &usize| u.to_string(), 
+        String::from(", "), 
+        l,
+        r,
+        true,
+    )
+}
+
+fn args_to_string(arguments: &[usize]) -> String
+{
+    usize_slice_borders_string(arguments, String::from("("), String::from(")"))
+}
+
+fn string_of_node(
+    node: &ir::Node, 
+    types_arena: &Arena<ir::Type>,
+    value_functions_arena: &Arena<ir::ValueFunction>,
+    cpu_functions: &Vec<ir::ExternalCpuFunction>,
+    gpu_functions: &Vec<ir::ExternalGpuFunction>,
+) -> String
+{
+    match node 
+    {
+        ir::Node::Phi {index} => format!("phi {}", index),
+        ir::Node::ExtractResult { node_id, index } => { 
+            format!("extract {} into [{}]", node_name(*node_id), index)
+        },
+        ir::Node::ConstantInteger{value, type_id} => {
+            format!("const {} : {:?}", value, &types_arena[&type_id])
+        },
+        ir::Node::ConstantUnsignedInteger{value, type_id} => {
+            format!("uconst {} : {:?}", value, &types_arena[&type_id])
+        },
+        ir::Node::CallValueFunction { function_id, arguments } => {
+            format!(
+                "{}{}", 
+                (&value_functions_arena[&function_id]).name, 
+                args_to_string(arguments),
+            )
+        },
+        ir::Node::CallExternalCpu { external_function_id, arguments } => {
+            format!(
+                "{}{}", 
+                (cpu_functions[*external_function_id]).name,
+                args_to_string(arguments),
+            )
+        },
+        ir::Node::CallExternalGpuCompute {
+            external_function_id, 
+            arguments, 
+            dimensions
+        } => {
+            format!(
+                "{}{}{}", 
+                (gpu_functions[*external_function_id]).name,
+                usize_slice_borders_string(
+                    dimensions, 
+                    String::from("<"),
+                    String::from(">"),
+                ),
+                args_to_string(arguments),
+            )
+        },
+        _ => String::from("TODO")
+    }
+}
+
 fn write_funclets(
     oc: &mut dyn Write,
     funclets: Arena<ir::Funclet>,
     types_arena: &Arena<ir::Type>,
     numbers_mode: bool,
+    value_functions_arena : &Arena<ir::ValueFunction>,
+    cpu_functions: &Vec<ir::ExternalCpuFunction>,
+    gpu_functions: &Vec<ir::ExternalGpuFunction>,
 ) -> std::io::Result<()>
 {
     for (num, funclet) in funclets.iter()
     {
-        let name = funclet_name(*num);
-        write!(oc, "Funclet {} ({:?}) : ", name, funclet.kind)?;
+        write!(oc, "Funclet {} ", funclet_name(*num))?;
+        // Not sure if writing funclet kind should be done
+        //write!(oc, "({:?}) ", funclet.kind)?;
+        write!(oc, ": ")?;
         if numbers_mode
         {
             write_function_type_numbers(
@@ -143,19 +219,28 @@ fn write_funclets(
         {
             write_indent(oc, 1)?;
             // Node-printing could be subject to change
-            write!(oc, "{:?};", node)?;
+            write!(
+                oc, "{} = {};", 
+                node_name(i), 
+                string_of_node(
+                    node, 
+                    types_arena, 
+                    value_functions_arena,
+                    cpu_functions,
+                    gpu_functions,
+                ),
+            )?;
             write!(oc, "\n")?;
         }
-        write_indent(oc, 1)?;
 
         write_indent(oc, 1)?;
 
         let rv_to_string = |rv| 
-            slice_to_string(rv, &|u : &usize| u.to_string());
+            slice_to_string(rv, &|u : &usize| node_name(*u));
         let f_to_string = |f| slice_to_string(f, &|u| funclet_name(*u));
         let arg_to_string = |a| slice_to_string_specific(
             a, 
-            &|u : &usize| u.to_string(),
+            &|u| node_name(*u),
             String::from(", "), 
             String::from("("), 
             String::from(")"),
@@ -337,7 +422,15 @@ fn write_program(
     numbers_mode: bool,
 ) -> std::io::Result<()>
 {
-    write_funclets(oc, program.funclets, &program.types, numbers_mode)?;
+    write_funclets(
+        oc, 
+        program.funclets, 
+        &program.types, 
+        numbers_mode,
+        &program.value_functions,
+        &program.external_cpu_functions,
+        &program.external_gpu_functions,
+    )?;
     write_external_cpu_functions(
         oc,
         program.external_cpu_functions,
