@@ -38,6 +38,10 @@ mod funclet {
             .collect();
 
         funclet.nodes = new_nodes.into_boxed_slice();
+        funclet.tail_edge = funclet
+            .tail_edge
+            .map_referenced_nodes(|referenced| inverse[&referenced]);
+
         Ok(())
     }
 }
@@ -51,3 +55,6 @@ pub fn apply(program: &mut ir::Program) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

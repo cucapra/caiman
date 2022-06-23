@@ -34,7 +34,7 @@ fn write_ir_definition(output_file : &mut File, specification : &spec::Spec)
 	//GpuTaskEnd{ task_node_id : NodeId, local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
 ";
 
-	write!(output_file, "#[derive(Serialize, Deserialize, Debug, Clone)]\n");
+	write!(output_file, "#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]\n");
 	write!(output_file, "pub enum Node\n{{");
 	write!(output_file, "{}", built_in_node_string);
 	for operation in specification.operations.iter()

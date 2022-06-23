@@ -97,7 +97,7 @@ pub enum Type
 
 // Local Meta Variables are used to serve as ids for when types need to relate to each other
 // This allows them to do so without refering directly to an input, output, or node position
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum LocalMetaVariable
 {
 	Resource,
@@ -106,7 +106,7 @@ pub enum LocalMetaVariable
 
 pub use generated::Node;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum TailEdge
 {
 	Return { return_values : Box<[NodeId]> },
@@ -124,13 +124,26 @@ impl TailEdge {
 	pub fn for_each_referenced_node<F>(&self, mut f: F) where F: FnMut(NodeId) -> () {
 		match self {
 			Self::Return { return_values } => {
-				for &id in return_values.iter() {
-					f(id)
-				}
+				return_values.iter().for_each(|&id| f(id));
 			}
 			Self::Yield { return_values, captured_arguments, ..} => {
-				for &id in return_values.iter().chain(captured_arguments.iter()) {
-					f(id)
+				return_values.iter().chain(captured_arguments.iter()).map(|&id| f(id));
+			}
+		}
+	}
+	pub fn map_referenced_nodes<F>(&self, mut f: F) -> Self where F: FnMut(NodeId) -> NodeId {
+		match self {
+			Self::Return { return_values } => {
+				let new_rvals: Vec<NodeId> = return_values.iter().map(|&id| f(id)).collect();
+				Self::Return { return_values: new_rvals.into_boxed_slice() }
+			}
+			Self::Yield { return_values, captured_arguments, funclet_ids } => {
+				let new_rvals: Vec<NodeId> = return_values.iter().map(|&id| f(id)).collect();
+				let new_cargs: Vec<NodeId> = captured_arguments.iter().map(|&id| f(id)).collect();
+				Self::Yield { 
+					return_values: new_rvals.into_boxed_slice(), 
+					captured_arguments: new_cargs.into_boxed_slice(),
+					funclet_ids: funclet_ids.clone()
 				}
 			}
 		}
@@ -152,7 +165,7 @@ impl FuncletKind
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Funclet
 {
 	#[serde(default = "FuncletKind::easy_default")]
