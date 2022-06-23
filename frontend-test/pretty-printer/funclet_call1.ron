@@ -1,0 +1,39 @@
+(
+	version : (0, 0, 1),
+	program : (
+		types : {0:U8},
+		funclets : {
+			0 : (
+				kind : MixedImplicit,
+				input_types : [0],
+				output_types : [0],
+				nodes : [
+					Phi(index : 0),
+					ConstantInteger(value: 1, type_id : 0),
+					CallExternalCpu(external_function_id : 0, arguments : [0]),
+					ExtractResult(node_id : 2, index : 0),
+					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
+					ExtractResult(node_id : 4, index : 0)
+				],
+				tail_edge : Return(return_values : [5])
+			),
+		},
+		external_cpu_functions : [
+			(name : "foo", input_types : [0], output_types : [0])
+		],
+		external_gpu_functions : [
+			(
+				name : "bar", 
+        input_types : [0], 
+        output_types : [0], 
+        entry_point : "main", 
+        resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+				shader_module_content : Wgsl(""),
+			)
+		],
+		value_functions : {
+		},
+		pipelines : [
+    ]
+	)
+)
