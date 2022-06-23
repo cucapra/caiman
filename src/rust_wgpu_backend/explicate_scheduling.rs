@@ -291,7 +291,8 @@ impl NodeResourceTracker
 				}
 			}
 
-			funclet_builder.add_node(ir::Node::SubmitGpu{values : encoded_node_depedencies.into_boxed_slice()});
+			funclet_builder.add_node(ir::Node::Submit{place : ir::Place::Gpu});
+			//funclet_builder.add_node(ir::Node::SubmitGpu{values : encoded_node_depedencies.into_boxed_slice()});
 		}
 
 		if should_sync && sync_node_dependencies.len() > 0
@@ -626,11 +627,11 @@ impl<'program> Explicator<'program>
 				{
 					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
 				}
-				ir::Node::SubmitGpu{values} =>
+				/*ir::Node::SubmitGpu{values} =>
 				{
 					function_state.node_resource_tracker.encode_gpu(& remap_nodes(& function_state.funclet_builder, frame_id, values), &mut function_state.funclet_builder);
 					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
-				}
+				}*/
 				ir::Node::SyncLocal{values} =>
 				{
 					function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, values), &mut function_state.funclet_builder);
