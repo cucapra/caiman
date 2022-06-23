@@ -107,11 +107,12 @@ fn write_function_type_numbers(
     )
 }
 
-fn usize_slice_borders_string(arguments: &[usize], l: String, r: String) -> String 
+fn usize_node_slice_borders_string(arguments: &[usize], l: String, r: String) 
+    -> String 
 {
     slice_to_string_specific(
         arguments, 
-        &|u : &usize| u.to_string(), 
+        &|u : &usize| node_name(*u), 
         String::from(", "), 
         l,
         r,
@@ -121,7 +122,11 @@ fn usize_slice_borders_string(arguments: &[usize], l: String, r: String) -> Stri
 
 fn args_to_string(arguments: &[usize]) -> String
 {
-    usize_slice_borders_string(arguments, String::from("("), String::from(")"))
+    usize_node_slice_borders_string(
+        arguments, 
+        String::from("("), 
+        String::from(")")
+    )
 }
 
 fn string_of_node(
@@ -166,7 +171,7 @@ fn string_of_node(
             format!(
                 "{}{}{}", 
                 (gpu_functions[*external_function_id]).name,
-                usize_slice_borders_string(
+                usize_node_slice_borders_string(
                     dimensions, 
                     String::from("<"),
                     String::from(">"),

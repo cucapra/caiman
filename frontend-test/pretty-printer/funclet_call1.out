@@ -1,0 +1,18 @@
+Funclet f0 : [U8] -> [U8] {
+  n0 = phi 0;
+  n1 = const 1 : U8;
+  n2 = foo(n0);
+  n3 = extract n2 into [0];
+  n4 = bar<n1, n1, n1>(n3);
+  n5 = extract n4 into [0];
+  Return [n5]
+}
+
+CPU foo : [U8] -> [U8];
+
+GPU bar (main) : [U8] -> [U8] {
+  [0][0] = 0 -> _;
+  [0][1] = _ -> 0;
+  
+}
+
