@@ -1,0 +1,13 @@
+(
+	version : (0, 0, 1),
+	program : (
+		types : {},
+		funclets : {},
+		external_cpu_functions : [],
+		external_gpu_functions : [],
+		value_functions : {},
+		pipelines : [
+			(name : "pipeline_1", entry_funclet : 0), 
+    ]
+	)
+)

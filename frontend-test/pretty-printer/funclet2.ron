@@ -1,0 +1,27 @@
+(
+	version : (0, 0, 1),
+	program : (
+		types : {0:I32, 1:F32},
+		funclets : {
+			0 : (
+				kind : MixedImplicit,
+				input_types : [0],
+				output_types : [1],
+				nodes : [
+					Phi(index : 0),
+					ConstantInteger(value: 42, type_id : 1),
+					ExtractResult(node_id : 1, index : 0),
+				],
+				tail_edge : Return(return_values : [2])
+			),
+		},
+		external_cpu_functions : [
+		],
+		external_gpu_functions : [
+		],
+		value_functions : {
+		},
+		pipelines : [
+    ]
+	)
+)

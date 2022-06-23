@@ -1,0 +1,7 @@
+Funclet f0 : [I32] -> [F32] {
+  n0 = phi 0;
+  n1 = const 42 : F32;
+  n2 = extract n1 into [0];
+  Return [n2]
+}
+

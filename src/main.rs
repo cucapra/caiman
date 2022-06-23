@@ -133,31 +133,33 @@ fn main()
 	};
 
 	let input_path = Path::new(& arguments.input_path);
-    let output_path = match & arguments.output_path
-    {
-        Some(output_path) => output_path.clone(),
-        None => String::from("a.out")
-    };
-
 	let mut input_file = match File::open(& input_path)
 	{
 		Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
 		Ok(file) => file
 	};
-    let mut output_file = File::create(output_path).unwrap();
 
-    if arguments.explicate_only
-    {
-        explicate(&mut input_file, &mut output_file);
-    }
-    else if arguments.pretty_print
+    if arguments.pretty_print 
     {
         pretty_print(&mut input_file);
     }
     else
     {
-        let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
-        compile(&mut input_file, &mut output_file, Some(options));
-    }
+        let output_path = match & arguments.output_path
+        {
+            Some(output_path) => output_path.clone(),
+            None => String::from("a.out")
+        };
+        let mut output_file = File::create(output_path).unwrap();
 
+        if arguments.explicate_only
+        {
+            explicate(&mut input_file, &mut output_file);
+        }
+        else
+        {
+            let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
+            compile(&mut input_file, &mut output_file, Some(options));
+        }
+    }
 }

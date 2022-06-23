@@ -302,7 +302,7 @@ fn write_external_cpu_functions(
                 types_arena,
             )?;
         }
-        write!(oc, ";\n")?;
+        write!(oc, ";\n\n")?;
     }
     Ok(())
 }
@@ -362,7 +362,7 @@ fn write_external_gpu_functions(
         //write_indent(oc, 2)?;
         //write!(oc, "Shader module content: {:?}\n",
         //func.shader_module_content)?;
-        write!(oc, "\n}}\n");
+        write!(oc, "\n}}\n\n");
     }
     Ok(())
 }
@@ -398,7 +398,7 @@ fn write_value_functions(
                 types_arena,
             )?;
         }
-        write!(oc, ";\n")?;
+        write!(oc, ";\n\n")?;
     }
     Ok(())
 }
@@ -437,21 +437,18 @@ fn write_program(
         &program.types,
         numbers_mode,
     )?;
-    write!(oc, "\n")?;
     write_external_gpu_functions(
         oc,
         program.external_gpu_functions,
         &program.types,
         numbers_mode,
     )?;
-    write!(oc, "\n")?;
     write_value_functions(
         oc,
         program.value_functions,
         &program.types,
         numbers_mode,
     )?;
-    write!(oc, "\n")?;
     write_pipelines(oc, program.pipelines)?;
     Ok(())
 }
