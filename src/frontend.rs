@@ -26,7 +26,7 @@ pub enum CompileError
 		#[from]
 		source: ron::de::Error 
 	},
-	#[error("failed to apply transformations: {source}")]
+	#[error("failed to apply transformation: {source}")]
 	Transformation {
 		#[from]
 		source: crate::transformations::Error 
@@ -38,9 +38,9 @@ pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileO
 {
 	let mut definition: Definition = ron::from_str(&input_string)?;
 	assert_eq!(definition.version, (0, 0, 1));
-	crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
 	crate::transformations::apply(&mut definition.program)?;
-	let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
+	crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
+	let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
 	if let Some(options) = options_opt
 	{
 		codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
@@ -54,7 +54,8 @@ pub fn explicate_ron_definition(input_string : &str, options : Option<CompileOpt
 	let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
 	let mut definition: Definition = ron::from_str(&input_string)?;
 	assert_eq!(definition.version, (0, 0, 1));
+	crate::transformations::apply(&mut definition.program)?;
 	crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
-	let output_string_result = ron::ser::to_string_pretty(& definition, pretty);
+	let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
 	Ok(output_string_result.unwrap())
 }

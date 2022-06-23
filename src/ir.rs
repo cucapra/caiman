@@ -120,7 +120,22 @@ pub enum TailEdge
 	//CallGpuCoordinator { callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
 	//CallGpuWorker{ callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
 }
-
+impl TailEdge {
+	pub fn for_each_referenced_node<F>(&self, mut f: F) where F: FnMut(NodeId) -> () {
+		match self {
+			Self::Return { return_values } => {
+				for &id in return_values.iter() {
+					f(id)
+				}
+			}
+			Self::Yield { return_values, captured_arguments, ..} => {
+				for &id in return_values.iter().chain(captured_arguments.iter()) {
+					f(id)
+				}
+			}
+		}
+	}
+}
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind
 {
