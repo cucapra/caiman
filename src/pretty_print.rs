@@ -66,8 +66,22 @@ fn write_function_type_generic<T>(
     to_string: &dyn Fn(&T) -> String,
 ) -> std::io::Result<()>
 {
-    let input_s = slice_to_string(input_types, to_string);
-    let output_s = slice_to_string(output_types, to_string);
+    let input_s = slice_to_string_specific(
+        input_types, 
+        to_string,
+        String::from(", "), 
+        String::from("("),
+        String::from(")"),
+        true,
+    );
+    let output_s = slice_to_string_specific(
+        output_types, 
+        to_string,
+        String::from(", "), 
+        String::from("("),
+        String::from(")"),
+        true,
+    );
     write!(oc, "{} -> {}", input_s, output_s)?;
     Ok(())
 }
@@ -258,15 +272,28 @@ fn write_funclets(
 
         write_indent(oc, 1)?;
 
-        let rv_to_string = |rv| 
-            slice_to_string(rv, &|u : &usize| node_name(*u));
-        let f_to_string = |f| slice_to_string(f, &|u| funclet_name(*u));
+        let rv_to_string = |rv| slice_to_string_specific(
+            rv, 
+            &|u : &usize| node_name(*u),
+            String::from(", "), 
+            String::from(""), 
+            String::from(""),
+            true,
+        );
+        let f_to_string = |f| slice_to_string_specific(
+            f, 
+            &|u| funclet_name(*u),
+            String::from(", "), 
+            String::from(""), 
+            String::from(""),
+            true,
+        );
         let arg_to_string = |a| slice_to_string_specific(
             a, 
             &|u| node_name(*u),
             String::from(", "), 
-            String::from("("), 
-            String::from(")"),
+            String::from(""), 
+            String::from(""),
             true,
         );
         match &funclet.tail_edge
@@ -288,7 +315,7 @@ fn write_funclets(
                 let cap_args_s = arg_to_string(&captured_arguments);
                 let return_vals_s = rv_to_string(&return_values);
                 write!(oc, "Yield {} ", return_vals_s)?;
-                write!(oc, "{{{} => {}}}", cap_args_s, funclet_ids_s)?;
+                write!(oc, "{{{} => {}}}\n", cap_args_s, funclet_ids_s)?;
             }
         }
 

@@ -1,10 +1,61 @@
 use std::str::FromStr;
+use crate::ast::*;
+
+// MACROS:
+// Expr* gives you a Vec<Expr> as does Expr+
+// Expr? gives you an Option<Expr>
+// parens "(...)" creates a new nonterminal real quick; remember to put
+//  angle brackets around everything that you want inside it
+
 
 grammar;
 
-pub Term: i32 = {
-    <n:Num> => n,
-    "(" <t:Term> ")" => t,
-};
+Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
 
-Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
+pub Declaration: Declaration = {
+  <Inline> "Funclet" <Id> <TypeAnnotation> "{" <Node*> <Tail> "}"
+      => Declaration::Funclet(<>),
+  "CPU" <Id> <TypeAnnotation> ";" 
+      => Declaration::CPU(<>),
+  "ValueFunction" <Id> <("(" <Id> ")")?> <TypeAnnotation> ";"
+      => Declaration::ValueFunction(<>),
+  "Pipeline" <Id> "(" <Id> ")" ";" 
+      => Declaration::Pipeline(<>),
+}
+
+TypeAnnotation: FuncType = { 
+  ":" <t1: Type> "->" <t2: Type> 
+      => (vec![t1], vec![t2]),
+  ":" "(" <CommaList<Type>> ")" "->" "(" <CommaList<Type>> ")" => (<>),
+}
+
+Tail: FuncletTail = {
+  "Return" <CommaList<Id>> => FuncletTail::Return(<>),
+  "Yield" <CommaList<Id>> "{" <CommaList<Id>> "=>" <CommaList<Id>> "}"
+      => FuncletTail::Yield(<>),
+}
+
+NodeType: NodeType = {
+  "Phi" <Num> => NodeType::Phi(<>),
+}
+
+Node: Node = { <Id> "=" <NodeType> ";" => (<>) }
+
+Inline: bool = { <o: "Inline"?> => o.is_some() }
+
+Num: usize = { <r"[0-9]+"> => usize::from_str(<>).unwrap() }
+
+Type: Type = {
+  "I32" => Type::I32,
+}
+
+CommaList<T>: Vec<T> = {
+  <mut v: (<T> ",")*> <e: T?> => match e { 
+      None => v, 
+      Some(e) => {
+          v.push(e);
+          v
+      },
+  }
+}
+
