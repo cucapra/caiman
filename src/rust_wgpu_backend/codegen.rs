@@ -54,6 +54,8 @@ enum NodeResult
 	None,
 	SingleOutput(Data),
 	MultipleOutput(Box<[Data]>),
+	ExternalGpuCall{ outputs : Box<[usize]> },
+	ExternalCpuCall{ outputs : Box<[usize]> }
 }
 
 // Records the most recent state of a place as known to the local coordinator
@@ -66,7 +68,7 @@ struct PlaceState
 	node_queue_stages : BTreeMap<ir::NodeId, ir::ResourceQueueStage>,
 	node_variable_ids : HashMap<ir::NodeId, usize>,
 	// A hack to match with the old code generator
-	node_call_states : HashMap<ir::NodeId, Box<[usize]>>,
+	//node_call_states : HashMap<ir::NodeId, Box<[usize]>>,
 	//last_submission_timestamp_opt : Option<LogicalTimestamp>
 }
 
@@ -294,21 +296,24 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
-					let mut exists = false;
-
-					for place in [ir::Place::Local, ir::Place::Gpu]
+					match & placement_state.node_results[node_id]
 					{
-						let place_state : &mut PlaceState = placement_state.place_states.get_mut(& place).unwrap();
-						if let Some(node_call_state) = place_state.node_call_states.get(node_id)
+						NodeResult::ExternalCpuCall{outputs} =>
 						{
-							exists = true;
+							let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Local).unwrap();
 							place_state.node_queue_stages.insert(current_node_id, place_state.node_queue_stages[node_id]);
-							place_state.node_variable_ids.insert(current_node_id, node_call_state[*index as usize]);
+							place_state.node_variable_ids.insert(current_node_id, outputs[*index as usize]);
 							place_state.node_timestamps.insert(current_node_id, place_state.node_timestamps[node_id]);
 						}
+						NodeResult::ExternalGpuCall{outputs} =>
+						{
+							let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
+							place_state.node_queue_stages.insert(current_node_id, place_state.node_queue_stages[node_id]);
+							place_state.node_variable_ids.insert(current_node_id, outputs[*index as usize]);
+							place_state.node_timestamps.insert(current_node_id, place_state.node_timestamps[node_id]);
+						}
+						_ => panic!("Funclet #{} at node #{} {:?}: Node #{} is not the result of a call {:?}", funclet_id, current_node_id, node, node_id, placement_state)
 					}
-					
-					assert!(exists, "Funclet #{} at node #{} {:?}: Node #{} is not the result of a call {:?}", funclet_id, current_node_id, node, node_id, placement_state);
 				}
 				ir::Node::ConstantInteger{value, type_id} =>
 				{
@@ -340,8 +345,9 @@ impl<'program> CodeGen<'program>
 
 					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Local).unwrap();
 					place_state.node_queue_stages.insert(current_node_id, ir::ResourceQueueStage::Ready);
-					place_state.node_call_states.insert(current_node_id, raw_outputs);
 					place_state.node_timestamps.insert(current_node_id, place_state.timestamp);
+
+					placement_state.node_results.insert(current_node_id, NodeResult::ExternalCpuCall{outputs : raw_outputs});
 				}
 				ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 				{
@@ -359,8 +365,9 @@ impl<'program> CodeGen<'program>
 
 					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
 					place_state.node_queue_stages.insert(current_node_id, ir::ResourceQueueStage::Encoded);
-					place_state.node_call_states.insert(current_node_id, raw_outputs);
 					place_state.node_timestamps.insert(current_node_id, place_state.timestamp);
+
+					placement_state.node_results.insert(current_node_id, NodeResult::ExternalGpuCall{outputs : raw_outputs});
 				}
 				ir::Node::EncodeGpu{values} =>
 				{
