@@ -39,9 +39,12 @@ impl Default for LogicalTimestamp
 
 // This is a temporary hack
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum Value
+enum Data
 {
-	Slot,
+	// A slot binds resources in a place to a value
+	// In a mixed language, they can be used as values
+	Slot { value : ir::NodeId, place : ir::Place },
+	ValueInstance,
 	Fence { place : ir::Place, timestamp : LogicalTimestamp }
 }
 
@@ -49,8 +52,8 @@ enum Value
 enum NodeResult
 {
 	None,
-	SingleOutput(Value),
-	MultipleOutput(Box<[Value]>),
+	SingleOutput(Data),
+	MultipleOutput(Box<[Data]>),
 }
 
 // Records the most recent state of a place as known to the local coordinator
@@ -58,7 +61,6 @@ enum NodeResult
 struct PlaceState
 {
 	timestamp : LogicalTimestamp,
-	//pending_submission_timestamps : BinaryHeap<Reverse<LogicalTimestamp>>,
 	pending_submissions : BTreeMap<LogicalTimestamp, SubmissionId>,
 	node_timestamps : BTreeMap<ir::NodeId, LogicalTimestamp>,
 	node_queue_stages : BTreeMap<ir::NodeId, ir::ResourceQueueStage>,
@@ -71,10 +73,6 @@ struct PlaceState
 #[derive(Debug, Default)]
 struct PlacementState
 {
-	//submit_node_submission_ids : HashMap<ir::NodeId, Option<SubmissionId>>,
-	//pending_submission_node_ids : BinaryHeap<Reverse<ir::NodeId>>,
-	//node_submission_node_ids : HashMap<ir::NodeId, ir::NodeId>,
-	//last_submissions : HashMap<ir::Place, SubmissionId>,
 	place_states : HashMap<ir::Place, PlaceState>, // as known to the coordinator
 	node_results : HashMap<ir::NodeId, NodeResult>
 }
@@ -381,11 +379,32 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::SyncLocal{values} =>
 				{
+					for node_id in values.iter()
+					{
+						let new_variable_id = 
+						{
+							let gpu_place_state = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
+							assert_eq!(gpu_place_state.node_queue_stages[node_id], ir::ResourceQueueStage::Ready);
+							self.code_generator.make_local_copy(gpu_place_state.node_variable_ids[node_id]).unwrap()
+						};
+
+						placement_state.update_node_state(* node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, new_variable_id);
+					}
+				}
+
+				// Syncs to earliest legal point that is available
+				ir::Node::SyncEarliest{to_place, from_place, nodes} =>
+				{
+					// Only implemented for the local queue for now
+					assert_eq!(* to_place, ir::Place::Local);
+
+					// This requires sophistication, but it's sophistication the backend will have for a while?
+
 					let local_timestamp = self.advance_local_time(&mut placement_state);
 					let mut latest_timestamp = LogicalTimestamp(0);
 					{
-						let gpu_place_state = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-						for node_id in values.iter()
+						let gpu_place_state = placement_state.place_states.get_mut(from_place).unwrap();
+						for node_id in nodes.iter()
 						{
 							latest_timestamp = latest_timestamp.max(gpu_place_state.node_timestamps[node_id]);
 						}
@@ -393,78 +412,12 @@ impl<'program> CodeGen<'program>
 
 					assert!(latest_timestamp <= local_timestamp);
 
-					if let Some(newer_timestamp) = self.advance_known_place_time(&mut placement_state, ir::Place::Gpu, latest_timestamp)
+					if let Some(newer_timestamp) = self.advance_known_place_time(&mut placement_state, * from_place, latest_timestamp)
 					{
 						assert!(newer_timestamp <= local_timestamp);
 						// nothing
 					}
-
-					for node_id in values.iter()
-					{
-						let new_variable_id = 
-						{
-							let gpu_place_state = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-							self.code_generator.make_local_copy(gpu_place_state.node_variable_ids[node_id]).unwrap()
-						};
-
-						placement_state.update_node_state(* node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, new_variable_id);
-					}
-
-
-					/*let mut latest_submission_node_id_opt = None;
-					for node_id in values.iter()
-					{
-						let submission_node_id = *placement_state.node_submission_node_ids.get(node_id).unwrap();
-						while placement_state.pending_submission_node_ids.len() > 0
-						{
-							if let Some(Reverse(pending_submission_node_id)) = placement_state.pending_submission_node_ids.peek().map(|x| *x)
-							{
-								if pending_submission_node_id < submission_node_id
-								{
-									placement_state.pending_submission_node_ids.pop();
-								}
-								else if pending_submission_node_id == submission_node_id
-								{
-									placement_state.pending_submission_node_ids.pop();
-									latest_submission_node_id_opt = Some(pending_submission_node_id);
-									break
-								}
-							}
-							else
-							{
-								break
-							}
-						}
-					}
-					
-					if let Some(submission_node_id) = latest_submission_node_id_opt
-					{
-						if let Some(submission_id) = placement_state.submit_node_submission_ids[& submission_node_id]
-						{
-							self.code_generator.sync_submission(submission_id);
-						}
-						placement_state.submit_node_submission_ids.insert(submission_node_id, None);
-					}
-
-					for node_id in values.iter()
-					{
-						if let Some(GpuResidencyState::Submitted(variable_id, _)) = placement_state.node_gpu_residency_states.get(node_id).map(|x| *x)
-						{
-							// This is a wart with how this code is designed...
-							// It should eventually get cleaned up once the scheduling language implementationm is reworked
-							assert!(variable_id != usize::MAX, "Cannot synchronize directly on a gpu call because there is no value.  This is a wart resulting from the old scheduling language being value-centric.  This will get fixed.");
-							placement_state.update_node_state(* node_id, ir::Place::Gpu, ir::ResourceQueueStage::Ready, variable_id);
-							let new_variable_id = self.code_generator.make_local_copy(variable_id).unwrap();
-							placement_state.update_node_state(* node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, new_variable_id);
-							assert!(old.is_none());
-						}
-						else
-						{
-							panic!("Locally synced node is not gpu submitted");
-						}
-					}*/
 				}
-
 				// New scheduling nodes
 				ir::Node::Submit { place } =>
 				{
@@ -496,7 +449,7 @@ impl<'program> CodeGen<'program>
 				ir::Node::EncodeFence { place } =>
 				{
 					let local_timestamp = self.advance_local_time(&mut placement_state);
-					let fence_value = Value::Fence { place : * place, timestamp : local_timestamp };
+					let fence_value = Data::Fence { place : * place, timestamp : local_timestamp };
 					placement_state.node_results.insert(current_node_id, NodeResult::SingleOutput(fence_value));
 				}
 				ir::Node::SyncFence { place : synced_place, fence } =>
@@ -507,14 +460,14 @@ impl<'program> CodeGen<'program>
 					// To do: Need to update nodes
 					let value_opt = match placement_state.node_results.get(fence)
 					{
-						Some(NodeResult::SingleOutput(Value::Fence{place, timestamp})) =>
+						Some(NodeResult::SingleOutput(Data::Fence{place, timestamp})) =>
 						{
-							Some(Value::Fence{place : * place, timestamp : * timestamp})
+							Some(Data::Fence{place : * place, timestamp : * timestamp})
 						}
 						_ => panic!("Expected fence")
 					};
 
-					if let Some(Value::Fence{place : fenced_place, timestamp}) = value_opt
+					if let Some(Data::Fence{place : fenced_place, timestamp}) = value_opt
 					{
 						assert_eq!(fenced_place, ir::Place::Gpu);
 						if let Some(newer_timestamp) = self.advance_known_place_time(&mut placement_state, fenced_place, timestamp)
@@ -562,11 +515,6 @@ impl<'program> CodeGen<'program>
 		assert!(old.is_none());
 	}
 
-	/*fn generate_pipeline_stage(&mut self, pipeline_context : &mut PipelineContext, parent_stage_id_opt : Option<usize>) -> usize
-	{
-
-	}*/
-
 	fn generate_cpu_function(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
 		let entry_funclet = & self.program.funclets[& entry_funclet_id];
@@ -589,22 +537,6 @@ impl<'program> CodeGen<'program>
 				self.code_generator.end_funclet();
 			}
 		}
-
-		/*match & entry_funclet.tail_edge
-		{
-			ir::TailEdge::Return {return_values : _} =>
-			{
-				let argument_variable_ids = self.code_generator.begin_oneshot_entry_funclet(&entry_funclet.input_types, &entry_funclet.output_types);
-				self.compile_funclet(entry_funclet_id, & argument_variable_ids, &mut pipeline_context);
-				self.code_generator.end_funclet();
-			}
-
-			ir::TailEdge::Yield {funclet_ids : _, captured_arguments : _, return_values : _} => 
-			{
-				()
-			}
-			//self.code_generator.begin_corecursive_base_funclet(pipeline_name, &entry_funclet.input_types, &entry_funclet.output_types),
-		};*/
 
 		self.code_generator.emit_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
 		

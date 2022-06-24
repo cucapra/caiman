@@ -29,7 +29,9 @@ struct NodeResourceTracker
 	active_encoding_node_set : BTreeSet::<ir::NodeId>,
 	//submitted_node_map : HashMap::<ir::NodeId, ir::NodeId>,
 	node_gpu_residency_state : HashMap<ir::NodeId, GpuResidencyState>,
-	locally_resident_node_set : HashSet<ir::NodeId>
+	//gpu_fence : BTreeMap<ir::NodeId>,
+	locally_resident_node_set : HashSet<ir::NodeId>,
+	most_recent_gpu_fence : Option<ir::NodeId>
 }
 
 impl NodeResourceTracker
@@ -297,10 +299,18 @@ impl NodeResourceTracker
 
 		if should_sync && sync_node_dependencies.len() > 0
 		{
+			/*if should_submit
+			{
+				let fence_id = funclet_builder.add_node(ir::Node::EncodeFence{place : ir::Place::Gpu});
+				funclet_builder.add_node(ir::Node::SyncFence{place : ir::Place::Local, fence : fence_id});
+			}*/
+
 			for & node_id in sync_node_dependencies.iter()
 			{
 				self.node_gpu_residency_state.insert(node_id, GpuResidencyState::Useable);
 			}
+			
+			funclet_builder.add_node(ir::Node::SyncEarliest{to_place : ir::Place::Local, from_place : ir::Place::Gpu, nodes : sync_node_dependencies.clone().into_boxed_slice()});
 			funclet_builder.add_node(ir::Node::SyncLocal{values : sync_node_dependencies.into_boxed_slice()});
 		}
 	}
@@ -634,6 +644,13 @@ impl<'program> Explicator<'program>
 				}*/
 				ir::Node::SyncLocal{values} =>
 				{
+
+					/*// Should do a check first to find an earlier fence if it exists
+					let fence_id = function_state.funclet_builder.add_node(ir::Node::EncodeFence{place : ir::Place::Gpu});
+					function_state.funclet_builder.add_node(ir::Node::SyncFence{place : ir::Place::Local, fence : fence_id});*/
+
+					function_state.funclet_builder.add_node(ir::Node::SyncEarliest{to_place : ir::Place::Local, from_place : ir::Place::Gpu, nodes : values.clone()});
+
 					function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, values), &mut function_state.funclet_builder);
 					let new_node_id = function_state.funclet_builder.add_node_from_old(frame_id, current_node_id, & node);
 				}

@@ -1,5 +1,7 @@
 (
 	operations : [
+		// Essential nodes
+		// These are mostly artifacts of program encoding
 		(
 			name : "None",
 			inputs : [],
@@ -26,7 +28,6 @@
 			language_set : (functional : true, scheduling: true, intrinsic : true),
 			has_local_side_effect : false
 		),
-
 		(
 			name : "ConstantInteger",
 			inputs : [
@@ -47,6 +48,9 @@
 			language_set : (functional : true, scheduling: false, intrinsic : true),
 			has_local_side_effect : false
 		),
+
+		// Value function nodes
+		// Unlikely to have any meaning when evaluated
 		(
 			name : "CallValueFunction",
 			inputs : [
@@ -58,6 +62,8 @@
 			has_local_side_effect : false
 		),
 
+		// Intrinsic nodes
+		// exposes functionality that should be used with caution to implement other functionality
 		(
 			name : "CallExternalCpu",
 			inputs : [
@@ -79,13 +85,16 @@
 			language_set : (functional : true, scheduling: false, intrinsic : true),
 			has_local_side_effect : false
 		),
+
+		// Old scheduling nodes
+		// Likely to disappear
 		(
 			name : "SyncLocal",
 			inputs : [
 				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, intrinsic : true),
+			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -94,35 +103,57 @@
 				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, intrinsic : true),
+			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
 
+		// These are convenience instructions that rely on codegen doing some questionable magic
+		// Don't expect these to be predictable
+		// It's possible for them to do the worst thing possible that is still legal without knowing the future
 		(
-			name : "Hole",
-			inputs : [],
+			name : "AllocTemporary",
+			inputs : [
+				(name : "place", kind : Place),
+				(name : "value", kind : Operation),
+			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
+		(
+			name : "SyncEarliest",
+			inputs : [
+				(name : "to_place", kind : Place),
+				(name : "from_place", kind : Place),
+				(name : "nodes", kind : Operation, is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
 
+		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(
 			name : "EncodeDo",
 			inputs : [
+				(name : "place", kind : Place),
 				(name : "value", kind : Operation),
 				(name : "inputs", kind : Operation, is_array : true, is_inferable : true),
 				(name : "outputs", kind : Operation, is_array : true, is_inferable : true)
 			],
-			output : Single,
+			output : None,
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
 		(
 			name : "EncodeCopy",
 			inputs : [
-				(name : "value", kind : Operation)
+				(name : "place", kind : Place),
+				(name : "value", kind : Operation),
+				(name : "input", kind : Operation, is_inferable : true),
+				(name : "output", kind : Operation, is_inferable : true)
 			],
-			output : Single,
+			output : None,
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
