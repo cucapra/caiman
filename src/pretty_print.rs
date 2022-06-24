@@ -141,7 +141,8 @@ fn string_of_node(
     {
         ir::Node::Phi {index} => format!("phi {}", index),
         ir::Node::ExtractResult { node_id, index } => { 
-            format!("extract {} into [{}]", node_name(*node_id), index)
+            let s = format!("extract {}", node_name(*node_id));
+            if *index == 0 { s } else { format!("{}[{}]", s, index) }
         },
         ir::Node::ConstantInteger{value, type_id} => {
             format!("const {} : {:?}", value, &types_arena[&type_id])
@@ -183,6 +184,18 @@ fn string_of_node(
     }
 }
 
+// This is to make the printing deterministic!
+fn funclets_arena_to_vector(a: &Arena<ir::Funclet>) -> Vec<&ir::Funclet>
+{
+    let len = a.iter().count();
+    let mut v = Vec::new();
+    for i in 0..len
+    {
+        v.push(&a[&i]);
+    }
+    v
+}
+
 fn write_funclets(
     oc: &mut dyn Write,
     funclets: Arena<ir::Funclet>,
@@ -193,9 +206,10 @@ fn write_funclets(
     gpu_functions: &Vec<ir::ExternalGpuFunction>,
 ) -> std::io::Result<()>
 {
-    for (num, funclet) in funclets.iter()
+    let funclets_vec = funclets_arena_to_vector(&funclets);
+    for (num, funclet) in funclets_vec.iter().enumerate()
     {
-        write!(oc, "Funclet {} ", funclet_name(*num))?;
+        write!(oc, "Funclet {} ", funclet_name(num))?;
         // Not sure if writing funclet kind should be done
         //write!(oc, "({:?}) ", funclet.kind)?;
         write!(oc, ": ")?;
@@ -270,8 +284,7 @@ fn write_funclets(
                 let cap_args_s = arg_to_string(&captured_arguments);
                 let return_vals_s = rv_to_string(&return_values);
                 write!(oc, "Yield {} ", return_vals_s)?;
-                write!(oc, "=> {}", funclet_ids_s)?;
-                write!(oc, "{}\n", cap_args_s)?;
+                write!(oc, "{{{} => {}}}", cap_args_s, funclet_ids_s)?;
             }
         }
 

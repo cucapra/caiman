@@ -1,0 +1,36 @@
+(
+	version : (0, 0, 1),
+	program : (
+		types : {0:U32},
+		funclets : {
+			0 : (
+				kind : MixedImplicit,
+				input_types : [0],
+				output_types : [0],
+				nodes : [
+					Phi(index : 0),
+					ConstantUnsignedInteger(value: 42, type_id : 0),
+					ExtractResult(node_id : 1, index : 0),
+				],
+				tail_edge : Yield(funclet_ids : [1], captured_arguments : [1], return_values : [2])
+			),
+			1 : (
+				kind : MixedImplicit,
+				input_types : [],
+				output_types : [],
+				nodes : [
+          Phi(index: 0),
+				],
+				tail_edge : Return(return_values: [0])
+			),
+		},
+		external_cpu_functions : [
+		],
+		external_gpu_functions : [
+		],
+		value_functions : {
+		},
+		pipelines : [
+    ]
+	)
+)

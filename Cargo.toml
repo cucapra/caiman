@@ -17,6 +17,7 @@ naga = { version = "0.8", features = ["wgsl-in", "wgsl-out", "spv-in", "spv-out"
 
 [build-dependencies]
 caiman-spec = { path = "caiman-spec" }
+caiman-frontend = { path = "caiman-frontend" }
 
 [dev-dependencies]
 caiman-ref = { path = "caiman-ref" }

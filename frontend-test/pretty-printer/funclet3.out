@@ -1,0 +1,11 @@
+Funclet f0 : [U32] -> [U32] {
+  n0 = phi 0;
+  n1 = uconst 42 : U32;
+  n2 = extract n1;
+  Yield [n2] {(n1) => [f1]}}
+
+Funclet f1 : [] -> [] {
+  n0 = phi 0;
+  Return [n0]
+}
+
