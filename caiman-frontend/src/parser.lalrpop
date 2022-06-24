@@ -17,6 +17,8 @@ pub Declaration: Declaration = {
       => Declaration::Funclet(<>),
   "CPU" <Id> <TypeAnnotation> ";" 
       => Declaration::CPU(<>),
+  "GPU" <Id> "(" <Id> ")" <TypeAnnotation> "{" <Binding*> <Shader> "}" 
+      => Declaration::GPU(<>),
   "ValueFunction" <Id> <("(" <Id> ")")?> <TypeAnnotation> ";"
       => Declaration::ValueFunction(<>),
   "Pipeline" <Id> "(" <Id> ")" ";" 
@@ -47,6 +49,21 @@ Num: usize = { <r"[0-9]+"> => usize::from_str(<>).unwrap() }
 
 Type: Type = {
   "I32" => Type::I32,
+}
+
+// TODO: make into other things
+Shader: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
+
+BindingOption: Option<usize> = {
+  <Num> => Some(<>),
+  "_" => None,
+}
+
+Binding: ResourceBinding = {
+  "[" <n1: Num> "]" "[" <n2: Num> "]" "=" 
+      <b1: BindingOption> "->" <b2: BindingOption> ";" 
+        => ResourceBinding { group: n1, binding: n2, input: b1, output: b2 }
+        
 }
 
 CommaList<T>: Vec<T> = {

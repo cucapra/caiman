@@ -26,6 +26,15 @@ pub enum FuncletTail
 }
 
 #[derive(Debug)]
+pub struct ResourceBinding
+{
+    pub group : usize,
+    pub binding : usize,
+    pub input : Option<usize>,
+    pub output : Option<usize>
+}
+
+#[derive(Debug)]
 pub enum Declaration
 {
     // For now: funclet kind will be a bool (true is inline)
@@ -33,8 +42,7 @@ pub enum Declaration
     //   make every non-inline funclet MixedImplicit
     Funclet(bool, String, FuncType, Vec<Node>, FuncletTail),
     CPU(String, FuncType),
-    // TODO: GPU! The reason I am holding off on it is because of the
-    // part where you just dump WGSL code into it
+    GPU(String, String, FuncType, Vec<ResourceBinding>, String),
     ValueFunction(String, Option<String>, FuncType),
     Pipeline(String, String),
 }
