@@ -15,7 +15,7 @@
 				tail_edge : Yield(funclet_ids : [1], captured_arguments : [1], return_values : [2])
 			),
 			1 : (
-				kind : MixedImplicit,
+				kind : Inline,
 				input_types : [],
 				output_types : [],
 				nodes : [

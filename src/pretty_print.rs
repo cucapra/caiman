@@ -209,8 +209,12 @@ fn write_funclets(
     let funclets_vec = funclets_arena_to_vector(&funclets);
     for (num, funclet) in funclets_vec.iter().enumerate()
     {
+        if let ir::FuncletKind::Inline = funclet.kind
+        {
+            write!(oc, "Inline ")?;
+        }
         write!(oc, "Funclet {} ", funclet_name(num))?;
-        // Not sure if writing funclet kind should be done
+        // This is subject to change!
         //write!(oc, "({:?}) ", funclet.kind)?;
         write!(oc, ": ")?;
         if numbers_mode
