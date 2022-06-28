@@ -1,16 +1,25 @@
 use std::str::FromStr;
 use crate::ast::*;
 
-// MACROS:
-// Expr* gives you a Vec<Expr> as does Expr+
-// Expr? gives you an Option<Expr>
-// parens "(...)" creates a new nonterminal real quick; remember to put
-//  angle brackets around everything that you want inside it
-
-
 grammar;
 
-Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
+match {
+  r"[a-zA-Z][a-zA-Z0-9_]*", // Id
+  r"[-]?[0-9]+([.][0-9]+)?", // Constant
+  r"[a-zA-Z0-9_]*[.][a-zA-Z]*", // Shader filename
+
+  "Funclet", "CPU", "GPU", "ValueFunction", "Pipeline", "Inline",
+  ":", ";", "->", "=>", "=", "_", ",",
+  "{", "}", "(", ")", "[", "]", "<", ">", 
+	"F32", "F64", "U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64",
+  "phi", "extract", "const", "Return", "Yield",
+
+  r"\s*" => { }, // Whitespace
+  r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
+}
+
+
+pub Program: Program = { Declaration* => <> }
 
 pub Declaration: Declaration = {
   <Inline> "Funclet" <Id> <TypeAnnotation> "{" <Node*> <Tail> "}"
@@ -25,6 +34,8 @@ pub Declaration: Declaration = {
       => Declaration::Pipeline(<>),
 }
 
+Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
+
 TypeAnnotation: FuncType = { 
   ":" <t1: Type> "->" <t2: Type> 
       => (vec![t1], vec![t2]),
@@ -38,32 +49,58 @@ Tail: FuncletTail = {
 }
 
 NodeType: NodeType = {
-  "Phi" <Num> => NodeType::Phi(<>),
+  "phi" <Index> 
+      => NodeType::Phi(<>),
+  "extract" <s: Id> 
+      => NodeType::Extract(s, 0),
+  "extract" <Id> "[" <Index> "]" 
+      => NodeType::Extract(<>),
+  "const" <Constant> ":" <Type> 
+      => NodeType::Constant(<>),
+  <Id> "(" <CommaList<Id>> ")" 
+      => NodeType::Call(<>),
+  <Id> "<" <CommaList<Id>> ">" "(" <CommaList<Id>> ")" 
+      => NodeType::GPUCall(<>),
 }
 
 Node: Node = { <Id> "=" <NodeType> ";" => (<>) }
 
 Inline: bool = { <o: "Inline"?> => o.is_some() }
 
-Num: usize = { <r"[0-9]+"> => usize::from_str(<>).unwrap() }
-
-Type: Type = {
-  "I32" => Type::I32,
+Index: usize = { 
+  <Constant> => usize::from_str(&<>).unwrap() 
 }
 
-// TODO: make into other things
-Shader: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
+Constant: String = {
+  <r"[-]?[0-9]+([.][0-9]+)?"> => String::from(<>),
+}
+
+Type: Type = {
+	"F32" => Type::F32,
+	"F64" => Type::F64,
+	"U8" => Type::U8,
+	"U16" => Type::U16,
+	"U32" => Type::U32,
+	"U64" => Type::U64,
+	"I8" => Type::I8,
+	"I16" => Type::I16,
+  "I32" => Type::I32,
+	"I64" => Type::I64,
+}
+
+Shader: String = { 
+  <r"[a-zA-Z0-9_]*[.][a-zA-Z]*"> => String::from(<>) 
+}
 
 BindingOption: Option<usize> = {
-  <Num> => Some(<>),
+  <Index> => Some(<>),
   "_" => None,
 }
 
 Binding: ResourceBinding = {
-  "[" <n1: Num> "]" "[" <n2: Num> "]" "=" 
+  "[" <n1: Index> "]" "[" <n2: Index> "]" "=" 
       <b1: BindingOption> "->" <b2: BindingOption> ";" 
         => ResourceBinding { group: n1, binding: n2, input: b1, output: b2 }
-        
 }
 
 CommaList<T>: Vec<T> = {

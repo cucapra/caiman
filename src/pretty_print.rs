@@ -162,7 +162,7 @@ fn string_of_node(
             format!("const {} : {:?}", value, &types_arena[&type_id])
         },
         ir::Node::ConstantUnsignedInteger{value, type_id} => {
-            format!("uconst {} : {:?}", value, &types_arena[&type_id])
+            format!("const {} : {:?}", value, &types_arena[&type_id])
         },
         ir::Node::CallValueFunction { function_id, arguments } => {
             format!(

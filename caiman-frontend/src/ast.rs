@@ -3,7 +3,16 @@
 #[derive(Debug)]
 pub enum Type
 {
+    F32,
+    F64,
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
     I32,
+    I64,
     // TODO others
 }
 
@@ -13,6 +22,21 @@ pub type FuncType = (Vec<Type>, Vec<Type>);
 pub enum NodeType
 {
     Phi(usize),
+    Extract(String, usize),
+
+    // For constants, parsing the value as 
+    // a String so that we can use the correct
+    // to-string function depending on the type
+    Constant(String, Type),
+
+    // Calling can either be ValueFunction or CPU
+    // (I have given them the same syntax for now)
+    Call(String, Vec<String>),
+    // GPU call differs only because it requires
+    // dimensions info
+    // Dimensions info is FIRST
+    GPUCall(String, Vec<String>, Vec<String>),
+
     // TODO others 
 }
 
@@ -47,5 +71,6 @@ pub enum Declaration
     Pipeline(String, String),
 }
 
-//pub type Program = Vec<Declaration>;
+pub type Program = Vec<Declaration>;
+
 
