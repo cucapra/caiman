@@ -7,3 +7,4 @@ pub mod frontend;
 pub mod pretty_print;
 mod rust_wgpu_backend;
 mod node_usage_analysis;
+mod frontend_to_ir;

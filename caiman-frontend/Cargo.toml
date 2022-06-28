@@ -14,4 +14,6 @@ lalrpop-util = { version="0.19.7", features=["lexer"] }
 regex = "1"
 clap = { version="3.2.6", features=["derive"] }
 
-
+[lib]
+name = "caiman_frontend"
+path = "src/lib.rs"

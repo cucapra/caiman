@@ -14,10 +14,17 @@ fn main()
 {
     let args = Arguments::parse();
 
-    let ast = parse_file(String::from(args.filename));
-    for decl in ast.iter() 
+    match parse_file(String::from(args.filename))
     {
-        println!("{:?}", decl);
+        Ok(ast) => {
+            for decl in ast.iter() 
+            {
+                println!("{:?}", decl);
+            }
+        },
+        Err(why) => {
+            println!("Parser error: {}", why)
+        },
     }
 }
 

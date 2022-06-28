@@ -5,7 +5,7 @@ use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
 use crate::arena::Arena;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Place
 {
 	Local,
@@ -13,7 +13,7 @@ pub enum Place
 	Gpu,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResourceQueueStage
 {
 	None,
@@ -46,7 +46,7 @@ mod generated
 	include!(concat!(env!("OUT_DIR"), "/generated/ir.txt"));
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructField
 {
 	pub name : String,
@@ -55,12 +55,12 @@ pub struct StructField
 	pub byte_size : usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LocalValueTag
 {
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type
 {
 	// Value types

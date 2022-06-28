@@ -1,6 +1,6 @@
 // Ast
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Type
 {
     F32,
@@ -18,7 +18,7 @@ pub enum Type
 
 pub type FuncType = (Vec<Type>, Vec<Type>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NodeType
 {
     Phi(usize),
@@ -42,14 +42,14 @@ pub enum NodeType
 
 pub type Node = (String, NodeType);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FuncletTail
 {
     Return(Vec<String>),
     Yield(Vec<String>, Vec<String>, Vec<String>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResourceBinding
 {
     pub group : usize,
@@ -58,7 +58,7 @@ pub struct ResourceBinding
     pub output : Option<usize>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Declaration
 {
     // For now: funclet kind will be a bool (true is inline)

@@ -1,6 +1,6 @@
 extern crate clap;
 use clap::{Arg, App, SubCommand};
-
+use std::ffi::OsStr;
 use caiman::frontend;
 use caiman::pretty_print;
 use std::fs::File;
@@ -16,7 +16,7 @@ struct Arguments
     pretty_print : bool,
 }
 
-fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option<caiman::frontend::CompileOptions>)
+fn compile(is_ron : bool, input_file : &mut File, output_file : &mut File, options_opt : Option<caiman::frontend::CompileOptions>)
 {
 
 	let mut input_string = String::new();
@@ -26,7 +26,15 @@ fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option
 		Ok(_) => ()
 	};
 
-	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, options_opt);
+	let result : Result<String, caiman::frontend::CompileError> = 
+    if is_ron 
+    {
+      caiman::frontend::compile_ron_definition(& input_string, options_opt)
+    }
+    else 
+    {
+      caiman::frontend::compile_frontend_language(& input_string, options_opt)
+    };
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
@@ -132,34 +140,39 @@ fn main()
         }
 	};
 
-	let input_path = Path::new(& arguments.input_path);
-	let mut input_file = match File::open(& input_path)
+	let input_path = Path::new(&arguments.input_path);
+	let mut input_file = match File::open(&input_path)
 	{
 		Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
 		Ok(file) => file
 	};
 
-    if arguments.pretty_print 
-    {
-        pretty_print(&mut input_file);
-    }
-    else
-    {
-        let output_path = match & arguments.output_path
-        {
-            Some(output_path) => output_path.clone(),
-            None => String::from("a.out")
-        };
-        let mut output_file = File::create(output_path).unwrap();
+  let is_ron = input_path
+      .extension()
+      .and_then(OsStr::to_str)
+      .map_or(false, |s| "ron".to_string().eq(s));
 
-        if arguments.explicate_only
-        {
-            explicate(&mut input_file, &mut output_file);
-        }
-        else
-        {
-            let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
-            compile(&mut input_file, &mut output_file, Some(options));
-        }
-    }
+  if arguments.pretty_print 
+  {
+      pretty_print(&mut input_file);
+  }
+  else
+  {
+      let output_path = match & arguments.output_path
+      {
+          Some(output_path) => output_path.clone(),
+          None => String::from("a.out")
+      };
+      let mut output_file = File::create(output_path).unwrap();
+
+      if arguments.explicate_only
+      {
+          explicate(&mut input_file, &mut output_file);
+      }
+      else
+      {
+          let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
+          compile(is_ron, &mut input_file, &mut output_file, Some(options));
+      }
+  }
 }
