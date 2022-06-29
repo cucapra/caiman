@@ -16,6 +16,9 @@ pub struct SubmissionId(usize);
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 pub struct CommandBufferId(usize);
 
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
+pub struct VarId(usize);
+
 #[derive(Debug, Default)]
 struct SubmissionQueue
 {
@@ -110,19 +113,9 @@ enum Binding
 	Buffer(usize)
 }
 
-enum Command
-{
-	//SetExternalFunction(usize),
-	//SetBindings{bindings : BTreeMap<(usize, usize), Binding>},
-	DispatchCompute{external_function_id : ir::ExternalGpuFunctionId, dimension_vars : [usize; 3], argument_vars : Box<[usize]>, output_vars : Box<[usize]>},
-}
-
 #[derive(Default)]
 struct SubmissionEncodingState
 {
-	//shader_module : shadergen::ShaderModule,
-	//bindings : BTreeMap<(usize, usize), Binding>,
-	//commands : Vec<Command>,
 	command_buffer_ids : Vec<CommandBufferId>
 }
 
@@ -233,30 +226,18 @@ impl<'program> CodeGenerator<'program>
 		self.type_code_writer.finish() + self.state_code_writer.finish().as_str() + self.code_writer.finish().as_str()
 	}
 
-	fn enqueue_compute_dispatch(&mut self, external_function_id : ir::ExternalCpuFunctionId, dimensions : &[usize; 3], argument_vars : &[usize]) -> Option<Box<[usize]>>
+	fn generate_compute_dispatch_outputs(&mut self, external_function_id : ir::ExternalCpuFunctionId) -> Box<[usize]>
 	{
-		if self.active_submission_encoding_state.is_none()
+		let mut output_vars = Vec::<usize>::new();
+
+		let external_gpu_function = & self.external_gpu_functions[external_function_id];
+		for (output_index, output_type_id) in external_gpu_function.output_types.iter().enumerate()
 		{
-			self.active_submission_encoding_state = Some(Default::default());
+			let variable_id = self.variable_tracker.create_in_encoding(* output_type_id);
+			output_vars.push(variable_id);
 		}
 
-		if let Some(submission_encoding_state) = self.active_submission_encoding_state.as_mut()
-		{
-			let mut output_vars = Vec::<usize>::new();
-
-			let external_gpu_function = & self.external_gpu_functions[external_function_id];
-			for (output_index, output_type_id) in external_gpu_function.output_types.iter().enumerate()
-			{
-				let variable_id = self.variable_tracker.create_in_encoding(* output_type_id);
-				output_vars.push(variable_id);
-			}
-
-			
-			//submission_encoding_state.commands.push(Command::DispatchCompute{external_function_id, dimension_vars : * dimensions, argument_vars : argument_vars.to_vec().into_boxed_slice(), output_vars : output_vars.clone().into_boxed_slice()});
-			return Some(output_vars.into_boxed_slice());
-		}
-
-		None
+		return output_vars.into_boxed_slice();
 	}
 
 	// This will need to be reassessed if modifying bindings from the coordinator becomes possible
@@ -387,42 +368,7 @@ impl<'program> CodeGenerator<'program>
 		let invocation_id = self.gpu_function_invocations.len();
 		self.gpu_function_invocations.push(GpuFunctionInvocation{external_gpu_function_id : external_function_id, bindings, shader_module_key : self.active_shader_module_key.unwrap()});
 		let gpu_function_invocation = & self.gpu_function_invocations[invocation_id];
-		/*self.code_writer.write("let bind_group_layout_entries = [".to_string());
-		for (binding, (_input_opt, output_opt)) in bindings.iter()
-		{
-			let is_read_only : bool = output_opt.is_none();
-			self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
-			self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : {} }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding, is_read_only));
-			self.code_writer.write(" }, ".to_string());
-		}
-		self.code_writer.write("];\n".to_string());
-
-		self.code_writer.write("let bind_group_layout = instance.state.get_device_mut().create_bind_group_layout(& wgpu::BindGroupLayoutDescriptor { label : None, entries : & bind_group_layout_entries});\n".to_string());
-
-		self.code_writer.write("let entries = [".to_string());
-		for (binding, (input_opt, output_opt)) in bindings.iter()
-		{
-			let mut variable_id : Option<usize> = None;
-			
-			if let Some(input) = input_opt
-			{
-				variable_id = Some(input_staging_variables[*input]);
-			}
-
-			if let Some(output) = output_opt
-			{
-				variable_id = Some(output_staging_variables[*output]);
-			}
-
-			assert_eq!(variable_id.is_some(), true, "Binding must be input or output");
-			self.code_writer.write(format!("wgpu::BindGroupEntry {{binding : {}, resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding{{buffer : & var_{}, offset : 0, size : None}}) }}, ", binding, variable_id.unwrap()));
-		}
-		self.code_writer.write("];\n".to_string());
-		self.code_writer.write("let bind_group = instance.state.get_device_mut().create_bind_group(& wgpu::BindGroupDescriptor {label : None, layout : & bind_group_layout, entries : & entries});\n".to_string());
-
-		self.code_writer.write("let pipeline_layout = instance.state.get_device_mut().create_pipeline_layout(& wgpu::PipelineLayoutDescriptor { label : None, bind_group_layouts : & [& bind_group_layout], push_constant_ranges : & []});\n".to_string());
-		self.code_writer.write("let pipeline = instance.state.get_device_mut().create_compute_pipeline(& wgpu::ComputePipelineDescriptor {label : None, layout : Some(& pipeline_layout), module : & module, entry_point : & \"main\"});\n".to_string());*/
-
+		
 		self.code_writer.write("let entries = [".to_string());
 		for (binding, (input_opt, output_opt)) in gpu_function_invocation.bindings.iter()
 		{
@@ -479,12 +425,6 @@ impl<'program> CodeGenerator<'program>
 		self.active_external_gpu_function_id = None;
 		self.active_shader_module_key = None;
 	}
-
-	/*fn get_var_name(&mut self, var_id : usize) -> String
-	{
-
-	}*/
-
 
 	pub fn require_local(&self, variable_ids : &[usize])
 	{
@@ -979,23 +919,6 @@ impl<'program> CodeGenerator<'program>
 		}
 
 		write!(self.code_writer, "}}\n");
-		
-/*
-		if ! self.shader_modules.contains_key(& shader_module_key)
-		{
-			let external_gpu_function = & self.external_gpu_functions[external_function_id];
-	
-			let mut shader_module = match & external_gpu_function.shader_module_content
-			{
-				ir::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
-			};
-	
-			//self.code_writer.write_str("let module = instance.state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
-			//self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
-			//self.code_writer.write_str("\"))});\n");
-
-			self.shader_modules.insert(shader_module_key, shader_module);
-		}*/
 
 		write!(self.code_writer, "{}", "
 		impl<'state, 'cpu_functions, F : CpuFunctions> Instance<'state, 'cpu_functions, F> 
@@ -1006,9 +929,6 @@ impl<'program> CodeGenerator<'program>
 		
 		for (shader_module_key, shader_module) in self.shader_modules.iter_mut()
 		{
-			//self.code_writer.write_str("let module = instance.state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
-			//self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
-			//self.code_writer.write_str("\"))});\n");
 			write!(self.code_writer, "let {} = state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor {{ label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"{}\"))}});\n", shader_module_key.instance_field_name(), shader_module.compile_wgsl_text().as_str());
 		}
 
@@ -1068,73 +988,6 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "{}", "
 		}
 		");
-
-
-
-		/*write!(self.code_writer, "{}", "
-		impl<'parent_state, 'cpu_functions> Instance<'parent_state, 'cpu_functions> 
-		{
-			fn new(parent : &mut 'parent_state dyn super::State, cpu_functions : & 'cpu_functions dyn CpuFunctions) -> Self
-			{
-				Self{parent, cpu_functions}
-			}
-		}
-
-		"impl<'parent_state, 'cpu_functions> super::State for Instance<'parent_state, 'cpu_functions>
-		{
-			fn get_device_mut(&mut self) -> &mut wgpu::Device
-			{
-				self.parent_state.get_device_mut()
-			}
-
-			fn get_queue_mut(&mut self) -> &mut wgpu::Queue
-			{
-				self.parent_state.get_queue_mut()
-			}
-
-		");*/
-
-		//write!(self.code_writer, "\n}}\n");
-
-		// Write the template
-
-		/*write!(self.code_writer, "pub struct Template<'root_state, 'cpu_functions, F : CpuFunctions>{{phantom : std::marker::PhantomData<& 'root_state dyn State>, cpu_functions : & 'cpu_functions F}};\n");
-
-		write!(self.code_writer, "impl<'root_state> Template<'root_state>\n{{\n");
-
-		let mut argument_variable_ids = Vec::<usize>::new();
-		self.code_writer.write(format!("pub fn new<F>(state : &mut 'root_state super::State, cpu_functions : & 'cpu_functions F) -> Self"));
-		self.code_writer.write("\n{\nSelf\t}\n".to_string());
-
-		//InstanceState<'state, 'cpu_functions, F>
-		write!(self.code_writer, "pub fn instantiate<'template, 'state>(& 'template self, state : &mut 'state super::State) -> {}\n{{\n", );
-		write!(self.code_writer, "\tlet instance_state = InstanceState::<'state, 'cpu_functions, F>::new(self, state);\n");
-		write!(self.code_writer, "\n}}\n");
-
-
-		write!(self.code_writer, "\n}}\n");
-		// Idk
-
-		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
-		//self.code_writer.write("{\n".to_string());
-		write!(self.code_writer, "\treturn Funclet{}::new(state, cpu_functions", funclet_id);
-		for (_, var_id) in argument_variable_ids.iter().enumerate()
-		{
-			write!(self.code_writer, ", var_{}", *var_id);
-		}
-		write!(self.code_writer, ").complete();\n");
-		write!(self.code_writer, "return pipeline_outputs::{} {{", self.active_pipeline_name.as_ref().unwrap().as_str());
-		for (output_index, output_type) in output_types.iter().enumerate()
-		{
-			if output_index != 0
-			{
-				write!(self.code_writer, ", ");
-			}
-			write!(self.code_writer, "field_{} : result.field_{}", output_index, output_index);
-		}
-		write!(self.code_writer, "}};\n}}\n");
-
-		write!(self.code_writer, "\n}}\n");*/
 	}
 
 	pub fn build_return(&mut self, output_var_ids : &[usize])
@@ -1434,13 +1287,13 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn build_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize]) -> Box<[usize]>
 	{
-		if let Some(output_vars) = self.enqueue_compute_dispatch(external_function_id, dimension_vars, argument_vars)
-		{
-			//self.flush_submission();
-			self.generate_compute_dispatch(external_function_id, dimension_vars, argument_vars, & output_vars);
-			return output_vars;
-		}
+		let output_vars = self.generate_compute_dispatch_outputs(external_function_id);
+		self.generate_compute_dispatch(external_function_id, dimension_vars, argument_vars, & output_vars);
+		return output_vars;
+	}
 
-		panic!("Did not use recording!");
+	pub fn build_compute_dispatch_with_outputs(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
+	{
+		self.generate_compute_dispatch(external_function_id, dimension_vars, argument_vars, output_vars);
 	}
 }

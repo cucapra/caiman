@@ -5,4 +5,4 @@ mod ir_builders;
 mod shadergen;
 pub mod frontend;
 mod rust_wgpu_backend;
-mod node_usage_analysis;
+mod scheduling_state;
