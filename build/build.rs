@@ -5,6 +5,8 @@ use std::path::Path;
 use std::io::Write;
 use caiman_spec::spec;
 
+mod dataflow;
+
 fn get_input_kind_type_name(kind : &spec::OperationInputKind) -> String
 {
 	use spec::OperationInputKind;
@@ -181,4 +183,20 @@ fn main()
 	std::fs::create_dir(&generated_path);
 	let mut ir_output_file = File::create(format!("{}/generated/ir.txt", out_dir)).unwrap();
 	write_ir_definition(&mut ir_output_file, & specification);
+	dataflow::write_base(
+		&format!("{}/generated/dataflow_base.rs", out_dir), 
+		&specification
+	).unwrap();
+	dataflow::write_conversion(
+		&format!("{}/generated/dataflow_from_ir.rs", out_dir), 
+		&specification, 
+		"ir::Node", 
+		"Operation"
+	).unwrap();
+	dataflow::write_conversion(
+		&format!("{}/generated/dataflow_to_ir.rs", out_dir), 
+		&specification, 
+		"Operation", 
+		"ir::Node"
+	).unwrap();
 }

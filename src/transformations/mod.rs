@@ -7,6 +7,7 @@ pub enum Error {}
 
 type Result<T> = std::result::Result<T, Error>;
 
+mod dataflow;
 mod funclet;
 
 /// Applies a set of optimizing transformations to the IR. These transformations only operate

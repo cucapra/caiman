@@ -7,4 +7,5 @@ mod shadergen;
 pub mod frontend;
 mod rust_wgpu_backend;
 mod transformations;
+mod convert;
 mod node_usage_analysis;
