@@ -96,24 +96,20 @@ pub fn write_conversion(
     dst_type: &str,
 ) -> std::io::Result<()> {
     write_formatted_file(path, |o| {
-        write_scope!(o, {"impl<'a> Convert<{dst_type}, Context<'a>> for {src_type}"} {
-            write_scope!(o, {"fn convert(self, context: &Context<'a>) -> Result<{dst_type}, <Context<'a> as ConversionContext>::Error>"} {
-                write_scope!(o, {"Ok(match self"} {
-                    for operation in spec.operations.iter() {
-                        write_scope!(o, {"{src_type}::{}", operation.name} {
-                            for input in operation.inputs.iter() {
-                                write!(o, "{},\n", input.name)?;
-                            }
-                        } {"=>"});
-                        write_scope!(o, {"{dst_type}::{}", operation.name} {
-                            for input in operation.inputs.iter() {
-                                write!(o, "{0}: {0}.convert(context)?,\n", input.name)?;
-                            }
-                        } {","});
+        write_scope!(o, {"{{ Ok(match self"} {
+            for operation in spec.operations.iter() {
+                write_scope!(o, {"{src_type}::{}", operation.name} {
+                    for input in operation.inputs.iter() {
+                        write!(o, "{},\n", input.name)?;
                     }
-                } {")"});
-            });
-        });
+                } {"=>"});
+                write_scope!(o, {"{dst_type}::{}", operation.name} {
+                    for input in operation.inputs.iter() {
+                        write!(o, "{0}: {0}.convert(context)?,\n", input.name)?;
+                    }
+                } {","});
+            }
+        } {") }}"});
         Ok(())
     })
 }

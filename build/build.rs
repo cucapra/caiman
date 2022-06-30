@@ -188,13 +188,13 @@ fn main()
 		&specification
 	).unwrap();
 	dataflow::write_conversion(
-		&format!("{}/generated/dataflow_from_ir.rs", out_dir), 
+		&format!("{}/generated/dataflow_from_ir.txt", out_dir), 
 		&specification, 
 		"ir::Node", 
 		"Operation"
 	).unwrap();
 	dataflow::write_conversion(
-		&format!("{}/generated/dataflow_to_ir.rs", out_dir), 
+		&format!("{}/generated/dataflow_to_ir.txt", out_dir), 
 		&specification, 
 		"Operation", 
 		"ir::Node"

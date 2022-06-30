@@ -67,8 +67,20 @@ pub struct Graph {
     tail: Tail,
 }
 impl Graph {
-    fn new(ir_nodes: Vec<ir::Node>, tail: ir::TailEdge) -> Result<Self, Error> {
-        todo!()
+    fn new(ir_nodes: Vec<ir::Node>, ir_tail: ir::TailEdge) -> Result<Self, Error> {
+        use crate::convert::Convert;
+        let mut nodes = Vec::with_capacity(ir_nodes.len());
+        for (i, ir_node) in ir_nodes.into_iter().enumerate() {
+            let context = from_ir::Context::new(i);
+            let operation = ir_node.convert(&context)?;
+            nodes.push(Node::Operation(operation));
+        }
+        // we treat the tail like the final node for the purpose of error reporting
+        let tail = {
+            let context = from_ir::Context::new(nodes.len());
+            ir_tail.convert(&context)?
+        };
+        Ok(Self { nodes, tail })
     }
     fn into_ir(self) -> Result<(Vec<ir::Node>, ir::TailEdge), Error> {
         todo!()

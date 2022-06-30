@@ -1,5 +1,5 @@
 pub trait ConversionContext {
-    type Error;
+    type Error: std::error::Error;
 }
 pub trait Convert<T, C: ConversionContext> {
     fn convert(self, context: &C) -> Result<T, C::Error>;
