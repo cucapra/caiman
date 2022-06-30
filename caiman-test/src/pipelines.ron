@@ -4,7 +4,7 @@
 		types : {0:I32},
 		funclets : {
 			0 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -18,7 +18,7 @@
 				tail_edge : Return(return_values : [5])
 			),
 			1 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -32,7 +32,7 @@
 				tail_edge : Return(return_values : [5])
 			),
 			2 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -43,7 +43,7 @@
 				tail_edge : Return(return_values : [2])
 			),
 			3 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -57,7 +57,7 @@
 				tail_edge : Return(return_values : [5])
 			),
 			4 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -71,7 +71,7 @@
 				tail_edge : Return(return_values : [5])
 			),
 			5 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -83,7 +83,7 @@
 				tail_edge : Return(return_values : [3])
 			),
 			6 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0, 0],
 				nodes : [
@@ -95,7 +95,7 @@
 				tail_edge : Yield(funclet_ids : [7, 8], captured_arguments : [3], return_values : [3])
 			),
 			7 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0, 0],
 				output_types : [0, 0],
 				nodes : [
@@ -108,7 +108,7 @@
 				tail_edge : Yield(funclet_ids : [7, 8], captured_arguments : [3], return_values : [4])
 			),
 			8 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -129,7 +129,7 @@
 				tail_edge : Return(return_values : [3])
 			),
 			10 : (
-				kind : MixedImplicit,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [

@@ -126,6 +126,8 @@ pub enum FuncletKind
 {
 	MixedImplicit,
 	MixedExplicit,
+	Value,
+	ScheduleExplicit,
 	Inline // Adopts the constraints of the calling funclet
 }
 
@@ -205,26 +207,24 @@ pub struct ValueFunction
 	pub default_funclet_id : Option<FuncletId>
 }
 
-// 
-/*#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ValueFunctionBinding
-{
-	ExternalCpu{ external_cpu_function_id : ExternalCpuFunctionId, input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
-	ExternalGpuComputeDispatchFixedWorkgroups{ external_gpu_function_id : ExternalGpuFunctionId, dimensions : [u32; 3], input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
-	ExternalGpuComputeDispatch{ external_gpu_function_id : ExternalGpuFunctionId, dimension_arguments : [usize; 3], input_map : HashMap<usize, usize>, output_map : HashMap<usize, usize>},
-}*/
-
 // A user-facing entry point into the pipeline
-pub enum PipelineMethod
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PipelineMethod
 {
-	
+	pub name : String,
+	pub input_types : Box<[TypeId]>,
+	pub output_types : Box<[TypeId]>,
+	pub value_function_id : ValueFunctionId,
+	pub default_scheduling_funclet_id : Option<FuncletId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pipeline
 {
 	pub name : String,
-	pub entry_funclet : FuncletId
+	pub entry_funclet : FuncletId,
+	#[serde(default)]
+	pub reentry_methods : Box<[PipelineMethod]>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

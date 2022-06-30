@@ -105,10 +105,10 @@ impl SchedulingState
 		Self{ place_states, .. Default::default() }
 	}
 
-	pub fn insert_hacked_slot(&mut self, type_id : ir::TypeId, queue_place : ir::Place) -> SlotId
+	pub fn insert_hacked_slot(&mut self, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage) -> SlotId
 	{
 		let timestamp = self.get_local_time();
-		let slot = Slot{type_id, value_opt : None, timestamp, queue_place, queue_stage : ir::ResourceQueueStage::None, state_binding : StateBinding::TemporaryHack};
+		let slot = Slot{type_id, value_opt : None, timestamp, queue_place, queue_stage, state_binding : StateBinding::TemporaryHack};
 		SlotId(self.slots.create(slot))
 	}
 
@@ -155,10 +155,15 @@ impl SchedulingState
 		SubmissionId(self.submissions.create(Submission{queue_place, timestamp}))
 	}
 
-	/*fn get_slot_queue_stage(&self, slot_id : SlotId)
+	pub fn get_slot_queue_stage(&self, slot_id : SlotId) -> ir::ResourceQueueStage
 	{
+		self.slots[& slot_id.0].queue_stage
+	}
 
-	}*/
+	pub fn get_slot_queue_place(&self, slot_id : SlotId) -> ir::Place
+	{
+		self.slots[& slot_id.0].queue_place
+	}
 
 	fn get_local_time(&self) -> LogicalTimestamp
 	{

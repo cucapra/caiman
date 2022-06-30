@@ -63,7 +63,7 @@ Slots are the key piece of state in schedules.  They do not hold values themselv
 
 The associated value subexpression may be seen as one part of the type of the slot.  Additionally, slots have type information that tracks the state of the value as known to the coordinator which change as a result of operations that modify the Coordinator's timeline.  This includes a logical time stamp for when the coordinator last observed a state transition for that slot, a tag for the queue that is expected to produce the value, and a tag encoding what are (currently) 4 mutually exclusive states:
 
-- `None`
+- `Bound`
 	- The resource binding exists and the value may be written to by a queue, but no action has been taken to populate the bound region with a value.
 - `Encoded`
 	- The Coordinator has prepared work that will populate the bound region with a value, but has not yet sent it to a queue.
@@ -77,15 +77,15 @@ The associated value subexpression may be seen as one part of the type of the sl
 The scheduling language provides the following operations in almost all contexts.
 
 - `alloc_temporary (value_tag : (InstanceId, SubexpressionId), offset : usize, size : usize) -> SlotId`
-	- immediately creates a slot with future value `value_tag` in the `None` state that is bound to the region of the local temporary buffer at `offset` and ending at `offset + size` (exclusive)
+	- immediately creates a slot with future value `value_tag` in the `Bound` state that is bound to the region of the local temporary buffer at `offset` and ending at `offset + size` (exclusive)
 	- This range cannot overlap the range of another slot
 - `bind_buffer (value_tag : (InstanceId, SubexpressionId), buffer_id : BufferId, offset : usize, size : usize) -> SlotId`
-	- immediately creates a slot with future value `value_tag` in the `None` state that is bound to the region of `buffer_id` starting at `offset` and ending at `offset + size` (exclusive)
+	- immediately creates a slot with future value `value_tag` in the `Bound` state that is bound to the region of `buffer_id` starting at `offset` and ending at `offset + size` (exclusive)
 	- This range cannot overlap the range of another slot
 - `encode_copy (place : Place, from_slot_id : SlotId, to_slot_id : SlotId)`
 	- schedules to `place` the copy of the memory from `from_slot_id` to `to_slot_id`
 	- `from_slot_id` must at least be in the `Encoded` state and have a resource binding
-	- `to_slot_id` must be in the `None` state and have a resource binding with equal size to that of `from_slot_id`
+	- `to_slot_id` must be in the `Bound` state and have a resource binding with equal size to that of `from_slot_id`
 	- The value part of both slots must match
 - `encode_do (place : Place, value_tag : (InstanceId, SubexpressionId),  input_slots : [SlotId], output_slots : [SlotId])`
 	- schedules to `place` the execution of the subexpression specified by `value_tag` with inputs bound to `input_slots` and outputs bound to `output_slots`
@@ -99,7 +99,7 @@ The scheduling language provides the following operations in almost all contexts
 - `encode_map_write_only (place : Place, mapped_slot : SlotId) -> SlotId`
 	- schedules to `place` the creation of a slot containing a write-only reference to a bound buffer region referenced by `mapped_slot`
 	- the created slot will have the same value as `mapped_slot`
-	- No other mapping (read only or writeable) may be allowed at any given time and `mapped_slot` must be in the `None` state
+	- No other mapping (read only or writeable) may be allowed at any given time and `mapped_slot` must be in the `Bound` state
 	- Upon encoding a value to this slot, `mapped_slot` will also be in the `Encoded` state and the created slot will be immediately `discard`ed
 - `encode_forward (value_tag : (InstanceId, SubexpressionId), forwarded_slot_id : SlotId) -> SlotId`
 	- schedules to `place` the creation of a slot with value specified as `value_tag` which will have its resource bindings transfered from `forwarded_slot_id` simultaneously with the next read of `forwarded_slot_id`
@@ -136,7 +136,7 @@ The process of inferring a schedule from a partially given one is called "schedu
 
 A couple points of the scheduling language facilitate explication:
 - The queue states form a total ordering that unambiguously implies a path for the explicator to generate when the schedule is left implicit.
-	- The canonical path is `None` -> `Encoded` via `encode_copy` (if the data already exists) or `encode_do` scheduled immediately (necessary to preserve ordering), `Encoded` -> `Submitted` via `submit` as late as legally possible, `Submitted` -> `Ready` via synchronization as late as possible on a fence inserted as late as possible.  Each of the inserted operations is performed as late as possible to be  manually written operations to make them unnecessary.
+	- The canonical path is `Bound` -> `Encoded` via `encode_copy` (if the data already exists) or `encode_do` scheduled immediately (necessary to preserve ordering), `Encoded` -> `Submitted` via `submit` as late as legally possible, `Submitted` -> `Ready` via synchronization as late as possible on a fence inserted as late as possible.  Each of the inserted operations is performed as late as possible to be  manually written operations to make them unnecessary.
 - `discard` is never inserted
 - `alloc_temporary` and `bind_buffer` always bump allocate and never fill holes, even if memory in lower regions has been made available via discard
 	- Additionally, `bind_buffer` will always allocate from a buffer that is visible only to the explicator (one for each place)

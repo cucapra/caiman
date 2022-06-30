@@ -107,6 +107,17 @@
 			has_local_side_effect : true
 		),
 
+		(
+			name : "InstantiateValue",
+			inputs : [
+				(name : "funclet", kind : Funclet),
+				(name : "inputs", kind : Operation, is_array : true),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
+
 		// These are convenience instructions that rely on codegen doing some questionable magic
 		// Don't expect these to be predictable
 		// It's possible for them to do the worst thing possible that is still legal without knowing the future
@@ -131,6 +142,53 @@
 			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
+
+		(
+			// Marks an operation in the future as value only
+			// This only makes sense in a mixed language where operations might be interpreted as value or scheduling
+			name : "ManuallySchedule",
+			inputs : [
+				(name : "value", kind : Operation), // Can be in the future
+			],
+			output: None,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			// Selects a slot to use when passing a value across a funclet boundary in a mixed language
+			name : "BindSlot",
+			inputs : [
+				(name : "value", kind : Operation),
+				(name : "slot", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+
+		(
+			name : "UnbindSlot",
+			inputs : [
+				(name : "binding", kind : Operation),
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+
+		(
+			// Designate the slots to use when computing the corresponding mixed node
+			name : "BindCallSlots",
+			inputs : [
+				(name : "value", kind : Operation),
+				(name : "inputs", kind : Operation, is_array : true, is_inferable : true),
+				(name : "outputs", kind : Operation, is_array : true, is_inferable : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+
 
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(

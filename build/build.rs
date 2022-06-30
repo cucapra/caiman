@@ -18,6 +18,7 @@ fn get_input_kind_type_name(kind : &spec::OperationInputKind) -> String
 		OperationInputKind::ValueFunction => String::from("ValueFunctionId"),
 		OperationInputKind::Operation => String::from("OperationId"),
 		OperationInputKind::Place => String::from("Place"),
+		OperationInputKind::Funclet => String::from("FuncletId"),
 		_ => panic!("Unimplemented input kind: {:?}", kind)
 	}
 }

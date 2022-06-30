@@ -422,6 +422,7 @@ impl<'program> Explicator<'program>
 				}
 				// Explication erases the funclet currently.  This isn't right long-term.
 				ir::FuncletKind::Inline => (),
+				_ => panic!("Unimplemented")
 			}
 		}
 		self.program.funclets = Arena::<ir::Funclet>::from_hash_map(new_funclets);
@@ -436,6 +437,7 @@ impl<'program> Explicator<'program>
 			ir::FuncletKind::MixedExplicit => panic!("Should not be here"),
 			ir::FuncletKind::MixedImplicit => (),
 			ir::FuncletKind::Inline =>  panic!("Cannot use inline funclet as an entry point"),
+			_ => panic!("Unimplemented")
 		}
 
 		let mut funclet_builder = ir_builders::FuncletBuilder::new(ir::FuncletKind::MixedExplicit);
@@ -674,6 +676,7 @@ impl<'program> Explicator<'program>
 			ir::FuncletKind::MixedExplicit => panic!("Should not be here"),
 			ir::FuncletKind::MixedImplicit => panic!("Cannot use mixed funclet as inline"),
 			ir::FuncletKind::Inline =>  (),
+			_ => panic!("Unimplemented")
 		}
 
 		let mut frame = FrameState{funclet_id, funclet_builder_frame_id : function_state.funclet_builder.create_frame(), input_nodes_opt : Some(input_nodes.to_vec().into_boxed_slice()), per_input_input_resource_states_opt : None};

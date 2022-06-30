@@ -38,6 +38,7 @@ pub enum OperationInputKind
 	ExternalCpuFunction,
 	ExternalGpuFunction,
 	ValueFunction,
+	Funclet,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
