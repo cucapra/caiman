@@ -1,8 +1,10 @@
+use crate::convert::Convert;
 use crate::ir;
+use std::mem::replace;
 use thiserror::Error;
 
 mod from_ir;
-mod to_ir;
+mod into_ir;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct NodeIndex(usize);
@@ -61,28 +63,75 @@ enum Node {
     /// nodes which depend on B.
     Reference(NodeIndex),
 }
-
 pub struct Graph {
     nodes: Vec<Node>,
     tail: Tail,
 }
 impl Graph {
-    fn new(ir_nodes: Vec<ir::Node>, ir_tail: ir::TailEdge) -> Result<Self, Error> {
-        use crate::convert::Convert;
+    pub fn from_ir(ir_nodes: Vec<ir::Node>, ir_tail: ir::TailEdge) -> Result<Self, Error> {
         let mut nodes = Vec::with_capacity(ir_nodes.len());
         for (i, ir_node) in ir_nodes.into_iter().enumerate() {
             let context = from_ir::Context::new(i);
             let operation = ir_node.convert(&context)?;
             nodes.push(Node::Operation(operation));
         }
-        // we treat the tail like the final node for the purpose of error reporting
         let tail = {
             let context = from_ir::Context::new(nodes.len());
             ir_tail.convert(&context)?
         };
         Ok(Self { nodes, tail })
     }
-    fn into_ir(self) -> Result<(Vec<ir::Node>, ir::TailEdge), Error> {
-        todo!()
+    fn operation(&self, index: NodeIndex) -> &Operation {
+        match &self.nodes[index.0] {
+            Node::Operation(operation) => operation,
+            Node::Reference(index) => self.operation(*index),
+        }
+    }
+    fn operation_mut(&mut self, mut index: NodeIndex) -> &mut Operation {
+        // This code is a bit tricky due to mutable borrowing rules
+        while let Node::Reference(next) = &self.nodes[index.0] {
+            index = *next;
+        }
+        match &mut self.nodes[index.0] {
+            Node::Operation(operation) => operation,
+            Node::Reference(_) => unreachable!(),
+        }
+    }
+    pub fn into_ir(mut self) -> (Vec<ir::Node>, ir::TailEdge) {
+        fn visit(
+            index: NodeIndex,
+            graph: &mut Graph,
+            ir_nodes: &mut Vec<ir::Node>,
+            context: &mut into_ir::Context,
+        ) {
+            if context.is_fully_visited(index) {
+                return;
+            }
+            context.begin_visit(index);
+            let operation = replace(graph.operation_mut(index), Operation::None {});
+            operation.for_each_dependency(|&index| {
+                visit(index, graph, ir_nodes, context);
+            });
+            let node_id = ir_nodes.len();
+            ir_nodes.push(operation.convert(context).unwrap());
+            context.finish_visit(index, node_id);
+        }
+
+        let mut ir_nodes = Vec::new();
+        let mut context = into_ir::Context::new();
+
+        let tail = replace(
+            &mut self.tail,
+            Tail::Return {
+                return_values: Box::new([]),
+            },
+        );
+
+        tail.for_each_dependency(|&index| {
+            visit(index, &mut self, &mut ir_nodes, &mut context);
+        });
+
+        let ir_tail = tail.convert(&context).unwrap();
+        (ir_nodes, ir_tail)
     }
 }
