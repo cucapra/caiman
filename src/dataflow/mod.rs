@@ -1,5 +1,6 @@
 use crate::convert::Convert;
 use crate::ir;
+use std::collections::{HashMap, HashSet};
 use std::mem::replace;
 use thiserror::Error;
 
@@ -63,6 +64,7 @@ enum Node {
     /// nodes which depend on B.
     Reference(NodeIndex),
 }
+
 pub struct Graph {
     nodes: Vec<Node>,
     tail: Tail,
@@ -86,9 +88,10 @@ impl Graph {
     /// will be a [`Node::Operation`].
     fn resolve_index(&self, mut index: NodeIndex) -> NodeIndex {
         loop {
+            // I'm pretty sure reference cycles are impossible if you only use the `pub` functions,
+            // but I'm not going to do a formal proof by induction.
             match &self.nodes[index.0] {
                 Node::Operation(_) => return index,
-                Node::Reference(next) if *next == index => panic!("Reference cycle"),
                 Node::Reference(next) => index = *next,
             }
         }
@@ -118,41 +121,56 @@ impl Graph {
         let real_dst = self.resolve_index(dst);
         self.nodes[real_src.0] = Node::Reference(real_dst);
     }
-    pub fn into_ir(mut self) -> (Vec<ir::Node>, ir::TailEdge) {
-        fn visit(
-            index: NodeIndex,
-            graph: &mut Graph,
-            ir_nodes: &mut Vec<ir::Node>,
-            context: &mut into_ir::Context,
-        ) {
-            if context.is_fully_visited(index) {
-                return;
-            }
-            context.begin_visit(index);
-            let operation = replace(graph.operation_mut(index), Operation::None {});
-            operation.for_each_dependency(|&index| {
-                visit(index, graph, ir_nodes, context);
-            });
-            let node_id = ir_nodes.len();
-            ir_nodes.push(operation.convert(context).unwrap());
-            context.finish_visit(index, node_id);
-        }
-
+    pub fn into_ir(&self) -> (Vec<ir::Node>, ir::TailEdge) {
+        let mut dfs = Dfs::new(&self);
         let mut ir_nodes = Vec::new();
-        let mut context = into_ir::Context::new();
-
-        let tail = replace(
-            &mut self.tail,
-            Tail::Return {
-                return_values: Box::new([]),
-            },
-        );
-
-        tail.for_each_dependency(|&index| {
-            visit(index, &mut self, &mut ir_nodes, &mut context);
-        });
-
-        let ir_tail = tail.convert(&context).unwrap();
+        let mut node_map = HashMap::new();
+        while let Some(event) = dfs.next(self) {
+            // technically we should do cycle detection here
+            if let DfsEvent::Leave(index) = event {
+                let context = into_ir::Context::new(&node_map);
+                ir_nodes.push(self.operation(index).convert(&context).unwrap());
+                node_map.insert(index, node_map.len());
+            }
+        }
+        let ir_tail = {
+            let context = into_ir::Context::new(&node_map);
+            (&self.tail).convert(&context).unwrap()
+        };
         (ir_nodes, ir_tail)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum DfsEvent {
+    Visit(NodeIndex),
+    Leave(NodeIndex),
+}
+pub struct Dfs {
+    stack: Vec<DfsEvent>,
+    visited: HashSet<NodeIndex>,
+}
+impl Dfs {
+    fn new(graph: &Graph) -> Self {
+        let visited = HashSet::with_capacity(graph.nodes.len());
+        let mut stack = Vec::new();
+        graph.tail.for_each_dependency(|&i| {
+            stack.push(DfsEvent::Visit(i)) //
+        });
+        Self { stack, visited }
+    }
+    fn next(&mut self, graph: &Graph) -> Option<DfsEvent> {
+        loop {
+            let index = match self.stack.pop() {
+                Some(DfsEvent::Visit(index)) => index,
+                other => return other,
+            };
+            if self.visited.insert(index) {
+                graph.operation(index).for_each_dependency(|&i| {
+                    self.stack.push(DfsEvent::Visit(i)) //
+                });
+                return Some(DfsEvent::Visit(index));
+            }
+        }
     }
 }

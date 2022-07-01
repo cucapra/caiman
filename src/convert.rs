@@ -12,3 +12,9 @@ impl<T, C: ConversionContext> Convert<T, C> for T {
         Ok(self)
     }
 }
+impl<T: Clone, C: ConversionContext> Convert<T, C> for &T {
+    #[inline]
+    fn convert(self, _: &C) -> Result<T, C::Error> {
+        Ok(self.clone())
+    }
+}
