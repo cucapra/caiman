@@ -1,51 +1,115 @@
-use std::cmp::Eq;
-use std::hash::Hash; 
 use crate::arena::Arena;
 use crate::ir;
 use caiman_frontend::ast;
+use std::cmp::Eq;
 use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::hash::Hash;
 
-pub enum SemanticError {}
+pub enum SemanticError
+{
+    Index(String),
+    NonIntegerType(ir::Type),
+    ValueParsing(String),
+    IntegerTooLarge(String, ir::Type),
+}
 
-pub fn semantic_error_to_string(e: SemanticError) -> String { String::new() }
+pub fn semantic_error_to_string(e: SemanticError) -> String
+{
+    match e
+    {
+        SemanticError::Index(f_id) => format!("Unbound name {}", f_id),
+        SemanticError::NonIntegerType(t) =>
+        {
+            format!("Expected integer type, but is {:?} instead", t)
+        }
+        SemanticError::ValueParsing(s) => format!("Error parsing value {}", s),
+        SemanticError::IntegerTooLarge(s, t) =>
+        {
+            format!("Value {} does not fit into type {:?}", s, t)
+        }
+    }
+}
 
-// Plan:
-// So Results implement the FromIterator trait which is great news
-// We have each function like for example, ast_to_funclets, which takes a
-// reference to the full AST and produces our funclets arena
-// Start this using filter map! Of course everything non-funclet is useless
-// to have
-// Hopefully there isn't difficulty with reference business, but I did
-// derive Clone for ast so should be ok?
+type Index<T> = HashMap<T, usize>;
 
 pub fn from_ast(program: ast::Program) -> Result<ir::Program, SemanticError>
 {
-    let (types_arena, types_map) = generate_types_arena(&program)?;
-    //println!("{:?}", &types_arena[&0]);
-    //println!("{:?}", &types_map[&ir::Type::I32]);
-    panic!("TODO")
+    let (types, types_index) = generate_types(&program)?;
+
+    let (external_cpu_functions, cpu_index) =
+        generate_cpu(&program, &types_index)?;
+    let (external_gpu_functions, gpu_index) =
+        generate_gpu(&program, &types_index)?;
+
+    let funclet_index = generate_funclet_index(&program);
+    let (value_functions, vf_index) =
+        generate_value_functions(&program, &types_index, &funclet_index)?;
+
+    let funclets = convert_funclets(
+        &program,
+        &types_index,
+        &funclet_index,
+        &cpu_index,
+        &gpu_index,
+        &vf_index,
+    )?;
+
+    let pipelines = convert_pipelines(&program, &funclet_index)?;
+
+    Ok(ir::Program {
+        types,
+        funclets,
+        external_cpu_functions,
+        external_gpu_functions,
+        value_functions,
+        pipelines,
+    })
 }
 
-// Creates both the arena (used as part of the IR program) as well as the
-// inverse of it, which is necessary for translation
-fn vec_to_arena_and_hashmap<T: Hash + Eq + Clone>(
-    v: Vec<T>,
-) -> (Arena<T>, HashMap<T, usize>)
+fn vec_to_arena<T: Clone>(v: Vec<T>) -> Arena<T>
 {
     let mut hash_map: HashMap<usize, T> = HashMap::new();
-    let mut inverse: HashMap<T, usize> = HashMap::new();
     for (i, t) in v.into_iter().enumerate()
     {
         if hash_map.insert(i, t.clone()).is_some()
         {
             panic!("Failure in vector to arena conversion");
         }
-        if inverse.insert(t.clone(), i).is_some()
+    }
+    Arena::from_hash_map(hash_map)
+}
+
+fn vec_to_index<T: Clone + Hash + Eq>(v: Vec<T>) -> Index<T>
+{
+    let mut index: Index<T> = HashMap::new();
+    for (i, s) in v.into_iter().enumerate()
+    {
+        if index.insert(s, i).is_some()
         {
-            panic!("Failure in vector to hash map conversion");
+            panic!("Failure in vector to index conversion");
         }
     }
-    (Arena::from_hash_map(hash_map), inverse)
+    index
+}
+
+fn index_get(index: &Index<String>, key: &str)
+    -> Result<usize, SemanticError>
+{
+    match index.get(key)
+    {
+        Some(v) => Ok(*v),
+        None => Err(SemanticError::Index(String::from(key))),
+    }
+}
+
+fn type_vec_to_arena_and_index(
+    v: Vec<ir::Type>,
+) -> (Arena<ir::Type>, Index<ir::Type>)
+{
+    let arena = vec_to_arena(v.clone());
+    let index = vec_to_index(v);
+    (arena, index)
 }
 
 fn convert_type(t: ast::Type) -> Result<ir::Type, SemanticError>
@@ -64,6 +128,27 @@ fn convert_type(t: ast::Type) -> Result<ir::Type, SemanticError>
         ast::Type::I64 => Ok(ir::Type::I64),
         _ => panic!("Unimplemented"),
     }
+}
+
+fn ast_type_to_id(
+    t: ast::Type,
+    types_index: &Index<ir::Type>,
+) -> Result<usize, SemanticError>
+{
+    let t_converted = convert_type(t)?;
+    Ok(types_index[&t_converted])
+}
+
+fn convert_function_type(
+    ft: ast::FuncType,
+    types_index: &Index<ir::Type>,
+) -> Result<(Box<[usize]>, Box<[usize]>), SemanticError>
+{
+    let (input, output) = ft;
+    let convert = |v: Vec<ast::Type>| -> Result<Box<[usize]>, SemanticError> {
+        v.into_iter().map(|t| ast_type_to_id(t, types_index)).collect()
+    };
+    Ok((convert(input)?, convert(output)?))
 }
 
 fn types_used(d: &ast::Declaration) -> Vec<ast::Type>
@@ -94,9 +179,9 @@ fn types_used(d: &ast::Declaration) -> Vec<ast::Type>
     }
 }
 
-fn generate_types_arena(
+fn generate_types(
     program: &ast::Program,
-) -> Result<(Arena<ir::Type>, HashMap<ir::Type, usize>), SemanticError>
+) -> Result<(Arena<ir::Type>, Index<ir::Type>), SemanticError>
 {
     let mut all_types_used: Vec<ast::Type> =
         program.iter().fold(vec![], |mut v, mut d| {
@@ -107,5 +192,479 @@ fn generate_types_arena(
     all_types_used.dedup();
     let converted_types: Result<Vec<ir::Type>, SemanticError> =
         all_types_used.into_iter().map(convert_type).collect();
-    converted_types.map(vec_to_arena_and_hashmap)
+    converted_types.map(type_vec_to_arena_and_index)
+}
+
+fn convert_cpu(
+    d: &ast::Declaration,
+    types_index: &Index<ir::Type>,
+) -> Option<Result<ir::ExternalCpuFunction, SemanticError>>
+{
+    match d
+    {
+        ast::Declaration::CPU(name, ft) =>
+        {
+            let func_type = convert_function_type(ft.clone(), types_index);
+            Some(func_type.map(|(input_types, output_types)| {
+                ir::ExternalCpuFunction {
+                    name: String::from(name),
+                    input_types,
+                    output_types,
+                }
+            }))
+        }
+        _ => None,
+    }
+}
+
+fn construct_ir_gpu(
+    name: &str,
+    entry_point: &str,
+    ft: &ast::FuncType,
+    rbs: &Vec<ast::ResourceBinding>,
+    shader: &Option<String>,
+    types_index: &Index<ir::Type>,
+) -> Result<ir::ExternalGpuFunction, SemanticError>
+{
+    let (i, o) = convert_function_type(ft.clone(), types_index)?;
+    let resource_bindings: Box<[ir::ExternalGpuFunctionResourceBinding]> = rbs
+        .iter()
+        .map(|rb| ir::ExternalGpuFunctionResourceBinding {
+            group: rb.group,
+            binding: rb.binding,
+            input: rb.input,
+            output: rb.output,
+        })
+        .collect();
+    Ok(ir::ExternalGpuFunction {
+        name: String::from(name),
+        entry_point: String::from(entry_point),
+        input_types: i,
+        output_types: o,
+        resource_bindings,
+        // TODO: not this haha; open a file and get its contents
+        shader_module_content: ir::ShaderModuleContent::Wgsl(String::new()),
+    })
+}
+
+fn convert_gpu(
+    d: &ast::Declaration,
+    types_index: &Index<ir::Type>,
+) -> Option<Result<ir::ExternalGpuFunction, SemanticError>>
+{
+    match d
+    {
+        ast::Declaration::GPU(name, entry, ft, rbs, shader) =>
+        {
+            Some(construct_ir_gpu(name, entry, ft, rbs, shader, types_index))
+        }
+        _ => None,
+    }
+}
+
+// Making the generic version of the following two functions to factor out
+// code was very hard! I gave up on doing it after the iterator refused to
+// collect to a generic Vec<T>. If you are reading this and are not me and
+// would like to improve this code by helping me make the generic version
+// of these two functions (and you know how), please let me know! Thanks :)
+
+fn generate_cpu(
+    program: &ast::Program,
+    types_index: &Index<ir::Type>,
+) -> Result<(Vec<ir::ExternalCpuFunction>, Index<String>), SemanticError>
+{
+    let converted: Result<Vec<ir::ExternalCpuFunction>, SemanticError> =
+        program.iter().filter_map(|d| convert_cpu(d, types_index)).collect();
+
+    converted.map(|functions| {
+        let names = functions.iter().map(|c| String::from(&c.name)).collect();
+        let index = vec_to_index(names);
+        (functions, index)
+    })
+}
+
+fn generate_gpu(
+    program: &ast::Program,
+    types_index: &Index<ir::Type>,
+) -> Result<(Vec<ir::ExternalGpuFunction>, Index<String>), SemanticError>
+{
+    let converted: Result<Vec<ir::ExternalGpuFunction>, SemanticError> =
+        program.iter().filter_map(|d| convert_gpu(d, types_index)).collect();
+
+    converted.map(|functions| {
+        let names = functions.iter().map(|g| String::from(&g.name)).collect();
+        let index = vec_to_index(names);
+        (functions, index)
+    })
+}
+
+fn generate_funclet_index(program: &ast::Program) -> Index<String>
+{
+    let names = program
+        .iter()
+        .filter_map(|d| match d
+        {
+            ast::Declaration::Funclet(_, s, _, _, _) => Some(String::from(s)),
+            _ => None,
+        })
+        .collect();
+    vec_to_index(names)
+}
+
+fn generate_value_functions(
+    program: &ast::Program,
+    types_index: &Index<ir::Type>,
+    funclet_index: &Index<String>,
+) -> Result<(Arena<ir::ValueFunction>, Index<String>), SemanticError>
+{
+    let vfs: Result<Vec<ir::ValueFunction>, SemanticError> = program
+        .iter()
+        .filter_map(|d| match d
+        {
+            ast::Declaration::ValueFunction(name, funclet_op, ft) => Some(
+                // Explanation of this code, if this is too unreadable:
+                //  index_get and convert_function_type both return results,
+                //  but funclet_op is an option, so I apply index_get to it
+                //  using map, then transpose, switching option and result
+                //  (of course, we want option on the inside). Result is
+                //  self explanatory I think (and_then for first result,
+                //  followed by map for second)
+                funclet_op
+                    .clone()
+                    .map(|f| index_get(funclet_index, &f))
+                    .transpose()
+                    .and_then(|f_id| {
+                        convert_function_type(ft.clone(), types_index).map(
+                            |(i, o)| ir::ValueFunction {
+                                name: String::from(name),
+                                input_types: i,
+                                output_types: o,
+                                default_funclet_id: f_id,
+                            },
+                        )
+                    }),
+            ),
+            _ => None,
+        })
+        .collect();
+    vfs.map(|vfs| {
+        let names = vfs.iter().map(|vf| String::from(&vf.name)).collect();
+        (vec_to_arena(vfs), vec_to_index(names))
+    })
+}
+
+fn generate_node_index(nodes: &Vec<ast::Node>) -> Index<String>
+{
+    let v = nodes.iter().map(|(s, _)| String::from(s)).collect();
+    vec_to_index(v)
+}
+
+fn is_unsigned_integer(t: ir::Type) -> Result<bool, SemanticError>
+{
+    match t
+    {
+        ir::Type::U8 | ir::Type::U16 | ir::Type::U32 | ir::Type::U64 =>
+        {
+            Ok(true)
+        }
+        ir::Type::I8 | ir::Type::I16 | ir::Type::I32 | ir::Type::I64 =>
+        {
+            Ok(false)
+        }
+        _ => Err(SemanticError::NonIntegerType(t.clone())),
+    }
+}
+
+fn convert_size_error<T, V>(
+    result: Result<T, V>,
+    value_str: &str,
+    t: ir::Type,
+) -> Result<(), SemanticError>
+{
+    match result
+    {
+        Err(_) =>
+        {
+            Err(SemanticError::IntegerTooLarge(String::from(value_str), t))
+        }
+        Ok(_) => Ok(()),
+    }
+}
+
+fn check_size<T>(
+    v: T,
+    value_str: &str,
+    t: ir::Type,
+) -> Result<(), SemanticError>
+where
+    u8: TryFrom<T>,
+    u16: TryFrom<T>,
+    u32: TryFrom<T>,
+    i8: TryFrom<T>,
+    i16: TryFrom<T>,
+    i32: TryFrom<T>,
+{
+    match t
+    {
+        ir::Type::U8 => convert_size_error(u8::try_from(v), value_str, t),
+        ir::Type::U16 => convert_size_error(u16::try_from(v), value_str, t),
+        ir::Type::U32 => convert_size_error(u32::try_from(v), value_str, t),
+        ir::Type::I8 => convert_size_error(i8::try_from(v), value_str, t),
+        ir::Type::I16 => convert_size_error(i16::try_from(v), value_str, t),
+        ir::Type::I32 => convert_size_error(i32::try_from(v), value_str, t),
+        ir::Type::I64 | ir::Type::U64 => Ok(()),
+        _ => panic!("Not an integer"),
+    }
+}
+
+fn map_index(
+    args: &Vec<String>,
+    node_index: &Index<String>,
+) -> Result<Box<[usize]>, SemanticError>
+{
+    args.iter().map(|s| index_get(node_index, s)).collect()
+}
+
+// TODO NOW:
+// - convert node function
+// - tail edge
+// then i am done :)
+
+fn convert_node(
+    node: &ast::NodeType,
+    types_index: &Index<ir::Type>,
+    funclet_index: &Index<String>,
+    cpu_index: &Index<String>,
+    gpu_index: &Index<String>,
+    vf_index: &Index<String>,
+    node_index: &Index<String>,
+) -> Result<ir::Node, SemanticError>
+{
+    match node
+    {
+        ast::NodeType::Phi(index) => Ok(ir::Node::Phi {
+            index: *index,
+        }),
+        ast::NodeType::Extract(sub_node, index) =>
+        {
+            let node_id = index_get(node_index, sub_node)?;
+            Ok(ir::Node::ExtractResult {
+                node_id,
+                index: *index,
+            })
+        }
+        ast::NodeType::Constant(value_str, ast_typ) =>
+        {
+            let typ = convert_type(ast_typ.clone())?;
+            let type_id = types_index[&typ];
+            // This error is used in both branches
+            let value_parsing_error =
+                Err(SemanticError::ValueParsing(String::from(value_str)));
+            if is_unsigned_integer(typ.clone())?
+            {
+                let value_parse: Result<u64, _> = value_str.parse();
+                match value_parse
+                {
+                    Err(_) => value_parsing_error,
+                    Ok(value) =>
+                    {
+                        check_size(value, &value_str, typ)?;
+                        Ok(ir::Node::ConstantUnsignedInteger {
+                            value,
+                            type_id,
+                        })
+                    }
+                }
+            }
+            else
+            {
+                let value_parse: Result<i64, _> = value_str.parse();
+                match value_parse
+                {
+                    Err(_) => value_parsing_error,
+                    Ok(value) =>
+                    {
+                        check_size(value, &value_str, typ)?;
+                        Ok(ir::Node::ConstantInteger {
+                            value,
+                            type_id,
+                        })
+                    }
+                }
+            }
+        }
+        ast::NodeType::Call(name, args) =>
+        {
+            let arguments = map_index(args, node_index)?;
+            // Could be CPU or ValueFunction call
+            if cpu_index.contains_key(&name.clone())
+            {
+                // Assume CPU
+                let external_function_id = index_get(cpu_index, &name)?;
+                Ok(ir::Node::CallExternalCpu {
+                    external_function_id,
+                    arguments,
+                })
+            }
+            else
+            // Assume ValueFunction
+            {
+                let function_id = index_get(vf_index, &name)?;
+                Ok(ir::Node::CallValueFunction {
+                    function_id,
+                    arguments,
+                })
+            }
+        }
+        ast::NodeType::GPUCall(name, dims, args) =>
+        {
+            let external_function_id = index_get(gpu_index, &name)?;
+            let arguments = map_index(args, node_index)?;
+            let dimensions = map_index(dims, node_index)?;
+            Ok(ir::Node::CallExternalGpuCompute {
+                external_function_id,
+                arguments,
+                dimensions,
+            })
+        }
+    }
+}
+
+fn convert_tail_edge(
+    tail: &ast::FuncletTail,
+    node_index: &Index<String>,
+    funclet_index: &Index<String>,
+) -> Result<ir::TailEdge, SemanticError>
+{
+    match tail
+    {
+        ast::FuncletTail::Return(rvs) =>
+        {
+            let return_values = map_index(&rvs, node_index)?;
+            Ok(ir::TailEdge::Return {
+                return_values,
+            })
+        }
+        ast::FuncletTail::Yield(rvs, args, funclets) =>
+        {
+            let captured_arguments = map_index(&args, node_index)?;
+            let return_values = map_index(&rvs, node_index)?;
+            let funclet_ids = map_index(&funclets, funclet_index)?;
+            Ok(ir::TailEdge::Yield {
+                funclet_ids,
+                captured_arguments,
+                return_values,
+            })
+        }
+    }
+}
+
+fn convert_funclet(
+    is_inline: bool,
+    function_type: &ast::FuncType,
+    ast_nodes: &Vec<ast::Node>,
+    ast_tail: &ast::FuncletTail,
+    types_index: &Index<ir::Type>,
+    funclet_index: &Index<String>,
+    cpu_index: &Index<String>,
+    gpu_index: &Index<String>,
+    vf_index: &Index<String>,
+) -> Result<ir::Funclet, SemanticError>
+{
+    let node_index = generate_node_index(ast_nodes);
+
+    let kind = if is_inline
+    {
+        ir::FuncletKind::Inline
+    }
+    else
+    {
+        ir::FuncletKind::MixedImplicit
+    };
+    let (input_types, output_types) =
+        convert_function_type(function_type.clone(), types_index)?;
+    let nodes_res: Result<Box<[ir::Node]>, SemanticError> = ast_nodes
+        .iter()
+        .map(|(_, node)| {
+            convert_node(
+                node,
+                types_index,
+                funclet_index,
+                cpu_index,
+                gpu_index,
+                vf_index,
+                &node_index,
+            )
+        })
+        .collect();
+    let nodes = nodes_res?;
+    let tail_edge = convert_tail_edge(ast_tail, &node_index, funclet_index)?;
+
+    Ok(ir::Funclet {
+        kind,
+        input_types,
+        output_types,
+        nodes,
+        tail_edge,
+        // Dunno about these
+        input_resource_states: Default::default(),
+        output_resource_states: Default::default(),
+        local_meta_variables: Default::default(),
+    })
+}
+
+fn convert_funclets(
+    program: &ast::Program,
+    types_index: &Index<ir::Type>,
+    funclet_index: &Index<String>,
+    cpu_index: &Index<String>,
+    gpu_index: &Index<String>,
+    vf_index: &Index<String>,
+) -> Result<Arena<ir::Funclet>, SemanticError>
+{
+    let v: Result<Vec<ir::Funclet>, SemanticError> = program
+        .iter()
+        .filter_map(|d| match d
+        {
+            ast::Declaration::Funclet(is_inline, _, ft, nodes, tail) =>
+            {
+                Some(convert_funclet(
+                    *is_inline,
+                    ft,
+                    nodes,
+                    tail,
+                    types_index,
+                    funclet_index,
+                    cpu_index,
+                    gpu_index,
+                    vf_index,
+                ))
+            }
+            _ => None,
+        })
+        .collect();
+    v.map(vec_to_arena)
+}
+
+fn convert_pipelines(
+    program: &ast::Program,
+    funclet_index: &Index<String>,
+) -> Result<Vec<ir::Pipeline>, SemanticError>
+{
+    program
+        .iter()
+        .filter_map(|d| match d
+        {
+            ast::Declaration::Pipeline(name, entry_funclet_name) =>
+            {
+                Some(index_get(funclet_index, entry_funclet_name).map(
+                    |entry_funclet| ir::Pipeline {
+                        name: String::from(name),
+                        entry_funclet,
+                    },
+                ))
+            }
+            _ => None,
+        })
+        .collect()
 }

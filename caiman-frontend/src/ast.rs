@@ -66,7 +66,7 @@ pub enum Declaration
     //   make every non-inline funclet MixedImplicit
     Funclet(bool, String, FuncType, Vec<Node>, FuncletTail),
     CPU(String, FuncType),
-    GPU(String, String, FuncType, Vec<ResourceBinding>, String),
+    GPU(String, String, FuncType, Vec<ResourceBinding>, Option<String>),
     ValueFunction(String, Option<String>, FuncType),
     Pipeline(String, String),
 }

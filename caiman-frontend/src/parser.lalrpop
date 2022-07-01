@@ -26,7 +26,7 @@ pub Declaration: Declaration = {
       => Declaration::Funclet(<>),
   "CPU" <Id> <TypeAnnotation> ";" 
       => Declaration::CPU(<>),
-  "GPU" <Id> "(" <Id> ")" <TypeAnnotation> "{" <Binding*> <Shader> "}" 
+  "GPU" <Id> "(" <Id> ")" <TypeAnnotation> "{" <Binding*> <Shader?> "}" 
       => Declaration::GPU(<>),
   "ValueFunction" <Id> <("(" <Id> ")")?> <TypeAnnotation> ";"
       => Declaration::ValueFunction(<>),

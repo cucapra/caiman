@@ -1,0 +1,7 @@
+Funclet f0 : (U8) -> (F32) {
+  n0 = phi 0;
+  n1 = const 1 : U8;
+  Return n0
+}
+
+Pipeline pipeline_1(f0);

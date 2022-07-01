@@ -1,0 +1,5 @@
+Funclet foo : (I32) -> (I32) {
+  node = phi 0;
+  Return node
+}
+

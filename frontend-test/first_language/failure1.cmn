@@ -1,0 +1,5 @@
+Funclet no_good : () -> (F32) {
+  overflow = const 1000 : U8;
+  result = extract overflow;
+  Return result
+}

@@ -1,7 +1,7 @@
 (
 	version : (0, 0, 1),
 	program : (
-		types : {0:I32, 1:F32},
+		types : {0:I32, 1:U32},
 		funclets : {
 			0 : (
 				kind : MixedImplicit,

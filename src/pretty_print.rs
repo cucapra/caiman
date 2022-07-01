@@ -4,6 +4,8 @@ use crate::ir;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, Write};
+use caiman_frontend;
+use crate::frontend_to_ir;
 
 fn write_indent(oc: &mut dyn Write, indent: usize) -> std::io::Result<()>
 {
@@ -465,7 +467,7 @@ fn write_pipelines(
     Ok(())
 }
 
-fn write_program(
+pub fn write_program(
     oc: &mut dyn Write,
     program: ir::Program,
     numbers_mode: bool,
@@ -536,7 +538,7 @@ fn file_to_definition(
     }
 }
 
-pub fn print_file(input_file: &mut File) -> std::io::Result<()>
+pub fn print_ron_file(input_file: &mut File) -> std::io::Result<()>
 {
     let mut oc = io::stdout();
     match file_to_definition(input_file)
@@ -547,5 +549,30 @@ pub fn print_file(input_file: &mut File) -> std::io::Result<()>
         }
         Ok(mut definition) => write_definition(&mut oc, definition)?,
     };
+    Ok(())
+}
+
+pub fn print_program_file(input_file: &mut File) -> std::io::Result<()>
+{
+    match caiman_frontend::parse_read(input_file)
+    {
+        Err(why) => println!("Parsing error: {}", why),
+        Ok(ast) => {
+            match frontend_to_ir::from_ast(ast)
+            {
+                Err(why) => println!(
+                    "Semantic error: {}", 
+                    frontend_to_ir::semantic_error_to_string(why),
+                ),
+                Ok(program) => {
+                    write_program(
+                        &mut std::io::stdout(),
+                        program,
+                        false,
+                    );
+                }
+            }
+        },
+    }
     Ok(())
 }

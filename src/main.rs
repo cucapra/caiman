@@ -66,8 +66,15 @@ fn explicate(input_file : &mut File, output_file : &mut File)
 	}
 }
 
-fn pretty_print(input_file : &mut File) {
-    caiman::pretty_print::print_file(input_file);
+fn pretty_print(is_ron : bool, input_file : &mut File) {
+    if is_ron
+    {
+        caiman::pretty_print::print_ron_file(input_file);
+    }
+    else
+    {
+        caiman::pretty_print::print_program_file(input_file);
+    }
 }
 
 fn main()
@@ -154,7 +161,7 @@ fn main()
 
   if arguments.pretty_print 
   {
-      pretty_print(&mut input_file);
+      pretty_print(is_ron, &mut input_file);
   }
   else
   {

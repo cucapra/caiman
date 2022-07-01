@@ -1,0 +1,14 @@
+Funclet f0 : (U8) -> (U8) {
+  n0 = phi 0;
+  n1 = const 1 : U8;
+  n2 = foo(n0);
+  n3 = extract n2;
+  n4 = bar(n4);
+  n5 = extract n4;
+  Return n5
+}
+
+CPU foo : (U8) -> (U8);
+
+CPU bar : (I32) -> (U8);
+
