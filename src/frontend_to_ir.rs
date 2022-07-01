@@ -425,11 +425,6 @@ fn map_index(
     args.iter().map(|s| index_get(node_index, s)).collect()
 }
 
-// TODO NOW:
-// - convert node function
-// - tail edge
-// then i am done :)
-
 fn convert_node(
     node: &ast::NodeType,
     types_index: &Index<ir::Type>,
