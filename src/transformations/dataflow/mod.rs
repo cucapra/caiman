@@ -46,11 +46,11 @@ pub enum Error {
 }
 
 enum Node {
-    /// A node containing a value-producing operation.
+    /// A node containing an operation.
     Operation(Operation),
 
-    /// A reference to another node. The referenced node *must* be an operation, and not another
-    /// reference; this is done to ensure O(1) operation access and simplify cycle detection.
+    /// A reference to another node. When operating on a reference node, you traverse the
+    /// "linked list" of references until a Node::Operation is found and operate on that instead.
     ///
     /// # Why references?
     ///
@@ -81,21 +81,42 @@ impl Graph {
         };
         Ok(Self { nodes, tail })
     }
-    fn operation(&self, index: NodeIndex) -> &Operation {
-        match &self.nodes[index.0] {
-            Node::Operation(operation) => operation,
-            Node::Reference(index) => self.operation(*index),
+    /// Returns the index of the node containing the operation referenced by `index`.
+    /// (This may be the same as `index`.) It's guaranteed that the node at the resulting index
+    /// will be a [`Node::Operation`].
+    fn resolve_index(&self, mut index: NodeIndex) -> NodeIndex {
+        loop {
+            match &self.nodes[index.0] {
+                Node::Operation(_) => return index,
+                Node::Reference(next) if *next == index => panic!("Reference cycle"),
+                Node::Reference(next) => index = *next,
+            }
         }
     }
-    fn operation_mut(&mut self, mut index: NodeIndex) -> &mut Operation {
-        // This code is a bit tricky due to mutable borrowing rules
-        while let Node::Reference(next) = &self.nodes[index.0] {
-            index = *next;
-        }
-        match &mut self.nodes[index.0] {
+    /// Retrieves a reference to the operation associated with `index`.
+    pub fn operation(&self, index: NodeIndex) -> &Operation {
+        let real_index = self.resolve_index(index);
+        match &self.nodes[real_index.0] {
             Node::Operation(operation) => operation,
             Node::Reference(_) => unreachable!(),
         }
+    }
+    /// Retrieves a mutable reference to the operation associated with the `index`.
+    pub fn operation_mut(&mut self, index: NodeIndex) -> &mut Operation {
+        let real_index = self.resolve_index(index);
+        match &mut self.nodes[real_index.0] {
+            Node::Operation(operation) => operation,
+            Node::Reference(_) => unreachable!(),
+        }
+    }
+    /// Makes the node at `src` into a reference to `dst`. Note that there is no way to convert
+    /// a node from a reference back into an operation -- this is to make it easier to reason
+    /// about correctness.
+    pub fn make_reference(&mut self, src: NodeIndex, dst: NodeIndex) {
+        let real_src = self.resolve_index(src);
+        // strictly speaking, we don't need to resolve dst, but it might help performance
+        let real_dst = self.resolve_index(dst);
+        self.nodes[real_src.0] = Node::Reference(real_dst);
     }
     pub fn into_ir(mut self) -> (Vec<ir::Node>, ir::TailEdge) {
         fn visit(
