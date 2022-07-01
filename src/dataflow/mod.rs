@@ -70,9 +70,9 @@ pub struct Graph {
     tail: Tail,
 }
 impl Graph {
-    pub fn from_ir(ir_nodes: Vec<ir::Node>, ir_tail: ir::TailEdge) -> Result<Self, Error> {
+    pub fn from_ir(ir_nodes: &[ir::Node], ir_tail: &ir::TailEdge) -> Result<Self, Error> {
         let mut nodes = Vec::with_capacity(ir_nodes.len());
-        for (i, ir_node) in ir_nodes.into_iter().enumerate() {
+        for (i, ir_node) in ir_nodes.iter().enumerate() {
             let context = from_ir::Context::new(i);
             let operation = ir_node.convert(&context)?;
             nodes.push(Node::Operation(operation));
@@ -88,8 +88,8 @@ impl Graph {
     /// will be a [`Node::Operation`].
     fn resolve_index(&self, mut index: NodeIndex) -> NodeIndex {
         loop {
-            // I'm pretty sure reference cycles are impossible if you only use the `pub` functions,
-            // but I'm not going to do a formal proof by induction.
+            // I'm pretty sure reference cycles are impossible if you only use the `pub` functions
+            // Worst case scenario, they're not & we get an infinite loop (easy to debug)
             match &self.nodes[index.0] {
                 Node::Operation(_) => return index,
                 Node::Reference(next) => index = *next,
