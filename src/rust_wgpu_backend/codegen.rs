@@ -289,7 +289,7 @@ impl<'program> CodeGen<'program>
 
 			match node
 			{
-				ir::Node::None => (),
+				ir::Node::None {} => (),
 				ir::Node::Phi {index} =>
 				{
 					placement_state.update_node_state(current_node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, argument_variable_ids[*index as usize]);

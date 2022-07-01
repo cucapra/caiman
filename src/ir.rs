@@ -40,11 +40,46 @@ pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
 pub type LocalMetaVariableId = usize;
 
-mod generated
-{
-	use super::*;
-	include!(concat!(env!("OUT_DIR"), "/generated/ir.txt"));
+macro_rules! make_nodes {
+	// Overload for array types
+	(@lookup_type, [$elem_type:ident]) => { Box<[make_nodes!(@lookup_type, $elem_type)]> };
+	// Actual type mappings
+	(@lookup_type, Type) => { TypeId };
+	(@lookup_type, ImmediateI64) => { i64 };
+	(@lookup_type, ImmediateU64) => { u64 };
+	(@lookup_type, Index) => { usize };
+	(@lookup_type, ExternalCpuFunction) => { ExternalCpuFunctionId };
+	(@lookup_type, ExternalGpuFunction) => { ExternalGpuFunctionId };
+	(@lookup_type, ValueFunction) => { ValueFunctionId };
+	(@lookup_type, Operation) => { OperationId };
+	(@lookup_type, Place) => { Place };
+
+	// When mapping referenced nodes, we only care about mapping the Operation types,
+	// since those are the actual references.
+	(@map_ref, $map:ident, $arg:ident : Operation) => {$map(*$arg)};
+	(@map_ref, $map:ident, $arg:ident : [Operation]) => {
+		$arg.iter().map(|op| $map(*op)).collect()
+	};
+	(@map_ref, $_map:ident, $arg:ident : $_arg_type:tt) => {$arg.clone()};
+
+	($($_lang:lifetime ($name:ident $_output:ident ($($arg:ident : $arg_type:tt,)*));)*) => {
+		#[derive(Serialize, Deserialize, Debug, Clone)]
+		pub enum Node {
+			$($name {$($arg : make_nodes!(@lookup_type, $arg_type)),*}),*
+		}
+		impl Node {
+			pub fn map_referenced_nodes(&self, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
+				match self {
+					$(Self::$name {$($arg),*} => Self::$name {
+						$($arg: make_nodes!(@map_ref, f, $arg : $arg_type)),*
+					},)*
+				}
+			}
+		}
+	};
 }
+
+with_operations!(make_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StructField
@@ -103,8 +138,6 @@ pub enum LocalMetaVariable
 	Resource,
 	Fence,
 }
-
-pub use generated::Node;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
