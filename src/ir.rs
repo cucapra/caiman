@@ -62,7 +62,7 @@ macro_rules! make_nodes {
 	};
 	(@map_ref, $_map:ident, $arg:ident : $_arg_type:tt) => {$arg.clone()};
 
-	($($_lang:lifetime ($name:ident $_output:ident ($($arg:ident : $arg_type:tt,)*));)*) => {
+	($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
 		#[derive(Serialize, Deserialize, Debug, Clone)]
 		pub enum Node {
 			$($name {$($arg : make_nodes!(@lookup_type, $arg_type)),*}),*
