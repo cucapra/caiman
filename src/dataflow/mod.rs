@@ -40,6 +40,10 @@ impl Tail {
     }
 }
 
+pub trait TreeTransformer {
+    fn apply(&mut self, graph: &mut Graph, index: NodeIndex);
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to translate IR to dataflow graph")]
@@ -104,7 +108,7 @@ impl Graph {
             Node::Reference(_) => unreachable!(),
         }
     }
-    /// Retrieves a mutable reference to the operation associated with the `index`.
+    /// Retrieves a mutable reference to the operation associated with `index`.
     pub fn operation_mut(&mut self, index: NodeIndex) -> &mut Operation {
         let real_index = self.resolve_index(index);
         match &mut self.nodes[real_index.0] {
@@ -120,6 +124,16 @@ impl Graph {
         // strictly speaking, we don't need to resolve dst, but it might help performance
         let real_dst = self.resolve_index(dst);
         self.nodes[real_src.0] = Node::Reference(real_dst);
+    }
+    pub fn apply_transforms(&mut self, transforms: &mut [&mut dyn TreeTransformer]) {
+        let mut dfs = Dfs::new(self);
+        while let Some(event) = dfs.next(self) {
+            if let DfsEvent::Leave(index) = event {
+                for transform in transforms.iter_mut() {
+                    transform.apply(self, index);
+                }
+            }
+        }
     }
     pub fn into_ir(&self) -> (Vec<ir::Node>, ir::TailEdge) {
         let mut dfs = Dfs::new(&self);
