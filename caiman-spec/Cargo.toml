@@ -1,13 +1,12 @@
 [package]
-name = "caiman-ref"
+name = "caiman-spec"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[build-dependencies]
-caiman-spec = { path = "../caiman-spec" }
-
 [dependencies]
-wgpu = "0.12.0"
-futures = "0.3"
+serde = "1.0.130"
+serde_derive = "1.0.130"
+ron = "0.7"
