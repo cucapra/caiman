@@ -66,26 +66,31 @@ impl DependencyFirst {
         });
         Self { stack, visited }
     }
-    /// Retrieves the next node in the traversal. `graph` must be the same graph which was used to
-    /// construct this instance. Returns an error upon encountering a dependency cycle.
+    /// Retrieves the next node in the traversal, or `None` if all reachable nodes have been
+    /// traversed. `graph` must be the same graph which was used to construct this instance.
     ///
     /// The exact order of traversal is unspecified, but the following invariants hold:
     /// - Each reachable node will be returned (assuming the graph is acyclic)
     /// - A node will only be returned from `next` if all its dependencies have already been
     ///   returned from `next`.
+    ///
+    /// # Errors
+    /// An error will be returned if a dependency cycle is detected. Calling [`next`](Self::next)
+    /// again may behave incorrectly.
     pub fn next(&mut self, graph: &Graph) -> Result<Option<NodeIndex>, DependencyCycle> {
         loop {
-            match self.stack.pop() {
+            let index = match self.stack.pop() {
                 None => return Ok(None),
                 Some(Command::Leave(index)) => {
                     self.visited.insert(index, VisitStatus::Done);
                     return Ok(Some(index));
                 }
-                Some(Command::Visit(index)) => {
-                    let status = self.visited.insert(index, VisitStatus::Working);
-                    if let Some(VisitStatus::Working) = status {
-                        return Err(DependencyCycle { includes: index });
-                    }
+                Some(Command::Visit(index)) => index,
+            };
+            match self.visited.insert(index, VisitStatus::Working) {
+                Some(VisitStatus::Working) => return Err(DependencyCycle { includes: index }),
+                Some(VisitStatus::Done) => (),
+                None => {
                     self.stack.push(Command::Leave(index));
                     graph.operation(index).for_each_dependency(|&i| {
                         self.stack.push(Command::Visit(i)) //
