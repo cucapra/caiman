@@ -6,6 +6,7 @@ use thiserror::Error;
 
 mod from_ir;
 mod into_ir;
+mod traversals;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct NodeIndex(usize);
@@ -41,13 +42,15 @@ impl Tail {
 }
 
 pub trait TreeTransformer {
-    fn apply(&mut self, graph: &mut Graph, index: NodeIndex);
+    fn apply(&mut self, graph: &mut Graph, index: NodeIndex) -> bool;
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to translate IR to dataflow graph")]
     FromIr(#[from] from_ir::Error),
+    #[error(transparent)]
+    DependencyCycle(#[from] traversals::DependencyCycle),
 }
 
 enum Node {
@@ -125,66 +128,32 @@ impl Graph {
         let real_dst = self.resolve_index(dst);
         self.nodes[real_src.0] = Node::Reference(real_dst);
     }
-    pub fn apply_transforms(&mut self, transforms: &mut [&mut dyn TreeTransformer]) {
-        let mut dfs = Dfs::new(self);
-        while let Some(event) = dfs.next(self) {
-            if let DfsEvent::Leave(index) = event {
-                for transform in transforms.iter_mut() {
-                    transform.apply(self, index);
-                }
+    pub fn apply_transforms(
+        &mut self,
+        transforms: &mut [&mut dyn TreeTransformer],
+    ) -> Result<bool, Error> {
+        let mut mutated = false;
+        let mut traversal = traversals::DependencyFirst::new(self);
+        while let Some(index) = traversal.next(self)? {
+            for transform in transforms.iter_mut() {
+                mutated |= transform.apply(self, index);
             }
         }
+        Ok(mutated)
     }
-    pub fn into_ir(&self) -> (Vec<ir::Node>, ir::TailEdge) {
-        let mut dfs = Dfs::new(&self);
+    pub fn into_ir(&self) -> Result<(Vec<ir::Node>, ir::TailEdge), Error> {
         let mut ir_nodes = Vec::new();
         let mut node_map = HashMap::new();
-        while let Some(event) = dfs.next(self) {
-            // technically we should do cycle detection here
-            if let DfsEvent::Leave(index) = event {
-                let context = into_ir::Context::new(&node_map);
-                ir_nodes.push(self.operation(index).convert(&context).unwrap());
-                node_map.insert(index, node_map.len());
-            }
+        let mut traversal = traversals::DependencyFirst::new(&self);
+        while let Some(index) = traversal.next(self)? {
+            let context = into_ir::Context::new(&node_map);
+            ir_nodes.push(self.operation(index).convert(&context).unwrap());
+            node_map.insert(index, node_map.len());
         }
         let ir_tail = {
             let context = into_ir::Context::new(&node_map);
             (&self.tail).convert(&context).unwrap()
         };
-        (ir_nodes, ir_tail)
-    }
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum DfsEvent {
-    Visit(NodeIndex),
-    Leave(NodeIndex),
-}
-pub struct Dfs {
-    stack: Vec<DfsEvent>,
-    visited: HashSet<NodeIndex>,
-}
-impl Dfs {
-    fn new(graph: &Graph) -> Self {
-        let visited = HashSet::with_capacity(graph.nodes.len());
-        let mut stack = Vec::new();
-        graph.tail.for_each_dependency(|&i| {
-            stack.push(DfsEvent::Visit(i)) //
-        });
-        Self { stack, visited }
-    }
-    fn next(&mut self, graph: &Graph) -> Option<DfsEvent> {
-        loop {
-            let index = match self.stack.pop() {
-                Some(DfsEvent::Visit(index)) => index,
-                other => return other,
-            };
-            if self.visited.insert(index) {
-                graph.operation(index).for_each_dependency(|&i| {
-                    self.stack.push(DfsEvent::Visit(i)) //
-                });
-                return Some(DfsEvent::Visit(index));
-            }
-        }
+        Ok((ir_nodes, ir_tail))
     }
 }
