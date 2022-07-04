@@ -81,18 +81,19 @@ impl DependencyFirst {
         loop {
             let index = match self.stack.pop() {
                 None => return Ok(None),
-                Some(Command::Leave(index)) => {
-                    self.visited.insert(index, VisitStatus::Done);
-                    return Ok(Some(index));
+                Some(Command::Leave(resolved)) => {
+                    self.visited.insert(resolved, VisitStatus::Done);
+                    return Ok(Some(resolved));
                 }
                 Some(Command::Visit(index)) => index,
             };
-            match self.visited.insert(index, VisitStatus::Working) {
-                Some(VisitStatus::Working) => return Err(DependencyCycle { includes: index }),
+            let resolved = graph.resolve_index(index);
+            match self.visited.insert(resolved, VisitStatus::Working) {
+                Some(VisitStatus::Working) => return Err(DependencyCycle { includes: resolved }),
                 Some(VisitStatus::Done) => (),
                 None => {
-                    self.stack.push(Command::Leave(index));
-                    graph.operation(index).for_each_dependency(|&i| {
+                    self.stack.push(Command::Leave(resolved));
+                    graph.operation(resolved).for_each_dependency(|&i| {
                         self.stack.push(Command::Visit(i)) //
                     });
                 }
