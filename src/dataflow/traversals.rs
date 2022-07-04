@@ -11,6 +11,7 @@ pub struct DependencyCycle {
     pub includes: NodeIndex,
 }
 
+#[derive(Debug)]
 /// An abstract "command" for a traversal to follow. These are meant to be traversal-agnostic
 /// and used inside traversal data structures (i.e. their stack).
 enum Command {
@@ -23,7 +24,7 @@ enum Command {
     Leave(NodeIndex),
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 /// Represents the "status" of a visited node.
 enum VisitStatus {
     /// The node — but not all of its dependencies — have been visited.
@@ -99,7 +100,7 @@ impl DependencyFirst {
                     return Ok(Some(resolved));
                 }
             };
-            match self.visited.insert(resolved, VisitStatus::Working) {
+            match self.visited.get(&resolved) {
                 Some(VisitStatus::Done) => continue,
                 Some(VisitStatus::Working) => {
                     let err = DependencyCycle { includes: resolved };
@@ -107,6 +108,7 @@ impl DependencyFirst {
                     return Err(err);
                 }
                 None => {
+                    self.visited.insert(resolved, VisitStatus::Working);
                     stack.push(Command::Leave(resolved));
                     graph.operation(resolved).for_each_dependency(|&i| {
                         stack.push(Command::Visit(i)) //
