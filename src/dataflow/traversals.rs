@@ -24,6 +24,7 @@ enum Command {
     Leave(NodeIndex),
 }
 
+#[derive(PartialEq, Eq)]
 /// Represents the "status" of a visited node.
 enum VisitStatus {
     /// The node — but not all of its dependencies — have been visited.
@@ -83,29 +84,37 @@ impl DependencyFirst {
     /// # Errors
     /// An error will be returned if a dependency cycle is detected.
     pub fn next(&mut self, graph: &Graph) -> Result<Option<NodeIndex>, DependencyCycle> {
+        // Grab mutable reference to stack, or return error if fused
         let stack = self.state.as_mut().map_err(|e| e.clone())?;
-        let err = loop {
-            let index = match stack.pop() {
+        loop {
+            let command = match stack.pop() {
+                Some(command) => command,
                 None => return Ok(None),
-                Some(Command::Leave(resolved)) => {
-                    self.visited.insert(resolved, VisitStatus::Done);
+            };
+            let resolved = match command {
+                Command::Visit(index) => graph.resolve_index(index),
+                Command::Leave(index) => {
+                    let resolved = graph.resolve_index(index);
+                    let prev = self.visited.insert(resolved, VisitStatus::Done);
+                    assert!(prev == Some(VisitStatus::Working));
                     return Ok(Some(resolved));
                 }
-                Some(Command::Visit(index)) => index,
             };
-            let resolved = graph.resolve_index(index);
             match self.visited.insert(resolved, VisitStatus::Working) {
-                Some(VisitStatus::Working) => break DependencyCycle { includes: resolved },
-                Some(VisitStatus::Done) => (),
+                Some(VisitStatus::Done) => continue,
+                Some(VisitStatus::Working) => {
+                    let err = DependencyCycle { includes: resolved };
+                    self.state = Err(err);
+                    return Err(err);
+                }
                 None => {
                     stack.push(Command::Leave(resolved));
                     graph.operation(resolved).for_each_dependency(|&i| {
                         stack.push(Command::Visit(i)) //
                     });
+                    continue;
                 }
             }
-        };
-        self.state = Err(err);
-        Err(err)
+        }
     }
 }
