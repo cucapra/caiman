@@ -1,8 +1,7 @@
 #![warn(warnings)]
 use crate::convert::Convert;
 use crate::ir;
-use std::collections::{HashMap, HashSet};
-use std::mem::replace;
+use std::collections::HashMap;
 use thiserror::Error;
 
 mod from_ir;

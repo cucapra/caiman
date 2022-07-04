@@ -1,6 +1,5 @@
 //! Dataflow graph traversals.
-
-use crate::dataflow::{Graph, NodeIndex, Tail};
+use crate::dataflow::{Graph, NodeIndex};
 use std::collections::HashMap;
 use thiserror::Error;
 
