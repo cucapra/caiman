@@ -41,10 +41,6 @@ impl Tail {
     }
 }
 
-pub trait TreeTransformer {
-    fn apply(&mut self, graph: &mut Graph, index: NodeIndex) -> bool;
-}
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to translate IR to dataflow graph")]
