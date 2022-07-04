@@ -6,7 +6,7 @@ use thiserror::Error;
 
 mod from_ir;
 mod into_ir;
-mod traversals;
+pub mod traversals;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct NodeIndex(usize);
@@ -127,19 +127,6 @@ impl Graph {
         // strictly speaking, we don't need to resolve dst, but it might help performance
         let real_dst = self.resolve_index(dst);
         self.nodes[real_src.0] = Node::Reference(real_dst);
-    }
-    pub fn apply_transforms(
-        &mut self,
-        transforms: &mut [&mut dyn TreeTransformer],
-    ) -> Result<bool, Error> {
-        let mut mutated = false;
-        let mut traversal = traversals::DependencyFirst::new(self);
-        while let Some(index) = traversal.next(self)? {
-            for transform in transforms.iter_mut() {
-                mutated |= transform.apply(self, index);
-            }
-        }
-        Ok(mutated)
     }
     pub fn into_ir(&self) -> Result<(Vec<ir::Node>, ir::TailEdge), Error> {
         let mut ir_nodes = Vec::new();
