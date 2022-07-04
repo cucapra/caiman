@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 /// A dependency cycle was encountered during graph traversal.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone, Copy)]
 #[error("dependency cycle (includes node #{})", includes.0)]
 pub struct DependencyCycle {
     /// A representative node of the cycle.
@@ -53,7 +53,10 @@ enum VisitStatus {
 /// - If you change a node's dependencies after the traversal has left that node, the new
 ///   dependencies won't be added to the search.
 pub struct DependencyFirst {
-    stack: Vec<Command>,
+    /// If the traversal has not yet encountered an error, this will be `Ok(s)` where `s`
+    /// is a stack of commands. If the traversal has encountered an error, the state will be
+    /// `Err(e)` with that error.
+    state: Result<Vec<Command>, DependencyCycle>,
     visited: HashMap<NodeIndex, VisitStatus>,
 }
 impl DependencyFirst {
@@ -64,7 +67,10 @@ impl DependencyFirst {
         graph.tail.for_each_dependency(|&i| {
             stack.push(Command::Visit(i)) //
         });
-        Self { stack, visited }
+        Self {
+            state: Ok(stack),
+            visited,
+        }
     }
     /// Retrieves the next node in the traversal, or `None` if all reachable nodes have been
     /// traversed. `graph` must be the same graph which was used to construct this instance.
@@ -75,11 +81,11 @@ impl DependencyFirst {
     ///   returned from `next`.
     ///
     /// # Errors
-    /// An error will be returned if a dependency cycle is detected. Calling [`next`](Self::next)
-    /// again may behave incorrectly.
+    /// An error will be returned if a dependency cycle is detected.
     pub fn next(&mut self, graph: &Graph) -> Result<Option<NodeIndex>, DependencyCycle> {
-        loop {
-            let index = match self.stack.pop() {
+        let stack = self.state.as_mut().map_err(|e| e.clone())?;
+        let err = loop {
+            let index = match stack.pop() {
                 None => return Ok(None),
                 Some(Command::Leave(resolved)) => {
                     self.visited.insert(resolved, VisitStatus::Done);
@@ -89,15 +95,17 @@ impl DependencyFirst {
             };
             let resolved = graph.resolve_index(index);
             match self.visited.insert(resolved, VisitStatus::Working) {
-                Some(VisitStatus::Working) => return Err(DependencyCycle { includes: resolved }),
+                Some(VisitStatus::Working) => break DependencyCycle { includes: resolved },
                 Some(VisitStatus::Done) => (),
                 None => {
-                    self.stack.push(Command::Leave(resolved));
+                    stack.push(Command::Leave(resolved));
                     graph.operation(resolved).for_each_dependency(|&i| {
-                        self.stack.push(Command::Visit(i)) //
+                        stack.push(Command::Visit(i)) //
                     });
                 }
             }
-        }
+        };
+        self.state = Err(err);
+        Err(err)
     }
 }
