@@ -21,7 +21,7 @@ caiman-spec = { path = "caiman-spec" }
 
 [dev-dependencies]
 caiman-ref = { path = "caiman-ref" }
-# caiman-test = { path = "caiman-test" }
+caiman-test = { path = "caiman-test" }
 
 [features]
 build-binary = [ "clap" ]
