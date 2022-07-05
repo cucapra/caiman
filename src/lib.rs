@@ -10,5 +10,4 @@ pub mod frontend;
 mod rust_wgpu_backend;
 mod dataflow;
 mod transformations;
-mod convert;
 mod node_usage_analysis;
