@@ -1,202 +1,74 @@
-#![allow(warnings)]
-use std::fs::File;
-use std::io::prelude::*;
-use std::path::Path;
-use std::io::Write;
 use caiman_spec::spec;
+use std::fs::File;
+use std::io::Write;
 
-mod dataflow;
-
-fn get_input_kind_type_name(kind : &spec::OperationInputKind) -> String
-{
-	use spec::OperationInputKind;
-	match kind
-	{
-		OperationInputKind::Type => String::from("TypeId"),
-		OperationInputKind::ImmediateI64 => String::from("i64"),
-		OperationInputKind::ImmediateU64 => String::from("u64"),
-		OperationInputKind::Index => String::from("usize"),
-		OperationInputKind::ExternalCpuFunction => String::from("ExternalCpuFunctionId"),
-		OperationInputKind::ExternalGpuFunction => String::from("ExternalGpuFunctionId"),
-		OperationInputKind::ValueFunction => String::from("ValueFunctionId"),
-		OperationInputKind::Operation => String::from("OperationId"),
-		OperationInputKind::Place => String::from("Place"),
-		_ => panic!("Unimplemented input kind: {:?}", kind)
-	}
+fn operation_language(operation: &spec::Operation) -> &'static str {
+    match (
+        operation.language_set.functional,
+        operation.language_set.scheduling,
+    ) {
+        (true, true) => "mixed",
+        (true, false) => "functional",
+        (false, true) => "scheduling",
+        (false, false) => panic!("operation doesn't belong to any languages?"),
+    }
+}
+fn operation_output(operation: &spec::Operation) -> &'static str {
+    match operation.output {
+        spec::OperationOutput::None => "None",
+        spec::OperationOutput::Single => "Single",
+        spec::OperationOutput::Multiple => "Multiple",
+    }
+}
+fn input_type(input: &spec::OperationInput) -> String {
+    use spec::OperationInputKind as OK;
+    let base = match input.kind {
+        OK::Type => "Type",
+        OK::Place => "Place",
+        OK::ImmediateI64 => "ImmediateI64",
+        OK::ImmediateU64 => "ImmediateU64",
+        OK::Index => "Index",
+        OK::Operation => "Operation",
+        OK::ExternalCpuFunction => "ExternalCpuFunction",
+        OK::ExternalGpuFunction => "ExternalGpuFunction",
+        OK::ValueFunction => "ValueFunction",
+    };
+    if input.is_array {
+        format!("[{base}]")
+    } else {
+        base.to_owned()
+    }
+}
+fn write_with_operations(out: &mut File, spec: &spec::Spec) -> std::io::Result<()> {
+    write!(out, "macro_rules! with_operations {{\n")?;
+    write!(out, "\t($macro:ident) => {{\n")?;
+    write!(out, "\t\t$macro! {{\n")?;
+    for operation in spec.operations.iter() {
+        write!(
+            out,
+            "\t\t\t{} {} (",
+            operation_language(operation),
+            operation.name,
+        )?;
+        for input in operation.inputs.iter() {
+            write!(out, "{}: {}, ", input.name, input_type(input))?;
+        }
+        write!(out, ") -> {};\n", operation_output(operation))?;
+    }
+    write!(out, "\t\t}}\n")?;
+    write!(out, "\t}}\n")?;
+    write!(out, "}}\n")
 }
 
-fn write_ir_definition(output_file : &mut File, specification : &spec::Spec)
-{
-	let built_in_node_string = "
-	//Phi { index : usize },
-	//ComputedResult { node_ids : Box<[NodeId]> },
-	//ExtractResult { node_id : NodeId, index : usize },
-
-	//GpuTaskStart{ local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
-	//GpuTaskEnd{ task_node_id : NodeId, local_variable_node_ids : Box<[NodeId]>, gpu_resident_node_ids : Box<[NodeId]> },
-";
-
-	write!(output_file, "#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]\n");
-	write!(output_file, "pub enum Node\n{{");
-	write!(output_file, "{}", built_in_node_string);
-	for operation in specification.operations.iter()
-	{
-		write!(output_file, "\t{}", operation.name);
-		if operation.inputs.len() > 0
-		{
-			write!(output_file, "{}", " {");
-			for input in operation.inputs.iter()
-			{
-				if input.is_array
-				{
-					write!(output_file, "{} : Box<[{}]>, ", input.name, get_input_kind_type_name(& input.kind));
-				}
-				else
-				{
-					write!(output_file, "{} : {}, ", input.name, get_input_kind_type_name(& input.kind));
-				}
-			}
-			write!(output_file, "{}", "}");
-		}
-		write!(output_file, "{}", ",\n");
-	}
-	write!(output_file, "{}", "}\n\n");
-	write!(output_file, "{}", "");
-
-	write!(output_file, "impl Node\n{{");
-
-	// For each
-	write!(output_file, "\tpub fn for_each_referenced_node<F>(&self, mut f : F) where F : FnMut(NodeId) -> ()\n\t{{\n\t\tmatch self\n\t\t{{\n");
-
-	for operation in specification.operations.iter()
-	{
-		write!(output_file, "\tSelf::{}{{ ", operation.name);
-		if operation.inputs.len() > 0
-		{
-			for input in operation.inputs.iter()
-			{
-				if input.kind == spec::OperationInputKind::Operation
-				{
-					write!(output_file, "{}, ", input.name);
-				}
-			}
-		}
-		write!(output_file, ".. }} => {{ ");
-		if operation.inputs.len() > 0
-		{
-			for input in operation.inputs.iter()
-			{
-				if input.kind != spec::OperationInputKind::Operation
-				{
-					continue
-				}
-
-				if input.is_array
-				{
-					write!(output_file, "for &n in {}.iter() {{ f(n); }}; ", input.name);
-				}
-				else
-				{
-					write!(output_file, "f(*{}); ", input.name);
-				}
-			}
-		}
-		write!(output_file, " }}\n");
-	}
-
-	write!(output_file, "\t}}");
-
-	write!(output_file, "\t}}");
-
-	// Map
-
-	write!(output_file, "\tpub fn map_referenced_nodes<F>(&self, mut f : F) -> Self where F : FnMut(NodeId) -> NodeId\n\t{{\n\t\tmatch self\n\t\t{{\n");
-
-	for operation in specification.operations.iter()
-	{
-		write!(output_file, "\tSelf::{}{{ ", operation.name);
-		if operation.inputs.len() > 0
-		{
-			for (index, input) in operation.inputs.iter().enumerate()
-			{
-				write!(output_file, "{} : var_{}, ", input.name, index);
-			}
-		}
-		write!(output_file, "}} => {{");
-		if operation.inputs.len() > 0
-		{
-			for (index, input) in operation.inputs.iter().enumerate()
-			{
-				if input.is_array
-				{
-					let is_node : bool = input.kind == spec::OperationInputKind::Operation;
-					write!(output_file, "let mut new_var_{} = Vec::<{}>::new(); for &v in var_{}.iter() {{ new_var_{}.push({}(v)); }}; ", index, get_input_kind_type_name(& input.kind), index, index, if is_node {"f"} else {""});
-				}
-			}
-		}
-		write!(output_file, "Self::{}", operation.name);
-		if operation.inputs.len() > 0
-		{
-			write!(output_file, "{{");
-			for (index, input) in operation.inputs.iter().enumerate()
-			{
-				if input.is_array
-				{
-					write!(output_file, "{} : new_var_{}.into_boxed_slice(), ", input.name, index);
-				}
-				else
-				{
-					if input.kind == spec::OperationInputKind::Operation
-					{
-						write!(output_file, "{} : f(*var_{}), ", input.name, index);
-					}
-					else
-					{
-						write!(output_file, "{} : *var_{}, ", input.name, index);
-					}
-				}
-			}
-			write!(output_file, "}}");
-		}
-		write!(output_file, " }}\n");
-	}
-
-	write!(output_file, "\t}}");
-
-	write!(output_file, "\t}}");
-
-	write!(output_file, "}}");
-}
-
-/*fn write_ir_tools(output_file : &mut File, specification : &spec::Spec)
-{
-
-}*/
-
-fn main()
-{
-	println!("cargo:rerun-if-changed=build/build.rs");
-
-	let specification = caiman_spec::content::build_spec();
-	let out_dir = std::env::var("OUT_DIR").unwrap();
-	let generated_path = format!("{}/generated", out_dir);
-	std::fs::create_dir(&generated_path);
-	let mut ir_output_file = File::create(format!("{}/generated/ir.txt", out_dir)).unwrap();
-	write_ir_definition(&mut ir_output_file, & specification);
-	dataflow::write_base(
-		&format!("{}/generated/dataflow_base.rs", out_dir), 
-		&specification
-	).unwrap();
-	dataflow::write_conversion(
-		&format!("{}/generated/dataflow_from_ir.txt", out_dir), 
-		&specification, 
-		"ir::Node", 
-		"Operation"
-	).unwrap();
-	dataflow::write_conversion(
-		&format!("{}/generated/dataflow_to_ir.txt", out_dir), 
-		&specification, 
-		"Operation", 
-		"ir::Node"
-	).unwrap();
+fn main() {
+    println!("cargo:rerun-if-changed=build/build.rs");
+    let spec = caiman_spec::content::build_spec();
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let gen_dir = format!("{out_dir}/generated");
+    let _ = std::fs::create_dir(&gen_dir);
+    {
+        let path = format!("{gen_dir}/with_operations.rs");
+        let mut out = File::create(path).unwrap();
+        write_with_operations(&mut out, &spec).unwrap();
+    }
 }
