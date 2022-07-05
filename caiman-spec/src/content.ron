@@ -125,7 +125,7 @@
 			name : "AllocTemporary",
 			inputs : [
 				(name : "place", kind : Place),
-				(name : "value", kind : Operation),
+				(name : "type_id", kind : Type),
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, intrinsic : true),
@@ -191,13 +191,56 @@
 
 
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
+		/*(
+
+		),
+		(
+			name : "GetInputSubvalue",
+			inputs : [
+				(name : "parent", kind : Operation),
+				(name : "index", kind : Index),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "GetOutputSubvalue",
+			inputs : [
+				(name : "parent", kind : Operation),
+				(name : "index", kind : Index),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "GetOperationSubvalue",
+			inputs : [
+				(name : "parent", kind : Operation),
+				(name : "remote_operation", kind : Index),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),*/
+		/*(
+			name : "OperationValue",
+			inputs : [
+				(name : "inputs", kind : Operation),
+				(name : "remote_operation", kind : Index),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),*/
 		(
 			name : "EncodeDo",
 			inputs : [
 				(name : "place", kind : Place),
-				(name : "value", kind : Operation),
-				(name : "inputs", kind : Operation, is_array : true, is_inferable : true),
-				(name : "outputs", kind : Operation, is_array : true, is_inferable : true)
+				(name : "operation", kind : RemoteOperation),
+				(name : "inputs", kind : Operation, is_array : true),
+				(name : "outputs", kind : Operation, is_array : true)
 			],
 			output : None,
 			language_set : (functional : false, scheduling: true, intrinsic : true),
@@ -207,9 +250,8 @@
 			name : "EncodeCopy",
 			inputs : [
 				(name : "place", kind : Place),
-				(name : "value", kind : Operation),
-				(name : "input", kind : Operation, is_inferable : true),
-				(name : "output", kind : Operation, is_inferable : true)
+				(name : "input", kind : Operation),
+				(name : "output", kind : Operation)
 			],
 			output : None,
 			language_set : (functional : false, scheduling: true, intrinsic : true),

@@ -47,11 +47,13 @@ enum StateBinding
 	TemporaryHack,
 }
 
+
 #[derive(Debug)]
 struct Value
 {
 	type_id_opt : Option<ir::TypeId>,
-	dependencies : BTreeSet<ValueId>,
+	//value_function_id_opt : ir::ValueFunctionId,
+	//subvalue_tag : ir::SubvalueTag
 }
 
 #[derive(Debug)]
@@ -122,11 +124,10 @@ impl SchedulingState
 		slot.value_opt = Some(value_id);
 	}
 
-	pub fn insert_value(&mut self, type_id_opt : Option<ir::TypeId>, mandatory_dependencies : &[ValueId]) -> ValueId
+	pub fn insert_value(&mut self, type_id_opt : Option<ir::TypeId>) -> ValueId
 	{
 		use std::iter::FromIterator;
-		let dependencies = BTreeSet::<ValueId>::from_iter(mandatory_dependencies.iter().map(|x| * x));
-		ValueId(self.values.create(Value{type_id_opt, dependencies}))
+		ValueId(self.values.create(Value{type_id_opt}))
 	}
 
 	pub fn insert_submission<Listener>(&mut self, queue_place : ir::Place, listener : &mut Listener) -> SubmissionId
@@ -155,6 +156,17 @@ impl SchedulingState
 		SubmissionId(self.submissions.create(Submission{queue_place, timestamp}))
 	}
 
+
+	pub fn get_slot_value_id(&self, slot_id : SlotId) -> Option<ValueId>
+	{
+		self.slots[& slot_id.0].value_opt
+	}
+
+	pub fn get_slot_type_id(&self, slot_id : SlotId) -> ir::TypeId
+	{
+		self.slots[& slot_id.0].type_id
+	}
+
 	pub fn get_slot_queue_stage(&self, slot_id : SlotId) -> ir::ResourceQueueStage
 	{
 		self.slots[& slot_id.0].queue_stage
@@ -163,6 +175,13 @@ impl SchedulingState
 	pub fn get_slot_queue_place(&self, slot_id : SlotId) -> ir::Place
 	{
 		self.slots[& slot_id.0].queue_place
+	}
+
+	pub fn advance_queue_stage(&mut self, slot_id : SlotId, to : ir::ResourceQueueStage)
+	{
+		let slot = &mut self.slots[& slot_id.0];
+		assert!(slot.queue_stage <= to);
+		slot.queue_stage = to;
 	}
 
 	fn get_local_time(&self) -> LogicalTimestamp

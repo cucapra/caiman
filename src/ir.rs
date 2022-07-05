@@ -1,4 +1,4 @@
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap, BTreeMap, HashSet};
 use std::default::Default;
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
@@ -13,7 +13,7 @@ pub enum Place
 	Gpu,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ResourceQueueStage
 {
 	None,
@@ -40,6 +40,9 @@ pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
 pub type LocalMetaVariableId = usize;
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
+
 mod generated
 {
 	use super::*;
@@ -56,8 +59,21 @@ pub struct StructField
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct LocalValueTag
+pub enum SubvalueTag
 {
+	// These two are implementation-agnostic
+	Input{index : usize},
+	Output{index : usize},
+	// This one is not
+	Operation{ remote_node_id : RemoteNodeId }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ValueTag
+{
+	pub instance_id_opt : Option<LocalMetaVariableId>,
+	pub function_id : ValueFunctionId,
+	pub subvalue_tag : SubvalueTag,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -90,9 +106,9 @@ pub enum Type
 	BufferMutRef {local_resource_id : LocalMetaVariableId},
 	//Texture
 
-	Fence { id : LocalMetaVariableId, prior_fence_ids : Box<[LocalMetaVariableId]>, place : Place },
+	Fence { id : LocalMetaVariableId },
 
-	Slot{ value_type : TypeId, value_tag : Option<LocalValueTag>, local_resource_id : LocalMetaVariableId, queue_stage : ResourceQueueStage, place : Place, fence_id : LocalMetaVariableId },
+	Slot{ value_type : TypeId, value_tag_id_opt : Option<LocalMetaVariableId>, /*local_resource_id : LocalMetaVariableId,*/ queue_stage : ResourceQueueStage, queue_place : Place, fence_id : LocalMetaVariableId },
 }
 
 // Local Meta Variables are used to serve as ids for when types need to relate to each other
@@ -101,7 +117,8 @@ pub enum Type
 pub enum LocalMetaVariable
 {
 	Resource,
-	Fence,
+	Fence(Fence),
+	ValueTag(ValueTag)
 }
 
 pub use generated::Node;
@@ -140,6 +157,13 @@ impl FuncletKind
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Fence
+{
+	pub prior_fence_ids : Box<[LocalMetaVariableId]>,
+	pub place : Place
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet
 {
 	#[serde(default = "FuncletKind::easy_default")]
@@ -156,6 +180,21 @@ pub struct Funclet
 
 	#[serde(default)]
 	pub local_meta_variables : BTreeMap<LocalMetaVariableId, LocalMetaVariable>,
+}
+
+/*#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SchedulingFuncletInfo
+{
+	pub fences : HashMap<LocalMetaVariableId, Fence>,
+	pub value_tags : HashMap<LocalMetaVariableId, ValueTag>
+}*/
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ValueFuncletInfo
+{
+	// Value functions this funclet implements
+	#[serde(default)]
+	pub value_function_ids : HashSet<ValueFunctionId>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -212,10 +251,10 @@ pub struct ValueFunction
 pub struct PipelineMethod
 {
 	pub name : String,
-	pub input_types : Box<[TypeId]>,
+	pub capture_types : Box<[TypeId]>,
+	pub argument_types : Box<[TypeId]>,
 	pub output_types : Box<[TypeId]>,
-	pub value_function_id : ValueFunctionId,
-	pub default_scheduling_funclet_id : Option<FuncletId>,
+	pub entry_funclet : Option<FuncletId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

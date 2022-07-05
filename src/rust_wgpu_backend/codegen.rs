@@ -15,19 +15,17 @@ use std::cmp::Reverse;
 use crate::scheduling_state;
 use crate::scheduling_state::{LogicalTimestamp};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum NodeResult
 {
 	None,
 	// Reference to a value function that can be scheduled
 	//ValueFunction { root_node : Option<ir::NodeId>, funclet_id : Option<ir::FuncletId>, node_id : Option<ir::NodeId> },
-	InlineValue { value_id : scheduling_state::ValueId, type_id : ir::TypeId },
 	//InlineValue { value_id : scheduling_state::ValueId, type_id : ir::TypeId },
-	RootValueInstance { funclet_id : ir::FuncletId, node_id : ir::NodeId },
+	//InlineValue { value_id : scheduling_state::ValueId, type_id : ir::TypeId },
+	//Value { value_id : scheduling_state::ValueId },
 	Slot { slot_id : scheduling_state::SlotId },
 	Fence { place : ir::Place, timestamp : LogicalTimestamp },
-	ExternalGpuCall{ output_slots : Box<[scheduling_state::SlotId]> },
-	ExternalCpuCall{ output_slots : Box<[scheduling_state::SlotId]> }
 }
 
 // Records the most recent state of a place as known to the local coordinator
@@ -45,7 +43,7 @@ struct PlacementState
 	scheduling_state : scheduling_state::SchedulingState,
 	submission_map : HashMap<scheduling_state::SubmissionId, SubmissionId>,
 	slot_variable_ids : HashMap<scheduling_state::SlotId, usize>,
-	value_funclet_node_id_pairs : HashMap<scheduling_state::ValueId, (ir::FuncletId, ir::NodeId)>
+	value_tags : HashMap<scheduling_state::ValueId, ir::ValueTag>,
 }
 
 impl PlacementState
@@ -55,13 +53,14 @@ impl PlacementState
 		let mut place_states = HashMap::<ir::Place, PlaceState>::new();
 		place_states.insert(ir::Place::Gpu, PlaceState{ .. Default::default() });
 		place_states.insert(ir::Place::Local, PlaceState{ .. Default::default() });
-		Self{ place_states, scheduling_state : scheduling_state::SchedulingState::new(), node_results : Default::default(), submission_map : HashMap::new(), slot_variable_ids : HashMap::new(), value_funclet_node_id_pairs : HashMap::new()}
+		Self{ place_states, scheduling_state : scheduling_state::SchedulingState::new(), node_results : Default::default(), submission_map : HashMap::new(), slot_variable_ids : HashMap::new(), value_tags : HashMap::new()}
 	}
 
-	fn update_slot_state(&mut self, slot_id : scheduling_state::SlotId, place : ir::Place, stage : ir::ResourceQueueStage, var_id : usize)
+	fn update_slot_state(&mut self, slot_id : scheduling_state::SlotId, stage : ir::ResourceQueueStage, var_id : usize)
 	{
 		self.slot_variable_ids.insert(slot_id, var_id);
 		// need to do place and stage
+		self.scheduling_state.advance_queue_stage(slot_id, stage);
 	}
 
 	/*fn update_node_state(&mut self, node_id : ir::NodeId, place : ir::Place, stage : ir::ResourceQueueStage, var_id : usize)
@@ -118,12 +117,24 @@ impl PlacementState
 		self.get_var_ids(node_ids, ir::Place::Gpu)
 	}
 
-	fn get_node_value_id(&self, node_id : ir::NodeId) -> Option<scheduling_state::ValueId>
+	/*fn get_node_value_id(&self, node_id : ir::NodeId) -> Option<scheduling_state::ValueId>
 	{
 		match & self.node_results[& node_id]
 		{
 			NodeResult::InlineValue{value_id, ..} => Some(* value_id),
 			_ => None
+		}
+	}*/
+
+	fn get_node_slot_id(&self, node_id : ir::NodeId) -> Option<scheduling_state::SlotId>
+	{
+		if let NodeResult::Slot{slot_id} = & self.node_results[& node_id]
+		{
+			Some(* slot_id)
+		}
+		else
+		{
+			None
 		}
 	}
 }
@@ -184,9 +195,6 @@ impl<'program> CodeGen<'program>
 
 	fn advance_local_time(&mut self, placement_state : &mut PlacementState) -> LogicalTimestamp
 	{
-		/*placement_state.place_states.get_mut(& ir::Place::Local).unwrap().timestamp.step();
-		let local_timestamp = placement_state.place_states.get(& ir::Place::Local).unwrap().timestamp;
-		local_timestamp*/
 		placement_state.scheduling_state.advance_local_time()
 	}
 
@@ -212,84 +220,9 @@ impl<'program> CodeGen<'program>
 		}
 
 		return time_opt;
-		/*assert!(place != ir::Place::Local);
-		let local_timestamp = placement_state.place_states[& ir::Place::Local].timestamp;
-		// The local coordinator is always the latest time because all events are caused by the coordinator
-		assert!(known_timestamp <= local_timestamp);
-
-		let place_state : &mut PlaceState = placement_state.place_states.get_mut(& place).unwrap();
-
-		// Return if we already know of this or a later time
-
-		if place_state.timestamp >= known_timestamp
-		{
-			return Some(place_state.timestamp);
-		}
-		
-		place_state.timestamp = known_timestamp;
-
-		// Update submissions for this place
-		let mut last_submission_id_opt : Option<SubmissionId> = None;
-		let mut expired_timestamps = Vec::<LogicalTimestamp>::new();
-		for (& timestamp, & submission_id) in place_state.pending_submissions.iter()
-		{
-			if timestamp <= known_timestamp
-			{
-				expired_timestamps.push(timestamp);
-				//self.sync_submission(submission_id);
-				// Relies on iteration order of a BTreeMap
-				last_submission_id_opt = Some(submission_id);
-			}
-			else
-			{
-				// Also relies on iteration order
-				break
-			}
-		}
-
-		for & timestamp in expired_timestamps.iter()
-		{
-			place_state.pending_submissions.remove(& timestamp);
-		}
-
-		if let Some(submission_id) = last_submission_id_opt
-		{
-			self.code_generator.sync_submission(submission_id);
-		}
-
-		// Transition resource stages
-
-		let place_state = placement_state.place_states.get_mut(& place).unwrap();
-		for (node_id, stage) in place_state.node_queue_stages.iter_mut()
-		{
-			match stage
-			{
-				ir::ResourceQueueStage::Submitted if place_state.node_timestamps[node_id] <= known_timestamp =>
-				{
-					* stage = ir::ResourceQueueStage::Ready;
-					place_state.node_timestamps.insert(* node_id, local_timestamp);
-				}
-				_ => ()
-			}
-		}
-
-		None*/
 	}
 
-	/*fn transition_resource_stages(&mut self, placement_state : &mut PlacementState, place : ir::Place, from_stage : ir::ResourceQueueStage, to_stage : ir::ResourceQueueStage, timestamp : LogicalTimestamp)
-	{
-		let place_state = placement_state.place_states.get_mut(& place).unwrap();
-		for (node_id, stage) in place_state.node_queue_stages.iter_mut()
-		{
-			if * stage == from_stage
-			{
-				* stage = to_stage;
-				place_state.node_timestamps.insert(* node_id, timestamp);
-			}
-		}
-	}*/
-
-	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, node : & ir::Node, input_slot_ids : &[scheduling_state::SlotId], output_slot_ids : &[scheduling_state::SlotId])
+	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : & [scheduling_state::SlotId])
 	{
 		match node
 		{
@@ -297,55 +230,35 @@ impl<'program> CodeGen<'program>
 			{
 				let function = & self.program.external_gpu_functions[* external_function_id];
 
-				assert_eq!(input_slot_ids.len(), arguments.len());
+				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
 				use std::convert::TryInto;
+				use std::iter::FromIterator;
 				//use core::slice::SlicePattern;
-				let dimension_var_ids_opt = placement_state.get_local_state_var_ids(dimensions);
-				let argument_var_ids_opt = placement_state.get_gpu_state_var_ids(arguments);
-				assert!(dimension_var_ids_opt.is_some(), "{:?}: Not all dimensions are local {:?} {:?}", node, dimensions, placement_state);
-				assert!(argument_var_ids_opt.is_some(), "{:?}: Not all arguments are gpu {:?} {:?}", node, arguments, placement_state);
+				let dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(|(index, x)| { let slot_id = input_slot_ids[index]; assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]); assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local); assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded); placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
+				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| { let slot_id = input_slot_ids[dimensions.len() + index]; assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]); assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu); assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded); placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
 
-				let dimension_var_ids = dimension_var_ids_opt.unwrap();
-				let argument_var_ids = argument_var_ids_opt.unwrap();
 				let dimensions_slice : &[usize] = & dimension_var_ids;
 				let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
 
 				for (index, output_type_id) in function.output_types.iter().enumerate()
 				{
 					let slot_id = output_slot_ids[index];
-					placement_state.update_slot_state(slot_id, ir::Place::Gpu, ir::ResourceQueueStage::Encoded, raw_outputs[index]);
+					// To do: Do something about the value
+					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * output_type_id);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu);
+					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Encoded, raw_outputs[index]);
 				}
 			}
-			/*{
-				use std::convert::TryInto;
-				//use core::slice::SlicePattern;
-				let dimension_var_ids_opt = placement_state.get_local_state_var_ids(dimensions);
-				let argument_var_ids_opt = placement_state.get_gpu_state_var_ids(arguments);
-				assert!(dimension_var_ids_opt.is_some(), "#{} {:?}: Not all dimensions are local {:?} {:?}", current_node_id, node, dimensions, placement_state);
-				assert!(argument_var_ids_opt.is_some(), "#{} {:?}: Not all arguments are gpu {:?} {:?}", current_node_id, node, arguments, placement_state);
-
-				let dimension_var_ids = dimension_var_ids_opt.unwrap();
-				let argument_var_ids = argument_var_ids_opt.unwrap();
-				let dimensions_slice : &[usize] = & dimension_var_ids;
-
-				let raw_outputs = 
-
-				self.code_generator.build_compute_dispatch_with_outputs(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
-
-				let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-				place_state.node_queue_stages.insert(current_node_id, ir::ResourceQueueStage::Encoded);
-				place_state.node_timestamps.insert(current_node_id, place_state.timestamp);
-
-				placement_state.node_results.insert(current_node_id, NodeResult::ExternalGpuCall{outputs : raw_outputs.into_boxed_slice()});
-			}*/
 			_ => panic!("Node cannot be encoded to the gpu")
 		}
 	}
 
-	fn encode_do_node_local(&mut self, placement_state : &mut PlacementState, node : & ir::Node, input_slot_ids : &[scheduling_state::SlotId], output_slot_ids : &[scheduling_state::SlotId])
+	fn encode_do_node_local(&mut self, placement_state : &mut PlacementState, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : &[scheduling_state::SlotId])
 	{
+		// To do: Do something about the value
 		match node
 		{
 			ir::Node::ConstantInteger{value, type_id} =>
@@ -355,7 +268,12 @@ impl<'program> CodeGen<'program>
 
 				let slot_id = output_slot_ids[0];
 				let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
-				placement_state.update_slot_state(slot_id, ir::Place::Local, ir::ResourceQueueStage::Ready, variable_id);
+
+				assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
+
+				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
 			}
 			ir::Node::ConstantUnsignedInteger{value, type_id} =>
 			{
@@ -364,57 +282,85 @@ impl<'program> CodeGen<'program>
 
 				let slot_id = output_slot_ids[0];
 				let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
-				placement_state.update_slot_state(slot_id, ir::Place::Local, ir::ResourceQueueStage::Ready, variable_id);
+
+				assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
+
+				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
 			}
-			ir::Node::CallValueFunction { function_id, arguments } =>
+			/*ir::Node::CallValueFunction { function_id, arguments } =>
 			{
 				panic!("Not yet implemented");
 				let function = & self.program.value_functions[function_id];
-				assert!(function.default_funclet_id.is_some(), "Codegen doesn't know how to handle value functions with no default binding yet");
+				assert!(function.default_funclet_id.is_some(), "Codegen doesn't know how to handle value functions yet");
 				let default_funclet_id = function.default_funclet_id.unwrap();
-			}
+			}*/
 			ir::Node::CallExternalCpu { external_function_id, arguments } =>
 			{
 				let function = & self.program.external_cpu_functions[* external_function_id];
 
-				assert_eq!(input_slot_ids.len(), arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
-				let argument_var_ids_opt = placement_state.get_local_state_var_ids(arguments);
-				assert!(argument_var_ids_opt.is_some(), "{:?}: Not all arguments are local {:?} {:?}", node, arguments, placement_state);
-				let argument_var_ids = argument_var_ids_opt.unwrap();
+				use std::iter::FromIterator;
+
+				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| { let slot_id = input_slot_ids[index]; assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]); assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local); assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded); placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
 				let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, & argument_var_ids);
 
 				for (index, output_type_id) in function.output_types.iter().enumerate()
 				{
 					let slot_id = output_slot_ids[index];
-					placement_state.update_slot_state(slot_id, ir::Place::Local, ir::ResourceQueueStage::Ready, raw_outputs[index]);
+					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * output_type_id);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
+					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, raw_outputs[index]);
 				}
 			}
 			_ => panic!("Cannot be scheduled local")
 		}
 	}
 
-	fn compile_funclet(&mut self, funclet_id : ir::FuncletId, argument_variable_ids : &[usize], pipeline_context : &mut PipelineContext)
+	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_variable_ids : &[usize], pipeline_context : &mut PipelineContext)
 	{
 		let mut placement_state = PlacementState::new();
 
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
-		let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
-		let mut argument_value_ids = Vec::<scheduling_state::ValueId>::new();
-		
+		let mut argument_node_results = Vec::<NodeResult>::new();
 		for (index, input_type_id) in funclet.input_types.iter().enumerate()
 		{
-			let slot_id = placement_state.scheduling_state.insert_hacked_slot(* input_type_id, ir::Place::Local, ir::ResourceQueueStage::Ready);
-			argument_slot_ids.push(slot_id);
-			placement_state.slot_variable_ids.insert(slot_id, argument_variable_ids[index]);
+			let result = 
+			{
+				use ir::Type;
+				
+				match & self.program.types[input_type_id]
+				{
+					ir::Type::Slot { value_type, value_tag_id_opt, /*local_resource_id,*/ queue_stage, queue_place, fence_id } =>
+					{
+						if let Some(value_tag_id) = value_tag_id_opt
+						{
+							let value_id = if let ir::LocalMetaVariable::ValueTag(value_tag) = & funclet.local_meta_variables[value_tag_id]
+							{
+								// I'm too lazy to get the type of a value_tag for now
+								let actual_value_type_id_opt = None;
+								let value_id = placement_state.scheduling_state.insert_value(actual_value_type_id_opt);
+								placement_state.value_tags.insert(value_id, value_tag.clone());
 
-			let value_id = placement_state.scheduling_state.insert_value(None, &[]);
-			argument_value_ids.push(value_id);
-
-			placement_state.scheduling_state.bind_slot_value(slot_id, value_id);
+								//assert_eq!(actual_value_type_id_opt.unwrap(), value_type);
+							}
+							else
+							{
+								panic!("Not a value tag: {}", value_tag_id);
+							};
+						}
+						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* value_type, * queue_place, * queue_stage);
+						NodeResult::Slot{slot_id}
+					}
+					_ => panic!("Unimplemented")
+				}
+			};
+			argument_node_results.push(result);
 		}
 
 		if self.print_codegen_debug_info
@@ -434,275 +380,113 @@ impl<'program> CodeGen<'program>
 			match node
 			{
 				ir::Node::None => (),
-				ir::Node::Phi {index} =>
+				ir::Node::Phi { index } =>
 				{
-					let slot_id = argument_slot_ids[* index as usize];
-					let value_id = argument_value_ids[* index as usize];
-					placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
-					placement_state.value_funclet_node_id_pairs.insert(value_id, (funclet_id, current_node_id));
+					placement_state.node_results.insert(current_node_id, argument_node_results[* index as usize].clone());
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
 					match & placement_state.node_results[node_id]
 					{
-						NodeResult::ExternalCpuCall{output_slots} =>
-						{
-							let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Local).unwrap();
-							placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id : output_slots[*index as usize]});
-						}
-						NodeResult::ExternalGpuCall{output_slots} =>
-						{
-							let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-							placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id : output_slots[*index as usize]});
-						}
-						_ => panic!("Funclet #{} at node #{} {:?}: Node #{} is not the result of a call {:?}", funclet_id, current_node_id, node, node_id, placement_state)
+						_ => panic!("Funclet #{} at node #{} {:?}: Node #{} does not have multiple returns {:?}", funclet_id, current_node_id, node, node_id, placement_state)
 					}
 				}
-				ir::Node::ConstantInteger { type_id, .. } =>
+				ir::Node::AllocTemporary{ place, type_id } =>
 				{
-					let value_id = placement_state.scheduling_state.insert_value(Some(* type_id), &[]);
-					placement_state.node_results.insert(current_node_id, NodeResult::InlineValue{value_id, type_id : * type_id});
-				}
-				ir::Node::ConstantUnsignedInteger { type_id, .. } =>
-				{
-					let value_id = placement_state.scheduling_state.insert_value(Some(* type_id), &[]);
-					placement_state.node_results.insert(current_node_id, NodeResult::InlineValue{value_id, type_id : * type_id});
-				}
-				//ir::Node::CallValueFunction { .. } => (),
-				ir::Node::CallExternalCpu { external_function_id, arguments } =>
-				{
-					let function = & self.program.external_cpu_functions[* external_function_id];
-					let mut dependencies = Vec::<scheduling_state::ValueId>::new();
-
-					for & argument_node_id in arguments.iter()
-					{
-						dependencies.push(placement_state.get_node_value_id(argument_node_id).unwrap());
-					}
-
-					let function_value_id = placement_state.scheduling_state.insert_value(None, dependencies.as_slice());
-					placement_state.value_funclet_node_id_pairs.insert(function_value_id, (funclet_id, current_node_id));
-
-					let mut output_value_ids = Vec::<scheduling_state::ValueId>::new();
-					for & output_type_id in function.output_types.iter()
-					{
-						let value_id = placement_state.scheduling_state.insert_value(Some(output_type_id), &[function_value_id]);
-					}
-					
-					//placement_state.node_results.insert(current_node_id, NodeResult::InlineValue{value_id, }); ?
-				}
-				/*ir::Node::ConstantInteger{value, type_id} =>
-				{
-					let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
-					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* type_id, ir::Place::Local, ir::ResourceQueueStage::Ready);
-					placement_state.slot_variable_ids.insert(slot_id, variable_id);
+					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* type_id, * place, ir::ResourceQueueStage::None);
 					placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
+
+					// To do: Allocate from buffers for GPU/CPU and assign variable
 				}
-				ir::Node::ConstantUnsignedInteger{value, type_id} =>
+				ir::Node::EncodeDo { place, operation, inputs, outputs } =>
 				{
-					let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
-					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* type_id, ir::Place::Local, ir::ResourceQueueStage::Ready);
-					placement_state.slot_variable_ids.insert(slot_id, variable_id);
-					placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
-				}
-				ir::Node::CallValueFunction { function_id, arguments } =>
-				{
-					panic!("Not yet implemented");
-					let function = & self.program.value_functions[function_id];
-					assert!(function.default_funclet_id.is_some(), "Codegen doesn't know how to handle value functions with no default binding yet");
-					let default_funclet_id = function.default_funclet_id.unwrap();
-				}
-				ir::Node::CallExternalCpu { external_function_id, arguments } =>
-				{
-					let argument_var_ids_opt = placement_state.get_local_state_var_ids(arguments);
-					assert!(argument_var_ids_opt.is_some(), "#{} {:?}: Not all arguments are local {:?} {:?}", current_node_id, node, arguments, placement_state);
-					let argument_var_ids = argument_var_ids_opt.unwrap();
-					let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, & argument_var_ids);
+					let mut input_slot_ids = Vec::<scheduling_state::SlotId>::new();
+					let mut output_slot_ids = Vec::<scheduling_state::SlotId>::new();
 
-					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Local).unwrap();
-
-					let mut output_slots = Vec::<scheduling_state::SlotId>::new();
-					for (index, output_type_id) in self.program.funclets[external_function_id].output_types.iter().enumerate()
+					for & input_node_id in inputs.iter()
 					{
-						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* output_type_id, ir::Place::Local, ir::ResourceQueueStage::Encoded);
-						placement_state.slot_variable_ids.insert(slot_id, raw_outputs[index]);
-						output_slots.push(slot_id);
-					}
-
-					placement_state.node_results.insert(current_node_id, NodeResult::ExternalCpuCall{output_slots : output_slots.into_boxed_slice()});
-				}*/
-				ir::Node::CallExternalGpuCompute { .. } => (),
-				/*{
-					placement_state.node_results.insert(current_node_id, NodeResult::InlineValue);
-				}*/
-				/*{
-					use std::convert::TryInto;
-					//use core::slice::SlicePattern;
-					let dimension_var_ids_opt = placement_state.get_local_state_var_ids(dimensions);
-					let argument_var_ids_opt = placement_state.get_gpu_state_var_ids(arguments);
-					assert!(dimension_var_ids_opt.is_some(), "#{} {:?}: Not all dimensions are local {:?} {:?}", current_node_id, node, dimensions, placement_state);
-					assert!(argument_var_ids_opt.is_some(), "#{} {:?}: Not all arguments are gpu {:?} {:?}", current_node_id, node, arguments, placement_state);
-
-					let dimension_var_ids = dimension_var_ids_opt.unwrap();
-					let argument_var_ids = argument_var_ids_opt.unwrap();
-					let dimensions_slice : &[usize] = & dimension_var_ids;
-					let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
-
-					let place_state : &mut PlaceState = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-					//place_state.node_queue_stages.insert(current_node_id, ir::ResourceQueueStage::Encoded);
-					//place_state.node_timestamps.insert(current_node_id, place_state.timestamp);
-
-					let mut output_slots = Vec::<scheduling_state::SlotId>::new();
-					for (index, output_type_id) in self.program.funclets[external_function_id].output_types.iter().enumerate()
-					{
-						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* output_type_id, ir::Place::Local, ir::ResourceQueueStage::Ready);
-						placement_state.slot_variable_ids.insert(slot_id, raw_outputs[index]);
-						output_slots.push(slot_id);
-					}
-
-					placement_state.node_results.insert(current_node_id, NodeResult::ExternalGpuCall{output_slots : output_slots.into_boxed_slice()});
-				}*/
-
-				// 
-				/*ir::Node::EncodeGpu{values} =>
-				{
-					for node_id in values.iter()
-					{
-						if let Some(variable_id) = placement_state.place_states[& ir::Place::Local].node_variable_ids.get(node_id).map(|x| *x)
+						if let Some(slot_id) = placement_state.get_node_slot_id(input_node_id)
 						{
-							let new_variable_id = self.code_generator.make_on_gpu_copy(variable_id).unwrap();
-							placement_state.update_node_state(* node_id, ir::Place::Gpu, ir::ResourceQueueStage::Encoded, new_variable_id);
+							input_slot_ids.push(slot_id);
 						}
 						else
 						{
-							panic!("Encoded node is not locally resident");
-						}
-					}
-				}
-				ir::Node::SyncLocal{values} =>
-				{
-					for node_id in values.iter()
-					{
-						let new_variable_id = 
-						{
-							let slot_id = match & placement_state.node_results[node_id]
-							{
-								NodeResult::Slot{slot_id} => * slot_id,
-								_ => panic!("Node is not a slot")
-							};
-							let gpu_place_state = placement_state.place_states.get_mut(& ir::Place::Gpu).unwrap();
-							assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Ready);
-							self.code_generator.make_local_copy(gpu_place_state.node_variable_ids[node_id]).unwrap()
-						};
-
-						placement_state.update_node_state(* node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, new_variable_id);
-					}
-				}*/
-
-				ir::Node::AllocTemporary{place, value} =>
-				{
-					let type_id = 0;
-					let slot_id = placement_state.scheduling_state.insert_hacked_slot(type_id, * place, ir::ResourceQueueStage::None);
-					//let slot_id = placement_state.scheduling_state.insert_hacked_slot(type_id, * place);
-					placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
-
-					// To do: Allocate buffers for GPU/CPU
-
-					/*match place
-					{
-						ir::Place::Local =>
-						{
-							placement_state.update_node_state(* node_id, ir::Place::Local, ir::ResourceQueueStage::Ready, new_variable_id);
-						}
-					}*/
-				}
-
-				// Syncs to earliest legal point that is available
-				/*ir::Node::SyncEarliest{to_place, from_place, nodes} =>
-				{
-					// Only implemented for the local queue for now
-					assert_eq!(* to_place, ir::Place::Local);
-
-					// This requires sophistication, but it's sophistication the backend will have for a while?
-
-					let local_timestamp = self.advance_local_time(&mut placement_state);
-					let mut latest_timestamp = LogicalTimestamp::new();
-					{
-						let gpu_place_state = placement_state.place_states.get_mut(from_place).unwrap();
-						for node_id in nodes.iter()
-						{
-							latest_timestamp = latest_timestamp.max(gpu_place_state.node_timestamps[node_id]);
+							panic!("Node #{} (content: {:?}) is not a slot", input_node_id, placement_state.node_results[& input_node_id]);
 						}
 					}
 
-					assert!(latest_timestamp <= local_timestamp);
-
-					if let Some(newer_timestamp) = self.advance_known_place_time(&mut placement_state, * from_place, latest_timestamp)
+					for & output_node_id in outputs.iter()
 					{
-						assert!(newer_timestamp <= local_timestamp);
-						// nothing
+						if let Some(slot_id) = placement_state.get_node_slot_id(output_node_id)
+						{
+							output_slot_ids.push(slot_id);
+						}
+						else
+						{
+							panic!("Node #{} (content: {:?}) is not a slot", output_node_id, placement_state.node_results[& output_node_id]);
+						}
 					}
-				}*/
-				// New scheduling nodes
-				ir::Node::EncodeDo { place, value, inputs, outputs } =>
-				{
-					let mut input_slots = Vec::<scheduling_state::SlotId>::new();
-					let mut output_slots = Vec::<scheduling_state::SlotId>::new();
-					for i in 0 .. 2
-					{
 
-					}
-					//let slot_id = placement_state.scheduling_state.insert_hacked_slot(* type_id, ir::Place::Local, ir::ResourceQueueStage::Ready);
-					//placement_state.slot_variable_ids.insert(slot_id, variable_id);
-					//placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
+					/*let value_id = if let NodeResult::Value{value_id} = placement_state.node_results[value] { value_id } else { panic!("Not a value") };
+					let value_tag = & placement_state.value_tags[& value_id];
+
+					let encoded_node = match value_tag.subvalue_tag
+					{
+						ir::SubvalueTag::Operation{funclet_id, node_id} => & self.program.funclets[& funclet_id].nodes[node_id],
+						_ => panic!("Can only encode concrete operations")
+					};*/
+
+					// To do: Lots of value compatibility checks
+					let encoded_node = & self.program.funclets[& operation.funclet_id].nodes[operation.node_id];
+
 					match place
 					{
 						ir::Place::Local =>
 						{
-							self.encode_do_node_local(&mut placement_state, node, input_slots.as_slice(), output_slots.as_slice());
+							self.encode_do_node_local(&mut placement_state, encoded_node, input_slot_ids.as_slice(), output_slot_ids.as_slice());
 						}
 						ir::Place::Gpu =>
 						{
-							self.encode_do_node_gpu(&mut placement_state, node, input_slots.as_slice(), output_slots.as_slice());
+							self.encode_do_node_gpu(&mut placement_state, encoded_node, input_slot_ids.as_slice(), output_slot_ids.as_slice());
+						}
+						ir::Place::Cpu => (),
+					}
+				}
+				ir::Node::EncodeCopy { place, input, output } =>
+				{
+					let src_slot_id = placement_state.get_node_slot_id(* input).unwrap();
+					let dst_slot_id = placement_state.get_node_slot_id(* output).unwrap();
+
+					// This is a VERY temporary assumption due to how code_generator currently works (there is no CPU place)
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(dst_slot_id), * place);
+
+					assert_eq!(placement_state.scheduling_state.get_slot_type_id(src_slot_id), placement_state.scheduling_state.get_slot_type_id(dst_slot_id));
+					assert!(placement_state.scheduling_state.get_slot_queue_stage(src_slot_id) > ir::ResourceQueueStage::None);
+					assert!(placement_state.scheduling_state.get_slot_queue_stage(src_slot_id) < ir::ResourceQueueStage::Dead);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(dst_slot_id), ir::ResourceQueueStage::None);
+
+					// This is wrong, but we need to do it to work with code_generator
+					match placement_state.scheduling_state.get_slot_queue_place(dst_slot_id)
+					{
+						ir::Place::Local =>
+						{
+							let var_id = self.code_generator.make_local_copy(placement_state.slot_variable_ids[& src_slot_id]).unwrap();
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, var_id);
+						}
+						ir::Place::Gpu =>
+						{
+							let var_id = self.code_generator.make_on_gpu_copy(placement_state.slot_variable_ids[& src_slot_id]).unwrap();
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, var_id);
 						}
 						ir::Place::Cpu => (),
 					}
 				}
 				ir::Node::Submit { place } =>
 				{
-					/*let local_timestamp = self.advance_local_time(&mut placement_state);
-					match place
-					{
-						ir::Place::Gpu =>
-						{
-							let place_state = placement_state.place_states.get_mut(place).unwrap();
-							for (node_id, stage) in place_state.node_queue_stages.iter_mut()
-							{
-								match stage
-								{
-									ir::ResourceQueueStage::Encoded =>
-									{
-										* stage = ir::ResourceQueueStage::Submitted;
-										place_state.node_timestamps.insert(* node_id, local_timestamp);
-									}
-									_ => ()
-								}
-							}
-
-							let submission_id = self.code_generator.flush_submission();
-							place_state.pending_submissions.insert(local_timestamp, submission_id);
-						}
-						_ => panic!("Unimplemented")
-					}*/
 					let submission_id = placement_state.scheduling_state.insert_submission
 					(
 						* place,
 						&mut |scheduling_state, event| ()
-						/*match event
-						{
-
-						}*/
 					);
 
 					placement_state.submission_map.insert(submission_id, self.code_generator.flush_submission());
@@ -778,7 +562,7 @@ impl<'program> CodeGen<'program>
 	fn generate_cpu_function(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)
 	{
 		let entry_funclet = & self.program.funclets[& entry_funclet_id];
-		assert_eq!(entry_funclet.kind, ir::FuncletKind::MixedExplicit);
+		assert_eq!(entry_funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
 		let mut pipeline_context = PipelineContext::new();
 		pipeline_context.pending_funclet_ids.push(entry_funclet_id);
@@ -790,10 +574,10 @@ impl<'program> CodeGen<'program>
 			if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
 			{
 				let funclet = & self.program.funclets[& funclet_id];
-				assert_eq!(funclet.kind, ir::FuncletKind::MixedExplicit);
+				assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
 				let argument_variable_ids = self.code_generator.begin_funclet(funclet_id, &funclet.input_types, &funclet.output_types);
-				self.compile_funclet(funclet_id, & argument_variable_ids, &mut pipeline_context);
+				self.compile_scheduling_funclet(funclet_id, & argument_variable_ids, &mut pipeline_context);
 				self.code_generator.end_funclet();
 			}
 		}

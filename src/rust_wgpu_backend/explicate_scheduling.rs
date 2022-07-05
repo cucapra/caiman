@@ -415,13 +415,20 @@ impl<'program> Explicator<'program>
 			// This isn't smart about which funclets we really want entry points for, so we do a lot of wasted work
 			match funclet.kind
 			{
-				ir::FuncletKind::MixedExplicit => (),
 				ir::FuncletKind::MixedImplicit =>
 				{
 					new_funclets.insert(* funclet_id, self.explicate_entry_point_funclet(* funclet_id));
 				}
 				// Explication erases the funclet currently.  This isn't right long-term.
 				ir::FuncletKind::Inline => (),
+				ir::FuncletKind::ScheduleExplicit =>
+				{
+					new_funclets.insert(* funclet_id, funclet.clone());
+				}
+				ir::FuncletKind::Value =>
+				{
+					new_funclets.insert(* funclet_id, funclet.clone());
+				}
 				_ => panic!("Unimplemented")
 			}
 		}
@@ -435,6 +442,8 @@ impl<'program> Explicator<'program>
 		match original_funclet.kind
 		{
 			ir::FuncletKind::MixedExplicit => panic!("Should not be here"),
+			ir::FuncletKind::ScheduleExplicit => panic!("Should not be here"),
+			ir::FuncletKind::Value => panic!("Should not be here"),
 			ir::FuncletKind::MixedImplicit => (),
 			ir::FuncletKind::Inline =>  panic!("Cannot use inline funclet as an entry point"),
 			_ => panic!("Unimplemented")
@@ -675,6 +684,8 @@ impl<'program> Explicator<'program>
 		{
 			ir::FuncletKind::MixedExplicit => panic!("Should not be here"),
 			ir::FuncletKind::MixedImplicit => panic!("Cannot use mixed funclet as inline"),
+			ir::FuncletKind::ScheduleExplicit => panic!("Should not be here"),
+			ir::FuncletKind::Value => panic!("Should not be here"),
 			ir::FuncletKind::Inline =>  (),
 			_ => panic!("Unimplemented")
 		}

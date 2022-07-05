@@ -1,7 +1,10 @@
 (
 	version : (0, 0, 1),
 	program : (
-		types : {0:I32},
+		types : {
+			0 : I32,
+			1 : Slot(value_type : 0, value_tag_id_opt : None, queue_stage : Ready, queue_place : Local, fence_id : 0 )
+		},
 		funclets : {
 			0 : (
 				kind : Value,
@@ -17,7 +20,7 @@
 				],
 				tail_edge : Return(return_values : [5])
 			),
-			1 : (
+			/*1 : (
 				kind : Value,
 				input_types : [0],
 				output_types : [0],
@@ -138,6 +141,25 @@
 					ExtractResult(node_id : 1, index : 0),
 				],
 				tail_edge : Return(return_values : [2])
+			),*/
+
+			11 : (
+				kind : ScheduleExplicit,
+				input_types : [1],
+				output_types : [1],
+
+				local_meta_variables : {
+					0 : Fence((
+						prior_fence_ids : [],
+						place : Local))
+				},
+
+				nodes : [
+					Phi(index : 0),
+					AllocTemporary(place : Gpu, type_id : 0),
+					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
+				],
+				tail_edge : Return(return_values : [2])
 			),
 		},
 		external_cpu_functions : [
@@ -172,14 +194,14 @@
 			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9))
 		},
 		pipelines : [
-			(name : "pipeline_1", entry_funclet : 0), 
-			(name : "pipeline_with_gpu_gpu_communication", entry_funclet : 1),
+			(name : "pipeline_1", entry_funclet : 11), 
+			/*(name : "pipeline_with_gpu_gpu_communication", entry_funclet : 1),
 			(name : "pipeline_with_single_cpu_call", entry_funclet : 2),
 			(name : "pipeline_with_gpu_cpu_communication", entry_funclet : 3),
 			(name : "pipeline_with_cpu_cpu_communication", entry_funclet : 4),
 			(name : "pipeline_with_single_gpu_call", entry_funclet : 5),
 			(name : "pipeline_with_yield_enter_loop_exit", entry_funclet : 6),
-			(name : "pipeline_with_value_function", entry_funclet : 10),
+			(name : "pipeline_with_value_function", entry_funclet : 10),*/
 			]
 	)
 )

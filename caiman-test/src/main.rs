@@ -13,7 +13,7 @@ impl pipelines::pipeline_1::CpuFunctions for Callbacks
 	}
 }
 
-impl pipelines::pipeline_with_gpu_gpu_communication::CpuFunctions for Callbacks
+/*impl pipelines::pipeline_with_gpu_gpu_communication::CpuFunctions for Callbacks
 {
 	fn do_thing_on_cpu( & self, state : &mut pipelines::State, value : i32 ) -> pipelines::pipeline_with_gpu_gpu_communication::outputs::do_thing_on_cpu
 	{
@@ -59,7 +59,7 @@ impl pipelines::pipeline_with_yield_enter_loop_exit::CpuFunctions for Callbacks
 	{
 		return pipelines::pipeline_with_yield_enter_loop_exit::outputs::do_thing_on_cpu { field_0 : value + 1 };
 	}
-}
+}*/
 
 fn main()
 {
@@ -80,7 +80,7 @@ mod tests
 		assert_eq!(3, result.field_0);
 	}
 
-	#[test]
+	/*#[test]
 	fn test_2()
 	{
 		let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
@@ -172,5 +172,5 @@ mod tests
 		}
 		let result = loop_stage.step_8().complete();
 		assert_eq!(3 + iterations, result.field_0);
-	}
+	}*/
 }
