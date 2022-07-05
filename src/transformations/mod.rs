@@ -45,11 +45,3 @@ pub fn optimize(program: &mut ir::Program) -> Result<(), Error> {
     }
     Ok(())
 }
-/*
-pub fn apply(
-    funclet: ir::Funclet,
-    transforms: &mut [&mut dyn TreeTransformer],
-) -> Result<bool, Error> {
-
-}
-*/
