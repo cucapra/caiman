@@ -7,7 +7,7 @@ fn operation_language(operation: &spec::Operation) -> &'static str {
         operation.language_set.functional,
         operation.language_set.scheduling,
     ) {
-        (true, true) => "shared",
+        (true, true) => "mixed",
         (true, false) => "functional",
         (false, true) => "scheduling",
         (false, false) => panic!("operation doesn't belong to any languages?"),
