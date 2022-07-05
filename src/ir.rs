@@ -62,20 +62,35 @@ macro_rules! map_refs {
 	($_map:ident, $arg:ident : $_arg_type:tt) => {$arg.clone()};
 }
 macro_rules! make_nodes {
-	($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+	(@ $map:ident {} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
 		#[derive(Serialize, Deserialize, Debug, Clone)]
 		pub enum Node {
-			$($name {$($arg : lookup_abstract_type!($arg_type)),*}),*
+			$($fields)*
 		}
 		impl Node {
-			pub fn map_referenced_nodes(&self, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
-				match self {
-					$(Self::$name {$($arg),*} => Self::$name {
-						$($arg: map_refs!(f, $arg : $arg_type)),*
-					},)*
-				}
+			pub fn map_referenced_nodes(&self, mut $map: impl FnMut(NodeId) -> NodeId) -> Self {
+				match self {$($mapper)*}
 			}
 		}
+	};
+	(@ $map:ident {$name:ident (), $($rest:tt)*} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
+		make_nodes! {
+			@ $map { $($rest)* } -> 
+			($($fields)* $name,), 
+			($($mapper)* Self::$name => Self::$name,)
+		}
+	};
+	(@ $map:ident {$name:ident ($($arg:ident : $arg_type:tt,)*), $($rest:tt)*} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
+		make_nodes! {
+			@ $map { $($rest)* } -> 
+			($($fields)* $name { $($arg: lookup_abstract_type!($arg_type)),* },), 
+			($($mapper)* Self::$name { $($arg),* } => Self::$name { 
+				$($arg: map_refs!($map, $arg : $arg_type)),*
+			},)
+		}
+	};
+	($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+		make_nodes! { @ f {$($name ($($arg : $arg_type,)*),)*} -> (), () }
 	};
 }
 with_operations!(make_nodes);
