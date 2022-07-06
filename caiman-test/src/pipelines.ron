@@ -156,10 +156,21 @@
 
 				nodes : [
 					Phi(index : 0),
-					AllocTemporary(place : Gpu, type_id : 0),
+					AllocTemporary(place : Local, type_id : 0),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
+					AllocTemporary(place : Local, type_id : 0),
+					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [1], outputs : [3]),
+					AllocTemporary(place : Gpu, type_id : 0),
+					EncodeCopy(place : Gpu, input : 3, output : 5),
+					AllocTemporary(place : Gpu, type_id : 0),
+					EncodeDo(place : Gpu, operation : (funclet_id : 0, node_id : 4), inputs : [1, 1, 1, 5], outputs : [7]),
+					AllocTemporary(place : Local, type_id : 0),
+					Submit(place : Gpu),
+					EncodeFence(place : Gpu),
+					SyncFence(place : Local, fence : 11),
+					EncodeCopy(place : Local, input : 7, output : 9),
 				],
-				tail_edge : Return(return_values : [2])
+				tail_edge : Return(return_values : [9])
 			),
 		},
 		external_cpu_functions : [

@@ -721,6 +721,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.active_pipeline_name = Some(String::from(pipeline_name));
 		self.code_writer.begin_module(pipeline_name);
+		write!(self.code_writer, "use super::*;\n");
 
 		self.code_writer.begin_module("outputs");
 		{
@@ -744,6 +745,7 @@ impl<'program> CodeGenerator<'program>
 			self.code_writer.write(format!("\tfn {}(&self, state : &mut super::State", external_cpu_function.name));
 			for (input_index, input_type) in external_cpu_function.input_types.iter().enumerate()
 			{
+				self.generate_type_definition(* input_type);
 				self.code_writer.write(format!(", _ : {}", self.get_type_name(*input_type)));
 			}
 			self.code_writer.write(format!(") -> outputs::{};\n", external_cpu_function.name));
@@ -760,6 +762,7 @@ impl<'program> CodeGenerator<'program>
 			{
 				let output_type = output_types[output_index];
 				tuple_fields.push(output_type);
+				self.generate_type_definition(output_type);
 			}
 			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
@@ -802,6 +805,7 @@ impl<'program> CodeGenerator<'program>
 			for output_index in 0 .. output_types.len()
 			{
 				let output_type = output_types[output_index];
+				self.generate_type_definition(output_type);
 				tuple_fields.push(output_type);
 			}
 			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
@@ -825,6 +829,7 @@ impl<'program> CodeGenerator<'program>
 		for (input_index, input_type) in input_types.iter().enumerate()
 		{
 			self.code_writer.write(", ".to_string());
+			self.generate_type_definition(* input_type);
 
 			//let variable_id = self.variable_tracker.generate();
 			let variable_id = self.variable_tracker.create_local(* input_type);
@@ -1153,7 +1158,13 @@ impl<'program> CodeGenerator<'program>
 				}
 				self.type_code_writer.write_str("}\n\n");
 			}
-			_ => panic!("Unimplemented")
+			ir::Type::Slot { value_type, value_tag_id_opt, queue_stage, queue_place, fence_id } =>
+			{
+				write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));
+
+			}
+			_ => panic!("Unimplemented type #{}: {:?}", type_id, typ),
+			//_ => panic!("Unimplemented")
 		}
 	}
 

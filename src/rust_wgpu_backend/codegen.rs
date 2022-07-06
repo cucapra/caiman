@@ -236,8 +236,25 @@ impl<'program> CodeGen<'program>
 				use std::convert::TryInto;
 				use std::iter::FromIterator;
 				//use core::slice::SlicePattern;
-				let dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(|(index, x)| { let slot_id = input_slot_ids[index]; assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]); assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local); assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded); placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
-				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| { let slot_id = input_slot_ids[dimensions.len() + index]; assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]); assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu); assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded); placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
+				let dimension_map = |(index, x)| 
+				{
+					let slot_id = input_slot_ids[index];
+					// Need to check that this is int
+					//assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
+					assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded);
+					placement_state.slot_variable_ids[& slot_id]
+				};
+				let argument_map = |(index, x)|
+				{
+					let slot_id = input_slot_ids[dimensions.len() + index];
+					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu);
+					assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded);
+					placement_state.slot_variable_ids[& slot_id]
+				};
+				let dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(dimension_map)).into_boxed_slice();
+				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(argument_map)).into_boxed_slice();
 
 				let dimensions_slice : &[usize] = & dimension_var_ids;
 				let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
@@ -382,10 +399,16 @@ impl<'program> CodeGen<'program>
 				ir::Node::None => (),
 				ir::Node::Phi { index } =>
 				{
+					// Phis must appear at the start of a scheduling funclet (so that node order reflects scheduling order)
+					assert_eq!(current_node_id, * index as usize);
+
 					placement_state.node_results.insert(current_node_id, argument_node_results[* index as usize].clone());
 				}
 				ir::Node::ExtractResult { node_id, index } =>
 				{
+					// Extracts must appear directly after the call (so that node order reflects scheduling order)
+					assert_eq!(current_node_id, * node_id + (* index as usize));
+
 					match & placement_state.node_results[node_id]
 					{
 						_ => panic!("Funclet #{} at node #{} {:?}: Node #{} does not have multiple returns {:?}", funclet_id, current_node_id, node, node_id, placement_state)
