@@ -1,4 +1,4 @@
-use crate::dataflow::{Error, IrDependent, NodeIndex};
+use crate::dataflow::{Error, Graph, IrDependent, NodeIndex};
 use crate::ir;
 use std::collections::HashMap;
 
@@ -38,15 +38,6 @@ macro_rules! convert_to_ir {
         $arg.clone()
     };
 }
-macro_rules! for_each_dep {
-    ([Operation], $arg:ident, $func:ident) => {
-        $arg.iter().for_each(&mut $func)
-    };
-    (Operation, $arg:ident, $func:ident) => {
-        $func($arg)
-    };
-    ($_arg_type:tt, $_arg:ident, $_func:ident) => {};
-}
 macro_rules! convert_to_ir_helper {
      // Overload for types with no inputs, which are recordless in the IR
      ($context:ident, $name:ident, ()) => { ir::Node::$name };
@@ -56,7 +47,48 @@ macro_rules! convert_to_ir_helper {
          }
      };
 }
-
+macro_rules! for_each_dep {
+    ([Operation], $arg:ident, $func:ident) => {
+        $arg.iter().for_each(&mut $func)
+    };
+    (Operation, $arg:ident, $func:ident) => {
+        $func($arg)
+    };
+    ($_arg_type:tt, $_arg:ident, $_func:ident) => {};
+}
+macro_rules! fields_eq_shallow {
+    ([Operation], $arg1:ident, $arg2:ident, $graph:ident) => {
+        $arg1.len() == $arg2.len()
+            && std::iter::zip($arg1.iter(), $arg2.iter())
+                .all(|(a, b)| $graph.resolve_index(*a) == $graph.resolve_index(*b))
+    };
+    (Operation, $arg1:ident, $arg2:ident, $graph:ident) => {
+        $graph.resolve_index(*$arg1) == $graph.resolve_index(*$arg2)
+    };
+    ($_arg_type:tt, $arg1:ident, $arg2:ident, $_graph:ident) => {
+        $arg1 == $arg2
+    };
+}
+macro_rules! fields_eq_deep {
+    ([Operation], $arg1:ident, $arg2:ident, $self_graph:ident, $other_graph:ident) => {
+        $arg1.len() == $arg2.len()
+            && std::iter::zip($arg1.iter(), $arg2.iter()).all(|(a, b)| {
+                $self_graph.operation(*a).deep_eq(
+                    $self_graph,
+                    $other_graph.operation(*b),
+                    $other_graph,
+                )
+            })
+    };
+    (Operation, $arg1:ident, $arg2:ident, $self_graph:ident, $other_graph:ident) => {
+        $graph
+            .operation(*$arg1)
+            .deep_eq($self_graph, $other_graph.operation(*b), $other_graph)
+    };
+    ($_arg_type:tt, $arg1:ident, $arg2:ident, $_graph:ident) => {
+        $arg1 == $arg2
+    };
+}
 macro_rules! make_operations {
     // First, we filter the incoming operations with a TT muncher to exclude scheduling operations.
     // This probably won't be necessary after the language split.
@@ -81,12 +113,58 @@ macro_rules! make_operations {
                     )),*
                 }
             }
-            pub fn for_each_dependency(&self, mut f: impl FnMut(&NodeIndex)) {
+            /// Invoke `closure` on each dependency of the given operation.
+            pub fn for_each_dependency(&self, mut closure: impl FnMut(&NodeIndex)) {
                 #[allow(unused_variables)]
                 match self {
                     $(Self::$name { $($arg),* } => {
-                        $( for_each_dep!($arg_type, $arg, f); )*
+                        $( for_each_dep!($arg_type, $arg, closure); )*
                     }),*
+                }
+            }
+            /// Returns whether `self` and `other` are shallow-equal.
+            ///
+            /// [`Operation`]s are shallow-equal if:
+            /// - They have the same concrete type
+            /// - They depend on the same [`NodeIndex`]es after index resolution
+            /// - Their non-dependency fields are equal
+            ///
+            /// A, B shallow-equal => A, B deep-equal, but A, B deep-equal =/=> A, B shallow-equal.
+            pub fn shallow_eq(&self, other: &Operation, graph: &Graph) -> bool {
+                paste::paste! {
+                    match (self, other) {
+                        $(
+                            (Self::$name { $($arg: [<$arg 1>]),* }, Self::$name { $($arg: [<$arg 2>]),* })
+                            =>
+                            {
+                                $( fields_eq_shallow!($arg_type, [<$arg 1>], [<$arg 2>], graph) &&)*
+                                true
+                            },
+                        )*
+                        _ => false
+                    }
+                }
+            }
+
+            /// Returns whether `self` and `other` are deep-equal.
+            ///
+            /// [`Operation`]s are deep-equal if:
+            /// - They have the same concrete type
+            /// - Their *dependencies* are deep-equal
+            /// - Their non-dependency fields are equal
+            fn deep_eq(&self, self_graph: &Graph, other: &Operation, other_graph: &Graph) -> bool {
+                paste::paste! {
+                    match (self, other) {
+                        $(
+                            (Self::$name { $($arg: [<$arg 1>]),* }, Self::$name { $($arg: [<$arg 2>]),* })
+                            =>
+                            {
+                                $( fields_eq_deep!($arg_type, [<$arg 1>], [<$arg 2>], graph) &&)*
+                                true
+                            },
+                        )*
+                        _ => false
+                    }
                 }
             }
         }
