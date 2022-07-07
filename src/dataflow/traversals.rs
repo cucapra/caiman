@@ -1,5 +1,5 @@
 //! Dataflow graph traversals.
-use crate::dataflow::{Graph, NodeIndex};
+use crate::dataflow::{Graph, NodeIndex, ValueDependent};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -91,26 +91,25 @@ impl DependencyFirst {
                 Some(command) => command,
                 None => return Ok(None),
             };
-            let resolved = match command {
-                Command::Visit(index) => graph.resolve_index(index),
+            let index = match command {
+                Command::Visit(index) => index,
                 Command::Leave(index) => {
-                    let resolved = graph.resolve_index(index);
-                    let prev = self.visited.insert(resolved, VisitStatus::Done);
+                    let prev = self.visited.insert(index, VisitStatus::Done);
                     assert!(prev == Some(VisitStatus::Working));
-                    return Ok(Some(resolved));
+                    return Ok(Some(index));
                 }
             };
-            match self.visited.get(&resolved) {
+            match self.visited.get(&index) {
                 Some(VisitStatus::Done) => continue,
                 Some(VisitStatus::Working) => {
-                    let err = DependencyCycle { includes: resolved };
+                    let err = DependencyCycle { includes: index };
                     self.state = Err(err);
                     return Err(err);
                 }
                 None => {
-                    self.visited.insert(resolved, VisitStatus::Working);
-                    stack.push(Command::Leave(resolved));
-                    graph.operation(resolved).for_each_dependency(|&i| {
+                    self.visited.insert(index, VisitStatus::Working);
+                    stack.push(Command::Leave(index));
+                    graph.node(index).for_each_dependency(|&i| {
                         stack.push(Command::Visit(i)) //
                     });
                     continue;
