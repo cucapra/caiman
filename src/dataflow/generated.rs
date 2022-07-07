@@ -96,7 +96,7 @@ macro_rules! make_operations {
     // We then *actually* construct the operations.
     (@filter {} -> {$( $name:ident ( $($arg:ident : $arg_type:tt,)* ); )*}) => {
         $(
-            #[derive(PartialEq)]
+            #[derive(Debug, PartialEq)]
             pub struct $name {
                 $( $arg : _lookup_type!($arg_type) ),*
             }
@@ -113,7 +113,7 @@ macro_rules! make_operations {
                 }
             }
         )*
-        #[derive(PartialEq)]
+        #[derive(Debug, PartialEq)]
         pub enum Node {
             $( $name($name) ),*
         }
@@ -181,7 +181,7 @@ with_operations!(make_operations);
 macro_rules! make_tails {
     ($($name:ident ($($arg:ident : $arg_type:tt),*);)*) => {
         $(
-            #[derive(PartialEq)]
+            #[derive(Debug, PartialEq)]
             pub struct $name {
                 $( $arg : _lookup_type!($arg_type) ),*
             }
@@ -198,7 +198,7 @@ macro_rules! make_tails {
                 }
             }
         )*
-        #[derive(PartialEq)]
+        #[derive(Debug, PartialEq)]
         pub enum Tail {
             $( $name($name) ),*
         }

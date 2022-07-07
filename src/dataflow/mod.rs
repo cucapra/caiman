@@ -82,6 +82,7 @@ impl NodeIndex {
     }
 }
 
+#[derive(Debug)]
 pub struct Graph {
     nodes: Vec<Node>,
     tail: Tail,
@@ -126,5 +127,157 @@ impl Graph {
         }
         let ir_tail = self.tail.to_ir(&node_map);
         Ok((ir_nodes, ir_tail))
+    }
+}
+
+impl PartialEq for Graph {
+    fn eq(&self, other: &Self) -> bool {
+        self.tail.eq_deep(self, &other.tail, other)
+    }
+}
+
+#[cfg(test)]
+fn validate(pre_str: &str, operation: impl FnOnce(&mut Graph), post_str: &str) {
+    let mut graph = {
+        let funclet: ir::Funclet = ron::from_str(pre_str).unwrap();
+        Graph::from_ir(&funclet.nodes, &funclet.tail_edge).unwrap()
+    };
+    operation(&mut graph);
+    let post = {
+        let funclet: ir::Funclet = ron::from_str(post_str).unwrap();
+        Graph::from_ir(&funclet.nodes, &funclet.tail_edge).unwrap()
+    };
+    assert_eq!(graph, post);
+}
+
+#[cfg(test)]
+mod unused_code_elimination {
+    use super::*;
+    #[test]
+    fn empty() {
+        let empty_str = "(
+            kind : MixedImplicit,
+            input_types : [],
+            output_types : [],
+            nodes : [],
+            tail_edge : Return(return_values : []) 
+        )";
+        validate(empty_str, |_| (), empty_str);
+    }
+    #[test]
+    fn all_used() {
+        let all_used_str = "(
+            kind : MixedImplicit,
+            input_types : [0],
+            output_types : [0],
+            nodes : [
+                Phi(index : 0),
+                CallExternalCpu(external_function_id : 0, arguments : [0]),
+                ExtractResult(node_id : 1, index : 0),
+            ],
+            tail_edge : Return(return_values : [2]) 
+        )";
+        validate(all_used_str, |_| (), all_used_str);
+    }
+    #[test]
+    fn none_used() {
+        let pre_str = "(
+            kind : MixedImplicit,
+            input_types : [0],
+            output_types : [],
+            nodes : [
+                Phi(index : 0),
+                CallExternalCpu(external_function_id : 0, arguments : [0]),
+                ExtractResult(node_id : 1, index : 0),
+            ],
+            tail_edge : Return(return_values : []) 
+        )";
+        let post_str = "(
+            kind : MixedImplicit,
+            input_types : [0],
+            output_types : [],
+            nodes : [],
+            tail_edge : Return(return_values : []) 
+        )";
+        validate(pre_str, |_| (), post_str);
+    }
+    #[test]
+    fn some_used() {
+        let pre_str = "(
+            kind : MixedImplicit,
+            input_types : [0],
+            output_types : [0],
+            nodes : [
+                Phi(index : 0),
+                CallExternalCpu(external_function_id : 0, arguments : []),
+                ExtractResult(node_id : 1, index : 0),
+                CallExternalCpu(external_function_id : 1, arguments : [2]),
+                ExtractResult(node_id : 3, index : 0),
+                CallExternalCpu(external_function_id : 2, arguments: [0]),
+                ExtractResult(node_id : 5, index : 0)
+            ],
+            tail_edge : Return(return_values : [4]) 
+        )";
+        let post_str = "(
+            kind : MixedImplicit,
+            input_types : [0],
+            output_types : [0],
+            nodes : [
+                CallExternalCpu(external_function_id : 0, arguments : []),
+                ExtractResult(node_id : 0, index : 0),
+                CallExternalCpu(external_function_id : 1, arguments : [1]),
+                ExtractResult(node_id : 2, index : 0),
+            ],
+            tail_edge : Return(return_values : [3]) 
+        )";
+        validate(pre_str, |_| (), post_str);
+    }
+    #[test]
+    fn complex_use() {
+        let pre_str = "(
+            kind : MixedImplicit,
+            input_types : [0, 0, 0, 0],
+            output_types : [0, 0],
+            nodes : [
+                Phi(index : 0),
+                Phi(index : 1),
+                Phi(index : 2),
+                Phi(index : 3),
+
+                CallExternalCpu(external_function_id : 0, arguments : [0, 2]),
+                ExtractResult(node_id : 4, index : 0),
+
+                CallExternalCpu(external_function_id : 0, arguments : [1, 3]),
+                ExtractResult(node_id : 6, index : 0),
+
+                ConstantInteger(value : 42, type_id : 0),
+                CallExternalCpu(external_function_id : 0, arguments : [3, 8]),
+                ExtractResult(node_id : 9, index : 0),
+
+                CallExternalCpu(external_function_id : 0, arguments : [5, 8]),
+                ExtractResult(node_id : 11, index : 0)
+            ],
+            tail_edge : Return(return_values : [1, 12]) 
+        )";
+        let post_str = "(
+            kind : MixedImplicit,
+            input_types : [0, 0, 0, 0],
+            output_types : [0, 0],
+            nodes : [
+                Phi(index : 0),
+                Phi(index : 1),
+                Phi(index : 2),
+
+                CallExternalCpu(external_function_id : 0, arguments : [0, 2]),
+                ExtractResult(node_id : 3, index : 0),
+
+                ConstantInteger(value : 42, type_id : 0),
+
+                CallExternalCpu(external_function_id : 0, arguments : [4, 5]),
+                ExtractResult(node_id : 6, index : 0)
+            ],
+            tail_edge : Return(return_values : [1, 7]) 
+        )";
+        validate(pre_str, |_| (), post_str);
     }
 }
