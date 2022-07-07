@@ -9,9 +9,9 @@ use std::hash::Hash;
 pub enum SemanticError
 {
     Index(String),
-    NonIntegerType(ir::Type),
+    NonIntegerType(ast::Type),
     ValueParsing(String),
-    IntegerTooLarge(String, ir::Type),
+    IntegerTooLarge(String, ast::Type),
 }
 
 pub fn semantic_error_to_string(e: SemanticError) -> String
@@ -35,7 +35,7 @@ type Index<T> = HashMap<T, usize>;
 
 pub fn from_ast(program: ast::Program) -> Result<ir::Program, SemanticError>
 {
-    let (types, types_index) = generate_types(&program)?;
+    let (types, types_index) = generate_types(&program);
 
     let (external_cpu_functions, cpu_index) =
         generate_cpu(&program, &types_index)?;
@@ -103,40 +103,51 @@ fn index_get(index: &Index<String>, key: &str)
     }
 }
 
-fn type_vec_to_arena_and_index(
-    v: Vec<ir::Type>,
-) -> (Arena<ir::Type>, Index<ir::Type>)
-{
-    let arena = vec_to_arena(v.clone());
-    let index = vec_to_index(v);
-    (arena, index)
-}
-
-fn convert_type(t: ast::Type) -> Result<ir::Type, SemanticError>
+fn convert_type(
+    t: ast::Type,
+    f: &mut dyn FnMut(ast::Type) -> usize,
+) -> ir::Type
 {
     match t
     {
-        ast::Type::F32 => Ok(ir::Type::F32),
-        ast::Type::F64 => Ok(ir::Type::F64),
-        ast::Type::U8 => Ok(ir::Type::U8),
-        ast::Type::U16 => Ok(ir::Type::U16),
-        ast::Type::U32 => Ok(ir::Type::U32),
-        ast::Type::U64 => Ok(ir::Type::U64),
-        ast::Type::I8 => Ok(ir::Type::I8),
-        ast::Type::I16 => Ok(ir::Type::I16),
-        ast::Type::I32 => Ok(ir::Type::I32),
-        ast::Type::I64 => Ok(ir::Type::I64),
+        ast::Type::F32 => ir::Type::F32,
+        ast::Type::F64 => ir::Type::F64,
+        ast::Type::U8 => ir::Type::U8,
+        ast::Type::U16 => ir::Type::U16,
+        ast::Type::U32 => ir::Type::U32,
+        ast::Type::U64 => ir::Type::U64,
+        ast::Type::I8 => ir::Type::I8,
+        ast::Type::I16 => ir::Type::I16,
+        ast::Type::I32 => ir::Type::I32,
+        ast::Type::I64 => ir::Type::I64,
+        ast::Type::Array(t_box, length) => ir::Type::Array {
+            element_type: f(*t_box),
+            length,
+        },
+        ast::Type::Ref(t_box) => ir::Type::ConstRef {
+            element_type: f(*t_box),
+        },
+        ast::Type::MutRef(t_box) => ir::Type::MutRef {
+            element_type: f(*t_box),
+        },
+        ast::Type::Slice(t_box) => ir::Type::ConstSlice {
+            element_type: f(*t_box),
+        },
+        ast::Type::MutSlice(t_box) => ir::Type::MutSlice {
+            element_type: f(*t_box),
+        },
         _ => panic!("Unimplemented"),
     }
 }
 
-fn ast_type_to_id(
-    t: ast::Type,
-    types_index: &Index<ir::Type>,
-) -> Result<usize, SemanticError>
+// The following panics instead of using SemanticError because its not
+// working as intended means the index was built wrong, i.e. my fault and
+// unintended behavior
+fn ast_type_to_id(t: ast::Type, types_index: &Index<ir::Type>) -> usize
 {
-    let t_converted = convert_type(t)?;
-    Ok(types_index[&t_converted])
+    let mut recur = |t| ast_type_to_id(t, types_index);
+    let ir_type = convert_type(t, &mut recur);
+    types_index[&ir_type]
 }
 
 fn convert_function_type(
@@ -145,10 +156,10 @@ fn convert_function_type(
 ) -> Result<(Box<[usize]>, Box<[usize]>), SemanticError>
 {
     let (input, output) = ft;
-    let convert = |v: Vec<ast::Type>| -> Result<Box<[usize]>, SemanticError> {
+    let convert = |v: Vec<ast::Type>| -> Box<[usize]> {
         v.into_iter().map(|t| ast_type_to_id(t, types_index)).collect()
     };
-    Ok((convert(input)?, convert(output)?))
+    Ok((convert(input), convert(output)))
 }
 
 fn types_used(d: &ast::Declaration) -> Vec<ast::Type>
@@ -179,20 +190,63 @@ fn types_used(d: &ast::Declaration) -> Vec<ast::Type>
     }
 }
 
-fn generate_types(
-    program: &ast::Program,
-) -> Result<(Arena<ir::Type>, Index<ir::Type>), SemanticError>
+fn add_to_type_index(
+    t: ast::Type,
+    counter: &mut usize,
+    index: &mut Index<ir::Type>,
+    arena_map: &mut HashMap<usize, ir::Type>,
+) -> usize
+{
+    let mut recur = |t| add_to_type_index(t, counter, index, arena_map);
+    let ir_typ = convert_type(t, &mut recur);
+    match index.get(&ir_typ)
+    {
+        Some(x) => *x,
+        None =>
+        {
+            if index.insert(ir_typ.clone(), *counter).is_some()
+                || arena_map.insert(*counter, ir_typ.clone()).is_some()
+            {
+                panic!("Failure in type arena creation");
+            }
+            let old_counter = *counter;
+            *counter += 1;
+            old_counter
+        }
+    }
+}
+
+fn type_vec_to_arena_and_index(
+    v: Vec<ast::Type>,
+) -> (Arena<ir::Type>, Index<ir::Type>)
+{
+    let mut counter = 0;
+    let mut type_index: Index<ir::Type> = HashMap::new();
+    let mut arena_map: HashMap<usize, ir::Type> = HashMap::new();
+    for typ in v.iter()
+    {
+        add_to_type_index(
+            typ.clone(),
+            &mut counter,
+            &mut type_index,
+            &mut arena_map,
+        );
+    }
+    let arena = Arena::from_hash_map(arena_map);
+    (arena, type_index)
+}
+
+fn generate_types(program: &ast::Program)
+    -> (Arena<ir::Type>, Index<ir::Type>)
 {
     let mut all_types_used: Vec<ast::Type> =
-        program.iter().fold(vec![], |mut v, mut d| {
+        program.iter().fold(vec![], |mut v, d| {
             v.append(&mut types_used(d));
             v
         });
     all_types_used.sort();
     all_types_used.dedup();
-    let converted_types: Result<Vec<ir::Type>, SemanticError> =
-        all_types_used.into_iter().map(convert_type).collect();
-    converted_types.map(type_vec_to_arena_and_index)
+    type_vec_to_arena_and_index(all_types_used)
 }
 
 fn convert_cpu(
@@ -359,15 +413,15 @@ fn generate_node_index(nodes: &Vec<ast::Node>) -> Index<String>
     vec_to_index(v)
 }
 
-fn is_unsigned_integer(t: ir::Type) -> Result<bool, SemanticError>
+fn is_unsigned_integer(t: ast::Type) -> Result<bool, SemanticError>
 {
     match t
     {
-        ir::Type::U8 | ir::Type::U16 | ir::Type::U32 | ir::Type::U64 =>
+        ast::Type::U8 | ast::Type::U16 | ast::Type::U32 | ast::Type::U64 =>
         {
             Ok(true)
         }
-        ir::Type::I8 | ir::Type::I16 | ir::Type::I32 | ir::Type::I64 =>
+        ast::Type::I8 | ast::Type::I16 | ast::Type::I32 | ast::Type::I64 =>
         {
             Ok(false)
         }
@@ -378,7 +432,7 @@ fn is_unsigned_integer(t: ir::Type) -> Result<bool, SemanticError>
 fn convert_size_error<T, V>(
     result: Result<T, V>,
     value_str: &str,
-    t: ir::Type,
+    t: ast::Type,
 ) -> Result<(), SemanticError>
 {
     match result
@@ -394,7 +448,7 @@ fn convert_size_error<T, V>(
 fn check_size<T>(
     v: T,
     value_str: &str,
-    t: ir::Type,
+    t: ast::Type,
 ) -> Result<(), SemanticError>
 where
     u8: TryFrom<T>,
@@ -406,13 +460,13 @@ where
 {
     match t
     {
-        ir::Type::U8 => convert_size_error(u8::try_from(v), value_str, t),
-        ir::Type::U16 => convert_size_error(u16::try_from(v), value_str, t),
-        ir::Type::U32 => convert_size_error(u32::try_from(v), value_str, t),
-        ir::Type::I8 => convert_size_error(i8::try_from(v), value_str, t),
-        ir::Type::I16 => convert_size_error(i16::try_from(v), value_str, t),
-        ir::Type::I32 => convert_size_error(i32::try_from(v), value_str, t),
-        ir::Type::I64 | ir::Type::U64 => Ok(()),
+        ast::Type::U8 => convert_size_error(u8::try_from(v), value_str, t),
+        ast::Type::U16 => convert_size_error(u16::try_from(v), value_str, t),
+        ast::Type::U32 => convert_size_error(u32::try_from(v), value_str, t),
+        ast::Type::I8 => convert_size_error(i8::try_from(v), value_str, t),
+        ast::Type::I16 => convert_size_error(i16::try_from(v), value_str, t),
+        ast::Type::I32 => convert_size_error(i32::try_from(v), value_str, t),
+        ast::Type::I64 | ast::Type::U64 => Ok(()),
         _ => panic!("Not an integer"),
     }
 }
@@ -448,10 +502,9 @@ fn convert_node(
                 index: *index,
             })
         }
-        ast::NodeType::Constant(value_str, ast_typ) =>
+        ast::NodeType::Constant(value_str, typ) =>
         {
-            let typ = convert_type(ast_typ.clone())?;
-            let type_id = types_index[&typ];
+            let type_id = ast_type_to_id(typ.clone(), types_index);
             // This error is used in both branches
             let value_parsing_error =
                 Err(SemanticError::ValueParsing(String::from(value_str)));
@@ -463,7 +516,7 @@ fn convert_node(
                     Err(_) => value_parsing_error,
                     Ok(value) =>
                     {
-                        check_size(value, &value_str, typ)?;
+                        check_size(value, &value_str, typ.clone())?;
                         Ok(ir::Node::ConstantUnsignedInteger {
                             value,
                             type_id,
@@ -479,7 +532,7 @@ fn convert_node(
                     Err(_) => value_parsing_error,
                     Ok(value) =>
                     {
-                        check_size(value, &value_str, typ)?;
+                        check_size(value, &value_str, typ.clone())?;
                         Ok(ir::Node::ConstantInteger {
                             value,
                             type_id,
@@ -520,6 +573,27 @@ fn convert_node(
                 external_function_id,
                 arguments,
                 dimensions,
+            })
+        }
+        ast::NodeType::GPUSubmit(vals) =>
+        {
+            let values = map_index(vals, node_index)?;
+            Ok(ir::Node::SubmitGpu {
+                values,
+            })
+        }
+        ast::NodeType::GPUEncode(vals) =>
+        {
+            let values = map_index(vals, node_index)?;
+            Ok(ir::Node::EncodeGpu {
+                values,
+            })
+        }
+        ast::NodeType::LocalSync(vals) =>
+        {
+            let values = map_index(vals, node_index)?;
+            Ok(ir::Node::SyncLocal {
+                values,
             })
         }
     }

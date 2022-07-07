@@ -10,9 +10,10 @@ match {
 
   "Funclet", "CPU", "GPU", "ValueFunction", "Pipeline", "Inline",
   ":", ";", "->", "=>", "=", "_", ",",
-  "{", "}", "(", ")", "[", "]", "<", ">", 
+  "{", "}", "(", ")", "[", "]", "<", ">", "&", 
 	"F32", "F64", "U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64",
-  "phi", "extract", "const", "Return", "Yield",
+  "phi", "extract", "const", "Return", "Yield", "encode", "submit",
+  "local", "sync", "mut",
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
@@ -61,6 +62,12 @@ NodeType: NodeType = {
       => NodeType::Call(<>),
   <Id> "<" <CommaList<Id>> ">" "(" <CommaList<Id>> ")" 
       => NodeType::GPUCall(<>),
+  "GPU" "encode" "(" <CommaList<Id>> ")" 
+      => NodeType::GPUEncode(<>),
+  "GPU" "submit" "(" <CommaList<Id>> ")" 
+      => NodeType::GPUSubmit(<>),
+  "local" "sync" "(" <CommaList<Id>> ")" 
+      => NodeType::LocalSync(<>),
 }
 
 Node: Node = { <Id> "=" <NodeType> ";" => (<>) }
@@ -86,6 +93,11 @@ Type: Type = {
 	"I16" => Type::I16,
   "I32" => Type::I32,
 	"I64" => Type::I64,
+  "[" <t: Type> ";" <l: Index> "]" => Type::Array(Box::new(t), l),
+  "&" <t: Type> => Type::Ref(Box::new(t)),
+  "&" "mut" <t: Type> => Type::MutRef(Box::new(t)),
+  "&" "[" <t: Type> "]" => Type::Slice(Box::new(t)),
+  "&" "mut" "[" <t: Type> "]" => Type::MutSlice(Box::new(t)),
 }
 
 Shader: String = { 

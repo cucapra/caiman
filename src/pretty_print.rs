@@ -88,6 +88,29 @@ fn write_function_type_generic<T>(
     Ok(())
 }
 
+fn type_id_to_string(u: ir::TypeId, types_arena: &Arena<ir::Type>) -> String
+{
+    let t = &types_arena[&u];
+    let wrap = |s1, u, s2| {
+        String::from(s1) + &type_id_to_string(u, types_arena) + s2
+    };
+    match t
+    {
+        ir::Type::ConstRef { element_type } => wrap("& ", *element_type, ""),
+        ir::Type::MutRef { element_type } => wrap("&mut ", *element_type, ""),
+        ir::Type::ConstSlice { element_type } => {
+            wrap("& [", *element_type, "]")
+        },
+        ir::Type::MutSlice { element_type } => {
+            wrap("&mut [", *element_type, "]")
+        },
+        ir::Type::Array { element_type, length } => {
+            wrap("[", *element_type, &format!("; {}]", length))
+        },
+        _ => format!("{:?}", t)
+    }
+}
+
 fn write_function_type(
     oc: &mut dyn Write,
     input_types: &Box<[usize]>,
@@ -95,15 +118,19 @@ fn write_function_type(
     types_arena: &Arena<ir::Type>,
 ) -> std::io::Result<()>
 {
-    let true_input_types: Vec<&ir::Type> =
-        input_types.iter().map(|u| &types_arena[&u]).collect();
-    let true_output_types: Vec<&ir::Type> =
-        output_types.iter().map(|u| &types_arena[&u]).collect();
-    let to_string = |t: &&ir::Type| format!("{:?}", t);
+    let str_input_types: Vec<String> = input_types
+        .iter()
+        .map(|u| type_id_to_string(*u, types_arena))
+        .collect();
+    let str_output_types: Vec<String> = output_types
+        .iter()
+        .map(|u| type_id_to_string(*u, types_arena))
+        .collect();
+    let to_string = |s: &String| s.to_string();
     write_function_type_generic(
         oc,
-        true_input_types.as_slice(),
-        true_output_types.as_slice(),
+        str_input_types.as_slice(),
+        str_output_types.as_slice(),
         &to_string,
     )
 }
@@ -161,10 +188,18 @@ fn string_of_node(
             if *index == 0 { s } else { format!("{}[{}]", s, index) }
         },
         ir::Node::ConstantInteger{value, type_id} => {
-            format!("const {} : {:?}", value, &types_arena[&type_id])
+            format!(
+                "const {} : {}", 
+                value, 
+                type_id_to_string(*type_id, types_arena)
+            ) 
         },
         ir::Node::ConstantUnsignedInteger{value, type_id} => {
-            format!("const {} : {:?}", value, &types_arena[&type_id])
+            format!(
+                "const {} : {}", 
+                value, 
+                type_id_to_string(*type_id, types_arena)
+            ) 
         },
         ir::Node::CallValueFunction { function_id, arguments } => {
             format!(
@@ -195,6 +230,15 @@ fn string_of_node(
                 ),
                 args_to_string(arguments),
             )
+        },
+        ir::Node::EncodeGpu { values } => {
+            format!("GPU encode{}", args_to_string(values))
+        },
+        ir::Node::SubmitGpu { values } => {
+            format!("GPU submit{}", args_to_string(values))
+        },
+        ir::Node::SyncLocal { values } => {
+            format!("local sync{}", args_to_string(values))
         },
         _ => String::from("TODO")
     }

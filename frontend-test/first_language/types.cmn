@@ -1,0 +1,14 @@
+Funclet f1 : (I32) -> (U32) { node = phi 0; Return node }
+
+Funclet f2 : (U8) -> (U64) { node = phi 0; Return node }
+
+Funclet f4 : (&F32) -> () { node = phi 0; Return node }
+
+Funclet f3 : ([U8; 5]) -> (U8, I32) { node = phi 0; Return node }
+
+Funclet f5 : (U32, I32, I32, I32) -> ([F32; 42], &mut I64)
+{ node = phi 0; Return node }
+
+
+Funclet f6 : (&mut [U64]) -> (&[U64]) { node = phi 0; Return node }
+

@@ -69,11 +69,11 @@ fn explicate(input_file : &mut File, output_file : &mut File)
 fn pretty_print(is_ron : bool, input_file : &mut File) {
     if is_ron
     {
-        caiman::pretty_print::print_ron_file(input_file);
+        caiman::pretty_print::print_ron_file(input_file).unwrap();
     }
     else
     {
-        caiman::pretty_print::print_program_file(input_file);
+        caiman::pretty_print::print_program_file(input_file).unwrap();
     }
 }
 

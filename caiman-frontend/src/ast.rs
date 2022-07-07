@@ -13,6 +13,12 @@ pub enum Type
     I16,
     I32,
     I64,
+
+    Array(Box<Type>, usize),
+    Ref(Box<Type>),
+    MutRef(Box<Type>),
+    Slice(Box<Type>),
+    MutSlice(Box<Type>),
     // TODO others
 }
 
@@ -37,6 +43,9 @@ pub enum NodeType
     // Dimensions info is FIRST
     GPUCall(String, Vec<String>, Vec<String>),
 
+    GPUSubmit(Vec<String>),
+    GPUEncode(Vec<String>),
+    LocalSync(Vec<String>),
     // TODO others 
 }
 

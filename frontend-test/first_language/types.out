@@ -1,0 +1,20 @@
+Funclet f0 : (I32) -> (U32) {
+  n0 = phi 0;
+  Return n0
+}
+
+Funclet f1 : (U8) -> (U64) {
+  n0 = phi 0;
+  Return n0
+}
+
+Funclet f2 : (& F32) -> () {
+  n0 = phi 0;
+  Return n0
+}
+
+Funclet f3 : ([U8; 5]) -> (U8, I32) {
+  n0 = phi 0;
+  Return n0
+}
+
