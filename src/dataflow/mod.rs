@@ -141,12 +141,6 @@ impl Graph {
     }
 }
 
-impl PartialEq for Graph {
-    fn eq(&self, other: &Self) -> bool {
-        self.tail.eq_deep(self, &other.tail, other)
-    }
-}
-
 #[cfg(test)]
 pub fn validate(pre_str: &str, operation: impl FnOnce(&mut Graph), post_str: &str) {
     let mut graph = {
@@ -158,7 +152,14 @@ pub fn validate(pre_str: &str, operation: impl FnOnce(&mut Graph), post_str: &st
         let funclet: ir::Funclet = ron::from_str(post_str).unwrap();
         Graph::from_ir(&funclet.nodes, &funclet.tail_edge).unwrap()
     };
-    assert_eq!(graph, post);
+    assert!(
+        graph.tail.eq_deep(&graph, &post.tail, &post),
+        "assertion failed: 
+     left: {:#?}
+    right: {:#?}",
+        graph,
+        post
+    )
 }
 
 #[cfg(test)]
