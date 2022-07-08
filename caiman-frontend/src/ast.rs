@@ -68,6 +68,14 @@ pub struct ResourceBinding
 }
 
 #[derive(Debug, Clone)]
+pub enum ShaderType
+{
+    Wgsl,
+}
+
+pub type Shader = (ShaderType, String);
+
+#[derive(Debug, Clone)]
 pub enum Declaration
 {
     // For now: funclet kind will be a bool (true is inline)
@@ -75,7 +83,7 @@ pub enum Declaration
     //   make every non-inline funclet MixedImplicit
     Funclet(bool, String, FuncType, Vec<Node>, FuncletTail),
     CPU(String, FuncType),
-    GPU(String, String, FuncType, Vec<ResourceBinding>, Option<String>),
+    GPU(String, String, FuncType, Vec<ResourceBinding>, Option<Shader>),
     ValueFunction(String, Option<String>, FuncType),
     Pipeline(String, String),
 }

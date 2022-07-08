@@ -6,7 +6,7 @@ grammar;
 match {
   r"[a-zA-Z][a-zA-Z0-9_]*", // Id
   r"[-]?[0-9]+([.][0-9]+)?", // Constant
-  r"[a-zA-Z0-9_]*[.][a-zA-Z]*", // Shader filename
+  r"!BEGIN[^!]*!END", // Shader content
 
   "Funclet", "CPU", "GPU", "ValueFunction", "Pipeline", "Inline",
   ":", ";", "->", "=>", "=", "_", ",",
@@ -14,6 +14,7 @@ match {
 	"F32", "F64", "U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64",
   "phi", "extract", "const", "Return", "Yield", "encode", "submit",
   "local", "sync", "mut",
+  "WGSL", "BEGIN!", "END!",
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
@@ -100,9 +101,18 @@ Type: Type = {
   "&" "mut" "[" <t: Type> "]" => Type::MutSlice(Box::new(t)),
 }
 
-Shader: String = { 
-  <r"[a-zA-Z0-9_]*[.][a-zA-Z]*"> => String::from(<>) 
+ShaderType: ShaderType = {
+  "WGSL" => ShaderType::Wgsl,
 }
+
+ShaderContent: String = { 
+  <s: r"!BEGIN[^!]*!END"> => String::from(&s[6 .. s.len() - 4])
+}
+
+Shader: Shader = {
+  <ShaderType> <ShaderContent> => (<>)
+}
+
 
 BindingOption: Option<usize> = {
   <Index> => Some(<>),

@@ -276,7 +276,7 @@ fn construct_ir_gpu(
     entry_point: &str,
     ft: &ast::FuncType,
     rbs: &Vec<ast::ResourceBinding>,
-    shader: &Option<String>,
+    shader: &Option<ast::Shader>,
     types_index: &Index<ir::Type>,
 ) -> Result<ir::ExternalGpuFunction, SemanticError>
 {
@@ -290,14 +290,20 @@ fn construct_ir_gpu(
             output: rb.output,
         })
         .collect();
+    let shader_module_content = match shader {
+        None => ir::ShaderModuleContent::Wgsl(String::new()),
+        Some((shader_type, content)) => match shader_type {
+            ast::ShaderType::Wgsl => 
+                ir::ShaderModuleContent::Wgsl(String::from(content))
+        },
+    };
     Ok(ir::ExternalGpuFunction {
         name: String::from(name),
         entry_point: String::from(entry_point),
         input_types: i,
         output_types: o,
         resource_bindings,
-        // TODO: not this haha; open a file and get its contents
-        shader_module_content: ir::ShaderModuleContent::Wgsl(String::new()),
+        shader_module_content, 
     })
 }
 

@@ -452,11 +452,20 @@ fn write_external_gpu_functions(
         write!(oc, "{}", resource_bindings_str)?;
 
         // Shader module content seems inherently not pretty; it just looks
-        // like a block of WGSL code, so I am not going to print it (for now)
-        
-        //write_indent(oc, 2)?;
-        //write!(oc, "Shader module content: {:?}\n",
-        //func.shader_module_content)?;
+        // like a block of WGSL code, so it is hard to tell whether or not
+        // printing it is a good idea.
+        let print_shader_content = true;
+        if print_shader_content 
+        {
+            let shader_content = match &func.shader_module_content {
+                ir::ShaderModuleContent::Wgsl(content) => {
+                    write!(oc, "WGSL\n")?;
+                    String::from(content)
+                }
+            };
+            write_indent(oc, 1)?;
+            write!(oc, "!BEGIN{}!END\n", shader_content)?;
+        }
         write!(oc, "\n}}\n\n");
     }
     Ok(())

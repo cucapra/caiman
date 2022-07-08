@@ -18,3 +18,13 @@ Funclet f3 : ([U8; 5]) -> (U8, I32) {
   Return n0
 }
 
+Funclet f4 : (U32, I32, I32, I32) -> ([F32; 42], &mut I64) {
+  n0 = phi 0;
+  Return n0
+}
+
+Funclet f5 : (&mut [U64]) -> (& [U64]) {
+  n0 = phi 0;
+  Return n0
+}
+

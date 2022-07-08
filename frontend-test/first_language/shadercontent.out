@@ -1,0 +1,40 @@
+Funclet f0 : (U8) -> (U8) {
+  n0 = phi 0;
+  n1 = const 1 : U8;
+  n2 = foo(n0);
+  n3 = extract n2;
+  n4 = bar<n1, n1, n1>(n3);
+  n5 = extract n4;
+  Return n5
+}
+
+CPU foo : (U8) -> (U8);
+
+GPU bar (main) : (U8) -> (U8) {
+  [0][0] = 0 -> _;
+  [0][1] = _ -> 0;
+  WGSL
+  !BEGIN
+
+					struct Output {field_0 : i32;};
+					fn do_thing_on_gpu(a : i32) -> Output 
+					{
+						var output : Output;
+						output.field_0 = a + 1;
+						return output;
+					}
+					
+					struct Input_0 { field_0 : i32; };
+					[[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
+					struct Output_0 { field_0 : i32; };
+					[[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
+					[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
+					{
+						let output = do_thing_on_gpu(input_0.field_0);
+						output_0.field_0 = output.field_0;
+					}
+  
+  !END
+
+}
+
