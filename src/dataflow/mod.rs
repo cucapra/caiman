@@ -124,6 +124,10 @@ impl Graph {
         &mut self.tail
     }
 
+    pub fn num_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+
     pub fn into_ir(&self) -> Result<(Vec<ir::Node>, ir::TailEdge), Error> {
         let mut ir_nodes = Vec::new();
         let mut node_map = HashMap::new();
