@@ -14,12 +14,20 @@ trait SubgraphTransform {
     /// Attempts to apply the transformation to the subgraph of `graph` induced by `index`
     /// and all of its indirect and direct dependencies. The return code indicates success.
     fn attempt(&mut self, graph: &mut dataflow::Graph, index: dataflow::NodeIndex) -> bool;
+
+    fn reset(&mut self);
 }
+
+mod basic_cse;
+use basic_cse::BasicCse;
 
 fn attempt_subgraph_transforms(
     graph: &mut dataflow::Graph,
     transforms: &mut [Box<dyn SubgraphTransform>],
 ) -> Result<bool, Error> {
+    for transform in transforms.iter_mut() {
+        transform.reset();
+    }
     let mut mutated = false;
     let mut traversal = dataflow::traversals::DependencyFirst::new(graph);
     while let Some(index) = traversal.next(graph).map_err(dataflow::Error::from)? {

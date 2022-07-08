@@ -117,6 +117,13 @@ impl Graph {
         &mut self.nodes[index.0]
     }
 
+    pub fn tail(&self) -> &Tail {
+        &self.tail
+    }
+    pub fn tail_mut(&mut self) -> &mut Tail {
+        &mut self.tail
+    }
+
     pub fn into_ir(&self) -> Result<(Vec<ir::Node>, ir::TailEdge), Error> {
         let mut ir_nodes = Vec::new();
         let mut node_map = HashMap::new();
@@ -137,7 +144,7 @@ impl PartialEq for Graph {
 }
 
 #[cfg(test)]
-fn validate(pre_str: &str, operation: impl FnOnce(&mut Graph), post_str: &str) {
+pub fn validate(pre_str: &str, operation: impl FnOnce(&mut Graph), post_str: &str) {
     let mut graph = {
         let funclet: ir::Funclet = ron::from_str(pre_str).unwrap();
         Graph::from_ir(&funclet.nodes, &funclet.tail_edge).unwrap()
@@ -153,6 +160,9 @@ fn validate(pre_str: &str, operation: impl FnOnce(&mut Graph), post_str: &str) {
 #[cfg(test)]
 mod unused_code_elimination {
     use super::*;
+    fn validate_uce(pre_str: &str, post_str: &str) {
+        validate(pre_str, |_| (), post_str)
+    }
     #[test]
     fn empty() {
         let empty_str = "(
@@ -162,7 +172,7 @@ mod unused_code_elimination {
             nodes : [],
             tail_edge : Return(return_values : []) 
         )";
-        validate(empty_str, |_| (), empty_str);
+        validate_uce(empty_str, empty_str);
     }
     #[test]
     fn all_used() {
@@ -177,7 +187,7 @@ mod unused_code_elimination {
             ],
             tail_edge : Return(return_values : [2]) 
         )";
-        validate(all_used_str, |_| (), all_used_str);
+        validate_uce(all_used_str, all_used_str);
     }
     #[test]
     fn none_used() {
@@ -199,7 +209,7 @@ mod unused_code_elimination {
             nodes : [],
             tail_edge : Return(return_values : []) 
         )";
-        validate(pre_str, |_| (), post_str);
+        validate_uce(pre_str, post_str);
     }
     #[test]
     fn some_used() {
@@ -230,7 +240,7 @@ mod unused_code_elimination {
             ],
             tail_edge : Return(return_values : [3]) 
         )";
-        validate(pre_str, |_| (), post_str);
+        validate_uce(pre_str, post_str);
     }
     #[test]
     fn complex_use() {
@@ -278,6 +288,6 @@ mod unused_code_elimination {
             ],
             tail_edge : Return(return_values : [1, 7]) 
         )";
-        validate(pre_str, |_| (), post_str);
+        validate_uce(pre_str, post_str);
     }
 }

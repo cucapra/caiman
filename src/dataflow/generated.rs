@@ -96,7 +96,7 @@ macro_rules! make_operations {
     // We then *actually* construct the operations.
     (@filter {} -> {$( $name:ident ( $($arg:ident : $arg_type:tt,)* ); )*}) => {
         $(
-            #[derive(Debug, PartialEq)]
+            #[derive(Debug, Clone, Hash, PartialEq, Eq)]
             pub struct $name {
                 $( $arg : _lookup_type!($arg_type) ),*
             }
@@ -113,7 +113,7 @@ macro_rules! make_operations {
                 }
             }
         )*
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, Clone, Hash, PartialEq, Eq)]
         pub enum Node {
             $( $name($name) ),*
         }
