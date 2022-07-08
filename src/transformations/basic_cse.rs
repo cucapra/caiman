@@ -1,54 +1,47 @@
-use crate::dataflow::{Graph, Node, NodeIndex, ValueDependent};
-use crate::transformations::{Error, SubgraphTransform};
+use crate::dataflow::{traversals, Error, Graph, ValueDependent};
 use std::collections::HashMap;
-pub struct BasicCse {
-    remaps: HashMap<NodeIndex, NodeIndex>,
-    // TODO: This has pretty poor memory usage... in the worst case scenario,
-    // we're essentially duplicating the entire graph, and then some because alignment.
-    exprs: HashMap<Node, NodeIndex>,
-}
-impl BasicCse {
-    fn new() -> Self {
-        Self {
-            remaps: HashMap::new(),
-            exprs: HashMap::new(),
-        }
-    }
-}
-impl SubgraphTransform for BasicCse {
-    fn attempt(&mut self, graph: &mut Graph, index: NodeIndex) -> bool {
-        let remap = |id| self.remaps.get(&id).copied().unwrap_or(id);
-        graph.node_mut(index).map_dependencies(remap);
-        // This is a bit ugly, hopefully it can be eliminated in the future
-        graph.tail_mut().map_dependencies(remap);
-        if let Some(&other) = self.exprs.get(graph.node(index)) {
-            self.remaps.insert(index, other);
-            true
+
+/// Applies common subexpression elimination to `graph`. CSE is only applied to "reachable" nodes
+/// (those iterated over by [`traversals::DependencyFirst`]) — this is probably what you want.
+///
+/// Currently, this function *does not* utilize mathematical properties such as transitivity.
+pub fn apply(graph: &mut Graph) -> Result<(), Error> {
+    // Map from nodes (their actual contents!) to a canonical node index
+    // *TODO:* This has absolutely abysmal memory usage. In the worst case scenario, it may
+    // store a copy of the entire graph (+ extra memory due to the load factor!)
+    // To make this sane, I'll probably want to use HashMap::raw_entry_mut
+    let mut canonical = HashMap::new();
+    // Map from duplicate node index to canonical node index
+    let mut dedup = HashMap::new();
+
+    let mut traversal = traversals::DependencyFirst::new(graph);
+    while let Some(index) = traversal.next(graph).map_err(Error::from)? {
+        // -------- Step 1: Canonicalize this node's dependencies
+        let canonicalize = |i| dedup.get(&i).copied().unwrap_or(i);
+        graph.node_mut(index).map_dependencies(canonicalize);
+
+        // -------- Step 2: See if there's already a canonical index for this node
+        // If so, ensure dependents on this node are remapped to refer to the canonical index
+        // instead; if not, this becomes the canonical index
+        if let Some(&other) = canonical.get(graph.node(index)) {
+            dedup.insert(index, other);
         } else {
-            self.exprs.insert(graph.node(index).clone(), index);
-            false
+            canonical.insert(graph.node(index).clone(), index);
         }
     }
-    fn reset(&mut self) {
-        self.remaps.clear();
-        self.exprs.clear();
-    }
+
+    // -------- Step 3: Canonicalize the tail edge's dependencies
+    // TODO: This should not be necessary after operation-tail unification (coming soon?)
+    let canonicalize = |i| dedup.get(&i).copied().unwrap_or(i);
+    graph.tail_mut().map_dependencies(canonicalize);
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::BasicCse;
-    use crate::dataflow::validate;
-    use crate::transformations::{attempt_subgraph_transforms, SubgraphTransform};
     fn validate_cse(pre_str: &str, post_str: &str) {
-        let cse = Box::new(BasicCse::new()) as Box<dyn SubgraphTransform>;
-        validate(
-            pre_str,
-            |graph| {
-                attempt_subgraph_transforms(graph, &mut [cse]).unwrap();
-            },
-            post_str,
-        )
+        crate::dataflow::validate(pre_str, |graph| super::apply(graph).unwrap(), post_str)
     }
     #[test]
     fn empty() {

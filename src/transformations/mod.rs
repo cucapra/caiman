@@ -1,37 +1,41 @@
 #![warn(warnings)]
-use crate::dataflow;
+use crate::dataflow::{traversals, Error, Graph, NodeIndex};
 use crate::ir;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error(transparent)]
-    Dataflow(#[from] dataflow::Error),
-}
-
-/// Represents a transformation on a subgraph of a dataflow graph.
+/// Represents an transformation on a subgraph of a dataflow graph.
 trait SubgraphTransform {
     /// Attempts to apply the transformation to the subgraph of `graph` induced by `index`
     /// and all of its indirect and direct dependencies. The return code indicates success.
-    fn attempt(&mut self, graph: &mut dataflow::Graph, index: dataflow::NodeIndex) -> bool;
-
-    fn reset(&mut self);
+    ///
+    /// This **should not** modify any nodes outside of the aforementioned subtree.
+    ///
+    /// # Mutability
+    /// Although [`SubgraphTransform`]s are free to mutate their subgraph, they can't mutate
+    /// themselves; if self-mutability is needed, you're probably better off writing a
+    /// "freestanding" transformation. This restriction exists for two reasons:
+    /// - Since a [`SubgraphTransform`] can't keep track of which nodes its already visited,
+    ///   it can't modify nodes outside of its subtree without using out-of-band information
+    ///   to obtain their node indices. (That is, it's difficult to break the trait contract
+    ///   unless you intentionally "cheat".)
+    /// - If a transform *requires* self-mutability, it must maintain some internal state. That
+    ///   state could be accidentally invalidated by other transformations running in parallel.
+    ///   For example, [`BasicCse`](basic_cse::BasicCse) maintains an internal hashmap from node
+    ///   contents to node indices. A transformation interspersed between `BasicCse` applications
+    ///   could mutate node contents, thus de-syncing the hashmap from the graph.
+    ///   Self-immutability helps avoid these footguns.
+    fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool;
 }
 
 mod basic_cse;
-use basic_cse::BasicCse;
 
 fn attempt_subgraph_transforms(
-    graph: &mut dataflow::Graph,
-    transforms: &mut [Box<dyn SubgraphTransform>],
+    graph: &mut Graph,
+    transforms: &[Box<dyn SubgraphTransform>],
 ) -> Result<bool, Error> {
-    for transform in transforms.iter_mut() {
-        transform.reset();
-    }
     let mut mutated = false;
-    let mut traversal = dataflow::traversals::DependencyFirst::new(graph);
-    while let Some(index) = traversal.next(graph).map_err(dataflow::Error::from)? {
-        for transform in transforms.iter_mut() {
+    let mut traversal = traversals::DependencyFirst::new(graph);
+    while let Some(index) = traversal.next(graph).map_err(Error::from)? {
+        for transform in transforms.iter() {
             mutated |= transform.attempt(graph, index);
         }
     }
@@ -39,11 +43,11 @@ fn attempt_subgraph_transforms(
 }
 pub fn optimize(program: &mut ir::Program) -> Result<(), Error> {
     for (_, funclet) in program.funclets.iter_mut() {
-        let mut graph = dataflow::Graph::from_ir(&funclet.nodes, &funclet.tail_edge)?;
+        let mut graph = Graph::from_ir(&funclet.nodes, &funclet.tail_edge)?;
         const MAX_ITERATIONS: usize = 32;
         for _ in 0..MAX_ITERATIONS {
-            let mutated = attempt_subgraph_transforms(&mut graph, /* todo */ &mut [])?;
-            if !mutated {
+            basic_cse::apply(&mut graph)?;
+            if !attempt_subgraph_transforms(&mut graph, /* todo */ &[])? {
                 break;
             }
         }

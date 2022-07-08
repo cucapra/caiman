@@ -26,10 +26,10 @@ pub enum CompileError
 		#[from]
 		source: ron::de::Error 
 	},
-	#[error("failed to apply transformation: {source}")]
-	Transformation {
+	#[error("failed to apply value transformations: {source}")]
+	ValueTransformation {
 		#[from]
-		source: crate::transformations::Error 
+		source: crate::dataflow::Error
 	}
 }
 
