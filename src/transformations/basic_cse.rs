@@ -201,7 +201,7 @@ mod tests {
                 Phi(index : 0),
                 CallExternalCpu(external_function_id : 0, arguments : [0]),
                 Phi(index : 0),
-                CallExternalCpu(external_function_id : 0, arguments : [1]),
+                CallExternalCpu(external_function_id : 0, arguments : [2]),
                 ExtractResult(node_id : 3, index : 0),
                 ExtractResult(node_id : 1, index : 0),
                 CallExternalCpu(external_function_id : 0, arguments : [1, 5]),
