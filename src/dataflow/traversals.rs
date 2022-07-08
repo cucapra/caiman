@@ -1,6 +1,6 @@
 //! Dataflow graph traversals.
 use crate::dataflow::{Graph, NodeIndex, ValueDependent};
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use thiserror::Error;
 
 /// A dependency cycle was encountered during graph traversal.
@@ -36,8 +36,9 @@ enum VisitStatus {
 
 /// A **dependency-first** traversal of the reachable nodes in a graph.
 ///
-/// (TODO: Properly define "reachable". Currently it means "referenced by a tail edge" but
-/// this may change with the addition of stateful value operations like `print`.)
+/// (*TODO:* Properly define "reachable". Currently it means "referenced by a tail edge" but
+/// this may change with the addition of stateful value operations like `print`. It will also
+/// probably change when/if [`Graph`] becomes a pipeline graph instead of a funclet graph.)
 ///
 /// More specifically, this implements a postorder depth-first search, which is equivalent
 /// to a reversed topological sort in an acyclic graph. (In a traditional topological sort,
@@ -99,15 +100,15 @@ impl DependencyFirst {
                     return Ok(Some(index));
                 }
             };
-            match self.visited.get(&index) {
-                Some(VisitStatus::Done) => continue,
-                Some(VisitStatus::Working) => {
+            match self.visited.entry(index) {
+                Entry::Occupied(val) if *val.get() == VisitStatus::Working => {
                     let err = DependencyCycle { includes: index };
                     self.state = Err(err);
                     return Err(err);
                 }
-                None => {
-                    self.visited.insert(index, VisitStatus::Working);
+                Entry::Occupied(_) => continue,
+                Entry::Vacant(spot) => {
+                    spot.insert(VisitStatus::Working);
                     stack.push(Command::Leave(index));
                     graph.node(index).for_each_dependency(|&i| {
                         stack.push(Command::Visit(i)) //
