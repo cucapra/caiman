@@ -9,8 +9,6 @@ mod basic_cse;
 pub enum Error {
     #[error("unknown transformation: {0}")]
     UnknownTransformation(String),
-    #[error("invalid num iterations: {0}")]
-    InvalidNumIterations(#[from] std::num::ParseIntError),
     #[error(transparent)]
     ValueError(#[from] crate::dataflow::Error),
 }
@@ -24,19 +22,17 @@ pub struct Transformer {
     transforms: Vec<&'static dyn SubgraphTransform>,
 }
 impl Transformer {
-    pub fn new(options: &[&str]) -> Result<Self, Error> {
+    const DEFAULT_MAX_ITERATIONS: usize = 16;
+    pub fn new(max_iterations: usize, options: &[&str]) -> Result<Self, Error> {
         let mut cfg = Self {
-            max_iterations: 32,
+            max_iterations,
             basic_cse: false,
             transforms: Vec::new(),
         };
         for &opt in options {
-            if opt == "basic-cse" {
-                cfg.basic_cse = true;
-            } else if let Some(maybe_iters) = opt.strip_prefix("iterations=") {
-                cfg.max_iterations = maybe_iters.parse()?;
-            } else {
-                return Err(Error::UnknownTransformation(opt.to_owned()));
+            match opt {
+                "basic-cse" => cfg.basic_cse = true,
+                other => return Err(Error::UnknownTransformation(other.to_owned())),
             }
         }
         Ok(cfg)
@@ -66,7 +62,15 @@ impl Transformer {
         Ok(())
     }
 }
-
+impl Default for Transformer {
+    fn default() -> Self {
+        Self {
+            max_iterations: Self::DEFAULT_MAX_ITERATIONS,
+            basic_cse: true,
+            transforms: Vec::new(),
+        }
+    }
+}
 /// Represents an transformation on a subgraph of a dataflow graph.
 trait SubgraphTransform {
     /// Attempts to apply the transformation to the subgraph of `graph` induced by `index`
