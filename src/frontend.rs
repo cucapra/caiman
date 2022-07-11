@@ -1,4 +1,5 @@
 use crate::ir;
+use crate::transform::Transformer;
 use std::collections::HashMap;
 use std::default::Default;
 use thiserror::Error;
@@ -27,9 +28,9 @@ pub enum CompileError
 		source: ron::de::Error 
 	},
 	#[error("failed to apply value transformations: {source}")]
-	ValueTransformation {
+	Transform {
 		#[from]
-		source: crate::dataflow::Error
+		source: crate::transform::Error
 	}
 }
 
@@ -38,7 +39,8 @@ pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileO
 {
 	let mut definition: Definition = ron::from_str(&input_string)?;
 	assert_eq!(definition.version, (0, 0, 1));
-	crate::transformations::optimize(&mut definition.program)?;
+	let transformer = Transformer::default();
+	transformer.apply(&mut definition.program)?;
 	crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
 	let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
 	if let Some(options) = options_opt
@@ -54,7 +56,8 @@ pub fn explicate_ron_definition(input_string : &str, options : Option<CompileOpt
 	let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
 	let mut definition: Definition = ron::from_str(&input_string)?;
 	assert_eq!(definition.version, (0, 0, 1));
-	crate::transformations::optimize(&mut definition.program)?;
+	let transformer = Transformer::default();
+	transformer.apply(&mut definition.program)?;
 	crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
 	let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
 	Ok(output_string_result.unwrap())

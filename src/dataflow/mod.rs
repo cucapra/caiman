@@ -46,7 +46,7 @@ impl std::fmt::Display for IrDependent {
     }
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Copy, Error)]
 pub enum Error {
     /// This error is produced when an [`ir::Node`](crate::ir) or [`ir::TailEdge`](crate::ir)
     /// depends on a node which:

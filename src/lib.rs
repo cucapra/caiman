@@ -9,5 +9,5 @@ mod shadergen;
 pub mod frontend;
 mod rust_wgpu_backend;
 mod dataflow;
-mod transformations;
+mod transform;
 mod node_usage_analysis;

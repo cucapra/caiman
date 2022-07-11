@@ -8,7 +8,7 @@ mod basic_cse;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("unknown transformation: {0}")]
-    UnknownTransformation(String),
+    UnknownTransform(String),
     #[error(transparent)]
     ValueError(#[from] crate::dataflow::Error),
 }
@@ -32,7 +32,7 @@ impl Transformer {
         for &opt in options {
             match opt {
                 "basic-cse" => cfg.basic_cse = true,
-                other => return Err(Error::UnknownTransformation(other.to_owned())),
+                other => return Err(Error::UnknownTransform(other.to_owned())),
             }
         }
         Ok(cfg)
