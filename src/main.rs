@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 fn main() -> Result<(), anyhow::Error> {
-    let default_max_iter_str = frontend::TransformConfig::DEFAULT_MAX_ITERATIONS.to_string();
+    let default_max_iter_str = frontend::TransformConfig::DEFAULT_MAX_PASSES.to_string();
     let matches = App::new("Caiman Compiler")
         .version("0.0.1")
         .arg(
@@ -14,7 +14,8 @@ fn main() -> Result<(), anyhow::Error> {
                 .long("input")
                 .value_name("path.ron")
                 .help("Path to input spec (ron)")
-                .takes_value(true),
+                .takes_value(true)
+                .number_of_values(1),
         )
         .arg(
             Arg::with_name("output")
@@ -22,21 +23,24 @@ fn main() -> Result<(), anyhow::Error> {
                 .long("output")
                 .value_name("path.rs")
                 .help("Path to output")
-                .takes_value(true),
+                .takes_value(true)
+                .number_of_values(1),
         )
         .arg(
             Arg::with_name("action")
                 .short("a")
                 .long("action")
                 .help("Which action to take")
+                .number_of_values(1)
                 .default_value("compile")
                 .possible_values(&["optimize", "explicate", "compile"]),
         )
         .arg(
-            Arg::with_name("max_iterations")
-                .long("max-iterations")
-                .help("The max number of transformation iterations")
+            Arg::with_name("max_passes")
+                .long("max-passes")
+                .help("The max number of transformation passes")
                 .value_name("count")
+                .number_of_values(1)
                 .default_value(&default_max_iter_str),
         )
         .arg(
@@ -54,7 +58,8 @@ fn main() -> Result<(), anyhow::Error> {
             Arg::with_name("print_codegen_debug_info")
                 .long("print_codegen_debug_info")
                 .help("Print Codegen Debug Info")
-                .takes_value(false),
+                .takes_value(false)
+                .number_of_values(1),
         )
         .get_matches();
 
@@ -65,12 +70,12 @@ fn main() -> Result<(), anyhow::Error> {
     };
 
     let transform_config = {
-        let max_iterations = matches
-            .value_of("max_iterations")
+        let max_passes = matches
+            .value_of("max_passes")
             .unwrap_or(&default_max_iter_str)
             .parse()
-            .context("invalid number of transformation iterations")?;
-        let mut transform_config = frontend::TransformConfig::new(max_iterations);
+            .context("invalid number of transformation passes")?;
+        let mut transform_config = frontend::TransformConfig::new(max_passes);
         if let Some(transforms) = matches.values_of("transformations") {
             for transform in transforms {
                 transform_config.add_transform(transform)?;
@@ -98,7 +103,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     let mut output_file = {
         let output_path = matches.value_of("output").unwrap_or("a.out");
-        File::open(output_path).context("couldn't open output file")?
+        File::create(output_path).context("couldn't open output file")?
     };
 
     let output = frontend::compile(&options, &input)?;

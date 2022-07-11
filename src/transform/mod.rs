@@ -14,18 +14,18 @@ pub enum Error {
 }
 
 pub struct TransformConfig {
-    /// The maximum number of transformation iterations to apply.
-    max_iterations: usize,
+    /// The maximum number of transformation passes to run.
+    max_passes: usize,
     /// Whether to run basic constant subexpression elimination.
     basic_cse: bool,
     /// The list of subgraph transforms to apply.
     transforms: Vec<Box<dyn SubgraphTransform>>,
 }
 impl TransformConfig {
-    pub const DEFAULT_MAX_ITERATIONS: usize = 16;
-    pub fn new(max_iterations: usize) -> Self {
+    pub const DEFAULT_MAX_PASSES: usize = 16;
+    pub fn new(max_passes: usize) -> Self {
         Self {
-            max_iterations,
+            max_passes,
             basic_cse: false,
             transforms: Vec::new(),
         }
@@ -41,7 +41,7 @@ impl TransformConfig {
 impl Default for TransformConfig {
     fn default() -> Self {
         Self {
-            max_iterations: Self::DEFAULT_MAX_ITERATIONS,
+            max_passes: Self::DEFAULT_MAX_PASSES,
             basic_cse: true,
             transforms: Vec::new(),
         }
@@ -74,7 +74,7 @@ trait SubgraphTransform {
 pub fn apply(config: &TransformConfig, program: &mut ir::Program) -> Result<(), Error> {
     for (_, funclet) in program.funclets.iter_mut() {
         let mut graph = Graph::from_ir(&funclet.nodes, &funclet.tail_edge)?;
-        for _ in 0..config.max_iterations {
+        for _ in 0..config.max_passes {
             if config.basic_cse {
                 basic_cse::apply(&mut graph)?;
             }
