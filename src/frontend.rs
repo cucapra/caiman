@@ -2,6 +2,8 @@ use crate::{ir, rust_wgpu_backend::codegen, rust_wgpu_backend::explicate_schedul
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use transform::TransformConfig;
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Definition {
     version: (u32, u32, u32),
@@ -26,7 +28,7 @@ impl Default for Action {
 #[derive(Default)]
 pub struct Options {
     pub action: Action,
-    pub transforms: transform::Config,
+    pub transform_config: TransformConfig,
     pub print_codegen_debug_info: bool,
 }
 
@@ -52,7 +54,7 @@ pub fn compile(options: &Options, input_string: &str) -> Result<String, Error> {
     assert_eq!(definition.version, (0, 0, 1));
 
     // Apply transforms
-    transform::apply(&options.transforms, &mut definition.program)?;
+    transform::apply(&options.transform_config, &mut definition.program)?;
     if options.action == Action::Optimize {
         return Ok(ron::ser::to_string_pretty(&definition, pretty).unwrap());
     }

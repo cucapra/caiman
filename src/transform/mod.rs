@@ -13,18 +13,32 @@ pub enum Error {
     ValueError(#[from] crate::dataflow::Error),
 }
 
-pub struct Config {
+pub struct TransformConfig {
     /// The maximum number of transformation iterations to apply.
-    pub max_iterations: usize,
+    max_iterations: usize,
     /// Whether to run basic constant subexpression elimination.
-    pub basic_cse: bool,
+    basic_cse: bool,
     /// The list of subgraph transforms to apply.
-    pub transforms: Vec<Box<dyn SubgraphTransform>>,
+    transforms: Vec<Box<dyn SubgraphTransform>>,
 }
-impl Config {
-    const DEFAULT_MAX_ITERATIONS: usize = 16;
+impl TransformConfig {
+    pub const DEFAULT_MAX_ITERATIONS: usize = 16;
+    pub fn new(max_iterations: usize) -> Self {
+        Self {
+            max_iterations,
+            basic_cse: false,
+            transforms: Vec::new(),
+        }
+    }
+    pub fn add_transform(&mut self, transform: &str) -> Result<&mut Self, Error> {
+        match transform {
+            "basic-cse" => self.basic_cse = true,
+            unknown => return Err(Error::UnknownTransform(unknown.to_owned())),
+        }
+        Ok(self)
+    }
 }
-impl Default for Config {
+impl Default for TransformConfig {
     fn default() -> Self {
         Self {
             max_iterations: Self::DEFAULT_MAX_ITERATIONS,
@@ -34,7 +48,7 @@ impl Default for Config {
     }
 }
 /// Represents an transformation on a subgraph of a dataflow graph.
-pub trait SubgraphTransform {
+trait SubgraphTransform {
     /// Attempts to apply the transformation to the subgraph of `graph` induced by `index`
     /// and all of its indirect and direct dependencies. The return code indicates success.
     ///
@@ -57,7 +71,7 @@ pub trait SubgraphTransform {
     fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool;
 }
 
-pub fn apply(config: &Config, program: &mut ir::Program) -> Result<(), Error> {
+pub fn apply(config: &TransformConfig, program: &mut ir::Program) -> Result<(), Error> {
     for (_, funclet) in program.funclets.iter_mut() {
         let mut graph = Graph::from_ir(&funclet.nodes, &funclet.tail_edge)?;
         for _ in 0..config.max_iterations {
