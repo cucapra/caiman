@@ -47,6 +47,7 @@ fn main() -> Result<(), anyhow::Error> {
                 .help("Which transformations to apply")
                 .use_delimiter(true)
                 .multiple(true)
+                .empty_values(true)
                 .default_value("basic-cse"),
         )
         .arg(
