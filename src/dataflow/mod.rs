@@ -14,16 +14,6 @@ pub trait ValueDependent: PartialEq {
     fn map_dependencies(&mut self, closure: impl Fn(NodeIndex) -> NodeIndex)
     where
         Self: Sized;
-
-    /// Returns whether `self` and `other` are deep-equal.
-    ///
-    /// [`ValueDependent`]s are deep-equal if:
-    /// - They have the same concrete type
-    /// - Their *dependencies* are deep-equal
-    /// - Their non-dependency fields are equal
-    fn eq_deep(&self, self_graph: &Graph, other: &Self, other_graph: &Graph) -> bool
-    where
-        Self: Sized;
 }
 
 mod generated;
@@ -146,25 +136,4 @@ impl Graph {
         let ir_tail = self.tail.to_ir(&node_map);
         Ok((ir_nodes, ir_tail))
     }
-}
-
-#[cfg(test)]
-pub fn validate(pre_str: &str, operation: impl FnOnce(&mut Graph), post_str: &str) {
-    let mut graph = {
-        let funclet: ir::Funclet = ron::from_str(pre_str).unwrap();
-        Graph::from_ir(&funclet.nodes, &funclet.tail_edge).unwrap()
-    };
-    operation(&mut graph);
-    let post = {
-        let funclet: ir::Funclet = ron::from_str(post_str).unwrap();
-        Graph::from_ir(&funclet.nodes, &funclet.tail_edge).unwrap()
-    };
-    assert!(
-        graph.tail.eq_deep(&graph, &post.tail, &post),
-        "assertion failed: 
-     left: {:#?}
-    right: {:#?}",
-        graph,
-        post
-    )
 }

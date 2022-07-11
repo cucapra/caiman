@@ -1,4 +1,4 @@
-use crate::dataflow::{Error, Graph, IrDependent, NodeIndex, ValueDependent};
+use crate::dataflow::{Error, IrDependent, NodeIndex, ValueDependent};
 use crate::ir;
 use std::collections::HashMap;
 
@@ -76,19 +76,6 @@ macro_rules! _map_dependencies {
     };
     ($_arg_type:tt, $_arg:expr, $_func:ident) => {};
 }
-macro_rules! _eq_deep {
-    ([Operation], $a:expr, $ga:ident, $b:expr, $gb:ident) => {
-        $a.len() == $b.len()
-            && std::iter::zip($a.iter(), $b.iter())
-                .all(|(a, b)| _eq_deep!(Operation, *a, $ga, *b, $gb))
-    };
-    (Operation, $a:expr, $ga:ident, $b:expr, $gb:ident) => {
-        $ga.node($a).eq_deep($ga, $gb.node($b), $gb)
-    };
-    ($_arg_type:tt, $a:expr, $_ga:ident, $b:expr, $_gb:ident) => {
-        $a == $b
-    };
-}
 
 macro_rules! make_operations {
     // First, we filter the incoming operations with a TT muncher to exclude scheduling operations.
@@ -107,9 +94,6 @@ macro_rules! make_operations {
                 }
                 fn map_dependencies(&mut self, closure: impl Fn(NodeIndex) -> NodeIndex) {
                     $( _map_dependencies!( $arg_type, &mut self.$arg, closure ); )*
-                }
-                fn eq_deep(&self, self_graph: &Graph, other: &Self, other_graph: &Graph) -> bool {
-                    $( _eq_deep!( $arg_type, self.$arg, self_graph, other.$arg, other_graph ) && )* true
                 }
             }
         )*
@@ -143,12 +127,6 @@ macro_rules! make_operations {
             fn map_dependencies(&mut self, closure: impl Fn(NodeIndex) -> NodeIndex) {
                 match self {
                     $( Self::$name(inner) => inner.map_dependencies(closure)),*
-                }
-            }
-            fn eq_deep(&self, self_graph: &Graph, other: &Self, other_graph: &Graph) -> bool {
-                match (self, other) {
-                    $( (Self::$name(a), Self::$name(b)) => a.eq_deep(self_graph, b, other_graph),)*
-                    _ => false
                 }
             }
         }
@@ -193,9 +171,6 @@ macro_rules! make_tails {
                 fn map_dependencies(&mut self, closure: impl Fn(NodeIndex) -> NodeIndex) {
                     $( _map_dependencies!( $arg_type, &mut self.$arg, closure ); )*
                 }
-                fn eq_deep(&self, self_graph: &Graph, other: &Self, other_graph: &Graph) -> bool {
-                    $( _eq_deep!( $arg_type, self.$arg, self_graph, other.$arg, other_graph ) && )* true
-                }
             }
         )*
         #[derive(Debug, PartialEq)]
@@ -227,12 +202,6 @@ macro_rules! make_tails {
             fn map_dependencies(&mut self, closure: impl Fn(NodeIndex) -> NodeIndex) {
                 match self {
                     $( Self::$name(inner) => inner.map_dependencies(closure)),*
-                }
-            }
-            fn eq_deep(&self, self_graph: &Graph, other: &Self, other_graph: &Graph) -> bool {
-                match (self, other) {
-                    $( (Self::$name(a), Self::$name(b)) => a.eq_deep(self_graph, b, other_graph),)*
-                    _ => false
                 }
             }
         }
