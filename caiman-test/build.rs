@@ -2,6 +2,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use caiman::frontend;
 
 fn compile(input_file : &mut File, output_file : &mut File)
 {
@@ -13,7 +14,7 @@ fn compile(input_file : &mut File, output_file : &mut File)
 		Ok(_) => ()
 	};
 
-	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, Some(caiman::frontend::CompileOptions{print_codegen_debug_info : false}));
+	let result = frontend::compile(&frontend::Options::default(), &input_string);
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
