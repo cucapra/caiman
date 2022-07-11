@@ -1,8 +1,7 @@
 use anyhow::Context;
 use caiman::frontend;
 use clap::{App, Arg};
-use std::fs::File;
-use std::io::prelude::*;
+use std::{fs::File, io::Read, io::Write};
 
 fn main() -> Result<(), anyhow::Error> {
     let default_max_iter_str = frontend::TransformConfig::DEFAULT_MAX_PASSES.to_string();
@@ -24,6 +23,7 @@ fn main() -> Result<(), anyhow::Error> {
                 .value_name("path.rs")
                 .help("Path to output")
                 .takes_value(true)
+                .allow_hyphen_values(true)
                 .number_of_values(1),
         )
         .arg(
@@ -51,7 +51,6 @@ fn main() -> Result<(), anyhow::Error> {
                 .help("Which transformations to apply")
                 .use_delimiter(true)
                 .multiple(true)
-                .empty_values(true)
                 .default_value("basic-cse"),
         )
         .arg(
@@ -101,15 +100,18 @@ fn main() -> Result<(), anyhow::Error> {
         input
     };
 
-    let mut output_file = {
-        let output_path = matches.value_of("output").unwrap_or("a.out");
-        File::create(output_path).context("couldn't open output file")?
-    };
-
     let output = frontend::compile(&options, &input)?;
-    output_file
-        .write(output.as_bytes())
-        .context("couldn't write output file")?;
+
+    let maybe_path = matches.value_of("output");
+    if maybe_path == Some("-") {
+        std::io::stdout().write(output.as_bytes()).unwrap();
+    } else {
+        let output_path = maybe_path.unwrap_or("a.out");
+        let mut output_file = File::create(output_path).context("couldn't open output file")?;
+        output_file
+            .write(output.as_bytes())
+            .context("couldn't write output file")?;
+    }
 
     Ok(())
 }

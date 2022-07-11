@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::default::Default;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 
@@ -102,7 +102,8 @@ impl<T> Serialize for Arena<T>
 	fn serialize<S>(& self, serializer : S) -> std::result::Result<<S as Serializer>::Ok, <S as Serializer>::Error>
 		where S : Serializer
 	{
-		self.elements.serialize(serializer)
+		let ordered: BTreeMap<_, _> = self.elements.iter().collect();
+		ordered.serialize(serializer)
 	}
 }
 
