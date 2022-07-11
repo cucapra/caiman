@@ -1,0 +1,168 @@
+(
+    version: (0, 0, 1),
+    program: (
+        types: {
+            0: I32,
+        },
+        funclets: {
+            0: (
+                kind: MixedImplicit,
+                input_types: [],
+                output_types: [],
+                nodes: [],
+                tail_edge: Return(
+                    return_values: [],
+                ),
+                input_resource_states: [],
+                output_resource_states: [],
+                local_meta_variables: {},
+            ),
+            1: (
+                kind: MixedImplicit,
+                input_types: [
+                    0,
+                ],
+                output_types: [
+                    0,
+                ],
+                nodes: [
+                    Phi(
+                        index: 0,
+                    ),// [0]
+                    CallExternalCpu(
+                        external_function_id: 0,
+                        arguments: [
+                            0,
+                        ],
+                    ),// [1]
+                    ExtractResult(
+                        node_id: 1,
+                        index: 0,
+                    ),
+                ],
+                tail_edge: Return(
+                    return_values: [
+                        2,
+                    ],
+                ),
+                input_resource_states: [],
+                output_resource_states: [],
+                local_meta_variables: {},
+            ),
+            2: (
+                kind: MixedImplicit,
+                input_types: [
+                    0,
+                ],
+                output_types: [],
+                nodes: [],
+                tail_edge: Return(
+                    return_values: [],
+                ),
+                input_resource_states: [],
+                output_resource_states: [],
+                local_meta_variables: {},
+            ),
+            3: (
+                kind: MixedImplicit,
+                input_types: [
+                    0,
+                ],
+                output_types: [
+                    0,
+                ],
+                nodes: [
+                    CallExternalCpu(
+                        external_function_id: 0,
+                        arguments: [],
+                    ),// [0]
+                    ExtractResult(
+                        node_id: 0,
+                        index: 0,
+                    ),// [1]
+                    CallExternalCpu(
+                        external_function_id: 1,
+                        arguments: [
+                            1,
+                        ],
+                    ),// [2]
+                    ExtractResult(
+                        node_id: 2,
+                        index: 0,
+                    ),
+                ],
+                tail_edge: Return(
+                    return_values: [
+                        3,
+                    ],
+                ),
+                input_resource_states: [],
+                output_resource_states: [],
+                local_meta_variables: {},
+            ),
+            4: (
+                kind: MixedImplicit,
+                input_types: [
+                    0,// [0]
+                    0,// [1]
+                    0,// [2]
+                    0,
+                ],
+                output_types: [
+                    0,// [0]
+                    0,
+                ],
+                nodes: [
+                    ConstantInteger(
+                        value: 42,
+                        type_id: 0,
+                    ),// [0]
+                    Phi(
+                        index: 2,
+                    ),// [1]
+                    Phi(
+                        index: 0,
+                    ),// [2]
+                    CallExternalCpu(
+                        external_function_id: 0,
+                        arguments: [
+                            2,// [0]
+                            1,
+                        ],
+                    ),// [3]
+                    ExtractResult(
+                        node_id: 3,
+                        index: 0,
+                    ),// [4]
+                    CallExternalCpu(
+                        external_function_id: 0,
+                        arguments: [
+                            4,// [0]
+                            0,
+                        ],
+                    ),// [5]
+                    ExtractResult(
+                        node_id: 5,
+                        index: 0,
+                    ),// [6]
+                    Phi(
+                        index: 1,
+                    ),
+                ],
+                tail_edge: Return(
+                    return_values: [
+                        7,// [0]
+                        6,
+                    ],
+                ),
+                input_resource_states: [],
+                output_resource_states: [],
+                local_meta_variables: {},
+            ),
+        },
+        external_cpu_functions: [],
+        external_gpu_functions: [],
+        value_functions: {},
+        pipelines: [],
+    ),
+)
