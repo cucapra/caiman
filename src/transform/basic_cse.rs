@@ -1,5 +1,5 @@
 use crate::dataflow::{traversals, Error, Graph, NodeIndex, ValueDependent};
-use std::collections::hash_map::{DefaultHasher, HashMap, RandomState};
+use std::collections::hash_map::{HashMap, RandomState};
 use std::convert::TryFrom;
 use std::hash::{BuildHasher, Hash, Hasher};
 
@@ -15,11 +15,12 @@ use std::hash::{BuildHasher, Hash, Hasher};
 ///    This is the whole reason why we don't just use a `HashMap`.
 /// 3. Because of (2), you must pass a reference to the graph to every mutating operation,
 ///    and you **must not mutate any nodes once their indexes have been added to the map.**
+#[derive(Debug)]
 struct CanonicalMap {
     buckets: Box<[usize]>,
     num_buckets: usize,
     entries: Vec<(NodeIndex, usize)>,
-    hasher: DefaultHasher,
+    random_state: RandomState,
 }
 impl CanonicalMap {
     const INVALID_ENTRY: usize = usize::MAX;
@@ -28,32 +29,34 @@ impl CanonicalMap {
         let num_buckets = (capacity * 2).next_power_of_two();
         let buckets = vec![Self::INVALID_ENTRY; num_buckets].into_boxed_slice();
         let entries = Vec::with_capacity(capacity);
-        let hasher = RandomState::new().build_hasher();
+        let random_state = RandomState::new();
         Self {
             buckets,
             num_buckets,
             entries,
-            hasher,
+            random_state,
         }
     }
     /// Calculates the bucket index by hashing the contents of the node at `index` in `graph`.
     /// (The signature is weird to avoid ugly syntax elsewhere due to lifetimes.)
     fn bucket_for_index(
         num_buckets: usize,
-        state: &mut DefaultHasher,
+        random_state: &RandomState,
         index: NodeIndex,
         graph: &Graph,
     ) -> usize {
         debug_assert!(num_buckets.is_power_of_two());
-        graph.node(index).hash(state);
-        usize::try_from(state.finish()).unwrap() & (num_buckets - 1)
+        let mut hasher = random_state.build_hasher();
+        graph.node(index).hash(&mut hasher);
+        usize::try_from(hasher.finish()).unwrap() & (num_buckets - 1)
     }
     /// Doubles this instance's bucket count and rehashes.
     fn expand(&mut self, graph: &Graph) {
         self.num_buckets *= 2;
         self.buckets = vec![Self::INVALID_ENTRY; self.num_buckets].into_boxed_slice();
         for (i, entry) in self.entries.iter_mut().enumerate() {
-            let bucket = Self::bucket_for_index(self.num_buckets, &mut self.hasher, entry.0, graph);
+            let bucket =
+                Self::bucket_for_index(self.num_buckets, &self.random_state, entry.0, graph);
             entry.1 = self.buckets[bucket];
             self.buckets[bucket] = i;
         }
@@ -66,7 +69,7 @@ impl CanonicalMap {
             self.expand(graph);
         }
 
-        let bucket = Self::bucket_for_index(self.num_buckets, &mut self.hasher, index, graph);
+        let bucket = Self::bucket_for_index(self.num_buckets, &self.random_state, index, graph);
         let bucket_contents = &mut self.buckets[bucket];
 
         // walk back linked list, try to find a match
@@ -99,7 +102,7 @@ pub fn apply(graph: &mut Graph) -> Result<(), Error> {
     let mut dedup = HashMap::new();
 
     let mut traversal = traversals::DependencyFirst::new(graph);
-    while let Some(index) = traversal.next(graph).map_err(Error::from)? {
+    while let Some(index) = traversal.next(graph)? {
         // -------- Step 1: Canonicalize this node's dependencies
         let canonicalize = |i| dedup.get(&i).copied().unwrap_or(i);
         graph.node_mut(index).map_dependencies(canonicalize);
@@ -132,7 +135,7 @@ mod tests {
             input_types : [],
             output_types : [],
             nodes : [],
-            tail_edge : Return(return_values : []) 
+            tail_edge : Return(return_values : [])
         )";
         validate_cse(empty, empty);
     }
@@ -147,7 +150,7 @@ mod tests {
                 CallExternalCpu(external_function_id : 0, arguments : [0]),
                 ExtractResult(node_id : 1, index : 0),
             ],
-            tail_edge : Return(return_values : [2]) 
+            tail_edge : Return(return_values : [2])
         )";
         validate_cse(unchanged, unchanged);
     }
@@ -162,7 +165,7 @@ mod tests {
                 CallExternalCpu(external_function_id : 0, arguments : [0]),
                 ExtractResult(node_id : 1, index : 0),
             ],
-            tail_edge : Return(return_values : [0, 2]) 
+            tail_edge : Return(return_values : [0, 2])
         )";
         validate_cse(unchanged_multi, unchanged_multi);
     }
@@ -201,7 +204,7 @@ mod tests {
                 Phi(index : 0),
                 Phi(index : 0)
             ],
-            tail_edge : Return(return_values : [0, 1]) 
+            tail_edge : Return(return_values : [0, 1])
         )";
         let post = "(
             kind : MixedImplicit,
@@ -210,7 +213,7 @@ mod tests {
             nodes : [
                 Phi(index : 0),
             ],
-            tail_edge : Return(return_values : [0, 0]) 
+            tail_edge : Return(return_values : [0, 0])
         )";
         validate_cse(pre, post);
     }
@@ -226,7 +229,7 @@ mod tests {
                 CallExternalCpu(external_function_id : 0, arguments : [0]),
                 CallExternalCpu(external_function_id : 0, arguments : [1])
             ],
-            tail_edge : Return(return_values : [2, 3]) 
+            tail_edge : Return(return_values : [2, 3])
         )";
         let post = "(
             kind : MixedImplicit,
@@ -252,7 +255,7 @@ mod tests {
                 Phi(index : 0),
                 CallExternalCpu(external_function_id : 0, arguments : [2])
             ],
-            tail_edge : Return(return_values : [1, 3]) 
+            tail_edge : Return(return_values : [1, 3])
         )";
         let post = "(
             kind : MixedImplicit,
@@ -283,7 +286,7 @@ mod tests {
                 CallExternalCpu(external_function_id : 0, arguments : [1, 4]),
                 CallExternalCpu(external_function_id : 0, arguments : [6, 7])
             ],
-            tail_edge : Return(return_values : [3, 8]) 
+            tail_edge : Return(return_values : [3, 8])
         )";
         let post = "(
             kind : MixedImplicit,
@@ -296,7 +299,7 @@ mod tests {
                 CallExternalCpu(external_function_id : 0, arguments : [1, 2]),
                 CallExternalCpu(external_function_id : 0, arguments : [3, 3])
             ],
-            tail_edge : Return(return_values : [1, 4]) 
+            tail_edge : Return(return_values : [1, 4])
         )";
         validate_cse(pre, post);
     }
