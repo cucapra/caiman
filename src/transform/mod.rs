@@ -32,6 +32,7 @@ impl TransformConfig {
     }
     pub fn add_transform(&mut self, transform: &str) -> Result<&mut Self, Error> {
         match transform {
+            "" => (),
             "basic-cse" => self.basic_cse = true,
             unknown => return Err(Error::UnknownTransform(unknown.to_owned())),
         }
