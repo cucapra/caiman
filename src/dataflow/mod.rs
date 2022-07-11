@@ -30,7 +30,7 @@ mod generated;
 pub use generated::{Node, Tail};
 pub mod traversals;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Copy, Error)]
 pub enum IrDependent {
     /// Represents the [`ir::Node`](crate::ir) specified by it's node ID in a given funclet.
     Node(ir::NodeId),
@@ -46,7 +46,7 @@ impl std::fmt::Display for IrDependent {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum Error {
     /// This error is produced when an [`ir::Node`](crate::ir) or [`ir::TailEdge`](crate::ir)
     /// depends on a node which:
@@ -56,11 +56,14 @@ pub enum Error {
     IrDependency {
         /// The ID of the dependency
         dependency: ir::NodeId,
-        /// The ID of the node which caused the failure.
+        /// The dependent which caused the failure.
         required_by: IrDependent,
     },
-    #[error(transparent)]
-    DependencyCycle(#[from] traversals::DependencyCycle),
+    #[error("dependency cycle (includes node #{})", includes.0)]
+    DependencyCycle {
+        /// A representative node of the cycle.
+        includes: NodeIndex,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -117,13 +120,17 @@ impl Graph {
         &mut self.nodes[index.0]
     }
 
+    /// Retrieves a reference to the graph's tail edge.
     pub fn tail(&self) -> &Tail {
         &self.tail
     }
+
+    /// Retrieves a mutable reference to the graph's tail edge.
     pub fn tail_mut(&mut self) -> &mut Tail {
         &mut self.tail
     }
 
+    /// Returns the number of nodes in the graph. (The tail does not count as a node.)
     pub fn num_nodes(&self) -> usize {
         self.nodes.len()
     }

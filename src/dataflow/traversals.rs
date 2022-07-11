@@ -1,15 +1,6 @@
 //! Dataflow graph traversals.
-use crate::dataflow::{Graph, NodeIndex, ValueDependent};
+use crate::dataflow::{Error, Graph, NodeIndex, ValueDependent};
 use std::collections::{hash_map::Entry, HashMap};
-use thiserror::Error;
-
-/// A dependency cycle was encountered during graph traversal.
-#[derive(Debug, Error, Clone, Copy)]
-#[error("dependency cycle (includes node #{})", includes.0)]
-pub struct DependencyCycle {
-    /// A representative node of the cycle.
-    pub includes: NodeIndex,
-}
 
 #[derive(Debug)]
 /// An abstract "command" for a traversal to follow. These are meant to be traversal-agnostic
@@ -58,7 +49,7 @@ pub struct DependencyFirst {
     /// If the traversal has not yet encountered an error, this will be `Ok(s)` where `s`
     /// is a stack of commands. If the traversal has encountered an error, the state will be
     /// `Err(e)` with that error.
-    state: Result<Vec<Command>, DependencyCycle>,
+    state: Result<Vec<Command>, Error>,
     visited: HashMap<NodeIndex, VisitStatus>,
 }
 impl DependencyFirst {
@@ -84,7 +75,7 @@ impl DependencyFirst {
     ///
     /// # Errors
     /// An error will be returned if a dependency cycle is detected.
-    pub fn next(&mut self, graph: &Graph) -> Result<Option<NodeIndex>, DependencyCycle> {
+    pub fn next(&mut self, graph: &Graph) -> Result<Option<NodeIndex>, Error> {
         // Grab mutable reference to stack, or return error if fused
         let stack = self.state.as_mut().map_err(|e| e.clone())?;
         loop {
@@ -102,7 +93,7 @@ impl DependencyFirst {
             };
             match self.visited.entry(index) {
                 Entry::Occupied(val) if *val.get() == VisitStatus::Working => {
-                    let err = DependencyCycle { includes: index };
+                    let err = Error::DependencyCycle { includes: index };
                     self.state = Err(err);
                     return Err(err);
                 }
