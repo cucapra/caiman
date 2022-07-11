@@ -13,56 +13,18 @@ pub enum Error {
     ValueError(#[from] crate::dataflow::Error),
 }
 
-pub struct Transformer {
+pub struct Config {
     /// The maximum number of transformation iterations to apply.
-    max_iterations: usize,
+    pub max_iterations: usize,
     /// Whether to run basic constant subexpression elimination.
-    basic_cse: bool,
+    pub basic_cse: bool,
     /// The list of subgraph transforms to apply.
-    transforms: Vec<&'static dyn SubgraphTransform>,
+    pub transforms: Vec<Box<dyn SubgraphTransform>>,
 }
-impl Transformer {
+impl Config {
     const DEFAULT_MAX_ITERATIONS: usize = 16;
-    pub fn new(max_iterations: usize, options: &[&str]) -> Result<Self, Error> {
-        let mut cfg = Self {
-            max_iterations,
-            basic_cse: false,
-            transforms: Vec::new(),
-        };
-        for &opt in options {
-            match opt {
-                "basic-cse" => cfg.basic_cse = true,
-                other => return Err(Error::UnknownTransform(other.to_owned())),
-            }
-        }
-        Ok(cfg)
-    }
-    pub fn apply(&self, program: &mut ir::Program) -> Result<(), Error> {
-        for (_, funclet) in program.funclets.iter_mut() {
-            let mut graph = Graph::from_ir(&funclet.nodes, &funclet.tail_edge)?;
-            for _ in 0..self.max_iterations {
-                if self.basic_cse {
-                    basic_cse::apply(&mut graph)?;
-                }
-                let mut mutated = false;
-                let mut traversal = traversals::DependencyFirst::new(&graph);
-                while let Some(index) = traversal.next(&graph)? {
-                    for transform in self.transforms.iter() {
-                        mutated |= transform.attempt(&mut graph, index);
-                    }
-                }
-                if !mutated {
-                    break;
-                }
-            }
-            let (ir_nodes, ir_tail) = graph.into_ir()?;
-            funclet.nodes = ir_nodes.into_boxed_slice();
-            funclet.tail_edge = ir_tail;
-        }
-        Ok(())
-    }
 }
-impl Default for Transformer {
+impl Default for Config {
     fn default() -> Self {
         Self {
             max_iterations: Self::DEFAULT_MAX_ITERATIONS,
@@ -72,7 +34,7 @@ impl Default for Transformer {
     }
 }
 /// Represents an transformation on a subgraph of a dataflow graph.
-trait SubgraphTransform {
+pub trait SubgraphTransform {
     /// Attempts to apply the transformation to the subgraph of `graph` induced by `index`
     /// and all of its indirect and direct dependencies. The return code indicates success.
     ///
@@ -93,4 +55,29 @@ trait SubgraphTransform {
     ///   could mutate node contents, thus de-syncing the hashmap from the graph.
     ///   Self-immutability helps avoid these footguns.
     fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool;
+}
+
+pub fn apply(config: &Config, program: &mut ir::Program) -> Result<(), Error> {
+    for (_, funclet) in program.funclets.iter_mut() {
+        let mut graph = Graph::from_ir(&funclet.nodes, &funclet.tail_edge)?;
+        for _ in 0..config.max_iterations {
+            if config.basic_cse {
+                basic_cse::apply(&mut graph)?;
+            }
+            let mut mutated = false;
+            let mut traversal = traversals::DependencyFirst::new(&graph);
+            while let Some(index) = traversal.next(&graph)? {
+                for transform in config.transforms.iter() {
+                    mutated |= transform.attempt(&mut graph, index);
+                }
+            }
+            if !mutated {
+                break;
+            }
+        }
+        let (ir_nodes, ir_tail) = graph.into_ir()?;
+        funclet.nodes = ir_nodes.into_boxed_slice();
+        funclet.tail_edge = ir_tail;
+    }
+    Ok(())
 }
