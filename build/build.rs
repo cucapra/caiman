@@ -32,6 +32,8 @@ fn input_type(input: &spec::OperationInput) -> String {
         OK::ExternalCpuFunction => "ExternalCpuFunction",
         OK::ExternalGpuFunction => "ExternalGpuFunction",
         OK::ValueFunction => "ValueFunction",
+        OK::Unop => "Unop",
+        OK::Binop => "Binop",
     };
     if input.is_array {
         format!("[{base}]")

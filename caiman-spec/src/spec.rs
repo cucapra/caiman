@@ -38,6 +38,8 @@ pub enum OperationInputKind
 	ExternalCpuFunction,
 	ExternalGpuFunction,
 	ValueFunction,
+	Unop,
+	Binop
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -1,5 +1,6 @@
 use crate::dataflow::{Error, IrDependent, NodeIndex, ValueDependent};
 use crate::ir;
+use crate::operations;
 use std::collections::HashMap;
 
 macro_rules! _lookup_type {
@@ -14,6 +15,8 @@ macro_rules! _lookup_type {
 	(Operation) => { NodeIndex };
 	(Place) => { ir::Place };
     (FuncletId) => { ir::FuncletId };
+    (Unop) => { operations::Unop };
+    (Binop) => { operations::Binop };
 }
 macro_rules! _from_ir_inner {
     ([Operation], $arg:expr, $dependent:expr, $sentinel:expr) => {

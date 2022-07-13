@@ -1,3 +1,17 @@
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Unop {
+    // Arithmetic
+    Negate,
+    // TODO
+}
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Binop {
+    // Arithmetic
+    Add,
+    Sub,
+    // TODO
+}
 include!(concat!(env!("OUT_DIR"), "/generated/with_operations.rs"));
 
 #[cfg(test)]

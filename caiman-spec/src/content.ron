@@ -80,6 +80,27 @@
 			has_local_side_effect : false
 		),
 		(
+			name: "Unop",
+			inputs: [
+				(name : "operation", kind: Unop),
+				(name : "arg", kind: Index)
+			],
+			output : Single,
+			language_set : (functional : true, scheduling : false, intrinsic : true),
+			has_local_side_effect : false
+		),
+		(
+			name: "Binop",
+			inputs: [
+				(name : "operation", kind: Binop),
+				(name : "arg0", kind: Index),
+				(name : "arg1", kind: Index),
+			],
+			output : Single,
+			language_set : (functional : true, scheduling : false, intrinsic : true),
+			has_local_side_effect : false
+		),
+		(
 			name : "SyncLocal",
 			inputs : [
 				(name : "values", kind : Operation, is_array : true)

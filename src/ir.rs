@@ -4,6 +4,7 @@ use std::default::Default;
 use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
 use crate::arena::Arena;
+use crate::operations::{Unop, Binop};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Place
@@ -51,6 +52,8 @@ macro_rules! lookup_abstract_type {
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
 	(Place) => { Place };
+	(Unop) => { Unop };
+	(Binop) => { Binop };
 }
 macro_rules! map_refs {
 	// When mapping referenced nodes, we only care about mapping the Operation types,
