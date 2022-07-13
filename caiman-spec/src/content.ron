@@ -82,8 +82,8 @@
 		(
 			name: "Unop",
 			inputs: [
-				(name : "operation", kind: Unop),
-				(name : "arg", kind: Index)
+				(name : "kind", kind: Unop),
+				(name : "arg", kind: Operation)
 			],
 			output : Single,
 			language_set : (functional : true, scheduling : false, intrinsic : true),
@@ -92,9 +92,9 @@
 		(
 			name: "Binop",
 			inputs: [
-				(name : "operation", kind: Binop),
-				(name : "arg0", kind: Index),
-				(name : "arg1", kind: Index),
+				(name : "kind", kind: Binop),
+				(name : "arg0", kind: Operation),
+				(name : "arg1", kind: Operation),
 			],
 			output : Single,
 			language_set : (functional : true, scheduling : false, intrinsic : true),

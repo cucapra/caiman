@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Unop {
+pub enum UnopKind {
     // Arithmetic
     Negate,
     // TODO
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Binop {
+pub enum BinopKind {
     // Arithmetic
     Add,
     Sub,

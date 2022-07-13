@@ -1,6 +1,6 @@
 use crate::dataflow::{Error, IrDependent, NodeIndex, ValueDependent};
 use crate::ir;
-use crate::operations;
+use crate::operations::{BinopKind, UnopKind};
 use std::collections::HashMap;
 
 macro_rules! _lookup_type {
@@ -15,8 +15,8 @@ macro_rules! _lookup_type {
 	(Operation) => { NodeIndex };
 	(Place) => { ir::Place };
     (FuncletId) => { ir::FuncletId };
-    (Unop) => { operations::Unop };
-    (Binop) => { operations::Binop };
+    (Unop) => { UnopKind };
+    (Binop) => { BinopKind };
 }
 macro_rules! _from_ir_inner {
     ([Operation], $arg:expr, $dependent:expr, $sentinel:expr) => {
@@ -88,7 +88,7 @@ macro_rules! make_operations {
         $(
             #[derive(Debug, Clone, Hash, PartialEq, Eq)]
             pub struct $name {
-                $( $arg : _lookup_type!($arg_type) ),*
+                $( pub $arg : _lookup_type!($arg_type) ),*
             }
             #[allow(unused_variables, unused_mut)]
             impl ValueDependent for $name {
@@ -164,7 +164,7 @@ macro_rules! make_tails {
         $(
             #[derive(Debug, PartialEq)]
             pub struct $name {
-                $( $arg : _lookup_type!($arg_type) ),*
+                $( pub $arg : _lookup_type!($arg_type) ),*
             }
             #[allow(unused_variables, unused_mut)]
             impl ValueDependent for $name {

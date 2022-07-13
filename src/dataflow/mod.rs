@@ -17,7 +17,7 @@ pub trait ValueDependent: PartialEq {
 }
 
 mod generated;
-pub use generated::{Node, Tail};
+pub use generated::*;
 pub mod traversals;
 
 #[derive(Debug, Clone, Copy, Error)]

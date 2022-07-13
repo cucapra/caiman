@@ -1,6 +1,7 @@
 #![warn(warnings)]
-use crate::dataflow::{traversals, Graph, NodeIndex};
+use crate::dataflow::*;
 use crate::ir;
+use crate::operations::BinopKind;
 use thiserror::Error;
 
 mod basic_cse;
@@ -34,6 +35,7 @@ impl TransformConfig {
         match transform {
             "" => (),
             "basic-cse" => self.basic_cse = true,
+            "constant-add" => self.transforms.push(Box::new(ConstantAdd {})),
             unknown => return Err(Error::UnknownTransform(unknown.to_owned())),
         }
         Ok(self)
@@ -70,6 +72,43 @@ trait SubgraphTransform {
     ///   could mutate node contents, thus de-syncing the hashmap from the graph.
     ///   Self-immutability helps avoid these footguns.
     fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool;
+}
+
+macro_rules! eznode {
+    (Ci {$($contents:tt)*}) => { eznode!(ConstantInteger {$($contents)*}) };
+    (Cui {$($contents:tt)*}) => { eznode!(ConstantUnsignedInteger {$($contents)*}) };
+    ($variant:ident {$($contents:tt)*}) => { Node::$variant ($variant {$($contents)*}) }
+}
+
+struct ConstantAdd {}
+impl SubgraphTransform for ConstantAdd {
+    #[rustfmt::skip]
+    fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool {
+        let (val0, val1) = match graph.node(index) {
+            Node::Binop(Binop {kind: BinopKind::Add, arg0, arg1}) => 
+                (graph.node(*arg0), graph.node(*arg1)),
+            _ => return false,
+        };
+        
+        let new = match (val0, val1) {
+            // signed constant folding
+            (eznode!(Ci { value: v1, type_id: t1 }), eznode!(Ci { value: v2, type_id: t2 })) 
+                if t1 == t2 => eznode!(Ci {value: v1 + v2, type_id: *t1}),
+
+            // unsigned constant folding
+            (eznode!(Cui { value: v1, type_id: t1 }), eznode!(Cui { value: v2, type_id: t2 })) 
+                if t1 == t2 => eznode!(Cui {value: v1 + v2, type_id: *t1}),
+
+            // identity -- this isn't type safe right now!
+            (val, eznode!(Ci {value: 0, ..})) | (val, eznode!(Cui {value: 0, ..})) |
+            (eznode!(Ci {value: 0, ..}), val) | (eznode!(Cui {value: 0, ..}), val) 
+                => val.clone(),
+
+            _ => return false,
+        };
+        *graph.node_mut(index) = new;
+        return true;
+    }
 }
 
 pub fn apply(config: &TransformConfig, program: &mut ir::Program) -> Result<(), Error> {

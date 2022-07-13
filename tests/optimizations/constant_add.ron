@@ -1,0 +1,124 @@
+// ARGS: -t constant-add,basic-cse
+(
+	version : (0, 0, 1),
+	program : (
+		types : {0:I32, 1:U32},
+		funclets : {
+            0 : (
+                // *definitely* can't constant fold this
+                kind : MixedImplicit,
+                input_types : [0, 0],
+                output_types : [0],
+                nodes : [
+                    Phi(index : 0),
+                    Phi(index : 1),
+                    Binop(kind : Add, arg0: 0, arg1: 1)
+                ],
+                tail_edge : Return(return_values : [2]) 
+            ),
+            1 : (
+                // can't constant fold this
+                kind : MixedImplicit,
+                input_types : [0],
+                output_types : [0, 0],
+                nodes : [
+                    Phi(index : 0),
+                    ConstantInteger(value: 10, type_id: 0),
+                    Binop(kind : Add, arg0: 0, arg1: 1),
+                    Binop(kind : Add, arg0: 1, arg1: 0)
+                ],
+                tail_edge : Return(return_values : [2, 3]) 
+            ),
+            2 : (
+                // can't constant fold this
+                kind : MixedImplicit,
+                input_types : [1],
+                output_types : [1, 1],
+                nodes : [
+                    Phi(index : 0),
+                    ConstantUnsignedInteger(value: 10, type_id: 0),
+                    Binop(kind : Add, arg0: 0, arg1: 1),
+                    Binop(kind : Add, arg0: 1, arg1: 0)
+                ],
+                tail_edge : Return(return_values : [2, 3]) 
+            ),
+            3 : (
+                // *can* constant fold this, kinda
+                kind : MixedImplicit,
+                input_types : [0],
+                output_types : [0, 0],
+                nodes : [
+                    Phi(index : 0),
+                    ConstantInteger(value: 0, type_id: 0),
+                    Binop(kind : Add, arg0: 0, arg1: 1),
+                    Binop(kind : Add, arg0: 1, arg1: 0)
+                ],
+                tail_edge : Return(return_values : [2, 3]) 
+            ),
+            4 : (
+                // *can* constant fold this, kinda
+                kind : MixedImplicit,
+                input_types : [1],
+                output_types : [1, 1],
+                nodes : [
+                    Phi(index : 0),
+                    ConstantUnsignedInteger(value: 0, type_id: 0),
+                    Binop(kind : Add, arg0: 0, arg1: 1),
+                    Binop(kind : Add, arg0: 1, arg1: 0)
+                ],
+                tail_edge : Return(return_values : [2, 3]) 
+            ),
+            5 : (
+                // ok time for REAL constant folding
+                kind : MixedImplicit,
+                input_types : [],
+                output_types : [0],
+                nodes : [
+                    ConstantInteger(value: 17, type_id: 0),
+                    ConstantInteger(value: -15, type_id: 0),
+                    ConstantInteger(value: 0, type_id: 0),
+                    ConstantInteger(value: 9, type_id: 0),
+                    Binop(kind : Add, arg0: 0, arg1: 2), // = 17
+                    Binop(kind : Add, arg0: 4, arg1: 1), // = 2
+                    Binop(kind : Add, arg0: 3, arg1: 3), // = 18
+                    Binop(kind : Add, arg0: 6, arg1: 5)  // = 20
+                ],
+                tail_edge : Return(return_values : [7]) 
+            ),
+            6 : (
+                // like above, but unsigned
+                kind : MixedImplicit,
+                input_types : [],
+                output_types : [1],
+                nodes : [
+                    ConstantUnsignedInteger(value: 17, type_id: 1),
+                    ConstantUnsignedInteger(value: 2, type_id: 1),
+                    ConstantUnsignedInteger(value: 0, type_id: 1),
+                    ConstantUnsignedInteger(value: 9, type_id: 1),
+                    Binop(kind : Add, arg0: 0, arg1: 2), // = 17
+                    Binop(kind : Add, arg0: 4, arg1: 1), // = 19
+                    Binop(kind : Add, arg0: 3, arg1: 3), // = 18
+                    Binop(kind : Add, arg0: 6, arg1: 5)  // = 37
+                ],
+                tail_edge : Return(return_values : [7]) 
+            ),
+            7 : (
+                // complex time :)
+                kind : MixedImplicit,
+                input_types : [1],
+                output_types : [0],
+                nodes : [
+                    Phi(index : 0), // imagine this being an array pointer or something
+                    ConstantUnsignedInteger(value: 81, type_id: 1), // and this is the offset
+                    Binop(kind : Add, arg0: 0, arg1: 1), // so we get pointer to the element...
+                    ConstantUnsignedInteger(value: 1, type_id: 1), 
+                    Binop(kind : Add, arg0: 1, arg1: 3), 
+                    Binop(kind : Add, arg0: 0, arg1: 4), // and pointer to the next element
+                    CallExternalCpu(external_function_id: 0, arguments: [2, 5]), // and we swap em
+                    ConstantInteger(value: 0, type_id: 0) // and return an exit code idk
+                ],
+                tail_edge : Return(return_values : [6]) 
+            ),
+        }
+	)
+)
