@@ -70,23 +70,20 @@ impl CanonicalMap {
         }
 
         let bucket = Self::bucket_for_index(self.num_buckets, &self.random_state, index, graph);
-        let bucket_contents = &mut self.buckets[bucket];
 
         // walk back linked list, try to find a match
-        let mut cur = index;
-        let mut prev = *bucket_contents;
+        let mut prev = self.buckets[bucket];
         while prev != Self::INVALID_ENTRY {
             let entry = self.entries[prev];
-            if graph.node(cur) == graph.node(entry.0) {
+            if graph.node(index) == graph.node(entry.0) {
                 return Some(entry.0);
             }
-            cur = entry.0;
             prev = entry.1;
         }
 
         // no match found, so add it
-        self.entries.push((index, *bucket_contents));
-        *bucket_contents = self.entries.len() - 1;
+        self.entries.push((index, self.buckets[bucket]));
+        self.buckets[bucket] = self.entries.len() - 1;
         None
     }
 }
