@@ -17,7 +17,7 @@
                 tail_edge : Return(return_values : [2]) 
             ),
             1 : (
-                // can't constant fold this
+                // can't constant fold this (but you can do CSE!)
                 kind : MixedImplicit,
                 input_types : [0],
                 output_types : [0, 0],
@@ -30,7 +30,7 @@
                 tail_edge : Return(return_values : [2, 3]) 
             ),
             2 : (
-                // can't constant fold this
+                // can't constant fold this (but you can do CSE!)
                 kind : MixedImplicit,
                 input_types : [1],
                 output_types : [1, 1],
@@ -118,6 +118,34 @@
                     ConstantInteger(value: 0, type_id: 0) // and return an exit code idk
                 ],
                 tail_edge : Return(return_values : [6]) 
+            ),
+            8 : (
+                // the zero is derived
+                kind : MixedImplicit,
+                input_types : [0],
+                output_types : [0],
+                nodes : [
+                    Phi(index : 0),
+                    ConstantInteger(value: -5, type_id: 0),
+                    ConstantInteger(value: 5, type_id: 0),
+                    Binop(kind : Add, arg0: 1, arg1: 2),
+                    Binop(kind : Add, arg0: 0, arg1: 3)
+                ],
+                tail_edge : Return(return_values : [4]) 
+            ),
+            9 : (
+                // the zero is derived, but now we have commutativity to deal with.
+                kind : MixedImplicit,
+                input_types : [0],
+                output_types : [0],
+                nodes : [
+                    Phi(index : 0),
+                    ConstantInteger(value: -5, type_id: 0),
+                    Binop(kind : Add, arg0: 0, arg1: 1),
+                    ConstantInteger(value: 5, type_id: 0),
+                    Binop(kind : Add, arg0: 2, arg1: 3)
+                ],
+                tail_edge : Return(return_values : [4]) 
             ),
         }
 	)

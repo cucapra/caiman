@@ -16,8 +16,8 @@ pub trait ValueDependent: PartialEq {
         Self: Sized;
 }
 
-mod generated;
-pub use generated::*;
+mod dependents;
+pub use dependents::*;
 pub mod traversals;
 
 #[derive(Debug, Clone, Copy, Error)]
@@ -56,7 +56,7 @@ pub enum Error {
     },
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NodeIndex(usize);
 impl NodeIndex {
     fn from_ir_dependency(
@@ -88,6 +88,12 @@ impl Graph {
         }
         let tail = Tail::from_ir(ir_tail, ir_nodes.len())?;
         Ok(Self { nodes, tail })
+    }
+
+    fn add_node(&mut self, node: Node) -> NodeIndex {
+        let index = self.nodes.len();
+        self.nodes.push(node);
+        NodeIndex(index)
     }
 
     /// Retrieves a reference to the node at `index`.

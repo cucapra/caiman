@@ -35,7 +35,10 @@ impl TransformConfig {
         match transform {
             "" => (),
             "basic-cse" => self.basic_cse = true,
-            "constant-add" => self.transforms.push(Box::new(ConstantAdd {})),
+            "constant-add" => {
+                self.transforms.push(Box::new(SumFold {}));
+                self.transforms.push(Box::new(SumUnfold {}))
+            }
             unknown => return Err(Error::UnknownTransform(unknown.to_owned())),
         }
         Ok(self)
@@ -74,39 +77,32 @@ trait SubgraphTransform {
     fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool;
 }
 
-macro_rules! eznode {
-    (Ci {$($contents:tt)*}) => { eznode!(ConstantInteger {$($contents)*}) };
-    (Cui {$($contents:tt)*}) => { eznode!(ConstantUnsignedInteger {$($contents)*}) };
-    ($variant:ident {$($contents:tt)*}) => { Node::$variant ($variant {$($contents)*}) }
-}
-
-struct ConstantAdd {}
-impl SubgraphTransform for ConstantAdd {
-    #[rustfmt::skip]
+struct SumFold {}
+impl SubgraphTransform for SumFold {
     fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool {
-        let (val0, val1) = match graph.node(index) {
-            Node::Binop(Binop {kind: BinopKind::Add, arg0, arg1}) => 
-                (graph.node(*arg0), graph.node(*arg1)),
+        let (arg0, arg1) = match graph.node(index) {
+            Node::Binop(Binop {
+                kind: BinopKind::Add,
+                arg0,
+                arg1,
+            }) => (*arg0, *arg1),
             _ => return false,
         };
-        
-        let new = match (val0, val1) {
-            // signed constant folding
-            (eznode!(Ci { value: v1, type_id: t1 }), eznode!(Ci { value: v2, type_id: t2 })) 
-                if t1 == t2 => eznode!(Ci {value: v1 + v2, type_id: *t1}),
-
-            // unsigned constant folding
-            (eznode!(Cui { value: v1, type_id: t1 }), eznode!(Cui { value: v2, type_id: t2 })) 
-                if t1 == t2 => eznode!(Cui {value: v1 + v2, type_id: *t1}),
-
-            // identity -- this isn't type safe right now!
-            (val, eznode!(Ci {value: 0, ..})) | (val, eznode!(Cui {value: 0, ..})) |
-            (eznode!(Ci {value: 0, ..}), val) | (eznode!(Cui {value: 0, ..}), val) 
-                => val.clone(),
-
+        let mut sum = Sum::new();
+        sum.add_arg(graph, arg0);
+        sum.add_arg(graph, arg1);
+        *graph.node_mut(index) = Node::Sum(sum);
+        return true;
+    }
+}
+struct SumUnfold {}
+impl SubgraphTransform for SumUnfold {
+    fn attempt(&self, graph: &mut Graph, index: NodeIndex) -> bool {
+        let sum = match graph.node(index) {
+            Node::Sum(sum) => sum.clone(),
             _ => return false,
         };
-        *graph.node_mut(index) = new;
+        *graph.node_mut(index) = sum.reduce(graph);
         return true;
     }
 }
