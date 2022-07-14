@@ -117,7 +117,7 @@
                     CallExternalCpu(external_function_id: 0, arguments: [2, 5]), // and we swap em
                     ConstantInteger(value: 0, type_id: 0) // and return an exit code idk
                 ],
-                tail_edge : Return(return_values : [6]) 
+                tail_edge : Return(return_values : [6, 7]) 
             ),
             8 : (
                 // the zero is derived
@@ -146,6 +146,30 @@
                     Binop(kind : Add, arg0: 2, arg1: 3)
                 ],
                 tail_edge : Return(return_values : [4]) 
+            ),
+            10 : (
+                // a tricky dependency tree like the last one
+                // this is really more about CSE than constant folding
+                kind : MixedImplicit,
+                input_types : [0,0,0,0,0,0],
+                output_types : [0],
+                nodes : [
+                    Phi(index : 0), // a
+                    Phi(index : 1), // b
+                    Phi(index : 2), // x
+                    Phi(index : 3), // y
+                    Phi(index : 4), // z
+                    Phi(index : 5), // w
+
+                    Binop(kind : Add, arg0: 2, arg1: 0), // x + a
+                    Binop(kind : Add, arg0: 6, arg1: 3), // (x + a) + y
+                    Binop(kind : Add, arg0: 7, arg1: 1), // ((x + a) + y) + b
+
+                    Binop(kind : Add, arg0: 0, arg1: 1), // a + b
+                    Binop(kind : Add, arg0: 4, arg1: 9), // z + (a + b)
+                    Binop(kind : Add, arg0: 10, arg1: 5) // (z + (a + b)) + w
+                ],
+                tail_edge : Return(return_values : [8,11]) 
             ),
         }
 	)

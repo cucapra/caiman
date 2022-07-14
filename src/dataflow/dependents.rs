@@ -40,8 +40,18 @@ impl Sum {
         match (graph.node(arg), &mut self.const_acc) {
             (Node::Sum(other), None) => {
                 self.arguments.extend(other.arguments.iter());
-                self.arguments.sort();
+                self.arguments.sort_unstable();
                 self.const_acc = other.const_acc;
+            }
+            (
+                Node::Sum(Sum {
+                    arguments: other_arguments,
+                    const_acc: None,
+                }),
+                _,
+            ) => {
+                self.arguments.extend(other_arguments.iter());
+                self.arguments.sort_unstable();
             }
             (
                 Node::Sum(Sum {
@@ -51,7 +61,7 @@ impl Sum {
                 Some(ConstSumAcc::Int(value, type_id)),
             ) if other_type_id == type_id => {
                 self.arguments.extend(other_arguments.iter());
-                self.arguments.sort();
+                self.arguments.sort_unstable();
                 value.add_assign(other_value);
             }
             (
@@ -62,7 +72,7 @@ impl Sum {
                 Some(ConstSumAcc::Uint(value, type_id)),
             ) if other_type_id == type_id => {
                 self.arguments.extend(other_arguments.iter());
-                self.arguments.sort();
+                self.arguments.sort_unstable();
                 value.add_assign(other_value);
             }
             (Node::ConstantInteger(ci), None) => {

@@ -21,6 +21,7 @@ pub struct TransformConfig {
     basic_cse: bool,
     /// The list of subgraph transforms to apply.
     transforms: Vec<Box<dyn SubgraphTransform>>,
+    cleanups: Vec<Box<dyn SubgraphTransform>>,
 }
 impl TransformConfig {
     pub const DEFAULT_MAX_PASSES: usize = 16;
@@ -29,6 +30,7 @@ impl TransformConfig {
             max_passes,
             basic_cse: false,
             transforms: Vec::new(),
+            cleanups: Vec::new(),
         }
     }
     pub fn add_transform(&mut self, transform: &str) -> Result<&mut Self, Error> {
@@ -37,7 +39,7 @@ impl TransformConfig {
             "basic-cse" => self.basic_cse = true,
             "constant-add" => {
                 self.transforms.push(Box::new(SumFold {}));
-                self.transforms.push(Box::new(SumUnfold {}))
+                self.cleanups.push(Box::new(SumUnfold {}))
             }
             unknown => return Err(Error::UnknownTransform(unknown.to_owned())),
         }
@@ -49,7 +51,8 @@ impl Default for TransformConfig {
         Self {
             max_passes: Self::DEFAULT_MAX_PASSES,
             basic_cse: true,
-            transforms: Vec::new(),
+            transforms: vec![Box::new(SumFold {})],
+            cleanups: vec![Box::new(SumUnfold {})],
         }
     }
 }
@@ -116,14 +119,24 @@ pub fn apply(config: &TransformConfig, program: &mut ir::Program) -> Result<(), 
             }
             let mut mutated = false;
             let mut traversal = traversals::DependencyFirst::new(&graph);
+            let mut to_clean = Vec::new();
             while let Some(index) = traversal.next(&graph)? {
                 for transform in config.transforms.iter() {
                     mutated |= transform.attempt(&mut graph, index);
+                }
+                to_clean.push(index);
+            }
+            for index in to_clean.into_iter() {
+                for cleanup in config.cleanups.iter() {
+                    mutated |= cleanup.attempt(&mut graph, index);
                 }
             }
             if !mutated {
                 break;
             }
+        }
+        if config.basic_cse {
+            basic_cse::apply(&mut graph)?;
         }
         let (ir_nodes, ir_tail) = graph.into_ir()?;
         funclet.nodes = ir_nodes.into_boxed_slice();
