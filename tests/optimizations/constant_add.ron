@@ -152,7 +152,7 @@
                 // this is really more about CSE than constant folding
                 kind : MixedImplicit,
                 input_types : [0,0,0,0,0,0],
-                output_types : [0],
+                output_types : [0,0],
                 nodes : [
                     Phi(index : 0), // a
                     Phi(index : 1), // b
@@ -170,6 +170,24 @@
                     Binop(kind : Add, arg0: 10, arg1: 5) // (z + (a + b)) + w
                 ],
                 tail_edge : Return(return_values : [8,11]) 
+            ),
+            11 : (
+                // one more tricky CSE interaction
+                kind : MixedImplicit,
+                input_types : [0,0,0],
+                output_types : [0,0],
+                nodes : [
+                    Phi(index : 0), // a
+                    Phi(index : 1), // b
+                    Phi(index : 2), // c
+
+                    Binop(kind : Add, arg0: 2, arg1: 0), // c + a
+                    Binop(kind : Add, arg0: 1, arg1: 3), // b + (c + a)
+
+                    Binop(kind : Add, arg0: 1, arg1: 0), // b + a
+                    Binop(kind : Add, arg0: 5, arg1: 2), // (b + a) + c
+                ],
+                tail_edge : Return(return_values : [4,6]) 
             ),
         }
 	)
