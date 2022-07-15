@@ -1,4 +1,4 @@
-// ARGS: -t constant-add,basic-cse
+// ARGS: --opt-overrides constant-fold,basic-cse
 (
 	version : (0, 0, 1),
 	program : (

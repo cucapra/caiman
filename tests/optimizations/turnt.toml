@@ -1,1 +1,1 @@
-command = "cargo run --features=build-binary -- {args} -a optimize -i {filename} -o -"
+command = "cargo run --features=build-binary -- -O0 {args} -a optimize -i {filename} -o -"

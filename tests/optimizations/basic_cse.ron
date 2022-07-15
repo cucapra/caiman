@@ -1,4 +1,4 @@
-// ARGS: -t basic-cse
+// ARGS: --opt-overrides basic-cse
 (
 	version : (0, 0, 1),
 	program : (

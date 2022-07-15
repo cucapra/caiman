@@ -1,8 +1,8 @@
-use crate::{ir, rust_wgpu_backend::codegen, rust_wgpu_backend::explicate_scheduling, transform};
+use crate::{
+    ir, optimizations::*, rust_wgpu_backend::codegen, rust_wgpu_backend::explicate_scheduling,
+};
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
-
-pub use transform::TransformConfig;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Definition {
@@ -28,7 +28,7 @@ impl Default for Action {
 #[derive(Default)]
 pub struct Options {
     pub action: Action,
-    pub transform_config: TransformConfig,
+    pub optimizer: Optimizer,
     pub print_codegen_debug_info: bool,
 }
 
@@ -39,10 +39,10 @@ pub enum Error {
         #[from]
         source: ron::de::Error,
     },
-    #[error("failed to apply value transformations: {source}")]
+    #[error("failed to apply optimizations: {source}")]
     Transform {
         #[from]
-        source: transform::Error,
+        source: OptError,
     },
 }
 
@@ -54,7 +54,7 @@ pub fn compile(options: &Options, input_string: &str) -> Result<String, Error> {
     assert_eq!(definition.version, (0, 0, 1));
 
     // Apply transforms
-    transform::apply(&options.transform_config, &mut definition.program)?;
+    options.optimizer.apply(&mut definition.program)?;
     if options.action == Action::Optimize {
         return Ok(ron::ser::to_string_pretty(&definition, pretty).unwrap());
     }

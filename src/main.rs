@@ -1,10 +1,11 @@
 use anyhow::Context;
-use caiman::frontend;
+use caiman::{frontend, optimizations::*};
 use clap::{App, Arg};
 use std::{fs::File, io::Read, io::Write};
 
 fn main() -> Result<(), anyhow::Error> {
-    let default_max_iter_str = frontend::TransformConfig::DEFAULT_MAX_PASSES.to_string();
+    let default_opt_level_str = OptLevel::default().to_string();
+    let default_max_iter_str = Optimizer::DEFAULT_MAX_PASSES.to_string();
     let matches = App::new("Caiman Compiler")
         .version("0.0.1")
         .arg(
@@ -38,20 +39,28 @@ fn main() -> Result<(), anyhow::Error> {
         .arg(
             Arg::with_name("max_passes")
                 .long("max-passes")
-                .help("The max number of transformation passes")
+                .help("The max number of optimization passes")
                 .value_name("count")
                 .number_of_values(1)
                 .default_value(&default_max_iter_str),
         )
         .arg(
-            Arg::with_name("transformations")
-                .short("t")
-                .long("transformations")
-                .value_name("transform")
-                .help("Which transformations to apply")
+            Arg::with_name("opt-level")
+                .short("O")
+                .long("opt-level")
+                .help("Sets the baseline optimization level")
+                .value_name("optimization level")
+                .number_of_values(1)
+                .default_value(&default_opt_level_str),
+        )
+        .arg(
+            Arg::with_name("opt-overrides")
+                .long("opt-overrides")
+                .value_name("override")
+                .help("Specifies additional optimizations")
                 .use_delimiter(true)
                 .multiple(true)
-                .default_value("basic-cse"),
+                .possible_values(Optimization::valid_names()),
         )
         .arg(
             Arg::with_name("print_codegen_debug_info")
@@ -68,26 +77,31 @@ fn main() -> Result<(), anyhow::Error> {
         _ => frontend::Action::Compile,
     };
 
-    let transform_config = {
+    let optimizer = {
         let max_passes = matches
             .value_of("max_passes")
             .unwrap_or(&default_max_iter_str)
             .parse()
-            .context("invalid number of transformation passes")?;
-        let mut transform_config = frontend::TransformConfig::new(max_passes);
-        if let Some(transforms) = matches.values_of("transformations") {
-            for transform in transforms {
-                transform_config.add_transform(transform)?;
+            .context("invalid number of optimization passes")?;
+        let opt_level = matches
+            .value_of("opt-level")
+            .unwrap_or(&default_opt_level_str)
+            .parse()?;
+        let mut opts = Optimization::from_opt_level(opt_level);
+        if let Some(ovs) = matches.values_of("opt-overrides") {
+            // TIL that `override` is a reserved keyword
+            for ov in ovs {
+                opts.push(ov.parse()?);
             }
         }
-        transform_config
+        Optimizer::new(max_passes, opts.as_slice())
     };
 
     let print_codegen_debug_info = matches.is_present("print_codegen_debug_info");
 
     let options = frontend::Options {
         action,
-        transform_config,
+        optimizer,
         print_codegen_debug_info,
     };
 
