@@ -1,8 +1,48 @@
 #![warn(warnings)]
+//! [[Tate09]](https://rosstate.org/publications/eqsat/eqsat_tate_popl09.pdf)
+
+/// Primitive functions. These are essential to the functionality of the E-PEG.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Primitive {
+    /// A list of [`egg::Id`]s.
+    ///
+    /// Unlike all other nodes, `IdList` can have an arbitrary number of children.
+    /// There are no semantics attached to these children; instead, their meaning is given
+    /// by the parents of the `IdList` in question. The ordering of this list is meaningful.
+    IdList,
+
+    /// A `φ` node which uses a boolean to "choose" a value.
+    ///
+    /// The third child is a boolean "selector". If it's `false`, this node assumes the value
+    /// of its first child. If it's `true`, this node assumes the value of its second child.
+    Choice,
+
+    /// An abstract representation of a sequence of values. This is called `θ` in [[Tate09]].
+    ///
+    /// The first child is the sequence's initial value. The second child is an expression which
+    /// gives the current value; usually, this expression is recursive.
+    SeqExpr,
+
+    /// Extracts a given value from a `Sequence`. This is called `eval` in [[Tate09]].
+    ///
+    /// The first child is the value sequence; the second child is the index of the desired value.
+    SeqExtract,
+
+    /// Represents the minimum `i ∈ ℕ` such that the `i`th element in the child sequence is true.
+    /// This is called `pass` in [[Tate09]].
+    SeqFirst,
+}
+
+/// Semantic functions. These are language-specific.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Function {
+    Todo,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum NodeData {
-    Bundle,
+    Prim(Primitive),
+    Func(Function),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
