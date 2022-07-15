@@ -15,6 +15,7 @@ clap = { version = "~2.34.0", optional = true }
 ron = "0.7"
 thiserror = "1.0"
 anyhow = { version = "1.0", optional = true }
+egg = {version = "0.9", features = [ "lp" ] }
 naga = { version = "0.8", features = ["wgsl-in", "wgsl-out", "spv-in", "spv-out"]}
 
 [build-dependencies]

@@ -64,6 +64,7 @@ fn write_with_operations(out: &mut File, spec: &spec::Spec) -> std::io::Result<(
 
 fn main() {
     println!("cargo:rerun-if-changed=build/build.rs");
+    println!("cargo:rustc-link-search=native=coin_cbc/lib");
     let spec = caiman_spec::content::build_spec();
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let gen_dir = format!("{out_dir}/generated");
