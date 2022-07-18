@@ -1,0 +1,129 @@
+Funclet f0 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_cpu(n0);
+  n3 = extract n2;
+  n4 = do_thing_on_gpu<n1, n1, n1>(n3);
+  n5 = extract n4;
+  Return n5
+}
+
+Funclet f1 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_gpu<n1, n1, n1>(n0);
+  n3 = extract n2;
+  n4 = do_thing_on_gpu<n1, n1, n1>(n3);
+  n5 = extract n4;
+  Return n5
+}
+
+Funclet f2 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = do_thing_on_cpu(n0);
+  n2 = extract n1;
+  Return n2
+}
+
+Funclet f3 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_gpu<n1, n1, n1>(n0);
+  n3 = extract n2;
+  n4 = do_thing_on_cpu(n3);
+  n5 = extract n4;
+  Return n5
+}
+
+Funclet f4 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_cpu(n0);
+  n3 = extract n2;
+  n4 = do_thing_on_cpu(n3);
+  n5 = extract n4;
+  Return n5
+}
+
+Funclet f5 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_gpu<n1, n1, n1>(n0);
+  n3 = extract n2;
+  Return n3
+}
+
+Funclet f6 : (I32) -> (I32, I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_gpu<n1, n1, n1>(n0);
+  n3 = extract n2;
+  Yield n3 {n3 => f7, f8}
+}
+
+Funclet f7 : (I32, I32) -> (I32, I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_gpu<n1, n1, n1>(n0);
+  n3 = extract n2;
+  n4 = phi 1;
+  Yield n4 {n3 => f7, f8}
+}
+
+Funclet f8 : (I32) -> (I32) {
+  n0 = phi 0;
+  Return n0
+}
+
+Inline Funclet f9 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = const 1 : I32;
+  n2 = do_thing_on_gpu<n1, n1, n1>(n0);
+  n3 = extract n2;
+  Return n3
+}
+
+Funclet f10 : (I32) -> (I32) {
+  n0 = phi 0;
+  n1 = test_value_function(n0);
+  n2 = extract n1;
+  Return n2
+}
+
+CPU do_thing_on_cpu : (I32) -> (I32);
+
+GPU do_thing_on_gpu (main) : (I32) -> (I32) {
+  [0][0] = 0 -> _;
+  [0][1] = _ -> 0;
+  WGSL
+  !BEGIN
+    struct Output {field_0 : i32;};
+    fn do_thing_on_gpu(a : i32) -> Output 
+    {
+      var output : Output;
+      output.field_0 = a + 1;
+      return output;
+    }
+    
+    struct Input_0 { field_0 : i32; };
+    [[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
+    struct Output_0 { field_0 : i32; };
+    [[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
+    [[stage(compute), workgroup_size(1, 1, 1)]] fn main()
+    {
+      let output = do_thing_on_gpu(input_0.field_0);
+      output_0.field_0 = output.field_0;
+    }
+  !END
+}
+
+ValueFunction test_value_function (f9) : (I32) -> (I32);
+
+Pipeline pipeline_1(f0);
+Pipeline pipeline_with_gpu_gpu_communication(f1);
+Pipeline pipeline_with_single_cpu_call(f2);
+Pipeline pipeline_with_gpu_cpu_communication(f3);
+Pipeline pipeline_with_cpu_cpu_communication(f4);
+Pipeline pipeline_with_single_gpu_call(f5);
+Pipeline pipeline_with_yield_enter_loop_exit(f6);
+Pipeline pipeline_with_value_function(f10);

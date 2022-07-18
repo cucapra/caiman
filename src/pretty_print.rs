@@ -607,7 +607,7 @@ pub fn print_ron_file(input_file: &mut File) -> std::io::Result<()>
 
 pub fn print_program_file(input_file: &mut File) -> std::io::Result<()>
 {
-    match caiman_frontend::parse_read(input_file)
+    match caiman_frontend::ir_version::parse_read(input_file)
     {
         Err(why) => println!("Parsing error: {}", why),
         Ok(ast) => {

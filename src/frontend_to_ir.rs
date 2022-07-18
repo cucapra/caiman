@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::ir;
-use caiman_frontend::ast;
+use caiman_frontend::ir_version::ast;
 use std::cmp::Eq;
 use std::collections::HashMap;
 use std::convert::TryFrom;

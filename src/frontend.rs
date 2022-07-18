@@ -73,7 +73,7 @@ pub fn compile_frontend_language(
     options_opt : Option<CompileOptions>,
 ) -> Result<String, CompileError>
 {
-    match caiman_frontend::parse_string(String::from(input_string))
+    match caiman_frontend::ir_version::parse_string(String::from(input_string))
     {
         Err(why) => {
             Err(CompileError{ message: format!("Parsing Error: {}", why) })

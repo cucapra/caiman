@@ -1,7 +1,7 @@
 // auto-generated: "lalrpop 0.19.8"
-// sha3: be7b74e44965e9f4d2622640a106041b89067da40c22e60ded030661accd1365
+// sha3: 2372de823940703b73158cf255023cd3c164f2f074cf9837ad0f287664d41728
 use std::str::FromStr;
-use crate::ast::*;
+use crate::ir_version::ast::*;
 #[allow(unused_extern_crates)]
 extern crate lalrpop_util as __lalrpop_util;
 #[allow(unused_imports)]
@@ -14,7 +14,7 @@ mod __parse__Declaration {
     #![allow(non_snake_case, non_camel_case_types, unused_mut, unused_variables, unused_imports, unused_parens, clippy::all)]
 
     use std::str::FromStr;
-    use crate::ast::*;
+    use crate::ir_version::ast::*;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]
@@ -3466,7 +3466,7 @@ mod __parse__Program {
     #![allow(non_snake_case, non_camel_case_types, unused_mut, unused_variables, unused_imports, unused_parens, clippy::all)]
 
     use std::str::FromStr;
-    use crate::ast::*;
+    use crate::ir_version::ast::*;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]
@@ -6933,7 +6933,7 @@ pub use self::__parse__Program::ProgramParser;
 mod __intern_token {
     #![allow(unused_imports)]
     use std::str::FromStr;
-    use crate::ast::*;
+    use crate::ir_version::ast::*;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]

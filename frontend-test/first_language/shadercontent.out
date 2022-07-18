@@ -15,7 +15,6 @@ GPU bar (main) : (U8) -> (U8) {
   [0][1] = _ -> 0;
   WGSL
   !BEGIN
-
 					struct Output {field_0 : i32;};
 					fn do_thing_on_gpu(a : i32) -> Output 
 					{
@@ -33,7 +32,6 @@ GPU bar (main) : (U8) -> (U8) {
 						let output = do_thing_on_gpu(input_0.field_0);
 						output_0.field_0 = output.field_0;
 					}
-  
   !END
 
 }

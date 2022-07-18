@@ -1,7 +1,7 @@
 extern crate clap;
 
 use clap::Parser;
-use caiman_frontend::parse_file;
+use caiman_frontend::ir_version::parse_file;
 
 #[derive(Parser)]
 #[clap(version)]
