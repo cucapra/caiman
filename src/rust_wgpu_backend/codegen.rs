@@ -535,27 +535,6 @@ impl<'program> CodeGen<'program>
 
 				self.code_generator.build_return(& return_var_ids);
 			}
-			ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
-			{
-				let captured_argument_var_ids = placement_state.get_local_state_var_ids(captured_arguments).unwrap();
-				let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
-
-				let mut next_funclet_input_types = Vec::<Box<[ir::TypeId]>>::new();
-				for & next_funclet_id in funclet_ids.iter()
-				{
-					pipeline_context.pending_funclet_ids.push(next_funclet_id);
-					/*if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
-					{
-					}*/
-					let input_types = self.program.funclets[& next_funclet_id].input_types.to_vec();
-					//let input_types = Vec::<ir::TypeId>::new();
-					next_funclet_input_types.push(input_types.into_boxed_slice());
-				}
-				// Proper codegen is a lot more complicated than this
-				// self.code_generator.build_yield(& captured_argument_var_ids, & return_var_ids);
-				// This is disgusting
-				self.code_generator.build_yield(funclet_ids, next_funclet_input_types.into_boxed_slice(), & captured_argument_var_ids, & return_var_ids);
-			}
 		}
 
 		let old = pipeline_context.funclet_placement_states.insert(funclet_id, placement_state);
@@ -567,13 +546,13 @@ impl<'program> CodeGen<'program>
 
 	}*/
 
-	fn generate_cpu_function(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)
+	fn generate_cpu_function(&mut self, pipeline : &ir::Pipeline, pipeline_name : &str)
 	{
-		let entry_funclet = & self.program.funclets[& entry_funclet_id];
+		let entry_funclet = &self.program.funclets[&pipeline.entry_funclet];
 		assert_eq!(entry_funclet.kind, ir::FuncletKind::MixedExplicit);
 
 		let mut pipeline_context = PipelineContext::new();
-		pipeline_context.pending_funclet_ids.push(entry_funclet_id);
+		pipeline_context.pending_funclet_ids.push(pipeline.entry_funclet);
 
 		self.code_generator.begin_pipeline(pipeline_name);
 
@@ -606,18 +585,28 @@ impl<'program> CodeGen<'program>
 			//self.code_generator.begin_corecursive_base_funclet(pipeline_name, &entry_funclet.input_types, &entry_funclet.output_types),
 		};*/
 
-		self.code_generator.emit_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
+		self.code_generator.emit_pipeline_entry_point(pipeline.entry_funclet, &entry_funclet.input_types, &entry_funclet.output_types);
+		
+		if let ir::PipelineKind::Yield { pipeline_ids, captured, returned } = &pipeline.kind {
+			let mut next_pipeline_input_types = Vec::<Box<[ir::TypeId]>>::new();
+			for & next_pipeline in pipeline_ids.iter()
+			{
+				let next_pipeline_entry_id = self.program.pipelines[next_pipeline].entry_funclet;
+				let input_types = self.program.funclets[&next_pipeline_entry_id].input_types.to_vec();
+				//let input_types = Vec::<ir::TypeId>::new();
+				next_pipeline_input_types.push(input_types.into_boxed_slice());
+			}
+			// Proper codegen is a lot more complicated than this
+			// self.code_generator.build_yield(& captured_argument_var_ids, & return_var_ids);
+			// This is disgusting
+			self.code_generator.build_yield(&pipeline_ids, next_pipeline_input_types.into_boxed_slice(), & captured, & returned);
+		}
 		
 		match & entry_funclet.tail_edge
 		{
 			ir::TailEdge::Return {return_values : _} =>
 			{
-				self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
-			}
-
-			ir::TailEdge::Yield {funclet_ids : _, captured_arguments : _, return_values : _} => 
-			{
-				()
+				self.code_generator.emit_oneshot_pipeline_entry_point(pipeline.entry_funclet, &entry_funclet.input_types, &entry_funclet.output_types);
 			}
 		};
 
@@ -628,7 +617,7 @@ impl<'program> CodeGen<'program>
 	{
 		for pipeline in self.program.pipelines.iter()
 		{
-			self.generate_cpu_function(pipeline.entry_funclet, pipeline.name.as_str());
+			self.generate_cpu_function(pipeline, pipeline.name.as_str());
 		}
 
 		return self.code_generator.finish();

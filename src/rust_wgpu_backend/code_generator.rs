@@ -1148,25 +1148,9 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!("}}}};"));
 	}
 
-	pub fn build_yield(&mut self, next_funclet_ids : &[ir::FuncletId], next_funclet_input_types : Box<[Box<[ir::TypeId]>]>, capture_var_ids : &[usize], output_var_ids : &[usize])
+	pub fn build_yield(&mut self, next_pipeline_ids : &[usize], next_pipeline_input_types : Box<[Box<[ir::TypeId]>]>, capture_var_ids : &[usize], output_var_ids : &[usize])
 	{
-		self.active_funclet_state.as_mut().unwrap().next_funclet_ids = Some(next_funclet_ids.to_vec().into_boxed_slice());
-
-		self.require_local(capture_var_ids);
-		self.require_local(output_var_ids);
-		self.code_writer.write(format!("return Funclet{} {{instance, intermediates : super::{} {{", self.active_funclet_state.as_ref().unwrap().funclet_id, self.get_type_name(self.active_funclet_result_type_id.unwrap())));
-		for (return_index, var_id) in capture_var_ids.iter().enumerate()
-		{
-			self.code_writer.write(format!("field_{} : var_{}, ", return_index, var_id));
-		}
-		for (return_index, var_id) in output_var_ids.iter().enumerate()
-		{
-			self.code_writer.write(format!("field_{} : var_{}, ", return_index + capture_var_ids.len(), var_id));
-		}
-		self.active_funclet_state.as_mut().unwrap().capture_count = capture_var_ids.len();
-		self.active_funclet_state.as_mut().unwrap().output_count = output_var_ids.len();
-		self.active_funclet_state.as_mut().unwrap().next_funclet_input_types = Some(next_funclet_input_types);
-		self.code_writer.write(format!("}}}};"));
+		self.code_writer.write("todo!(\"Yeah this doesn't work (temporary)\");".to_owned());
 	}
 
 	//fn build_oneshot_entry_point()

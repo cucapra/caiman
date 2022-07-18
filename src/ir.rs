@@ -160,7 +160,6 @@ pub enum LocalMetaVariable
 pub enum TailEdge
 {
 	Return { return_values : Box<[NodeId]> },
-	Yield { funclet_ids : Box<[FuncletId]>, captured_arguments : Box<[NodeId]>, return_values : Box<[NodeId]> },
 	// invokes and waits on the gpu
 	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
 	//Wait { required_scope_set : ScopeSet, funclet_id : usize, arguments : Box<[usize]> }
@@ -176,9 +175,6 @@ impl TailEdge {
 			Self::Return { return_values } => {
 				return_values.iter().for_each(|&id| f(id));
 			}
-			Self::Yield { return_values, captured_arguments, ..} => {
-				return_values.iter().chain(captured_arguments.iter()).map(|&id| f(id));
-			}
 		}
 	}
 	pub fn map_referenced_nodes<F>(&self, mut f: F) -> Self where F: FnMut(NodeId) -> NodeId {
@@ -186,15 +182,6 @@ impl TailEdge {
 			Self::Return { return_values } => {
 				let new_rvals: Vec<NodeId> = return_values.iter().map(|&id| f(id)).collect();
 				Self::Return { return_values: new_rvals.into_boxed_slice() }
-			}
-			Self::Yield { return_values, captured_arguments, funclet_ids } => {
-				let new_rvals: Vec<NodeId> = return_values.iter().map(|&id| f(id)).collect();
-				let new_cargs: Vec<NodeId> = captured_arguments.iter().map(|&id| f(id)).collect();
-				Self::Yield { 
-					return_values: new_rvals.into_boxed_slice(), 
-					captured_arguments: new_cargs.into_boxed_slice(),
-					funclet_ids: funclet_ids.clone()
-				}
 			}
 		}
 	}
@@ -299,10 +286,23 @@ pub enum PipelineMethod
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum PipelineKind {
+	Function,
+	Yield {
+		// the ids of pipelines the host can choose to invoke next
+		pipeline_ids: Box<[usize]>,
+		// the indexes of the elements in the pipeline's return value which should be captured
+		captured: Box<[usize]>,
+		// the indexes of the elements in the pipeline's return value which should be returned
+		returned: Box<[usize]>,
+	}
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pipeline
 {
 	pub name : String,
-	pub entry_funclet : FuncletId
+	pub entry_funclet : FuncletId,
+	pub kind: PipelineKind
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
