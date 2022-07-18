@@ -474,15 +474,6 @@ impl<'program> Explicator<'program>
 				function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, return_values), &mut function_state.funclet_builder);
 				function_state.funclet_builder.set_tail_edge_from_old(frame_id, & original_funclet.tail_edge)
 			}
-			ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
-			{
-				function_state.funclet_builder.set_output_types(& original_funclet.output_types);
-				output_nodes.extend_from_slice(& captured_arguments);
-				output_nodes.extend_from_slice(& return_values);
-				function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, captured_arguments), &mut function_state.funclet_builder); // Not ideal, but required for now
-				function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, return_values), &mut function_state.funclet_builder);
-				function_state.funclet_builder.set_tail_edge_from_old(frame_id, & original_funclet.tail_edge)
-			}
 		}
 
 		{
@@ -672,10 +663,6 @@ impl<'program> Explicator<'program>
 			ir::TailEdge::Return { return_values } =>
 			{
 				output_nodes.extend_from_slice(& remap_nodes(& function_state.funclet_builder, frame_id, return_values));
-			}
-			ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
-			{
-				panic!("Inline funclets cannot yield")
 			}
 		}
 

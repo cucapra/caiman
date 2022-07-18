@@ -366,11 +366,6 @@ macro_rules! with_tails {
     ($macro:ident) => {
         $macro! {
             Return (return_values: [Operation]);
-            Yield (
-                funclet_ids: [FuncletId],
-                captured_arguments: [Operation],
-                return_values: [Operation]
-            );
         }
     };
 }
