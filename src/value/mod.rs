@@ -1,21 +1,36 @@
 #![warn(warnings)]
 //! [[Tate09]](https://rosstate.org/publications/eqsat/eqsat_tate_popl09.pdf)
+use crate::ir;
+use thiserror::Error;
 
-/// Primitive functions. These are essential to the functionality of the E-PEG.
+/// A control-flow graph for a caiman pipeline. Each node corresponds to a funclet.
+/// All leaf nodes of a pipeline have `Return` tail edges.
+pub struct PipelineCFG {}
+
+/// This error is produced when an [`ir::Dependent`](crate::ir) depends on a node which:
+///   1. occurs after the dependent, or
+///   2. doesn't exist at all
+#[derive(Debug, Error)]
+#[error("IR conversion error: {needed_by} incorrectly depends on node #{dependency}")]
+pub struct FromIrError {
+    /// The ID of the dependency
+    pub dependency: ir::NodeId,
+    /// The dependent which caused the failure.
+    pub needed_by: ir::Dependent,
+}
+
+/// Primitive functions. These are only used internally by the egraph and don't show up in the
+/// output IR.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Primitive {
-    /// A list of [`egg::Id`]s.
-    ///
-    /// Unlike all other nodes, `IdList` can have an arbitrary number of children.
-    /// There are no semantics attached to these children; instead, their meaning is given
-    /// by the parents of the `IdList` in question. The ordering of this list is meaningful.
+    /// An arbitrarily-sized list of child [`egg::Id`]s. The list ordering is meaningful.
     IdList,
 
-    /// A `φ` node which uses a boolean to "choose" a value.
+    /// A generalization of a `φ` node which uses a integer to "choose" a value.
     ///
-    /// The third child is a boolean "selector". If it's `false`, this node assumes the value
-    /// of its first child. If it's `true`, this node assumes the value of its second child.
-    Choice,
+    /// The first child is the selector, which evaluates to some unsigned integer `i`. The
+    /// switch node as a whole evaluates to the value of its `i+1`th child.
+    Switch,
 
     /// An abstract representation of a sequence of values. This is called `θ` in [[Tate09]].
     ///
@@ -40,25 +55,24 @@ enum Function {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum NodeData {
+enum Operation {
     Prim(Primitive),
     Func(Function),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Node {
-    /// The data contained by this node. This includes what kind of node it is, as well as any
-    /// per-node attributes.
-    data: NodeData,
-    /// The indices of each of the node's dependencies. The order is significant. There is no
+    /// The operation represented by this node. This does *NOT* include the node's children.
+    operation: Operation,
+    /// The indices of each of the node's children. The order is significant. There is no
     /// guarantee that the entries are unique.
     /// This is a `Box<[NodeIndex]>` instead of a `Vec<NodeIndex>` in order to save space.
-    /// You generally shouldn't be adding or removing dependencies anyways.
+    /// You generally shouldn't be adding or removing children anyways.
     deps: Box<[egg::Id]>,
 }
 impl egg::Language for Node {
     fn matches(&self, other: &Self) -> bool {
-        self.data == other.data
+        self.operation == other.operation
     }
     fn children(&self) -> &[egg::Id] {
         &self.deps

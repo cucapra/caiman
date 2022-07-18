@@ -332,6 +332,23 @@ impl Program
 	}
 }
 
+/// Represents an IR construct which depends on IR nodes.
+#[derive(Debug, Clone, Copy)]
+pub enum Dependent {
+    /// Represents a [`ir::Node`](crate::ir) with the given node ID.
+    Node(NodeId),
+    /// Represents a [`ir::TailEdge`](crate::ir).
+    Tail,
+}
+impl std::fmt::Display for Dependent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Node(id) => write!(f, "node (id: {id})"),
+            Self::Tail => write!(f, "tail edge"),
+        }
+    }
+}
+
 /*#[derive(Debug, Default)]
 pub struct ProgramBuilder
 {
