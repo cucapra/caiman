@@ -157,9 +157,24 @@ pub enum LocalMetaVariable
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Jump {
+	pub target: FuncletId,
+	pub args: Box<[NodeId]>
+}
+impl Jump {
+	pub fn map_referenced_nodes(&self, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
+		Self { 
+			target: self.target, 
+			args: self.args.iter().map(|&id| f(id)).collect()
+		}
+	}
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
 {
 	Return { return_values : Box<[NodeId]> },
+	Jump(Jump),
+	Switch { key: NodeId, cases: Box<[Jump]> }
 	// invokes and waits on the gpu
 	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
 	//Wait { required_scope_set : ScopeSet, funclet_id : usize, arguments : Box<[usize]> }
@@ -175,6 +190,14 @@ impl TailEdge {
 			Self::Return { return_values } => {
 				return_values.iter().for_each(|&id| f(id));
 			}
+			Self::Jump ( Jump {args, ..} ) => {
+				args.iter().for_each(|&id| f(id));
+			}
+			Self::Switch { cases, .. } => {
+				for jump in cases.iter() {
+					jump.args.iter().for_each(|&id| f(id));
+				}
+			}
 		}
 	}
 	pub fn map_referenced_nodes<F>(&self, mut f: F) -> Self where F: FnMut(NodeId) -> NodeId {
@@ -182,6 +205,15 @@ impl TailEdge {
 			Self::Return { return_values } => {
 				let new_rvals: Vec<NodeId> = return_values.iter().map(|&id| f(id)).collect();
 				Self::Return { return_values: new_rvals.into_boxed_slice() }
+			}
+			Self::Jump ( jump ) => {
+				Self::Jump ( jump.map_referenced_nodes(f) )
+			}
+			Self::Switch { key, cases } => {
+				Self::Switch { 
+					key: *key, 
+					cases: cases.iter().map(|jump| jump.map_referenced_nodes(&mut f)).collect() 
+				}
 			}
 		}
 	}

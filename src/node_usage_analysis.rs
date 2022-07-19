@@ -116,6 +116,7 @@ impl NodeUsageAnalysis
 					analysis.use_node(node_id, Usage::LocalVariable);
 				}
 			}
+			_ => todo!()
 		}
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate().rev()

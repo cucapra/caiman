@@ -535,6 +535,7 @@ impl<'program> CodeGen<'program>
 
 				self.code_generator.build_return(& return_var_ids);
 			}
+			_ => todo!()
 		}
 
 		let old = pipeline_context.funclet_placement_states.insert(funclet_id, placement_state);
@@ -608,6 +609,7 @@ impl<'program> CodeGen<'program>
 			{
 				self.code_generator.emit_oneshot_pipeline_entry_point(pipeline.entry_funclet, &entry_funclet.input_types, &entry_funclet.output_types);
 			}
+			_ => todo!()
 		};
 
 		self.code_generator.end_pipeline();

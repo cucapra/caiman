@@ -99,6 +99,7 @@ impl FuncletBuilder
 				}
 				TailEdge::Return{return_values : new_return_values.into_boxed_slice()}
 			}
+			_ => todo!()
 		};
 		self.tail_edge = Some(tail_edge);
 	}

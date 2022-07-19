@@ -335,7 +335,8 @@ macro_rules! make_tails {
                 match tail {
                     $(ir::TailEdge::$name { $($arg),* } => Ok(Self::$name($name {
                         $($arg : _from_ir_tail!($arg_type, $arg, sentinel)),*
-                    }))),*
+                    })),)*
+                    _ => unimplemented!("wrong branch")
                 }
             }
             pub fn to_ir(&self, node_map: &HashMap<NodeIndex, ir::NodeId>) -> ir::TailEdge {
