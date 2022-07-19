@@ -38,8 +38,10 @@ impl DominatorGraph {
         while let Some((id, prev)) = stack.pop() {
             match lookup.entry(id) {
                 // already visited this funclet... might need to recalc immediate dominator
-                Entry::Occupied(mut val) => {
-                    val.insert(Self::first_shared_ancestor(&nodes, *val.get(), prev));
+                Entry::Occupied(val) => {
+                    let cur_idom = nodes[*val.get() as usize].1;
+                    let idom = Self::first_shared_ancestor(&nodes, cur_idom, prev);
+                    nodes[*val.get() as usize].1 = idom;
                 }
                 // unvisited funclet, set its idom to the previous node & add its children
                 Entry::Vacant(spot) => {
