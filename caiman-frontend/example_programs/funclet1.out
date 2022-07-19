@@ -1,5 +1,0 @@
-Funclet f0 : (I32) -> (I32) {
-  n0 = phi 0;
-  Return n0
-}
-
