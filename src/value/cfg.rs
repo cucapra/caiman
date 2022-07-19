@@ -6,69 +6,85 @@ use std::{
     collections::hash_map::{Entry, HashMap},
 };
 
+#[derive(Clone, Copy)]
+struct DominatorNode {
+    funclet_id: ir::FuncletId,
+    // The index of this funclet's immediate dominator. If `0`, this node is an entry node.
+    idom_index: usize,
+}
 pub struct DominatorGraph {
     /// The nodes in the dominator tree. Each node is comprised of it's corresponding funclet ID
     /// and the index of its immediate dominator (or `0` if its the entry node).
     /// The node at index 0 is a fake "pre-entry" node which strictly dominates all other nodes.
-    nodes: Vec<(ir::FuncletId, usize)>,
+    nodes: Vec<DominatorNode>,
     // A map from funclets to their node index
     lookup: HashMap<ir::FuncletId, usize>,
 }
 impl DominatorGraph {
-    fn first_shared_ancestor(
-        nodes: &[(ir::FuncletId, usize)],
-        mut a: usize,
-        mut b: usize,
-    ) -> usize {
+    fn recalc_idom(nodes: &[DominatorNode], mut idom_a: usize, mut idom_b: usize) -> usize {
         loop {
-            match a.cmp(&b) {
-                Ordering::Less => b = nodes[b].1,
-                Ordering::Greater => a = nodes[a].1,
-                Ordering::Equal => return a,
+            match idom_a.cmp(&idom_b) {
+                Ordering::Less => idom_b = nodes[idom_b].idom_index,
+                Ordering::Greater => idom_a = nodes[idom_a].idom_index,
+                Ordering::Equal => return idom_a,
             }
         }
     }
     pub fn new(pipeline: &ir::Pipeline, funclets: &Arena<ir::Funclet>) -> Self {
         // This is loosely based on http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
         let mut lookup = HashMap::new();
-        let mut nodes = Vec::new();
-        nodes.push((0, 0)); // pre-entry node
+        let mut nodes: Vec<DominatorNode> = Vec::new();
+        // push pre-entry node
+        nodes.push(DominatorNode {
+            funclet_id: usize::MAX,
+            idom_index: 0,
+        });
+
         let mut stack = Vec::new();
         stack.push((pipeline.entry_funclet, 0));
-        while let Some((id, prev)) = stack.pop() {
-            match lookup.entry(id) {
+
+        while let Some((funclet_id, parent_index)) = stack.pop() {
+            let funclet_node_index = match lookup.entry(funclet_id) {
                 // already visited this funclet... might need to recalc immediate dominator
-                Entry::Occupied(val) => {
-                    let cur_idom = nodes[*val.get() as usize].1;
-                    let idom = Self::first_shared_ancestor(&nodes, cur_idom, prev);
-                    nodes[*val.get() as usize].1 = idom;
+                Entry::Occupied(entry) => {
+                    let funclet_node_index: usize = *entry.get();
+                    let old_idom_index = nodes[funclet_node_index].idom_index;
+                    let new_idom_index = Self::recalc_idom(&nodes, old_idom_index, parent_index);
+                    // TODO: This seems really hacky... is there a proof this *actually* works?
+                    if old_idom_index == new_idom_index {
+                        continue;
+                    }
+                    nodes[funclet_node_index].idom_index = new_idom_index;
+                    funclet_node_index
                 }
                 // unvisited funclet, set its idom to the previous node & add its children
                 Entry::Vacant(spot) => {
-                    let node_id = nodes.len();
-                    spot.insert(node_id);
-                    nodes.push((id, prev));
-                    match &funclets[&id].tail_edge {
-                        ir::TailEdge::Return { .. } => (),
-                        ir::TailEdge::Jump(jump) => stack.push((jump.target, node_id)),
-                        ir::TailEdge::Switch { cases, .. } => cases
-                            .iter()
-                            .for_each(|jump| stack.push((jump.target, node_id))),
-                    }
+                    let funclet_node_index = nodes.len();
+                    spot.insert(funclet_node_index);
+                    nodes.push(DominatorNode {
+                        funclet_id,
+                        idom_index: parent_index,
+                    });
+                    funclet_node_index
                 }
+            };
+            match &funclets[&funclet_id].tail_edge {
+                ir::TailEdge::Return { .. } => (),
+                ir::TailEdge::Jump(jump) => stack.push((jump.target, funclet_node_index)),
+                ir::TailEdge::Switch { cases, .. } => cases
+                    .iter()
+                    .for_each(|jump| stack.push((jump.target, funclet_node_index))),
             }
         }
         Self { nodes, lookup }
     }
     pub fn immediate_dominator(&self, funclet: ir::FuncletId) -> Option<ir::FuncletId> {
-        let node_index = self.lookup[&funclet];
-        let node = self.nodes[node_index];
-        if node.1 != 0 {
-            let idom_node = self.nodes[node.1];
-            return Some(idom_node.0);
+        let funclet_node_index = self.lookup[&funclet];
+        let funclet_node = self.nodes[funclet_node_index];
+        if funclet_node.idom_index != 0 {
+            let idom_node = self.nodes[funclet_node.idom_index];
+            return Some(idom_node.funclet_id);
         }
-        // made it here: at entry funclet, which has no immediate dominator
-        assert!(node_index == 1);
         None
     }
     pub fn dominators(&self, funclet: ir::FuncletId) -> impl '_ + Iterator<Item = ir::FuncletId> {
@@ -92,8 +108,8 @@ impl<'a> Iterator for Dominators<'a> {
             return None; // at pre-entry funclet, which isn't real
         }
         let node = self.graph.nodes[self.index];
-        self.index = node.1;
-        Some(node.0)
+        self.index = node.idom_index;
+        Some(node.funclet_id)
     }
 }
 #[cfg(test)]
@@ -221,25 +237,57 @@ mod tests {
             (ret!(), &[0, 3]),  // = 3
         ])
     }
-    #[test]
-    fn irreducible_1() {
-        assert_cfg(&[
-            (sel![1, 2], &[0]), // = 0 (dom14:2:5)
-            (jmp!(3), &[0, 1]), // = 1 (dom14:2:4)
-            (jmp!(4), &[0, 2]), // = 2 (dom14:2:3)
-            (jmp!(4), &[0, 3]), // = 3 (dom14:2:1)
-            (jmp!(3), &[0, 4]), // = 1 (dom14:2:2)
-        ])
-    }
-    #[test]
-    fn irreducible_2() {
-        assert_cfg(&[
-            (sel![1, 2], &[0]),    // = 0 (dom14:4:6)
-            (jmp!(3), &[0, 1]),    // = 1 (dom14:4:5)
-            (sel![4, 5], &[0, 2]), // = 2 (dom14:4:4)
-            (jmp!(4), &[0, 3]),    // = 3 (dom14:4:1)
-            (sel![3, 5], &[0, 4]), // = 4 (dom14:4:2)
-            (jmp!(4), &[0, 5]),    // = 5 (dom14:4:3)
-        ])
+
+    mod irreducible {
+        use super::*;
+        #[test]
+        fn dom14_fig2() {
+            assert_cfg(&[
+                (sel![1, 2], &[0]), // = 0 (dom14:2:5)
+                (jmp!(3), &[0, 1]), // = 1 (dom14:2:4)
+                (jmp!(4), &[0, 2]), // = 2 (dom14:2:3)
+                (jmp!(4), &[0, 3]), // = 3 (dom14:2:1)
+                (jmp!(3), &[0, 4]), // = 1 (dom14:2:2)
+            ])
+        }
+        #[test]
+        fn dom14_fig4() {
+            assert_cfg(&[
+                (sel![1, 2], &[0]),    // = 0 (dom14:4:6)
+                (jmp!(3), &[0, 1]),    // = 1 (dom14:4:5)
+                (sel![4, 5], &[0, 2]), // = 2 (dom14:4:4)
+                (jmp!(4), &[0, 3]),    // = 3 (dom14:4:1)
+                (sel![3, 5], &[0, 4]), // = 4 (dom14:4:2)
+                (jmp!(4), &[0, 5]),    // = 5 (dom14:4:3)
+            ])
+        }
+        #[test]
+        fn triangle() {
+            assert_cfg(&[
+                (sel![1, 2], &[0]), // = 0
+                (jmp!(2), &[0, 1]), // = 1
+                (jmp!(1), &[0, 2]), // = 2
+            ])
+        }
+        #[test]
+        fn pogo() {
+            assert_cfg(&[
+                (jmp!(1), &[0]),       // = 0
+                (jmp!(2), &[0, 1]),    // = 1
+                (jmp!(1), &[0, 1, 2]), // = 2
+            ])
+        }
+        #[test]
+        fn circle_like() {
+            assert_cfg(&[
+                (sel![1, 5], &[0]),       // = 0
+                (jmp!(2), &[0, 1]),       // = 1
+                (sel![1, 3], &[0, 2]),    // = 2
+                (sel![2, 4, 6], &[0, 3]), // = 3
+                (sel![3, 5], &[0, 4]),    // = 4
+                (jmp!(4), &[0, 5]),       // = 5
+                (ret!(), &[0, 3, 6]),     // = 6
+            ])
+        }
     }
 }
