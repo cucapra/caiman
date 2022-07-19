@@ -30,26 +30,22 @@ impl DominatorGraph {
     }
     pub fn new(pipeline: &ir::Pipeline, funclets: &Arena<ir::Funclet>) -> Self {
         // This is loosely based on http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
+        let mut lookup = HashMap::new();
         let mut nodes = Vec::new();
         nodes.push((0, 0)); // pre-entry node
-        let mut lookup = HashMap::new();
-
         let mut stack = Vec::new();
         stack.push((pipeline.entry_funclet, 0));
-
-        while let Some((id, parent)) = stack.pop() {
+        while let Some((id, prev)) = stack.pop() {
             match lookup.entry(id) {
+                // already visited this funclet... might need to recalc immediate dominator
                 Entry::Occupied(mut val) => {
-                    // we already visited this funclet... we need to fix up its dominators
-                    val.insert(Self::first_shared_ancestor(&nodes, *val.get(), parent));
+                    val.insert(Self::first_shared_ancestor(&nodes, *val.get(), prev));
                 }
+                // unvisited funclet, set its idom to the previous node & add its children
                 Entry::Vacant(spot) => {
-                    // we haven't visited this funclet, add it & set its immediate dominator
-                    // to whatever node we arrived from...
                     let node_id = nodes.len();
                     spot.insert(node_id);
-                    nodes.push((id, parent));
-                    // ... and add all its "children" to the stack for later traversal
+                    nodes.push((id, prev));
                     match &funclets[&id].tail_edge {
                         ir::TailEdge::Return { .. } => (),
                         ir::TailEdge::Jump(jump) => stack.push((jump.target, node_id)),
@@ -82,7 +78,7 @@ struct Dominators<'a> {
     index: usize,
 }
 impl<'a> Dominators<'a> {
-    pub fn new(graph: &'a DominatorGraph, funclet: ir::FuncletId) -> Self {
+    fn new(graph: &'a DominatorGraph, funclet: ir::FuncletId) -> Self {
         let index = graph.lookup[&funclet];
         Self { graph, index }
     }
@@ -102,18 +98,18 @@ impl<'a> Iterator for Dominators<'a> {
 mod tests {
     use super::*;
 
-    fn assert_cfg(input: &[(ir::TailEdge, &[usize], Option<usize>)]) {
+    fn assert_cfg(input: &[(ir::TailEdge, &[usize])]) {
         let pipeline = ir::Pipeline {
             name: "test pipeline".to_string(),
             entry_funclet: 0,
             kind: ir::PipelineKind::Function,
         };
+        // NOTE: correctness here depends on empty arenas adding nodes with sequential ids
         let mut funclets = Arena::new();
-        for (index, item) in input.iter().enumerate() {
-            let id = funclets.create(ir::Funclet {
-                tail_edge: item.0.clone(),
-                // everything below this point is an arbitrarily chosen,
-                // probably-incorrect default
+        for (tail_edge, _) in input.iter() {
+            funclets.create(ir::Funclet {
+                tail_edge: tail_edge.clone(),
+                // everything below this point is probably incorrect
                 kind: ir::FuncletKind::MixedExplicit,
                 input_types: Box::new([]),
                 output_types: Box::new([]),
@@ -124,13 +120,20 @@ mod tests {
             });
         }
         let graph = DominatorGraph::new(&pipeline, &funclets);
-        for (index, item) in input.iter().enumerate() {
-            let mut expected: Vec<_> = item.1.iter().map(|&id| id).collect();
+        for (index, (_, dominators)) in input.iter().enumerate() {
+            let mut expected: Vec<_> = dominators.iter().map(|&id| id).collect();
             expected.sort_unstable();
             let mut actual: Vec<_> = graph.dominators(index).collect();
             actual.sort_unstable();
             assert_eq!(expected, actual);
-            assert_eq!(item.2, graph.immediate_dominator(index));
+            // the last element of the dominator slice is always the node itself,
+            // the *second* to last element is treated as the immediate dominator.
+            let idom = if dominators.len() >= 2 {
+                Some(dominators[dominators.len() - 2])
+            } else {
+                None
+            };
+            assert_eq!(idom, graph.immediate_dominator(index));
         }
     }
     macro_rules! ret {
@@ -159,26 +162,82 @@ mod tests {
         }
     }
     #[test]
-    fn test_ret() {
-        assert_cfg(&[(ret!(), &[0], None)])
+    fn ret() {
+        assert_cfg(&[(ret!(), &[0])])
     }
     #[test]
-    fn test_jmp() {
+    fn jmp() {
         assert_cfg(&[
-            (jmp!(1), &[0], None),
-            (jmp!(2), &[0, 1], Some(0)),
-            (ret!(), &[0, 1, 2], Some(1)),
+            (jmp!(1), &[0]),      // = 0
+            (jmp!(2), &[0, 1]),   // = 1
+            (ret!(), &[0, 1, 2]), // = 2
         ])
     }
     #[test]
-    fn test_sel() {
+    fn sel() {
         assert_cfg(&[
-            (sel![1, 2, 3], &[0], None),    // = 0
-            (ret!(), &[0, 1], Some(0)),     // = 1
-            (sel![4, 5], &[0, 2], Some(0)), // = 2
-            (ret!(), &[0, 3], Some(0)),     // = 3
-            (ret!(), &[0, 2, 4], Some(2)),  // = 4
-            (ret!(), &[0, 2, 5], Some(2)),  // = 5
+            (sel![1, 2, 3], &[0]), // = 0
+            (ret!(), &[0, 1]),     // = 1
+            (sel![4, 5], &[0, 2]), // = 2
+            (ret!(), &[0, 3]),     // = 3
+            (ret!(), &[0, 2, 4]),  // = 4
+            (ret!(), &[0, 2, 5]),  // = 5
+        ])
+    }
+    #[test]
+    fn entry_loop_inf() {
+        assert_cfg(&[(jmp!(0), &[0])])
+    }
+    #[test]
+    fn entry_loop() {
+        assert_cfg(&[(sel![0, 1], &[0]), (ret!(), &[0, 1])])
+    }
+    #[test]
+    fn nested_loop_1() {
+        assert_cfg(&[
+            (jmp!(1), &[0]),          // = 0
+            (sel![1, 2], &[0, 1]),    // = 1
+            (sel![0, 3], &[0, 1, 2]), // = 2
+            (ret!(), &[0, 1, 2, 3]),  // = 3
+        ])
+    }
+    #[test]
+    fn nested_loop_2() {
+        assert_cfg(&[
+            (sel![0, 1], &[0]),             // = 0
+            (sel![0, 1, 2], &[0, 1]),       // = 1
+            (sel![0, 1, 2, 3], &[0, 1, 2]), // = 2
+            (ret!(), &[0, 1, 2, 3]),        // = 3
+        ])
+    }
+    #[test]
+    fn diamond() {
+        assert_cfg(&[
+            (sel![1, 2], &[0]), // = 0
+            (jmp!(3), &[0, 1]), // = 1
+            (jmp!(3), &[0, 2]), // = 2
+            (ret!(), &[0, 3]),  // = 3
+        ])
+    }
+    #[test]
+    fn irreducible_1() {
+        assert_cfg(&[
+            (sel![1, 2], &[0]), // = 0 (dom14:2:5)
+            (jmp!(3), &[0, 1]), // = 1 (dom14:2:4)
+            (jmp!(4), &[0, 2]), // = 2 (dom14:2:3)
+            (jmp!(4), &[0, 3]), // = 3 (dom14:2:1)
+            (jmp!(3), &[0, 4]), // = 1 (dom14:2:2)
+        ])
+    }
+    #[test]
+    fn irreducible_2() {
+        assert_cfg(&[
+            (sel![1, 2], &[0]),    // = 0 (dom14:4:6)
+            (jmp!(3), &[0, 1]),    // = 1 (dom14:4:5)
+            (sel![4, 5], &[0, 2]), // = 2 (dom14:4:4)
+            (jmp!(4), &[0, 3]),    // = 3 (dom14:4:1)
+            (sel![3, 5], &[0, 4]), // = 4 (dom14:4:2)
+            (jmp!(4), &[0, 5]),    // = 5 (dom14:4:3)
         ])
     }
 }
