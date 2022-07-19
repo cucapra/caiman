@@ -1,0 +1,50 @@
+let mut x = 1;
+x = 2;
+
+print(x || true);
+
+if true {
+  x = 100;
+}
+
+let im_gonna_make_a_nested_if = true;
+if im_gonna_make_a_nested_if {
+  if false {
+    let this_does_nothing = 10000000000;
+    print(this_does_nothing);
+  }
+}
+
+fn setX(y) {
+  x = y;
+}
+
+fn add_three(x, y, z) {
+  // Abstraction
+  let intermediate = y + z;
+  return x + intermediate;
+}
+
+setX(5);
+
+let g = add_three(x, 5, 2 + 2);
+
+fn print_hello_world() {
+  print(104);
+  print(101);
+  print(108);
+  print(108);
+  print(111);
+  print(32);
+  print(119);
+  print(111);
+  print(114);
+  print(108);
+  print(100);
+  print(10);
+}
+
+while 1 {
+  print_hello_world();
+}
+

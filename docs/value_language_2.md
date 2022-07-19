@@ -39,17 +39,17 @@ unop := {!, -}
 
 program := c*
 
-c := | if e { c } 
-     | while e { c }
+c := | if e { c* } 
+     | while e { c* }
      | print(e);
      | let x = e;
      | let mut x = e;
      | x = e;
-     | fn f(x, y, ...) { c }
+     | fn f(x, y, ...) { c* }
      | f(e1, e2, ...);
      | return e;
 
-e := | x | n | b | input() | e1 binop e2 | unop e 
+e := | x | n | b | input() | e1 binop e2 | unop e | ( e )
      | f(e1, e2, ...) | { l: e }
 ```
 
@@ -77,6 +77,9 @@ language aesthetically resembles.
 
 The syntax for labeling expressions was chosen arbitrarily, so it is also 
 likely to change.
+
+As far as additions are concerned, type annotations should certainly be
+one in the future.
 
 ## Semantics
 

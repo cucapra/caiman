@@ -1,0 +1,118 @@
+use std::str::FromStr;
+use crate::value_language::ast::*;
+
+grammar;
+
+match {
+  r"[a-zA-Z][a-zA-Z0-9_]*", // Id
+  r"[-]?[0-9]+([.][0-9]+)?", // Constant
+
+  "let", "mut", "input", "print", "if", "while", "fn", "return",
+  "=", ";", "(", ")", ",", "{", "}", ":",
+  "+", "-", "*", "/", "&&", "||", "==", "!",
+  "true", "false",
+
+  r"\s*" => { }, // Whitespace
+  r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
+}
+
+pub Program: Program = { Statement* => <> }
+
+pub Statement: Statement = {
+    "if" <Exp> "{" <Statement*> "}" => Statement::If(<>),
+    "while" <Exp> "{" <Statement*> "}" => Statement::While(<>),
+    "print" "(" <Exp> ")" ";" => Statement::Print(<>),
+    "let" <Mut> <Id> "=" <Exp> ";" => Statement::Let(<>),
+    <Id> "=" <Exp> ";" => Statement::Assign(<>),
+    "fn" <Id> "(" <CommaList<Id>> ")" "{" <Statement*> "}" => 
+        Statement::Function(<>),
+    <Id> "(" <CommaList<Exp>> ")" ";" => Statement::Call(<>),
+    "return" <Exp> ";" => Statement::Return(<>),
+}
+
+Exp: Exp = {
+    BinopExp, // Includes terminal exps
+}
+
+TermExp: Exp = {
+    <Constant> => Exp::Num(<>),
+    <Id> => Exp::Var(<>),
+    "true" => Exp::Bool(true), 
+    "false" => Exp::Bool(false),
+    "input" "(" ")" => Exp::Input(),
+    <Id> "(" <CommaList<Exp>> ")" => Exp::Call(<>),
+    UnopExp,
+    "{" <l: Id> ":" <e: Exp> "}" => Exp::Labeled(l, Box::new(e)),
+    "(" <Exp> ")",
+}
+
+UnopExp: Exp = {
+    "!" <e: TermExp> => Exp::Unop(Unop::Not, Box::new(e)),
+}
+
+
+// BEGIN Binop Section
+// Numbers here (1, 2, ...) indicate predence level for levels containing
+// two or more options (so not && or ||)
+
+BinopExp: Exp = { BinopOr }
+
+BinopOr: Exp = {
+    <e1: BinopOr> "||" <e2: BinopAnd> => make_binop(e1, Binop::Or, e2),
+    BinopAnd,
+}
+
+BinopAnd: Exp = {
+    <e1: BinopAnd> "&&" <e2: BinopExp1> => make_binop(e1, Binop::And, e2),
+    BinopExp1,
+}
+
+BinopExp1: Exp = {
+    <BinopExp1> <Binop1> <BinopExp2> => make_binop(<>),
+    BinopExp2,
+}
+
+BinopExp2: Exp = {
+    <BinopExp2> <Binop2> <BinopExp3> => make_binop(<>),
+    BinopExp3,
+}
+
+BinopExp3: Exp = {
+    <BinopExp3> <Binop3> <TermExp> => make_binop(<>),
+    TermExp, 
+}
+
+Binop1: Binop = {
+    "==" => Binop::Equals,
+}
+
+Binop2: Binop = {
+    "+" => Binop::Plus,
+    "-" => Binop::Minus,
+}
+
+Binop3: Binop = {
+    "*" => Binop::Mult,
+    "/" => Binop::Div,
+}
+
+// END Binop Section
+
+Mut: bool = { <m: "mut"?> => m.is_some() }
+
+Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
+
+Constant: String = {
+  <r"[-]?[0-9]+([.][0-9]+)?"> => String::from(<>),
+}
+
+CommaList<T>: Vec<T> = {
+  <mut v: (<T> ",")*> <e: T?> => match e { 
+      None => v, 
+      Some(e) => {
+          v.push(e);
+          v
+      },
+  }
+}
+
