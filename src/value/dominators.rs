@@ -253,6 +253,26 @@ mod tests {
             (ret!(), &[0, 1, 2, 10]),          // = 10
         ])
     }
+    #[test]
+    fn switch_fallthrough() {
+        assert_cfg(&[
+            (sel![1, 2, 3, 4], &[0]), // = 0
+            (jmp!(2), &[0, 1]),       // = 1
+            (jmp!(3), &[0, 2]),       // = 2
+            (jmp!(4), &[0, 3]),       // = 3
+            (ret!(), &[0, 4]),        // = 4
+        ])
+    }
+    #[test]
+    fn switch_fallthrough_rev() {
+        assert_cfg(&[
+            (sel![1, 2, 3, 4], &[0]), // = 0
+            (ret!(), &[0, 1]),        // = 1
+            (jmp!(1), &[0, 2]),       // = 2
+            (jmp!(2), &[0, 3]),       // = 3
+            (jmp!(3), &[0, 4]),       // = 4
+        ])
+    }
     mod irreducible {
         use super::*;
         #[test]
