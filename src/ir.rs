@@ -217,6 +217,13 @@ impl TailEdge {
 			}
 		}
 	}
+	pub fn for_each_funclet(&self, mut f: impl FnMut(FuncletId)) {
+		match self {
+			Self::Return { .. } => (),
+			Self::Jump(jump) => f(jump.target),
+			Self::Switch { cases, .. } => cases.iter().for_each(|jump| f(jump.target))
+		}
+	}
 }
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind
