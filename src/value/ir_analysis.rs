@@ -6,22 +6,23 @@ use std::{
     collections::hash_map::{Entry, HashMap},
 };
 
-#[derive(Clone, Copy)]
-struct DominatorNode {
+#[derive(Clone)]
+struct AnalysisNode {
     funclet_id: ir::FuncletId,
     // The index of this funclet's immediate dominator. If `0`, this node is an entry node.
     idom_index: usize,
+    // A list of this funclet's immediate predecessors.
+    predecessors: Vec<usize>,
 }
-pub struct DominatorGraph {
-    /// The nodes in the dominator tree. Each node is comprised of it's corresponding funclet ID
-    /// and the index of its immediate dominator (or `0` if its the entry node).
+pub struct AnalysisGraph {
+    /// The nodes in the analysis tree.
     /// The node at index 0 is a fake "pre-entry" node which strictly dominates all other nodes.
-    nodes: Vec<DominatorNode>,
+    nodes: Vec<AnalysisNode>,
     // A map from funclets to their node index
     lookup: HashMap<ir::FuncletId, usize>,
 }
-impl DominatorGraph {
-    fn recalc_idom(nodes: &[DominatorNode], mut idom_a: usize, mut idom_b: usize) -> usize {
+impl AnalysisGraph {
+    fn recalc_idom(nodes: &[AnalysisNode], mut idom_a: usize, mut idom_b: usize) -> usize {
         loop {
             match idom_a.cmp(&idom_b) {
                 Ordering::Less => idom_b = nodes[idom_b].idom_index,
@@ -33,11 +34,12 @@ impl DominatorGraph {
     pub fn new(pipeline: &ir::Pipeline, funclets: &Arena<ir::Funclet>) -> Self {
         // This is loosely based on http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
         let mut lookup = HashMap::new();
-        let mut nodes: Vec<DominatorNode> = Vec::new();
+        let mut nodes: Vec<AnalysisNode> = Vec::new();
         // push pre-entry node
-        nodes.push(DominatorNode {
+        nodes.push(AnalysisNode {
             funclet_id: usize::MAX,
             idom_index: 0,
+            predecessors: Vec::new(),
         });
 
         let mut stack = Vec::new();
@@ -48,9 +50,10 @@ impl DominatorGraph {
                 // already visited this funclet... might need to recalc immediate dominator
                 Entry::Occupied(entry) => {
                     let funclet_node_index: usize = *entry.get();
+                    nodes[funclet_node_index].predecessors.push(parent_index);
                     let old_idom_index = nodes[funclet_node_index].idom_index;
                     let new_idom_index = Self::recalc_idom(&nodes, old_idom_index, parent_index);
-                    // TODO: This seems really hacky... is there a proof this *actually* works?
+                    // TODO: This might be wrong
                     if old_idom_index == new_idom_index {
                         continue;
                     }
@@ -61,9 +64,10 @@ impl DominatorGraph {
                 Entry::Vacant(spot) => {
                     let funclet_node_index = nodes.len();
                     spot.insert(funclet_node_index);
-                    nodes.push(DominatorNode {
+                    nodes.push(AnalysisNode {
                         funclet_id,
                         idom_index: parent_index,
+                        predecessors: vec![parent_index],
                     });
                     funclet_node_index
                 }
@@ -80,9 +84,9 @@ impl DominatorGraph {
     }
     pub fn immediate_dominator(&self, funclet: ir::FuncletId) -> Option<ir::FuncletId> {
         let funclet_node_index = self.lookup[&funclet];
-        let funclet_node = self.nodes[funclet_node_index];
+        let funclet_node = &self.nodes[funclet_node_index];
         if funclet_node.idom_index != 0 {
-            let idom_node = self.nodes[funclet_node.idom_index];
+            let idom_node = &self.nodes[funclet_node.idom_index];
             return Some(idom_node.funclet_id);
         }
         None
@@ -92,11 +96,11 @@ impl DominatorGraph {
     }
 }
 struct Dominators<'a> {
-    graph: &'a DominatorGraph,
+    graph: &'a AnalysisGraph,
     index: usize,
 }
 impl<'a> Dominators<'a> {
-    fn new(graph: &'a DominatorGraph, funclet: ir::FuncletId) -> Self {
+    fn new(graph: &'a AnalysisGraph, funclet: ir::FuncletId) -> Self {
         let index = graph.lookup[&funclet];
         Self { graph, index }
     }
@@ -107,7 +111,7 @@ impl<'a> Iterator for Dominators<'a> {
         if self.index == 0 {
             return None; // at pre-entry funclet, which isn't real
         }
-        let node = self.graph.nodes[self.index];
+        let node = &self.graph.nodes[self.index];
         self.index = node.idom_index;
         Some(node.funclet_id)
     }
@@ -137,7 +141,7 @@ mod tests {
                 local_meta_variables: Default::default(),
             });
         }
-        let graph = DominatorGraph::new(&pipeline, &funclets);
+        let graph = AnalysisGraph::new(&pipeline, &funclets);
         for (index, (_, dominators)) in input.iter().enumerate() {
             let mut expected: Vec<_> = dominators.iter().map(|&id| id).collect();
             expected.sort_unstable();
