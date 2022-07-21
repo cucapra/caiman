@@ -6,114 +6,119 @@ use std::{
     collections::hash_map::{Entry, HashMap},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct NodeId(usize);
+impl NodeId {
+    const PREENTRY: Self = Self(0);
+}
+
 #[derive(Clone)]
-struct AnalysisNode {
-    funclet_id: ir::FuncletId,
+struct Node {
+    // The ir funclet which this analysis node corresponds to.
+    fid: ir::FuncletId,
     // The index of this funclet's immediate dominator. If `0`, this node is an entry node.
-    idom_index: usize,
+    idom: NodeId,
     // A list of this funclet's immediate predecessors.
-    predecessors: Vec<usize>,
+    preds: Vec<NodeId>,
 }
 pub struct AnalysisGraph {
     /// The nodes in the analysis tree.
     /// The node at index 0 is a fake "pre-entry" node which strictly dominates all other nodes.
-    nodes: Vec<AnalysisNode>,
+    nodes: Vec<Node>,
     // A map from funclets to their node index
-    lookup: HashMap<ir::FuncletId, usize>,
+    lookup: HashMap<ir::FuncletId, NodeId>,
 }
 impl AnalysisGraph {
-    fn recalc_idom(nodes: &[AnalysisNode], mut idom_a: usize, mut idom_b: usize) -> usize {
+    fn recalc_idom(nodes: &[Node], mut a: NodeId, mut b: NodeId) -> NodeId {
         loop {
-            match idom_a.cmp(&idom_b) {
-                Ordering::Less => idom_b = nodes[idom_b].idom_index,
-                Ordering::Greater => idom_a = nodes[idom_a].idom_index,
-                Ordering::Equal => return idom_a,
+            match a.cmp(&b) {
+                Ordering::Less => b = nodes[b.0].idom,
+                Ordering::Greater => a = nodes[a.0].idom,
+                Ordering::Equal => return a,
             }
         }
     }
-    pub fn new(pipeline: &ir::Pipeline, funclets: &Arena<ir::Funclet>) -> Self {
+    pub fn new(head: ir::FuncletId, funclets: &Arena<ir::Funclet>) -> Self {
         // This is loosely based on http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
         let mut lookup = HashMap::new();
-        let mut nodes: Vec<AnalysisNode> = Vec::new();
+        let mut nodes: Vec<Node> = Vec::new();
+
         // push pre-entry node
-        nodes.push(AnalysisNode {
-            funclet_id: usize::MAX,
-            idom_index: 0,
-            predecessors: Vec::new(),
+        nodes.push(Node {
+            fid: usize::MAX,
+            idom: NodeId::PREENTRY,
+            preds: Vec::new(),
         });
 
         let mut stack = Vec::new();
-        stack.push((pipeline.entry_funclet, 0));
+        stack.push((head, NodeId::PREENTRY));
 
-        while let Some((funclet_id, parent_index)) = stack.pop() {
-            let funclet_node_index = match lookup.entry(funclet_id) {
+        while let Some((fid, pred)) = stack.pop() {
+            let nid = match lookup.entry(fid) {
                 // already visited this funclet... might need to recalc immediate dominator
                 Entry::Occupied(entry) => {
-                    let funclet_node_index: usize = *entry.get();
-                    nodes[funclet_node_index].predecessors.push(parent_index);
-                    let old_idom_index = nodes[funclet_node_index].idom_index;
-                    let new_idom_index = Self::recalc_idom(&nodes, old_idom_index, parent_index);
-                    // TODO: This might be wrong
-                    if old_idom_index == new_idom_index {
+                    let nid: NodeId = *entry.get();
+                    nodes[nid.0].preds.push(pred);
+                    let old_idom = nodes[nid.0].idom;
+                    let new_idom = Self::recalc_idom(&nodes, old_idom, pred);
+                    if old_idom == new_idom {
                         continue;
                     }
-                    nodes[funclet_node_index].idom_index = new_idom_index;
-                    funclet_node_index
+                    nodes[nid.0].idom = new_idom;
+                    nid
                 }
                 // unvisited funclet, set its idom to the previous node & add its children
                 Entry::Vacant(spot) => {
-                    let funclet_node_index = nodes.len();
-                    spot.insert(funclet_node_index);
-                    nodes.push(AnalysisNode {
-                        funclet_id,
-                        idom_index: parent_index,
-                        predecessors: vec![parent_index],
+                    let nid = NodeId(nodes.len());
+                    spot.insert(nid);
+                    nodes.push(Node {
+                        fid,
+                        idom: pred,
+                        preds: vec![pred],
                     });
-                    funclet_node_index
+                    nid
                 }
             };
-            match &funclets[&funclet_id].tail_edge {
+            match &funclets[&fid].tail_edge {
                 ir::TailEdge::Return { .. } => (),
-                ir::TailEdge::Jump(jump) => stack.push((jump.target, funclet_node_index)),
-                ir::TailEdge::Switch { cases, .. } => cases
-                    .iter()
-                    .for_each(|jump| stack.push((jump.target, funclet_node_index))),
+                ir::TailEdge::Jump(jump) => stack.push((jump.target, nid)),
+                ir::TailEdge::Switch { cases, .. } => {
+                    cases.iter().for_each(|jump| stack.push((jump.target, nid)))
+                }
             }
         }
         Self { nodes, lookup }
     }
-    pub fn immediate_dominator(&self, funclet: ir::FuncletId) -> Option<ir::FuncletId> {
-        let funclet_node_index = self.lookup[&funclet];
-        let funclet_node = &self.nodes[funclet_node_index];
-        if funclet_node.idom_index != 0 {
-            let idom_node = &self.nodes[funclet_node.idom_index];
-            return Some(idom_node.funclet_id);
+    pub fn immediate_dominator(&self, fid: ir::FuncletId) -> Option<ir::FuncletId> {
+        let node = &self.nodes[self.lookup[&fid].0];
+        if node.idom != NodeId::PREENTRY {
+            return Some(self.nodes[node.idom.0].fid);
         }
         None
     }
-    pub fn dominators(&self, funclet: ir::FuncletId) -> impl '_ + Iterator<Item = ir::FuncletId> {
-        Dominators::new(&self, funclet)
+    pub fn dominators(&self, fid: ir::FuncletId) -> impl '_ + Iterator<Item = ir::FuncletId> {
+        Dominators::new(&self, fid)
     }
 }
 struct Dominators<'a> {
     graph: &'a AnalysisGraph,
-    index: usize,
+    cur: NodeId,
 }
 impl<'a> Dominators<'a> {
-    fn new(graph: &'a AnalysisGraph, funclet: ir::FuncletId) -> Self {
-        let index = graph.lookup[&funclet];
-        Self { graph, index }
+    fn new(graph: &'a AnalysisGraph, fid: ir::FuncletId) -> Self {
+        let cur = graph.lookup[&fid];
+        Self { graph, cur }
     }
 }
 impl<'a> Iterator for Dominators<'a> {
     type Item = ir::FuncletId;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index == 0 {
-            return None; // at pre-entry funclet, which isn't real
+        if self.cur == NodeId::PREENTRY {
+            return None;
         }
-        let node = &self.graph.nodes[self.index];
-        self.index = node.idom_index;
-        Some(node.funclet_id)
+        let node = &self.graph.nodes[self.cur.0];
+        self.cur = node.idom;
+        Some(node.fid)
     }
 }
 #[cfg(test)]
@@ -121,11 +126,6 @@ mod tests {
     use super::*;
 
     fn assert_cfg(input: &[(ir::TailEdge, &[usize])]) {
-        let pipeline = ir::Pipeline {
-            name: "test pipeline".to_string(),
-            entry_funclet: 0,
-            kind: ir::PipelineKind::Function,
-        };
         // NOTE: correctness here depends on empty arenas adding nodes with sequential ids
         let mut funclets = Arena::new();
         for (tail_edge, _) in input.iter() {
@@ -141,7 +141,7 @@ mod tests {
                 local_meta_variables: Default::default(),
             });
         }
-        let graph = AnalysisGraph::new(&pipeline, &funclets);
+        let graph = AnalysisGraph::new(0, &funclets);
         for (index, (_, dominators)) in input.iter().enumerate() {
             let mut expected: Vec<_> = dominators.iter().map(|&id| id).collect();
             expected.sort_unstable();

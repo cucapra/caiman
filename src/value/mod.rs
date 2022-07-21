@@ -4,7 +4,7 @@ use crate::ir;
 use thiserror::Error;
 
 mod cfg;
-mod dominators;
+mod ir_analysis;
 
 /// This error is produced when an [`ir::Dependent`](crate::ir) depends on a node which:
 ///   1. occurs after the dependent, or
