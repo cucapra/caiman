@@ -15,8 +15,9 @@ impl NodeId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct ComponentId(usize);
 
+#[derive(Debug, PartialEq)]
 struct Component {
-    nids: Vec<ir::FuncletId>,
+    fids: Vec<ir::FuncletId>,
     preds: Vec<ComponentId>,
 }
 
@@ -105,40 +106,71 @@ impl AnalysisGraph {
     }
     fn components(&self) -> Vec<Component> {
         // create initial components: one for each node
-        let mut comps = Vec::with_capacity(self.nodes.len() - 1);
-        for node in self.nodes.iter() {
+        let mut comps = Vec::with_capacity(self.nodes.len());
+        let mut remap = HashMap::with_capacity(self.nodes.len());
+
+        for (i, node) in self.nodes.iter().enumerate() {
             comps.push(Component {
-                nids: vec![node.fid],
-                preds: node.preds.iter().map(|x| ComponentId(x.0 - 1)).collect(),
-            })
+                fids: vec![node.fid],
+                preds: node.preds.iter().map(|x| ComponentId(x.0)).collect(),
+            });
+            remap.insert(ComponentId(i), ComponentId(i));
         }
+
+        let mut new_comps = Vec::with_capacity(self.nodes.len());
+        let mut old_new_map = HashMap::with_capacity(self.nodes.len());
         loop {
-            let old_comps_len = comps.len();
-            let mut new_comps: Vec<Component> = Vec::new();
-            let mut remap = HashMap::new();
+            new_comps.clear();
+            old_new_map.clear();
+            let old_len = comps.len();
+
+            // Apply T1 transformation - remove self loops
             for (i, comp) in comps.iter_mut().enumerate() {
-                // sort & deduplicate predecessors and remove self-loops (T1)
+                comp.preds.retain(|id| *id != ComponentId(i));
+            }
+            fn apply_t2(
+                old_id: ComponentId,
+                old_comps: &mut [Component],
+                new_comps: &mut Vec<Component>,
+                old_new_map: &mut HashMap<ComponentId, ComponentId>,
+            ) -> ComponentId {
+                let old_pred_id = match old_new_map.entry(old_id) {
+                    Entry::Occupied(new_id) => return *new_id.get(),
+                    Entry::Vacant(spot) => {
+                        let comp = &mut old_comps[old_id.0];
+                        if comp.preds.len() != 1 {
+                            // multiple predecessors, or none; not a candidate for merge
+                            let new_id = ComponentId(new_comps.len());
+                            new_comps.push(Component {
+                                fids: std::mem::take(&mut comp.fids),
+                                preds: std::mem::take(&mut comp.preds),
+                            });
+                            spot.insert(new_id);
+                            return new_id;
+                        }
+                        comp.preds[0]
+                    }
+                };
+                // only one predecessor: recurse, then merge our fids with theirs
+                let new_pred_id = apply_t2(old_pred_id, old_comps, new_comps, old_new_map);
+                old_new_map.insert(old_id, new_pred_id);
+                new_comps[new_pred_id.0]
+                    .fids
+                    .append(&mut old_comps[old_id.0].fids);
+                return new_pred_id;
+            }
+            // Apply T2 transformations
+            for i in 0..comps.len() {
+                apply_t2(ComponentId(i), &mut comps, &mut new_comps, &mut old_new_map);
+            }
+            std::mem::swap(&mut comps, &mut new_comps);
+            // Fixup T2 transformations
+            for comp in comps.iter_mut() {
+                comp.preds.iter_mut().for_each(|id| *id = old_new_map[id]);
                 comp.preds.sort_unstable();
                 comp.preds.dedup();
-                comp.preds.retain(|&id| id == ComponentId(i));
             }
-            for (i, comp) in comps.into_iter().enumerate() {
-                // merge
-                if comp.preds.len() == 1 {
-                    let pred = comp.preds[0];
-                    remap.insert(ComponentId(i), pred);
-                    new_comps[remap[&pred].0].nids.extend(comp.nids);
-                } else {
-                    let new_id = new_comps.len();
-                    new_comps.push(comp);
-                    remap.insert(ComponentId(i), ComponentId(new_id));
-                }
-            }
-            comps = new_comps;
-            for comp in comps.iter_mut() {
-                comp.preds.iter_mut().for_each(|id| *id = remap[id]);
-            }
-            if old_comps_len == comps.len() {
+            if comps.len() == old_len {
                 break;
             }
         }
@@ -211,8 +243,15 @@ mod tests {
         let funclets = make_arena(desc);
         let analysis = AnalysisGraph::new(0, &funclets);
         validate_dominators(desc, &analysis);
-        //let comps = analysis.components();
-        //assert!(comps.len() == 1);
+        let expected_comps = vec![Component {
+            fids: (0..desc.len()).collect(),
+            preds: Vec::new(),
+        }];
+        let mut actual_comps = analysis.components();
+        for comp in actual_comps.iter_mut() {
+            comp.fids.sort_unstable();
+        }
+        assert_eq!(expected_comps, actual_comps);
     }
     macro_rules! node_tail {
         ((ret)) => {
