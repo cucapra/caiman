@@ -20,48 +20,6 @@ struct Component {
     preds: Vec<ComponentId>,
 }
 
-fn components(graph: &AnalysisGraph) -> Vec<Component> {
-    // create initial components: one for each node
-    let mut comps = Vec::with_capacity(graph.nodes.len());
-    for node in graph.nodes.iter() {
-        comps.push(Component {
-            nids: vec![node.fid],
-            preds: node.preds.iter().map(|x| ComponentId(x.0 - 1)).collect(),
-        })
-    }
-    loop {
-        let old_comps_len = comps.len();
-        let mut new_comps: Vec<Component> = Vec::new();
-        let mut remap = HashMap::new();
-        for (i, comp) in comps.iter_mut().enumerate() {
-            // sort & deduplicate predecessors and remove self-loops (T1)
-            comp.preds.sort_unstable();
-            comp.preds.dedup();
-            comp.preds.retain(|&id| id == ComponentId(i));
-        }
-        for (i, comp) in comps.into_iter().enumerate() {
-            // merge
-            if comp.preds.len() == 1 {
-                let pred = comp.preds[0];
-                remap.insert(ComponentId(i), pred);
-                new_comps[remap[&pred].0].nids.extend(comp.nids);
-            } else {
-                let new_id = new_comps.len();
-                new_comps.push(comp);
-                remap.insert(ComponentId(i), ComponentId(new_id));
-            }
-        }
-        comps = new_comps;
-        for comp in comps.iter_mut() {
-            comp.preds.iter_mut().for_each(|id| *id = remap[id]);
-        }
-        if old_comps_len == comps.len() {
-            break;
-        }
-    }
-    comps
-}
-
 #[derive(Clone)]
 struct Node {
     // The ir funclet which this analysis node corresponds to.
@@ -149,6 +107,47 @@ impl AnalysisGraph {
     pub fn dominators(&self, fid: ir::FuncletId) -> impl '_ + Iterator<Item = ir::FuncletId> {
         Dominators::new(&self, fid)
     }
+    fn components(&self) -> Vec<Component> {
+        // create initial components: one for each node
+        let mut comps = Vec::with_capacity(self.nodes.len() - 1);
+        for node in self.nodes.iter() {
+            comps.push(Component {
+                nids: vec![node.fid],
+                preds: node.preds.iter().map(|x| ComponentId(x.0 - 1)).collect(),
+            })
+        }
+        loop {
+            let old_comps_len = comps.len();
+            let mut new_comps: Vec<Component> = Vec::new();
+            let mut remap = HashMap::new();
+            for (i, comp) in comps.iter_mut().enumerate() {
+                // sort & deduplicate predecessors and remove self-loops (T1)
+                comp.preds.sort_unstable();
+                comp.preds.dedup();
+                comp.preds.retain(|&id| id == ComponentId(i));
+            }
+            for (i, comp) in comps.into_iter().enumerate() {
+                // merge
+                if comp.preds.len() == 1 {
+                    let pred = comp.preds[0];
+                    remap.insert(ComponentId(i), pred);
+                    new_comps[remap[&pred].0].nids.extend(comp.nids);
+                } else {
+                    let new_id = new_comps.len();
+                    new_comps.push(comp);
+                    remap.insert(ComponentId(i), ComponentId(new_id));
+                }
+            }
+            comps = new_comps;
+            for comp in comps.iter_mut() {
+                comp.preds.iter_mut().for_each(|id| *id = remap[id]);
+            }
+            if old_comps_len == comps.len() {
+                break;
+            }
+        }
+        comps
+    }
 }
 struct Dominators<'a> {
     graph: &'a AnalysisGraph,
@@ -218,8 +217,8 @@ mod tests {
         let funclets = make_arena(desc);
         let analysis = AnalysisGraph::new(0, &funclets);
         validate_dominators(desc, &analysis);
-        //let comps = components(&analysis);
-        //assert!(comps.len() == 1);
+        let comps = analysis.components();
+        assert!(comps.len() == 1);
     }
     macro_rules! node_tail {
         ((ret)) => {
