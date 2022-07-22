@@ -175,12 +175,16 @@ impl<'a> Iterator for Dominators<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn assert_cfg(input: &[(ir::TailEdge, &[usize])]) {
+    struct NodeDesc {
+        tail: ir::TailEdge,
+        doms: &'static [ir::FuncletId],
+    }
+    fn make_arena(desc: &[NodeDesc]) -> Arena<ir::Funclet> {
         // NOTE: correctness here depends on empty arenas adding nodes with sequential ids
-        let mut funclets = Arena::new();
-        for (tail_edge, _) in input.iter() {
-            funclets.create(ir::Funclet {
-                tail_edge: tail_edge.clone(),
+        let mut arena = Arena::new();
+        for nd in desc.iter() {
+            arena.create(ir::Funclet {
+                tail_edge: nd.tail.clone(),
                 // everything below this point is probably incorrect
                 kind: ir::FuncletKind::MixedExplicit,
                 input_types: Box::new([]),
@@ -191,142 +195,158 @@ mod tests {
                 local_meta_variables: Default::default(),
             });
         }
-        let graph = AnalysisGraph::new(0, &funclets);
-        for (index, (_, dominators)) in input.iter().enumerate() {
-            let mut expected: Vec<_> = dominators.iter().map(|&id| id).collect();
+        arena
+    }
+    fn validate_dominators(desc: &[NodeDesc], analysis: &AnalysisGraph) {
+        for (index, nd) in desc.iter().enumerate() {
+            let mut expected: Vec<_> = nd.doms.iter().map(|&id| id).collect();
             expected.sort_unstable();
-            let mut actual: Vec<_> = graph.dominators(index).collect();
+            let mut actual: Vec<_> = analysis.dominators(index).collect();
             actual.sort_unstable();
             assert_eq!(expected, actual);
             // the last element of the dominator slice is always the node itself,
             // the *second* to last element is treated as the immediate dominator.
-            let idom = if dominators.len() >= 2 {
-                Some(dominators[dominators.len() - 2])
+            let idom = if nd.doms.len() >= 2 {
+                Some(nd.doms[nd.doms.len() - 2])
             } else {
                 None
             };
-            assert_eq!(idom, graph.immediate_dominator(index));
+            assert_eq!(idom, analysis.immediate_dominator(index));
         }
     }
-    macro_rules! ret {
-        () => {
-            ir::TailEdge::Return {
-                return_values: Box::new([]),
-            }
-        };
+    fn test_reducible(desc: &[NodeDesc]) {
+        let funclets = make_arena(desc);
+        let analysis = AnalysisGraph::new(0, &funclets);
+        validate_dominators(desc, &analysis);
+        //let comps = components(&analysis);
+        //assert!(comps.len() == 1);
     }
-    macro_rules! jmp {
-        ($i:expr) => {
-            ir::TailEdge::Jump(ir::Jump {
-                target: $i,
-                args: Box::new([]),
-            })
+    macro_rules! node_tail {
+        ((ret)) => {
+            ir::TailEdge::Return { return_values: Box::new([])}
         };
-    }
-    macro_rules! sel {
-        ($($i:expr),* $(,)?) => {
+        ((jmp $i:expr)) => {
+            ir::TailEdge::Jump(ir::Jump {target: $i, args: Box::new([])})
+        };
+        ((sel $($i:expr),+)) => {
             ir::TailEdge::Switch {
                 key: 0,
                 cases: Box::new([
-                    $(ir::Jump {target: $i, args: Box::new([])}),*
+                    $(ir::Jump {target: $i, args: Box::new([])}),+
                 ])
+            }
+        };
+    }
+    macro_rules! node {
+        ($tail:tt [$($dom:expr),+]) => {
+            NodeDesc {
+                tail: node_tail!($tail),
+                doms: &[ $($dom),+ ]
             }
         }
     }
+    macro_rules! nodes {
+        ($($tail:tt $doms:tt),*) => {
+            &[ $(node!($tail $doms)), *]
+        }
+    }
+
     #[test]
     fn ret() {
-        assert_cfg(&[(ret!(), &[0])])
+        test_reducible(nodes![(ret)[0]])
     }
     #[test]
     fn jmp() {
-        assert_cfg(&[
-            (jmp!(1), &[0]),      // = 0
-            (jmp!(2), &[0, 1]),   // = 1
-            (ret!(), &[0, 1, 2]), // = 2
+        test_reducible(nodes![
+            (jmp 1)     [0],                // = 0
+            (jmp 2)     [0, 1],             // = 1
+            (ret)       [0, 1, 2]           // = 2
         ])
     }
     #[test]
     fn sel() {
-        assert_cfg(&[
-            (sel![1, 2, 3], &[0]), // = 0
-            (ret!(), &[0, 1]),     // = 1
-            (sel![4, 5], &[0, 2]), // = 2
-            (ret!(), &[0, 3]),     // = 3
-            (ret!(), &[0, 2, 4]),  // = 4
-            (ret!(), &[0, 2, 5]),  // = 5
+        test_reducible(nodes![
+            (sel 1, 2, 3)   [0],            // = 0
+            (ret)           [0, 1],         // = 1
+            (sel 4, 5)      [0, 2],         // = 2
+            (ret)           [0, 3],         // = 3
+            (ret)           [0, 2, 4],      // = 4
+            (ret)           [0, 2, 5]       // = 5
         ])
     }
     #[test]
     fn entry_loop_inf() {
-        assert_cfg(&[(jmp!(0), &[0])])
+        test_reducible(nodes![(jmp 0) [0]])
     }
     #[test]
     fn entry_loop() {
-        assert_cfg(&[(sel![0, 1], &[0]), (ret!(), &[0, 1])])
+        test_reducible(nodes![(sel 0, 1) [0], (ret) [0, 1]])
     }
     #[test]
     fn nested_loop_1() {
-        assert_cfg(&[
-            (jmp!(1), &[0]),          // = 0
-            (sel![1, 2], &[0, 1]),    // = 1
-            (sel![0, 3], &[0, 1, 2]), // = 2
-            (ret!(), &[0, 1, 2, 3]),  // = 3
+        test_reducible(nodes![
+            (jmp 1)     [0],            // = 0
+            (sel 1, 2)  [0, 1],         // = 1
+            (sel 0, 3)  [0, 1, 2],      // = 2
+            (ret)       [0, 1, 2, 3]    // = 3
         ])
     }
     #[test]
     fn nested_loop_2() {
-        assert_cfg(&[
-            (sel![0, 1], &[0]),             // = 0
-            (sel![0, 1, 2], &[0, 1]),       // = 1
-            (sel![0, 1, 2, 3], &[0, 1, 2]), // = 2
-            (ret!(), &[0, 1, 2, 3]),        // = 3
+        test_reducible(nodes![
+            (sel 0, 1)          [0],            // = 0
+            (sel 0, 1, 2)       [0, 1],         // = 1
+            (sel 0, 1, 2, 3)    [0, 1, 2],      // = 2
+            (ret)               [0, 1, 2, 3]    // = 3
         ])
     }
     #[test]
     fn diamond() {
-        assert_cfg(&[
-            (sel![1, 2], &[0]), // = 0
-            (jmp!(3), &[0, 1]), // = 1
-            (jmp!(3), &[0, 2]), // = 2
-            (ret!(), &[0, 3]),  // = 3
+        test_reducible(nodes![
+            (sel 1, 2)  [0],    // = 0
+            (jmp 3)     [0, 1], // = 1
+            (jmp 3)     [0, 2], // = 2
+            (ret)       [0, 3]  // = 3
         ])
     }
     #[test]
     fn ece5775_lec6_pg22() {
-        assert_cfg(&[
-            (jmp!(1), &[0]),                   // just to make nodes align
-            (jmp!(2), &[0, 1]),                // = 1
-            (sel![3, 10], &[0, 1, 2]),         // = 2
-            (jmp!(4), &[0, 1, 2, 3]),          // = 3
-            (sel![5, 9], &[0, 1, 2, 3, 4]),    // = 4
-            (sel![6, 7], &[0, 1, 2, 3, 4, 5]), // = 5
-            (jmp!(8), &[0, 1, 2, 3, 4, 5, 6]), // = 6
-            (jmp!(8), &[0, 1, 2, 3, 4, 5, 7]), // = 7
-            (jmp!(4), &[0, 1, 2, 3, 4, 5, 8]), // = 8
-            (jmp!(2), &[0, 1, 2, 3, 4, 9]),    // = 9
-            (ret!(), &[0, 1, 2, 10]),          // = 10
+        test_reducible(nodes![
+            (jmp 1)     [0],                    // just to make nodes align
+            (jmp 2)     [0, 1],                 // = 1
+            (sel 3, 10) [0, 1, 2],              // = 2
+            (jmp 4)     [0, 1, 2, 3],           // = 3
+            (sel 5, 9)  [0, 1, 2, 3, 4],        // = 4
+            (sel 6, 7)  [0, 1, 2, 3, 4, 5],     // = 5
+            (jmp 8)     [0, 1, 2, 3, 4, 5, 6],  // = 6
+            (jmp 8)     [0, 1, 2, 3, 4, 5, 7],  // = 7
+            (jmp 4)     [0, 1, 2, 3, 4, 5, 8],  // = 8
+            (jmp 2)     [0, 1, 2, 3, 4, 9],     // = 9
+            (ret)       [0, 1, 2, 10]           // = 10
         ])
     }
     #[test]
     fn switch_fallthrough() {
-        assert_cfg(&[
-            (sel![1, 2, 3, 4], &[0]), // = 0
-            (jmp!(2), &[0, 1]),       // = 1
-            (jmp!(3), &[0, 2]),       // = 2
-            (jmp!(4), &[0, 3]),       // = 3
-            (ret!(), &[0, 4]),        // = 4
+        test_reducible(nodes![
+            (sel 1, 2, 3, 4)    [0],    // = 0
+            (jmp 2)             [0, 1], // = 1
+            (jmp 3)             [0, 2], // = 2
+            (jmp 4)             [0, 3], // = 3
+            (ret)               [0, 4]  // = 4
         ])
     }
     #[test]
     fn switch_fallthrough_rev() {
-        assert_cfg(&[
-            (sel![1, 2, 3, 4], &[0]), // = 0
-            (ret!(), &[0, 1]),        // = 1
-            (jmp!(1), &[0, 2]),       // = 2
-            (jmp!(2), &[0, 3]),       // = 3
-            (jmp!(3), &[0, 4]),       // = 4
+        test_reducible(nodes![
+            (sel 1, 2, 3, 4)    [0],    // = 0
+            (ret)               [0, 1], // = 1
+            (jmp 1)             [0, 2], // = 2
+            (jmp 2)             [0, 3], // = 3
+            (jmp 3)             [0, 4]  // = 4
         ])
     }
+
+    /*
     mod irreducible {
         use super::*;
         #[test]
@@ -379,4 +399,5 @@ mod tests {
             ])
         }
     }
+    */
 }
