@@ -37,7 +37,9 @@ fn main()
     }
     if args.value_language
     {
-        match value_language::parse_file(String::from(args.filename).clone())
+        match value_language::run_parser::parse_file(
+            String::from(args.filename).clone()
+        )
         {
             Ok(ast) => {
                 for statement in ast.iter() 
@@ -46,7 +48,7 @@ fn main()
                 }
             },
             Err(why) => {
-                println!("Parser error: {}", why)
+                println!("{}", why)
             },
         }
     }
