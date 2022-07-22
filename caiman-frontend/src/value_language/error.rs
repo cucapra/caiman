@@ -1,8 +1,10 @@
 use std::fmt;
+use crate::value_language::check::SemanticError;
 
 pub enum Error
 {
     Parsing(String),
+    Semantic(SemanticError),
 }
 
 impl fmt::Display for Error
@@ -12,6 +14,7 @@ impl fmt::Display for Error
         match self
         {
             Error::Parsing(s) => write!(f, "Parsing Error: {}", s),
+            Error::Semantic(e) => panic!("TODO"),
         }
     }
 }

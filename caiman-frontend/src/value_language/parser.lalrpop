@@ -18,7 +18,7 @@ match {
 
 pub Program: Program = { Statement* => <> }
 
-pub Statement: Statement = {
+pub Statement: ParsedStatement = {
     "if" <Exp> "{" <Statement*> "}" => Statement::If(<>),
     "while" <Exp> "{" <Statement*> "}" => Statement::While(<>),
     "print" "(" <Exp> ")" ";" => Statement::Print(<>),

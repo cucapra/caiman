@@ -1,5 +1,5 @@
 // auto-generated: "lalrpop 0.19.8"
-// sha3: 6080c4f174ff93fea460dfdf73eba86f7fee4e1b9da7c461094124629bb9004c
+// sha3: 35d7aa6f22cf376d5a583fe57d4afcb878d9be537d9a3847b11a5e914ccc833a
 use std::str::FromStr;
 use crate::value_language::ast::*;
 #[allow(unused_extern_crates)]
@@ -38,8 +38,8 @@ mod __parse__Program {
         Variant10(core::option::Option<String>),
         Variant11(bool),
         Variant12(Program),
-        Variant13(Statement),
-        Variant14(alloc::vec::Vec<Statement>),
+        Variant13(ParsedStatement),
+        Variant14(alloc::vec::Vec<ParsedStatement>),
     }
     const __ACTION: &[i8] = &[
         // State 0
@@ -1035,6 +1035,17 @@ mod __parse__Program {
             _ => __symbol_type_mismatch()
         }
     }
+    fn __pop_Variant13<
+      'input,
+    >(
+        __symbols: &mut alloc::vec::Vec<(usize,__Symbol<'input>,usize)>
+    ) -> (usize, ParsedStatement, usize)
+     {
+        match __symbols.pop() {
+            Some((__l, __Symbol::Variant13(__v), __r)) => (__l, __v, __r),
+            _ => __symbol_type_mismatch()
+        }
+    }
     fn __pop_Variant12<
       'input,
     >(
@@ -1043,17 +1054,6 @@ mod __parse__Program {
      {
         match __symbols.pop() {
             Some((__l, __Symbol::Variant12(__v), __r)) => (__l, __v, __r),
-            _ => __symbol_type_mismatch()
-        }
-    }
-    fn __pop_Variant13<
-      'input,
-    >(
-        __symbols: &mut alloc::vec::Vec<(usize,__Symbol<'input>,usize)>
-    ) -> (usize, Statement, usize)
-     {
-        match __symbols.pop() {
-            Some((__l, __Symbol::Variant13(__v), __r)) => (__l, __v, __r),
             _ => __symbol_type_mismatch()
         }
     }
@@ -1105,7 +1105,7 @@ mod __parse__Program {
       'input,
     >(
         __symbols: &mut alloc::vec::Vec<(usize,__Symbol<'input>,usize)>
-    ) -> (usize, alloc::vec::Vec<Statement>, usize)
+    ) -> (usize, alloc::vec::Vec<ParsedStatement>, usize)
      {
         match __symbols.pop() {
             Some((__l, __Symbol::Variant14(__v), __r)) => (__l, __v, __r),
@@ -2549,8 +2549,8 @@ mod __parse__Statement {
         Variant10(core::option::Option<String>),
         Variant11(bool),
         Variant12(Program),
-        Variant13(Statement),
-        Variant14(alloc::vec::Vec<Statement>),
+        Variant13(ParsedStatement),
+        Variant14(alloc::vec::Vec<ParsedStatement>),
     }
     const __ACTION: &[i8] = &[
         // State 0
@@ -3097,7 +3097,7 @@ mod __parse__Statement {
         type Token = Token<'input>;
         type TokenIndex = usize;
         type Symbol = __Symbol<'input>;
-        type Success = Statement;
+        type Success = ParsedStatement;
         type StateIndex = i8;
         type Action = i8;
         type ReduceIndex = i8;
@@ -3255,7 +3255,7 @@ mod __parse__Statement {
         >(
             &self,
             input: &'input str,
-        ) -> Result<Statement, __lalrpop_util::ParseError<usize, Token<'input>, &'static str>>
+        ) -> Result<ParsedStatement, __lalrpop_util::ParseError<usize, Token<'input>, &'static str>>
         {
             let mut __tokens = self.builder.matcher(input);
             __state_machine::Parser::drive(
@@ -3276,7 +3276,7 @@ mod __parse__Statement {
         __states: &mut alloc::vec::Vec<i8>,
         __symbols: &mut alloc::vec::Vec<(usize,__Symbol<'input>,usize)>,
         _: core::marker::PhantomData<(&'input ())>,
-    ) -> Option<Result<Statement,__lalrpop_util::ParseError<usize, Token<'input>, &'static str>>>
+    ) -> Option<Result<ParsedStatement,__lalrpop_util::ParseError<usize, Token<'input>, &'static str>>>
     {
         let (__pop_states, __nonterminal) = match __action {
             0 => {
@@ -3541,6 +3541,17 @@ mod __parse__Statement {
             _ => __symbol_type_mismatch()
         }
     }
+    fn __pop_Variant13<
+      'input,
+    >(
+        __symbols: &mut alloc::vec::Vec<(usize,__Symbol<'input>,usize)>
+    ) -> (usize, ParsedStatement, usize)
+     {
+        match __symbols.pop() {
+            Some((__l, __Symbol::Variant13(__v), __r)) => (__l, __v, __r),
+            _ => __symbol_type_mismatch()
+        }
+    }
     fn __pop_Variant12<
       'input,
     >(
@@ -3549,17 +3560,6 @@ mod __parse__Statement {
      {
         match __symbols.pop() {
             Some((__l, __Symbol::Variant12(__v), __r)) => (__l, __v, __r),
-            _ => __symbol_type_mismatch()
-        }
-    }
-    fn __pop_Variant13<
-      'input,
-    >(
-        __symbols: &mut alloc::vec::Vec<(usize,__Symbol<'input>,usize)>
-    ) -> (usize, Statement, usize)
-     {
-        match __symbols.pop() {
-            Some((__l, __Symbol::Variant13(__v), __r)) => (__l, __v, __r),
             _ => __symbol_type_mismatch()
         }
     }
@@ -3611,7 +3611,7 @@ mod __parse__Statement {
       'input,
     >(
         __symbols: &mut alloc::vec::Vec<(usize,__Symbol<'input>,usize)>
-    ) -> (usize, alloc::vec::Vec<Statement>, usize)
+    ) -> (usize, alloc::vec::Vec<ParsedStatement>, usize)
      {
         match __symbols.pop() {
             Some((__l, __Symbol::Variant14(__v), __r)) => (__l, __v, __r),
@@ -5038,7 +5038,7 @@ mod __intern_token {
     extern crate alloc;
     pub fn new_builder() -> __lalrpop_util::lexer::MatcherBuilder {
         let __strs: &[(&str, bool)] = &[
-            ("^(//[\u{0}-\t\u{b}-\u{c}\u{e}-\u{10ffff}]*[\n\r]*)", true),
+            ("^(//[\0-\t\u{b}-\u{c}\u{e}-\u{10ffff}]*[\n\r]*)", true),
             ("^([\\-]?[0-9]+([\\.][0-9]+)?)", false),
             ("^([A-Za-z][0-9A-Z_a-z]*)", false),
             ("^([\t-\r \u{85}\u{a0}\u{1680}\u{2000}-\u{200a}\u{2028}-\u{2029}\u{202f}\u{205f}\u{3000}]*)", true),
@@ -5090,8 +5090,8 @@ fn __action1<
     'input,
 >(
     input: &'input str,
-    (_, __0, _): (usize, Statement, usize),
-) -> Statement
+    (_, __0, _): (usize, ParsedStatement, usize),
+) -> ParsedStatement
 {
     __0
 }
@@ -5101,7 +5101,7 @@ fn __action2<
     'input,
 >(
     input: &'input str,
-    (_, __0, _): (usize, alloc::vec::Vec<Statement>, usize),
+    (_, __0, _): (usize, alloc::vec::Vec<ParsedStatement>, usize),
 ) -> Program
 {
     __0
@@ -5115,9 +5115,9 @@ fn __action3<
     (_, _, _): (usize, &'input str, usize),
     (_, __0, _): (usize, Exp, usize),
     (_, _, _): (usize, &'input str, usize),
-    (_, __1, _): (usize, alloc::vec::Vec<Statement>, usize),
+    (_, __1, _): (usize, alloc::vec::Vec<ParsedStatement>, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::If(__0, __1)
 }
@@ -5130,9 +5130,9 @@ fn __action4<
     (_, _, _): (usize, &'input str, usize),
     (_, __0, _): (usize, Exp, usize),
     (_, _, _): (usize, &'input str, usize),
-    (_, __1, _): (usize, alloc::vec::Vec<Statement>, usize),
+    (_, __1, _): (usize, alloc::vec::Vec<ParsedStatement>, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::While(__0, __1)
 }
@@ -5147,7 +5147,7 @@ fn __action5<
     (_, __0, _): (usize, Exp, usize),
     (_, _, _): (usize, &'input str, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::Print(__0)
 }
@@ -5163,7 +5163,7 @@ fn __action6<
     (_, _, _): (usize, &'input str, usize),
     (_, __2, _): (usize, Exp, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::Let(__0, __1, __2)
 }
@@ -5177,7 +5177,7 @@ fn __action7<
     (_, _, _): (usize, &'input str, usize),
     (_, __1, _): (usize, Exp, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::Assign(__0, __1)
 }
@@ -5193,9 +5193,9 @@ fn __action8<
     (_, __1, _): (usize, Vec<String>, usize),
     (_, _, _): (usize, &'input str, usize),
     (_, _, _): (usize, &'input str, usize),
-    (_, __2, _): (usize, alloc::vec::Vec<Statement>, usize),
+    (_, __2, _): (usize, alloc::vec::Vec<ParsedStatement>, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::Function(__0, __1, __2)
 }
@@ -5210,7 +5210,7 @@ fn __action9<
     (_, __1, _): (usize, Vec<Exp>, usize),
     (_, _, _): (usize, &'input str, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::Call(__0, __1)
 }
@@ -5223,7 +5223,7 @@ fn __action10<
     (_, _, _): (usize, &'input str, usize),
     (_, __0, _): (usize, Exp, usize),
     (_, _, _): (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     Statement::Return(__0)
 }
@@ -5646,7 +5646,7 @@ fn __action45<
     input: &'input str,
     __lookbehind: &usize,
     __lookahead: &usize,
-) -> alloc::vec::Vec<Statement>
+) -> alloc::vec::Vec<ParsedStatement>
 {
     alloc::vec![]
 }
@@ -5656,8 +5656,8 @@ fn __action46<
     'input,
 >(
     input: &'input str,
-    (_, v, _): (usize, alloc::vec::Vec<Statement>, usize),
-) -> alloc::vec::Vec<Statement>
+    (_, v, _): (usize, alloc::vec::Vec<ParsedStatement>, usize),
+) -> alloc::vec::Vec<ParsedStatement>
 {
     v
 }
@@ -5667,8 +5667,8 @@ fn __action47<
     'input,
 >(
     input: &'input str,
-    (_, __0, _): (usize, Statement, usize),
-) -> alloc::vec::Vec<Statement>
+    (_, __0, _): (usize, ParsedStatement, usize),
+) -> alloc::vec::Vec<ParsedStatement>
 {
     alloc::vec![__0]
 }
@@ -5678,9 +5678,9 @@ fn __action48<
     'input,
 >(
     input: &'input str,
-    (_, v, _): (usize, alloc::vec::Vec<Statement>, usize),
-    (_, e, _): (usize, Statement, usize),
-) -> alloc::vec::Vec<Statement>
+    (_, v, _): (usize, alloc::vec::Vec<ParsedStatement>, usize),
+    (_, e, _): (usize, ParsedStatement, usize),
+) -> alloc::vec::Vec<ParsedStatement>
 {
     { let mut v = v; v.push(e); v }
 }
@@ -6287,7 +6287,7 @@ fn __action82<
     'input,
 >(
     input: &'input str,
-    __0: (usize, alloc::vec::Vec<Statement>, usize),
+    __0: (usize, alloc::vec::Vec<ParsedStatement>, usize),
 ) -> Program
 {
     let __start0 = __0.0.clone();
@@ -6312,7 +6312,7 @@ fn __action83<
     __1: (usize, Exp, usize),
     __2: (usize, &'input str, usize),
     __3: (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     let __start0 = __2.2.clone();
     let __end0 = __3.0.clone();
@@ -6340,9 +6340,9 @@ fn __action84<
     __0: (usize, &'input str, usize),
     __1: (usize, Exp, usize),
     __2: (usize, &'input str, usize),
-    __3: (usize, alloc::vec::Vec<Statement>, usize),
+    __3: (usize, alloc::vec::Vec<ParsedStatement>, usize),
     __4: (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     let __start0 = __3.0.clone();
     let __end0 = __3.2.clone();
@@ -6370,7 +6370,7 @@ fn __action85<
     __1: (usize, Exp, usize),
     __2: (usize, &'input str, usize),
     __3: (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     let __start0 = __2.2.clone();
     let __end0 = __3.0.clone();
@@ -6398,9 +6398,9 @@ fn __action86<
     __0: (usize, &'input str, usize),
     __1: (usize, Exp, usize),
     __2: (usize, &'input str, usize),
-    __3: (usize, alloc::vec::Vec<Statement>, usize),
+    __3: (usize, alloc::vec::Vec<ParsedStatement>, usize),
     __4: (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     let __start0 = __3.0.clone();
     let __end0 = __3.2.clone();
@@ -6431,7 +6431,7 @@ fn __action87<
     __4: (usize, &'input str, usize),
     __5: (usize, &'input str, usize),
     __6: (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     let __start0 = __5.2.clone();
     let __end0 = __6.0.clone();
@@ -6465,9 +6465,9 @@ fn __action88<
     __3: (usize, Vec<String>, usize),
     __4: (usize, &'input str, usize),
     __5: (usize, &'input str, usize),
-    __6: (usize, alloc::vec::Vec<Statement>, usize),
+    __6: (usize, alloc::vec::Vec<ParsedStatement>, usize),
     __7: (usize, &'input str, usize),
-) -> Statement
+) -> ParsedStatement
 {
     let __start0 = __6.0.clone();
     let __end0 = __6.2.clone();

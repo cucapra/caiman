@@ -1,16 +1,17 @@
 // AST
+use crate::value_language::typing;
 
 pub type Var = String;
 
 // Negative numbers are parsed as negative at a later stage
 // because we store all numbers as Strings here
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Unop 
 {
     Not,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Binop
 {
     Plus,
@@ -22,7 +23,7 @@ pub enum Binop
     Or,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Exp
 {
     Var(Var),
@@ -35,20 +36,30 @@ pub enum Exp
     Labeled(Var, Box<Exp>),
 }
 
-#[derive(Debug)]
-pub enum Statement
+// The two types of statement are so that one can contain ordinary
+// expresions (Statement) while the other (AnnotatedStatement) contains the 
+// types of its underlying expressions as well
+
+#[derive(Debug, Clone)]
+pub enum Statement<E>
 {
-    If(Exp, Vec<Statement>),
-    While(Exp, Vec<Statement>),
-    Print(Exp),
-    Let(bool, Var, Exp),
-    Assign(Var, Exp),
-    Function(Var, Vec<Var>, Vec<Statement>),
-    Call(Var, Vec<Exp>),
-    Return(Exp),
+    If(E, Vec<Statement<E>>),
+    While(E, Vec<Statement<E>>),
+    Print(E),
+    Let(bool, Var, E),
+    Assign(Var, E),
+    Function(Var, Vec<Var>, Vec<Statement<E>>),
+    Call(Var, Vec<E>),
+    Return(E),
 }
 
-pub type Program = Vec<Statement>;
+pub type ParsedStatement = Statement<Exp>;
+
+pub type CheckedStatement = Statement<(typing::Type, Exp)>;
+
+pub type Program = Vec<ParsedStatement>;
+
+pub type CheckedProgram = Vec<CheckedStatement>;
 
 // Factory
 pub fn make_binop(e1: Exp, b: Binop, e2: Exp) -> Exp
