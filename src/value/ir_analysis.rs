@@ -6,10 +6,60 @@ use std::{
     collections::hash_map::{Entry, HashMap},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NodeId(usize);
 impl NodeId {
     const PREENTRY: Self = Self(0);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct ComponentId(usize);
+
+struct Component {
+    nids: Vec<ir::FuncletId>,
+    preds: Vec<ComponentId>,
+}
+
+fn components(graph: &AnalysisGraph) -> Vec<Component> {
+    // create initial components: one for each node
+    let mut comps = Vec::with_capacity(graph.nodes.len());
+    for node in graph.nodes.iter() {
+        comps.push(Component {
+            nids: vec![node.fid],
+            preds: node.preds.iter().map(|x| ComponentId(x.0 - 1)).collect(),
+        })
+    }
+    loop {
+        let old_comps_len = comps.len();
+        let mut new_comps: Vec<Component> = Vec::new();
+        let mut remap = HashMap::new();
+        for (i, comp) in comps.iter_mut().enumerate() {
+            // sort & deduplicate predecessors and remove self-loops (T1)
+            comp.preds.sort_unstable();
+            comp.preds.dedup();
+            comp.preds.retain(|&id| id == ComponentId(i));
+        }
+        for (i, comp) in comps.into_iter().enumerate() {
+            // merge
+            if comp.preds.len() == 1 {
+                let pred = comp.preds[0];
+                remap.insert(ComponentId(i), pred);
+                new_comps[remap[&pred].0].nids.extend(comp.nids);
+            } else {
+                let new_id = new_comps.len();
+                new_comps.push(comp);
+                remap.insert(ComponentId(i), ComponentId(new_id));
+            }
+        }
+        comps = new_comps;
+        for comp in comps.iter_mut() {
+            comp.preds.iter_mut().for_each(|id| *id = remap[id]);
+        }
+        if old_comps_len == comps.len() {
+            break;
+        }
+    }
+    comps
 }
 
 #[derive(Clone)]
@@ -121,10 +171,10 @@ impl<'a> Iterator for Dominators<'a> {
         Some(node.fid)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
     fn assert_cfg(input: &[(ir::TailEdge, &[usize])]) {
         // NOTE: correctness here depends on empty arenas adding nodes with sequential ids
         let mut funclets = Arena::new();
