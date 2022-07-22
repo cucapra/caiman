@@ -116,10 +116,10 @@ impl AnalysisGraph {
         }
 
         let mut new_comps = Vec::with_capacity(self.nodes.len());
-        let mut old_new_map = HashMap::with_capacity(self.nodes.len());
+        let mut map = HashMap::with_capacity(self.nodes.len());
         loop {
             new_comps.clear();
-            old_new_map.clear();
+            map.clear();
             let old_len = comps.len();
 
             // Apply T1 transformation - remove self loops
@@ -157,12 +157,12 @@ impl AnalysisGraph {
             }
             // Apply T2 transformations
             for i in 0..comps.len() {
-                apply_t2(ComponentId(i), &mut comps, &mut new_comps, &mut old_new_map);
+                apply_t2(ComponentId(i), &mut comps, &mut new_comps, &mut map);
             }
             std::mem::swap(&mut comps, &mut new_comps);
             // Fixup T2 transformations
             for comp in comps.iter_mut() {
-                comp.preds.iter_mut().for_each(|id| *id = old_new_map[id]);
+                comp.preds.iter_mut().for_each(|id| *id = map[id]);
                 comp.preds.sort_unstable();
                 comp.preds.dedup();
             }
@@ -235,19 +235,31 @@ mod tests {
             assert_eq!(idom, analysis.immediate_dominator(index));
         }
     }
-    fn test_reducible(desc: &[NodeDesc]) {
-        let funclets = make_arena(desc);
-        let analysis = AnalysisGraph::new(0, &funclets);
-        validate_dominators(desc, &analysis);
+    fn validate_reducible(desc: &[NodeDesc], components: Vec<Component>) {
         let expected_comps = vec![Component {
             fids: (0..desc.len()).collect(),
             preds: Vec::new(),
         }];
-        let mut actual_comps = analysis.components();
+        let mut actual_comps = components;
         for comp in actual_comps.iter_mut() {
             comp.fids.sort_unstable();
         }
         assert_eq!(expected_comps, actual_comps);
+    }
+    fn test_reducible(desc: &[NodeDesc]) {
+        let funclets = make_arena(desc);
+        let analysis = AnalysisGraph::new(0, &funclets);
+        validate_dominators(desc, &analysis);
+        validate_reducible(desc, analysis.components());
+    }
+    fn test_irreducible(pre: &[NodeDesc], post: &[NodeDesc]) {
+        let pre_funclets = make_arena(pre);
+        let post_funclets = make_arena(post);
+        let pre_analysis = AnalysisGraph::new(0, &pre_funclets);
+        validate_dominators(pre, &pre_analysis);
+        // ..
+        // validate_dominators(post, &post_analysis)
+        // validate_reducible(post, post_analysis.components());
     }
     macro_rules! node_tail {
         ((ret)) => {
@@ -374,58 +386,78 @@ mod tests {
         ])
     }
 
-    /*
-    mod irreducible {
-        use super::*;
-        #[test]
-        fn dom14_fig2() {
-            assert_cfg(&[
-                (sel![1, 2], &[0]), // = 0 (dom14:2:5)
-                (jmp!(3), &[0, 1]), // = 1 (dom14:2:4)
-                (jmp!(4), &[0, 2]), // = 2 (dom14:2:3)
-                (jmp!(4), &[0, 3]), // = 3 (dom14:2:1)
-                (jmp!(3), &[0, 4]), // = 1 (dom14:2:2)
-            ])
-        }
-        #[test]
-        fn dom14_fig4() {
-            assert_cfg(&[
-                (sel![1, 2], &[0]),    // = 0 (dom14:4:6)
-                (jmp!(3), &[0, 1]),    // = 1 (dom14:4:5)
-                (sel![4, 5], &[0, 2]), // = 2 (dom14:4:4)
-                (jmp!(4), &[0, 3]),    // = 3 (dom14:4:1)
-                (sel![3, 5], &[0, 4]), // = 4 (dom14:4:2)
-                (jmp!(4), &[0, 5]),    // = 5 (dom14:4:3)
-            ])
-        }
-        #[test]
-        fn triangle() {
-            assert_cfg(&[
-                (sel![1, 2], &[0]), // = 0
-                (jmp!(2), &[0, 1]), // = 1
-                (jmp!(1), &[0, 2]), // = 2
-            ])
-        }
-        #[test]
-        fn pogo() {
-            assert_cfg(&[
-                (jmp!(1), &[0]),       // = 0
-                (jmp!(2), &[0, 1]),    // = 1
-                (jmp!(1), &[0, 1, 2]), // = 2
-            ])
-        }
-        #[test]
-        fn circle_like() {
-            assert_cfg(&[
-                (sel![1, 5], &[0]),       // = 0
-                (jmp!(2), &[0, 1]),       // = 1
-                (sel![1, 3], &[0, 2]),    // = 2
-                (sel![2, 4, 6], &[0, 3]), // = 3
-                (sel![3, 5], &[0, 4]),    // = 4
-                (jmp!(4), &[0, 5]),       // = 5
-                (ret!(), &[0, 3, 6]),     // = 6
-            ])
-        }
+    #[test]
+    fn dom14_fig2() {
+        test_irreducible(
+            nodes![
+                (sel 1, 2)  [0],    // = 0 (dom14:2:5)
+                (jmp 3)     [0, 1], // = 1 (dom14:2:4)
+                (jmp 4)     [0, 2], // = 2 (dom14:2:3)
+                (jmp 4)     [0, 3], // = 3 (dom14:2:1)
+                (jmp 3)     [0, 4]  // = 1 (dom14:2:2)
+            ],
+            nodes![
+                // TODO
+            ],
+        )
     }
-    */
+    #[test]
+    fn dom14_fig4() {
+        test_irreducible(
+            nodes![
+                (sel 1, 2)  [0],    // = 0 (dom14:4:6)
+                (jmp 3)     [0, 1], // = 1 (dom14:4:5)
+                (sel 4, 5)  [0, 2], // = 2 (dom14:4:4)
+                (jmp 4)     [0, 3], // = 3 (dom14:4:1)
+                (sel 3, 5)  [0, 4], // = 4 (dom14:4:2)
+                (jmp 4)     [0, 5]  // = 5 (dom14:4:3)
+            ],
+            nodes![
+                // TODO
+            ],
+        )
+    }
+    #[test]
+    fn triangle() {
+        test_irreducible(
+            nodes![
+                (sel 1, 2)  [0],    // = 0
+                (jmp 2)     [0, 1], // = 1
+                (jmp 1)     [0, 2]  // = 2
+            ],
+            nodes![
+                // TODO
+            ],
+        )
+    }
+    #[test]
+    fn pogo() {
+        test_irreducible(
+            nodes![
+                (jmp 1) [0],       // = 0
+                (jmp 2) [0, 1],    // = 1
+                (jmp 1) [0, 1, 2] // = 2
+            ],
+            nodes![
+                // TODO
+            ],
+        )
+    }
+    #[test]
+    fn circle_like() {
+        test_irreducible(
+            nodes![
+                (sel 1, 5)      [0],        // = 0
+                (jmp 2)         [0, 1],     // = 1
+                (sel 1, 3)      [0, 2],     // = 2
+                (sel 2, 4, 6)   [0, 3],     // = 3
+                (sel 3, 5)      [0, 4],     // = 4
+                (jmp 4)         [0, 5],     // = 5
+                (ret)           [0, 3, 6]   // = 6
+            ],
+            nodes![
+                // TODO
+            ],
+        )
+    }
 }
