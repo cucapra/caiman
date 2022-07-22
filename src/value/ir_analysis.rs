@@ -107,14 +107,12 @@ impl AnalysisGraph {
     fn components(&self) -> Vec<Component> {
         // create initial components: one for each node
         let mut comps = Vec::with_capacity(self.nodes.len());
-        let mut remap = HashMap::with_capacity(self.nodes.len());
 
-        for (i, node) in self.nodes.iter().enumerate() {
+        for node in self.nodes.iter() {
             comps.push(Component {
                 fids: vec![node.fid],
                 preds: node.preds.iter().map(|x| ComponentId(x.0)).collect(),
             });
-            remap.insert(ComponentId(i), ComponentId(i));
         }
 
         let mut new_comps = Vec::with_capacity(self.nodes.len());
@@ -130,18 +128,18 @@ impl AnalysisGraph {
             }
             fn apply_t2(
                 old_id: ComponentId,
-                old_comps: &mut [Component],
-                new_comps: &mut Vec<Component>,
-                old_new_map: &mut HashMap<ComponentId, ComponentId>,
+                old: &mut [Component],
+                new: &mut Vec<Component>,
+                map: &mut HashMap<ComponentId, ComponentId>,
             ) -> ComponentId {
-                let old_pred_id = match old_new_map.entry(old_id) {
+                let old_pid = match map.entry(old_id) {
                     Entry::Occupied(new_id) => return *new_id.get(),
                     Entry::Vacant(spot) => {
-                        let comp = &mut old_comps[old_id.0];
+                        let comp = &mut old[old_id.0];
                         if comp.preds.len() != 1 {
                             // multiple predecessors, or none; not a candidate for merge
-                            let new_id = ComponentId(new_comps.len());
-                            new_comps.push(Component {
+                            let new_id = ComponentId(new.len());
+                            new.push(Component {
                                 fids: std::mem::take(&mut comp.fids),
                                 preds: std::mem::take(&mut comp.preds),
                             });
@@ -152,12 +150,10 @@ impl AnalysisGraph {
                     }
                 };
                 // only one predecessor: recurse, then merge our fids with theirs
-                let new_pred_id = apply_t2(old_pred_id, old_comps, new_comps, old_new_map);
-                old_new_map.insert(old_id, new_pred_id);
-                new_comps[new_pred_id.0]
-                    .fids
-                    .append(&mut old_comps[old_id.0].fids);
-                return new_pred_id;
+                let new_pid = apply_t2(old_pid, old, new, map);
+                map.insert(old_id, new_pid);
+                new[new_pid.0].fids.append(&mut old[old_id.0].fids);
+                return new_pid;
             }
             // Apply T2 transformations
             for i in 0..comps.len() {
