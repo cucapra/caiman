@@ -224,6 +224,13 @@ impl TailEdge {
 			Self::Switch { cases, .. } => cases.iter().for_each(|jump| f(jump.target))
 		}
 	}
+	pub fn map_funclets(&mut self, mut f: impl FnMut(FuncletId) -> FuncletId) {
+		match self {
+			Self::Return { .. } => (),
+			Self::Jump(jump) => jump.target = f(jump.target),
+			Self::Switch { cases, .. } => cases.iter_mut().for_each(|jump| jump.target = f(jump.target)),
+		};
+	}
 }
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind

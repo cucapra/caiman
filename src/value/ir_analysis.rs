@@ -4,6 +4,7 @@ use crate::ir;
 use std::{
     cmp::Ordering,
     collections::hash_map::{Entry, HashMap},
+    path::Components,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -31,6 +32,7 @@ struct Node {
     // A list of this funclet's immediate predecessors.
     preds: Vec<NodeId>,
 }
+
 pub struct AnalysisGraph {
     /// The nodes in the analysis tree.
     nodes: Vec<Node>,
@@ -193,6 +195,28 @@ impl<'a> Iterator for Dominators<'a> {
     }
 }
 
+pub fn make_reducible(head: ir::FuncletId, arena: &mut Arena<ir::Funclet>) -> AnalysisGraph {
+    loop {
+        let analysis = AnalysisGraph::new(head, arena);
+        let comps = analysis.components();
+        if comps.len() == 1 {
+            return analysis;
+        }
+        let candidate = comps.iter().find(|c| c.preds.len() > 1).unwrap();
+        for pred in &candidate.preds[1..] {
+            let mut remap = HashMap::with_capacity(candidate.fids.len());
+            for orig_fid in candidate.fids.iter() {
+                let copy_fid = arena.create(arena[orig_fid].clone());
+                remap.insert(orig_fid, copy_fid);
+            }
+            for fid in comps[pred.0].fids.iter().chain(remap.values()) {
+                arena[fid]
+                    .tail_edge
+                    .map_funclets(|id| remap.get(&id).copied().unwrap_or(id))
+            }
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,13 +277,12 @@ mod tests {
         validate_reducible(desc, analysis.components());
     }
     fn test_irreducible(pre: &[NodeDesc], post: &[NodeDesc]) {
-        let pre_funclets = make_arena(pre);
-        let post_funclets = make_arena(post);
+        let mut pre_funclets = make_arena(pre);
         let pre_analysis = AnalysisGraph::new(0, &pre_funclets);
         validate_dominators(pre, &pre_analysis);
-        // ..
-        // validate_dominators(post, &post_analysis)
-        // validate_reducible(post, post_analysis.components());
+        let post_analysis = make_reducible(0, &mut pre_funclets);
+        validate_dominators(post, &post_analysis);
+        validate_reducible(post, post_analysis.components());
     }
     macro_rules! node_tail {
         ((ret)) => {
@@ -390,14 +413,19 @@ mod tests {
     fn dom14_fig2() {
         test_irreducible(
             nodes![
-                (sel 1, 2)  [0],    // = 0 (dom14:2:5)
-                (jmp 3)     [0, 1], // = 1 (dom14:2:4)
-                (jmp 4)     [0, 2], // = 2 (dom14:2:3)
-                (jmp 4)     [0, 3], // = 3 (dom14:2:1)
-                (jmp 3)     [0, 4]  // = 1 (dom14:2:2)
+                (sel 1, 2)  [0],        // = 0 (dom14:2:5)
+                (jmp 3)     [0, 1],     // = 1 (dom14:2:4)
+                (jmp 4)     [0, 2],     // = 2 (dom14:2:3)
+                (jmp 4)     [0, 3],     // = 3 (dom14:2:1)
+                (jmp 3)     [0, 4]      // = 4 (dom14:2:2)
             ],
             nodes![
-                // TODO
+                (sel 1, 2)  [0],        // = 0 (dom14:2:5)
+                (jmp 3)     [0, 1],     // = 1 (dom14:2:4)
+                (jmp 4)     [0, 2],     // = 2 (dom14:2:3)
+                (jmp 5)     [0, 3],     // = 3 (dom14:2:1)
+                (jmp 3)     [0, 2, 4],  // = 4 (dom14:2:2)
+                (jmp 3)     [0, 3, 5]   // = 5 (copy of dom14:2:2)
             ],
         )
     }
@@ -405,15 +433,26 @@ mod tests {
     fn dom14_fig4() {
         test_irreducible(
             nodes![
-                (sel 1, 2)  [0],    // = 0 (dom14:4:6)
-                (jmp 3)     [0, 1], // = 1 (dom14:4:5)
-                (sel 4, 5)  [0, 2], // = 2 (dom14:4:4)
-                (jmp 4)     [0, 3], // = 3 (dom14:4:1)
-                (sel 3, 5)  [0, 4], // = 4 (dom14:4:2)
-                (jmp 4)     [0, 5]  // = 5 (dom14:4:3)
+                (sel 1, 2)  [0],        // = 0 (dom14:4:6)
+                (jmp 3)     [0, 1],     // = 1 (dom14:4:5)
+                (sel 4, 5)  [0, 2],     // = 2 (dom14:4:4)
+                (jmp 4)     [0, 3],     // = 3 (dom14:4:1)
+                (sel 3, 5)  [0, 4],     // = 4 (dom14:4:2)
+                (jmp 4)     [0, 5]      // = 5 (dom14:4:3)
             ],
             nodes![
-                // TODO
+                // I'm gonna be honest. This test is kind of useless,
+                // since it's hard to even visualize the reducible result.
+                // At least it shows the algorithm halts & doesn't crash...
+                (sel 1, 2)  [0],            // = 0 (dom14:4:6)
+                (jmp 3)     [0, 1],         // = 1 (dom14:4:5)
+                (sel 4, 5)  [0, 2],         // = 2 (dom14:4:4)
+                (jmp 7)     [0, 3],         // = 3 (dom14:4:1)
+                (jmp 6)     [0, 2, 4],      // = 4 (dom14:4:2)
+                (jmp 4)     [0, 2, 5],      // = 5 (dom14:4:3)
+                (jmp 4)     [0, 2, 4, 6],   // = 6 (copy of dom14:4:3, for dom14:4:2)
+                (sel 3, 8)  [0, 3, 7],      // = 7 (copy of dom14:4:2, for dom14:4:1)
+                (jmp 7)     [0, 3, 7, 8]    // = 8 (copy of dom14:4:3, for dom14:4:1)
             ],
         )
     }
@@ -421,42 +460,59 @@ mod tests {
     fn triangle() {
         test_irreducible(
             nodes![
-                (sel 1, 2)  [0],    // = 0
-                (jmp 2)     [0, 1], // = 1
-                (jmp 1)     [0, 2]  // = 2
+                (sel 1, 2)  [0],        // = 0
+                (jmp 2)     [0, 1],     // = 1
+                (jmp 1)     [0, 2]      // = 2
             ],
             nodes![
-                // TODO
+                (sel 1, 2)  [0],        // = 0
+                (jmp 3)     [0, 1],     // = 1
+                (jmp 1)     [0, 2],     // = 2
+                (jmp 1)     [0, 1, 3]   // = 3
             ],
         )
     }
     #[test]
     fn pogo() {
-        test_irreducible(
-            nodes![
-                (jmp 1) [0],       // = 0
-                (jmp 2) [0, 1],    // = 1
-                (jmp 1) [0, 1, 2] // = 2
-            ],
-            nodes![
-                // TODO
-            ],
-        )
+        test_reducible(nodes![
+            (jmp 1) [0],        // = 0
+            (jmp 2) [0, 1],     // = 1
+            (jmp 1) [0, 1, 2]   // = 2
+        ])
     }
     #[test]
     fn circle_like() {
         test_irreducible(
             nodes![
                 (sel 1, 5)      [0],        // = 0
-                (jmp 2)         [0, 1],     // = 1
+                (sel 0, 2)      [0, 1],     // = 1
                 (sel 1, 3)      [0, 2],     // = 2
                 (sel 2, 4, 6)   [0, 3],     // = 3
                 (sel 3, 5)      [0, 4],     // = 4
-                (jmp 4)         [0, 5],     // = 5
+                (sel 0, 4)      [0, 5],     // = 5
                 (ret)           [0, 3, 6]   // = 6
             ],
             nodes![
-                // TODO
+                // See dom14_fig4 -- I don't even know if this is correct.
+                (sel 1, 5)          [0],                            // = 0
+                (sel 0, 14)         [0, 1],                         // = 1
+                (sel 3, 1)          [0, 5, 4, 3, 2],                // = 2
+                (sel 2, 4, 6)       [0, 5, 4, 3],                   // = 3
+                (sel 3, 5)          [0, 5, 4],                      // = 4
+                (sel 0, 4)          [0, 5],                         // = 5
+                (ret)               [0, 5, 4, 3, 6],                // = 6
+                (sel 0, 4)          [0, 5, 4, 7],                   // = 7
+                (sel 3, 9)          [0, 5, 4, 3, 8],                // = 8
+                (sel 0, 8)          [0, 5, 4, 3, 8, 9],             // = 9
+                (sel 2, 11, 12)     [0, 5, 4, 3, 2, 10],            // = 10
+                (ret)               [0, 5, 4, 3, 2, 10, 11],        // = 11
+                (sel 10, 13)        [0, 5, 4, 3, 2, 10, 12],        // = 12
+                (sel 0, 12)         [0, 5, 4, 3, 2, 10, 12, 13],    // = 13
+                (sel 1, 15)         [0, 1, 14],                     // = 14
+                (sel 14, 16, 17)    [0, 1, 14, 15],                 // = 15
+                (ret)               [0, 1, 14, 15, 16],             // = 16
+                (sel 15, 18)        [0, 1, 14, 15, 17],             // = 17
+                (sel 0, 17)         [0, 1, 14, 15, 17, 18]          // = 18
             ],
         )
     }
