@@ -4,18 +4,52 @@
 // using LALRpop's <> syntax. It is not a very elegant or
 // visually-appealing file. 
 
+// Credit to the following for the code that 
+// calculates line and column number from byte offset:
+// https://github.com/sampsyo/bril/blob/main/bril-rs/bril2json/src/lib.rs
+
 use crate::value_language::ast::*;
 
-// TODO: contain info that converts... info
-pub struct ASTFactory { }
+pub struct ASTFactory 
+{ 
+    line_ending_byte_offsets: Vec<usize>,
+}
 
 impl ASTFactory
 {
-    pub fn new() -> Self { ASTFactory {} }
+    
+    pub fn new(s: &str) -> Self { 
+        Self {
+            line_ending_byte_offsets: s
+                .as_bytes()
+                .iter()
+                .enumerate()
+                .filter_map(
+                    |(idx, b)| if *b == b'\n' { Some(idx) } else { None }
+                )
+                .collect()
+        } 
+    }
+
+    pub fn line_and_column(&self, u: usize) -> (usize, usize)
+    {
+        if let Some(b) = self.line_ending_byte_offsets.last() 
+        {
+            if u > *b { panic!("Byte offset too big: {}", u); }
+        }
+        self.line_ending_byte_offsets
+            .iter()
+            .enumerate()
+            .map(|(l, c)| (l + 1, c))
+            .fold(
+                (1, u), // Case where offset is on line one
+                |curr, (l, c)| if u > *c { (l + 1, u - c) } else { curr },
+            )
+    }
 
     fn info(&self, l: usize, r: usize) -> Info
     {
-        (l, r)
+        (self.line_and_column(l), self.line_and_column(r))
     }
 
     pub fn binop(

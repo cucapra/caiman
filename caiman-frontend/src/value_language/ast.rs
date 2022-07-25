@@ -51,7 +51,8 @@ pub enum StmtKind<S, E>
 }
 pub type Stmt<S, E> = (S, StmtKind<S, E>);
 
-pub type Info = (usize, usize);
+// (Line, Column) and (Beginning, Ending)
+pub type Info = ((usize, usize), (usize, usize));
 
 pub type ParsedExpr = Expr<Info>;
 pub type ParsedStmt = Stmt<Info, Info>;

@@ -2,70 +2,107 @@ use crate::value_language::parser;
 use crate::value_language::ast;
 use crate::value_language::ast_factory::ASTFactory;
 use crate::value_language::error::Error;
+use crate::value_language::error::ErrorKind;
 use std::path::Path;
 use std::fs::File;
 
 use lalrpop_util::ParseError;
 
-fn parse_error_to_string<'a>(
-    err : ParseError<usize, parser::Token<'a>, &'a str>
-) -> String
+pub enum ParsingError
+{
+    InvalidToken,
+    UnrecognizedToken(String, String),
+    ExtraToken(String),
+    EOF(String),
+    User(String),
+}
+
+fn make_error((l, c): (usize, usize), filename: &str, p: ParsingError) -> Error
+{
+    Error
+    {
+        kind: ErrorKind::Parsing(p),
+        location: (l, c),
+        filename: filename.to_string(),
+    }
+}
+
+fn parse_error_to_error<'a>(
+    err : ParseError<usize, parser::Token<'a>, &'a str>,
+    ast_factory: &ASTFactory,
+    filename: &str,
+) -> Error
 {
     match err
     {
         ParseError::InvalidToken{location} => {
-            format!("Invalid token at {}", location)
-        },
-        ParseError::UnrecognizedToken{token, expected} => {
-            format!(
-                "Unrecognized token {:?} at {}, expected one of {:#?}", 
-                token.1, 
-                token.0,
-                expected,
+            make_error(
+                ast_factory.line_and_column(location), 
+                filename,
+                ParsingError::InvalidToken,
             )
         },
-        ParseError::ExtraToken{token} => {
-            format!("Extra token {:?} at {}", token.1, token.0)
+        ParseError::UnrecognizedToken{token, expected} => {
+            make_error(
+                ast_factory.line_and_column(token.0), 
+                filename,
+                ParsingError::UnrecognizedToken(
+                    format!("{:?}", token.1),
+                    format!("{:#?}", expected),
+                ),
+            )
         },
-        ParseError::User{error} => {
-            format!("User error: {}", String::from(error))
-        },
+        ParseError::ExtraToken{token} =>
+            make_error(
+                ast_factory.line_and_column(token.0), 
+                filename,
+                ParsingError::ExtraToken(format!("{:?}", token.1)),
+            ),
+        ParseError::User{error} => 
+            make_error(
+                (0, 0), 
+                filename, 
+                ParsingError::User(error.to_string())
+            ),
         ParseError::UnrecognizedEOF{location, expected} => {
-            format!(
-                "Unrecognized EOF at {}, expected one of {:#?}", 
-                location, 
-                expected,
+            make_error(
+                ast_factory.line_and_column(location), 
+                filename,
+                ParsingError::EOF(format!("{:#?}", expected)),
             )
         },
     }
 }
 
-pub fn parse_string(buf: String) -> Result<ast::ParsedProgram, Error>
+pub fn parse_string(
+    buf: String,
+    filename: &str,
+) -> Result<ast::ParsedProgram, Error>
 {
     let parser = parser::ProgramParser::new();
-    match parser.parse(&ASTFactory::new(), &buf)
-    {
-        Ok(program) => Ok(program),
-        Err(why) => Err(Error::Parsing(parse_error_to_string(why))),
-    }
+    let ast_factory = ASTFactory::new(&buf);
+    parser.parse(&ast_factory, &buf).map_err(|e|
+       parse_error_to_error(e, &ast_factory, filename)
+    )
 }
 
 pub fn parse_read<R: std::io::Read>(
-    mut input: R
+    mut input: R,
+    filename: &str,
 ) -> Result<ast::ParsedProgram, Error>
 {
     let mut buf = String::new();
     input.read_to_string(&mut buf).unwrap();
-    parse_string(buf)
+    parse_string(buf, filename)
 }
 
-pub fn parse_file(filename: String) -> Result<ast::ParsedProgram, Error>
+pub fn parse_file(filename: &str) -> Result<ast::ParsedProgram, Error>
 {
-    let input_path = Path::new(&filename);
+    let input_path = Path::new(filename);
     let input_file = match File::open(&input_path) {
         Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
         Ok(file) => file,
     };
-    parse_read(input_file)
+    parse_read(input_file, filename)
 }
 

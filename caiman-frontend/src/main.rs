@@ -37,9 +37,7 @@ fn main()
     }
     if args.value_language
     {
-        match value_language::run_parser::parse_file(
-            String::from(args.filename).clone()
-        )
+        match value_language::run_parser::parse_file(&args.filename)
         {
             Ok(ast) => {
                 for statement in ast.iter() 

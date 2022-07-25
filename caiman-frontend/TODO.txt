@@ -1,6 +1,0 @@
-1. Make generic metadata type for EVERYTHING, not just expressions
-  :(
-
-2. Have parser convey this info
-
-3. Type elaborator checker
