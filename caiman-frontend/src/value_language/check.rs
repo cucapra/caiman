@@ -10,7 +10,8 @@ pub enum SemanticError
 {
 }
 
-fn check_exp(exp: &ast::Exp) -> Result<Type, SemanticError>
+/*
+fn check_exp(exp: &ast::ParsedExp) -> Result<Type, SemanticError>
 {
     Ok(Type::I32)
 }
@@ -18,7 +19,7 @@ fn check_exp(exp: &ast::Exp) -> Result<Type, SemanticError>
 // To factor out if and while code
 fn check_guard_and_block(
     context: &mut Context,
-    guard: &ast::Exp, 
+    guard: &ast::ParsedExp, 
     block: &Vec<ast::ParsedStatement>,
 ) -> Result<(Type, Vec<ast::CheckedStatement>), SemanticError>
 {
@@ -67,7 +68,7 @@ fn check_statement(
 }
 
 pub fn check_program(
-    program: &ast::Program
+    program: &ast::ParsedProgram
 ) -> Result<ast::CheckedProgram, error::Error>
 {
     let mut context = Context::new();
@@ -77,4 +78,4 @@ pub fn check_program(
         .collect();
     checked.map_err(|e| error::Error::Semantic(e))
 }
-
+*/

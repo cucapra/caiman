@@ -1,5 +1,6 @@
 use crate::value_language::parser;
 use crate::value_language::ast;
+use crate::value_language::ast_factory::ASTFactory;
 use crate::value_language::error::Error;
 use std::path::Path;
 use std::fs::File;
@@ -39,10 +40,10 @@ fn parse_error_to_string<'a>(
     }
 }
 
-pub fn parse_string(buf: String) -> Result<ast::Program, Error>
+pub fn parse_string(buf: String) -> Result<ast::ParsedProgram, Error>
 {
     let parser = parser::ProgramParser::new();
-    match parser.parse(&buf)
+    match parser.parse(&ASTFactory::new(), &buf)
     {
         Ok(program) => Ok(program),
         Err(why) => Err(Error::Parsing(parse_error_to_string(why))),
@@ -51,14 +52,14 @@ pub fn parse_string(buf: String) -> Result<ast::Program, Error>
 
 pub fn parse_read<R: std::io::Read>(
     mut input: R
-) -> Result<ast::Program, Error>
+) -> Result<ast::ParsedProgram, Error>
 {
     let mut buf = String::new();
     input.read_to_string(&mut buf).unwrap();
     parse_string(buf)
 }
 
-pub fn parse_file(filename: String) -> Result<ast::Program, Error>
+pub fn parse_file(filename: String) -> Result<ast::ParsedProgram, Error>
 {
     let input_path = Path::new(&filename);
     let input_file = match File::open(&input_path) {

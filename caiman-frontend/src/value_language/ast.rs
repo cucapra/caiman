@@ -1,5 +1,5 @@
 // AST
-use crate::value_language::typing;
+use crate::value_language::typing::Type;
 
 pub type Var = String;
 
@@ -24,45 +24,40 @@ pub enum Binop
 }
 
 #[derive(Debug, Clone)]
-pub enum Exp
+pub enum ExprKind<E>
 {
     Var(Var),
     Num(String),
     Bool(bool),
     Input(),
-    Binop(Binop, Box<Exp>, Box<Exp>),
-    Unop(Unop, Box<Exp>),
-    Call(Var, Vec<Exp>),
-    Labeled(Var, Box<Exp>),
+    Binop(Binop, Box<Expr<E>>, Box<Expr<E>>),
+    Unop(Unop, Box<Expr<E>>),
+    Call(Var, Vec<Expr<E>>),
+    Labeled(Var, Box<Expr<E>>),
 }
-
-// The two types of statement are so that one can contain ordinary
-// expresions (Statement) while the other (AnnotatedStatement) contains the 
-// types of its underlying expressions as well
+pub type Expr<E> = (E, ExprKind<E>);
 
 #[derive(Debug, Clone)]
-pub enum Statement<E>
+pub enum StmtKind<S, E>
 {
-    If(E, Vec<Statement<E>>),
-    While(E, Vec<Statement<E>>),
-    Print(E),
-    Let(bool, Var, E),
-    Assign(Var, E),
-    Function(Var, Vec<Var>, Vec<Statement<E>>),
-    Call(Var, Vec<E>),
-    Return(E),
+    If(Expr<E>, Vec<Stmt<S, E>>),
+    While(Expr<E>, Vec<Stmt<S, E>>),
+    Print(Expr<E>),
+    Let(bool, Var, Expr<E>),
+    Assign(Var, Expr<E>),
+    Function(Var, Vec<Var>, Vec<Stmt<S, E>>),
+    Call(Var, Vec<Expr<E>>),
+    Return(Expr<E>),
 }
+pub type Stmt<S, E> = (S, StmtKind<S, E>);
 
-pub type ParsedStatement = Statement<Exp>;
+pub type Info = (usize, usize);
 
-pub type CheckedStatement = Statement<(typing::Type, Exp)>;
+pub type ParsedExpr = Expr<Info>;
+pub type ParsedStmt = Stmt<Info, Info>;
+pub type ParsedProgram = Vec<ParsedStmt>;
 
-pub type Program = Vec<ParsedStatement>;
+//pub type CheckedExp = Exp<Type>;
+//pub type CheckedStmt = Stmt<(), Type>;
+//pub type CheckedProgram = Vec<CheckedStmt>;
 
-pub type CheckedProgram = Vec<CheckedStatement>;
-
-// Factory
-pub fn make_binop(e1: Exp, b: Binop, e2: Exp) -> Exp
-{
-    Exp::Binop(b, Box::new(e1), Box::new(e2))
-}

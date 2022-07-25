@@ -1,7 +1,7 @@
-use std::str::FromStr;
 use crate::value_language::ast::*;
+use crate::value_language::ast_factory::ASTFactory;
 
-grammar;
+grammar(astf: &ASTFactory);
 
 match {
   r"[a-zA-Z][a-zA-Z0-9_]*", // Id
@@ -16,71 +16,80 @@ match {
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
 }
 
-pub Program: Program = { Statement* => <> }
+pub Program: ParsedProgram = { Stmt* => <> }
 
-pub Statement: ParsedStatement = {
-    "if" <Exp> "{" <Statement*> "}" => Statement::If(<>),
-    "while" <Exp> "{" <Statement*> "}" => Statement::While(<>),
-    "print" "(" <Exp> ")" ";" => Statement::Print(<>),
-    "let" <Mut> <Id> "=" <Exp> ";" => Statement::Let(<>),
-    <Id> "=" <Exp> ";" => Statement::Assign(<>),
-    "fn" <Id> "(" <CommaList<Id>> ")" "{" <Statement*> "}" => 
-        Statement::Function(<>),
-    <Id> "(" <CommaList<Exp>> ")" ";" => Statement::Call(<>),
-    "return" <Exp> ";" => Statement::Return(<>),
+pub Stmt: ParsedStmt = {
+    <@L> "if" <Expr> "{" <Stmt*> "}" <@R>        => astf.if_stmt(<>), 
+    <@L> "while" <Expr> "{" <Stmt*> "}" <@R>     => astf.while_stmt(<>),
+    <@L> "print" "(" <Expr> ")" ";" <@R>         => astf.print(<>),
+    <@L> "let" <Mut> <Id> "=" <Expr> ";" <@R>    => astf.let_stmt(<>),
+    <@L> <Id> "=" <Expr> ";" <@R>                => astf.assign(<>),
+    <@L> <Id> "(" <CommaList<Expr>> ")" ";" <@R> => astf.ccall(<>),
+    <@L> "return" <Expr> ";" <@R>                => astf.return_stmt(<>),
+    <@L> "fn" <Id> "(" <CommaList<Id>> ")" "{" <Stmt*> "}" <@R> => 
+        astf.function(<>),
 }
 
-Exp: Exp = {
-    BinopExp, // Includes terminal exps
+Expr: ParsedExpr = {
+    BinopExpr, // Includes terminal exps
 }
 
-TermExp: Exp = {
-    <Constant> => Exp::Num(<>),
-    <Id> => Exp::Var(<>),
-    "true" => Exp::Bool(true), 
-    "false" => Exp::Bool(false),
-    "input" "(" ")" => Exp::Input(),
-    <Id> "(" <CommaList<Exp>> ")" => Exp::Call(<>),
-    UnopExp,
-    "{" <l: Id> ":" <e: Exp> "}" => Exp::Labeled(l, Box::new(e)),
-    "(" <Exp> ")",
+TermExpr: ParsedExpr = {
+    <@L> <Constant> <@R>                     => astf.num(<>),
+    <@L> <Id> <@R>                           => astf.var(<>),
+    <@L> <Bool> <@R>                         => astf.bool_expr(<>),
+    <@L> "input" "(" ")" <@R>                => astf.input(<>),
+    <@L> <Id> "(" <CommaList<Expr>> ")" <@R> => astf.ecall(<>),
+    <@L> "{" <Id> ":" <Expr> "}" <@R>  => astf.labeled(<>), 
+    UnopExpr,
+    "(" <Expr> ")",
 }
 
-UnopExp: Exp = {
-    "!" <e: TermExp> => Exp::Unop(Unop::Not, Box::new(e)),
+Bool: bool = {
+  "true" => true,
+  "false" => false,
 }
 
+UnopExpr: ParsedExpr = {
+    <@L> <UnopNot> <TermExpr> <@R> => astf.unop(<>),
+}
+
+UnopNot: Unop = { "!" => Unop::Not }
 
 // BEGIN Binop Section
 // Numbers here (1, 2, ...) indicate predence level for levels containing
-// two or more options (so not && or ||)
+// two or more options (so not And or Or)
 
-BinopExp: Exp = { BinopOr }
+BinopExpr: ParsedExpr = { BinopEOr }
 
-BinopOr: Exp = {
-    <e1: BinopOr> "||" <e2: BinopAnd> => make_binop(e1, Binop::Or, e2),
-    BinopAnd,
+BinopEOr: ParsedExpr = {
+    <@L> <BinopEOr> <BinopOr> <BinopEAnd> <@R> => astf.binop(<>),
+    BinopEAnd,
 }
 
-BinopAnd: Exp = {
-    <e1: BinopAnd> "&&" <e2: BinopExp1> => make_binop(e1, Binop::And, e2),
-    BinopExp1,
+BinopEAnd: ParsedExpr = {
+    <@L> <BinopEAnd> <BinopAnd> <BinopE1> <@R> => astf.binop(<>),
+    BinopE1,
 }
 
-BinopExp1: Exp = {
-    <BinopExp1> <Binop1> <BinopExp2> => make_binop(<>),
-    BinopExp2,
+BinopE1: ParsedExpr = {
+    <@L> <BinopE1> <Binop1> <BinopE2> <@R> => astf.binop(<>),
+    BinopE2,
 }
 
-BinopExp2: Exp = {
-    <BinopExp2> <Binop2> <BinopExp3> => make_binop(<>),
-    BinopExp3,
+BinopE2: ParsedExpr = {
+    <@L> <BinopE2> <Binop2> <BinopE3> <@R> => astf.binop(<>),
+    BinopE3,
 }
 
-BinopExp3: Exp = {
-    <BinopExp3> <Binop3> <TermExp> => make_binop(<>),
-    TermExp, 
+BinopE3: ParsedExpr = {
+    <@L> <BinopE3> <Binop3> <TermExpr> <@R> => astf.binop(<>),
+    TermExpr, 
 }
+
+BinopAnd: Binop = { "&&" => Binop::And, }
+
+BinopOr: Binop = { "||" => Binop::Or, }
 
 Binop1: Binop = {
     "==" => Binop::Equals,
