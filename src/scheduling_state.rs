@@ -11,8 +11,11 @@ use std::cmp::Reverse;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotId(usize);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/*#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ValueId(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ValueInstanceId(usize);*/
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubmissionId(usize);
@@ -48,19 +51,24 @@ enum StateBinding
 }
 
 
-#[derive(Debug)]
-struct Value
+/*#[derive(Debug)]
+struct ValueId
 {
-	type_id_opt : Option<ir::TypeId>,
-	//value_function_id_opt : ir::ValueFunctionId,
-	//subvalue_tag : ir::SubvalueTag
+	root_id_opt : Option<ValueId>,
+	
 }
+
+#[derive(Debug)]
+struct ValueInstance
+{
+}*/
 
 #[derive(Debug)]
 struct Slot
 {
 	type_id : ir::TypeId,
-	value_opt : Option<ValueId>,
+	value_tag_opt : Option<ir::ValueTag>,
+	//value_instance_id_opt : Option<ValueInstanceId>,
 	timestamp : LogicalTimestamp,
 	queue_place : ir::Place,
 	queue_stage : ir::ResourceQueueStage,
@@ -87,7 +95,7 @@ pub struct SchedulingState
 {
 	place_states : HashMap<ir::Place, PlaceState>, // as known to the coordinator
 	slots : Arena<Slot>,
-	values : Arena<Value>,
+	//value_instances : Arena<ValueInstance>,
 	submissions : Arena<Submission>
 }
 
@@ -110,25 +118,27 @@ impl SchedulingState
 	pub fn insert_hacked_slot(&mut self, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage) -> SlotId
 	{
 		let timestamp = self.get_local_time();
-		let slot = Slot{type_id, value_opt : None, timestamp, queue_place, queue_stage, state_binding : StateBinding::TemporaryHack};
+		let slot = Slot{type_id, value_tag_opt : None, /*value_instance_id_opt : None,*/ timestamp, queue_place, queue_stage, state_binding : StateBinding::TemporaryHack};
 		SlotId(self.slots.create(slot))
 	}
 
-	pub fn bind_slot_value(&mut self, slot_id : SlotId, value_id : ValueId)
+	/*pub fn bind_slot_value(&mut self, slot_id : SlotId, value_tag_opt : Option<ir::ValueTag>, value_instance_id_opt : Option<ValueInstanceId>)
 	{
 		let slot = &mut self.slots[& slot_id.0];
-		let value = & self.values[& value_id.0];
-		assert!(value.type_id_opt.is_some());
-		assert_eq!(slot.type_id, value.type_id_opt.unwrap());
-		assert!(slot.value_opt.is_none());
-		slot.value_opt = Some(value_id);
-	}
+		//let value_instance = & self.value_instances[& value_instance_id.0];
+		//assert!(value.type_id_opt.is_some());
+		//assert_eq!(slot.type_id, value.type_id_opt.unwrap());
+		assert!(slot.value_tag_opt.is_none());
+		slot.value_tag_opt = value_tag_opt;
+		assert!(slot.value_instance_id_opt.is_none());
+		slot.value_instance_id_opt = value_instance_id_opt;
+	}*/
 
-	pub fn insert_value(&mut self, type_id_opt : Option<ir::TypeId>) -> ValueId
+	/*pub fn insert_value_instance(&mut self) -> ValueInstanceId
 	{
 		use std::iter::FromIterator;
-		ValueId(self.values.create(Value{type_id_opt}))
-	}
+		ValueInstanceId(self.value_instances.create(ValueInstance{}))
+	}*/
 
 	pub fn insert_submission<Listener>(&mut self, queue_place : ir::Place, listener : &mut Listener) -> SubmissionId
 		where Listener : FnMut(&Self, &SchedulingEvent) -> ()
@@ -157,10 +167,15 @@ impl SchedulingState
 	}
 
 
-	pub fn get_slot_value_id(&self, slot_id : SlotId) -> Option<ValueId>
+	/*pub fn get_slot_value_instance_id(&self, slot_id : SlotId) -> Option<ValueInstanceId>
 	{
-		self.slots[& slot_id.0].value_opt
-	}
+		self.slots[& slot_id.0].value_instance_id_opt
+	}*/
+
+	/*pub fn get_slot_value_tag(&self, slot_id : SlotId) -> Option<ir::ValueTag>
+	{
+		self.slots[& slot_id.0].value_tag_opt
+	}*/
 
 	pub fn get_slot_type_id(&self, slot_id : SlotId) -> ir::TypeId
 	{

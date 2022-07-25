@@ -1,4 +1,4 @@
-use std::collections::{HashMap, BTreeMap, HashSet};
+use std::collections::{HashMap, BTreeMap, HashSet, BTreeSet};
 use std::default::Default;
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
@@ -38,7 +38,8 @@ pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
-pub type LocalMetaVariableId = usize;
+pub type FenceId = usize;
+//pub type LocalMetaVariableId = usize;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
@@ -58,23 +59,25 @@ pub struct StructField
 	pub byte_size : usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum SubvalueTag
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ValueTag
 {
-	// These two are implementation-agnostic
-	Input{index : usize},
-	Output{index : usize},
-	// This one is not
-	Operation{ remote_node_id : RemoteNodeId }
+	// These two are implementation-agnostic and are only allowed in external interfaces
+	Input{function_id : ValueFunctionId, index : usize},
+	Output{function_id : ValueFunctionId, index : usize},
+	// These are not, and are intended for funclets
+	Operation{ remote_node_id : RemoteNodeId },
+	ConcreteInput{funclet_id : FuncletId, index : usize},
+	ConcreteOutput{funclet_id : FuncletId, index : usize},
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/*#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ValueTag
 {
 	pub instance_id_opt : Option<LocalMetaVariableId>,
-	pub function_id : ValueFunctionId,
+	//pub function_id : ValueFunctionId,
 	pub subvalue_tag : SubvalueTag,
-}
+}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
@@ -101,33 +104,38 @@ pub enum Type
 	MutRef { element_type : TypeId },
 	ConstSlice { element_type : TypeId },
 	MutSlice { element_type : TypeId },
-	Buffer {local_resource_id : LocalMetaVariableId},
-	BufferRef {local_resource_id : LocalMetaVariableId},
-	BufferMutRef {local_resource_id : LocalMetaVariableId},
+	//Buffer {local_resource_id : LocalMetaVariableId},
+	//BufferRef {local_resource_id : LocalMetaVariableId},
+	//BufferMutRef {local_resource_id : LocalMetaVariableId},
 	//Texture
 
-	Fence { id : LocalMetaVariableId },
+	Fence { id : FenceId },
 
-	Slot{ value_type : TypeId, value_tag_id_opt : Option<LocalMetaVariableId>, /*local_resource_id : LocalMetaVariableId,*/ queue_stage : ResourceQueueStage, queue_place : Place, fence_id : LocalMetaVariableId },
+	Slot{ value_type : TypeId, value_tag_opt : Option<ValueTag>, queue_stage : ResourceQueueStage, queue_place : Place, fence_id : FenceId },
 }
 
-// Local Meta Variables are used to serve as ids for when types need to relate to each other
+// Local Meta Variables are used to serve as ids for when types in input/output lists need to relate to each other
 // This allows them to do so without refering directly to an input, output, or node position
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/*#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum LocalMetaVariable
 {
 	Resource,
 	Fence(Fence),
-	ValueTag(ValueTag)
-}
+	ValueInstance
+}*/
 
 pub use generated::Node;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
 {
+	// Common
 	Return { return_values : Box<[NodeId]> },
 	Yield { funclet_ids : Box<[FuncletId]>, captured_arguments : Box<[NodeId]>, return_values : Box<[NodeId]> },
+	// Scheduling only
+	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> },
+	ScheduleReturn { return_values : Box<[NodeId]> },
+
 	// invokes and waits on the gpu
 	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
 	//Wait { required_scope_set : ScopeSet, funclet_id : usize, arguments : Box<[usize]> }
@@ -159,7 +167,7 @@ impl FuncletKind
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Fence
 {
-	pub prior_fence_ids : Box<[LocalMetaVariableId]>,
+	pub prior_fence_ids : Box<[FenceId]>,
 	pub place : Place
 }
 
@@ -178,23 +186,27 @@ pub struct Funclet
 	#[serde(default)]
 	pub output_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
 
-	#[serde(default)]
-	pub local_meta_variables : BTreeMap<LocalMetaVariableId, LocalMetaVariable>,
+	//#[serde(default)]
+	//pub local_meta_variables : BTreeMap<LocalMetaVariableId, LocalMetaVariable>,
 }
 
-/*#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SchedulingFuncletInfo
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SchedulingFuncletExtra
 {
-	pub fences : HashMap<LocalMetaVariableId, Fence>,
-	pub value_tags : HashMap<LocalMetaVariableId, ValueTag>
-}*/
+	pub value_funclet_id : FuncletId,
+	pub input_binding_start : usize,
+	pub per_input_slot_counts : Box<[usize]>,
+	pub output_binding_start : usize,
+	pub per_output_slot_counts : Box<[usize]>,
+	pub fences : BTreeMap<FenceId, Fence>,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ValueFuncletInfo
+pub struct ValueFuncletExtra
 {
 	// Value functions this funclet implements
 	#[serde(default)]
-	pub value_function_ids : HashSet<ValueFunctionId>
+	pub value_function_ids : BTreeSet<ValueFunctionId>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -282,6 +294,10 @@ pub struct Program
 	pub value_functions : Arena<ValueFunction>,
 	#[serde(default)]
 	pub pipelines : Vec<Pipeline>,
+	#[serde(default)]
+	pub value_funclet_extras : HashMap<FuncletId, ValueFuncletExtra>,
+	#[serde(default)]
+	pub scheduling_funclet_extras : HashMap<FuncletId, SchedulingFuncletExtra>,
 	//pub shader_modules : HashMap<usize, ShaderModule>
 }
 

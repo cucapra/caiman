@@ -115,6 +115,7 @@ impl FuncletBuilder
 
 				TailEdge::Yield { funclet_ids : funclet_ids.clone(), captured_arguments : new_captured_arguments.into_boxed_slice(), return_values : new_return_values.into_boxed_slice() }
 			}
+			_ => panic!("Umimplemented tail edge {:?}", old_tail_edge)
 		};
 		self.tail_edge = Some(tail_edge);
 	}
@@ -131,6 +132,6 @@ impl FuncletBuilder
 
 	pub fn build(mut self) -> Funclet
 	{
-		Funclet{kind : self.kind.unwrap(), input_types : self.input_types.into_boxed_slice(), input_resource_states : self.input_resource_states.into_boxed_slice(), output_types : self.output_types.into_boxed_slice(), output_resource_states : self.output_resource_states.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap(), local_meta_variables : BTreeMap::new()}
+		Funclet{kind : self.kind.unwrap(), input_types : self.input_types.into_boxed_slice(), input_resource_states : self.input_resource_states.into_boxed_slice(), output_types : self.output_types.into_boxed_slice(), output_resource_states : self.output_resource_states.into_boxed_slice(), nodes : self.nodes.into_boxed_slice(), tail_edge : self.tail_edge.unwrap(), /*local_meta_variables : BTreeMap::new()*/}
 	}
 }

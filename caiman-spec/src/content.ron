@@ -107,17 +107,6 @@
 			has_local_side_effect : true
 		),
 
-		(
-			name : "InstantiateValue",
-			inputs : [
-				(name : "funclet", kind : Funclet),
-				(name : "inputs", kind : Operation, is_array : true),
-			],
-			output : Single,
-			language_set : (functional : false, scheduling: true, intrinsic : false),
-			has_local_side_effect : true
-		),
-
 		// These are convenience instructions that rely on codegen doing some questionable magic
 		// Don't expect these to be predictable
 		// It's possible for them to do the worst thing possible that is still legal without knowing the future
@@ -126,12 +115,13 @@
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "type_id", kind : Type),
+				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
-		(
+		/*(
 			name : "SyncEarliest",
 			inputs : [
 				(name : "to_place", kind : Place),
@@ -141,9 +131,9 @@
 			output : None,
 			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
-		),
+		),*/
 
-		(
+		/*(
 			// Marks an operation in the future as value only
 			// This only makes sense in a mixed language where operations might be interpreted as value or scheduling
 			name : "ManuallySchedule",
@@ -187,7 +177,7 @@
 			output : None,
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
-		),
+		),*/
 
 
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
@@ -234,6 +224,31 @@
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),*/
+		/*(
+			name : "BindSlotValue",
+			inputs : [
+				(name : "slot", kind : Operation),
+				(name : "value", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : true),
+			has_local_side_effect : true
+		),*/
+		(
+			// Creates an instance where:
+			// 1) Each caller input value is unified with the corresponding phi
+			// 2) Each caller output extract is unified with the corresponding output
+			name : "InstantiateValueFunction",
+			inputs : [
+				(name : "operation", kind : RemoteOperation),
+				(name : "funclet", kind : Funclet),
+				(name : "inputs", kind : Operation, is_array : true),
+				(name : "outputs", kind : Operation, is_array : true),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
 		(
 			name : "EncodeDo",
 			inputs : [

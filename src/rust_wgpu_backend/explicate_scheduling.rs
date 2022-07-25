@@ -503,6 +503,7 @@ impl<'program> Explicator<'program>
 				function_state.node_resource_tracker.sync_local(& remap_nodes(& function_state.funclet_builder, frame_id, return_values), &mut function_state.funclet_builder);
 				function_state.funclet_builder.set_tail_edge_from_old(frame_id, & original_funclet.tail_edge)
 			}
+			_ => panic!("Unimplemented tail edge {:?}", original_funclet.tail_edge)
 		}
 
 		{
@@ -707,6 +708,7 @@ impl<'program> Explicator<'program>
 			{
 				panic!("Inline funclets cannot yield")
 			}
+			_ => panic!("Unimplemented")
 		}
 
 		function_state.currently_inlining_funclet_ids.remove(& funclet_id);

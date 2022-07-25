@@ -1158,7 +1158,7 @@ impl<'program> CodeGenerator<'program>
 				}
 				self.type_code_writer.write_str("}\n\n");
 			}
-			ir::Type::Slot { value_type, value_tag_id_opt, queue_stage, queue_place, fence_id } =>
+			ir::Type::Slot { value_type, value_tag_opt, /*value_instance_id_opt,*/ queue_stage, queue_place, fence_id } =>
 			{
 				write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));
 
@@ -1211,6 +1211,7 @@ impl<'program> CodeGenerator<'program>
 			ir::Type::MutSlice { element_type } => panic!("Unimplemented"),
 			ir::Type::Array { element_type, length } => panic!("Unimplemented"),
 			ir::Type::Struct { fields, byte_alignment, byte_size } => panic!("Unimplemented"),
+			ir::Type::Slot{ value_type, .. } => self.get_type_binding_info(* value_type), // Probably not quite right
 			_ => panic!("Unimplemented")
 		}
 	}

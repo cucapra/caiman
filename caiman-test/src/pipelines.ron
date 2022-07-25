@@ -3,7 +3,12 @@
 	program : (
 		types : {
 			0 : I32,
-			1 : Slot(value_type : 0, value_tag_id_opt : None, queue_stage : Ready, queue_place : Local, fence_id : 0 )
+			1 : Slot(value_type : 0, value_tag_id_opt : None, queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			2 : Slot(value_type : 0, value_tag_id_opt : ConcreteInput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			3 : Slot(value_type : 0, value_tag_id_opt : ConcreteOutput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			4 : Slot(value_type : 0, value_tag_id_opt : ConcreteInput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			5 : Slot(value_type : 0, value_tag_id_opt : ConcreteOutput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			6 : Slot(value_type : 0, value_tag_id_opt : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
 		},
 		funclets : {
 			0 : (
@@ -118,9 +123,9 @@
 					Phi(index : 0),
 				],
 				tail_edge : Return(return_values : [0])
-			),
+			),*/
 			9 : (
-				kind : Inline,
+				kind : Value,
 				input_types : [0],
 				output_types : [0],
 				nodes : [
@@ -141,30 +146,24 @@
 					ExtractResult(node_id : 1, index : 0),
 				],
 				tail_edge : Return(return_values : [2])
-			),*/
+			),
 
 			11 : (
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
 
-				local_meta_variables : {
-					0 : Fence((
-						prior_fence_ids : [],
-						place : Local))
-				},
-
 				nodes : [
 					Phi(index : 0),
-					AllocTemporary(place : Local, type_id : 0),
+					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 0, node_id : 1)),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
-					AllocTemporary(place : Local, type_id : 0),
+					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 0, node_id : 2)),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [1], outputs : [3]),
-					AllocTemporary(place : Gpu, type_id : 0),
+					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 0, node_id : 2)),
 					EncodeCopy(place : Gpu, input : 3, output : 5),
-					AllocTemporary(place : Gpu, type_id : 0),
+					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 0, node_id : 4)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 0, node_id : 4), inputs : [1, 1, 1, 5], outputs : [7]),
-					AllocTemporary(place : Local, type_id : 0),
+					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 0, node_id : 4)),
 					Submit(place : Gpu),
 					EncodeFence(place : Gpu),
 					SyncFence(place : Local, fence : 11),
@@ -172,6 +171,49 @@
 				],
 				tail_edge : Return(return_values : [9])
 			),
+
+			12 : (
+				kind : ScheduleExplicit,
+				input_types : [2],
+				output_types : [3],
+
+				nodes : [
+					Phi(index : 0),
+					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 9, node_id : 1)),
+					EncodeDo(place : Local, operation : (funclet_id : 9, node_id : 1), inputs : [], outputs : [1]),
+					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 9, node_id : 0)),
+					EncodeCopy(place : Gpu, input : 0, output : 3),
+					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 9, node_id : 3)),
+					EncodeDo(place : Gpu, operation : (funclet_id : 9, node_id : 2), inputs : [1, 1, 1, 3], outputs : [5]),
+					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 9, node_id : 3)),
+					EncodeFence(place : Gpu),
+					SyncFence(place : Local, fence : 8),
+					EncodeCopy(place : Local, input : 5, output : 7),
+				],
+				tail_edge : Return(return_values : [7])
+			),
+
+			13 : (
+				kind : ScheduleExplicit,
+				input_types : [4],
+				output_types : [5],
+
+				nodes : [
+					Phi(index : 0),
+				],
+				tail_edge : ScheduleCall(value_operation : (funclet_id : 10, node_id : 1), callee_funclet_id : 12, callee_arguments : [0], continuation_funclet_id : 14, continuation_arguments : [])
+			),
+
+			14 : (
+				kind : ScheduleExplicit,
+				input_types : [6],
+				output_types : [5],
+
+				nodes : [
+					Phi(index : 0),
+				],
+				tail_edge : Return(return_values : [0])
+			)
 		},
 		external_cpu_functions : [
 			(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
@@ -204,6 +246,56 @@
 		value_functions : {
 			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9))
 		},
+		scheduling_funclet_extras : {
+			11 : (
+				value_funclet_id : 0,
+				input_binding_start : 0,
+				per_input_slot_counts : [1],
+				output_binding_start : 0,
+				per_output_slot_counts : [1],
+				fences : {
+					0 : Fence(
+						prior_fence_ids : [],
+						place : Local)
+				}
+			),
+			12 : (
+				value_funclet_id : 9,
+				input_binding_start : 0,
+				per_input_slot_counts : [1],
+				output_binding_start : 0,
+				per_output_slot_counts : [1],
+				fences : {
+					0 : Fence(
+						prior_fence_ids : [],
+						place : Local)
+				}
+			),
+			13 : (
+				value_funclet_id : 10,
+				input_binding_start : 0,
+				per_input_slot_counts : [1],
+				output_binding_start : 0,
+				per_output_slot_counts : [1],
+				fences : {
+					0 : Fence(
+						prior_fence_ids : [],
+						place : Local)
+				}
+			),
+			14 : (
+				value_funclet_id : 10,
+				input_binding_start : 0,
+				per_input_slot_counts : [1],
+				output_binding_start : 0,
+				per_output_slot_counts : [1],
+				fences : {
+					0 : Fence(
+						prior_fence_ids : [],
+						place : Local)
+				}
+			)
+		},
 		pipelines : [
 			(name : "pipeline_1", entry_funclet : 11), 
 			/*(name : "pipeline_with_gpu_gpu_communication", entry_funclet : 1),
@@ -211,8 +303,8 @@
 			(name : "pipeline_with_gpu_cpu_communication", entry_funclet : 3),
 			(name : "pipeline_with_cpu_cpu_communication", entry_funclet : 4),
 			(name : "pipeline_with_single_gpu_call", entry_funclet : 5),
-			(name : "pipeline_with_yield_enter_loop_exit", entry_funclet : 6),
-			(name : "pipeline_with_value_function", entry_funclet : 10),*/
+			(name : "pipeline_with_yield_enter_loop_exit", entry_funclet : 6),*/
+			(name : "pipeline_with_value_function", entry_funclet : 13),
 			]
 	)
 )
