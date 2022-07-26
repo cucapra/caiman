@@ -6,6 +6,8 @@ use serde_derive::{Serialize, Deserialize};
 use crate::arena::Arena;
 use crate::operations::{UnopKind, BinopKind};
 
+pub mod utils;
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Place
 {
