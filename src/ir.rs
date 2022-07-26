@@ -62,6 +62,8 @@ pub struct StructField
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueTag
 {
+	// Intended for scheduling purposes
+	None,
 	// These two are implementation-agnostic and are only allowed in external interfaces
 	Input{function_id : ValueFunctionId, index : usize},
 	Output{function_id : ValueFunctionId, index : usize},
@@ -111,7 +113,7 @@ pub enum Type
 
 	Fence { id : FenceId },
 
-	Slot{ value_type : TypeId, value_tag_opt : Option<ValueTag>, queue_stage : ResourceQueueStage, queue_place : Place, fence_id : FenceId },
+	Slot{ value_type : TypeId, value_tag : ValueTag, queue_stage : ResourceQueueStage, queue_place : Place, fence_id : FenceId },
 }
 
 // Local Meta Variables are used to serve as ids for when types in input/output lists need to relate to each other

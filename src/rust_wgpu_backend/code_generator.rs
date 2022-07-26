@@ -1158,7 +1158,7 @@ impl<'program> CodeGenerator<'program>
 				}
 				self.type_code_writer.write_str("}\n\n");
 			}
-			ir::Type::Slot { value_type, value_tag_opt, /*value_instance_id_opt,*/ queue_stage, queue_place, fence_id } =>
+			ir::Type::Slot { value_type, value_tag, /*value_instance_id_opt,*/ queue_stage, queue_place, fence_id } =>
 			{
 				write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));
 

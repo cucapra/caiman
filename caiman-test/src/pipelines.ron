@@ -3,12 +3,12 @@
 	program : (
 		types : {
 			0 : I32,
-			1 : Slot(value_type : 0, value_tag_id_opt : None, queue_stage : Ready, queue_place : Local, fence_id : 0 ),
-			2 : Slot(value_type : 0, value_tag_id_opt : ConcreteInput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
-			3 : Slot(value_type : 0, value_tag_id_opt : ConcreteOutput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
-			4 : Slot(value_type : 0, value_tag_id_opt : ConcreteInput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
-			5 : Slot(value_type : 0, value_tag_id_opt : ConcreteOutput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
-			6 : Slot(value_type : 0, value_tag_id_opt : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			1 : Slot(value_type : 0, value_tag : None, queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			2 : Slot(value_type : 0, value_tag : ConcreteInput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			3 : Slot(value_type : 0, value_tag : ConcreteOutput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			4 : Slot(value_type : 0, value_tag : ConcreteInput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			5 : Slot(value_type : 0, value_tag : ConcreteOutput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			6 : Slot(value_type : 0, value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
 		},
 		funclets : {
 			0 : (

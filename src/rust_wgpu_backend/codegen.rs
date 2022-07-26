@@ -19,14 +19,8 @@ use crate::scheduling_state::{LogicalTimestamp};
 enum NodeResult
 {
 	None,
-	// Reference to a value function that can be scheduled
-	//ValueFunction { root_node : Option<ir::NodeId>, funclet_id : Option<ir::FuncletId>, node_id : Option<ir::NodeId> },
-	//InlineValue { value_id : scheduling_state::ValueId, type_id : ir::TypeId },
-	//InlineValue { value_id : scheduling_state::ValueId, type_id : ir::TypeId },
-	//Value { value_id : scheduling_state::ValueId },
 	Slot { slot_id : scheduling_state::SlotId },
 	Fence { place : ir::Place, timestamp : LogicalTimestamp },
-	//ValueInstance { value_instance_id : scheduling_state::ValueInstanceId }
 }
 
 // Records the most recent state of a place as known to the local coordinator
@@ -99,18 +93,6 @@ impl PlacementState
 	fn get_var_ids(&self, node_ids : &[ir::NodeId], place : ir::Place) -> Option<Box<[usize]>>
 	{
 		let mut var_ids = Vec::<usize>::new();
-		/*let place_state : & PlaceState = self.place_states.get(& place).unwrap();
-		for node_id in node_ids.iter()
-		{
-			if let Some(& var_id) = place_state.node_variable_ids.get(node_id)
-			{
-				var_ids.push(var_id);
-			}
-			else
-			{
-				return None;
-			}
-		}*/
 		for node_id in node_ids.iter()
 		{
 			match self.node_results[node_id]
@@ -177,30 +159,26 @@ impl PlacementState
 	}
 }
 
-/*#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-struct PipelineStageKey
+#[derive(Debug)]
+struct FuncletScopedState
 {
-	funclet_id : ir::FuncletId,
-	funclet_stage_id : Option<usize>,
+	value_funclet_id : ir::FuncletId,
+	scheduling_funclet_id : ir::FuncletId,
+	node_results : HashMap<ir::NodeId, NodeResult>,
+	slot_value_tags : HashMap<scheduling_state::SlotId, ir::ValueTag>,
 }
 
-// When pipeline stages surface to the outside world (the calling function) entry points don't strictly correspond to funclets (nodes), but instead correspond to the prior stage and the next funclet (paths)
-// This can introduce potentially infinite cycles, so it's important that we not try to do placement inference across funclets lest we wake the sleeping halting problem
-// For now we dodge this by forcing local on entry and exit, but this will have to change and it's important to be careful when it does
-// Ignore the above
-struct PipelineStageData
+impl FuncletScopedState
 {
-	placement_state_opt : Option<PlacementState>,
-	//captured_argument_count : usize,
-	//prior_stage_id_opt : Option<usize>
-}*/
+	fn new(value_funclet_id : ir::FuncletId, scheduling_funclet_id : ir::FuncletId) -> Self
+	{
+		Self{ value_funclet_id, scheduling_funclet_id, node_results : Default::default(), slot_value_tags : HashMap::new()}
+	}
+}
 
-// PipelineContext tracks traversal through the funclet graph
 #[derive(Default)]
 struct PipelineContext
 {
-	//pipeline_stages : HashMap<PipelineStageKey, PipelineStageData>
-	//funclet_placement_states : HashMap<ir::FuncletId, PlacementState>,
 	pending_funclet_ids : Vec<ir::FuncletId>,
 	is_entry_point : bool
 }
@@ -414,9 +392,9 @@ impl<'program> CodeGen<'program>
 				
 				match & self.program.types[input_type_id]
 				{
-					ir::Type::Slot { value_type, value_tag_opt, /*value_instance_id_opt, local_resource_id,*/ queue_stage, queue_place, fence_id } =>
+					ir::Type::Slot { value_type, value_tag, /*value_instance_id_opt, local_resource_id,*/ queue_stage, queue_place, fence_id } =>
 					{
-						if let Some(value_tag) = value_tag_opt
+						//if let Some(value_tag) = value_tag_opt
 						{
 							/*let value_id = if let ir::LocalMetaVariable::ValueTag(value_tag) = & funclet.local_meta_variables[value_tag_id]
 							{
@@ -456,12 +434,14 @@ impl<'program> CodeGen<'program>
 		// ValueTag is only meaningful locally
 		// If we were to make this global, we'd need a key for disambiguation of different call instances and a way to define equivalence classes of valuetags (for example, between a phi and the node used as input for that phi)
 		// Because of this, we need to recreate this for each funclet instance
-		let mut slot_value_tags = HashMap::<scheduling_state::SlotId, Option<ir::ValueTag>>::new();
+		//let mut slot_value_tags = HashMap::<scheduling_state::SlotId, Option<ir::ValueTag>>::new();
 
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 		let funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& funclet_id];
 		//let scheduled_value_funclet = & self.program.value_funclets[& scheduling_funclet.value_funclet_id];
+
+		let mut funclet_scoped_state = FuncletScopedState::new(funclet_scheduling_extra.value_funclet_id, funclet_id);
 
 		// Ugly hack for now... in a pile of even worse hacks
 		let mut argument_node_results = Vec::<NodeResult>::new();
@@ -479,16 +459,16 @@ impl<'program> CodeGen<'program>
 
 			match & self.program.types[input_type_id]
 			{
-				ir::Type::Slot { value_type, value_tag_opt, queue_stage, queue_place, fence_id } =>
+				ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
 				{
-					let tag = match * value_tag_opt
+					let tag = match * value_tag
 					{
-						None => None,
-						Some(ir::ValueTag::Operation{remote_node_id}) => Some(ir::ValueTag::Operation{remote_node_id}),
-						Some(ir::ValueTag::ConcreteInput{funclet_id, index}) => Some(ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}}),
+						ir::ValueTag::None => ir::ValueTag::None,
+						ir::ValueTag::Operation{remote_node_id} => ir::ValueTag::Operation{remote_node_id},
+						ir::ValueTag::ConcreteInput{funclet_id, index} => ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
 						_ => panic!("Unimplemented")
 					};
-					slot_value_tags.insert(slot_id, tag);
+					funclet_scoped_state.slot_value_tags.insert(slot_id, tag);
 				}
 				_ => panic!("Unimplemented")
 			}
@@ -538,7 +518,7 @@ impl<'program> CodeGen<'program>
 					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* type_id, * place, ir::ResourceQueueStage::None);
 					placement_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
 
-					slot_value_tags.insert(slot_id, Some(ir::ValueTag::Operation{remote_node_id : * operation}));
+					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
 
 					// To do: Allocate from buffers for GPU/CPU and assign variable
 				}
@@ -660,44 +640,42 @@ impl<'program> CodeGen<'program>
 					{
 						for (slot_index, slot_id) in output_slot_ids.iter().enumerate()
 						{
-							if let Some(value_tag) = slot_value_tags[slot_id]
+							let value_tag = funclet_scoped_state.slot_value_tags[slot_id];
+							match value_tag
 							{
-								match value_tag
+								ir::ValueTag::None => (),
+								ir::ValueTag::Input{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+								ir::ValueTag::Output{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+								ir::ValueTag::Operation{remote_node_id} =>
 								{
-									ir::ValueTag::Input{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-									ir::ValueTag::Output{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-									ir::ValueTag::Operation{remote_node_id} =>
+									assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
+									if let ir::Node::ExtractResult { node_id, index } = & encoded_funclet.nodes[remote_node_id.node_id]
 									{
-										assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
-										if let ir::Node::ExtractResult { node_id, index } = & encoded_funclet.nodes[remote_node_id.node_id]
-										{
-											assert_eq!(slot_index, * index);
-											assert_eq!(operation.node_id, * node_id);
-										}
+										assert_eq!(slot_index, * index);
+										assert_eq!(operation.node_id, * node_id);
 									}
-									ir::ValueTag::ConcreteInput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
-									ir::ValueTag::ConcreteOutput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
 								}
+								ir::ValueTag::ConcreteInput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
+								ir::ValueTag::ConcreteOutput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
 							}
 						}
 					}
 					else
 					{
 						assert_eq!(output_slot_ids.len(), 1);
-						if let Some(value_tag) = slot_value_tags[& output_slot_ids[0]]
+						let value_tag = funclet_scoped_state.slot_value_tags[& output_slot_ids[0]];
+						match value_tag
 						{
-							match value_tag
+							ir::ValueTag::None => (),
+							ir::ValueTag::Input{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+							ir::ValueTag::Output{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+							ir::ValueTag::Operation{remote_node_id} =>
 							{
-								ir::ValueTag::Input{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-								ir::ValueTag::Output{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-								ir::ValueTag::Operation{remote_node_id} =>
-								{
-									assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
-									assert_eq!(operation.node_id, remote_node_id.node_id);
-								}
-								ir::ValueTag::ConcreteInput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
-								ir::ValueTag::ConcreteOutput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
+								assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
+								assert_eq!(operation.node_id, remote_node_id.node_id);
 							}
+							ir::ValueTag::ConcreteInput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
+							ir::ValueTag::ConcreteOutput{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
 						}
 					}
 
@@ -827,11 +805,11 @@ impl<'program> CodeGen<'program>
 						// To do: Check value compatibility
 						output_slots.push(slot_id);
 
-						let slot_value_tag = slot_value_tags[& slot_id];
+						let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 
 						match & self.program.types[& funclet.output_types[return_index]]
 						{
-							ir::Type::Slot { value_type, value_tag_opt, queue_stage, queue_place, fence_id } =>
+							ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
 							{
 								// Scheduling state checks are easy...
 								assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), * queue_place);
@@ -839,14 +817,14 @@ impl<'program> CodeGen<'program>
 								// To do: Fence
 
 								// Value tag checks are something else...
-								match (slot_value_tag, * value_tag_opt)
+								match (slot_value_tag, * value_tag)
 								{
-									(_, None) => (),
-									(Some(ir::ValueTag::Operation{remote_node_id}), Some(ir::ValueTag::Operation{remote_node_id : remote_node_id_2})) =>
+									(_, ir::ValueTag::None) => (),
+									(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Operation{remote_node_id : remote_node_id_2}) =>
 									{
 										assert_eq!(remote_node_id, remote_node_id_2);
 									}
-									(Some(ir::ValueTag::Operation{remote_node_id}), Some(ir::ValueTag::ConcreteOutput{funclet_id, index})) =>
+									(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::ConcreteOutput{funclet_id, index}) =>
 									{
 										// Sanity
 										assert_eq!(remote_node_id.funclet_id, funclet_id);
@@ -953,11 +931,11 @@ impl<'program> CodeGen<'program>
 								assert!(used_slot_ids.insert(slot_id));
 								callee_input_slots.push(slot_id);
 
-								let slot_value_tag = slot_value_tags[& slot_id];
+								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 
 								match & self.program.types[& callee_funclet.input_types[callee_argument_index]]
 								{
-									ir::Type::Slot { value_type, value_tag_opt, queue_stage, queue_place, fence_id } =>
+									ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
 									{
 										// Scheduling state checks are easy...
 										assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), * queue_place);
@@ -965,13 +943,14 @@ impl<'program> CodeGen<'program>
 										// To do: Fence
 
 										// Value tag checks are something else...
-										match (slot_value_tag, * value_tag_opt)
+										match (slot_value_tag, * value_tag)
 										{
-											(_, None) => (),
-											(Some(ir::ValueTag::Operation{remote_node_id}), Some(ir::ValueTag::ConcreteInput{funclet_id, index})) =>
+											(_, ir::ValueTag::None) => (),
+											(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::ConcreteInput{funclet_id, index}) =>
 											{
 												// Sanity
-												assert_eq!(remote_node_id.funclet_id, funclet_id);
+												assert_eq!(remote_node_id.funclet_id, funclet_scoped_state.value_funclet_id);
+												assert_eq!(callee_value_funclet_id, funclet_id);
 												assert_eq!(callee_value_funclet.input_types[index], * value_type);
 
 												// All this ceremony leads up to this:
@@ -1034,11 +1013,11 @@ impl<'program> CodeGen<'program>
 							{
 								assert!(used_slot_ids.insert(slot_id));
 
-								let slot_value_tag = slot_value_tags[& slot_id];
+								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 
 								match & self.program.types[& continuation_funclet.input_types[continuation_argument_index]]
 								{
-									ir::Type::Slot { value_type, value_tag_opt, queue_stage, queue_place, fence_id } =>
+									ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
 									{
 										// Scheduling state checks are easy...
 										assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), * queue_place);
@@ -1046,10 +1025,10 @@ impl<'program> CodeGen<'program>
 										// To do: Fence
 
 										// Value tag checks are something else...
-										match (slot_value_tag, * value_tag_opt)
+										match (slot_value_tag, * value_tag)
 										{
-											(_, None) => (),
-											(Some(ir::ValueTag::Operation{remote_node_id}), Some(ir::ValueTag::Operation{remote_node_id : remote_node_id_2})) =>
+											(_, ir::ValueTag::None) => (),
+											(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Operation{remote_node_id : remote_node_id_2}) =>
 											{
 												assert_eq!(remote_node_id, remote_node_id_2);
 											}
@@ -1070,7 +1049,7 @@ impl<'program> CodeGen<'program>
 							let continuation_input_index = continuation_arguments.len() + callee_output_index;
 							match (& self.program.types[callee_output_type], & self.program.types[& continuation_funclet.input_types[continuation_input_index]])
 							{
-								(ir::Type::Slot { value_type, value_tag_opt, queue_stage, queue_place, fence_id }, ir::Type::Slot { value_type : value_type_2, value_tag_opt : value_tag_opt_2, queue_stage : queue_stage_2, queue_place : queue_place_2, fence_id : fence_id_2 }) =>
+								(ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id }, ir::Type::Slot { value_type : value_type_2, value_tag : value_tag_2, queue_stage : queue_stage_2, queue_place : queue_place_2, fence_id : fence_id_2 }) =>
 								{
 									// Scheduling state checks are easy...
 									assert_eq!(* queue_place_2, * queue_place);
@@ -1079,21 +1058,22 @@ impl<'program> CodeGen<'program>
 									// To do: Fence
 
 									// Value tag checks are something else...
-									match (* value_tag_opt, * value_tag_opt_2)
+									match (* value_tag, * value_tag_2)
 									{
-										(_, None) => (),
-										(Some(ir::ValueTag::ConcreteOutput{funclet_id, index : output_index}), Some(ir::ValueTag::Operation{remote_node_id})) =>
+										(_, ir::ValueTag::None) => (),
+										(ir::ValueTag::ConcreteOutput{funclet_id, index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
 										{
 											assert_eq!(remote_node_id.funclet_id, value_operation.funclet_id);
-											assert_eq!(funclet_id, * callee_funclet_id);
-											if let ir::Node::ExtractResult{node_id : call_node_id, index} = & self.program.funclets[& funclet_id].nodes[remote_node_id.node_id]
+											assert_eq!(funclet_id, callee_value_funclet_id);
+											let node = & self.program.funclets[& remote_node_id.funclet_id].nodes[remote_node_id.node_id];
+											if let ir::Node::ExtractResult{node_id : call_node_id, index} = node
 											{
 												assert_eq!(* index, output_index);
 												assert_eq!(* call_node_id, value_operation.node_id);
 											}
 											else
 											{
-												panic!("Target operation is not a result extraction");
+												panic!("Target operation is not a result extraction: #{:?} {:?}", remote_node_id, node);
 											}
 										}
 										_ => panic!("Ill-formed")
