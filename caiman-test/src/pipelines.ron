@@ -3,12 +3,13 @@
 	program : (
 		types : {
 			0 : I32,
-			1 : Slot(value_type : 0, value_tag : None, queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			1 : Slot(value_type : 0, queue_stage : Ready, queue_place : Local ),
+			/*1 : Slot(value_type : 0, value_tag : None, queue_stage : Ready, queue_place : Local, fence_id : 0 ),
 			2 : Slot(value_type : 0, value_tag : ConcreteInput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
 			3 : Slot(value_type : 0, value_tag : ConcreteOutput(funclet_id : 9, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
 			4 : Slot(value_type : 0, value_tag : ConcreteInput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
 			5 : Slot(value_type : 0, value_tag : ConcreteOutput(funclet_id : 10, index : 0), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
-			6 : Slot(value_type : 0, value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), queue_stage : Ready, queue_place : Local, fence_id : 0 ),
+			6 : Slot(value_type : 0, value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), queue_stage : Ready, queue_place : Local, fence_id : 0 ),*/
 		},
 		funclets : {
 			0 : (
@@ -174,8 +175,8 @@
 
 			12 : (
 				kind : ScheduleExplicit,
-				input_types : [2],
-				output_types : [3],
+				input_types : [1],
+				output_types : [1],
 
 				nodes : [
 					Phi(index : 0),
@@ -195,8 +196,8 @@
 
 			13 : (
 				kind : ScheduleExplicit,
-				input_types : [4],
-				output_types : [5],
+				input_types : [1],
+				output_types : [1],
 
 				nodes : [
 					Phi(index : 0),
@@ -206,8 +207,8 @@
 
 			14 : (
 				kind : ScheduleExplicit,
-				input_types : [6],
-				output_types : [5],
+				input_types : [1],
+				output_types : [1],
 
 				nodes : [
 					Phi(index : 0),
@@ -249,10 +250,8 @@
 		scheduling_funclet_extras : {
 			11 : (
 				value_funclet_id : 0,
-				input_binding_start : 0,
-				per_input_slot_counts : [1],
-				output_binding_start : 0,
-				per_output_slot_counts : [1],
+				input_slots : {0 : (value_tag : None)},
+				output_slots : {0 : (value_tag : None)},
 				fences : {
 					0 : Fence(
 						prior_fence_ids : [],
@@ -261,10 +260,8 @@
 			),
 			12 : (
 				value_funclet_id : 9,
-				input_binding_start : 0,
-				per_input_slot_counts : [1],
-				output_binding_start : 0,
-				per_output_slot_counts : [1],
+				input_slots : {0 : (value_tag : ConcreteInput(funclet_id : 9, index : 0))},
+				output_slots : {0 : (value_tag : ConcreteOutput(funclet_id : 9, index : 0))},
 				fences : {
 					0 : Fence(
 						prior_fence_ids : [],
@@ -273,10 +270,8 @@
 			),
 			13 : (
 				value_funclet_id : 10,
-				input_binding_start : 0,
-				per_input_slot_counts : [1],
-				output_binding_start : 0,
-				per_output_slot_counts : [1],
+				input_slots : {0 : (value_tag : ConcreteInput(funclet_id : 10, index : 0))},
+				output_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 0)) )},
 				fences : {
 					0 : Fence(
 						prior_fence_ids : [],
@@ -285,10 +280,8 @@
 			),
 			14 : (
 				value_funclet_id : 10,
-				input_binding_start : 0,
-				per_input_slot_counts : [1],
-				output_binding_start : 0,
-				per_output_slot_counts : [1],
+				input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)) )},
+				output_slots : {0 : (value_tag : ConcreteOutput(funclet_id : 10, index : 0))},
 				fences : {
 					0 : Fence(
 						prior_fence_ids : [],

@@ -392,7 +392,7 @@ impl<'program> CodeGen<'program>
 				
 				match & self.program.types[input_type_id]
 				{
-					ir::Type::Slot { value_type, value_tag, /*value_instance_id_opt, local_resource_id,*/ queue_stage, queue_place, fence_id } =>
+					ir::Type::Slot { value_type, queue_stage, queue_place } =>
 					{
 						//if let Some(value_tag) = value_tag_opt
 						{
@@ -456,12 +456,13 @@ impl<'program> CodeGen<'program>
 			assert!(is_valid);
 			
 			let slot_id = argument_slot_ids[index];
+			let slot_info = & funclet_scheduling_extra.input_slots[& index];
 
 			match & self.program.types[input_type_id]
 			{
-				ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
+				ir::Type::Slot { value_type, queue_stage, queue_place } =>
 				{
-					let tag = match * value_tag
+					let tag = match slot_info.value_tag
 					{
 						ir::ValueTag::None => ir::ValueTag::None,
 						ir::ValueTag::Operation{remote_node_id} => ir::ValueTag::Operation{remote_node_id},
@@ -809,15 +810,17 @@ impl<'program> CodeGen<'program>
 
 						match & self.program.types[& funclet.output_types[return_index]]
 						{
-							ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
+							ir::Type::Slot { value_type, queue_stage, queue_place } =>
 							{
 								// Scheduling state checks are easy...
 								assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), * queue_place);
 								assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), * queue_stage);
 								// To do: Fence
 
+								let value_tag = funclet_scheduling_extra.output_slots[& return_index].value_tag;
+
 								// Value tag checks are something else...
-								match (slot_value_tag, * value_tag)
+								match (slot_value_tag, value_tag)
 								{
 									(_, ir::ValueTag::None) => (),
 									(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Operation{remote_node_id : remote_node_id_2}) =>
@@ -836,7 +839,7 @@ impl<'program> CodeGen<'program>
 											_ => panic!("Unimplemented")
 										}
 									}
-									_ => panic!("Ill-formed")
+									_ => panic!("Ill-formed: {:?} to {:?}", slot_value_tag, value_tag)
 								};
 							}
 							_ => panic!("Not a slot type")
@@ -935,15 +938,17 @@ impl<'program> CodeGen<'program>
 
 								match & self.program.types[& callee_funclet.input_types[callee_argument_index]]
 								{
-									ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
+									ir::Type::Slot { value_type, queue_stage, queue_place } =>
 									{
 										// Scheduling state checks are easy...
 										assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), * queue_place);
 										assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), * queue_stage);
 										// To do: Fence
 
+										let value_tag = callee_funclet_scheduling_extra.input_slots[& callee_argument_index].value_tag;
+
 										// Value tag checks are something else...
-										match (slot_value_tag, * value_tag)
+										match (slot_value_tag, value_tag)
 										{
 											(_, ir::ValueTag::None) => (),
 											(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::ConcreteInput{funclet_id, index}) =>
@@ -958,7 +963,7 @@ impl<'program> CodeGen<'program>
 												assert_eq!(arguments[index], remote_node_id.node_id);
 												// That's "it"
 											}
-											_ => panic!("Ill-formed")
+											_ => panic!("Ill-formed: {:?} to {:?}", slot_value_tag, value_tag)
 										};
 									}
 									_ => panic!("Not a slot type")
@@ -1017,22 +1022,24 @@ impl<'program> CodeGen<'program>
 
 								match & self.program.types[& continuation_funclet.input_types[continuation_argument_index]]
 								{
-									ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id } =>
+									ir::Type::Slot { value_type, queue_stage, queue_place } =>
 									{
 										// Scheduling state checks are easy...
 										assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), * queue_place);
 										assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), * queue_stage);
 										// To do: Fence
 
+										let value_tag = continuation_funclet_scheduling_extra.input_slots[& continuation_argument_index].value_tag;
+
 										// Value tag checks are something else...
-										match (slot_value_tag, * value_tag)
+										match (slot_value_tag, value_tag)
 										{
 											(_, ir::ValueTag::None) => (),
 											(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Operation{remote_node_id : remote_node_id_2}) =>
 											{
 												assert_eq!(remote_node_id, remote_node_id_2);
 											}
-											_ => panic!("Ill-formed")
+											_ => panic!("Ill-formed: {:?} to {:?}", slot_value_tag, value_tag)
 										};
 									}
 									_ => panic!("Not a slot type")
@@ -1049,7 +1056,7 @@ impl<'program> CodeGen<'program>
 							let continuation_input_index = continuation_arguments.len() + callee_output_index;
 							match (& self.program.types[callee_output_type], & self.program.types[& continuation_funclet.input_types[continuation_input_index]])
 							{
-								(ir::Type::Slot { value_type, value_tag, queue_stage, queue_place, fence_id }, ir::Type::Slot { value_type : value_type_2, value_tag : value_tag_2, queue_stage : queue_stage_2, queue_place : queue_place_2, fence_id : fence_id_2 }) =>
+								(ir::Type::Slot { value_type, queue_stage, queue_place }, ir::Type::Slot { value_type : value_type_2, queue_stage : queue_stage_2, queue_place : queue_place_2 }) =>
 								{
 									// Scheduling state checks are easy...
 									assert_eq!(* queue_place_2, * queue_place);
@@ -1057,8 +1064,11 @@ impl<'program> CodeGen<'program>
 									assert_eq!(* value_type_2, * value_type);
 									// To do: Fence
 
+									let value_tag = callee_funclet_scheduling_extra.output_slots[& callee_output_index].value_tag;
+									let value_tag_2 = continuation_funclet_scheduling_extra.input_slots[& continuation_input_index].value_tag;
+
 									// Value tag checks are something else...
-									match (* value_tag, * value_tag_2)
+									match (value_tag, value_tag_2)
 									{
 										(_, ir::ValueTag::None) => (),
 										(ir::ValueTag::ConcreteOutput{funclet_id, index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
@@ -1076,7 +1086,7 @@ impl<'program> CodeGen<'program>
 												panic!("Target operation is not a result extraction: #{:?} {:?}", remote_node_id, node);
 											}
 										}
-										_ => panic!("Ill-formed")
+										_ => panic!("Ill-formed: {:?} to {:?}", value_tag, value_tag_2)
 									};
 								}
 								_ => panic!("Not a slot type")

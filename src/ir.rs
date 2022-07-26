@@ -111,9 +111,11 @@ pub enum Type
 	//BufferMutRef {local_resource_id : LocalMetaVariableId},
 	//Texture
 
-	Fence { id : FenceId },
+	//Fence { id : FenceId },
 
-	Slot{ value_type : TypeId, value_tag : ValueTag, queue_stage : ResourceQueueStage, queue_place : Place, fence_id : FenceId },
+	Slot{ value_type : TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
+	//Slot{ value_type : TypeId, value_tag : ValueTag, queue_stage : ResourceQueueStage, queue_place : Place, fence_id : FenceId },
+	//Slot,
 }
 
 // Local Meta Variables are used to serve as ids for when types in input/output lists need to relate to each other
@@ -194,14 +196,26 @@ pub struct Funclet
 	//pub local_meta_variables : BTreeMap<LocalMetaVariableId, LocalMetaVariable>,
 }
 
+// Funclet-relative slot info goes here
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SlotInfo
+{
+	pub value_tag : ValueTag,
+	//pub queue_stage : ResourceQueueStage,
+	//pub queue_place : Place,
+	//pub fence_id : FenceId
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SchedulingFuncletExtra
 {
 	pub value_funclet_id : FuncletId,
-	pub input_binding_start : usize,
+	pub input_slots : HashMap<usize, SlotInfo>,
+	pub output_slots : HashMap<usize, SlotInfo>,
+	/*pub input_binding_start : usize,
 	pub per_input_slot_counts : Box<[usize]>,
 	pub output_binding_start : usize,
-	pub per_output_slot_counts : Box<[usize]>,
+	pub per_output_slot_counts : Box<[usize]>,*/
 	pub fences : BTreeMap<FenceId, Fence>,
 }
 
