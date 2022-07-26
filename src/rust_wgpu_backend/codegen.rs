@@ -79,6 +79,23 @@ impl PlacementState
 		//self.slot_variable_ids.insert(node, );
 	}*/
 
+	fn get_slot_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[scheduling_state::SlotId]>>
+	{
+		let mut slot_ids = Vec::<scheduling_state::SlotId>::new();
+		for node_id in node_ids.iter()
+		{
+			match self.node_results[node_id]
+			{
+				NodeResult::Slot{slot_id} =>
+				{	
+					slot_ids.push(slot_id)
+				}
+				_ => return None
+			}
+		}
+		Some(slot_ids.into_boxed_slice())
+	}
+
 	fn get_var_ids(&self, node_ids : &[ir::NodeId], place : ir::Place) -> Option<Box<[usize]>>
 	{
 		let mut var_ids = Vec::<usize>::new();
@@ -323,6 +340,26 @@ impl<'program> CodeGen<'program>
 				let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
 
 				assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
+
+				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
+			}
+			ir::Node::Select { condition, true_case, false_case } =>
+			{
+				assert_eq!(input_slot_ids.len(), 3);
+				assert_eq!(output_slot_ids.len(), 1);
+
+				/*let condition_var_id = if let NodeResult::Slot{slot_id} = placement_state.node_results[* condition] { placement_state.slot_variable_ids[& slot_id] } else { panic!("Not a slot") };
+				let true_var_id = placement_state.slot_variable_ids[& true_case];
+				let false_var_id = placement_state.slot_variable_ids[& false_case];*/
+
+				let input_var_ids = placement_state.get_var_ids(& [* condition, * true_case, * false_case], ir::Place::Local).unwrap();
+
+				let slot_id = output_slot_ids[0];
+				let variable_id = self.code_generator.build_select_hack(input_var_ids[0], input_var_ids[1], input_var_ids[2]);
+
+				//assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 
@@ -612,6 +649,7 @@ impl<'program> CodeGen<'program>
 						// Single return nodes
 						ir::Node::ConstantInteger { .. } => false,
 						ir::Node::ConstantUnsignedInteger { .. } => false,
+						ir::Node::Select { .. } => false,
 						// Multiple return nodes
 						ir::Node::CallExternalCpu { .. } => true,
 						ir::Node::CallExternalGpuCompute { .. } => true,
@@ -1070,6 +1108,59 @@ impl<'program> CodeGen<'program>
 						return self.compile_scheduling_funclet(* continuation_funclet_id, continuation_input_slots.as_slice(), pipeline_context, placement_state);
 					}
 					_ => panic!("Node cannot be scheduled via ScheduleCall")
+				}
+			}
+			ir::TailEdge::ScheduleSelect { value_operation, callee_funclet_ids, callee_arguments, continuation_funclet_id } =>
+			{
+
+				// The operation of each output of the callee funclets must be exactly equal to the corresponding input of the continuation funclet
+				// Except for the 0th output, which will be the respective branch in the callee funclet and the select itself in the continuation input
+
+				assert_eq!(funclet_scheduling_extra.value_funclet_id, value_operation.funclet_id);
+				let encoded_value_funclet = & self.program.funclets[& value_operation.funclet_id];
+				let encoded_node = & encoded_value_funclet.nodes[value_operation.node_id];
+				let encoded_value_funclet_id = value_operation.funclet_id;
+
+				let continuation_funclet = & self.program.funclets[continuation_funclet_id];
+				assert_eq!(continuation_funclet.kind, ir::FuncletKind::ScheduleExplicit);
+				let continuation_funclet_scheduling_extra = & self.program.scheduling_funclet_extras[continuation_funclet_id];
+				assert_eq!(funclet_scheduling_extra.value_funclet_id, continuation_funclet_scheduling_extra.value_funclet_id);
+
+				let continuation_value_funclet_id = continuation_funclet_scheduling_extra.value_funclet_id;
+				let continuation_value_funclet = & self.program.funclets[& continuation_value_funclet_id];
+				assert_eq!(continuation_value_funclet.kind, ir::FuncletKind::Value);
+
+				assert_eq!(encoded_value_funclet_id, continuation_value_funclet_id);
+
+				match & encoded_node
+				{
+					ir::Node::Select { condition, true_case, false_case } =>
+					{
+
+						// To do: Refactor compatibility check in ScheduleCall so writing the check for ScheduleSelect doesn't cause me physical pain
+
+						//let condition_slot_id = if let NodeResult::Slot{slot_id} = placement_state.node_results[& callee_arguments[0]] { * slot_id } else { panic!("") };
+		
+						let input_slot_ids = placement_state.get_slot_ids(& callee_arguments).unwrap();
+						let input_var_ids = placement_state.get_var_ids(& callee_arguments, ir::Place::Local).unwrap();
+						let output_var_ids = self.code_generator.begin_if_else(input_var_ids[0], & continuation_funclet.input_types);
+						let if_branch_output_slots = self.compile_scheduling_funclet(callee_funclet_ids[0], & input_slot_ids, pipeline_context, placement_state);
+						self.code_generator.end_if_begin_else(& placement_state.get_slot_var_ids(& if_branch_output_slots, ir::Place::Local).unwrap());
+						let else_branch_output_slots = self.compile_scheduling_funclet(callee_funclet_ids[1], & input_slot_ids, pipeline_context, placement_state);
+						self.code_generator.end_else(& placement_state.get_slot_var_ids(& else_branch_output_slots, ir::Place::Local).unwrap());
+		
+						let mut output_slot_ids = Vec::<scheduling_state::SlotId>::new();
+						for (output_index, var_id) in output_var_ids.iter().enumerate()
+						{
+							let slot_id = placement_state.scheduling_state.insert_hacked_slot(continuation_funclet.input_types[output_index], ir::Place::Local, ir::ResourceQueueStage::None);
+							//slot_value_tags.insert(slot_id, Some(ir::ValueTag::Operation{remote_node_id : * operation}));
+							placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, * var_id);
+							output_slot_ids.push(slot_id);
+						}
+
+						return self.compile_scheduling_funclet(* continuation_funclet_id, output_slot_ids.as_slice(), pipeline_context, placement_state);
+					}
+					_ => panic!("Must be a select node")
 				}
 			}
 		/*ir::TailEdge::ScheduleReturn { return_values/*, output_slots*/ } =>

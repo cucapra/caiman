@@ -1234,6 +1234,70 @@ impl<'program> CodeGenerator<'program>
 		variable_id
 	}
 
+	pub fn build_select_hack(&mut self, condition_var_id : usize, true_case_var_id : usize, false_case_var_id : usize) -> usize
+	{
+		//let variable_id = self.variable_tracker.generate();
+		let true_type_id = self.variable_tracker.variable_types[& true_case_var_id];
+		let false_type_id = self.variable_tracker.variable_types[& false_case_var_id];
+		assert_eq!(true_type_id, false_type_id);
+		let type_id = true_type_id;
+		self.generate_type_definition(type_id);
+		let variable_id = self.variable_tracker.create_local(type_id);
+		// Too lazy to implement booleans for now
+		write!(self.code_writer, "let var_{} : {} = if var_{} != 0 {{ var_{} }} else {{ var_{} }};\n", variable_id, self.get_type_name(type_id), condition_var_id, true_case_var_id, false_case_var_id);
+		variable_id
+	}
+
+	pub fn begin_if_else(&mut self, condition_var_id : usize, output_type_ids : &[ir::TypeId]) -> Box<[usize]>
+	{
+		write!(self.code_writer, "let ( ");
+		let mut var_ids = Vec::<usize>::new();
+		for (i, type_id) in output_type_ids.iter().enumerate()
+		{
+			self.generate_type_definition(* type_id);
+			let var_id = self.variable_tracker.create_local(* type_id);
+
+			write!(self.code_writer, "var_{} : {}", var_id, self.get_type_name(* type_id));
+			if i < output_type_ids.len() - 1
+			{
+				write!(self.code_writer, ", ");
+			}
+
+			var_ids.push(var_id);
+		}
+		write!(self.code_writer, " ) = if var_{} !=0 {{ ", condition_var_id);
+
+		var_ids.into_boxed_slice()
+	}
+
+	pub fn end_if_begin_else(&mut self, output_var_ids : &[usize])
+	{
+		write!(self.code_writer, " ( ");
+		for (i, var_id) in output_var_ids.iter().enumerate()
+		{
+			write!(self.code_writer, "{}", var_id);
+			if i < output_var_ids.len() - 1
+			{
+				write!(self.code_writer, ", ");
+			}
+		}
+		write!(self.code_writer, " ) }} else {{ ");
+	}
+
+	pub fn end_else(&mut self, output_var_ids : &[usize])
+	{
+		write!(self.code_writer, " ( ");
+		for (i, var_id) in output_var_ids.iter().enumerate()
+		{
+			write!(self.code_writer, "{}", var_id);
+			if i < output_var_ids.len() - 1
+			{
+				write!(self.code_writer, ", ");
+			}
+		}
+		write!(self.code_writer, " ) }};\n");
+	}
+
 	pub fn build_external_cpu_function_call(&mut self, external_function_id : ir::ExternalCpuFunctionId, argument_vars : &[usize]) -> Box<[usize]>
 	{
 		let external_cpu_function = & self.external_cpu_functions[external_function_id];
