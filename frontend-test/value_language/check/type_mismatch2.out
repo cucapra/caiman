@@ -1,0 +1,2 @@
+At type_mismatch2.vl:2:1, 
+  Semantic Error: Type mismatch: Expected Bool, found Ordinary(I32)

@@ -3,6 +3,7 @@ use crate::value_language::ast;
 use crate::value_language::ast_factory::ASTFactory;
 use crate::value_language::error::Error;
 use crate::value_language::error::ErrorKind;
+use crate::value_language::error::ErrorLocation;
 use std::path::Path;
 use std::fs::File;
 
@@ -22,7 +23,7 @@ fn make_error((l, c): (usize, usize), filename: &str, p: ParsingError) -> Error
     Error
     {
         kind: ErrorKind::Parsing(p),
-        location: (l, c),
+        location: ErrorLocation::Single(l, c),
         filename: filename.to_string(),
     }
 }

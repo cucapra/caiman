@@ -9,6 +9,7 @@
 // https://github.com/sampsyo/bril/blob/main/bril-rs/bril2json/src/lib.rs
 
 use crate::value_language::ast::*;
+use crate::value_language::typing::Type;
 
 pub struct ASTFactory 
 { 
@@ -148,12 +149,12 @@ impl ASTFactory
         &self,
         l: usize,
         m: bool,
-        x: String,
+        vwt: VarWithType,
         e: ParsedExpr,
         r: usize,
     ) -> ParsedStmt
     {
-        (self.info(l, r), StmtKind::Let(m, x, e))
+        (self.info(l, r), StmtKind::Let(m, vwt, e))
     }
 
     pub fn assign(
@@ -171,12 +172,13 @@ impl ASTFactory
         &self,
         l: usize,
         f: String,
-        params: Vec<String>,
+        params: Vec<VarWithType>,
+        ret: Type,
         v: Vec<ParsedStmt>,
         r: usize,
     ) -> ParsedStmt
     {
-        (self.info(l, r), StmtKind::Function(f, params, v))
+        (self.info(l, r), StmtKind::Function(f, params, ret, v))
     }
 
     pub fn ccall(

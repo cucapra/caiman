@@ -13,7 +13,7 @@ struct Arguments
     #[clap(short)]
     ir_version: bool,
     #[clap(short)]
-    value_language: bool,
+    parse: bool,
 }
 
 fn main() 
@@ -35,20 +35,9 @@ fn main()
             },
         }
     }
-    if args.value_language
+    else
     {
-        match value_language::run_parser::parse_file(&args.filename)
-        {
-            Ok(ast) => {
-                for statement in ast.iter() 
-                {
-                    println!("{:?}", statement);
-                }
-            },
-            Err(why) => {
-                println!("{}", why)
-            },
-        }
+        value_language::compiler::run(&args.filename);
     }
 }
 

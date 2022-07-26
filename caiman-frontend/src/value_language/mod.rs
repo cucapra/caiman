@@ -5,4 +5,5 @@ pub mod error;
 pub mod run_parser;
 pub mod typing;
 pub mod check;
+pub mod compiler;
 

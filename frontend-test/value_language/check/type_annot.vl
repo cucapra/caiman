@@ -1,0 +1,5 @@
+let x : i32 = 6;
+let b : bool = false;
+let y : i32 = x;
+let z : i32 = x + y;
+let b2 : bool = b || false;

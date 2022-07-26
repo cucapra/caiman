@@ -1,4 +1,5 @@
 use crate::value_language::ast::*;
+use crate::value_language::typing::Type;
 use crate::value_language::ast_factory::ASTFactory;
 
 grammar(astf: &ASTFactory);
@@ -8,9 +9,10 @@ match {
   r"[-]?[0-9]+([.][0-9]+)?", // Constant
 
   "let", "mut", "input", "print", "if", "while", "fn", "return",
-  "=", ";", "(", ")", ",", "{", "}", ":",
+  "=", ";", "(", ")", ",", "{", "}", ":", "->",
   "+", "-", "*", "/", "&&", "||", "==", "!",
   "true", "false",
+  "i32", "bool",
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
@@ -19,15 +21,19 @@ match {
 pub Program: ParsedProgram = { Stmt* => <> }
 
 pub Stmt: ParsedStmt = {
-    <@L> "if" <Expr> "{" <Stmt*> "}" <@R>        => astf.if_stmt(<>), 
-    <@L> "while" <Expr> "{" <Stmt*> "}" <@R>     => astf.while_stmt(<>),
-    <@L> "print" "(" <Expr> ")" ";" <@R>         => astf.print(<>),
-    <@L> "let" <Mut> <Id> "=" <Expr> ";" <@R>    => astf.let_stmt(<>),
-    <@L> <Id> "=" <Expr> ";" <@R>                => astf.assign(<>),
-    <@L> <Id> "(" <CommaList<Expr>> ")" ";" <@R> => astf.ccall(<>),
-    <@L> "return" <Expr> ";" <@R>                => astf.return_stmt(<>),
-    <@L> "fn" <Id> "(" <CommaList<Id>> ")" "{" <Stmt*> "}" <@R> => 
-        astf.function(<>),
+    <@L> "if" <Expr> "{" <Stmt*> "}" <@R>              => astf.if_stmt(<>), 
+    <@L> "while" <Expr> "{" <Stmt*> "}" <@R>           => astf.while_stmt(<>),
+    <@L> "print" "(" <Expr> ")" ";" <@R>               => astf.print(<>),
+    <@L> "let" <Mut> <VarWithType> "=" <Expr> ";" <@R> => astf.let_stmt(<>),
+    <@L> <Id> "=" <Expr> ";" <@R>                      => astf.assign(<>),
+    <@L> <Id> "(" <CommaList<Expr>> ")" ";" <@R>       => astf.ccall(<>),
+    <@L> "return" <Expr> ";" <@R>                      => astf.return_stmt(<>),
+    <@L> "fn" <Id> "(" <CommaList<VarWithType>> ")" 
+      "->" <Type> "{" <Stmt*> "}" <@R>                 => astf.function(<>),
+}
+
+VarWithType: VarWithType = {
+    <Id> ":" <Type> => (<>)
 }
 
 Expr: ParsedExpr = {
@@ -112,16 +118,21 @@ Mut: bool = { <m: "mut"?> => m.is_some() }
 Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
 
 Constant: String = {
-  <r"[-]?[0-9]+([.][0-9]+)?"> => String::from(<>),
+    <r"[-]?[0-9]+([.][0-9]+)?"> => String::from(<>),
 }
 
 CommaList<T>: Vec<T> = {
-  <mut v: (<T> ",")*> <e: T?> => match e { 
-      None => v, 
-      Some(e) => {
-          v.push(e);
-          v
-      },
-  }
+    <mut v: (<T> ",")*> <e: T?> => match e { 
+        None => v, 
+        Some(e) => {
+            v.push(e);
+            v
+        },
+    }
+}
+
+Type: Type = {
+    "i32" => Type::I32,
+    "bool" => Type::Bool,
 }
 
