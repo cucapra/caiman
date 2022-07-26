@@ -102,42 +102,46 @@ fn maximal_rgroups(program: &Program) -> Vec<RGroup> {
     }
 }
 
+pub struct DuplicateInfo {
+    duplicates: HashMap<FuncletId, FuncletId>,
+}
+impl DuplicateInfo {
+    fn new() -> Self {
+        DuplicateInfo {
+            duplicates: HashMap::new(),
+        }
+    }
+    pub fn original(&self, id: FuncletId) -> Option<FuncletId> {
+        self.duplicates.get(&id).copied()
+    }
+    fn duplicate(&mut self, source_id: FuncletId, copy_id: FuncletId) {
+        let source_id = self.original(source_id).unwrap_or(source_id);
+        self.duplicates.insert(copy_id, source_id);
+    }
+}
+
 /// Makes all control flow in `program` reducible via node splitting.
 /// Returns a mapping from the original funclet to their duplicate(s), if any.
-pub fn make_reducible(program: &mut Program) -> HashMap<FuncletId, Vec<FuncletId>> {
-    // mapping from original funclet to duplicates
-    let mut mapping: HashMap<FuncletId, Vec<FuncletId>> = HashMap::new();
-    // mapping from duplicate id to original id
-    let mut inverse_mapping: HashMap<FuncletId, FuncletId> = HashMap::new();
-
+pub fn make_reducible(program: &mut Program) -> DuplicateInfo {
+    let mut info = DuplicateInfo::new();
     let mut rgroups = maximal_rgroups(program);
     while let Some(rg) = rgroups.iter().find(|rg| rg.incoming.len() >= 1) {
         // if there is only one incoming, then you could do T2, not maximal
         assert!(rg.incoming.len() != 1);
         for pred in &rg.incoming[1..] {
-            let mut updated = HashMap::with_capacity(rg.funclets.len());
-            for funclet in rg.funclets.iter() {
-                let copied = program.funclets.create(program.funclets[funclet].clone());
-                updated.insert(funclet, copied);
-
-                let original = *inverse_mapping.get(funclet).unwrap_or(funclet);
-                inverse_mapping.insert(copied, original);
-                match mapping.entry(original) {
-                    Entry::Occupied(mut dupes) => {
-                        dupes.get_mut().push(copied);
-                    }
-                    Entry::Vacant(spot) => {
-                        spot.insert(vec![copied]);
-                    }
-                };
+            let mut copies = HashMap::with_capacity(rg.funclets.len());
+            for &funclet in rg.funclets.iter() {
+                let copy = program.funclets.create(program.funclets[&funclet].clone());
+                copies.insert(funclet, copy);
+                info.duplicate(funclet, copy);
             }
-            for funclet in rgroups[*pred].funclets.iter().chain(updated.values()) {
+            for funclet in rgroups[*pred].funclets.iter().chain(copies.values()) {
                 program.funclets[funclet].tail_edge.map_funclets(|id| {
-                    updated.get(&id).copied().unwrap_or(id) //
+                    copies.get(&id).copied().unwrap_or(id) //
                 })
             }
         }
         rgroups = maximal_rgroups(program);
     }
-    mapping
+    info
 }

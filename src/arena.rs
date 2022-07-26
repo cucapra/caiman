@@ -40,6 +40,10 @@ impl<T> Arena<T>
 		Self{elements, unused_ids, next_id}
 	}
 
+	pub fn keys(&self) -> impl std::iter::Iterator<Item = &'_ usize> {
+		self.elements.keys()
+	}
+
 	fn pop_unused_id(&mut self) -> usize
 	{
 		if let Some(id) = self.unused_ids.pop()
