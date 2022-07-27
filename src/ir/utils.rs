@@ -1,8 +1,8 @@
 #![warn(warnings)]
 #![allow(dead_code)]
 use crate::ir::*;
-use std::cmp::Ordering;
 use std::collections::hash_map::{Entry, HashMap};
+use std::collections::HashSet;
 use thiserror::Error;
 
 /// A "reducible group"; all control flow between funclets within the same reducible group
@@ -135,13 +135,14 @@ pub fn make_reducible(program: &mut Program) -> HashMap<FuncletId, FuncletId> {
     mapping
 }
 
-struct LoopInfo {
+struct LoopTag {
     iloop_header: Option<FuncletId>,
     dfsp_index: usize,
+    is_header: bool,
 }
 
 fn tag_loop_header(
-    traversed: &mut HashMap<FuncletId, LoopInfo>,
+    loops: &mut HashMap<FuncletId, LoopTag>,
     target: FuncletId,
     header: Option<FuncletId>,
 ) {
@@ -150,37 +151,42 @@ fn tag_loop_header(
         if cur1 == cur2 {
             return;
         }
-        while let Some(ih) = traversed[&cur1].iloop_header {
+        // essentially, we walk up the loop header "linked list" until we reach a header
+        // which isn't contained in any loop, and we place it in `cur2`'s loop
+        // note that cur2 may not be `header`: if header is an inner loop, that can swap places
+        // with cur2 and let cur2 propagate up (the paper calls it "weaving")
+        while let Some(ih) = loops[&cur1].iloop_header {
             if ih == cur2 {
                 return;
             }
-            if traversed[&ih].dfsp_index < traversed[&cur2].dfsp_index {
-                traversed.get_mut(&cur1).unwrap().iloop_header = Some(cur2);
+            if loops[&ih].dfsp_index < loops[&cur2].dfsp_index {
+                loops.get_mut(&cur1).unwrap().iloop_header = Some(cur2);
                 cur1 = cur2;
                 cur2 = ih;
             } else {
                 cur1 = ih;
             }
         }
-        traversed.get_mut(&cur1).unwrap().iloop_header = Some(cur2);
+        loops.get_mut(&cur1).unwrap().iloop_header = Some(cur2);
     }
 }
 
 fn traverse_loops_dfs(
     funclets: &Arena<Funclet>,
-    traversed: &mut HashMap<FuncletId, LoopInfo>,
+    loops: &mut HashMap<FuncletId, LoopTag>,
     current: FuncletId,
     dfsp_index: usize,
 ) -> Option<FuncletId> {
     // mark as visited by adding an entry to `traversed`...
     // but we don't want to accidentally overwrite any existing iloop info!
-    match traversed.entry(current) {
+    match loops.entry(current) {
         Entry::Occupied(mut existing) => {
             existing.get_mut().dfsp_index = dfsp_index;
         }
         Entry::Vacant(spot) => {
-            spot.insert(LoopInfo {
+            spot.insert(LoopTag {
                 iloop_header: None,
+                is_header: false,
                 dfsp_index,
             });
         }
@@ -189,18 +195,18 @@ fn traverse_loops_dfs(
     funclets[&current].tail_edge.for_each_funclet(|next| {
         // pretty straightforward adaptation from the paper, except we don't bother with
         // irreducible loops
-        match traversed.entry(next) {
+        match loops.entry(next) {
             Entry::Vacant(_) => {
-                let header = traverse_loops_dfs(funclets, traversed, next, dfsp_index + 1);
-                tag_loop_header(traversed, current, header);
+                let header = traverse_loops_dfs(funclets, loops, next, dfsp_index + 1);
+                tag_loop_header(loops, current, header);
             }
             Entry::Occupied(mut entry) => {
                 if entry.get_mut().dfsp_index > 0 {
-                    // next is a loop header
-                    tag_loop_header(traversed, current, Some(next));
+                    entry.get_mut().is_header = true;
+                    tag_loop_header(loops, current, Some(next));
                 } else if let Some(header) = entry.get_mut().iloop_header {
-                    if traversed.get(&header).unwrap().dfsp_index > 0 {
-                        tag_loop_header(traversed, current, Some(header))
+                    if loops.get(&header).unwrap().dfsp_index > 0 {
+                        tag_loop_header(loops, current, Some(header))
                     } else {
                         panic!("irreducible loop in CFG (includes node #{})", header);
                     }
@@ -210,13 +216,33 @@ fn traverse_loops_dfs(
     });
 
     // reset dfsp index & return the innermost loop header
-    let entry = traversed.get_mut(&current).unwrap();
+    let entry = loops.get_mut(&current).unwrap();
     entry.dfsp_index = 0;
     return entry.iloop_header;
 }
 
-pub fn identify_loops(funclets: &Arena<Funclet>, entry: FuncletId) {
+pub struct Loops {
+    headers: Vec<FuncletId>,
+    header_map: HashMap<FuncletId, Option<FuncletId>>,
+}
+
+pub fn identify_loops(funclets: &Arena<Funclet>, entry: FuncletId) -> Loops {
     // Adapted from http://lenx.100871.net/papers/loop-SAS.pdf
-    let mut traversed = HashMap::new();
-    traverse_loops_dfs(funclets, &mut traversed, entry, 0);
+    let mut loops = HashMap::new();
+    traverse_loops_dfs(funclets, &mut loops, entry, 0);
+
+    let mut headers = Vec::new();
+    let mut header_map = HashMap::new();
+
+    for (id, tag) in loops.into_iter() {
+        header_map.insert(id, tag.iloop_header);
+        if tag.is_header {
+            headers.push(id);
+        }
+    }
+
+    Loops {
+        headers,
+        header_map,
+    }
 }
