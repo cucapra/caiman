@@ -47,43 +47,48 @@ fn apply_t2(
     old_id: usize,
     old: &mut [RGroup],
     new: &mut Vec<RGroup>,
-    updated: &mut HashMap<usize, usize>,
+    map: &mut HashMap<usize, usize>,
 ) -> usize {
-    let old_pid = match updated.entry(old_id) {
+    let old_pid = match map.entry(old_id) {
         Entry::Occupied(new_id) => return *new_id.get(),
         Entry::Vacant(spot) => {
-            if old[old_id].incoming.len() != 1 {
+            let inc = &mut old[old_id].incoming;
+            if inc.len() != 1 {
                 // multiple predecessors, or none; not a candidate for merge
                 let new_id = new.len();
                 new.push(std::mem::take(&mut old[old_id]));
                 spot.insert(new_id);
                 return new_id;
             }
-            old[old_id].incoming[0]
+            // this clear handles a degenerate case where each rgroup has exactly one incoming
+            // a simple case is a <-> b
+            let pid = inc[0];
+            inc.clear();
+            pid
         }
     };
     // only one predecessor: recurse, then merge our fids with theirs
-    let merged_id = apply_t2(old_pid, old, new, updated);
-    updated.insert(old_id, merged_id);
+    let merged_id = apply_t2(old_pid, old, new, map);
+    map.insert(old_id, merged_id);
     new[merged_id].funclets.append(&mut old[old_id].funclets);
-    merged_id
+    return merged_id;
 }
 fn maximal_rgroups(program: &Program) -> Vec<RGroup> {
     let mut rgroups = minimal_rgroups(program);
     loop {
         let old_len = rgroups.len();
-        let mut updated = HashMap::new();
+        let mut map = HashMap::new();
         {
             // Apply T2 transformations
             let mut new_rgroups = Vec::with_capacity(old_len);
             for i in 0..rgroups.len() {
-                apply_t2(i, &mut rgroups, &mut new_rgroups, &mut updated);
+                apply_t2(i, &mut rgroups, &mut new_rgroups, &mut map);
             }
             rgroups = new_rgroups;
         };
         for (i, rg) in rgroups.iter_mut().enumerate() {
             // The indices are all wrong after updating...
-            rg.incoming.iter_mut().for_each(|id| *id = updated[id]);
+            rg.incoming.iter_mut().for_each(|id| *id = map[id]);
 
             // The "no duplicates" invariant might be violated...
             rg.incoming.sort_unstable();
@@ -102,28 +107,10 @@ fn maximal_rgroups(program: &Program) -> Vec<RGroup> {
     }
 }
 
-pub struct DuplicateInfo {
-    duplicates: HashMap<FuncletId, FuncletId>,
-}
-impl DuplicateInfo {
-    fn new() -> Self {
-        DuplicateInfo {
-            duplicates: HashMap::new(),
-        }
-    }
-    pub fn original(&self, id: FuncletId) -> Option<FuncletId> {
-        self.duplicates.get(&id).copied()
-    }
-    fn duplicate(&mut self, source_id: FuncletId, copy_id: FuncletId) {
-        let source_id = self.original(source_id).unwrap_or(source_id);
-        self.duplicates.insert(copy_id, source_id);
-    }
-}
-
 /// Makes all control flow in `program` reducible via node splitting.
-/// Returns a mapping from the original funclet to their duplicate(s), if any.
-pub fn make_reducible(program: &mut Program) -> DuplicateInfo {
-    let mut info = DuplicateInfo::new();
+/// Returns a mapping from any duplicate funclets' IDs to their originals' IDs.
+pub fn make_reducible(program: &mut Program) -> HashMap<FuncletId, FuncletId> {
+    let mut mapping = HashMap::new();
     let mut rgroups = maximal_rgroups(program);
     while let Some(rg) = rgroups.iter().find(|rg| rg.incoming.len() >= 1) {
         // if there is only one incoming, then you could do T2, not maximal
@@ -133,7 +120,7 @@ pub fn make_reducible(program: &mut Program) -> DuplicateInfo {
             for &funclet in rg.funclets.iter() {
                 let copy = program.funclets.create(program.funclets[&funclet].clone());
                 copies.insert(funclet, copy);
-                info.duplicate(funclet, copy);
+                mapping.insert(copy, mapping.get(&funclet).copied().unwrap_or(funclet));
             }
             for funclet in rgroups[*pred].funclets.iter().chain(copies.values()) {
                 program.funclets[funclet].tail_edge.map_funclets(|id| {
@@ -143,5 +130,5 @@ pub fn make_reducible(program: &mut Program) -> DuplicateInfo {
         }
         rgroups = maximal_rgroups(program);
     }
-    info
+    mapping
 }
