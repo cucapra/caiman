@@ -172,17 +172,6 @@ mod tests {
         let analysis = AnalysisGraph::new(0, &program.funclets);
         validate_dominators(desc, &analysis);
     }
-    fn test_irreducible(desc: &[NodeDesc]) {
-        let mut program = make_program(desc);
-        let analysis = AnalysisGraph::new(0, &program.funclets);
-        validate_dominators(desc, &analysis);
-        let dupes = ir::utils::make_reducible(&mut program);
-        assert!(!dupes.is_empty());
-        // let post_analysis = AnalysisGraph::new(0, &program.funclets);
-        // validate_dominators(post, &post_analysis);
-        let dupes_2 = ir::utils::make_reducible(&mut program);
-        assert!(dupes_2.is_empty());
-    }
     macro_rules! node_tail {
         ((ret)) => {
             ir::TailEdge::Return { return_values: Box::new([])}
@@ -307,70 +296,6 @@ mod tests {
             (jmp 3)             [0, 4]  // = 4
         ])
     }
-
-    #[test]
-    fn dom14_fig2() {
-        test_irreducible(
-            nodes![
-                (sel 1, 2)  [0],        // = 0 (dom14:2:5)
-                (jmp 3)     [0, 1],     // = 1 (dom14:2:4)
-                (jmp 4)     [0, 2],     // = 2 (dom14:2:3)
-                (jmp 4)     [0, 3],     // = 3 (dom14:2:1)
-                (jmp 3)     [0, 4]      // = 4 (dom14:2:2)
-            ],
-            /*nodes![
-                (sel 1, 2)  [0],        // = 0 (dom14:2:5)
-                (jmp 3)     [0, 1],     // = 1 (dom14:2:4)
-                (jmp 4)     [0, 2],     // = 2 (dom14:2:3)
-                (jmp 5)     [0, 3],     // = 3 (dom14:2:1)
-                (jmp 3)     [0, 2, 4],  // = 4 (dom14:2:2)
-                (jmp 3)     [0, 3, 5]   // = 5 (copy of dom14:2:2)
-            ],*/
-        )
-    }
-    #[test]
-    fn dom14_fig4() {
-        test_irreducible(
-            nodes![
-                (sel 1, 2)  [0],        // = 0 (dom14:4:6)
-                (jmp 3)     [0, 1],     // = 1 (dom14:4:5)
-                (sel 4, 5)  [0, 2],     // = 2 (dom14:4:4)
-                (jmp 4)     [0, 3],     // = 3 (dom14:4:1)
-                (sel 3, 5)  [0, 4],     // = 4 (dom14:4:2)
-                (jmp 4)     [0, 5]      // = 5 (dom14:4:3)
-            ],
-            /*nodes![
-                // I'm gonna be honest. This test is kind of useless,
-                // since it's hard to even visualize the reducible result.
-                // At least it shows the algorithm halts & doesn't crash...
-                (sel 1, 2)  [0],            // = 0 (dom14:4:6)
-                (jmp 3)     [0, 1],         // = 1 (dom14:4:5)
-                (sel 4, 5)  [0, 2],         // = 2 (dom14:4:4)
-                (jmp 7)     [0, 3],         // = 3 (dom14:4:1)
-                (jmp 6)     [0, 2, 4],      // = 4 (dom14:4:2)
-                (jmp 4)     [0, 2, 5],      // = 5 (dom14:4:3)
-                (jmp 4)     [0, 2, 4, 6],   // = 6 (copy of dom14:4:3, for dom14:4:2)
-                (sel 3, 8)  [0, 3, 7],      // = 7 (copy of dom14:4:2, for dom14:4:1)
-                (jmp 7)     [0, 3, 7, 8]    // = 8 (copy of dom14:4:3, for dom14:4:1)
-            ],*/
-        )
-    }
-    #[test]
-    fn triangle() {
-        test_irreducible(
-            nodes![
-                (sel 1, 2)  [0],        // = 0
-                (jmp 2)     [0, 1],     // = 1
-                (jmp 1)     [0, 2]      // = 2
-            ],
-            /*nodes![
-                (sel 1, 2)  [0],        // = 0
-                (jmp 2)     [0, 1],     // = 1
-                (jmp 3)     [0, 2],     // = 2
-                (jmp 2)     [0, 2, 3]   // = 3
-            ],*/
-        )
-    }
     #[test]
     fn pogo() {
         test_reducible(nodes![
@@ -378,41 +303,5 @@ mod tests {
             (jmp 2) [0, 1],     // = 1
             (jmp 1) [0, 1, 2]   // = 2
         ])
-    }
-    #[test]
-    fn circle_like() {
-        test_irreducible(
-            nodes![
-                (sel 1, 5)      [0],        // = 0
-                (sel 0, 2)      [0, 1],     // = 1
-                (sel 1, 3)      [0, 2],     // = 2
-                (sel 2, 4, 6)   [0, 3],     // = 3
-                (sel 3, 5)      [0, 4],     // = 4
-                (sel 0, 4)      [0, 5],     // = 5
-                (ret)           [0, 3, 6]   // = 6
-            ],
-            /*nodes![
-                // See dom14_fig4 -- I don't even know if this is correct.
-                (sel 1, 5)          [0],                            // = 0
-                (sel 0, 14)         [0, 1],                         // = 1
-                (sel 3, 1)          [0, 5, 4, 3, 2],                // = 2
-                (sel 2, 4, 6)       [0, 5, 4, 3],                   // = 3
-                (sel 3, 5)          [0, 5, 4],                      // = 4
-                (sel 0, 4)          [0, 5],                         // = 5
-                (ret)               [0, 5, 4, 3, 6],                // = 6
-                (sel 0, 4)          [0, 5, 4, 7],                   // = 7
-                (sel 3, 9)          [0, 5, 4, 3, 8],                // = 8
-                (sel 0, 8)          [0, 5, 4, 3, 8, 9],             // = 9
-                (sel 2, 11, 12)     [0, 5, 4, 3, 2, 10],            // = 10
-                (ret)               [0, 5, 4, 3, 2, 10, 11],        // = 11
-                (sel 10, 13)        [0, 5, 4, 3, 2, 10, 12],        // = 12
-                (sel 0, 12)         [0, 5, 4, 3, 2, 10, 12, 13],    // = 13
-                (sel 1, 15)         [0, 1, 14],                     // = 14
-                (sel 14, 16, 17)    [0, 1, 14, 15],                 // = 15
-                (ret)               [0, 1, 14, 15, 16],             // = 16
-                (sel 15, 18)        [0, 1, 14, 15, 17],             // = 17
-                (sel 0, 17)         [0, 1, 14, 15, 17, 18]          // = 18
-            ],*/
-        )
     }
 }

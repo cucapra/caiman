@@ -246,3 +246,114 @@ pub fn identify_loops(funclets: &Arena<Funclet>, entry: FuncletId) -> Loops {
         header_map,
     }
 }
+
+/// Creates a "dummy program" with control flow given by the specified CFG.
+pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
+    // NOTE: correctness here depends on arenas using sequential IDs
+    let mut funclets = Arena::new();
+    let make_jump = |target: &FuncletId| Jump {
+        target: *target,
+        args: Box::new([]),
+    };
+    for node in nodes {
+        let tail_edge = match node {
+            [] => TailEdge::Return {
+                return_values: Box::new([]),
+            },
+            [next] => TailEdge::Jump(make_jump(next)),
+            rest => TailEdge::Switch {
+                key: 0,
+                cases: rest.iter().map(make_jump).collect(),
+            },
+        };
+        let funclet = Funclet {
+            tail_edge,
+            // everything below this are dummy values
+            kind: FuncletKind::MixedExplicit,
+            input_types: Box::new([]),
+            output_types: Box::new([]),
+            // we add one constant integer so switch nodes actually have a key
+            nodes: Box::new([Node::ConstantInteger {
+                value: 0,
+                type_id: 0,
+            }]),
+            input_resource_states: Default::default(),
+            output_resource_states: Default::default(),
+            local_meta_variables: Default::default(),
+        };
+        funclets.create(funclet);
+    }
+    let mut types = Arena::new();
+    types.create(Type::U32);
+
+    Program {
+        funclets,
+        types,
+        external_cpu_functions: Vec::new(),
+        external_gpu_functions: Vec::new(),
+        value_functions: Arena::new(),
+        pipelines: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    mod reducible {
+        use crate::ir::utils;
+    }
+    mod irreducible {
+        use crate::ir::utils;
+        // we use simpler property-based tests for irreducibles
+        // since there are many valid possible outputs and I don't
+        // want to bless any of them as canonical yet
+        // ..
+        // basically, we ensure make_reducible doesn't crash,
+        // and that it's idempotent. Not too strong, I know...
+        macro_rules! make_tests {
+            ($($name:ident [$($desc:expr),+ $(,)?]),* $(,)?) => {
+                $(
+                #[test]
+                fn $name() {
+                    let mut program = utils::program_from_cfg(&[ $($desc),* ]);
+                    let first_output = utils::make_reducible(&mut program);
+                    assert!(!first_output.is_empty());
+                    let second_output = utils::make_reducible(&mut program);
+                    assert!(second_output.is_empty());
+                }
+            )*
+            };
+        }
+
+        make_tests!(
+            triangle [
+                &[1, 2],    // = 0
+                &[2],       // = 1
+                &[1]        // = 2
+            ],
+            dom14_fig2 [
+                &[1, 2],    // = 0 (dom14:2:5)
+                &[3],       // = 1 (dom14:2:4)
+                &[4],       // = 2 (dom14:2:3)
+                &[4],       // = 3 (dom14:2:1)
+                &[3]        // = 4 (dom14:2:2)
+            ],
+            dom14_fig4 [
+                &[1, 2],    // = 0 (dom14:4:6)
+                &[3],       // = 1 (dom14:4:5)
+                &[4, 5],    // = 2 (dom14:4:4)
+                &[4],       // = 3 (dom14:4:1)
+                &[3, 5],    // = 4 (dom14:4:2)
+                &[4],       // = 5 (dom14:4:3)
+            ],
+            circle_like [
+                &[1, 5],    // = 0
+                &[0, 2],    // = 1
+                &[1, 3],    // = 2
+                &[2, 4, 6], // = 3
+                &[3, 5],    // = 4
+                &[0, 4],    // = 5
+                &[]         // = 6
+            ]
+        );
+    }
+}
