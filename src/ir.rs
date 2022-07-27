@@ -73,14 +73,6 @@ pub enum ValueTag
 	ConcreteOutput{funclet_id : FuncletId, index : usize},
 }
 
-/*#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ValueTag
-{
-	pub instance_id_opt : Option<LocalMetaVariableId>,
-	//pub function_id : ValueFunctionId,
-	pub subvalue_tag : SubvalueTag,
-}*/
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
@@ -139,7 +131,6 @@ pub enum TailEdge
 
 	// Scheduling only
 	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> },
-	ScheduleReturn { return_values : Box<[NodeId]> },
 	ScheduleSelect { value_operation : RemoteNodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId },
 
 	// invokes and waits on the gpu
@@ -191,9 +182,6 @@ pub struct Funclet
 	pub input_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
 	#[serde(default)]
 	pub output_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
-
-	//#[serde(default)]
-	//pub local_meta_variables : BTreeMap<LocalMetaVariableId, LocalMetaVariable>,
 }
 
 // Funclet-relative slot info goes here
@@ -212,10 +200,6 @@ pub struct SchedulingFuncletExtra
 	pub value_funclet_id : FuncletId,
 	pub input_slots : HashMap<usize, SlotInfo>,
 	pub output_slots : HashMap<usize, SlotInfo>,
-	/*pub input_binding_start : usize,
-	pub per_input_slot_counts : Box<[usize]>,
-	pub output_binding_start : usize,
-	pub per_output_slot_counts : Box<[usize]>,*/
 	pub fences : BTreeMap<FenceId, Fence>,
 }
 

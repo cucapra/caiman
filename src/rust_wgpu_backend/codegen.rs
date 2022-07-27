@@ -34,11 +34,9 @@ struct PlaceState
 struct PlacementState
 {
 	place_states : HashMap<ir::Place, PlaceState>, // as known to the coordinator
-	//node_results : HashMap<ir::NodeId, NodeResult>,
 	scheduling_state : scheduling_state::SchedulingState,
 	submission_map : HashMap<scheduling_state::SubmissionId, SubmissionId>,
 	slot_variable_ids : HashMap<scheduling_state::SlotId, usize>,
-	//value_tags : HashMap<scheduling_state::ValueId, ir::ValueTag>,
 }
 
 impl PlacementState
@@ -51,76 +49,12 @@ impl PlacementState
 		Self{ place_states, scheduling_state : scheduling_state::SchedulingState::new(), /*node_results : Default::default(),*/ submission_map : HashMap::new(), slot_variable_ids : HashMap::new()/*, value_tags : HashMap::new()*/}
 	}
 
-	fn reset_funclet(&mut self, active_funclet_id_opt : Option<ir::FuncletId>)
-	{
-		//self.node_results.clear();
-	}
-
 	fn update_slot_state(&mut self, slot_id : scheduling_state::SlotId, stage : ir::ResourceQueueStage, var_id : usize)
 	{
 		self.slot_variable_ids.insert(slot_id, var_id);
 		// need to do place and stage
 		self.scheduling_state.advance_queue_stage(slot_id, stage);
 	}
-
-	/*fn update_node_state(&mut self, node_id : ir::NodeId, place : ir::Place, stage : ir::ResourceQueueStage, var_id : usize)
-	{
-		let place_state : &mut PlaceState = self.place_states.get_mut(& place).unwrap();
-		//place_state.node_queue_stages.insert(node_id, stage);
-
-		place_state.node_variable_ids.insert(node_id, var_id);
-		//place_state.node_timestamps.insert(node_id, place_state.timestamp);
-		//self.slot_variable_ids.insert(node, );
-	}*/
-
-	/*fn get_slot_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[scheduling_state::SlotId]>>
-	{
-		let mut slot_ids = Vec::<scheduling_state::SlotId>::new();
-		for node_id in node_ids.iter()
-		{
-			match self.node_results[node_id]
-			{
-				NodeResult::Slot{slot_id} =>
-				{	
-					slot_ids.push(slot_id)
-				}
-				_ => return None
-			}
-		}
-		Some(slot_ids.into_boxed_slice())
-	}*/
-
-	/*fn get_var_ids(&self, node_ids : &[ir::NodeId], place : ir::Place) -> Option<Box<[usize]>>
-	{
-		let mut var_ids = Vec::<usize>::new();
-		for node_id in node_ids.iter()
-		{
-			match self.node_results[node_id]
-			{
-				NodeResult::Slot{slot_id} =>
-				{
-					if self.scheduling_state.get_slot_queue_place(slot_id) != place
-					{
-						return None;
-					}
-					
-					var_ids.push(self.slot_variable_ids[& slot_id])
-				}
-				_ => return None
-			}
-		}
-		Some(var_ids.into_boxed_slice())
-	}
-
-	fn get_local_state_var_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[usize]>>
-	{
-		self.get_var_ids(node_ids, ir::Place::Local)
-	}
-
-	fn get_gpu_state_var_ids(&self, node_ids : &[ir::NodeId]) -> Option<Box<[usize]>>
-	{
-		self.get_var_ids(node_ids, ir::Place::Gpu)
-	}*/
 
 	fn get_slot_var_ids(&self, slot_ids : &[scheduling_state::SlotId], place : ir::Place) -> Option<Box<[usize]>>
 	{
@@ -141,27 +75,6 @@ impl PlacementState
 	{
 		self.slot_variable_ids.get(& slot_id).map(|x| * x)
 	}
-
-	/*fn get_node_value_id(&self, node_id : ir::NodeId) -> Option<scheduling_state::ValueId>
-	{
-		match & self.node_results[& node_id]
-		{
-			NodeResult::InlineValue{value_id, ..} => Some(* value_id),
-			_ => None
-		}
-	}*/
-
-	/*fn get_node_slot_id(&self, node_id : ir::NodeId) -> Option<scheduling_state::SlotId>
-	{
-		if let NodeResult::Slot{slot_id} = & self.node_results[& node_id]
-		{
-			Some(* slot_id)
-		}
-		else
-		{
-			None
-		}
-	}*/
 }
 
 #[derive(Debug)]
@@ -170,6 +83,9 @@ struct FuncletScopedState
 	value_funclet_id : ir::FuncletId,
 	scheduling_funclet_id : ir::FuncletId,
 	node_results : HashMap<ir::NodeId, NodeResult>,
+	// ValueTag is only meaningful locally
+	// If we were to make this global, we'd need a key for disambiguation of different call instances and a way to define equivalence classes of valuetags (for example, between a phi and the node used as input for that phi)
+	// Because of this, we need to recreate this for each funclet instance
 	slot_value_tags : HashMap<scheduling_state::SlotId, ir::ValueTag>,
 }
 
@@ -194,14 +110,13 @@ impl FuncletScopedState
 struct PipelineContext
 {
 	pending_funclet_ids : Vec<ir::FuncletId>,
-	is_entry_point : bool
 }
 
 impl PipelineContext
 {
 	fn new() -> Self
 	{
-		Self { pending_funclet_ids : Default::default(), is_entry_point : true }
+		Self { pending_funclet_ids : Default::default() }
 	}
 }
 
@@ -342,10 +257,6 @@ impl<'program> CodeGen<'program>
 				assert_eq!(input_slot_ids.len(), 3);
 				assert_eq!(output_slot_ids.len(), 1);
 
-				/*let condition_var_id = if let NodeResult::Slot{slot_id} = placement_state.node_results[* condition] { placement_state.slot_variable_ids[& slot_id] } else { panic!("Not a slot") };
-				let true_var_id = placement_state.slot_variable_ids[& true_case];
-				let false_var_id = placement_state.slot_variable_ids[& false_case];*/
-
 				let input_var_ids = input_slot_ids.iter().map(|& slot_id| placement_state.get_slot_var_id(slot_id).unwrap()).collect::<Box<[usize]>>();
 
 				let slot_id = output_slot_ids[0];
@@ -357,13 +268,6 @@ impl<'program> CodeGen<'program>
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
 			}
-			/*ir::Node::CallValueFunction { function_id, arguments } =>
-			{
-				panic!("Not yet implemented");
-				let function = & self.program.value_functions[function_id];
-				assert!(function.default_funclet_id.is_some(), "Codegen doesn't know how to handle value functions yet");
-				let default_funclet_id = function.default_funclet_id.unwrap();
-			}*/
 			ir::Node::CallExternalCpu { external_function_id, arguments } =>
 			{
 				let function = & self.program.external_cpu_functions[* external_function_id];
@@ -441,15 +345,6 @@ impl<'program> CodeGen<'program>
 
 	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_slot_ids : &[scheduling_state::SlotId], pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState) -> Box<[scheduling_state::SlotId]>
 	{
-		placement_state.reset_funclet(Some(funclet_id));
-		let is_entry_point = pipeline_context.is_entry_point;
-		pipeline_context.is_entry_point = false;
-
-		// ValueTag is only meaningful locally
-		// If we were to make this global, we'd need a key for disambiguation of different call instances and a way to define equivalence classes of valuetags (for example, between a phi and the node used as input for that phi)
-		// Because of this, we need to recreate this for each funclet instance
-		//let mut slot_value_tags = HashMap::<scheduling_state::SlotId, Option<ir::ValueTag>>::new();
-
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 		let funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& funclet_id];
@@ -546,8 +441,6 @@ impl<'program> CodeGen<'program>
 
 					let encoded_funclet = & self.program.funclets[& operation.funclet_id];
 					let encoded_node = & encoded_funclet.nodes[operation.node_id];
-
-					//let mut last_value_instance_id_opt : Option<scheduling_state::ValueInstanceId> = None;
 
 					for & input_node_id in inputs.iter()
 					{
@@ -913,32 +806,6 @@ impl<'program> CodeGen<'program>
 
 						// To do: Check that the value function is compatibile with the value funclet for the callee scheduling funclet we're calling
 
-						// To do: Require that slots passed outside of the input binding table have no associated value
-						/*assert_eq!(callee_funclet_scheduling_extra.input_binding_start, callee_arguments.len());
-						let mut callee_slot_offset = 0usize;
-						let mut callee_argument_index = callee_funclet_scheduling_extra.input_binding_start;
-						for (argument_index, argument_node_id) in arguments.iter().enumerate()
-						{
-							let slot_count = funclet_scheduling_extra.per_input_slot_counts[argument_index];
-							for i in 0 .. slot_count
-							{
-								let input_slot_node_id = input_slots[callee_slot_offset];
-								if let NodeResult::Slot{slot_id} = placement_state.node_results[& input_slot_node_id]
-								{
-									assert!(used_slot_ids.insert(& slot_id));
-									// To do: Check value compatibility
-								}
-								else
-								{
-									panic!("Input is not slot");
-								}
-								
-								callee_slot_offset += 1;
-								callee_argument_index += 1;
-							}
-						}
-						assert_eq!(callee_argument_index, callee_funclet.input_types.len());*/
-
 						let mut callee_input_slots = Vec::<scheduling_state::SlotId>::new();
 						assert_eq!(callee_arguments.len(), callee_funclet.input_types.len());
 						for (callee_argument_index, callee_argument_node_id) in callee_arguments.iter().enumerate()
@@ -991,20 +858,6 @@ impl<'program> CodeGen<'program>
 
 						// To do: Check type compatibility
 
-						/*for (input_index, input_type_id) in callee_funclet.input_types.iter().enumerate()
-						{
-							let callee_argument_node_id = callee_arguments[input_index];
-							let slot_id = if let NodeResult::Slot{slot_id} { * slot_id } else { panic!("Not a slot") };
-							let slot_value_tag = slot_value_tags[& slot_id];
-							match & self.program.types[input_type_id]
-							{
-								ir::Type::Slot { value_type, value_tag_opt, queue_stage, queue_place, fence_id } =>
-								{
-								}
-								_ => panic!("Unimplemented")
-							}
-						}*/
-
 						// Step 2: Continuation
 
 						let continuation_funclet = & self.program.funclets[continuation_funclet_id];
@@ -1017,11 +870,6 @@ impl<'program> CodeGen<'program>
 						assert_eq!(continuation_value_funclet.kind, ir::FuncletKind::Value);
 
 						assert_eq!(encoded_value_funclet_id, continuation_value_funclet_id);
-
-						/*// No input binding table
-						assert_eq!(continuation_funclet_scheduling_extra.per_input_slot_counts.len(), 0);
-						// The continuation will output instead
-						assert_eq!(funclet_scheduling_extra.per_output_slot_counts.len(), 0);*/
 
 						assert_eq!(continuation_arguments.len() + callee_funclet.output_types.len(), continuation_funclet.input_types.len());
 
@@ -1168,33 +1016,8 @@ impl<'program> CodeGen<'program>
 					_ => panic!("Must be a select node")
 				}
 			}
-		/*ir::TailEdge::ScheduleReturn { return_values/*, output_slots*/ } =>
-			{
-				// Slots are linear (really: affine) when they cross the funclet boundary
-				let mut used_slot_ids = HashSet::<scheduling_state::SlotId>::new();
-
-				let mut output_slots = Vec::<scheduling_state::SlotId>::new();
-				for (argument_index, argument_node_id) in return_values.iter().enumerate()
-				{
-					if let NodeResult::Slot{slot_id} = placement_state.node_results[argument_node_id]
-					{
-						assert!(used_slot_ids.insert(slot_id));
-						// To do: Check value compatibility
-						output_slots.push(slot_id);
-					}
-					else
-					{
-						panic!("Output is not slot");
-					}
-				}
-
-				return output_slots.into_boxed_slice();
-			}*/
 			_ => panic!("Umimplemented")
 		}
-
-		//let old = pipeline_context.funclet_placement_states.insert(funclet_id, placement_state);
-		//assert!(old.is_none());
 
 		panic!("Should not reach here")
 	}
@@ -1213,7 +1036,6 @@ impl<'program> CodeGen<'program>
 		
 		while let Some(funclet_id) = pipeline_context.pending_funclet_ids.pop()
 		{
-			//if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
 			if ! visited_funclet_ids.contains(& funclet_id)
 			{
 				self.compile_externally_visible_scheduling_funclet(funclet_id, &mut pipeline_context);
