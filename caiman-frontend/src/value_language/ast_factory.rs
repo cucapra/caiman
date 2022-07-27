@@ -148,13 +148,12 @@ impl ASTFactory
     pub fn let_stmt(
         &self,
         l: usize,
-        m: bool,
         vwt: VarWithType,
         e: ParsedExpr,
         r: usize,
     ) -> ParsedStmt
     {
-        (self.info(l, r), StmtKind::Let(m, vwt, e))
+        (self.info(l, r), StmtKind::Let(vwt, e))
     }
 
     pub fn assign(
@@ -175,10 +174,11 @@ impl ASTFactory
         params: Vec<VarWithType>,
         ret: Type,
         v: Vec<ParsedStmt>,
+        ret_value: ParsedExpr,
         r: usize,
     ) -> ParsedStmt
     {
-        (self.info(l, r), StmtKind::Function(f, params, ret, v))
+        (self.info(l, r), StmtKind::Function(f, params, ret, v, ret_value))
     }
 
     pub fn ccall(
@@ -192,8 +192,4 @@ impl ASTFactory
         (self.info(l, r), StmtKind::Call(name, es))
     }
 
-    pub fn return_stmt(&self, l: usize, e: ParsedExpr, r: usize) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::Return(e))
-    }
 }

@@ -24,6 +24,7 @@ pub enum ExprType
     PositiveInteger,
     NegativeInteger,
     Float,
+    Any,
 }
 
 pub type FuncType = (Vec<Type>, Type);
@@ -36,6 +37,7 @@ pub struct Context
     var_table: HashMap<Var, (Type, bool)>,
 }
 
+#[derive(Clone)]
 pub struct FunctionContext 
 {
     table: HashMap<Var, FuncType>,
@@ -109,6 +111,15 @@ impl FunctionContext
             None => Ok(())
         }
     }
+
+    pub fn get(&self, f: Var) -> Result<(Vec<Type>, Type), SemanticError>
+    {
+        match self.table.get(&f)
+        {
+            Some((v, rt)) => Ok((v.to_vec(), *rt)),
+            None => Err(SemanticError::UnboundFunction(f.to_string())),
+        }
+    }
 }
 
 impl Type
@@ -133,6 +144,7 @@ impl ExprType
             ExprType::PositiveInteger => t == Type::I32,
             ExprType::NegativeInteger => t == Type::I32,
             ExprType::Float => panic!("Float moment"),
+            ExprType::Any => true,
         }
     }
 
@@ -148,8 +160,22 @@ impl ExprType
             | (ExprType::PositiveInteger, ExprType::PositiveInteger)
             | (ExprType::PositiveInteger, ExprType::NegativeInteger)
             | (ExprType::NegativeInteger, ExprType::PositiveInteger)
-            | (ExprType::Float, ExprType::Float) => true,
+            | (ExprType::Float, ExprType::Float) 
+            | (ExprType::Any, _) 
+            | (_, ExprType::Any) => true,
             _ => false,
+        }
+    }
+
+    fn order(&self) -> usize
+    {
+        match self
+        {
+            ExprType::Ordinary(_) => 0,
+            ExprType::Float => 1,
+            ExprType::NegativeInteger => 2,
+            ExprType::PositiveInteger => 3,
+            ExprType::Any => 4,
         }
     }
 
@@ -159,6 +185,7 @@ impl ExprType
         {
             | ExprType::PositiveInteger 
             | ExprType::NegativeInteger 
+            | ExprType::Any
             | ExprType::Float => true,
             ExprType::Ordinary(t) => match *t {
                 Type::I32 => true,
@@ -169,17 +196,18 @@ impl ExprType
 
     pub fn is_bool(&self) -> bool
     {
-        match self
-        {
-            ExprType::Ordinary(t) => *t == Type::Bool,
-            _ => false,
-        }
+        self.is_subtype_of(Type::Bool)
     }
 }
 
 pub fn type_equal(t1: Type, t2: Type) -> bool
 {
     t1 == t2
+}
+
+pub fn min_expr_type(t1: ExprType, t2: ExprType) -> ExprType
+{
+    if t1.order() >= t2.order() { t1 } else { t2 }
 }
 
 

@@ -1,2 +1,2 @@
 At type_mismatch3.vl:1:14, 
-  Semantic Error: Cannot use operator Plus with data of type Ordinary(Bool)
+  Semantic Error: Cannot use binary operator Plus with data of type Ordinary(Bool)

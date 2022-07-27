@@ -52,7 +52,8 @@ pub type Expr<E> = (E, ExprKind<E>);
 // Probably don't need reference or array types yet because
 //   no way to initialize them
 
-pub type VarWithType = (Var, Type);
+// bool true <==> var is mutable
+pub type VarWithType = (bool, Var, Type);
 
 #[derive(Debug, Clone)]
 pub enum StmtKind<S, E>
@@ -60,11 +61,10 @@ pub enum StmtKind<S, E>
     If(Expr<E>, Vec<Stmt<S, E>>),
     While(Expr<E>, Vec<Stmt<S, E>>),
     Print(Expr<E>),
-    Let(bool, VarWithType, Expr<E>),
+    Let(VarWithType, Expr<E>),
     Assign(Var, Expr<E>),
-    Function(Var, Vec<VarWithType>, Type, Vec<Stmt<S, E>>),
+    Function(Var, Vec<VarWithType>, Type, Vec<Stmt<S, E>>, Expr<E>),
     Call(Var, Vec<Expr<E>>),
-    Return(Expr<E>),
 }
 pub type Stmt<S, E> = (S, StmtKind<S, E>);
 

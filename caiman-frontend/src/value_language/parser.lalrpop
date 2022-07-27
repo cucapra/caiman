@@ -24,16 +24,15 @@ pub Stmt: ParsedStmt = {
     <@L> "if" <Expr> "{" <Stmt*> "}" <@R>              => astf.if_stmt(<>), 
     <@L> "while" <Expr> "{" <Stmt*> "}" <@R>           => astf.while_stmt(<>),
     <@L> "print" "(" <Expr> ")" ";" <@R>               => astf.print(<>),
-    <@L> "let" <Mut> <VarWithType> "=" <Expr> ";" <@R> => astf.let_stmt(<>),
+    <@L> "let" <VarWithType> "=" <Expr> ";" <@R> => astf.let_stmt(<>),
     <@L> <Id> "=" <Expr> ";" <@R>                      => astf.assign(<>),
     <@L> <Id> "(" <CommaList<Expr>> ")" ";" <@R>       => astf.ccall(<>),
-    <@L> "return" <Expr> ";" <@R>                      => astf.return_stmt(<>),
     <@L> "fn" <Id> "(" <CommaList<VarWithType>> ")" 
-      "->" <Type> "{" <Stmt*> "}" <@R>                 => astf.function(<>),
+      "->" <Type> "{" <Stmt*> <Expr> "}" <@R>          => astf.function(<>),
 }
 
 VarWithType: VarWithType = {
-    <Id> ":" <Type> => (<>)
+    <Mut> <Id> ":" <Type> => (<>)
 }
 
 Expr: ParsedExpr = {
