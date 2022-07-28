@@ -222,14 +222,29 @@ fn traverse_loops_dfs(
 }
 
 pub struct Loops {
+    /// Sorted list of loop headers.
     headers: Vec<FuncletId>,
     header_map: HashMap<FuncletId, Option<FuncletId>>,
 }
-
+impl Loops {
+    /// Returns the loop headers of the loops the given funclet is contained in,
+    /// ordered from innermost to outermost.
+    pub fn headers_for(&self, mut funclet: FuncletId) -> Vec<FuncletId> {
+        let mut output = Vec::new();
+        if let Ok(_) = self.headers.binary_search(&funclet) {
+            output.push(funclet);
+        }
+        while let Some(next) = self.header_map[&funclet] {
+            output.push(next);
+            funclet = next;
+        }
+        output
+    }
+}
 pub fn identify_loops(funclets: &Arena<Funclet>, entry: FuncletId) -> Loops {
     // Adapted from http://lenx.100871.net/papers/loop-SAS.pdf
     let mut loops = HashMap::new();
-    traverse_loops_dfs(funclets, &mut loops, entry, 0);
+    traverse_loops_dfs(funclets, &mut loops, entry, 1);
 
     let mut headers = Vec::new();
     let mut header_map = HashMap::new();
@@ -240,6 +255,8 @@ pub fn identify_loops(funclets: &Arena<Funclet>, entry: FuncletId) -> Loops {
             headers.push(id);
         }
     }
+
+    headers.sort_unstable();
 
     Loops {
         headers,
@@ -299,7 +316,100 @@ pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
 #[cfg(test)]
 mod tests {
     mod reducible {
-        use crate::ir::utils;
+        use crate::ir::{utils, FuncletId};
+        macro_rules! make_tests {
+            ($($name:ident [$({
+                next: $tail:expr,
+                in_loops: $loops:expr
+            }),+ $(,)?]),* $(,)?) => {$(
+                #[test]
+                fn $name() {
+                    let mut program = utils::program_from_cfg(&[ $($tail),* ]);
+                    let reduce_output = utils::make_reducible(&mut program);
+                    assert!(reduce_output.is_empty());
+                    let expected_loops: &[&[FuncletId]] = &[ $($loops),* ];
+                    let loops = utils::identify_loops(&program.funclets, 0);
+                    for i in 0..expected_loops.len() {
+                        let actual = loops.headers_for(i);
+                        assert_eq!(expected_loops[i], actual.as_slice());
+                    }
+                }
+            )*};
+        }
+
+        make_tests!(
+            simple_return [ {next: &[], in_loops: &[]} ],
+            simple_jump [
+                {next: &[1], in_loops: &[]},
+                {next: &[2], in_loops: &[]},
+                {next: &[], in_loops: &[]}
+            ],
+            simple_switch [
+                {next: &[1, 2, 3], in_loops: &[]},
+                {next: &[], in_loops: &[]},
+                {next: &[4,5], in_loops: &[]},
+                {next: &[], in_loops: &[]},
+                {next: &[], in_loops: &[]},
+                {next: &[], in_loops: &[]}
+            ],
+            entry_loop_inf [
+                {next: &[0], in_loops: &[0]}
+            ],
+            entry_loop [
+                {next: &[0, 1], in_loops: &[0]},
+                {next: &[], in_loops: &[]}
+            ],
+            nested_loop_1 [
+                {next: &[1], in_loops: &[0]},
+                {next: &[1, 2], in_loops: &[1, 0]},
+                {next: &[0, 3], in_loops: &[0]},
+                {next: &[], in_loops: &[]}
+            ],
+            nested_loop_2 [
+                {next: &[0, 1], in_loops: &[0]},
+                {next: &[0, 1, 2], in_loops: &[1, 0]},
+                {next: &[0, 1, 2, 3], in_loops: &[2, 1, 0]},
+                {next: &[], in_loops: &[]},
+            ],
+            diamond [
+                {next: &[1, 2], in_loops: &[]},
+                {next: &[3], in_loops: &[]},
+                {next: &[3], in_loops: &[]},
+                {next: &[], in_loops: &[]}
+            ],
+            pogo [
+                {next: &[1], in_loops: &[]},
+                {next: &[2], in_loops: &[1]},
+                {next: &[1], in_loops: &[1]}
+            ],
+            switch_fallthrough [
+                {next: &[1, 2, 3, 4], in_loops: &[]},
+                {next: &[2], in_loops: &[]},
+                {next: &[3], in_loops: &[]},
+                {next: &[4], in_loops: &[]},
+                {next: &[], in_loops: &[]}
+            ],
+            switch_fallthrough_reverse [
+                {next: &[1, 2, 3, 4], in_loops: &[]},
+                {next: &[], in_loops: &[]},
+                {next: &[1], in_loops: &[]},
+                {next: &[2], in_loops: &[]},
+                {next: &[3], in_loops: &[]}
+            ],
+            ece5775_lec6_pg22 [
+                {next: &[1], in_loops: &[]},        // = 0
+                {next: &[2], in_loops: &[]},        // = 1
+                {next: &[3, 10], in_loops: &[2]},   // = 2
+                {next: &[4], in_loops: &[2]},       // = 3
+                {next: &[5, 9], in_loops: &[4, 2]}, // = 4
+                {next: &[6, 7], in_loops: &[4, 2]}, // = 5
+                {next: &[8], in_loops: &[4, 2]},    // = 6
+                {next: &[8], in_loops: &[4, 2]},    // = 7
+                {next: &[4], in_loops: &[4, 2]},    // = 8
+                {next: &[2], in_loops: &[2]},       // = 9
+                {next: &[], in_loops: &[]}          // = 10
+            ]
+        );
     }
     mod irreducible {
         use crate::ir::utils;
@@ -310,49 +420,49 @@ mod tests {
         // basically, we ensure make_reducible doesn't crash,
         // and that it's idempotent. Not too strong, I know...
         macro_rules! make_tests {
-            ($($name:ident [$($desc:expr),+ $(,)?]),* $(,)?) => {
-                $(
+            ($($name:ident [$({
+                next: $tail:expr
+            }),+ $(,)?]),* $(,)?) => {$(
                 #[test]
                 fn $name() {
-                    let mut program = utils::program_from_cfg(&[ $($desc),* ]);
+                    let mut program = utils::program_from_cfg(&[ $($tail),* ]);
                     let first_output = utils::make_reducible(&mut program);
                     assert!(!first_output.is_empty());
                     let second_output = utils::make_reducible(&mut program);
                     assert!(second_output.is_empty());
                 }
-            )*
-            };
+            )*};
         }
 
         make_tests!(
             triangle [
-                &[1, 2],    // = 0
-                &[2],       // = 1
-                &[1]        // = 2
+                {next: &[1, 2]},    // = 0
+                {next: &[2]},       // = 1
+                {next: &[1]}        // = 2
             ],
             dom14_fig2 [
-                &[1, 2],    // = 0 (dom14:2:5)
-                &[3],       // = 1 (dom14:2:4)
-                &[4],       // = 2 (dom14:2:3)
-                &[4],       // = 3 (dom14:2:1)
-                &[3]        // = 4 (dom14:2:2)
+                {next: &[1, 2]},    // = 0 (dom14:2:5)
+                {next: &[3]},       // = 1 (dom14:2:4)
+                {next: &[4]},       // = 2 (dom14:2:3)
+                {next: &[4]},       // = 3 (dom14:2:1)
+                {next: &[3]}        // = 4 (dom14:2:2)
             ],
             dom14_fig4 [
-                &[1, 2],    // = 0 (dom14:4:6)
-                &[3],       // = 1 (dom14:4:5)
-                &[4, 5],    // = 2 (dom14:4:4)
-                &[4],       // = 3 (dom14:4:1)
-                &[3, 5],    // = 4 (dom14:4:2)
-                &[4],       // = 5 (dom14:4:3)
+                {next: &[1, 2]},    // = 0 (dom14:4:6)
+                {next: &[3]},       // = 1 (dom14:4:5)
+                {next: &[4, 5]},    // = 2 (dom14:4:4)
+                {next: &[4]},       // = 3 (dom14:4:1)
+                {next: &[3, 5]},    // = 4 (dom14:4:2)
+                {next: &[4]},       // = 5 (dom14:4:3)
             ],
             circle_like [
-                &[1, 5],    // = 0
-                &[0, 2],    // = 1
-                &[1, 3],    // = 2
-                &[2, 4, 6], // = 3
-                &[3, 5],    // = 4
-                &[0, 4],    // = 5
-                &[]         // = 6
+                {next: &[1, 5]},    // = 0
+                {next: &[0, 2]},    // = 1
+                {next: &[1, 3]},    // = 2
+                {next: &[2, 4, 6]}, // = 3
+                {next: &[3, 5]},    // = 4
+                {next: &[0, 4]},    // = 5
+                {next: &[]}         // = 6
             ]
         );
     }
