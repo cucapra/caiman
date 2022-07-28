@@ -227,6 +227,9 @@ pub struct Loops {
     header_map: HashMap<FuncletId, Option<FuncletId>>,
 }
 impl Loops {
+    pub fn headers(&self) -> &'_ [FuncletId] {
+        self.headers.as_ref()
+    }
     /// Returns the loop headers of the loops the given funclet is contained in,
     /// ordered from innermost to outermost.
     pub fn headers_for(&self, mut funclet: FuncletId) -> Vec<FuncletId> {
