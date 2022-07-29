@@ -3,7 +3,7 @@
 use crate::ir;
 use thiserror::Error;
 
-mod analysis;
+mod convert;
 
 /// This error is produced when an [`ir::Dependent`](crate::ir) depends on a node which:
 ///   1. occurs after the dependent, or
@@ -21,7 +21,7 @@ pub struct FromIrError {
 /// output IR.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Primitive {
-    /// An arbitrarily-sized list of child [`egg::Id`]s. The list ordering is meaningful.
+    /// An arbitrarily-sized list of child ids. The list ordering is meaningful.
     IdList,
 
     /// A generalization of a `φ` node which uses a integer to "choose" a value.
@@ -46,22 +46,22 @@ enum Primitive {
     SeqFirst,
 }
 
-/// Semantic functions. These are language-specific.
+/// Semantic operations.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum Function {
+enum Operation {
     Todo,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum Operation {
-    Prim(Primitive),
-    Func(Function),
+enum NodeKind {
+    Primitive(Primitive),
+    Operation(Operation),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Node {
-    /// The operation represented by this node. This does *NOT* include the node's children.
-    operation: Operation,
+    /// The node's type, including any constant attributes.
+    kind: NodeKind,
     /// The indices of each of the node's children. The order is significant. There is no
     /// guarantee that the entries are unique.
     /// This is a `Box<[NodeIndex]>` instead of a `Vec<NodeIndex>` in order to save space.
@@ -70,7 +70,7 @@ struct Node {
 }
 impl egg::Language for Node {
     fn matches(&self, other: &Self) -> bool {
-        self.operation == other.operation
+        self.kind == other.kind
     }
     fn children(&self) -> &[egg::Id] {
         &self.deps
