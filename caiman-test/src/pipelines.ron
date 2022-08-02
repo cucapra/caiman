@@ -260,8 +260,8 @@
 			),
 			12 : (
 				value_funclet_id : 9,
-				input_slots : {0 : (value_tag : ConcreteInput(funclet_id : 9, index : 0))},
-				output_slots : {0 : (value_tag : ConcreteOutput(funclet_id : 9, index : 0))},
+				input_slots : {0 : (value_tag : Input(funclet_id : 9, index : 0))},
+				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0))},
 				fences : {
 					0 : Fence(
 						prior_fence_ids : [],
@@ -270,7 +270,7 @@
 			),
 			13 : (
 				value_funclet_id : 10,
-				input_slots : {0 : (value_tag : ConcreteInput(funclet_id : 10, index : 0))},
+				input_slots : {0 : (value_tag : Input(funclet_id : 10, index : 0))},
 				output_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 0)) )},
 				fences : {
 					0 : Fence(
@@ -281,7 +281,7 @@
 			14 : (
 				value_funclet_id : 10,
 				input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)) )},
-				output_slots : {0 : (value_tag : ConcreteOutput(funclet_id : 10, index : 0))},
+				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0))},
 				fences : {
 					0 : Fence(
 						prior_fence_ids : [],

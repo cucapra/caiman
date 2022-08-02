@@ -823,12 +823,75 @@ impl<'program> CodeGenerator<'program>
 
 		self.code_writer.write(format!("impl<'state,  'cpu_functions, F : CpuFunctions> Funclet{}<'state,  'cpu_functions, F>\n{{\n", funclet_id));
 
+		let mut next_trait_index = 0usize;
+
 		let mut argument_variable_ids = Vec::<usize>::new();
-		self.code_writer.write(format!("fn new(instance : Instance<'state, 'cpu_functions, F>"));
+		self.code_writer.write(format!("fn new(instance : Instance<'state, 'cpu_functions, F"));
+
+		/*for (input_index, input_type) in input_types.iter().enumerate()
+		{
+			self.code_writer.write(", ".to_string());
+			match & self.types[input_type]
+			{
+				ir::Type::Slot{ .. } =>
+				{
+
+				}
+				ir::Type::SchedulingJoin { input_types, output_types, extra } =>
+				{
+					write!(self.code_writer, ", F{} : FnOnce(", next_trait_index, next_trait_index);
+					for (input_index, input_type) in input_types.iter().enumerate()
+					{
+						write!(self.code_writer, "{}", self.get_type_name(* input_type));
+
+						if input_index + 1 < input_types.len()
+						{
+							write!(self.code_writer, ", ");
+						}
+					}
+					write!(self.code_writer, ") -> (");
+					for (output_index, output_type) in output_types.iter().enumerate()
+					{
+						write!(self.code_writer, "{}", self.get_type_name(* output_type));
+
+						if output_index + 1 < output_types.len()
+						{
+							write!(self.code_writer, ", ");
+						}
+					}
+					write!(self.code_writer, ") ");
+					//self.get_type_name(funclet_result_type_id)
+					next_trait_index += 1;
+				}
+				_ => panic!("Unknown type")
+			}
+		}*/
+
+		write!(self.code_writer, ">");
+
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in input_types.iter().enumerate()
 		{
 			self.code_writer.write(", ".to_string());
+			/*match & self.types[input_type]
+			{
+				ir::Type::Slot{ .. } =>
+				{
+					self.generate_type_definition(* input_type);
+
+					//let variable_id = self.variable_tracker.generate();
+					let variable_id = self.variable_tracker.create_local(* input_type);
+					argument_variable_ids.push(variable_id);
+					let type_name = self.get_type_name(*input_type);
+					self.code_writer.write(format!("var_{} : {}", variable_id, type_name));
+				}
+				ir::Type::SchedulingJoin { input_types, output_types, extra } =>
+				{
+
+				}
+				_ => panic!("Unknown type")
+			}*/
+
 			self.generate_type_definition(* input_type);
 
 			//let variable_id = self.variable_tracker.generate();
@@ -836,11 +899,6 @@ impl<'program> CodeGenerator<'program>
 			argument_variable_ids.push(variable_id);
 			let type_name = self.get_type_name(*input_type);
 			self.code_writer.write(format!("var_{} : {}", variable_id, type_name));
-
-			/*if input_index + 1 < funclet.input_types.len()
-			{
-				self.code_strings.push(", ".to_string());
-			}*/
 		}
 
 		self.active_funclet_state = Some(ActiveFuncletState{funclet_id, result_type_id : funclet_result_type_id, next_funclet_ids : None, capture_count : 0, output_count : 0, output_type_ids : output_types.to_vec().into_boxed_slice(), next_funclet_input_types : None});
@@ -1163,6 +1221,10 @@ impl<'program> CodeGenerator<'program>
 				write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));
 
 			}
+			ir::Type::SchedulingJoin { input_types, output_types, extra } =>
+			{
+
+			}
 			_ => panic!("Unimplemented type #{}: {:?}", type_id, typ),
 			//_ => panic!("Unimplemented")
 		}
@@ -1187,6 +1249,33 @@ impl<'program> CodeGenerator<'program>
 			ir::Type::ConstSlice { element_type } => ("& [").to_string() + self.get_type_name(* element_type).as_str() + "]",
 			ir::Type::MutSlice { element_type } => ("&mut [").to_string() + self.get_type_name(* element_type).as_str() + "]",
 			ir::Type::Array { element_type, length } => format!("[{}; {}]", self.get_type_name(* element_type), length),
+			ir::Type::SchedulingJoin { input_types, output_types, extra } =>
+			{
+				let mut output_string = String::new();
+				// Temporary hack
+				write!(output_string, "&mut (FnMut(");
+				for (input_index, input_type) in input_types.iter().enumerate()
+				{
+					write!(output_string, "{}", self.get_type_name(* input_type));
+
+					if input_index + 1 < input_types.len()
+					{
+						write!(output_string, ", ");
+					}
+				}
+				write!(output_string, ") -> (");
+				for (output_index, output_type) in output_types.iter().enumerate()
+				{
+					write!(output_string, "{}", self.get_type_name(* output_type));
+
+					if output_index + 1 < output_types.len()
+					{
+						write!(output_string, ", ");
+					}
+				}
+				write!(output_string, "))");
+				output_string
+			}
 			_ => format!("type_{}", type_id)
 		}
 	}

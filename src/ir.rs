@@ -65,12 +65,13 @@ pub enum ValueTag
 	// Intended for scheduling purposes
 	None,
 	// These two are implementation-agnostic and are only allowed in external interfaces
-	Input{function_id : ValueFunctionId, index : usize},
-	Output{function_id : ValueFunctionId, index : usize},
+	FunctionInput{function_id : ValueFunctionId, index : usize},
+	FunctionOutput{function_id : ValueFunctionId, index : usize},
 	// These are not, and are intended for funclets
 	Operation{ remote_node_id : RemoteNodeId },
-	ConcreteInput{funclet_id : FuncletId, index : usize},
-	ConcreteOutput{funclet_id : FuncletId, index : usize},
+	Input{funclet_id : FuncletId, index : usize},
+	Output{funclet_id : FuncletId, index : usize},
+	Halt{index : usize}
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -108,6 +109,8 @@ pub enum Type
 	Slot{ value_type : TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 	//Slot{ value_type : TypeId, value_tag : ValueTag, queue_stage : ResourceQueueStage, queue_place : Place, fence_id : FenceId },
 	//Slot,
+
+	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
 }
 
 // Local Meta Variables are used to serve as ids for when types in input/output lists need to relate to each other
@@ -125,13 +128,17 @@ pub use generated::Node;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
 {
-	// Common
+	// Common?
 	Return { return_values : Box<[NodeId]> },
 	Yield { funclet_ids : Box<[FuncletId]>, captured_arguments : Box<[NodeId]>, return_values : Box<[NodeId]> },
+	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
 	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> },
 	ScheduleSelect { value_operation : RemoteNodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId },
+	//ScheduleTailCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, arguments : Box<[NodeId]> }, // new scope
+	//ScheduleReturn { value_operation : RemoteNodeId, join : NodeId, arguments : Box<[NodeId]> }, // exit scope
+	//ScheduleTailSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, arguments : Box<[NodeId]> }
 
 	// invokes and waits on the gpu
 	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
@@ -191,7 +198,15 @@ pub struct SlotInfo
 	pub value_tag : ValueTag,
 	//pub queue_stage : ResourceQueueStage,
 	//pub queue_place : Place,
+	//pub resource_id : ...
 	//pub fence_id : FenceId
+}
+
+// Funclet-relative join info goes here
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct JoinInfo
+{
+	// To do: Which subregions of resources are reserved by this join
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -200,15 +215,23 @@ pub struct SchedulingFuncletExtra
 	pub value_funclet_id : FuncletId,
 	pub input_slots : HashMap<usize, SlotInfo>,
 	pub output_slots : HashMap<usize, SlotInfo>,
+	//pub input_joins : HashMap<usize, JoinInfo>,
 	pub fences : BTreeMap<FenceId, Fence>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub struct CompatibleValueFunctionKey
+{
+	pub value_function_id : ValueFunctionId,
+	pub capture_count : usize
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValueFuncletExtra
 {
-	// Value functions this funclet implements
+	// Value functions this funclet implements and the number of captures
 	#[serde(default)]
-	pub value_function_ids : BTreeSet<ValueFunctionId>
+	pub compatible_value_functions : BTreeSet<CompatibleValueFunctionKey>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

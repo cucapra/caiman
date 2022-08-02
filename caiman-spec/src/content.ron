@@ -143,7 +143,7 @@
 				(name : "outputs", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, intrinsic : true),
+			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -154,7 +154,7 @@
 				(name : "output", kind : Operation)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, intrinsic : true),
+			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -163,7 +163,7 @@
 				(name : "place", kind : Place)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, intrinsic : true),
+			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -172,7 +172,7 @@
 				(name : "place", kind : Place)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, intrinsic : true),
+			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -182,7 +182,25 @@
 				(name : "fence", kind : Operation)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, intrinsic : true),
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "Join",
+			inputs : [
+				(name : "funclet", kind : Funclet),
+				(name : "captures", kind : Operation, is_array : true),
+				(name : "type_id", kind : Type),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "DefaultJoin",
+			inputs : [],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
 	]
