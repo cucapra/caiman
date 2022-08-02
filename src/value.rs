@@ -3,8 +3,6 @@
 use crate::ir;
 use thiserror::Error;
 
-mod convert;
-
 /// This error is produced when an [`ir::Dependent`](crate::ir) depends on a node which:
 ///   1. occurs after the dependent, or
 ///   2. doesn't exist at all
@@ -17,45 +15,42 @@ pub struct FromIrError {
     pub needed_by: ir::Dependent,
 }
 
-/// Primitive functions. These are only used internally by the egraph and don't show up in the
-/// output IR.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum Primitive {
-    /// An arbitrarily-sized list of child ids. The list ordering is meaningful.
-    IdList,
+enum TailKind {
+    // One child dependency, an `IdList` of captured arguments.
+    Return,
 
-    /// A generalization of a `φ` node which uses a integer to "choose" a value.
-    ///
-    /// The first child is the selector, which evaluates to some unsigned integer `i`. The
-    /// switch node as a whole evaluates to the value of its `i+1`th child.
-    Switch,
+    // Same as above.
+    Jump { target: ir::FuncletId },
 
-    /// An abstract representation of a sequence of values. This is called `θ` in [[Tate09]].
-    ///
-    /// The first child is the sequence's initial value. The second child is an expression which
-    /// gives the current value; usually, this expression is recursive.
-    SeqExpr,
-
-    /// Extracts a given value from a `Sequence`. This is called `eval` in [[Tate09]].
-    ///
-    /// The first child is the value sequence; the second child is the index of the desired value.
-    SeqExtract,
-
-    /// Represents the minimum `i ∈ ℕ` such that the `i`th element in the child sequence is true.
-    /// This is called `pass` in [[Tate09]].
-    SeqFirst,
+    // One `IdList` dependency for each targets, and an additional final dependency
+    // for the selector.
+    Switch { targets: Box<[ir::FuncletId]> },
 }
 
-/// Semantic operations.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum Operation {
-    Todo,
-}
+mod operation_kind;
+use operation_kind::OperationKind;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum NodeKind {
-    Primitive(Primitive),
-    Operation(Operation),
+    /// An arbitrarily-sized list of child ids. The list ordering is meaningful.
+    IdList,
+
+    /// A funclet parameter (corresponds to a funclet phi node)
+    Param {
+        funclet: ir::FuncletId,
+        index: usize,
+    },
+
+    /// A tail edge for a given funclet.
+    Tail {
+        funclet: ir::FuncletId,
+        kind: TailKind,
+    },
+
+    Operation {
+        kind: OperationKind,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
