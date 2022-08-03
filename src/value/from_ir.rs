@@ -20,7 +20,7 @@ pub struct FromIrError {
 struct FuncletCvtCtx<'a> {
     funclet_id: ir::FuncletId,
     node_ids: HashMap<ir::NodeId, value::GraphId>,
-    graph: &'a mut value::Graph,
+    graph: &'a mut value::GraphInner,
 }
 
 fn convert_node_id(
@@ -128,8 +128,8 @@ fn convert_node(
     Ok(graph_id)
 }
 
-fn convert_funclet(
-    graph: &mut value::Graph,
+pub(super) fn convert_funclet(
+    graph: &mut value::GraphInner,
     program: &ir::Program,
     funclet_id: ir::FuncletId,
 ) -> Result<value::GraphId, FromIrError> {

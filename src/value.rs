@@ -1,5 +1,6 @@
 #![warn(warnings)]
 use crate::ir;
+use std::collections::hash_map::{Entry, HashMap};
 
 mod from_ir;
 pub use from_ir::FromIrError;
@@ -64,5 +65,32 @@ impl egg::Language for Node {
     }
 }
 
-type Graph = egg::EGraph<Node, ()>;
+type GraphInner = egg::EGraph<Node, ()>;
 type GraphId = egg::Id;
+
+pub struct Graph {
+    inner: GraphInner,
+    tail_map: HashMap<ir::FuncletId, GraphId>,
+}
+impl Graph {
+    pub fn new(
+        program: &ir::Program,
+        entry_funclet_id: ir::FuncletId,
+    ) -> Result<Self, FromIrError> {
+        let mut stack = vec![entry_funclet_id];
+        let mut graph = Self {
+            inner: egg::EGraph::new(()),
+            tail_map: HashMap::new(),
+        };
+        while let Some(funclet_id) = stack.pop() {
+            if let Entry::Vacant(spot) = graph.tail_map.entry(funclet_id) {
+                let tail_id = from_ir::convert_funclet(&mut graph.inner, program, funclet_id)?;
+                spot.insert(tail_id);
+                program.funclets[&funclet_id]
+                    .tail_edge
+                    .for_each_funclet(|id| stack.push(id));
+            }
+        }
+        Ok(graph)
+    }
+}
