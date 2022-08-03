@@ -1,5 +1,5 @@
-use crate::ir;
 use crate::operations::{BinopKind, UnopKind};
+use crate::{ir, value};
 
 macro_rules! _field_type {
 	([$elem_type:ident]) => { Box<[_field_type!($elem_type)]> };
@@ -26,6 +26,17 @@ macro_rules! _mok_impl {
             $( $name {
                 $($arg: _field_type!($arg_type)),*
             } ),*
+        }
+
+        impl OperationKind {
+            pub(super) fn from_ir_node(node: &ir::Node) -> Self {
+                match node {
+                    $(
+                        ir::Node::$name {$($arg,)* ..} => Self::$name { $($arg : $arg.clone()),* },
+                    )*
+                    _ => panic!("invalid value node for operation conversion")
+                }
+            }
         }
     };
 }

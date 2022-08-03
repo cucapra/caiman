@@ -1,19 +1,11 @@
 #![warn(warnings)]
-//! [[Tate09]](https://rosstate.org/publications/eqsat/eqsat_tate_popl09.pdf)
 use crate::ir;
-use thiserror::Error;
 
-/// This error is produced when an [`ir::Dependent`](crate::ir) depends on a node which:
-///   1. occurs after the dependent, or
-///   2. doesn't exist at all
-#[derive(Debug, Error)]
-#[error("IR conversion error: {needed_by} incorrectly depends on node #{dependency}")]
-pub struct FromIrError {
-    /// The ID of the dependency
-    pub dependency: ir::NodeId,
-    /// The dependent which caused the failure.
-    pub needed_by: ir::Dependent,
-}
+mod from_ir;
+pub use from_ir::FromIrError;
+
+mod operation_kind;
+use operation_kind::OperationKind;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum TailKind {
@@ -28,9 +20,6 @@ enum TailKind {
     Switch { targets: Box<[ir::FuncletId]> },
 }
 
-mod operation_kind;
-use operation_kind::OperationKind;
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum NodeKind {
     /// An arbitrarily-sized list of child ids. The list ordering is meaningful.
@@ -38,13 +27,13 @@ enum NodeKind {
 
     /// A funclet parameter (corresponds to a funclet phi node)
     Param {
-        funclet: ir::FuncletId,
+        funclet_id: ir::FuncletId,
         index: usize,
     },
 
     /// A tail edge for a given funclet.
     Tail {
-        funclet: ir::FuncletId,
+        funclet_id: ir::FuncletId,
         kind: TailKind,
     },
 
@@ -61,7 +50,7 @@ struct Node {
     /// guarantee that the entries are unique.
     /// This is a `Box<[NodeIndex]>` instead of a `Vec<NodeIndex>` in order to save space.
     /// You generally shouldn't be adding or removing children anyways.
-    deps: Box<[egg::Id]>,
+    deps: Box<[GraphId]>,
 }
 impl egg::Language for Node {
     fn matches(&self, other: &Self) -> bool {
@@ -74,3 +63,6 @@ impl egg::Language for Node {
         &mut self.deps
     }
 }
+
+type Graph = egg::EGraph<Node, ()>;
+type GraphId = egg::Id;
