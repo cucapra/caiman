@@ -6,10 +6,10 @@ mod from_ir;
 pub use from_ir::FromIrError;
 
 mod operation_kind;
-use operation_kind::OperationKind;
+pub use operation_kind::OperationKind;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum TailKind {
+pub enum TailKind {
     // One child dependency, an `IdList` of captured arguments.
     Return,
 
@@ -22,7 +22,7 @@ enum TailKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum NodeKind {
+pub enum NodeKind {
     /// An arbitrarily-sized list of child ids. The list ordering is meaningful.
     IdList,
 
@@ -44,7 +44,7 @@ enum NodeKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Node {
+pub struct Node {
     /// The node's type, including any constant attributes.
     kind: NodeKind,
     /// The indices of each of the node's children. The order is significant. There is no
@@ -84,7 +84,11 @@ impl Graph {
         };
         while let Some(funclet_id) = stack.pop() {
             if let Entry::Vacant(spot) = graph.tail_map.entry(funclet_id) {
-                let tail_id = from_ir::convert_funclet(&mut graph.inner, program, funclet_id)?;
+                let mut converter = from_ir::FuncletConverter::new(&mut graph.inner, funclet_id);
+                for (node_id, node) in program.funclets[&funclet_id].nodes.iter().enumerate() {
+                    converter.add_node(node, node_id)?;
+                }
+                let tail_id = converter.add_tail(&program.funclets[&funclet_id].tail_edge)?;
                 spot.insert(tail_id);
                 program.funclets[&funclet_id]
                     .tail_edge
