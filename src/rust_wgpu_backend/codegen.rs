@@ -20,7 +20,8 @@ struct Join
 {
 	funclet_id : ir::FuncletId,
 	captures : Box<[scheduling_state::SlotId]>,
-	type_id_opt : Option<ir::TypeId>
+	type_id_opt : Option<ir::TypeId>,
+	variable_id_opt : Option<usize>
 }
 
 #[derive(Debug, Clone)]
@@ -493,8 +494,12 @@ impl<'program> CodeGen<'program>
 		}
 
 		let output_slot_ids = self.compile_scheduling_funclet(funclet_id, & argument_slot_ids, pipeline_context, &mut placement_state);
-		let return_var_ids = placement_state.get_slot_var_ids(& output_slot_ids, ir::Place::Local).unwrap();
-		self.code_generator.build_return(& return_var_ids);
+		// Temporary hack while I get join points working
+		if output_slot_ids.len() > 0
+		{
+			let return_var_ids = placement_state.get_slot_var_ids(& output_slot_ids, ir::Place::Local).unwrap();
+			self.code_generator.build_return(& return_var_ids);
+		}
 		self.code_generator.end_funclet();
 	}
 
@@ -847,19 +852,45 @@ impl<'program> CodeGen<'program>
 						}
 					}
 				}
-				ir::Node::Join { funclet, captures, type_id } => 
+				ir::Node::Join { funclet : funclet_id, captures } => 
 				{
 					let mut captured_slot_ids = Vec::<scheduling_state::SlotId>::new();
-					let extra = & self.program.scheduling_funclet_extras[funclet];
+					let mut captured_var_ids = Vec::<usize>::new();
+					let funclet = & self.program.funclets[funclet_id];
+					let extra = & self.program.scheduling_funclet_extras[funclet_id];
 					for (capture_index, capture_node_id) in captures.iter().enumerate()
 					{
 						let slot_id = funclet_scoped_state.move_node_slot_id(* capture_node_id).unwrap();
 						captured_slot_ids.push(slot_id);
+						captured_var_ids.push(placement_state.get_slot_var_id(slot_id).unwrap());
 
 						let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 						check_value_tag_compatibility_interior(& self.program, slot_value_tag, extra.input_slots[& capture_index].value_tag);
 					}
-					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join(Join{funclet_id : * funclet, captures: captured_slot_ids.into_boxed_slice(), type_id_opt : Some(* type_id)}));
+
+					/*// This is a temporary hack, I hope
+					let input_types = & funclet.input_types[captures.len()..];
+					let (join_var_id, input_var_ids) = self.code_generator.begin_join(input_types, & funclet.output_types);
+					let mut input_slot_ids = Vec::<scheduling_state::SlotId>::new();
+					for (input_index, input_var_id) in input_var_ids.iter().enumerate()
+					{
+						let old_slot_id = captured_slot_ids[input_index];
+						let place = placement_state.scheduling_state.get_slot_queue_place(old_slot_id);
+						let stage = placement_state.scheduling_state.get_slot_queue_stage(old_slot_id);
+						let slot_id = placement_state.scheduling_state.insert_hacked_slot(input_types[input_index], place, stage);
+						placement_state.update_slot_state(slot_id, stage, * input_var_id);
+						funclet_scoped_state.slot_value_tags.insert(slot_id, extra.input_slots[& input_index].value_tag);
+						input_slot_ids.push(slot_id);
+					}
+					let output_slots = self.compile_scheduling_funclet(* funclet_id, input_slot_ids.as_slice(), pipeline_context, placement_state);
+					self.code_generator.end_join(& (output_slots.iter().map(|x| placement_state.get_slot_var_id(* x).unwrap()).collect::<Box<[usize]>>()));*/
+
+					let input_type_ids = & funclet.input_types[captures.len()..];
+					let join_var_id = self.code_generator.build_join(* funclet_id, captured_var_ids.as_slice(), input_type_ids, & funclet.output_types);
+					pipeline_context.pending_funclet_ids.push(* funclet_id);
+
+					//Some(* type_id)
+					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join(Join{funclet_id : * funclet_id, captures: captured_slot_ids.into_boxed_slice(), type_id_opt : None, variable_id_opt : Some(join_var_id)}));
 				}
 				_ => panic!("Unknown node")
 			};
@@ -885,7 +916,10 @@ impl<'program> CodeGen<'program>
 					check_slot_type(& self.program, funclet.output_types[return_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 				}
 
+				//let return_var_ids = placement_state.get_slot_var_ids(output_slots.as_slice(), ir::Place::Local).unwrap();
+				//self.code_generator.build_return(& return_var_ids);
 				return output_slots.into_boxed_slice();
+				//return vec![].into_boxed_slice();
 			}
 			/*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
@@ -908,7 +942,7 @@ impl<'program> CodeGen<'program>
 				// This is disgusting
 				self.code_generator.build_yield(funclet_ids, next_funclet_input_types.into_boxed_slice(), & captured_argument_var_ids, & return_var_ids);
 			}*/
-			ir::TailEdge::ScheduleCall { value_operation, /*input_slots,*/ callee_funclet_id, callee_arguments, continuation_funclet_id, continuation_arguments } =>
+			ir::TailEdge::ScheduleCall { value_operation, /*input_slots,*/ callee_funclet_id, callee_arguments, continuation_funclet_id, continuation_arguments /*continuation_join : continuation_join_node_id*/ } =>
 			{
 				assert_eq!(funclet_scheduling_extra.value_funclet_id, value_operation.funclet_id);
 				let encoded_value_funclet = & self.program.funclets[& value_operation.funclet_id];
@@ -918,9 +952,6 @@ impl<'program> CodeGen<'program>
 				{
 					ir::Node::CallValueFunction { function_id, arguments } =>
 					{
-						// Slots are linear (really: affine) when they cross the funclet boundary
-						let mut used_slot_ids = HashSet::<scheduling_state::SlotId>::new();
-
 						// Step 1: Check callee
 						let callee_funclet = & self.program.funclets[callee_funclet_id];
 
@@ -937,9 +968,8 @@ impl<'program> CodeGen<'program>
 						assert_eq!(callee_arguments.len(), callee_funclet.input_types.len());
 						for (callee_argument_index, callee_argument_node_id) in callee_arguments.iter().enumerate()
 						{
-							if let NodeResult::Slot{slot_id} = funclet_scoped_state.node_results[callee_argument_node_id]
+							let slot_id = funclet_scoped_state.move_node_slot_id(* callee_argument_node_id).unwrap();
 							{
-								assert!(used_slot_ids.insert(slot_id));
 								callee_input_slots.push(slot_id);
 
 								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
@@ -969,15 +999,16 @@ impl<'program> CodeGen<'program>
 
 								check_slot_type(& self.program, callee_funclet.input_types[callee_argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), value_type_opt);
 							}
-							else
-							{
-								panic!("Input is not slot");
-							}
 						}
 
 						// To do: Check type compatibility
 
 						// Step 2: Continuation
+
+						/*let continuation_join = funclet_scoped_state.move_node_join(* continuation_join_node_id).unwrap();
+						let continuation_funclet_id = & continuation_join.funclet_id;
+						let continuation_captures = continuation_join.captures;
+						let continuation_var_id = continuation_join.variable_id_opt.unwrap();*/
 
 						let continuation_funclet = & self.program.funclets[continuation_funclet_id];
 						assert_eq!(continuation_funclet.kind, ir::FuncletKind::ScheduleExplicit);
@@ -990,35 +1021,22 @@ impl<'program> CodeGen<'program>
 
 						assert_eq!(encoded_value_funclet_id, continuation_value_funclet_id);
 
+
+						let mut continuation_input_slots = Vec::<scheduling_state::SlotId>::new();
+						//continuation_input_slots.extend_from_slice(& continuation_captures);
+
 						assert_eq!(continuation_arguments.len() + callee_funclet.output_types.len(), continuation_funclet.input_types.len());
 
 						let mut continuation_input_slots = Vec::<scheduling_state::SlotId>::new();
 						for (continuation_argument_index, continuation_argument_node_id) in continuation_arguments.iter().enumerate()
 						{
-							if let NodeResult::Slot{slot_id} = funclet_scoped_state.node_results[continuation_argument_node_id]
+							let slot_id = funclet_scoped_state.move_node_slot_id(* continuation_argument_node_id).unwrap();
 							{
-								assert!(used_slot_ids.insert(slot_id));
 
 								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 								let value_tag = continuation_funclet_scheduling_extra.input_slots[& continuation_argument_index].value_tag;
 								check_value_tag_compatibility_interior(& self.program, slot_value_tag, value_tag);
 								check_slot_type(& self.program, continuation_funclet.input_types[continuation_argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-
-								/*match & self.program.types[& continuation_funclet.input_types[continuation_argument_index]]
-								{
-									ir::Type::Slot { value_type, queue_stage, queue_place } =>
-									{
-										// Scheduling state checks are easy...
-										assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), * queue_place);
-										assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), * queue_stage);
-										// To do: Fence
-									}
-									_ => panic!("Not a slot type")
-								}*/
-							}
-							else
-							{
-								panic!("Input is not slot");
 							}
 						}
 
@@ -1030,7 +1048,6 @@ impl<'program> CodeGen<'program>
 							let value_tag = callee_funclet_scheduling_extra.output_slots[& callee_output_index].value_tag;
 							let value_tag_2 = continuation_funclet_scheduling_extra.input_slots[& continuation_input_index].value_tag;
 
-							// Value tag checks are something else...
 							match (value_tag, value_tag_2)
 							{
 								(_, ir::ValueTag::None) => (),
@@ -1051,24 +1068,14 @@ impl<'program> CodeGen<'program>
 								}
 								_ => panic!("Ill-formed: {:?} to {:?}", value_tag, value_tag_2)
 							};
-
-							/*match (& self.program.types[callee_output_type], & self.program.types[& continuation_funclet.input_types[continuation_input_index]])
-							{
-								(ir::Type::Slot { value_type, queue_stage, queue_place }, ir::Type::Slot { value_type : value_type_2, queue_stage : queue_stage_2, queue_place : queue_place_2 }) =>
-								{
-									// Scheduling state checks are easy...
-									assert_eq!(* queue_place_2, * queue_place);
-									assert_eq!(* queue_stage_2, * queue_stage);
-									assert_eq!(* value_type_2, * value_type);
-									// To do: Fence
-								}
-								_ => panic!("Not a slot type")
-							}*/
 						}
 						
 						let mut callee_output_slots = self.compile_scheduling_funclet(* callee_funclet_id, callee_input_slots.as_slice(), pipeline_context, placement_state);
 						continuation_input_slots.extend_from_slice(& callee_output_slots);
 						return self.compile_scheduling_funclet(* continuation_funclet_id, continuation_input_slots.as_slice(), pipeline_context, placement_state);
+						//let continuation_input_var_ids = continuation_input_slots.iter().map(|x| placement_state.slot_variable_ids[x]).collect::<Box<[usize]>>();
+						//self.code_generator.call_join(continuation_var_id, & continuation_input_var_ids);
+						//return vec![].into_boxed_slice();
 					}
 					_ => panic!("Node cannot be scheduled via ScheduleCall")
 				}
@@ -1164,7 +1171,9 @@ impl<'program> CodeGen<'program>
 					assert_eq!(destination_funclet.output_types[* source_output_index], funclet.output_types[* source_output_index]);
 				}
 				
-				return self.compile_scheduling_funclet(join.funclet_id, input_slot_ids.as_slice(), pipeline_context, placement_state);
+				//return self.compile_scheduling_funclet(join.funclet_id, input_slot_ids.as_slice(), pipeline_context, placement_state);
+				let continuation_input_var_ids = input_slot_ids.iter().map(|x| placement_state.slot_variable_ids[x]).collect::<Box<[usize]>>();
+				self.code_generator.call_join(join.variable_id_opt.unwrap(), & continuation_input_var_ids);
 			}
 			_ => panic!("Umimplemented")
 		}
@@ -1210,7 +1219,7 @@ impl<'program> CodeGen<'program>
 
 			_ => panic!("Umimplemented")
 		};*/
-		self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
+		//self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
 
 		self.code_generator.end_pipeline();
 	}

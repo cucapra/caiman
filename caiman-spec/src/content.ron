@@ -190,7 +190,6 @@
 			inputs : [
 				(name : "funclet", kind : Funclet),
 				(name : "captures", kind : Operation, is_array : true),
-				(name : "type_id", kind : Type),
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, intrinsic : false),

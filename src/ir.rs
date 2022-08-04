@@ -134,7 +134,7 @@ pub enum TailEdge
 	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
-	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> },
+	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> /*continuation_join : NodeId*/ },
 	ScheduleSelect { value_operation : RemoteNodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId },
 	//ScheduleTailCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, arguments : Box<[NodeId]> }, // new scope
 	//ScheduleReturn { value_operation : RemoteNodeId, join : NodeId, arguments : Box<[NodeId]> }, // exit scope

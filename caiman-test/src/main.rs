@@ -5,13 +5,14 @@ mod pipelines
 
 struct Callbacks;
 
+/*
 impl pipelines::pipeline_1::CpuFunctions for Callbacks
 {
 	fn do_thing_on_cpu( & self, state : &mut pipelines::State, value : i32 ) -> pipelines::pipeline_1::outputs::do_thing_on_cpu
 	{
 		return pipelines::pipeline_1::outputs::do_thing_on_cpu { field_0 : value + 1 };
 	}
-}
+}*/
 
 /*impl pipelines::pipeline_with_gpu_gpu_communication::CpuFunctions for Callbacks
 {
@@ -68,7 +69,7 @@ fn main()
 #[cfg(test)]
 mod tests
 {
-	#[test]
+	/*#[test]
 	fn test_1()
 	{
 		let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
@@ -78,7 +79,7 @@ mod tests
 		let mut root_state = crate::pipelines::RootState::new(&mut device, &mut queue);
 		let result = crate::pipelines::pipeline_1::run(&mut root_state, & callbacks, 1);
 		assert_eq!(3, result.field_0);
-	}
+	}*/
 
 	/*#[test]
 	fn test_2()
