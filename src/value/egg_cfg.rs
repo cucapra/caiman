@@ -82,7 +82,7 @@ pub struct EggCfg {
     blocks: Vec<BlockSkeleton>,
     /// A list of candidates for jump threading.
     /// Each entry in this list is guaranteed to have a jump tail edge.
-    dirty: Vec<BlockId>,
+    thread_candidates: Vec<BlockId>,
 }
 impl EggCfg {
     /// Attempts to collapse branches into jumps using constant folding.
@@ -91,18 +91,12 @@ impl EggCfg {
             let block = &mut self.blocks[i];
             if let BlockTail::Branch { cond, j0, j1 } = &mut block.tail {
                 if let Some(Constant::Bool(cond)) = graph[*cond].data.constant {
+                    let (tail, other) = if cond { (j1, j0.dest) } else { (j0, j1.dest) };
                     // collapse the tail, and update the other destination's branches
-                    let unselected_id;
-                    if cond {
-                        unselected_id = j0.dest;
-                        block.tail = BlockTail::Jump(j1.clone());
-                    } else {
-                        unselected_id = j1.dest;
-                        block.tail = BlockTail::Jump(j0.clone());
-                    }
-                    self.blocks[unselected_id.0].remove_pred(BlockId(i));
+                    block.tail = BlockTail::Jump(tail.clone());
+                    self.blocks[other.0].remove_pred(BlockId(i));
                     // update dirty list
-                    self.dirty.push(BlockId(i));
+                    self.thread_candidates.push(BlockId(i));
                 }
             }
         }
@@ -113,9 +107,9 @@ impl EggCfg {
             if let BlockTail::Jump(jump) = &tail {
                 return jump;
             }
-            unreachable!("dirty list invariant violation");
+            unreachable!("thread_candidates invariant violation");
         }
-        while let Some(candidate) = self.dirty.pop() {
+        while let Some(candidate) = self.thread_candidates.pop() {
             // according to dirty list invariant, this should never fail
             let target = unwrap_jump(&self.blocks[candidate.0].tail).dest;
             // if the target has a single predecessor, it *must* be the candidate
@@ -131,7 +125,7 @@ impl EggCfg {
                         self.blocks[dest.0].remove_pred(target);
                         self.blocks[dest.0].add_pred(candidate);
                         // we still end in a jump, so we'll want to check this block again
-                        self.dirty.push(candidate);
+                        self.thread_candidates.push(candidate);
                     }
                     &BlockTail::Branch {
                         j0: Jump { dest: d0, .. },
