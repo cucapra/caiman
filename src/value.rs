@@ -5,25 +5,16 @@ use std::collections::hash_map::{Entry, HashMap};
 mod from_ir;
 pub use from_ir::FromIrError;
 
+mod into_ir;
+
+mod egg_cfg;
+
 mod operation_kind;
 pub use operation_kind::OperationKind;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TailKind {
-    // One child dependency, an `IdList` of captured arguments.
-    Return,
-
-    // Same as above.
-    Jump { target: ir::FuncletId },
-
-    // One `IdList` dependency for each targets, and an additional final dependency
-    // for the selector.
-    Switch { targets: Box<[ir::FuncletId]> },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NodeKind {
-    /// An arbitrarily-sized list of child ids. The list ordering is meaningful.
+    /// An arbitrarily-sized list of graph ids. The list ordering is meaningful.
     IdList,
 
     /// A funclet parameter (corresponds to a funclet phi node)
@@ -32,17 +23,68 @@ pub enum NodeKind {
         index: usize,
     },
 
-    /// A tail edge for a given funclet.
-    Tail {
-        funclet_id: ir::FuncletId,
-        kind: TailKind,
-    },
-
     Operation {
         kind: OperationKind,
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Constant {
+    Bool(bool),
+
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+}
+
+#[derive(Debug)]
+struct ClassAnalysis {
+    constant: Option<Constant>,
+}
+impl ClassAnalysis {
+    fn new(_egraph: &egg::EGraph<Node, GlobalAnalysis>, enode: &Node) -> Self {
+        let mut constant = None;
+        if let NodeKind::Operation { kind } = &enode.kind {
+            if let OperationKind::ConstantInteger { value, .. } = kind {
+                constant = Some(Constant::I64(*value));
+            } else if let OperationKind::ConstantUnsignedInteger { value, .. } = kind {
+                constant = Some(Constant::U64(*value));
+            }
+        }
+        Self { constant }
+    }
+    fn merge(&mut self, other: Self) -> egg::DidMerge {
+        let constant_merge = match (self.constant, other.constant) {
+            (None, None) => egg::DidMerge(false, false),
+            (Some(_), None) => egg::DidMerge(false, true),
+            (None, mut b @ Some(_)) => {
+                self.constant = b.take();
+                egg::DidMerge(true, false)
+            }
+            (Some(a), Some(b)) => {
+                assert!(a == b, "graph rewrite violated the type system");
+                egg::DidMerge(false, false)
+            }
+        };
+        constant_merge
+    }
+}
+struct GlobalAnalysis {}
+impl egg::Analysis<Node> for GlobalAnalysis {
+    type Data = ClassAnalysis;
+    fn make(egraph: &egg::EGraph<Node, Self>, enode: &Node) -> Self::Data {
+        ClassAnalysis::new(egraph, enode)
+    }
+    fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
+        a.merge(b)
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Node {
     /// The node's type, including any constant attributes.
@@ -65,7 +107,7 @@ impl egg::Language for Node {
     }
 }
 
-type GraphInner = egg::EGraph<Node, ()>;
+type GraphInner = egg::EGraph<Node, GlobalAnalysis>;
 type GraphId = egg::Id;
 
 pub struct Graph {
@@ -77,7 +119,8 @@ impl Graph {
         program: &ir::Program,
         entry_funclet_id: ir::FuncletId,
     ) -> Result<Self, FromIrError> {
-        let mut stack = vec![entry_funclet_id];
+        todo!();
+        /*let mut stack = vec![entry_funclet_id];
         let mut graph = Self {
             inner: egg::EGraph::new(()),
             tail_map: HashMap::new(),
@@ -95,6 +138,6 @@ impl Graph {
                     .for_each_funclet(|id| stack.push(id));
             }
         }
-        Ok(graph)
+        Ok(graph)*/
     }
 }

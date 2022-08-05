@@ -25,7 +25,7 @@ pub struct FuncletConverter<'a> {
     graph: &'a mut value::GraphInner,
 }
 impl<'a> FuncletConverter<'a> {
-    pub fn new(graph: &'a mut value::GraphInner, funclet_id: ir::FuncletId) -> Self {
+    pub(super) fn new(graph: &'a mut value::GraphInner, funclet_id: ir::FuncletId) -> Self {
         Self {
             funclet_id,
             node_ids: HashMap::new(),
@@ -88,7 +88,7 @@ impl<'a> FuncletConverter<'a> {
         self.node_ids.insert(node_id, graph_id);
         Ok(graph_id)
     }
-    pub fn add_tail(&mut self, tail: &ir::TailEdge) -> Result {
+    /*pub fn add_tail(&mut self, tail: &ir::TailEdge) -> Result {
         let needed_by = ir::Dependent::Tail;
         let mut deps = Vec::new();
         let kind = match tail {
@@ -120,5 +120,5 @@ impl<'a> FuncletConverter<'a> {
             deps: deps.into_boxed_slice(),
         });
         Ok(graph_id)
-    }
+    }*/
 }
