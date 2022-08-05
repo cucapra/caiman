@@ -1,5 +1,53 @@
+use super::*;
 use crate::ir;
-use crate::value::{Constant, GraphId, GraphInner};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Constant {
+    Bool(bool),
+
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+}
+
+#[derive(Debug)]
+pub struct ClassAnalysis {
+    constant: Option<Constant>,
+}
+impl ClassAnalysis {
+    fn new(_egraph: &GraphInner, enode: &Node) -> Self {
+        let mut constant = None;
+        if let NodeKind::Operation { kind } = &enode.kind {
+            if let OperationKind::ConstantInteger { value, .. } = kind {
+                constant = Some(Constant::I64(*value));
+            } else if let OperationKind::ConstantUnsignedInteger { value, .. } = kind {
+                constant = Some(Constant::U64(*value));
+            }
+        }
+        Self { constant }
+    }
+    fn merge(&mut self, other: Self) -> egg::DidMerge {
+        let constant_merge = match (self.constant, other.constant) {
+            (None, None) => egg::DidMerge(false, false),
+            (Some(_), None) => egg::DidMerge(false, true),
+            (None, mut b @ Some(_)) => {
+                self.constant = b.take();
+                egg::DidMerge(true, false)
+            }
+            (Some(a), Some(b)) => {
+                assert!(a == b, "graph rewrite violated the type system");
+                egg::DidMerge(false, false)
+            }
+        };
+        constant_merge
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct BlockId(usize);
@@ -78,13 +126,16 @@ impl BlockSkeleton {
         }
     }
 }
-pub struct EggCfg {
+pub struct Analysis {
     blocks: Vec<BlockSkeleton>,
     /// A list of candidates for jump threading.
     /// Each entry in this list is guaranteed to have a jump tail edge.
     thread_candidates: Vec<BlockId>,
 }
-impl EggCfg {
+impl Analysis {
+    pub fn new() -> Self {
+        todo!();
+    }
     /// Attempts to collapse branches into jumps using constant folding.
     fn collapse_branches(&mut self, graph: &GraphInner) {
         for i in 0..self.blocks.len() {
@@ -140,5 +191,15 @@ impl EggCfg {
                 }
             }
         }
+    }
+}
+
+impl egg::Analysis<Node> for Analysis {
+    type Data = ClassAnalysis;
+    fn make(egraph: &GraphInner, enode: &Node) -> Self::Data {
+        ClassAnalysis::new(egraph, enode)
+    }
+    fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
+        a.merge(b)
     }
 }
