@@ -20,6 +20,23 @@ fn foob(hi : i32) -> i32 {
 
 let foo_output : i32 = foo();
 let foob_out : i32 = foob(100);
-let foob_out2 : i32 = foob(1, 2);
+foo();
+foob(10000);
 
+while true {
+  let g : i32 = x;
+  let asdf : i32 = 5;
+  let test_if : i32 = asdf;
+}
+
+fn bar(a: i32, b: bool) -> bool {
+  let useless : i32 = a;
+  b && false 
+}
+
+bar(5, true);
+
+if bar(100, false) { }
+
+x = 1;
 

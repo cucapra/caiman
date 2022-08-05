@@ -115,7 +115,21 @@ where
             st.function_context.add(f.to_string(), param_ts, *ret_t)
                 .map_err(|e| (info, e))
         },
-        _ => panic!("TODO check stmt"),
+        StmtKind::If(guard, block)
+        | StmtKind::While(guard, block) => {
+            check_guard_and_block(guard, block, st)
+        },
+        StmtKind::Assign(x, e) => {
+            let var_t = context_get(info, &st.context, x)?;
+            let expr_t = expr_type(e, st)?;
+            check(
+                expr_t.is_subtype_of(var_t),
+                info,
+                SemanticError::TypeMismatch(var_t, expr_t),
+            )
+        },
+        StmtKind::Call(f, args) => call_type(info, st, f, args).map(|_| ()),
+        StmtKind::Print(_) => panic!("No printing sorry :("),
     }
 }
 
@@ -130,10 +144,11 @@ where
     let info = meta.info();
     match expr_kind
     {
-        // TODO: Other number types
         ExprKind::Num(n) => Ok(expr_type_of_num(n)),
         ExprKind::Bool(_) => Ok(ExprType::Ordinary(Type::Bool)),
-        ExprKind::Var(x) => context_get(info, &st.context, x),
+        ExprKind::Var(x) => {
+            context_get(info, &st.context, x).map(|t| ExprType::Ordinary(t))
+        },
         ExprKind::Input() => Ok(ExprType::Any),
         ExprKind::Binop(bop, e1, e2) => {
             let t1 = expr_type(e1, st)?;
@@ -153,12 +168,15 @@ fn check_binop(
     t2: ExprType
 ) -> Result<ExprType, InfoError>
 {
-    let check_num = |t: ExprType| 
-        check(t.is_number(), info, SemanticError::WrongBinop(t, *bop));
-    let check_bool = |t: ExprType| 
-        check(t.is_bool(), info, SemanticError::WrongBinop(t, *bop));
-    let check_compatible = || 
-        check(t1.compatible(t2), info, SemanticError::Incompatible(t1, t2));
+    let check_num = |t: ExprType| {
+        check(t.is_number(), info, SemanticError::WrongBinop(t, *bop))
+    };
+    let check_bool = |t: ExprType| {
+        check(t.is_bool(), info, SemanticError::WrongBinop(t, *bop))
+    };
+    let check_compatible = || {
+        check(t1.compatible(t2), info, SemanticError::Incompatible(t1, t2))
+    };
     let bop_body = 
         |f: &dyn Fn(ExprType) -> Result<(), InfoError>, ret: ExprType| { 
             f(t1)?; f(t2)?; check_compatible()?; Ok(ret)
@@ -191,6 +209,30 @@ fn check_unop(
         },
     }
 }
+
+// For if and while
+fn check_guard_and_block<S, E>(
+    guard: &Expr<E>,
+    block: &Vec<Stmt<S, E>>,
+    st: &mut CheckingState,
+) -> Result<(), InfoError>
+where
+    S: HasInfo,
+    E: HasInfo,
+{
+    let (meta, _) = guard;
+    let info = meta.info();
+    let guard_t = expr_type(guard, st)?;
+    check(
+        guard_t.is_bool(),
+        info,
+        SemanticError::TypeMismatch(Type::Bool, guard_t),
+    )?;
+    // XXX is clone too slow?
+    let mut block_st = st.clone();
+    check_block(block, &mut block_st)
+}
+
 
 fn call_type<E>(
     info: Info, 
@@ -234,11 +276,11 @@ fn context_get(
     info: Info, 
     context: &Context, 
     x: &Var,
-) -> Result<ExprType, InfoError>
+) -> Result<Type, InfoError>
 {
     match context.get_type(x)
     {
-        Ok(t) => Ok(ExprType::Ordinary(t)),
+        Ok(t) => Ok(t),
         Err(e) => Err((info, e)),
     }
 }

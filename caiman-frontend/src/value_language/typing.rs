@@ -138,56 +138,60 @@ impl ExprType
 {
     pub fn is_subtype_of(&self, t: Type) -> bool
     {
+        use ExprType::*;
         match self
         {
-            ExprType::Ordinary(ord_t) => ord_t.is_subtype_of(t),
-            ExprType::PositiveInteger => t == Type::I32,
-            ExprType::NegativeInteger => t == Type::I32,
-            ExprType::Float => panic!("Float moment"),
-            ExprType::Any => true,
+            Ordinary(ord_t) => ord_t.is_subtype_of(t),
+            PositiveInteger => t == Type::I32,
+            NegativeInteger => t == Type::I32,
+            Float => panic!("Float moment"),
+            Any => true,
         }
     }
 
     // Bleh
     pub fn compatible(&self, et: ExprType) -> bool
     {
+        use ExprType::*;
         match (self, et)
         {
-            (ExprType::Ordinary(t1), ExprType::Ordinary(t2)) => *t1 == t2,
-            (ExprType::Ordinary(t1), _) => et.is_subtype_of(*t1),
-            (_, ExprType::Ordinary(t2)) => self.is_subtype_of(t2),
-            (ExprType::NegativeInteger, ExprType::NegativeInteger)
-            | (ExprType::PositiveInteger, ExprType::PositiveInteger)
-            | (ExprType::PositiveInteger, ExprType::NegativeInteger)
-            | (ExprType::NegativeInteger, ExprType::PositiveInteger)
-            | (ExprType::Float, ExprType::Float) 
-            | (ExprType::Any, _) 
-            | (_, ExprType::Any) => true,
+            (Ordinary(t1), Ordinary(t2)) => *t1 == t2,
+            (Ordinary(t1), _) => et.is_subtype_of(*t1),
+            (_, Ordinary(t2)) => self.is_subtype_of(t2),
+            (NegativeInteger, NegativeInteger)
+            | (PositiveInteger, PositiveInteger)
+            | (PositiveInteger, NegativeInteger)
+            | (NegativeInteger, PositiveInteger)
+            | (Float, Float) 
+            | (Any, _) 
+            | (_, Any) => true,
             _ => false,
         }
     }
 
     fn order(&self) -> usize
     {
+        use ExprType::*;
         match self
         {
-            ExprType::Ordinary(_) => 0,
-            ExprType::Float => 1,
-            ExprType::NegativeInteger => 2,
-            ExprType::PositiveInteger => 3,
-            ExprType::Any => 4,
+            Ordinary(_) => 0,
+            Float => 1,
+            NegativeInteger => 2,
+            PositiveInteger => 3,
+            Any => 4,
         }
     }
 
     pub fn is_number(&self) -> bool
     {
+        use ExprType::*;
         match self
         {
-            | ExprType::PositiveInteger 
-            | ExprType::NegativeInteger 
-            | ExprType::Any
-            | ExprType::Float => true,
-            ExprType::Ordinary(t) => match *t {
+            | PositiveInteger 
+            | NegativeInteger 
+            | Any
+            | Float => true,
+            Ordinary(t) => match *t {
                 Type::I32 => true,
                 Type::Bool => false,
             },
