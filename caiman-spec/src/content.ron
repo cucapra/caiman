@@ -190,6 +190,34 @@
 			inputs : [
 				(name : "funclet", kind : Funclet),
 				(name : "captures", kind : Operation, is_array : true),
+				(name : "continuation", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			// If we ever add captures to value functions, we'll need the funclet to also have captures (and allow join points to cross value funclet boundaries somehow...)
+			name : "JoinCall",
+			inputs : [
+				(name : "operation", kind : RemoteOperation),
+				(name : "funclet", kind : Funclet),
+				(name : "captures", kind : Operation, is_array : true),
+				(name : "continuation", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "JoinSelect",
+			inputs : [
+				(name : "operation", kind : RemoteOperation),
+				(name : "condition", kind : Operation),
+				(name : "true_funclet", kind : Operation),
+				(name : "false_funclet", kind : Operation),
+				(name : "captures", kind : Operation, is_array : true),
+				(name : "continuation", kind : Operation),
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, intrinsic : false),
