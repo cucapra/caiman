@@ -373,6 +373,7 @@ impl<'a> Iterator for Dominators<'a> {
 }
 
 /// Creates a "dummy program" with control flow given by the specified CFG.
+#[cfg(test)]
 pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
     // NOTE: correctness here depends on arenas using sequential IDs
     let mut funclets = Arena::new();
@@ -386,10 +387,12 @@ pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
                 return_values: Box::new([]),
             },
             [next] => TailEdge::Jump(make_jump(next)),
-            rest => TailEdge::Switch {
-                key: 0,
-                cases: rest.iter().map(make_jump).collect(),
+            [if_false, if_true] => TailEdge::Branch {
+                cond: 0,
+                j0: make_jump(if_false),
+                j1: make_jump(if_true),
             },
+            _ => panic!("too many branches"),
         };
         let funclet = Funclet {
             tail_edge,
@@ -397,7 +400,8 @@ pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
             kind: FuncletKind::MixedExplicit,
             input_types: Box::new([]),
             output_types: Box::new([]),
-            // we add one constant integer so switch nodes actually have a key
+            // we add one constant integer so branch nodes actually have a key
+            // TODO: switch this to constantbool
             nodes: Box::new([Node::ConstantInteger {
                 value: 0,
                 type_id: 0,
@@ -464,13 +468,12 @@ mod tests {
                 {next: &[2], loops: &[], doms: &[0, 1]},
                 {next: &[], loops: &[], doms: &[0, 1, 2]}
             ],
-            simple_switch [
-                {next: &[1, 2, 3], loops: &[], doms: &[0]},
+            simple_branch [
+                {next: &[1, 2], loops: &[], doms: &[0]},
                 {next: &[], loops: &[], doms: &[0, 1]},
-                {next: &[4,5], loops: &[], doms: &[0, 2]},
-                {next: &[], loops: &[], doms: &[0, 3]},
-                {next: &[], loops: &[], doms: &[0, 2, 4]},
-                {next: &[], loops: &[], doms: &[0, 2, 5]}
+                {next: &[3,4], loops: &[], doms: &[0, 2]},
+                {next: &[], loops: &[], doms: &[0, 2, 3]},
+                {next: &[], loops: &[], doms: &[0, 2, 4]}
             ],
             entry_loop_inf [
                 {next: &[0], loops: &[0], doms: &[0]}
@@ -485,12 +488,12 @@ mod tests {
                 {next: &[0, 3], loops: &[0], doms: &[0, 1, 2]},
                 {next: &[], loops: &[], doms: &[0, 1, 2, 3]}
             ],
-            nested_loop_2 [
+            /*nested_loop_2 [
                 {next: &[0, 1], loops: &[0], doms: &[0]},
                 {next: &[0, 1, 2], loops: &[1, 0], doms: &[0, 1]},
                 {next: &[0, 1, 2, 3], loops: &[2, 1, 0], doms: &[0, 1, 2]},
                 {next: &[], loops: &[], doms: &[0, 1, 2, 3]},
-            ],
+            ],*/
             diamond [
                 {next: &[1, 2], loops: &[], doms: &[0]},
                 {next: &[3], loops: &[], doms: &[0, 1]},
@@ -502,7 +505,7 @@ mod tests {
                 {next: &[2], loops: &[1], doms: &[0, 1]},
                 {next: &[1], loops: &[1], doms: &[0, 1, 2]}
             ],
-            switch_fallthrough [
+            /*switch_fallthrough [
                 {next: &[1, 2, 3, 4], loops: &[], doms: &[0]},
                 {next: &[2], loops: &[], doms: &[0, 1]},
                 {next: &[3], loops: &[], doms: &[0, 2]},
@@ -515,7 +518,7 @@ mod tests {
                 {next: &[1], loops: &[], doms: &[0, 2]},
                 {next: &[2], loops: &[],  doms: &[0, 3]},
                 {next: &[3], loops: &[], doms: &[0, 4]}
-            ],
+            ],*/
             ece5775_lec6_pg22 [
                 {next: &[1], loops: &[], doms: &[0]},                           // = 0
                 {next: &[2], loops: &[], doms: &[0, 1]},                        // = 1
@@ -588,7 +591,7 @@ mod tests {
                 {next: &[3, 5], doms: &[0, 4]},     // = 4 (dom14:4:2)
                 {next: &[4], doms: &[0, 5]},        // = 5 (dom14:4:3)
             ],
-            circle_like [
+            /*circle_like [
                 {next: &[1, 5], doms: &[0]},        // = 0
                 {next: &[0, 2], doms: &[0, 1]},     // = 1
                 {next: &[1, 3], doms: &[0, 2]},     // = 2
@@ -596,7 +599,7 @@ mod tests {
                 {next: &[3, 5], doms: &[0, 4]},     // = 4
                 {next: &[0, 4], doms: &[0, 5]},     // = 5
                 {next: &[], doms: &[0, 3, 6]}       // = 6
-            ]
+            ]*/
         );
     }
 }

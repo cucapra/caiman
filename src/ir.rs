@@ -176,7 +176,8 @@ pub enum TailEdge
 {
 	Return { return_values : Box<[NodeId]> },
 	Jump(Jump),
-	Switch { key: NodeId, cases: Box<[Jump]> }
+	Branch { cond: NodeId, j0: Jump, j1: Jump },
+
 	// invokes and waits on the gpu
 	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
 	//Wait { required_scope_set : ScopeSet, funclet_id : usize, arguments : Box<[usize]> }
@@ -195,10 +196,10 @@ impl TailEdge {
 			Self::Jump ( Jump {args, ..} ) => {
 				args.iter().for_each(|&id| f(id));
 			}
-			Self::Switch { cases, .. } => {
-				for jump in cases.iter() {
-					jump.args.iter().for_each(|&id| f(id));
-				}
+			Self::Branch { cond, j0, j1, .. } => {
+				f(*cond);
+				j0.args.iter().for_each(|&id| f(id));
+				j1.args.iter().for_each(|&id| f(id));
 			}
 		}
 	}
@@ -211,10 +212,11 @@ impl TailEdge {
 			Self::Jump ( jump ) => {
 				Self::Jump ( jump.map_referenced_nodes(f) )
 			}
-			Self::Switch { key, cases } => {
-				Self::Switch { 
-					key: *key, 
-					cases: cases.iter().map(|jump| jump.map_referenced_nodes(&mut f)).collect() 
+			Self::Branch { cond, j0, j1 } => {
+				Self::Branch { 
+					cond: f(*cond), 
+					j0: j0.map_referenced_nodes(&mut f),
+					j1: j1.map_referenced_nodes(&mut f)
 				}
 			}
 		}
@@ -223,14 +225,17 @@ impl TailEdge {
 		match self {
 			Self::Return { .. } => (),
 			Self::Jump(jump) => f(jump.target),
-			Self::Switch { cases, .. } => cases.iter().for_each(|jump| f(jump.target))
+			Self::Branch { j0, j1, ..} => { f(j0.target); f(j1.target)}
 		}
 	}
 	pub fn map_funclets(&mut self, mut f: impl FnMut(FuncletId) -> FuncletId) {
 		match self {
 			Self::Return { .. } => (),
 			Self::Jump(jump) => jump.target = f(jump.target),
-			Self::Switch { cases, .. } => cases.iter_mut().for_each(|jump| jump.target = f(jump.target)),
+			Self::Branch { j0, j1, .. } => {
+				j0.target = f(j0.target);
+				j1.target = f(j1.target);
+			}
 		};
 	}
 }

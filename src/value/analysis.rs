@@ -1,5 +1,6 @@
 use super::*;
 use crate::ir;
+use std::collections::hash_map::{Entry, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Constant {
@@ -51,16 +52,23 @@ impl ClassAnalysis {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct BlockId(usize);
+impl BlockId {
+    /// Represents an external/unknown reference to a block/funclet
+    const OPAQUE: Self = BlockId(usize::MAX);
+}
 
 #[derive(Clone)]
 struct BlockArgs {
     args: Vec<Option<GraphId>>,
 }
 impl BlockArgs {
-    fn new(ids: &[GraphId]) -> Self {
-        Self {
-            args: ids.iter().map(|&id| Some(id)).collect(),
+    fn new(converter: &from_ir::FuncletConverter, ids: &[ir::NodeId]) -> Result<Self, FromIrError> {
+        let mut args = Vec::new();
+        for &ir_id in ids {
+            let graph_id = converter.convert_node_id(ir_id, ir::Dependent::Tail)?;
+            args.push(Some(graph_id));
         }
+        Ok(Self { args })
     }
     fn delete(&mut self, index: usize) {
         self.args[index] = None;
@@ -128,13 +136,59 @@ impl BlockSkeleton {
 }
 pub struct Analysis {
     blocks: Vec<BlockSkeleton>,
+    ir_map: HashMap<ir::FuncletId, BlockId>,
     /// A list of candidates for jump threading.
     /// Each entry in this list is guaranteed to have a jump tail edge.
     thread_candidates: Vec<BlockId>,
 }
 impl Analysis {
     pub fn new() -> Self {
-        todo!();
+        Self {
+            blocks: Vec::new(),
+            ir_map: HashMap::new(),
+            thread_candidates: Vec::new(),
+        }
+    }
+    pub(super) fn build_with_graph(
+        &mut self,
+        graph: &mut GraphInner,
+        program: &ir::Program,
+        start: ir::FuncletId,
+    ) -> Result<(), FromIrError> {
+        let mut stack = vec![(start, BlockId::OPAQUE)];
+        while let Some((ir_id, pred)) = stack.pop() {
+            match self.ir_map.entry(ir_id) {
+                Entry::Occupied(block_id) => {
+                    self.blocks[block_id.get().0].add_pred(pred);
+                }
+                Entry::Vacant(spot) => {
+                    let block_id = BlockId(self.blocks.len());
+                    let preds = vec![pred];
+                    let mut converter = from_ir::FuncletConverter::new(graph, ir_id);
+                    for (node_id, node) in program.funclets[&ir_id].nodes.iter().enumerate() {
+                        converter.add_node(node, node_id)?;
+                    }
+                    let tail = match &program.funclets[&ir_id].tail_edge {
+                        ir::TailEdge::Return { return_values } => {
+                            BlockTail::Return(BlockArgs::new(&converter, &return_values)?)
+                        }
+                        ir::TailEdge::Jump(jump) => {
+                            self.thread_candidates.push(block_id);
+                            stack.push((jump.target, block_id));
+                            todo!();
+                        }
+                        ir::TailEdge::Branch { cond, j0, j1 } => {
+                            stack.push((j0.target, block_id));
+                            stack.push((j1.target, block_id));
+                            todo!();
+                        }
+                    };
+                    self.blocks.push(BlockSkeleton { ir_id, preds, tail });
+                    spot.insert(block_id);
+                }
+            }
+        }
+        Ok(())
     }
     /// Attempts to collapse branches into jumps using constant folding.
     fn collapse_branches(&mut self, graph: &GraphInner) {

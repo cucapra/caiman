@@ -54,34 +54,15 @@ impl egg::Language for Node {
 type GraphInner = egg::EGraph<Node, Analysis>;
 type GraphId = egg::Id;
 
-pub struct Graph {
-    inner: GraphInner,
-    tail_map: HashMap<ir::FuncletId, GraphId>,
-}
+pub struct Graph(GraphInner);
 impl Graph {
-    pub fn new(
-        program: &ir::Program,
-        entry_funclet_id: ir::FuncletId,
-    ) -> Result<Self, FromIrError> {
-        todo!();
-        /*let mut stack = vec![entry_funclet_id];
-        let mut graph = Self {
-            inner: egg::EGraph::new(()),
-            tail_map: HashMap::new(),
-        };
-        while let Some(funclet_id) = stack.pop() {
-            if let Entry::Vacant(spot) = graph.tail_map.entry(funclet_id) {
-                let mut converter = from_ir::FuncletConverter::new(&mut graph.inner, funclet_id);
-                for (node_id, node) in program.funclets[&funclet_id].nodes.iter().enumerate() {
-                    converter.add_node(node, node_id)?;
-                }
-                let tail_id = converter.add_tail(&program.funclets[&funclet_id].tail_edge)?;
-                spot.insert(tail_id);
-                program.funclets[&funclet_id]
-                    .tail_edge
-                    .for_each_funclet(|id| stack.push(id));
-            }
-        }
-        Ok(graph)*/
+    pub fn new(program: &ir::Program, start: ir::FuncletId) -> Result<Self, FromIrError> {
+        // due to lifetime issues, we store the analysis separately while constructing it,
+        // and then move it into the graph once we're done
+        let mut graph = Self(egg::EGraph::new(Analysis::new()));
+        let mut analysis = Analysis::new();
+        analysis.build_with_graph(&mut graph.0, program, start)?;
+        graph.0.analysis = analysis;
+        Ok(graph)
     }
 }
