@@ -1,3 +1,5 @@
+#[macro_use]
+mod operations;
 mod id_generator;
 mod arena;
 mod ir;

@@ -44,11 +44,65 @@ pub type FenceId = usize;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
 
-mod generated
-{
-	use super::*;
-	include!(concat!(env!("OUT_DIR"), "/generated/ir.txt"));
+macro_rules! lookup_abstract_type {
+	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
+	(Type) => { TypeId };
+	(ImmediateI64) => { i64 };
+	(ImmediateU64) => { u64 };
+	(Index) => { usize };
+	(ExternalCpuFunction) => { ExternalCpuFunctionId };
+	(ExternalGpuFunction) => { ExternalGpuFunctionId };
+	(ValueFunction) => { ValueFunctionId };
+	(Operation) => { OperationId };
+	(RemoteOperation) => { RemoteNodeId };
+	(Place) => { Place };
+	(Funclet) => { FuncletId };
 }
+
+macro_rules! map_refs {
+	// When mapping referenced nodes, we only care about mapping the Operation types,
+	// since those are the actual references.
+	($map:ident, $arg:ident : Operation) => {$map(*$arg)};
+	($map:ident, $arg:ident : [Operation]) => {
+		$arg.iter().map(|op| $map(*op)).collect()
+	};
+	($_map:ident, $arg:ident : $_arg_type:tt) => {$arg.clone()};
+}
+
+macro_rules! make_nodes {
+	(@ $map:ident {} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
+		#[derive(Serialize, Deserialize, Debug, Clone)]
+		pub enum Node {
+			$($fields)*
+		}
+		impl Node {
+			pub fn map_referenced_nodes(&self, mut $map: impl FnMut(NodeId) -> NodeId) -> Self {
+				match self {$($mapper)*}
+			}
+		}
+	};
+	(@ $map:ident {$name:ident (), $($rest:tt)*} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
+		make_nodes! {
+			@ $map { $($rest)* } -> 
+			($($fields)* $name,), 
+			($($mapper)* Self::$name => Self::$name,)
+		}
+	};
+	(@ $map:ident {$name:ident ($($arg:ident : $arg_type:tt,)*), $($rest:tt)*} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
+		make_nodes! {
+			@ $map { $($rest)* } -> 
+			($($fields)* $name { $($arg: lookup_abstract_type!($arg_type)),* },), 
+			($($mapper)* Self::$name { $($arg),* } => Self::$name { 
+				$($arg: map_refs!($map, $arg : $arg_type)),*
+			},)
+		}
+	};
+	($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+		make_nodes! { @ f {$($name ($($arg : $arg_type,)*),)*} -> (), () }
+	};
+}
+
+with_operations!(make_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StructField
@@ -104,8 +158,6 @@ pub enum Type
 
 	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
 }
-
-pub use generated::Node;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
