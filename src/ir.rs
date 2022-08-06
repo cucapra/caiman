@@ -134,11 +134,12 @@ pub enum TailEdge
 	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
-	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> /*continuation_join : NodeId*/ },
-	ScheduleSelect { value_operation : RemoteNodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId },
+	//ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> /*continuation_join : NodeId*/ },
+	//ScheduleSelect { value_operation : RemoteNodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId },
 	//ScheduleTailCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, arguments : Box<[NodeId]> }, // new scope
 	//ScheduleReturn { value_operation : RemoteNodeId, join : NodeId, arguments : Box<[NodeId]> }, // exit scope
 	//ScheduleTailSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, arguments : Box<[NodeId]> }
+	ScheduleSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
 
 	// invokes and waits on the gpu
 	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
