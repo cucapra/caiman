@@ -99,29 +99,11 @@ pub enum Type
 	MutRef { element_type : TypeId },
 	ConstSlice { element_type : TypeId },
 	MutSlice { element_type : TypeId },
-	//Buffer {local_resource_id : LocalMetaVariableId},
-	//BufferRef {local_resource_id : LocalMetaVariableId},
-	//BufferMutRef {local_resource_id : LocalMetaVariableId},
-	//Texture
-
-	//Fence { id : FenceId },
 
 	Slot{ value_type : TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
-	//Slot{ value_type : TypeId, value_tag : ValueTag, queue_stage : ResourceQueueStage, queue_place : Place, fence_id : FenceId },
-	//Slot,
 
 	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
 }
-
-// Local Meta Variables are used to serve as ids for when types in input/output lists need to relate to each other
-// This allows them to do so without refering directly to an input, output, or node position
-/*#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum LocalMetaVariable
-{
-	Resource,
-	Fence(Fence),
-	ValueInstance
-}*/
 
 pub use generated::Node;
 
@@ -134,31 +116,9 @@ pub enum TailEdge
 	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
-	//ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId, continuation_arguments : Box<[NodeId]> /*continuation_join : NodeId*/ },
-	//ScheduleSelect { value_operation : RemoteNodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_funclet_id : FuncletId },
-	//ScheduleTailCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, arguments : Box<[NodeId]> }, // new scope
-	//ScheduleReturn { value_operation : RemoteNodeId, join : NodeId, arguments : Box<[NodeId]> }, // exit scope
-	//ScheduleTailSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, arguments : Box<[NodeId]> }
 	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
 	ScheduleSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
-
-	// invokes and waits on the gpu
-	//ReturnWithGpuCoordinator { initial_return_values : Box<[NodeId]>, gpu_funclet_id : FuncletId, arguments : Box<[NodeId]> },
-	//Wait { required_scope_set : ScopeSet, funclet_id : usize, arguments : Box<[usize]> }
-	//Jump { join : usize, arguments : Box<[usize]> },
-	//BranchIf { condition : NodeId, true_case : FuncletId, true_arguments : Box<[NodeId]>, false_case : FuncletId, false_arguments : Box<NodeId> },
-	//Call { callee_block_id : usize, callee_block_arguments : Box<[usize]>, continuation_block_id : usize, continuation_context_values : Box<[usize]> },
-	//CallGpuCoordinator { callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
-	//CallGpuWorker{ callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
 }
-
-/*
-
-				(name : "operation", kind : RemoteOperation),
-				(name : "funclet", kind : Funclet),
-				(name : "captures", kind : Operation, is_array : true),
-				(name : "continuation", kind : Operation),
-				*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind

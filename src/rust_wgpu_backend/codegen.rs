@@ -213,7 +213,7 @@ impl PlacementState
 #[derive(Debug)]
 enum SplitPoint
 {
-	Next { return_slot_ids : Box<[scheduling_state::SlotId]> },
+	Next { return_slot_ids : Box<[scheduling_state::SlotId]>, continuation_join_point_id_opt : Option<JoinPointId> },
 	Select { return_slot_ids : Box<[scheduling_state::SlotId]>, condition_slot_id : scheduling_state::SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> }
 }
 
@@ -652,13 +652,17 @@ impl<'program> CodeGen<'program>
 			while let Some(current_funclet_id) = current_funclet_id_opt
 			{
 				//current_output_slot_ids = 
-				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_slot_ids, pipeline_context, &mut placement_state, &mut default_join_point_id_opt);
+				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_slot_ids, pipeline_context, &mut placement_state, default_join_point_id_opt);
 				current_output_slot_ids = match split_point
 				{
-					SplitPoint::Next{return_slot_ids} => return_slot_ids,
+					SplitPoint::Next{return_slot_ids, continuation_join_point_id_opt} =>
+					{
+						default_join_point_id_opt = continuation_join_point_id_opt;
+						return_slot_ids
+					}
 					SplitPoint::Select{return_slot_ids, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt} =>
 					{
-						assert!(default_join_point_id_opt.is_none());
+						//assert!(default_join_point_id_opt.is_none());
 						traversal_state_stack.push(TraversalState::SelectIf{ branch_input_slot_ids : return_slot_ids, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt });
 						vec![].into_boxed_slice()
 					}
@@ -746,7 +750,7 @@ impl<'program> CodeGen<'program>
 		self.code_generator.end_funclet();
 	}
 
-	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_slot_ids : &[scheduling_state::SlotId], pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, default_join_point_id_opt : &mut Option<JoinPointId>) -> SplitPoint //Box<[scheduling_state::SlotId]>
+	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_slot_ids : &[scheduling_state::SlotId], pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[scheduling_state::SlotId]>
 	{
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
@@ -1013,9 +1017,9 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::DefaultJoin =>
 				{
-					if let Some(join_point_id) = * default_join_point_id_opt
+					if let Some(join_point_id) = default_join_point_id_opt
 					{
-						* default_join_point_id_opt = None;
+						default_join_point_id_opt = None;
 						funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 					}
 					else
@@ -1090,7 +1094,7 @@ impl<'program> CodeGen<'program>
 					check_slot_type(& self.program, funclet.output_types[return_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 				}
 
-				return SplitPoint::Next{return_slot_ids : output_slots.into_boxed_slice()};
+				return SplitPoint::Next{return_slot_ids : output_slots.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt};
 			}
 			/*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
@@ -1116,7 +1120,6 @@ impl<'program> CodeGen<'program>
 			ir::TailEdge::Jump { join, arguments } =>
 			{
 				let mut join_point_id = funclet_scoped_state.move_node_join_point_id(* join).unwrap();
-				* default_join_point_id_opt = Some(join_point_id);
 
 				let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
 
@@ -1152,7 +1155,8 @@ impl<'program> CodeGen<'program>
 					}
 				}
 
-				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice() };
+				assert!(default_join_point_id_opt.is_none());
+				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)};
 			}
 			ir::TailEdge::ScheduleCall { value_operation : value_operation_ref, callee_funclet_id : callee_scheduling_funclet_id_ref, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
@@ -1217,8 +1221,7 @@ impl<'program> CodeGen<'program>
 				// Don't need to check continuation -> current edge because we maintain the invariant that joins can't leave the value funclet scope they were created in
 
 				assert!(default_join_point_id_opt.is_none());
-				* default_join_point_id_opt = Some(continuation_join_point_id);
-				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice() };
+				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(continuation_join_point_id) };
 			}
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
