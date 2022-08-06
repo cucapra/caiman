@@ -139,6 +139,7 @@ pub enum TailEdge
 	//ScheduleTailCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, arguments : Box<[NodeId]> }, // new scope
 	//ScheduleReturn { value_operation : RemoteNodeId, join : NodeId, arguments : Box<[NodeId]> }, // exit scope
 	//ScheduleTailSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, arguments : Box<[NodeId]> }
+	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
 	ScheduleSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
 
 	// invokes and waits on the gpu
@@ -150,6 +151,14 @@ pub enum TailEdge
 	//CallGpuCoordinator { callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
 	//CallGpuWorker{ callee_block_id : usize, callee_block_arguments : Box<[usize]>, join_block_id : usize, join_block_initial_arguments : Box<[usize]> },
 }
+
+/*
+
+				(name : "operation", kind : RemoteOperation),
+				(name : "funclet", kind : Funclet),
+				(name : "captures", kind : Operation, is_array : true),
+				(name : "continuation", kind : Operation),
+				*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind

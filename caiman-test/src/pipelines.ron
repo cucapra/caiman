@@ -203,9 +203,10 @@
 					Phi(index : 0),
 					DefaultJoin,
 					Join(funclet : 14, captures : [], continuation : 1),
-					JoinCall(operation : (funclet_id : 10, node_id : 1), funclet : 12, captures : [], continuation : 2)
+					//JoinCall(operation : (funclet_id : 10, node_id : 1), funclet : 12, captures : [], continuation : 2)
 				],
-				tail_edge : Jump( join : 3, arguments : [0] )
+				//tail_edge : Jump( join : 3, arguments : [0] )
+				tail_edge : ScheduleCall(value_operation : (funclet_id : 10, node_id : 1), callee_funclet_id : 12, callee_arguments : [0], continuation_join : 2)
 				//tail_edge : ScheduleCall(value_operation : (funclet_id : 10, node_id : 1), callee_funclet_id : 12, callee_arguments : [0], continuation_funclet_id : 14, continuation_arguments : [] /*continuation_join : 1*/)
 			),
 

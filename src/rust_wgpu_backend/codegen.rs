@@ -200,40 +200,6 @@ impl JoinGraph
 	{
 		& self.join_points[join_point_id.0]
 	}
-
-	/*fn get_scheduling_output_type(&self, join_point : & JoinPoint, program : & ir::Program, index : usize) -> Option<ir::TypeId>
-	{
-		match join_point
-		{
-			JoinPoint::SimpleJoinPoint(simple_join_point) =>
-			{
-				let funclet = & program.funclets[& simple_join_point.scheduling_funclet_id];
-				Some(funclet.output_types[index])
-			}
-			JoinPoint::CallJoinPoint(call_join_point) =>
-			{
-				self.get_scheduling_output_type(& self.get_join(call_join_point.continuation_join_point_id), program, index)
-			}
-			_ => None
-		}
-	}
-
-	fn get_scheduling_output_value_tag(&self, join_point : & JoinPoint, program : & ir::Program, index : usize) -> Option<ir::ValueTag>
-	{
-		match join_point
-		{
-			JoinPoint::SimpleJoinPoint(simple_join_point) =>
-			{
-				let extra = & program.scheduling_funclet_extras[& simple_join_point.scheduling_funclet_id];
-				Some(extra.output_slots[& index].value_tag)
-			}
-			JoinPoint::CallJoinPoint(call_join_point) =>
-			{
-				self.get_scheduling_output_value_tag(& self.get_join(call_join_point.continuation_join_point_id), program, index)
-			}
-			_ => None
-		}
-	}*/
 }
 
 // Records the most recent state of a place as known to the local coordinator
@@ -1897,8 +1863,76 @@ impl<'program> CodeGen<'program>
 				self.code_generator.call_join(join.variable_id_opt.unwrap(), & continuation_input_var_ids);*/
 
 			}
+			ir::TailEdge::ScheduleCall { value_operation : value_operation_ref, callee_funclet_id : callee_scheduling_funclet_id_ref, callee_arguments, continuation_join : continuation_join_node_id } =>
+			{
+				let value_operation = * value_operation_ref;
+				let callee_scheduling_funclet_id = * callee_scheduling_funclet_id_ref;
+
+				let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
+				let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
+
+				assert_eq!(value_operation.funclet_id, funclet_scoped_state.value_funclet_id);
+				assert_eq!(continuation_join_point.get_value_funclet_id().unwrap(), funclet_scoped_state.value_funclet_id);
+
+				let callee_funclet = & self.program.funclets[& callee_scheduling_funclet_id];
+				assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
+				let callee_funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& callee_scheduling_funclet_id];
+				let callee_value_funclet_id = callee_funclet_scheduling_extra.value_funclet_id;
+				let callee_value_funclet = & self.program.funclets[& callee_value_funclet_id];
+				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
+
+				// Step 1: Check current -> callee edge
+				let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
+				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
+				{
+					let slot_id = funclet_scoped_state.move_node_slot_id(* argument_node_id).unwrap();
+					argument_slot_ids.push(slot_id);
+					let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+					check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, callee_funclet_scheduling_extra.input_slots[& argument_index].value_tag);
+				}
+
+				// Step 2: Check callee -> continuation edge
+				for (callee_output_index, callee_output_type) in callee_funclet.output_types.iter().enumerate()
+				{
+					let continuation_input_index = continuation_join_point.get_capture_count().unwrap() + callee_output_index;
+					assert_eq!(* callee_output_type, continuation_join_point.get_scheduling_input_type(& self.program, continuation_input_index).unwrap());
+
+					let value_tag = callee_funclet_scheduling_extra.output_slots[& callee_output_index].value_tag;
+					let value_tag_2 = continuation_join_point.get_scheduling_input_value_tag(& self.program, continuation_input_index).unwrap();
+
+					match (value_tag, value_tag_2)
+					{
+						(_, ir::ValueTag::None) => (),
+						(ir::ValueTag::Output{funclet_id, index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
+						{
+							assert_eq!(remote_node_id.funclet_id, value_operation.funclet_id);
+							assert_eq!(funclet_id, callee_value_funclet_id);
+
+							let node = & self.program.funclets[& remote_node_id.funclet_id].nodes[remote_node_id.node_id];
+							if let ir::Node::ExtractResult{node_id : call_node_id, index} = node
+							{
+								assert_eq!(* index, output_index);
+								assert_eq!(* call_node_id, value_operation.node_id);
+							}
+							else
+							{
+								panic!("Target operation is not a result extraction: #{:?} {:?}", remote_node_id, node);
+							}
+						}
+						_ => panic!("Ill-formed: {:?} to {:?}", value_tag, value_tag_2)
+					};
+				}
+
+				// Don't need to check continuation -> current edge because we maintain the invariant that joins can't leave the value funclet scope they were created in
+
+				assert!(default_join_point_id_opt.is_none());
+				* default_join_point_id_opt = Some(continuation_join_point_id);
+				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice() };
+			}
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
+				assert_eq!(value_operation.funclet_id, funclet_scoped_state.value_funclet_id);
+
 				let condition_slot_id = funclet_scoped_state.get_node_slot_id(* condition_slot_node_id).unwrap();
 
 				let mut continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
