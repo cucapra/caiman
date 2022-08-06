@@ -1134,24 +1134,14 @@ impl<'program> CodeGen<'program>
 
 					// We shouldn't have to check outputs for join points because all join chains go up to the root
 
-					match & join_point
+					for (argument_index, argument_slot_id) in argument_slot_ids.iter().enumerate()
 					{
-						JoinPoint::SimpleJoinPoint(simple_join_point) =>
-						{
-							let destination_funclet = & self.program.funclets[& simple_join_point.scheduling_funclet_id];
-							let destination_extra = & self.program.scheduling_funclet_extras[& simple_join_point.scheduling_funclet_id];
-			
-							for (argument_index, argument_slot_id) in argument_slot_ids.iter().enumerate()
-							{
-								let slot_id = * argument_slot_id;
-								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-								// We need to shift the destination argument index to account for the captures (that are checked at construction)
-								let destination_argument_index = argument_index + simple_join_point.captures.len();
-								check_value_tag_compatibility_interior(& self.program, slot_value_tag, join_point.get_scheduling_input_value_tag(& self.program, destination_argument_index));
-								check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							}
-						}
-						_ => panic!("Jump to invalid join point {:?}", join_point)
+						let slot_id = * argument_slot_id;
+						let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+						// We need to shift the destination argument index to account for the captures (that are checked at construction)
+						let destination_argument_index = argument_index + join_point.get_capture_count();
+						check_value_tag_compatibility_interior(& self.program, slot_value_tag, join_point.get_scheduling_input_value_tag(& self.program, destination_argument_index));
+						check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 					}
 				}
 
