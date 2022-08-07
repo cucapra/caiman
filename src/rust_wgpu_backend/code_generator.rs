@@ -1033,12 +1033,13 @@ impl<'program> CodeGenerator<'program>
 	{
 		self.require_local(output_var_ids);
 		//self.get_type_name(self.active_funclet_result_type_id.unwrap())
-		write!(self.code_writer, "return funclet{}_func (instance, ", self.active_funclet_state.as_ref().unwrap().funclet_id);
+		//self.active_funclet_state.as_ref().unwrap().funclet_id
+		write!(self.code_writer, "return FuncletResult {{instance, intermediates : (");
 		for (return_index, var_id) in output_var_ids.iter().enumerate()
 		{
 			write!(self.code_writer, "var_{}, ", var_id);
 		}
-		write!(self.code_writer, ");");
+		write!(self.code_writer, ")}};");
 	}
 
 	pub fn build_yield(&mut self, next_funclet_ids : &[ir::FuncletId], next_funclet_input_types : Box<[Box<[ir::TypeId]>]>, capture_var_ids : &[usize], output_var_ids : &[usize])
@@ -1315,6 +1316,9 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn begin_if_else(&mut self, condition_var_id : usize, output_type_ids : &[ir::TypeId]) -> Box<[usize]>
 	{
+		// Temporary fix
+		self.reset_pipeline();
+
 		write!(self.code_writer, "let ( ");
 		let mut var_ids = Vec::<usize>::new();
 		for (i, type_id) in output_type_ids.iter().enumerate()
@@ -1337,6 +1341,9 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn end_if_begin_else(&mut self, output_var_ids : &[usize])
 	{
+		// Temporary fix
+		self.reset_pipeline();
+		
 		write!(self.code_writer, " ( ");
 		for (i, var_id) in output_var_ids.iter().enumerate()
 		{
@@ -1361,10 +1368,16 @@ impl<'program> CodeGenerator<'program>
 			}
 		}
 		write!(self.code_writer, " ) }};\n");
+
+		// Temporary fix
+		self.reset_pipeline();
 	}
 
 	pub fn build_join(&mut self, callee_funclet_id : ir::FuncletId, captured_var_ids : &[usize], input_type_ids : &[ir::TypeId], output_type_ids : &[ir::TypeId]) -> usize
 	{
+		// Temporary fix
+		self.reset_pipeline();
+
 		let join_var_id = self.variable_tracker.generate();
 
 		write!(self.code_writer, "let mut var_{} = move |instance : Instance<'state, 'cpu_functions, Callbacks>", join_var_id);
@@ -1423,6 +1436,9 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn end_join(&mut self, output_var_ids : &[usize])
 	{
+		// Temporary fix
+		self.reset_pipeline();
+
 		write!(self.code_writer, " ( ");
 		for (i, var_id) in output_var_ids.iter().enumerate()
 		{
@@ -1437,6 +1453,9 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn call_join(&mut self, join_var_id : usize, input_var_ids : &[usize])
 	{
+		// Temporary fix
+		self.reset_pipeline();
+
 		write!(self.code_writer, "return var_{}(instance", join_var_id);
 		for (i, var_id) in input_var_ids.iter().enumerate()
 		{

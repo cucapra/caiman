@@ -653,6 +653,7 @@ impl<'program> CodeGen<'program>
 			{
 				//current_output_slot_ids = 
 				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_slot_ids, pipeline_context, &mut placement_state, default_join_point_id_opt);
+				println!("Split point: {:?}", split_point);
 				current_output_slot_ids = match split_point
 				{
 					SplitPoint::Next{return_slot_ids, continuation_join_point_id_opt} =>
@@ -721,6 +722,7 @@ impl<'program> CodeGen<'program>
 				{
 					default_join_point_id_opt = None;
 					let join_point = placement_state.join_graph.move_join(join_point_id);
+					println!("Continuing to {:?} {:?}", join_point_id, join_point);
 
 					match & join_point
 					{
@@ -741,6 +743,8 @@ impl<'program> CodeGen<'program>
 						}
 						_ => panic!("Jump to invalid join point #{:?}: {:?}", join_point_id, join_point)
 					}
+
+					println!("{:?} {:?} {:?}", current_funclet_id_opt, default_join_point_id_opt, current_output_slot_ids);
 				}
 			}
 
@@ -796,7 +800,7 @@ impl<'program> CodeGen<'program>
 
 		if self.print_codegen_debug_info
 		{
-			println!("Compiling Funclet #{}...\n{:?}\n", funclet_id, funclet);
+			println!("Compiling Funclet #{} with join {:?}...\n{:?}\n", funclet_id, default_join_point_id_opt, funclet);
 		}
 
 		for (current_node_id, node) in funclet.nodes.iter().enumerate()
@@ -805,7 +809,7 @@ impl<'program> CodeGen<'program>
 
 			if self.print_codegen_debug_info
 			{
-				println!("#{} {:?} : {:?}", current_node_id, node, placement_state);
+				println!("#{} {:?} : {:?} {:?}", current_node_id, node, placement_state, funclet_scoped_state);
 			}
 
 			match node
@@ -1068,12 +1072,14 @@ impl<'program> CodeGen<'program>
 					//Some(* type_id)
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join(Join{funclet_id : * funclet_id, captures: captured_slot_ids.into_boxed_slice(), type_id_opt : None, variable_id_opt : Some(join_var_id)}));*/
 					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_slot_ids.into_boxed_slice(), continuation_join_point_id}));
+					println!("Created join point: {:?} {:?}", join_point_id, placement_state.join_graph.get_join(join_point_id));
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 				}
 				_ => panic!("Unknown node")
 			};
 		}
 
+		self.code_generator.insert_comment(format!(" tail edge: {:?}", funclet.tail_edge).as_str());
 		match & funclet.tail_edge
 		{
 			ir::TailEdge::Return { return_values } =>
@@ -1211,7 +1217,8 @@ impl<'program> CodeGen<'program>
 				// Don't need to check continuation -> current edge because we maintain the invariant that joins can't leave the value funclet scope they were created in
 
 				assert!(default_join_point_id_opt.is_none());
-				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(continuation_join_point_id) };
+				let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : callee_value_funclet_id, scheduling_funclet_id : callee_scheduling_funclet_id, captures : vec![].into_boxed_slice(), continuation_join_point_id}));
+				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id) };
 			}
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
