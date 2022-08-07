@@ -158,9 +158,9 @@
 					Phi(index : 0),
 					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 0, node_id : 1)),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
-					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 0, node_id : 2)),
-					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [1], outputs : [3]),
-					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 0, node_id : 2)),
+					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 0, node_id : 3)),
+					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [0], outputs : [3]),
+					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 0, node_id : 3)),
 					EncodeCopy(place : Gpu, input : 3, output : 5),
 					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 0, node_id : 4)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 0, node_id : 4), inputs : [1, 1, 1, 5], outputs : [7]),
@@ -187,8 +187,9 @@
 					AllocTemporary(place : Gpu, type_id : 0, operation : (funclet_id : 9, node_id : 3)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 9, node_id : 2), inputs : [1, 1, 1, 3], outputs : [5]),
 					AllocTemporary(place : Local, type_id : 0, operation : (funclet_id : 9, node_id : 3)),
+					Submit(place : Gpu),
 					EncodeFence(place : Gpu),
-					SyncFence(place : Local, fence : 8),
+					SyncFence(place : Local, fence : 9),
 					EncodeCopy(place : Local, input : 5, output : 7),
 				],
 				tail_edge : Return(return_values : [7])
@@ -255,7 +256,7 @@
 		scheduling_funclet_extras : {
 			11 : (
 				value_funclet_id : 0,
-				input_slots : {0 : (value_tag : None)},
+				input_slots : {0 : (value_tag : Input(funclet_id : 0, index : 0))},
 				output_slots : {0 : (value_tag : None)},
 				fences : {
 					0 : Fence(

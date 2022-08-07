@@ -9,6 +9,9 @@ use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use std::fmt::Write;
 use crate::id_generator::IdGenerator;
 
+// The dependency on crate::ir is not good
+// code_generator should be independent of the ir definition, but fixing it will take time
+
 // Submissions represent groups of tasks that are executing in a logical sequence
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 pub struct SubmissionId(usize);
@@ -24,11 +27,6 @@ struct SubmissionQueue
 {
 	//most_recently_synchronized_submission_id : Option<SubmissionId>,
 	next_submission_id : SubmissionId
-}
-
-enum ResourceUsage
-{
-
 }
 
 // Tracks where the data is
@@ -794,7 +792,7 @@ impl<'program> CodeGenerator<'program>
 		let mut next_trait_index = 0usize;
 
 		let mut argument_variable_ids = Vec::<usize>::new();
-		write!(self.code_writer, "fn funclet{}_func<'state,  'cpu_functions, Callbacks : CpuFunctions>(instance : Instance<'state, 'cpu_functions, Callbacks>", funclet_id);
+		write!(self.code_writer, "pub fn funclet{}_func<'state,  'cpu_functions, Callbacks : CpuFunctions>(instance : Instance<'state, 'cpu_functions, Callbacks>", funclet_id);
 
 		/*for (input_index, input_type) in input_types.iter().enumerate()
 		{
@@ -938,7 +936,7 @@ impl<'program> CodeGenerator<'program>
 		pub struct FuncletResult<'state, 'cpu_functions, Callbacks : CpuFunctions, Intermediates>
 		{
 			instance : Instance<'state, 'cpu_functions, Callbacks>,
-			intermediates : Intermediates
+			pub intermediates : Intermediates
 		}
 		";
 

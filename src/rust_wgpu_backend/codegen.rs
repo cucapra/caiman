@@ -467,7 +467,7 @@ impl<'program> CodeGen<'program>
 		return time_opt;
 	}
 
-	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : & [scheduling_state::SlotId])
+	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : & [scheduling_state::SlotId])
 	{
 		match node
 		{
@@ -477,6 +477,14 @@ impl<'program> CodeGen<'program>
 
 				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
+
+				for (input_index, input_node_id) in dimensions.iter().chain(arguments.iter()).enumerate()
+				{
+					let slot_id = input_slot_ids[input_index];
+					let value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+					let funclet_id = funclet_scoped_state.value_funclet_id;
+					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
+				}
 
 				use std::convert::TryInto;
 				use std::iter::FromIterator;
@@ -518,7 +526,7 @@ impl<'program> CodeGen<'program>
 		}
 	}
 
-	fn encode_do_node_local(&mut self, placement_state : &mut PlacementState, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : &[scheduling_state::SlotId])
+	fn encode_do_node_local(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : &[scheduling_state::SlotId])
 	{
 		// To do: Do something about the value
 		match node
@@ -556,6 +564,14 @@ impl<'program> CodeGen<'program>
 				assert_eq!(input_slot_ids.len(), 3);
 				assert_eq!(output_slot_ids.len(), 1);
 
+				for (input_index, input_node_id) in [* condition, * true_case, * false_case].iter().enumerate()
+				{
+					let slot_id = input_slot_ids[input_index];
+					let value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+					let funclet_id = funclet_scoped_state.value_funclet_id;
+					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
+				}
+
 				let input_var_ids = input_slot_ids.iter().map(|& slot_id| placement_state.get_slot_var_id(slot_id).unwrap()).collect::<Box<[usize]>>();
 
 				let slot_id = output_slot_ids[0];
@@ -572,6 +588,14 @@ impl<'program> CodeGen<'program>
 				let function = & self.program.external_cpu_functions[* external_function_id];
 
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
+
+				for (input_index, input_node_id) in arguments.iter().enumerate()
+				{
+					let slot_id = input_slot_ids[input_index];
+					let value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+					let funclet_id = funclet_scoped_state.value_funclet_id;
+					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
+				}
 
 				use std::iter::FromIterator;
 
@@ -940,11 +964,11 @@ impl<'program> CodeGen<'program>
 					{
 						ir::Place::Local =>
 						{
-							self.encode_do_node_local(placement_state, encoded_node, input_slot_ids.as_slice(), output_slot_ids.as_slice());
+							self.encode_do_node_local(placement_state, &mut funclet_scoped_state, encoded_node, input_slot_ids.as_slice(), output_slot_ids.as_slice());
 						}
 						ir::Place::Gpu =>
 						{
-							self.encode_do_node_gpu(placement_state, encoded_node, input_slot_ids.as_slice(), output_slot_ids.as_slice());
+							self.encode_do_node_gpu(placement_state, &mut funclet_scoped_state, encoded_node, input_slot_ids.as_slice(), output_slot_ids.as_slice());
 						}
 						ir::Place::Cpu => (),
 					}
@@ -961,6 +985,12 @@ impl<'program> CodeGen<'program>
 					assert!(placement_state.scheduling_state.get_slot_queue_stage(src_slot_id) > ir::ResourceQueueStage::None);
 					assert!(placement_state.scheduling_state.get_slot_queue_stage(src_slot_id) < ir::ResourceQueueStage::Dead);
 					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(dst_slot_id), ir::ResourceQueueStage::None);
+
+					{
+						let source_value_tag = funclet_scoped_state.slot_value_tags[& src_slot_id];
+						let destination_value_tag = funclet_scoped_state.slot_value_tags[& dst_slot_id];
+						check_value_tag_compatibility_interior(& self.program, source_value_tag, destination_value_tag);
+					}
 
 					// To do: Check value compatibility
 
