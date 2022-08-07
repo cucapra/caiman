@@ -671,45 +671,12 @@ impl<'program> CodeGenerator<'program>
 	{
 		//self.state_code_writer
 		let code_string = "
-		pub trait State
+		use caiman_rt::wgpu;
+		
+		/*pub struct CpuFunctionInvocationState<'parent>
 		{
-			fn get_device_mut(&mut self) -> &mut wgpu::Device;
-			fn get_queue_mut(&mut self) -> &mut wgpu::Queue;
-		}
-
-		pub struct RootState<'device, 'queue>
-		{
-			device : & 'device mut wgpu::Device,
-			queue : & 'queue mut wgpu::Queue
-		}
-
-		impl<'device, 'queue> RootState<'device, 'queue>
-		{
-			pub fn new(
-				device : & 'device mut wgpu::Device,
-				queue : & 'queue mut wgpu::Queue) -> Self
-			{
-				Self{device, queue}
-			}
-		}
-
-		impl<'device, 'queue> State for RootState<'device, 'queue>
-		{
-			fn get_device_mut(&mut self) -> &mut wgpu::Device
-			{
-				self.device
-			}
-
-			fn get_queue_mut(&mut self) -> &mut wgpu::Queue
-			{
-				self.queue
-			}
-		}
-
-		pub struct CpuFunctionInvocationState<'parent>
-		{
-			parent_state : & 'parent mut dyn State
-		}
+			parent_state : & 'parent mut dyn caiman_rt::State
+		}*/
 ";
 
 		write!(self.state_code_writer, "{}", code_string);
@@ -742,7 +709,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!("pub trait CpuFunctions\n{{\n"));
 		for external_cpu_function in self.external_cpu_functions.iter()
 		{
-			self.code_writer.write(format!("\tfn {}(&self, state : &mut super::State", external_cpu_function.name));
+			self.code_writer.write(format!("\tfn {}(&self, state : &mut caiman_rt::State", external_cpu_function.name));
 			for (input_index, input_type) in external_cpu_function.input_types.iter().enumerate()
 			{
 				self.generate_type_definition(* input_type);
@@ -771,7 +738,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.end_module();
 
 		let mut argument_variable_ids = Vec::<usize>::new();
-		self.code_writer.write(format!("pub fn run<F>(state : &mut super::State, cpu_functions : & F"));
+		self.code_writer.write(format!("pub fn run<F>(state : &mut caiman_rt::State, cpu_functions : & F"));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in input_types.iter().enumerate()
 		{
@@ -924,7 +891,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.end_module();
 
 		let mut argument_variable_ids = Vec::<usize>::new();
-		self.code_writer.write(format!("pub fn run<F>(state : &mut super::State, cpu_functions : & F"));
+		self.code_writer.write(format!("pub fn run<F>(state : &mut caiman_rt::State, cpu_functions : & F"));
 		//self.code_strings.push("(".to_string());
 		for (input_index, input_type) in input_types.iter().enumerate()
 		{
@@ -978,7 +945,7 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "{}", funclet_result_definition_string);
 
 		// Write the instance state
-		write!(self.code_writer, "pub struct Instance<'state, 'cpu_functions, F : CpuFunctions>{{state : & 'state mut dyn super::State, cpu_functions : & 'cpu_functions F");
+		write!(self.code_writer, "pub struct Instance<'state, 'cpu_functions, F : CpuFunctions>{{state : & 'state mut dyn caiman_rt::State, cpu_functions : & 'cpu_functions F");
 
 		for (shader_module_key, shader_module) in self.shader_modules.iter()
 		{
@@ -995,7 +962,7 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "{}", "
 		impl<'state, 'cpu_functions, F : CpuFunctions> Instance<'state, 'cpu_functions, F> 
 		{
-			pub fn new(state : & 'state mut dyn super::State, cpu_functions : & 'cpu_functions F) -> Self
+			pub fn new(state : & 'state mut dyn caiman_rt::State, cpu_functions : & 'cpu_functions F) -> Self
 			{
 				");
 		

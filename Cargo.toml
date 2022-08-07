@@ -20,6 +20,7 @@ caiman-spec = { path = "caiman-spec" }
 
 [dev-dependencies]
 caiman-ref = { path = "caiman-ref" }
+caiman-rt = { path = "caiman-rt" }
 caiman-test = { path = "caiman-test" }
 
 [features]
