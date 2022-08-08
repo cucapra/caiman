@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use std::collections::BinaryHeap;
 use std::cmp::Reverse;
 
+// Scheduling state doesn't yet know how to handle multiple funclets or control flow
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotId(usize);
 

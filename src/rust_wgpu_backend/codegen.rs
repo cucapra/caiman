@@ -866,6 +866,16 @@ impl<'program> CodeGen<'program>
 					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
 
 					// To do: Allocate from buffers for GPU/CPU and assign variable
+					match place
+					{
+						ir::Place::Cpu => (),
+						ir::Place::Local => (),
+						ir::Place::Gpu =>
+						{
+							let var_id = self.code_generator.build_create_buffer(* type_id);
+							placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::None, var_id);
+						}
+					}
 				}
 				ir::Node::EncodeDo { place, operation, inputs, outputs } =>
 				{
@@ -958,8 +968,6 @@ impl<'program> CodeGen<'program>
 						}
 					}
 
-					// To do: Lots of value compatibility checks
-
 					match place
 					{
 						ir::Place::Local =>
@@ -978,12 +986,17 @@ impl<'program> CodeGen<'program>
 					let src_slot_id = funclet_scoped_state.get_node_slot_id(* input).unwrap();
 					let dst_slot_id = funclet_scoped_state.get_node_slot_id(* output).unwrap();
 
+					let src_place = placement_state.scheduling_state.get_slot_queue_place(src_slot_id);
+					let dst_place = placement_state.scheduling_state.get_slot_queue_place(dst_slot_id);
+
+					let src_stage = placement_state.scheduling_state.get_slot_queue_stage(src_slot_id);
+
 					// This is a VERY temporary assumption due to how code_generator currently works (there is no CPU place)
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(dst_slot_id), * place);
+					//assert_eq!(dst_place, * place);
 
 					assert_eq!(placement_state.scheduling_state.get_slot_type_id(src_slot_id), placement_state.scheduling_state.get_slot_type_id(dst_slot_id));
-					assert!(placement_state.scheduling_state.get_slot_queue_stage(src_slot_id) > ir::ResourceQueueStage::None);
-					assert!(placement_state.scheduling_state.get_slot_queue_stage(src_slot_id) < ir::ResourceQueueStage::Dead);
+					assert!(src_stage > ir::ResourceQueueStage::None);
+					assert!(src_stage < ir::ResourceQueueStage::Dead);
 					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(dst_slot_id), ir::ResourceQueueStage::None);
 
 					{
@@ -995,7 +1008,8 @@ impl<'program> CodeGen<'program>
 					// To do: Check value compatibility
 
 					// This is wrong, but we need to do it to work with code_generator
-					match placement_state.scheduling_state.get_slot_queue_place(dst_slot_id)
+					//match placement_state.scheduling_state.get_slot_queue_place(dst_slot_id)
+					/*match (* place, dst_place, src_place)
 					{
 						ir::Place::Local =>
 						{
@@ -1004,10 +1018,45 @@ impl<'program> CodeGen<'program>
 						}
 						ir::Place::Gpu =>
 						{
-							let var_id = self.code_generator.make_on_gpu_copy(placement_state.slot_variable_ids[& src_slot_id]).unwrap();
-							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, var_id);
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							let dst_var_id = placement_state.get_slot_var_id(dst_slot_id).unwrap();
+							match 
+							//let var_id = self.code_generator.make_on_gpu_copy(placement_state.slot_variable_ids[& src_slot_id]).unwrap();
+							//placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, var_id);
 						}
 						ir::Place::Cpu => (),
+					}*/
+
+					match (* place, dst_place, src_place)
+					{
+						(ir::Place::Local, ir::Place::Local, ir::Place::Local) =>
+						{
+							assert!(src_stage == ir::ResourceQueueStage::Ready);
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, src_var_id);
+						}
+						(ir::Place::Local, ir::Place::Local, ir::Place::Gpu) =>
+						{
+							assert!(src_stage == ir::ResourceQueueStage::Ready);
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							let dst_var_id = self.code_generator.encode_clone_local_data_from_buffer(src_var_id);
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, dst_var_id);
+						}
+						(ir::Place::Gpu, ir::Place::Gpu, ir::Place::Local) =>
+						{
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							let dst_var_id = placement_state.get_slot_var_id(dst_slot_id).unwrap();
+							self.code_generator.encode_copy_buffer_from_local_data(dst_var_id, src_var_id);
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Encoded, dst_var_id);
+						}
+						(ir::Place::Gpu, ir::Place::Gpu, ir::Place::Gpu) =>
+						{
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							let dst_var_id = placement_state.get_slot_var_id(dst_slot_id).unwrap();
+							self.code_generator.encode_copy_buffer_from_buffer(dst_var_id, src_var_id);
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Encoded, dst_var_id);
+						}
+						_ => panic!("Unimplemented")
 					}
 				}
 				ir::Node::Submit { place } =>
