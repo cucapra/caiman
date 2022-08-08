@@ -32,7 +32,7 @@ struct SubmissionQueue
 	next_submission_id : SubmissionId
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum VariableKind
 {
 	Dead,
@@ -60,30 +60,34 @@ impl VariableTracker
 		self.id_generator.generate()
 	}
 
-	fn create(&mut self, kind : VariableKind) -> usize
+	fn create(&mut self, kind : VariableKind, type_id : ir::TypeId) -> usize
 	{
 		let id = self.generate();
 		self.variable_kinds.insert(id, kind);
+		self.variable_types.insert(id, type_id);
 		id
 	}
 
 	fn create_local_data(&mut self, type_id : ir::TypeId) -> usize
 	{
-		let id = self.create(VariableKind::LocalData);
-		self.variable_types.insert(id, type_id);
+		let id = self.create(VariableKind::LocalData, type_id);
 		id
 	}
 
 	fn create_buffer(&mut self, type_id : ir::TypeId) -> usize
 	{
-		let id = self.create(VariableKind::Buffer);
-		self.variable_types.insert(id, type_id);
+		let id = self.create(VariableKind::Buffer, type_id);
 		id
 	}
 
-	fn get_type_id(&mut self, variable_id : usize) -> ir::TypeId
+	fn get_type_id(& self, variable_id : usize) -> ir::TypeId
 	{
 		self.variable_types[& variable_id]
+	}
+
+	fn get_kind(& self, variable_id : usize) -> VariableKind
+	{
+		self.variable_kinds[& variable_id]
 	}
 }
 
@@ -436,101 +440,6 @@ impl<'program> CodeGenerator<'program>
 				_ => panic!("Unimplemented")
 			}
 		}*/
-	}
-
-	pub fn make_local_copy(&mut self, variable_id : usize) -> Option<usize>
-	{
-		/*match self.variable_tracker.variable_states[& variable_id]
-		{
-			//VariableState::InEncoding => self.flush_submission(),
-			_ => ()
-		}
-
-		match self.variable_tracker.variable_states[& variable_id]
-		{
-			//VariableState::Local => (),
-			VariableState::OnGpu =>
-			{
-				let type_id = self.variable_tracker.variable_types[& variable_id];
-				let range_var_id = self.variable_tracker.generate();
-				let output_temp_var_id = self.variable_tracker.generate();
-				let slice_var_id = self.variable_tracker.generate();
-				let future_var_id = self.variable_tracker.generate();
-				let type_binding_info = self.get_type_binding_info(type_id); 
-				let type_name = self.get_type_name(type_id);
-
-				let output_var_id = self.variable_tracker.create_local(type_id);
-				
-				self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, variable_id));
-				self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
-				self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
-				self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
-				self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
-				self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_var_id, type_name, range_var_id));
-				return Some(output_var_id);
-			}
-			_ => panic!("Unimplemented")
-		}*/
-
-		{
-			let type_id = self.variable_tracker.variable_types[& variable_id];
-			let range_var_id = self.variable_tracker.generate();
-			let output_temp_var_id = self.variable_tracker.generate();
-			let slice_var_id = self.variable_tracker.generate();
-			let future_var_id = self.variable_tracker.generate();
-			let type_binding_info = self.get_type_binding_info(type_id); 
-			let type_name = self.get_type_name(type_id);
-
-			let output_var_id = self.variable_tracker.create_local_data(type_id);
-			
-			self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, variable_id));
-			self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
-			self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
-			self.code_writer.write(format!("futures::executor::block_on(var_{});;\n", future_var_id));
-			self.code_writer.write(format!("let var_{} = var_{}.get_mapped_range();\n", range_var_id, slice_var_id));
-			self.code_writer.write(format!("let var_{} = * unsafe {{ std::mem::transmute::<* const u8, & {}>(var_{}.as_ptr()) }};\n", output_var_id, type_name, range_var_id));
-			return Some(output_var_id);
-		}
-		
-		//self.variable_tracker.variable_states.insert(* variable_id, VariableState::Local);
-		None
-	}
-
-	pub fn make_on_gpu_copy(&mut self, variable_id : usize) -> Option<usize>
-	{
-		/*match self.variable_tracker.variable_states[& variable_id]
-		{
-			//VariableState::InEncoding => (),
-			VariableState::Local =>
-			{
-				let type_id = self.variable_tracker.variable_types[& variable_id];
-				let type_binding_info = self.get_type_binding_info(type_id); 
-				let type_name = self.get_type_name(type_id);
-				let output_var_id = self.variable_tracker.create_in_encoding(type_id);
-				self.code_writer.write(format!("let mut var_{} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", output_var_id, type_binding_info.size));
-				self.code_writer.write(format!("instance.state.get_queue_mut().write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", output_var_id, variable_id));
-				//self.code_writer.write(format!("let var_{} = var_{};\n", output_var_id, temp_id));
-				//self.variable_tracker.variable_states.insert(* variable_id, VariableState::OnGpu);
-				return Some(output_var_id);
-			}
-			//VariableState::OnGpu => (),
-			_ => panic!("Unimplemented")
-		}*/
-
-
-		{
-			let type_id = self.variable_tracker.variable_types[& variable_id];
-			let type_binding_info = self.get_type_binding_info(type_id); 
-			let type_name = self.get_type_name(type_id);
-			let output_var_id = self.variable_tracker.create_buffer(type_id);
-			self.code_writer.write(format!("let mut var_{} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", output_var_id, type_binding_info.size));
-			self.code_writer.write(format!("instance.state.get_queue_mut().write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", output_var_id, variable_id));
-			//self.code_writer.write(format!("let var_{} = var_{};\n", output_var_id, temp_id));
-			//self.variable_tracker.variable_states.insert(* variable_id, VariableState::OnGpu);
-			return Some(output_var_id);
-		}
-
-		None
 	}
 
 	fn generate_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
@@ -1310,7 +1219,9 @@ impl<'program> CodeGenerator<'program>
 		assert_eq!(true_type_id, false_type_id);
 		let type_id = true_type_id;
 		self.generate_type_definition(type_id);
-		let variable_id = self.variable_tracker.create_local_data(type_id);
+		let variable_kind = self.variable_tracker.get_kind(true_case_var_id);
+		assert_eq!(variable_kind, self.variable_tracker.get_kind(false_case_var_id));
+		let variable_id = self.variable_tracker.create(variable_kind, type_id);
 		// Too lazy to implement booleans for now
 		write!(self.code_writer, "let var_{} : {} = if var_{} != 0 {{ var_{} }} else {{ var_{} }};\n", variable_id, self.get_type_name(type_id), condition_var_id, true_case_var_id, false_case_var_id);
 		variable_id

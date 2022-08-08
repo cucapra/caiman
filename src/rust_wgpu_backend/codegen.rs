@@ -991,9 +991,6 @@ impl<'program> CodeGen<'program>
 
 					let src_stage = placement_state.scheduling_state.get_slot_queue_stage(src_slot_id);
 
-					// This is a VERY temporary assumption due to how code_generator currently works (there is no CPU place)
-					//assert_eq!(dst_place, * place);
-
 					assert_eq!(placement_state.scheduling_state.get_slot_type_id(src_slot_id), placement_state.scheduling_state.get_slot_type_id(dst_slot_id));
 					assert!(src_stage > ir::ResourceQueueStage::None);
 					assert!(src_stage < ir::ResourceQueueStage::Dead);
@@ -1004,28 +1001,6 @@ impl<'program> CodeGen<'program>
 						let destination_value_tag = funclet_scoped_state.slot_value_tags[& dst_slot_id];
 						check_value_tag_compatibility_interior(& self.program, source_value_tag, destination_value_tag);
 					}
-
-					// To do: Check value compatibility
-
-					// This is wrong, but we need to do it to work with code_generator
-					//match placement_state.scheduling_state.get_slot_queue_place(dst_slot_id)
-					/*match (* place, dst_place, src_place)
-					{
-						ir::Place::Local =>
-						{
-							let var_id = self.code_generator.make_local_copy(placement_state.slot_variable_ids[& src_slot_id]).unwrap();
-							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, var_id);
-						}
-						ir::Place::Gpu =>
-						{
-							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-							let dst_var_id = placement_state.get_slot_var_id(dst_slot_id).unwrap();
-							match 
-							//let var_id = self.code_generator.make_on_gpu_copy(placement_state.slot_variable_ids[& src_slot_id]).unwrap();
-							//placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, var_id);
-						}
-						ir::Place::Cpu => (),
-					}*/
 
 					match (* place, dst_place, src_place)
 					{
