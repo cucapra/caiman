@@ -88,37 +88,4 @@ impl<'a> FuncletConverter<'a> {
         self.node_ids.insert(node_id, graph_id);
         Ok(graph_id)
     }
-    /*pub fn add_tail(&mut self, tail: &ir::TailEdge) -> Result {
-        let needed_by = ir::Dependent::Tail;
-        let mut deps = Vec::new();
-        let kind = match tail {
-            ir::TailEdge::Return { return_values } => {
-                deps.push(self.make_id_list(&return_values, needed_by)?);
-                value::TailKind::Return
-            }
-            ir::TailEdge::Jump(jump) => {
-                deps.push(self.make_id_list(&jump.args, needed_by)?);
-                value::TailKind::Jump {
-                    target: jump.target,
-                }
-            }
-            ir::TailEdge::Switch { key, cases } => {
-                for jump in cases.iter() {
-                    deps.push(self.make_id_list(&jump.args, needed_by)?);
-                }
-                deps.push(self.convert_node_id(*key, needed_by)?);
-                value::TailKind::Switch {
-                    targets: cases.iter().map(|jump| jump.target).collect(),
-                }
-            }
-        };
-        let graph_id = self.graph.add(value::Node {
-            kind: value::NodeKind::Tail {
-                funclet_id: self.funclet_id,
-                kind,
-            },
-            deps: deps.into_boxed_slice(),
-        });
-        Ok(graph_id)
-    }*/
 }

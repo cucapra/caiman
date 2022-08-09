@@ -2,6 +2,7 @@ use super::*;
 use crate::ir;
 use std::collections::hash_map::{Entry, HashMap};
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Constant {
@@ -51,7 +52,7 @@ impl ClassAnalysis {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct BlockArgs {
     args: Vec<Option<GraphId>>,
 }
@@ -64,12 +65,18 @@ impl BlockArgs {
         }
         Ok(Self { args })
     }
+    fn get(&self, index: usize) -> Option<&GraphId> {
+        self.args.get(index)?.as_ref()
+    }
+    fn get_mut(&mut self, index: usize) -> Option<&mut GraphId> {
+        self.args.get_mut(index)?.as_mut()
+    }
     fn delete(&mut self, index: usize) {
         self.args[index] = None;
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Jump {
     dest: ir::FuncletId,
     args: BlockArgs,
@@ -87,6 +94,56 @@ enum BlockTail {
     Return(BlockArgs),
     Jump(Jump),
     Branch { cond: GraphId, j0: Jump, j1: Jump },
+}
+impl BlockTail {
+    fn jumps(&self) -> impl Iterator<Item = &'_ Jump> {
+        match self {
+            BlockTail::Return(_) => BlockJumps::Return,
+            BlockTail::Jump(jump) => BlockJumps::Jump(std::iter::once(jump)),
+            BlockTail::Branch { j0, j1, .. } => {
+                BlockJumps::Branch(std::iter::once(j0).chain(std::iter::once(j1)))
+            }
+        }
+    }
+    fn jumps_mut(&mut self) -> impl Iterator<Item = &'_ mut Jump> {
+        match self {
+            BlockTail::Return(_) => BlockJumpsMut::Return,
+            BlockTail::Jump(jump) => BlockJumpsMut::Jump(std::iter::once(jump)),
+            BlockTail::Branch { j0, j1, .. } => {
+                BlockJumpsMut::Branch(std::iter::once(j0).chain(std::iter::once(j1)))
+            }
+        }
+    }
+}
+enum BlockJumps<'a> {
+    Return,
+    Jump(std::iter::Once<&'a Jump>),
+    Branch(std::iter::Chain<std::iter::Once<&'a Jump>, std::iter::Once<&'a Jump>>),
+}
+impl<'a> Iterator for BlockJumps<'a> {
+    type Item = &'a Jump;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Return => None,
+            Self::Jump(ref mut iter) => iter.next(),
+            Self::Branch(ref mut iter) => iter.next(),
+        }
+    }
+}
+enum BlockJumpsMut<'a> {
+    Return,
+    Jump(std::iter::Once<&'a mut Jump>),
+    Branch(std::iter::Chain<std::iter::Once<&'a mut Jump>, std::iter::Once<&'a mut Jump>>),
+}
+impl<'a> Iterator for BlockJumpsMut<'a> {
+    type Item = &'a mut Jump;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Return => None,
+            Self::Jump(ref mut iter) => iter.next(),
+            Self::Branch(ref mut iter) => iter.next(),
+        }
+    }
 }
 struct BlockSkeleton {
     // This should *really* be a set - but since most nodes only have a few predecessors,
@@ -114,24 +171,8 @@ impl BlockSkeleton {
         }
         self.preds.push(pred);
     }
-    /// TODO: Refactor this so that we don't have this weird interface
-    fn delete_arg(&mut self, destination: ir::FuncletId, arg_index: usize) {
-        match &mut self.tail {
-            BlockTail::Return(_) => (),
-            BlockTail::Jump(jump) => {
-                if jump.dest == destination {
-                    jump.args.delete(arg_index);
-                }
-            }
-            BlockTail::Branch { j0, j1, .. } => {
-                if j0.dest == destination {
-                    j0.args.delete(arg_index);
-                }
-                if j1.dest == destination {
-                    j1.args.delete(arg_index);
-                }
-            }
-        }
+    fn preds(&self) -> impl ExactSizeIterator + Iterator<Item = &'_ ir::FuncletId> {
+        self.preds.iter()
     }
 }
 pub struct Analysis {
@@ -171,7 +212,6 @@ impl Analysis {
                     for (node_id, node) in program.funclets[&id].nodes.iter().enumerate() {
                         cvt.add_node(node, node_id)?;
                     }
-                    // TODO:
                     let tail = match &program.funclets[&id].tail_edge {
                         ir::TailEdge::Return { return_values } => {
                             BlockTail::Return(BlockArgs::from_ir(&cvt, &return_values)?)
@@ -209,7 +249,11 @@ impl Analysis {
                     // collapse the tail, and update the other destination's branches
                     block.tail = BlockTail::Jump(tail.clone());
                     self.blocks.get_mut(&other).unwrap().remove_pred(*id);
-                    // update dirty list
+                    self.thread_candidates.push(*id);
+                } else if j0 == j1 {
+                    // Both branches are the same. Note that it's not sufficient for the
+                    // targets to be the same, the arguments and their orderings must also match.
+                    block.tail = BlockTail::Jump(j0.clone());
                     self.thread_candidates.push(*id);
                 }
             }
@@ -271,5 +315,113 @@ impl egg::Analysis<Node> for Analysis {
     }
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
         a.merge(b)
+    }
+}
+
+pub mod inline_args {
+    use std::str::FromStr;
+
+    use super::*;
+    /// If it's possible to inline paramater #`index` of funclet `id`, returns the ID of
+    /// the equivalent eclass.
+    fn inline_param(id: ir::FuncletId, index: usize, egraph: &GraphInner) -> Option<egg::Id> {
+        let mut possible_ids: Vec<egg::Id> = egraph.analysis.blocks[&id]
+            .preds()
+            // find all incoming jumps - we may have multiple from the same predecessor
+            // (i.e. both branches of a branch tail, but potentially with different arguments)
+            .map(|id| egraph.analysis.blocks[id].tail.jumps())
+            .flatten()
+            .filter(|jump| jump.dest == id)
+            // get the eclass corresponding to this param for each jump
+            .map(|jump| *jump.args.get(index).expect("parameter with invalid index"))
+            // canonicalize the eclass
+            .map(|eclass| egraph.find(eclass))
+            // collect into vector & dedup - there's only one unique predecessor eclass,
+            // if and only if the resulting vector has one element
+            .collect();
+        possible_ids.dedup();
+
+        // 0 eclasses: no predecessors, so we can't inline the param
+        // 1 eclass: we can inline
+        // 2+ eclasses: multiple predecessors with non-equivalent args, can't inline
+        match possible_ids.as_slice() {
+            &[single_id] => Some(single_id),
+            _ => None,
+        }
+    }
+    struct Searcher {}
+    impl egg::Searcher<Node, Analysis> for Searcher {
+        fn search_eclass(
+            &self,
+            egraph: &GraphInner,
+            eclass: egg::Id,
+        ) -> Option<egg::SearchMatches<Node>> {
+            // An eclass must have at least one node. If it has more than one, then either:
+            //  1. it has no param nodes. Obviously not a candidate for param inlining.
+            //  2. it contains a param node and at least one other node. Then the param must
+            //     have already been inlined, since param inlining is the only way params
+            //     can have other nodes in their equivalence class.
+            if let &[Node {
+                kind: NodeKind::Param { funclet_id, index },
+                ..
+            }] = egraph[eclass].nodes.as_slice()
+            {
+                let inlined_eclass = inline_param(funclet_id, index, egraph)?;
+                // HACK: smuggle the node ID into the applier via (ab)using a variable
+                // substitution
+                let mut subst = egg::Subst::with_capacity(1);
+                subst.insert(egg::Var::from_str("?inlined").unwrap(), inlined_eclass);
+                return Some(egg::SearchMatches {
+                    eclass,
+                    substs: vec![subst],
+                    ast: None,
+                });
+            }
+            return None;
+        }
+        fn vars(&self) -> Vec<egg::Var> {
+            Vec::new()
+        }
+    }
+    struct Applier {}
+    impl egg::Applier<Node, Analysis> for Applier {
+        fn apply_one(
+            &self,
+            egraph: &mut egg::EGraph<Node, Analysis>,
+            eclass: egg::Id,
+            subst: &egg::Subst,
+            _searcher_ast: Option<&egg::PatternAst<Node>>,
+            _rule_name: egg::Symbol,
+        ) -> Vec<egg::Id> {
+            let (id, index) = match egraph[eclass].nodes.as_slice() {
+                &[Node {
+                    kind: NodeKind::Param { funclet_id, index },
+                    ..
+                }] => (funclet_id, index),
+                _ => unreachable!("we just checked this in the searcher"),
+            };
+
+            // ugly hack b/c lifetime issues
+            let preds: Vec<_> = egraph.analysis.blocks[&id].preds().copied().collect();
+            for pred_id in preds.iter() {
+                // if this fails, we have a corrupted analysis
+                let pred = egraph.analysis.blocks.get_mut(pred_id).unwrap();
+                for jump in pred.tail.jumps_mut() {
+                    jump.args.delete(index);
+                }
+            }
+
+            let inlined_eclass = subst
+                .get(egg::Var::from_str("?inlined").unwrap())
+                .copied()
+                .expect("we added this variable in the searcher");
+            vec![eclass, inlined_eclass]
+        }
+    }
+    pub fn rewrite() -> egg::Rewrite<Node, Analysis> {
+        let name = egg::Symbol::new("Parameter Rewrite (argument inlining)");
+        let searcher = Searcher {};
+        let applier = Applier {};
+        egg::Rewrite::new(name, searcher, applier).unwrap()
     }
 }
