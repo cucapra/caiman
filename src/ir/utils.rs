@@ -336,7 +336,7 @@ where
                 index
             }
         };
-        get_tails(index)
+        get_tails(id)
             .into_iter()
             .for_each(|target| stack.push((target, index)));
     }
