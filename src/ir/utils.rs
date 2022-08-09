@@ -352,16 +352,19 @@ pub struct Analysis {
     lookup: HashMap<FuncletId, usize>,
 }
 impl Analysis {
-    pub fn immediate_dominator(&self, fid: FuncletId) -> Option<FuncletId> {
-        let index = self.lookup[&fid];
+    pub fn dominator_tree(&self) -> DomTree {
+        DomTree::new(self)
+    }
+    pub fn immediate_dominator(&self, id: FuncletId) -> Option<FuncletId> {
+        let index = self.lookup[&id];
         if index == 0 {
             return None;
         }
         let idom = self.entries[index].idom;
         Some(self.entries[idom].id)
     }
-    pub fn dominators(&self, id: FuncletId) -> impl '_ + Iterator<Item = &'_ FuncletId> {
-        Dominators::new(&self, id)
+    pub fn dominators(&self, id: FuncletId) -> impl Iterator<Item = &'_ FuncletId> {
+        Dominators::new(self, id)
     }
 }
 struct Dominators<'a> {
@@ -387,6 +390,31 @@ impl<'a> Iterator for Dominators<'a> {
     }
 }
 
+pub struct DomTree {
+    /// map from a funclet to all funclets which it immediately dominates
+    dominated: HashMap<FuncletId, Vec<FuncletId>>,
+}
+impl DomTree {
+    fn new(analysis: &Analysis) -> Self {
+        let mut dominated = HashMap::new();
+        for entry in analysis.entries.iter() {
+            if let Some(idom_id) = analysis.immediate_dominator(entry.id) {
+                dominated
+                    .entry(idom_id)
+                    .or_insert(Vec::new())
+                    .push(entry.id);
+            }
+        }
+        Self { dominated }
+    }
+    pub fn immediately_dominated(&self, id: FuncletId) -> impl Iterator<Item = &'_ FuncletId> {
+        self.dominated
+            .get(&id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+            .iter()
+    }
+}
 /// Creates a "dummy program" with control flow given by the specified CFG.
 #[cfg(test)]
 pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
@@ -448,60 +476,68 @@ mod tests {
             ($($name:ident [$({
                 next: $tail:expr,
                 loops: $loops:expr,
-                doms: $doms:expr
+                dominators: $dominators:expr,
+                idominated: $idominated:expr
             }),+ $(,)?]),* $(,)?) => {$(
                 #[test]
                 fn $name() {
                     let mut program = utils::program_from_cfg(&[ $($tail),* ]);
                     let reduce_output = utils::make_reducible(&mut program);
                     assert!(reduce_output.is_empty());
-                    let expected: &[(&[FuncletId], &[FuncletId])] = &[ $( ($loops, $doms) ),* ];
+                    let expected: &[(&[FuncletId], &[FuncletId], &[FuncletId])] =
+                        &[ $( ($dominators, $idominated, $loops) ),* ];
                     let loops = utils::identify_loops(&program, 0);
                     let analysis = utils::analyze(0, |id| utils::next_funclets(&program, id));
+                    let domtree = analysis.dominator_tree();
                     for i in 0..expected.len() {
-                        let (expected_loops, expected_doms) = expected[i];
+                        let expected_dominators = expected[i].0;
+                        let mut actual_dominators: Vec<_> = analysis.dominators(i).copied().collect();
+                        actual_dominators.sort_unstable();
+                        assert_eq!(expected_dominators, actual_dominators.as_slice());
 
+                        let expected_dominated = expected[i].1;
+                        let mut actual_dominated: Vec<_> = domtree.immediately_dominated(i).copied().collect();
+                        actual_dominated.sort_unstable();
+                        assert_eq!(expected_dominated, actual_dominated.as_slice());
+
+                        let edl = expected_dominators.len();
+                        let expected_idom = (edl >= 2).then(|| expected_dominators[edl - 2]);
+                        assert_eq!(expected_idom,  analysis.immediate_dominator(i));
+
+                        let expected_loops = expected[i].2;
                         let actual_loops = loops.headers_for(i);
                         assert_eq!(expected_loops, actual_loops.as_slice());
-
-                        let mut actual_doms: Vec<_> = analysis.dominators(i).copied().collect();
-                        actual_doms.sort_unstable();
-                        assert_eq!(expected_doms, actual_doms.as_slice());
-
-                        let endoms = expected_doms.len();
-                        let expected_idom = (endoms >= 2).then(|| expected_doms[endoms - 2]);
-                        assert_eq!(expected_idom,  analysis.immediate_dominator(i))
                     }
                 }
             )*};
         }
 
         make_tests!(
-            simple_return [ {next: &[], loops: &[], doms: &[0]} ],
+            simple_return [ {next: &[], loops: &[], dominators: &[0], idominated: &[]} ],
             simple_jump [
-                {next: &[1], loops: &[], doms: &[0]},
-                {next: &[2], loops: &[], doms: &[0, 1]},
-                {next: &[], loops: &[], doms: &[0, 1, 2]}
+                {next: &[1], loops: &[], dominators: &[0], idominated: &[1]},
+                {next: &[2], loops: &[], dominators: &[0, 1], idominated: &[2]},
+                {next: &[], loops: &[], dominators: &[0, 1, 2], idominated: &[]}
             ],
             simple_branch [
-                {next: &[1, 2], loops: &[], doms: &[0]},
-                {next: &[], loops: &[], doms: &[0, 1]},
-                {next: &[3,4], loops: &[], doms: &[0, 2]},
-                {next: &[], loops: &[], doms: &[0, 2, 3]},
-                {next: &[], loops: &[], doms: &[0, 2, 4]}
+                {next: &[1, 2], loops: &[], dominators: &[0], idominated: &[1, 2]},
+                {next: &[], loops: &[], dominators: &[0, 1], idominated: &[]},
+                {next: &[3,4], loops: &[], dominators: &[0, 2], idominated: &[3,4]},
+                {next: &[], loops: &[], dominators: &[0, 2, 3], idominated: &[]},
+                {next: &[], loops: &[], dominators: &[0, 2, 4], idominated: &[]}
             ],
             entry_loop_inf [
-                {next: &[0], loops: &[0], doms: &[0]}
+                {next: &[0], loops: &[0], dominators: &[0], idominated: &[]}
             ],
             entry_loop [
-                {next: &[0, 1], loops: &[0], doms: &[0]},
-                {next: &[], loops: &[], doms: &[0, 1]}
+                {next: &[0, 1], loops: &[0], dominators: &[0], idominated: &[1]},
+                {next: &[], loops: &[], dominators: &[0, 1], idominated: &[]}
             ],
             nested_loop_1 [
-                {next: &[1], loops: &[0], doms: &[0]},
-                {next: &[1, 2], loops: &[1, 0], doms: &[0, 1]},
-                {next: &[0, 3], loops: &[0], doms: &[0, 1, 2]},
-                {next: &[], loops: &[], doms: &[0, 1, 2, 3]}
+                {next: &[1], loops: &[0], dominators: &[0], idominated: &[1]},
+                {next: &[1, 2], loops: &[1, 0], dominators: &[0, 1], idominated: &[2]},
+                {next: &[0, 3], loops: &[0], dominators: &[0, 1, 2], idominated: &[3]},
+                {next: &[], loops: &[], dominators: &[0, 1, 2, 3], idominated: &[]}
             ],
             /*nested_loop_2 [
                 {next: &[0, 1], loops: &[0], doms: &[0]},
@@ -510,15 +546,15 @@ mod tests {
                 {next: &[], loops: &[], doms: &[0, 1, 2, 3]},
             ],*/
             diamond [
-                {next: &[1, 2], loops: &[], doms: &[0]},
-                {next: &[3], loops: &[], doms: &[0, 1]},
-                {next: &[3], loops: &[], doms: &[0, 2]},
-                {next: &[], loops: &[], doms: &[0, 3]}
+                {next: &[1, 2], loops: &[], dominators: &[0], idominated: &[1, 2, 3]},
+                {next: &[3], loops: &[], dominators: &[0, 1], idominated: &[]},
+                {next: &[3], loops: &[], dominators: &[0, 2], idominated: &[]},
+                {next: &[], loops: &[], dominators: &[0, 3], idominated: &[]}
             ],
             pogo [
-                {next: &[1], loops: &[], doms: &[0]},
-                {next: &[2], loops: &[1], doms: &[0, 1]},
-                {next: &[1], loops: &[1], doms: &[0, 1, 2]}
+                {next: &[1], loops: &[], dominators: &[0], idominated: &[1]},
+                {next: &[2], loops: &[1], dominators: &[0, 1], idominated: &[2]},
+                {next: &[1], loops: &[1], dominators: &[0, 1, 2], idominated: &[]}
             ],
             /*switch_fallthrough [
                 {next: &[1, 2, 3, 4], loops: &[], doms: &[0]},
@@ -535,17 +571,17 @@ mod tests {
                 {next: &[3], loops: &[], doms: &[0, 4]}
             ],*/
             ece5775_lec6_pg22 [
-                {next: &[1], loops: &[], doms: &[0]},                           // = 0
-                {next: &[2], loops: &[], doms: &[0, 1]},                        // = 1
-                {next: &[3, 10], loops: &[2], doms: &[0, 1, 2]},                // = 2
-                {next: &[4], loops: &[2], doms: &[0, 1, 2, 3]},                 // = 3
-                {next: &[5, 9], loops: &[4, 2], doms: &[0, 1, 2, 3, 4]},        // = 4
-                {next: &[6, 7], loops: &[4, 2], doms: &[0, 1, 2, 3, 4, 5]},     // = 5
-                {next: &[8], loops: &[4, 2], doms: &[0, 1, 2, 3, 4, 5, 6]},     // = 6
-                {next: &[8], loops: &[4, 2], doms: &[0, 1, 2, 3, 4, 5, 7]},     // = 7
-                {next: &[4], loops: &[4, 2], doms: &[0, 1, 2, 3, 4, 5, 8]},     // = 8
-                {next: &[2], loops: &[2], doms: &[0, 1, 2, 3, 4, 9]},           // = 9
-                {next: &[], loops: &[], doms: &[0, 1, 2, 10]}                   // = 10
+                {next: &[1], loops: &[], dominators: &[0], idominated: &[1]},                             // = 0
+                {next: &[2], loops: &[], dominators: &[0, 1], idominated: &[2]},                          // = 1
+                {next: &[3, 10], loops: &[2], dominators: &[0, 1, 2], idominated: &[3, 10]},              // = 2
+                {next: &[4], loops: &[2], dominators: &[0, 1, 2, 3], idominated: &[4]},                   // = 3
+                {next: &[5, 9], loops: &[4, 2], dominators: &[0, 1, 2, 3, 4], idominated: &[5, 9]},       // = 4
+                {next: &[6, 7], loops: &[4, 2], dominators: &[0, 1, 2, 3, 4, 5], idominated: &[6, 7, 8]}, // = 5
+                {next: &[8], loops: &[4, 2], dominators: &[0, 1, 2, 3, 4, 5, 6], idominated: &[]},        // = 6
+                {next: &[8], loops: &[4, 2], dominators: &[0, 1, 2, 3, 4, 5, 7], idominated: &[]},        // = 7
+                {next: &[4], loops: &[4, 2], dominators: &[0, 1, 2, 3, 4, 5, 8], idominated: &[]},        // = 8
+                {next: &[2], loops: &[2], dominators: &[0, 1, 2, 3, 4, 9], idominated: &[]},              // = 9
+                {next: &[], loops: &[], dominators: &[0, 1, 2, 10], idominated: &[]}                      // = 10
             ]
         );
     }
@@ -560,22 +596,30 @@ mod tests {
         macro_rules! make_tests {
             ($($name:ident [$({
                 next: $tail:expr,
-                doms: $doms:expr
+                dominators: $dominators:expr,
+                idominates: $idominates:expr
             }),+ $(,)?]),* $(,)?) => {$(
                 #[test]
                 fn $name() {
                     let mut program = utils::program_from_cfg(&[ $($tail),* ]);
-                    let expected: &[&[FuncletId]] = &[ $($doms),* ];
+                    let expected: &[(&[FuncletId], &[FuncletId])] =
+                        &[ $(($dominators, $idominates)),* ];
                     let analysis = utils::analyze(0, |id| utils::next_funclets(&program, id));
+                    let domtree = analysis.dominator_tree();
                     for i in 0..expected.len() {
-                        let expected_doms = expected[i];
-                        let mut actual_doms: Vec<_> = analysis.dominators(i).copied().collect();
-                        actual_doms.sort_unstable();
-                        assert_eq!(expected_doms, actual_doms.as_slice());
+                        let expected_dominators = expected[i].0;
+                        let mut actual_dominators: Vec<_> = analysis.dominators(i).copied().collect();
+                        actual_dominators.sort_unstable();
+                        assert_eq!(expected_dominators, actual_dominators.as_slice());
 
-                        let endoms = expected_doms.len();
-                        let expected_idom = (endoms >= 2).then(|| expected_doms[endoms - 2]);
-                        assert_eq!(expected_idom,  analysis.immediate_dominator(i))
+                        let expected_dominated = expected[i].1;
+                        let mut actual_dominated: Vec<_> = domtree.immediately_dominated(i).copied().collect();
+                        actual_dominated.sort_unstable();
+                        assert_eq!(expected_dominated, actual_dominated.as_slice());
+
+                        let edl = expected_dominators.len();
+                        let expected_idom = (edl >= 2).then(|| expected_dominators[edl - 2]);
+                        assert_eq!(expected_idom,  analysis.immediate_dominator(i));
                     }
                     let first_output = utils::make_reducible(&mut program);
                     assert!(!first_output.is_empty());
@@ -587,24 +631,24 @@ mod tests {
 
         make_tests!(
             triangle [
-                {next: &[1, 2], doms: &[0]},        // = 0
-                {next: &[2], doms: &[0, 1]},        // = 1
-                {next: &[1], doms: &[0, 2]}         // = 2
+                {next: &[1, 2], dominators: &[0], idominates: &[1, 2]},          // = 0
+                {next: &[2], dominators: &[0, 1], idominates: &[]},              // = 1
+                {next: &[1], dominators: &[0, 2], idominates: &[]}               // = 2
             ],
             dom14_fig2 [
-                {next: &[1, 2], doms: &[0]},        // = 0 (dom14:2:5)
-                {next: &[3], doms: &[0, 1]},        // = 1 (dom14:2:4)
-                {next: &[4], doms: &[0, 2]},        // = 2 (dom14:2:3)
-                {next: &[4], doms: &[0, 3]},        // = 3 (dom14:2:1)
-                {next: &[3], doms: &[0, 4]}         // = 4 (dom14:2:2)
+                {next: &[1, 2], dominators: &[0], idominates: &[1, 2, 3, 4]},    // = 0 (dom14:2:5)
+                {next: &[3], dominators: &[0, 1], idominates: &[]},              // = 1 (dom14:2:4)
+                {next: &[4], dominators: &[0, 2], idominates: &[]},              // = 2 (dom14:2:3)
+                {next: &[4], dominators: &[0, 3], idominates: &[]},              // = 3 (dom14:2:1)
+                {next: &[3], dominators: &[0, 4], idominates: &[]}               // = 4 (dom14:2:2)
             ],
             dom14_fig4 [
-                {next: &[1, 2], doms: &[0]},        // = 0 (dom14:4:6)
-                {next: &[3], doms: &[0, 1]},        // = 1 (dom14:4:5)
-                {next: &[4, 5], doms: &[0, 2]},     // = 2 (dom14:4:4)
-                {next: &[4], doms: &[0, 3]},        // = 3 (dom14:4:1)
-                {next: &[3, 5], doms: &[0, 4]},     // = 4 (dom14:4:2)
-                {next: &[4], doms: &[0, 5]},        // = 5 (dom14:4:3)
+                {next: &[1, 2], dominators: &[0], idominates: &[1, 2, 3, 4, 5]}, // = 0 (dom14:4:6)
+                {next: &[3], dominators: &[0, 1], idominates: &[]},              // = 1 (dom14:4:5)
+                {next: &[4, 5], dominators: &[0, 2], idominates: &[]},           // = 2 (dom14:4:4)
+                {next: &[4], dominators: &[0, 3], idominates: &[]},              // = 3 (dom14:4:1)
+                {next: &[3, 5], dominators: &[0, 4], idominates: &[]},           // = 4 (dom14:4:2)
+                {next: &[4], dominators: &[0, 5], idominates: &[]},              // = 5 (dom14:4:3)
             ],
             /*circle_like [
                 {next: &[1, 5], doms: &[0]},        // = 0
