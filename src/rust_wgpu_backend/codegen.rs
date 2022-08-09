@@ -244,6 +244,11 @@ impl FuncletScopedState
 		Self{ value_funclet_id, scheduling_funclet_id, node_results : Default::default(), slot_value_tags : HashMap::new()}
 	}
 
+	fn move_node_result(&mut self, node_id : ir::NodeId) -> Option<NodeResult>
+	{
+		self.node_results.remove(& node_id)
+	}
+
 	fn get_node_slot_id(&self, node_id : ir::NodeId) -> Option<scheduling_state::SlotId>
 	{
 		match & self.node_results[& node_id]
@@ -956,7 +961,7 @@ impl<'program> CodeGen<'program>
 						}
 					}
 				}
-				ir::Node::Forward { place, storage_type, operation } =>
+				ir::Node::ForwardSlot { place, storage_type, operation } =>
 				{
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
@@ -964,6 +969,33 @@ impl<'program> CodeGen<'program>
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
 
 					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
+				}
+				ir::Node::Drop { node : dropped_node_id } =>
+				{
+					// Enforce use of all nodes
+					if let Some(node_result) = funclet_scoped_state.move_node_result(* dropped_node_id)
+					{
+						match node_result
+						{
+							NodeResult::None => panic!("Node #{} has already been used", dropped_node_id),
+							NodeResult::Slot { slot_id } =>
+							{
+								let queue_stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
+								match queue_stage
+								{
+									ir::ResourceQueueStage::Dead => (),
+									ir::ResourceQueueStage::Ready => (),
+									_ => panic!("Cannot drop node #{}", dropped_node_id)
+								}
+							}
+							NodeResult::Join { .. } => panic!("Cannot drop node #{}", dropped_node_id),
+							NodeResult::Fence { .. } => panic!("Cannot drop node #{}", dropped_node_id),
+						}
+					}
+					else
+					{
+						panic!("No node named")
+					}
 				}
 				ir::Node::EncodeDo { place, operation, inputs, outputs } =>
 				{
@@ -1143,11 +1175,11 @@ impl<'program> CodeGen<'program>
 					// Only implemented for the local queue for now
 					assert_eq!(* synced_place, ir::Place::Local);
 					// To do: Need to update nodes
-					let value_opt = match funclet_scoped_state.node_results.get(fence)
+					let value_opt = match funclet_scoped_state.move_node_result(* fence)
 					{
 						Some(NodeResult::Fence{place, timestamp}) =>
 						{
-							Some(NodeResult::Fence{place : * place, timestamp : * timestamp})
+							Some(NodeResult::Fence{place, timestamp})
 						}
 						_ => panic!("Expected fence")
 					};
@@ -1222,7 +1254,7 @@ impl<'program> CodeGen<'program>
 		}
 
 		self.code_generator.insert_comment(format!(" tail edge: {:?}", funclet.tail_edge).as_str());
-		match & funclet.tail_edge
+		let split_point = match & funclet.tail_edge
 		{
 			ir::TailEdge::Return { return_values } =>
 			{
@@ -1242,7 +1274,7 @@ impl<'program> CodeGen<'program>
 					check_slot_type(& self.program, funclet.output_types[return_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 				}
 
-				return SplitPoint::Next{return_slot_ids : output_slots.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt};
+				SplitPoint::Next{return_slot_ids : output_slots.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
 			}
 			/*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
@@ -1294,7 +1326,7 @@ impl<'program> CodeGen<'program>
 				}
 
 				assert!(default_join_point_id_opt.is_none());
-				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)};
+				SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)}
 			}
 			ir::TailEdge::ScheduleCall { value_operation : value_operation_ref, callee_funclet_id : callee_scheduling_funclet_id_ref, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
@@ -1360,7 +1392,7 @@ impl<'program> CodeGen<'program>
 
 				assert!(default_join_point_id_opt.is_none());
 				let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : callee_value_funclet_id, scheduling_funclet_id : callee_scheduling_funclet_id, captures : vec![].into_boxed_slice(), continuation_join_point_id}));
-				return SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id) };
+				SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id) }
 			}
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
@@ -1443,12 +1475,34 @@ impl<'program> CodeGen<'program>
 				}
 
 				assert!(default_join_point_id_opt.is_none());
-				return SplitPoint::Select{return_slot_ids : argument_slot_ids.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)};
+				SplitPoint::Select{return_slot_ids : argument_slot_ids.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}
 			}
 			_ => panic!("Umimplemented")
+		};
+
+		// Enforce use of all nodes
+		for (node_id, node_result) in funclet_scoped_state.node_results.iter()
+		{
+			match node_result
+			{
+				NodeResult::None => (),
+				NodeResult::Slot { slot_id } =>
+				{
+					let queue_stage = placement_state.scheduling_state.get_slot_queue_stage(* slot_id);
+					// Ok to implicitly drop slots with no pending computation
+					match queue_stage
+					{
+						ir::ResourceQueueStage::Dead => (),
+						ir::ResourceQueueStage::Ready => (),
+						_ => panic!("Unused slot at node #{}", node_id)
+					}
+				}
+				NodeResult::Join { .. } => panic!("Unused join at node #{}", node_id),
+				NodeResult::Fence { .. } => panic!("Unused fence at node #{}", node_id),
+			}
 		}
 
-		panic!("Should not reach here")
+		split_point
 	}
 
 	fn generate_pipeline(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)

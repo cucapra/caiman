@@ -132,14 +132,25 @@
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
+
+		// State management
 		(
-			name : "Forward",
+			name : "ForwardSlot",
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "storage_type", kind : StorageType),
 				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "Drop",
+			inputs : [
+				(name : "node", kind : Operation)
+			],
+			output : None,
 			language_set : (functional : false, scheduling: true, intrinsic : false),
 			has_local_side_effect : true
 		),
