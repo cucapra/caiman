@@ -2,7 +2,6 @@ use super::*;
 use crate::ir;
 use std::collections::hash_map::{Entry, HashMap};
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Constant {
@@ -319,9 +318,9 @@ impl egg::Analysis<Node> for Analysis {
 }
 
 pub mod inline_args {
+    use super::*;
     use std::str::FromStr;
 
-    use super::*;
     /// If it's possible to inline paramater #`index` of funclet `id`, returns the ID of
     /// the equivalent eclass.
     fn inline_param(id: ir::FuncletId, index: usize, egraph: &GraphInner) -> Option<egg::Id> {
