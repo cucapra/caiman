@@ -70,12 +70,13 @@ pub struct Graph {
     rules: Vec<GraphRewriteRule>,
 }
 impl Graph {
-    pub fn new(program: &ir::Program, start: ir::FuncletId) -> Result<Self, FromIrError> {
+    pub fn new(program: &ir::Program, head: ir::FuncletId) -> Result<Self, FromIrError> {
         // due to lifetime issues, we store the analysis separately while constructing it,
         // and then move it into the graph once we're done
+        // TODO: does this hack cause issues with constant folding (lost class analyses?)
         let mut egraph = egg::EGraph::new(Analysis::new());
         let mut analysis = Analysis::new();
-        analysis.build_with_graph(&mut egraph, program, start)?;
+        analysis.build_with_graph(&mut egraph, program, head)?;
         egraph.analysis = analysis;
         // this looks weird because egg::Runner has a weird API, don't blame me!
         // I don't understand why there's not a constructor that takes an egraph...
@@ -105,7 +106,7 @@ impl Graph {
         // sad.
         self.runner = runner;
     }
-    pub fn elaborate_into(program: &mut ir::Program) -> ir::FuncletId {
+    pub fn elaborate_into(&self, program: &mut ir::Program) -> ir::FuncletId {
         todo!()
     }
 }

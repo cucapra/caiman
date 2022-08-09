@@ -175,6 +175,7 @@ impl BlockSkeleton {
     }
 }
 pub struct Analysis {
+    head: ir::FuncletId,
     blocks: HashMap<ir::FuncletId, BlockSkeleton>,
     // this is used to speed up collapse_branches... it really shouldn't be necessary,
     // except iter_mut on a hashmap holds a mutable reference on *values* as well as keys,
@@ -187,6 +188,8 @@ pub struct Analysis {
 impl Analysis {
     pub fn new() -> Self {
         Self {
+            head: 0, // HACK: this only works as long as funclet IDs are usize
+            // then again, new() only exists as part of a hack for building the graph...
             blocks: HashMap::new(),
             block_ids: BTreeSet::new(),
             thread_candidates: Vec::new(),
@@ -304,6 +307,14 @@ impl Analysis {
                 }
             }
         }
+    }
+    pub fn bake_dominators(&self) -> ir::utils::BakedDoms {
+        ir::utils::bake_dominators(self.head, |id| {
+            self.blocks[&id].tail.jumps().map(|jump| jump.dest)
+        })
+    }
+    pub fn head(&self) -> ir::FuncletId {
+        self.head
     }
 }
 

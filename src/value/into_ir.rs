@@ -1,3 +1,4 @@
+use super::*;
 /*
 * The egraph -> IR conversion is an adaptation of Cranelift's [scoped elaboration][].
 * Most of the differences are due to differences between Cranelift's IR and ours.
@@ -47,3 +48,39 @@
 * as referenced. (This subsumes unused funclet input/output elimination.)
 * [scoped elaboration]: https://github.com/cfallin/rfcs/blob/cranelift-egraphs/accepted/cranelift-egraph.md
 */
+
+struct ScopedHashMap {}
+impl ScopedHashMap {
+    fn new() -> Self {
+        todo!()
+    }
+    fn push_scope(&mut self) {
+        todo!()
+    }
+    fn pop_scope(&mut self) {
+        todo!()
+    }
+}
+fn codegen_funclet(id: ir::FuncletId, scoped_map: &mut ScopedHashMap) {
+    todo!()
+}
+fn elaborate_funclet(
+    id: ir::FuncletId,
+    scoped_map: &mut ScopedHashMap,
+    domtree: &ir::utils::DomTree,
+) {
+    scoped_map.push_scope();
+
+    codegen_funclet(id, scoped_map);
+    for &next in domtree.immediately_dominated(id) {
+        elaborate_funclet(next, scoped_map, domtree);
+    }
+
+    scoped_map.pop_scope();
+}
+pub fn the_thing_that_generates_code(graph: &GraphInner) {
+    let bdoms = graph.analysis.bake_dominators();
+    let domtree = bdoms.dominator_tree();
+    let mut scoped_map = ScopedHashMap::new();
+    elaborate_funclet(graph.analysis.head(), &mut scoped_map, &domtree)
+}

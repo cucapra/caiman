@@ -278,17 +278,15 @@ pub fn identify_loops(program: &Program, entry: FuncletId) -> Loops {
 }
 
 #[derive(Clone)]
-struct AnalysisEntry {
+struct BakedDom {
     // The ID of the ir funclet which this analysis node corresponds to.
     id: FuncletId,
     // The index of this funclet's immediate dominator.
     // For the entry node, this will be its own id (since it doesn't have an idom)
     idom: usize,
-    // A list of this funclet's immediate predecessors.
-    preds: Vec<usize>,
 }
 
-fn recalc_idom(nodes: &[AnalysisEntry], mut dom_a: usize, mut dom_b: usize) -> usize {
+fn recalc_idom(nodes: &[BakedDom], mut dom_a: usize, mut dom_b: usize) -> usize {
     loop {
         match dom_a.cmp(&dom_b) {
             Ordering::Less => dom_b = nodes[dom_b].idom,
@@ -298,14 +296,15 @@ fn recalc_idom(nodes: &[AnalysisEntry], mut dom_a: usize, mut dom_b: usize) -> u
     }
 }
 
-pub fn analyze<F, I>(head: FuncletId, get_tails: F) -> Analysis
+/// "Bakes down" information about the graph's dominators into a static representation.
+pub fn bake_dominators<F, I>(head: FuncletId, destinations: F) -> BakedDoms
 where
     F: Fn(FuncletId) -> I,
     I: IntoIterator<Item = FuncletId>,
 {
     // This is loosely based on http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
     let mut lookup = HashMap::new();
-    let mut entries: Vec<AnalysisEntry> = Vec::new();
+    let mut entries: Vec<BakedDom> = Vec::new();
 
     let mut stack = Vec::new();
     stack.push((head, 0));
@@ -315,7 +314,6 @@ where
             // already visited this funclet... might need to recalc immediate dominator
             Entry::Occupied(entry) => {
                 let index: usize = *entry.get();
-                entries[index].preds.push(pred_index);
                 let old_idom = entries[index].idom;
                 let new_idom = recalc_idom(&entries, old_idom, pred_index);
                 if old_idom == new_idom {
@@ -328,30 +326,27 @@ where
             Entry::Vacant(spot) => {
                 let index = entries.len();
                 spot.insert(index);
-                entries.push(AnalysisEntry {
+                entries.push(BakedDom {
                     id,
                     idom: pred_index,
-                    preds: vec![pred_index],
                 });
                 index
             }
         };
-        get_tails(id)
+        destinations(id)
             .into_iter()
             .for_each(|target| stack.push((target, index)));
     }
-    // fixup the entry node, which had a dummy pred added
-    entries[0].preds.remove(0);
-    Analysis { entries, lookup }
+    BakedDoms { entries, lookup }
 }
 
-pub struct Analysis {
+pub struct BakedDoms {
     // The entry at index 0 is the "entry" entry
-    entries: Vec<AnalysisEntry>,
+    entries: Vec<BakedDom>,
     // A map from funclets to their entry index
     lookup: HashMap<FuncletId, usize>,
 }
-impl Analysis {
+impl BakedDoms {
     pub fn dominator_tree(&self) -> DomTree {
         DomTree::new(self)
     }
@@ -368,23 +363,20 @@ impl Analysis {
     }
 }
 struct Dominators<'a> {
-    analysis: &'a Analysis,
+    bdoms: &'a BakedDoms,
     cur_index: Option<usize>,
 }
 impl<'a> Dominators<'a> {
-    fn new(analysis: &'a Analysis, id: FuncletId) -> Self {
-        let cur_index = Some(analysis.lookup[&id]);
-        Self {
-            analysis,
-            cur_index,
-        }
+    fn new(bdoms: &'a BakedDoms, id: FuncletId) -> Self {
+        let cur_index = Some(bdoms.lookup[&id]);
+        Self { bdoms, cur_index }
     }
 }
 impl<'a> Iterator for Dominators<'a> {
     type Item = &'a FuncletId;
     fn next(&mut self) -> Option<Self::Item> {
         let index = self.cur_index?;
-        let entry = &self.analysis.entries[index];
+        let entry = &self.bdoms.entries[index];
         self.cur_index = (index != 0).then(|| entry.idom);
         Some(&entry.id)
     }
@@ -395,10 +387,10 @@ pub struct DomTree {
     dominated: HashMap<FuncletId, Vec<FuncletId>>,
 }
 impl DomTree {
-    fn new(analysis: &Analysis) -> Self {
+    fn new(bdoms: &BakedDoms) -> Self {
         let mut dominated = HashMap::new();
-        for entry in analysis.entries.iter() {
-            if let Some(idom_id) = analysis.immediate_dominator(entry.id) {
+        for entry in bdoms.entries.iter() {
+            if let Some(idom_id) = bdoms.immediate_dominator(entry.id) {
                 dominated
                     .entry(idom_id)
                     .or_insert(Vec::new())
@@ -487,7 +479,7 @@ mod tests {
                     let expected: &[(&[FuncletId], &[FuncletId], &[FuncletId])] =
                         &[ $( ($dominators, $idominated, $loops) ),* ];
                     let loops = utils::identify_loops(&program, 0);
-                    let analysis = utils::analyze(0, |id| utils::next_funclets(&program, id));
+                    let analysis = utils::bake_dominators(0, |id| utils::next_funclets(&program, id));
                     let domtree = analysis.dominator_tree();
                     for i in 0..expected.len() {
                         let expected_dominators = expected[i].0;
@@ -604,7 +596,7 @@ mod tests {
                     let mut program = utils::program_from_cfg(&[ $($tail),* ]);
                     let expected: &[(&[FuncletId], &[FuncletId])] =
                         &[ $(($dominators, $idominates)),* ];
-                    let analysis = utils::analyze(0, |id| utils::next_funclets(&program, id));
+                    let analysis = utils::bake_dominators(0, |id| utils::next_funclets(&program, id));
                     let domtree = analysis.dominator_tree();
                     for i in 0..expected.len() {
                         let expected_dominators = expected[i].0;
