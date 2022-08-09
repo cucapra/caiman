@@ -19,7 +19,7 @@ pub enum Place
 pub enum ResourceQueueStage
 {
 	Unbound,
-	None, // Bound
+	Bound,
 	Encoded,
 	Submitted,
 	Ready,
@@ -166,13 +166,6 @@ impl FuncletKind
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Fence
-{
-	pub prior_fence_ids : Box<[FenceId]>,
-	pub place : Place
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet
 {
 	#[serde(default = "FuncletKind::easy_default")]
@@ -204,6 +197,13 @@ pub struct SlotInfo
 pub struct JoinInfo
 {
 	// To do: Which subregions of resources are reserved by this join
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Fence
+{
+	pub prior_fence_ids : Box<[FenceId]>,
+	pub place : Place
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

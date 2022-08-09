@@ -135,7 +135,7 @@
 
 		// State management
 		(
-			name : "ForwardSlot",
+			name : "UnboundSlot",
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "storage_type", kind : StorageType),

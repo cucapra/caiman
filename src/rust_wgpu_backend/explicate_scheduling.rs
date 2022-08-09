@@ -528,7 +528,7 @@ impl<'program> Explicator<'program>
 								match resource_state.stage
 								{
 									ir::ResourceQueueStage::Unbound => (),
-									ir::ResourceQueueStage::None => (),
+									ir::ResourceQueueStage::Bound => (),
 									ir::ResourceQueueStage::Encoded => gpu_encoded_nodes.push(node_id),
 									ir::ResourceQueueStage::Submitted => gpu_submitted_nodes.push(node_id),
 									ir::ResourceQueueStage::Ready => gpu_ready_nodes.push(node_id),
@@ -589,7 +589,7 @@ impl<'program> Explicator<'program>
 									match resource_state.stage
 									{
 										ir::ResourceQueueStage::Unbound => (),
-										ir::ResourceQueueStage::None => (),
+										ir::ResourceQueueStage::Bound => (),
 										ir::ResourceQueueStage::Encoded => function_state.node_resource_tracker.register_gpu_encoded_nodes(&[new_node_id]),
 										ir::ResourceQueueStage::Submitted => function_state.node_resource_tracker.register_gpu_submitted_nodes(&[new_node_id]),
 										ir::ResourceQueueStage::Ready => function_state.node_resource_tracker.register_gpu_ready_nodes(&[new_node_id]),

@@ -205,7 +205,7 @@ impl SchedulingState
 	{
 		assert!(self.slots[& source_slot_id.0].queue_stage < ir::ResourceQueueStage::Dead);
 		assert!(self.slots[& destination_slot_id.0].queue_stage == ir::ResourceQueueStage::Unbound);
-		self.slots[& destination_slot_id.0].queue_stage = ir::ResourceQueueStage::None;
+		self.slots[& destination_slot_id.0].queue_stage = ir::ResourceQueueStage::Bound;
 		self.slots[& source_slot_id.0].queue_stage = ir::ResourceQueueStage::Dead;
 	}
 

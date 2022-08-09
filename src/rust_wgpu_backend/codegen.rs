@@ -596,7 +596,7 @@ impl<'program> CodeGen<'program>
 					let slot_id = output_slot_ids[index];
 					// To do: Do something about the value
 					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * output_type_id);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
 					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu);
 					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Encoded, output_var_ids[index]);
 				}
@@ -620,7 +620,7 @@ impl<'program> CodeGen<'program>
 				let variable_id = self.code_generator.build_constant_integer(* value, storage_type_id);
 				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
@@ -635,7 +635,7 @@ impl<'program> CodeGen<'program>
 				let variable_id = self.code_generator.build_constant_unsigned_integer(* value, storage_type_id);
 				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
@@ -659,7 +659,7 @@ impl<'program> CodeGen<'program>
 				let variable_id = self.code_generator.build_select_hack(input_var_ids[0], input_var_ids[1], input_var_ids[2]);
 
 				//assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
@@ -687,7 +687,7 @@ impl<'program> CodeGen<'program>
 				{
 					let slot_id = output_slot_ids[index];
 					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * output_type_id);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
 					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, raw_outputs[index]);
 				}
@@ -944,7 +944,7 @@ impl<'program> CodeGen<'program>
 				{
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
-					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * place, ir::ResourceQueueStage::None);
+					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * place, ir::ResourceQueueStage::Bound);
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
 
 					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
@@ -957,11 +957,11 @@ impl<'program> CodeGen<'program>
 						ir::Place::Gpu =>
 						{
 							let var_id = self.code_generator.build_create_buffer(* storage_type);
-							placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::None, var_id);
+							placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Bound, var_id);
 						}
 					}
 				}
-				ir::Node::ForwardSlot { place, storage_type, operation } =>
+				ir::Node::UnboundSlot { place, storage_type, operation } =>
 				{
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
@@ -1112,9 +1112,9 @@ impl<'program> CodeGen<'program>
 					let src_stage = placement_state.scheduling_state.get_slot_queue_stage(src_slot_id);
 
 					assert_eq!(placement_state.scheduling_state.get_slot_type_id(src_slot_id), placement_state.scheduling_state.get_slot_type_id(dst_slot_id));
-					assert!(src_stage > ir::ResourceQueueStage::None);
+					assert!(src_stage > ir::ResourceQueueStage::Bound);
 					assert!(src_stage < ir::ResourceQueueStage::Dead);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(dst_slot_id), ir::ResourceQueueStage::None);
+					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(dst_slot_id), ir::ResourceQueueStage::Bound);
 
 					{
 						let source_value_tag = funclet_scoped_state.slot_value_tags[& src_slot_id];
