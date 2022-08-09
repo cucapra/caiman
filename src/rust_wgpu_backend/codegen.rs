@@ -27,6 +27,21 @@ enum NodeResult
 	Join{ join_point_id : JoinPointId}
 }
 
+impl NodeResult
+{
+	fn get_slot_id(&self) -> Option<scheduling_state::SlotId>
+	{
+		if let NodeResult::Slot{ slot_id } = self
+		{
+			Some(* slot_id)
+		}
+		else
+		{
+			None
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 struct RootJoinPoint
 {
@@ -40,7 +55,7 @@ struct SimpleJoinPoint
 {
 	value_funclet_id : ir::FuncletId,
 	scheduling_funclet_id : ir::FuncletId,
-	captures : Box<[scheduling_state::SlotId]>,
+	captures : Box<[NodeResult]>,
 	continuation_join_point_id : JoinPointId
 }
 
@@ -216,13 +231,39 @@ impl PlacementState
 	{
 		self.slot_variable_ids.get(& slot_id).map(|x| * x)
 	}
+
+	fn get_node_result_var_id(&self, node_result : &NodeResult) -> Option<usize>
+	{
+		match node_result
+		{
+			NodeResult::Slot{slot_id} => self.get_slot_var_id(* slot_id),
+			_ => None
+		}
+	}
+
+	fn get_node_result_var_ids(&self, node_results : &[NodeResult]) -> Option<Box<[usize]>>
+	{
+		let mut var_ids = Vec::<usize>::new();
+		for node_result in node_results.iter()
+		{	
+			if let Some(var_id) = self.get_node_result_var_id(node_result)
+			{
+				var_ids.push(var_id)
+			}
+			else
+			{
+				return None;
+			}
+		}
+		Some(var_ids.into_boxed_slice())
+	}
 }
 
 #[derive(Debug)]
 enum SplitPoint
 {
-	Next { return_slot_ids : Box<[scheduling_state::SlotId]>, continuation_join_point_id_opt : Option<JoinPointId> },
-	Select { return_slot_ids : Box<[scheduling_state::SlotId]>, condition_slot_id : scheduling_state::SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> }
+	Next { return_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
+	Select { return_node_results : Box<[NodeResult]>, condition_slot_id : scheduling_state::SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> }
 }
 
 #[derive(Debug)]
@@ -706,7 +747,7 @@ impl<'program> CodeGen<'program>
 		let argument_variable_ids = self.code_generator.begin_funclet(funclet_id, & input_types, & output_types);
 
 		let mut placement_state = PlacementState::new();
-		let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
+		let mut argument_node_results = Vec::<NodeResult>::new();
 		
 		for (index, input_type_id) in funclet.input_types.iter().enumerate()
 		{
@@ -720,7 +761,7 @@ impl<'program> CodeGen<'program>
 					{
 						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * queue_place, * queue_stage);
 						placement_state.slot_variable_ids.insert(slot_id, argument_variable_ids[index]);
-						argument_slot_ids.push(slot_id);
+						argument_node_results.push(NodeResult::Slot{slot_id});
 					}
 					_ => panic!("Unimplemented")
 				}
@@ -743,14 +784,14 @@ impl<'program> CodeGen<'program>
 
 		enum TraversalState
 		{
-			SelectIf { branch_input_slot_ids : Box<[scheduling_state::SlotId]>, condition_slot_id : scheduling_state::SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
-			SelectElse { output_slot_ids : Box<[scheduling_state::SlotId]>, branch_input_slot_ids : Box<[scheduling_state::SlotId]>, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
-			SelectEnd { output_slot_ids : Box<[scheduling_state::SlotId]>, continuation_join_point_id_opt : Option<JoinPointId> },
+			SelectIf { branch_input_node_results : Box<[NodeResult]>, condition_slot_id : scheduling_state::SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
+			SelectElse { output_node_results : Box<[NodeResult]>, branch_input_node_results : Box<[NodeResult]>, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
+			SelectEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
 		}
 
 		let mut traversal_state_stack = Vec::<TraversalState>::new();
 
-		let mut current_output_slot_ids = argument_slot_ids.into_boxed_slice();
+		let mut current_output_node_results = argument_node_results.into_boxed_slice();
 		let mut current_funclet_id_opt = Some(funclet_id);
 
 		//while let Some(split_point_stack_entry) = split_point_stack.pop()
@@ -759,19 +800,19 @@ impl<'program> CodeGen<'program>
 			while let Some(current_funclet_id) = current_funclet_id_opt
 			{
 				//current_output_slot_ids = 
-				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_slot_ids, pipeline_context, &mut placement_state, default_join_point_id_opt);
+				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, default_join_point_id_opt);
 				println!("Split point: {:?}", split_point);
-				current_output_slot_ids = match split_point
+				current_output_node_results = match split_point
 				{
-					SplitPoint::Next{return_slot_ids, continuation_join_point_id_opt} =>
+					SplitPoint::Next{return_node_results, continuation_join_point_id_opt} =>
 					{
 						default_join_point_id_opt = continuation_join_point_id_opt;
-						return_slot_ids
+						return_node_results
 					}
-					SplitPoint::Select{return_slot_ids, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt} =>
+					SplitPoint::Select{return_node_results, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt} =>
 					{
 						//assert!(default_join_point_id_opt.is_none());
-						traversal_state_stack.push(TraversalState::SelectIf{ branch_input_slot_ids : return_slot_ids, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt });
+						traversal_state_stack.push(TraversalState::SelectIf{ branch_input_node_results : return_node_results, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt });
 						vec![].into_boxed_slice()
 					}
 				};
@@ -782,7 +823,7 @@ impl<'program> CodeGen<'program>
 					{
 						match traversal_state
 						{
-							TraversalState::SelectIf { branch_input_slot_ids, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt } =>
+							TraversalState::SelectIf { branch_input_node_results, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt } =>
 							{
 								let condition_var_id = placement_state.get_slot_var_id(condition_slot_id).unwrap();
 								let true_funclet = & self.program.funclets[& true_funclet_id];
@@ -790,7 +831,7 @@ impl<'program> CodeGen<'program>
 								//true_funclet_extra.input_slots[& output_index].value_tag
 								let output_types = true_funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
 								let output_var_ids = self.code_generator.begin_if_else(condition_var_id, & output_types);
-								let mut output_slot_ids = Vec::<scheduling_state::SlotId>::new();
+								let mut output_node_results = Vec::<NodeResult>::new();
 								for (output_index, output_type) in true_funclet.output_types.iter().enumerate()
 								{
 									let (storage_type, queue_stage, queue_place) = if let ir::Type::Slot{storage_type, queue_stage, queue_place} = & self.program.types[output_type]
@@ -802,24 +843,24 @@ impl<'program> CodeGen<'program>
 										panic!("Not a slot")
 									};
 									let slot_id = placement_state.scheduling_state.insert_hacked_slot(storage_type, queue_place, queue_stage);
-									output_slot_ids.push(slot_id);
+									output_node_results.push(NodeResult::Slot{slot_id});
 								}
 								current_funclet_id_opt = Some(true_funclet_id);
-								current_output_slot_ids = branch_input_slot_ids.clone();
-								traversal_state_stack.push(TraversalState::SelectElse{output_slot_ids : output_slot_ids.into_boxed_slice(), branch_input_slot_ids, false_funclet_id, continuation_join_point_id_opt});
+								current_output_node_results = branch_input_node_results.clone();
+								traversal_state_stack.push(TraversalState::SelectElse{output_node_results : output_node_results.into_boxed_slice(), branch_input_node_results, false_funclet_id, continuation_join_point_id_opt});
 							}
-							TraversalState::SelectElse { output_slot_ids, branch_input_slot_ids, false_funclet_id, continuation_join_point_id_opt } =>
+							TraversalState::SelectElse { output_node_results, branch_input_node_results, false_funclet_id, continuation_join_point_id_opt } =>
 							{
-								self.code_generator.end_if_begin_else(& placement_state.get_slot_var_ids(& current_output_slot_ids, ir::Place::Local).unwrap());
+								self.code_generator.end_if_begin_else(& placement_state.get_node_result_var_ids(& current_output_node_results).unwrap());
 								current_funclet_id_opt = Some(false_funclet_id);
-								current_output_slot_ids = branch_input_slot_ids;
-								traversal_state_stack.push(TraversalState::SelectEnd{output_slot_ids, continuation_join_point_id_opt});
+								current_output_node_results = branch_input_node_results;
+								traversal_state_stack.push(TraversalState::SelectEnd{output_node_results, continuation_join_point_id_opt});
 							}
-							TraversalState::SelectEnd { output_slot_ids, continuation_join_point_id_opt } =>
+							TraversalState::SelectEnd { output_node_results, continuation_join_point_id_opt } =>
 							{
-								self.code_generator.end_else(& placement_state.get_slot_var_ids(& current_output_slot_ids, ir::Place::Local).unwrap());
+								self.code_generator.end_else(& placement_state.get_node_result_var_ids(& current_output_node_results).unwrap());
 								default_join_point_id_opt = continuation_join_point_id_opt;
-								current_output_slot_ids = output_slot_ids;
+								current_output_node_results = output_node_results;
 							}
 						}
 					}
@@ -836,23 +877,23 @@ impl<'program> CodeGen<'program>
 					{
 						JoinPoint::RootJoinPoint(_) =>
 						{
-							let return_var_ids = placement_state.get_slot_var_ids(& current_output_slot_ids, ir::Place::Local).unwrap();
+							let return_var_ids = placement_state.get_node_result_var_ids(& current_output_node_results).unwrap();
 							self.code_generator.build_return(& return_var_ids);
 						}
 						JoinPoint::SimpleJoinPoint(simple_join_point) =>
 						{
-							let mut input_slot_ids = Vec::<scheduling_state::SlotId>::new();
-							input_slot_ids.extend_from_slice(& simple_join_point.captures);
-							input_slot_ids.extend_from_slice(& current_output_slot_ids);
+							let mut input_node_results = Vec::<NodeResult>::new();
+							input_node_results.extend_from_slice(& simple_join_point.captures);
+							input_node_results.extend_from_slice(& current_output_node_results);
 							
 							current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
 							default_join_point_id_opt = Some(simple_join_point.continuation_join_point_id);
-							current_output_slot_ids = input_slot_ids.into_boxed_slice();
+							current_output_node_results = input_node_results.into_boxed_slice();
 						}
 						_ => panic!("Jump to invalid join point #{:?}: {:?}", join_point_id, join_point)
 					}
 
-					println!("{:?} {:?} {:?}", current_funclet_id_opt, default_join_point_id_opt, current_output_slot_ids);
+					println!("{:?} {:?} {:?}", current_funclet_id_opt, default_join_point_id_opt, current_output_node_results);
 				}
 			}
 
@@ -862,17 +903,20 @@ impl<'program> CodeGen<'program>
 		self.code_generator.end_funclet();
 	}
 
-	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_slot_ids : &[scheduling_state::SlotId], pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[scheduling_state::SlotId]>
+	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[scheduling_state::SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[scheduling_state::SlotId]>
 	{
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 		let funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& funclet_id];
 		//let scheduled_value_funclet = & self.program.value_funclets[& scheduling_funclet.value_funclet_id];
 
+		let mut available_external_timestamps = funclet_scheduling_extra.timestamps.clone();
+		//let mut unsynced_external_timestamps = 
+
 		let mut funclet_scoped_state = FuncletScopedState::new(funclet_scheduling_extra.value_funclet_id, funclet_id);
 
 		// Ugly hack for now... in a pile of even worse hacks
-		let mut argument_node_results = Vec::<NodeResult>::new();
+		/*let mut argument_node_results = Vec::<NodeResult>::new();
 		for (index, input_type_id) in funclet.input_types.iter().enumerate()
 		{
 			let is_valid = match & funclet.nodes[index]
@@ -899,11 +943,72 @@ impl<'program> CodeGen<'program>
 					};
 					funclet_scoped_state.slot_value_tags.insert(slot_id, tag);
 				}
+				ir::Type::Fence { queue_place } =>
+				{
+					let fence_info = & funclet_scheduling_extra.input_fences[& index];
+					let timestamp_id = fence_info.timestamp_id;
+					//available_timestamps.remove(& timestamp_id);
+					//argument_node_results.push(NodeResult::Fence{queue_place : * queue_place, timestamp : ? });
+				}
 				_ => panic!("Unimplemented")
 			}
 			
 			let result = NodeResult::Slot{slot_id};
 			argument_node_results.push(result);
+		}*/
+
+		for (index, input_type_id) in funclet.input_types.iter().enumerate()
+		{
+			let is_valid = match & funclet.nodes[index]
+			{
+				ir::Node::None => true,
+				ir::Node::Phi { .. } => true,
+				_ => false
+			};
+			assert!(is_valid);
+
+			match argument_node_results[index]
+			{
+				NodeResult::Slot{slot_id} =>
+				{
+					let slot_info = & funclet_scheduling_extra.input_slots[& index];
+		
+					if let ir::Type::Slot { storage_type, queue_stage, queue_place } = & self.program.types[input_type_id]
+					{
+						let tag = match slot_info.value_tag
+						{
+							ir::ValueTag::None => ir::ValueTag::None,
+							ir::ValueTag::Operation{remote_node_id} => ir::ValueTag::Operation{remote_node_id},
+							ir::ValueTag::Input{funclet_id, index} => ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
+							_ => panic!("Unimplemented")
+						};
+						funclet_scoped_state.slot_value_tags.insert(slot_id, tag);
+					}
+					else
+					{
+						panic!("Must be a slot type");
+					}
+				}
+				NodeResult::Join{ .. } =>
+				{
+					panic!("Unimplemented")
+				}
+				NodeResult::Fence { .. } =>
+				{
+					if let ir::Type::Fence { queue_place } = & self.program.types[input_type_id]
+					{
+						let fence_info = & funclet_scheduling_extra.input_fences[& index];
+						let timestamp_id = fence_info.timestamp_id;
+						//available_timestamps.remove(& timestamp_id);
+						//argument_node_results.push(NodeResult::Fence{queue_place : * queue_place, timestamp : ? });
+					}
+					else
+					{
+						panic!("Must be a fence type");
+					}
+				}
+				_ => ()
+			}
 		}
 
 		if self.print_codegen_debug_info
@@ -1207,7 +1312,7 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::Join { funclet : funclet_id, captures, continuation : continuation_join_node_id } => 
 				{
-					let mut captured_slot_ids = Vec::<scheduling_state::SlotId>::new();
+					let mut captured_node_results = Vec::<NodeResult>::new();
 					//let mut captured_var_ids = Vec::<usize>::new();
 					let join_funclet = & self.program.funclets[funclet_id];
 					let extra = & self.program.scheduling_funclet_extras[funclet_id];
@@ -1218,7 +1323,7 @@ impl<'program> CodeGen<'program>
 					for (capture_index, capture_node_id) in captures.iter().enumerate()
 					{
 						let slot_id = funclet_scoped_state.move_node_slot_id(* capture_node_id).unwrap();
-						captured_slot_ids.push(slot_id);
+						captured_node_results.push(NodeResult::Slot{slot_id});
 						//captured_var_ids.push(placement_state.get_slot_var_id(slot_id).unwrap());
 
 						let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
@@ -1245,7 +1350,7 @@ impl<'program> CodeGen<'program>
 
 					//Some(* type_id)
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join(Join{funclet_id : * funclet_id, captures: captured_slot_ids.into_boxed_slice(), type_id_opt : None, variable_id_opt : Some(join_var_id)}));*/
-					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_slot_ids.into_boxed_slice(), continuation_join_point_id}));
+					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_node_results.into_boxed_slice(), continuation_join_point_id}));
 					println!("Created join point: {:?} {:?}", join_point_id, placement_state.join_graph.get_join(join_point_id));
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 				}
@@ -1261,12 +1366,12 @@ impl<'program> CodeGen<'program>
 				let encoded_value_funclet_id = funclet_scheduling_extra.value_funclet_id;
 				let encoded_value_funclet = & self.program.funclets[& encoded_value_funclet_id];
 
-				let mut output_slots = Vec::<scheduling_state::SlotId>::new();
+				let mut output_node_results = Vec::<NodeResult>::new();
 
 				for (return_index, return_node_id) in return_values.iter().enumerate()
 				{
 					let slot_id = funclet_scoped_state.move_node_slot_id(* return_node_id).unwrap();
-					output_slots.push(slot_id);
+					output_node_results.push(NodeResult::Slot{slot_id});
 
 					let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 					let value_tag = funclet_scheduling_extra.output_slots[& return_index].value_tag;
@@ -1274,7 +1379,7 @@ impl<'program> CodeGen<'program>
 					check_slot_type(& self.program, funclet.output_types[return_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 				}
 
-				SplitPoint::Next{return_slot_ids : output_slots.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
+				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
 			}
 			/*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
@@ -1301,12 +1406,12 @@ impl<'program> CodeGen<'program>
 			{
 				let mut join_point_id = funclet_scoped_state.move_node_join_point_id(* join).unwrap();
 
-				let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
+				let mut argument_node_results = Vec::<NodeResult>::new();
 
 				for (argument_index, argument_node_id) in arguments.iter().enumerate()
 				{
 					let slot_id = funclet_scoped_state.move_node_slot_id(* argument_node_id).unwrap();
-					argument_slot_ids.push(slot_id);
+					argument_node_results.push(NodeResult::Slot{slot_id});
 				}
 
 				{
@@ -1314,9 +1419,9 @@ impl<'program> CodeGen<'program>
 
 					// We shouldn't have to check outputs for join points because all join chains go up to the root
 
-					for (argument_index, argument_slot_id) in argument_slot_ids.iter().enumerate()
+					for (argument_index, argument_node_result) in argument_node_results.iter().enumerate()
 					{
-						let slot_id = * argument_slot_id;
+						let slot_id = argument_node_result.get_slot_id().unwrap();
 						let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 						// We need to shift the destination argument index to account for the captures (that are checked at construction)
 						let destination_argument_index = argument_index + join_point.get_capture_count();
@@ -1326,7 +1431,7 @@ impl<'program> CodeGen<'program>
 				}
 
 				assert!(default_join_point_id_opt.is_none());
-				SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)}
+				SplitPoint::Next { return_node_results : argument_node_results.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)}
 			}
 			ir::TailEdge::ScheduleCall { value_operation : value_operation_ref, callee_funclet_id : callee_scheduling_funclet_id_ref, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
@@ -1347,11 +1452,11 @@ impl<'program> CodeGen<'program>
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
 				// Step 1: Check current -> callee edge
-				let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
+				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
 					let slot_id = funclet_scoped_state.move_node_slot_id(* argument_node_id).unwrap();
-					argument_slot_ids.push(slot_id);
+					argument_node_results.push(NodeResult::Slot{slot_id});
 					let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
 					check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, callee_funclet_scheduling_extra.input_slots[& argument_index].value_tag);
 				}
@@ -1392,7 +1497,7 @@ impl<'program> CodeGen<'program>
 
 				assert!(default_join_point_id_opt.is_none());
 				let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : callee_value_funclet_id, scheduling_funclet_id : callee_scheduling_funclet_id, captures : vec![].into_boxed_slice(), continuation_join_point_id}));
-				SplitPoint::Next { return_slot_ids : argument_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id) }
+				SplitPoint::Next { return_node_results : argument_node_results.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id) }
 			}
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
@@ -1430,11 +1535,11 @@ impl<'program> CodeGen<'program>
 				assert_eq!(callee_arguments.len(), true_funclet.input_types.len());
 				assert_eq!(callee_arguments.len(), false_funclet.input_types.len());
 
-				let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
+				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
 					let slot_id = funclet_scoped_state.move_node_slot_id(* argument_node_id).unwrap();
-					argument_slot_ids.push(slot_id);
+					argument_node_results.push(NodeResult::Slot{slot_id});
 
 					assert_eq!(true_funclet.input_types[argument_index], false_funclet.input_types[argument_index]);
 					check_slot_type(& self.program, true_funclet.input_types[argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
@@ -1475,7 +1580,7 @@ impl<'program> CodeGen<'program>
 				}
 
 				assert!(default_join_point_id_opt.is_none());
-				SplitPoint::Select{return_slot_ids : argument_slot_ids.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}
+				SplitPoint::Select{return_node_results : argument_node_results.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}
 			}
 			_ => panic!("Umimplemented")
 		};

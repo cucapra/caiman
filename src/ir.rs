@@ -41,7 +41,7 @@ pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
-pub type FenceId = usize;
+pub type TimestampId = usize;
 //pub type LocalMetaVariableId = usize;
 pub type StorageTypeId = ffi::TypeId;
 
@@ -129,9 +129,9 @@ pub enum Type
 {
 	Integer { signed : bool, width : usize },
 
-	Slot{ storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
-
+	Slot { storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
+	Fence { queue_place : Place },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -189,7 +189,7 @@ pub struct SlotInfo
 	//pub queue_stage : ResourceQueueStage,
 	//pub queue_place : Place,
 	//pub resource_id : ...
-	//pub fence_id : FenceId
+	//pub timestamp_id_opt : Option<TimestampId>
 }
 
 // Funclet-relative join info goes here
@@ -200,10 +200,9 @@ pub struct JoinInfo
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Fence
+pub struct FenceInfo
 {
-	pub prior_fence_ids : Box<[FenceId]>,
-	pub place : Place
+	pub timestamp_id : TimestampId,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -212,8 +211,10 @@ pub struct SchedulingFuncletExtra
 	pub value_funclet_id : FuncletId,
 	pub input_slots : HashMap<usize, SlotInfo>,
 	pub output_slots : HashMap<usize, SlotInfo>,
+	pub input_fences : HashMap<usize, FenceInfo>,
+	pub output_fences : HashMap<usize, FenceInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
-	pub fences : BTreeMap<FenceId, Fence>,
+	pub timestamps : BTreeSet<TimestampId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
