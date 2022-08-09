@@ -136,8 +136,9 @@ pub enum ValueTag
 pub enum Type
 {
 	// Value types
+	Integer { signed : bool, width : usize },
 
-	F32,
+	/*F32,
 	F64,
 	U8,
 	U16,
@@ -156,7 +157,7 @@ pub enum Type
 	ConstRef { element_type : TypeId },
 	MutRef { element_type : TypeId },
 	ConstSlice { element_type : TypeId },
-	MutSlice { element_type : TypeId },
+	MutSlice { element_type : TypeId },*/
 
 	Slot{ storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 

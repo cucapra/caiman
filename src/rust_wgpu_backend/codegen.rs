@@ -878,11 +878,11 @@ impl<'program> CodeGen<'program>
 						_ => panic!("Funclet #{} at node #{} {:?}: Node #{} does not have multiple returns {:?}", funclet_id, current_node_id, node, node_id, placement_state)
 					}
 				}
-				ir::Node::AllocTemporary{ place, type_id, operation } =>
+				ir::Node::AllocTemporary{ place, storage_type, operation } =>
 				{
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
-					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* type_id, * place, ir::ResourceQueueStage::None);
+					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * place, ir::ResourceQueueStage::None);
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
 
 					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
@@ -894,7 +894,7 @@ impl<'program> CodeGen<'program>
 						ir::Place::Local => (),
 						ir::Place::Gpu =>
 						{
-							let var_id = self.code_generator.build_create_buffer(* type_id);
+							let var_id = self.code_generator.build_create_buffer(* storage_type);
 							placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::None, var_id);
 						}
 					}
