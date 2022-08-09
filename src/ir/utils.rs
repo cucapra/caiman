@@ -4,6 +4,14 @@ use crate::ir::*;
 use std::cmp::Ordering;
 use std::collections::hash_map::{Entry, HashMap};
 
+/// Utility function for when you want to easily iterate over the successors of a funclet.
+fn next_funclets<'a>(program: &'a Program, id: FuncletId) -> impl 'a + Iterator<Item = FuncletId> {
+    program.funclets[&id]
+        .tail_edge
+        .jumps()
+        .map(|jump| jump.target)
+}
+
 /// A "reducible group"; all control flow between funclets within the same reducible group
 /// is reducible.
 struct RGroup {
@@ -35,12 +43,12 @@ fn minimal_rgroups(program: &Program) -> Vec<RGroup> {
         });
         map.insert(id, index);
     }
-    for id in program.funclets.keys() {
-        program.funclets[id].tail_edge.for_each_funclet(|next| {
-            if *id != next {
-                rgroups[map[&next]].incoming.push(map[id]);
+    for id in program.funclets.keys().copied() {
+        for next in next_funclets(program, id) {
+            if id != next {
+                rgroups[map[&next]].incoming.push(map[&id]);
             }
-        });
+        }
     }
     rgroups
 }
@@ -124,9 +132,12 @@ pub fn make_reducible(program: &mut Program) -> HashMap<FuncletId, FuncletId> {
                 mapping.insert(copy, mapping.get(&funclet).copied().unwrap_or(funclet));
             }
             for funclet in rgroups[*pred].funclets.iter().chain(copies.values()) {
-                program.funclets[funclet].tail_edge.map_funclets(|id| {
-                    copies.get(&id).copied().unwrap_or(id) //
-                })
+                let tail = &mut program.funclets[funclet].tail_edge;
+                tail.jumps_mut().for_each(|jump| {
+                    if let Some(copy) = copies.get(&jump.target).copied() {
+                        jump.target = copy
+                    }
+                });
             }
         }
         rgroups = maximal_rgroups(program);
@@ -171,7 +182,7 @@ fn tag_loop_header(
 }
 
 fn traverse_loops_dfs(
-    funclets: &Arena<Funclet>,
+    program: &Program,
     loops: &mut HashMap<FuncletId, LoopTag>,
     current: FuncletId,
     dfsp_index: usize,
@@ -191,12 +202,12 @@ fn traverse_loops_dfs(
         }
     }
 
-    funclets[&current].tail_edge.for_each_funclet(|next| {
+    for next in next_funclets(program, current) {
         // pretty straightforward adaptation from the paper, except we don't bother with
         // irreducible loops
         match loops.entry(next) {
             Entry::Vacant(_) => {
-                let header = traverse_loops_dfs(funclets, loops, next, dfsp_index + 1);
+                let header = traverse_loops_dfs(program, loops, next, dfsp_index + 1);
                 tag_loop_header(loops, current, header);
             }
             Entry::Occupied(mut entry) => {
@@ -212,7 +223,7 @@ fn traverse_loops_dfs(
                 }
             }
         }
-    });
+    }
 
     // reset dfsp index & return the innermost loop header
     let entry = loops.get_mut(&current).unwrap();
@@ -246,7 +257,7 @@ impl Loops {
 pub fn identify_loops(program: &Program, entry: FuncletId) -> Loops {
     // Adapted from http://lenx.100871.net/papers/loop-SAS.pdf
     let mut loops = HashMap::new();
-    traverse_loops_dfs(&program.funclets, &mut loops, entry, 1);
+    traverse_loops_dfs(&program, &mut loops, entry, 1);
 
     let mut headers = Vec::new();
     let mut header_map = HashMap::new();
@@ -287,13 +298,17 @@ fn recalc_idom(nodes: &[AnalysisEntry], mut dom_a: usize, mut dom_b: usize) -> u
     }
 }
 
-pub fn analyze(program: &Program, entry: FuncletId) -> Analysis {
+pub fn analyze<F, I>(head: FuncletId, get_tails: F) -> Analysis
+where
+    F: Fn(FuncletId) -> I,
+    I: IntoIterator<Item = FuncletId>,
+{
     // This is loosely based on http://www.hipersoft.rice.edu/grads/publications/dom14.pdf
     let mut lookup = HashMap::new();
     let mut entries: Vec<AnalysisEntry> = Vec::new();
 
     let mut stack = Vec::new();
-    stack.push((entry, 0));
+    stack.push((head, 0));
 
     while let Some((id, pred_index)) = stack.pop() {
         let index = match lookup.entry(id) {
@@ -321,9 +336,9 @@ pub fn analyze(program: &Program, entry: FuncletId) -> Analysis {
                 index
             }
         };
-        program.funclets[&id]
-            .tail_edge
-            .for_each_funclet(|target| stack.push((target, index)));
+        get_tails(index)
+            .into_iter()
+            .for_each(|target| stack.push((target, index)));
     }
     // fixup the entry node, which had a dummy pred added
     entries[0].preds.remove(0);
@@ -442,7 +457,7 @@ mod tests {
                     assert!(reduce_output.is_empty());
                     let expected: &[(&[FuncletId], &[FuncletId])] = &[ $( ($loops, $doms) ),* ];
                     let loops = utils::identify_loops(&program, 0);
-                    let analysis = utils::analyze(&program, 0);
+                    let analysis = utils::analyze(0, |id| utils::next_funclets(&program, id));
                     for i in 0..expected.len() {
                         let (expected_loops, expected_doms) = expected[i];
 
@@ -551,7 +566,7 @@ mod tests {
                 fn $name() {
                     let mut program = utils::program_from_cfg(&[ $($tail),* ]);
                     let expected: &[&[FuncletId]] = &[ $($doms),* ];
-                    let analysis = utils::analyze(&program, 0);
+                    let analysis = utils::analyze(0, |id| utils::next_funclets(&program, id));
                     for i in 0..expected.len() {
                         let expected_doms = expected[i];
                         let mut actual_doms: Vec<_> = analysis.dominators(i).copied().collect();

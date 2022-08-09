@@ -1,5 +1,7 @@
 use std::collections::{HashMap, BTreeMap};
 use std::default::Default;
+use std::iter::{once, Once, Chain};
+
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
@@ -221,24 +223,53 @@ impl TailEdge {
 			}
 		}
 	}
-	pub fn for_each_funclet(&self, mut f: impl FnMut(FuncletId)) {
+	pub fn jumps(&self) -> impl Iterator<Item = &'_ Jump> {
 		match self {
-			Self::Return { .. } => (),
-			Self::Jump(jump) => f(jump.target),
-			Self::Branch { j0, j1, ..} => { f(j0.target); f(j1.target)}
+			Self::Return { .. } => TailJumps::Return,
+			Self::Jump(jump) => TailJumps::Jump(once(jump)),
+			Self::Branch { j0, j1, .. } => TailJumps::Branch(once(j0).chain(once(j1)))
 		}
 	}
-	pub fn map_funclets(&mut self, mut f: impl FnMut(FuncletId) -> FuncletId) {
+	pub fn jumps_mut(&mut self) -> impl Iterator<Item = &'_ mut Jump> {
 		match self {
-			Self::Return { .. } => (),
-			Self::Jump(jump) => jump.target = f(jump.target),
-			Self::Branch { j0, j1, .. } => {
-				j0.target = f(j0.target);
-				j1.target = f(j1.target);
-			}
-		};
+			Self::Return { .. } => TailJumpsMut::Return,
+			Self::Jump(jump) => TailJumpsMut::Jump(once(jump)),
+			Self::Branch { j0, j1, .. } => TailJumpsMut::Branch(once(j0).chain(once(j1)))
+		}
 	}
 }
+
+enum TailJumps<'a> {
+    Return,
+    Jump(Once<&'a Jump>),
+    Branch(Chain<Once<&'a Jump>, Once<&'a Jump>>),
+}
+impl<'a> Iterator for TailJumps<'a> {
+    type Item = &'a Jump;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Return => None,
+            Self::Jump(ref mut iter) => iter.next(),
+            Self::Branch(ref mut iter) => iter.next(),
+        }
+    }
+}
+enum TailJumpsMut<'a> {
+    Return,
+    Jump(Once<&'a mut Jump>),
+    Branch(Chain<Once<&'a mut Jump>, Once<&'a mut Jump>>),
+}
+impl<'a> Iterator for TailJumpsMut<'a> {
+    type Item = &'a mut Jump;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Return => None,
+            Self::Jump(ref mut iter) => iter.next(),
+            Self::Branch(ref mut iter) => iter.next(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind
 {
