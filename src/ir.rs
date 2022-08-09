@@ -5,6 +5,8 @@ use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
 use crate::arena::Arena;
 
+pub use crate::rust_wgpu_backend::ffi as ffi;
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Place
 {
@@ -40,6 +42,7 @@ pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
 pub type FenceId = usize;
 //pub type LocalMetaVariableId = usize;
+pub type StorageTypeId = ffi::TypeId;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
@@ -57,6 +60,7 @@ macro_rules! lookup_abstract_type {
 	(RemoteOperation) => { RemoteNodeId };
 	(Place) => { Place };
 	(Funclet) => { FuncletId };
+	(StorageType) => { StorageTypeId };
 }
 
 macro_rules! map_refs {
@@ -154,7 +158,7 @@ pub enum Type
 	ConstSlice { element_type : TypeId },
 	MutSlice { element_type : TypeId },
 
-	Slot{ value_type : TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
+	Slot{ storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 
 	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
 }
@@ -256,7 +260,7 @@ pub struct ValueFuncletExtra
 	pub compatible_value_functions : BTreeSet<CompatibleValueFunctionKey>
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/*#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalCpuFunction
 {
 	pub name : String,
@@ -292,7 +296,7 @@ pub struct ExternalGpuFunction
 	pub resource_bindings : Box<[ExternalGpuFunctionResourceBinding]>,
 	pub shader_module_content : ShaderModuleContent,
 	//pub shader_module : usize,
-}
+}*/
 
 // A value function is just an equivalence class over functions that behave identically at the value level
 // A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
@@ -328,15 +332,17 @@ pub struct Pipeline
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Program
 {
+	#[serde(default)]
+	pub native_interface : ffi::NativeInterface,
 	//pub types : HashMap<usize, Type>,
 	#[serde(default)]
 	pub types : Arena<Type>,
 	#[serde(default)]
 	pub funclets : Arena<Funclet>,
-	#[serde(default)]
-	pub external_cpu_functions : Vec<ExternalCpuFunction>,
-	#[serde(default)]
-	pub external_gpu_functions : Vec<ExternalGpuFunction>,
+	//#[serde(default)]
+	//pub external_cpu_functions : Vec<ExternalCpuFunction>,
+	//#[serde(default)]
+	//pub external_gpu_functions : Vec<ExternalGpuFunction>,
 	#[serde(default)]
 	pub value_functions : Arena<ValueFunction>,
 	#[serde(default)]

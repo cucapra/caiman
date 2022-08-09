@@ -68,7 +68,7 @@ struct ValueInstance
 #[derive(Debug)]
 struct Slot
 {
-	type_id : ir::TypeId,
+	type_id : ir::ffi::TypeId,
 	value_tag_opt : Option<ir::ValueTag>,
 	//value_instance_id_opt : Option<ValueInstanceId>,
 	timestamp : LogicalTimestamp,
@@ -117,7 +117,7 @@ impl SchedulingState
 		Self{ place_states, .. Default::default() }
 	}
 
-	pub fn insert_hacked_slot(&mut self, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage) -> SlotId
+	pub fn insert_hacked_slot(&mut self, type_id : ir::ffi::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage) -> SlotId
 	{
 		let timestamp = self.get_local_time();
 		let slot = Slot{type_id, value_tag_opt : None, /*value_instance_id_opt : None,*/ timestamp, queue_place, queue_stage, state_binding : StateBinding::TemporaryHack};
@@ -179,7 +179,7 @@ impl SchedulingState
 		self.slots[& slot_id.0].value_tag_opt
 	}*/
 
-	pub fn get_slot_type_id(&self, slot_id : SlotId) -> ir::TypeId
+	pub fn get_slot_type_id(&self, slot_id : SlotId) -> ir::ffi::TypeId
 	{
 		self.slots[& slot_id.0].type_id
 	}

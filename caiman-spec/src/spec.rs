@@ -40,6 +40,7 @@ pub enum OperationInputKind
 	ValueFunction,
 	Funclet,
 	RemoteOperation,
+	StorageType
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

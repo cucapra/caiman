@@ -387,22 +387,39 @@ fn check_value_tag_compatibility_interior(program : & ir::Program, source_value_
 	}
 }
 
-fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage, value_type_opt : Option<ir::TypeId>)
+fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage, storage_type_opt : Option<ir::TypeId>)
 {
 	match & program.types[& type_id]
 	{
-		ir::Type::Slot { value_type : value_type_2, queue_stage : queue_stage_2, queue_place : queue_place_2 } =>
+		ir::Type::Slot { storage_type : storage_type_2, queue_stage : queue_stage_2, queue_place : queue_place_2 } =>
 		{
 			assert_eq!(* queue_place_2, queue_place);
 			assert_eq!(* queue_stage_2, queue_stage);
-			if let Some(value_type) = value_type_opt
+			/*if let Some(storage_type) = storage_type_opt
 			{
-				assert_eq!(value_type, * value_type_2);
-			}
+				assert_eq!(storage_type, * storage_type_2);
+			}*/
 			// To do: Fence
 		}
 		_ => panic!("Not a slot type")
 	}
+}
+
+fn get_slot_type_storage_type(program : & ir::Program, type_id : ir::TypeId) -> ir::ffi::TypeId
+{
+	match & program.types[& type_id]
+	{
+		ir::Type::Slot { storage_type, queue_stage : _, queue_place : _ } =>
+		{
+			* storage_type
+		}
+		_ => panic!("Not a slot type")
+	}
+}
+
+fn check_storage_type_implements_value_type(program : & ir::Program, storage_type_id : ir::ffi::TypeId, value_type_id : ir::TypeId)
+{
+
 }
 
 #[derive(Default)]
@@ -430,7 +447,7 @@ impl<'program> CodeGen<'program>
 {
 	pub fn new(program : & 'program ir::Program) -> Self
 	{
-		Self { program : & program, code_generator : CodeGenerator::new(program.types.clone(), program.external_cpu_functions.as_slice(), program.external_gpu_functions.as_slice()), print_codegen_debug_info : false }
+		Self { program : & program, code_generator : CodeGenerator::new(& program.native_interface/*, program.types.clone(), program.external_cpu_functions.as_slice(), program.external_gpu_functions.as_slice()*/), print_codegen_debug_info : false }
 	}
 
 	pub fn set_print_codgen_debug_info(&mut self, to : bool)
@@ -473,7 +490,7 @@ impl<'program> CodeGen<'program>
 		{
 			ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 			{
-				let function = & self.program.external_gpu_functions[* external_function_id];
+				let function = & self.program.native_interface.external_gpu_functions[external_function_id];
 
 				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
@@ -537,9 +554,10 @@ impl<'program> CodeGen<'program>
 				assert_eq!(output_slot_ids.len(), 1);
 
 				let slot_id = output_slot_ids[0];
-				let variable_id = self.code_generator.build_constant_integer(* value, * type_id);
+				let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
+				let variable_id = self.code_generator.build_constant_integer(* value, storage_type_id);
+				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
-				assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 
@@ -551,9 +569,10 @@ impl<'program> CodeGen<'program>
 				assert_eq!(output_slot_ids.len(), 1);
 
 				let slot_id = output_slot_ids[0];
-				let variable_id = self.code_generator.build_constant_unsigned_integer(* value, * type_id);
+				let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
+				let variable_id = self.code_generator.build_constant_unsigned_integer(* value, storage_type_id);
+				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
-				assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
 				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 
@@ -585,7 +604,7 @@ impl<'program> CodeGen<'program>
 			}
 			ir::Node::CallExternalCpu { external_function_id, arguments } =>
 			{
-				let function = & self.program.external_cpu_functions[* external_function_id];
+				let function = & self.program.native_interface.external_cpu_functions[external_function_id];
 
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
@@ -620,7 +639,9 @@ impl<'program> CodeGen<'program>
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
-		let argument_variable_ids = self.code_generator.begin_funclet(funclet_id, &funclet.input_types, &funclet.output_types);
+		let input_types = funclet.input_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		let output_types = funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		let argument_variable_ids = self.code_generator.begin_funclet(funclet_id, & input_types, & output_types);
 
 		let mut placement_state = PlacementState::new();
 		let mut argument_slot_ids = Vec::<scheduling_state::SlotId>::new();
@@ -633,9 +654,9 @@ impl<'program> CodeGen<'program>
 				
 				match & self.program.types[input_type_id]
 				{
-					ir::Type::Slot { value_type, queue_stage, queue_place } =>
+					ir::Type::Slot { storage_type, queue_stage, queue_place } =>
 					{
-						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* value_type, * queue_place, * queue_stage);
+						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * queue_place, * queue_stage);
 						placement_state.slot_variable_ids.insert(slot_id, argument_variable_ids[index]);
 						argument_slot_ids.push(slot_id);
 					}
@@ -705,19 +726,20 @@ impl<'program> CodeGen<'program>
 								let true_funclet = & self.program.funclets[& true_funclet_id];
 								let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
 								//true_funclet_extra.input_slots[& output_index].value_tag
-								let output_var_ids = self.code_generator.begin_if_else(condition_var_id, & true_funclet.output_types);
+								let output_types = true_funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+								let output_var_ids = self.code_generator.begin_if_else(condition_var_id, & output_types);
 								let mut output_slot_ids = Vec::<scheduling_state::SlotId>::new();
 								for (output_index, output_type) in true_funclet.output_types.iter().enumerate()
 								{
-									let (value_type, queue_stage, queue_place) = if let ir::Type::Slot{value_type, queue_stage, queue_place} = & self.program.types[output_type]
+									let (storage_type, queue_stage, queue_place) = if let ir::Type::Slot{storage_type, queue_stage, queue_place} = & self.program.types[output_type]
 									{
-										(* value_type, * queue_stage, * queue_place)
+										(* storage_type, * queue_stage, * queue_place)
 									}
 									else
 									{
 										panic!("Not a slot")
 									};
-									let slot_id = placement_state.scheduling_state.insert_hacked_slot(value_type, queue_place, queue_stage);
+									let slot_id = placement_state.scheduling_state.insert_hacked_slot(storage_type, queue_place, queue_stage);
 									output_slot_ids.push(slot_id);
 								}
 								current_funclet_id_opt = Some(true_funclet_id);
@@ -804,7 +826,7 @@ impl<'program> CodeGen<'program>
 
 			match & self.program.types[input_type_id]
 			{
-				ir::Type::Slot { value_type, queue_stage, queue_place } =>
+				ir::Type::Slot { storage_type, queue_stage, queue_place } =>
 				{
 					let tag = match slot_info.value_tag
 					{
@@ -1385,7 +1407,9 @@ impl<'program> CodeGen<'program>
 			}
 		}
 
-		self.code_generator.emit_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
+		let input_types = entry_funclet.input_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		let output_types = entry_funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		self.code_generator.emit_pipeline_entry_point(entry_funclet_id, & input_types, & output_types);
 		
 		/*match & entry_funclet.tail_edge
 		{

@@ -36,6 +36,7 @@ fn input_type(input: &spec::OperationInput) -> String {
         OK::ExternalGpuFunction => "ExternalGpuFunction",
         OK::ValueFunction => "ValueFunction",
         OK::Funclet => "Funclet",
+        OK::StorageType => "StorageType",
     };
     if input.is_array {
         format!("[{base}]")

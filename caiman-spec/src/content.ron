@@ -125,7 +125,7 @@
 			name : "AllocTemporary",
 			inputs : [
 				(name : "place", kind : Place),
-				(name : "type_id", kind : Type),
+				(name : "type_id", kind : StorageType),
 				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
