@@ -132,6 +132,17 @@
 			language_set : (functional : false, scheduling: true, intrinsic : true),
 			has_local_side_effect : true
 		),
+		(
+			name : "Forward",
+			inputs : [
+				(name : "place", kind : Place),
+				(name : "storage_type", kind : StorageType),
+				(name : "operation", kind : RemoteOperation)
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, intrinsic : false),
+			has_local_side_effect : true
+		),
 
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(

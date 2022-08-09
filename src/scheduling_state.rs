@@ -194,6 +194,21 @@ impl SchedulingState
 		self.slots[& slot_id.0].queue_place
 	}
 
+	pub fn discard_slot(&mut self, slot_id : SlotId)
+	{
+		let slot = &mut self.slots[& slot_id.0];
+		assert!(slot.queue_stage < ir::ResourceQueueStage::Dead);
+		slot.queue_stage = ir::ResourceQueueStage::Dead;
+	}
+
+	pub fn forward_slot(&mut self, destination_slot_id : SlotId, source_slot_id : SlotId)
+	{
+		assert!(self.slots[& source_slot_id.0].queue_stage < ir::ResourceQueueStage::Dead);
+		assert!(self.slots[& destination_slot_id.0].queue_stage == ir::ResourceQueueStage::Unbound);
+		self.slots[& destination_slot_id.0].queue_stage = ir::ResourceQueueStage::None;
+		self.slots[& source_slot_id.0].queue_stage = ir::ResourceQueueStage::Dead;
+	}
+
 	pub fn advance_queue_stage(&mut self, slot_id : SlotId, to : ir::ResourceQueueStage)
 	{
 		let slot = &mut self.slots[& slot_id.0];

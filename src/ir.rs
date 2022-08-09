@@ -18,7 +18,8 @@ pub enum Place
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ResourceQueueStage
 {
-	None,
+	Unbound,
+	None, // Bound
 	Encoded,
 	Submitted,
 	Ready,
@@ -108,15 +109,6 @@ macro_rules! make_nodes {
 
 with_operations!(make_nodes);
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct StructField
-{
-	pub name : String,
-	pub type_id : TypeId,
-	pub byte_offset : usize,
-	pub byte_size : usize,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueTag
 {
@@ -135,29 +127,7 @@ pub enum ValueTag
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
-	// Value types
 	Integer { signed : bool, width : usize },
-
-	/*F32,
-	F64,
-	U8,
-	U16,
-	U32,
-	U64,
-	I8,
-	I16,
-	I32,
-	I64,
-	Array { element_type : TypeId, length : usize },
-	Struct { fields : Box<[StructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
-	Tuple { fields : Box<[TypeId]> },
-
-	// Resource types
-
-	ConstRef { element_type : TypeId },
-	MutRef { element_type : TypeId },
-	ConstSlice { element_type : TypeId },
-	MutSlice { element_type : TypeId },*/
 
 	Slot{ storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 
@@ -261,44 +231,6 @@ pub struct ValueFuncletExtra
 	pub compatible_value_functions : BTreeSet<CompatibleValueFunctionKey>
 }
 
-/*#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalCpuFunction
-{
-	pub name : String,
-	pub input_types : Box<[TypeId]>,
-	pub output_types : Box<[TypeId]>,
-}
-
-// This describes the initial mapping from the binding in the shader to the IR
-// It's expected codegen will emit a module with a different mapping
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalGpuFunctionResourceBinding
-{
-	pub group : usize,
-	pub binding : usize,
-	pub input : Option<usize>,
-	pub output : Option<usize>
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ShaderModuleContent
-{
-	Wgsl(String)
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalGpuFunction
-{
-	pub name : String,
-	pub input_types : Box<[TypeId]>,
-	pub output_types : Box<[TypeId]>,
-	// Contains pipeline and single render pass state
-	pub entry_point : String,
-	pub resource_bindings : Box<[ExternalGpuFunctionResourceBinding]>,
-	pub shader_module_content : ShaderModuleContent,
-	//pub shader_module : usize,
-}*/
-
 // A value function is just an equivalence class over functions that behave identically at the value level
 // A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -335,15 +267,10 @@ pub struct Program
 {
 	#[serde(default)]
 	pub native_interface : ffi::NativeInterface,
-	//pub types : HashMap<usize, Type>,
 	#[serde(default)]
 	pub types : Arena<Type>,
 	#[serde(default)]
 	pub funclets : Arena<Funclet>,
-	//#[serde(default)]
-	//pub external_cpu_functions : Vec<ExternalCpuFunction>,
-	//#[serde(default)]
-	//pub external_gpu_functions : Vec<ExternalGpuFunction>,
 	#[serde(default)]
 	pub value_functions : Arena<ValueFunction>,
 	#[serde(default)]

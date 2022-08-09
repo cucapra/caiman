@@ -189,6 +189,14 @@ impl PlacementState
 		self.scheduling_state.advance_queue_stage(slot_id, stage);
 	}
 
+	/*fn forward_slot(&mut self, destination_slot_id : scheduling_state::SlotId, source_slot_id : scheduling_state::SlotId, stage)
+	{
+		assert!(! self.slot_variable_ids.contains_key(& destination_slot_id));
+		assert!(self.slot_variable_ids.contains_key(& source_slot_id));
+
+		self.slot_variable_ids.insert(destination_slot_id, self.slot_variable_ids[& source_slot_id]);
+	}*/
+
 	fn get_slot_var_ids(&self, slot_ids : &[scheduling_state::SlotId], place : ir::Place) -> Option<Box<[usize]>>
 	{
 		let mut var_ids = Vec::<usize>::new();
@@ -419,7 +427,16 @@ fn get_slot_type_storage_type(program : & ir::Program, type_id : ir::TypeId) -> 
 
 fn check_storage_type_implements_value_type(program : & ir::Program, storage_type_id : ir::ffi::TypeId, value_type_id : ir::TypeId)
 {
-
+	let storage_type = & program.native_interface.types[& storage_type_id.0];
+	let value_type = & program.types[& value_type_id];
+	/*match value_type
+	{
+		ir::Type::Integer{signed, width} =>
+		{
+			()
+		}
+		_ => panic!("Unsupported")
+	}*/
 }
 
 #[derive(Default)]
@@ -503,6 +520,44 @@ impl<'program> CodeGen<'program>
 					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
 				}
 
+				let mut input_slot_counts = HashMap::<scheduling_state::SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
+				let mut output_slot_bindings = HashMap::<scheduling_state::SlotId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
+				for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
+				{
+					if let Some(index) = resource_binding.input
+					{
+						* input_slot_counts.get_mut(& input_slot_ids[index]).unwrap() += 1;
+					}
+
+					if let Some(index) = resource_binding.output
+					{
+						* output_slot_bindings.get_mut(& output_slot_ids[index]).unwrap() = Some(binding_index);
+					}
+				}
+
+				for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
+				{
+					if let Some(output_index) = resource_binding.output
+					{
+						let output_slot_id = output_slot_ids[output_index];
+						assert_eq!(input_slot_counts[& output_slot_id], 0);
+						assert_eq!(output_slot_bindings[& output_slot_id], Some(binding_index));
+
+						if let Some(input_index) = resource_binding.input
+						{
+							let input_slot_id = input_slot_ids[input_index];
+							assert_eq!(input_slot_counts[& input_slot_id], 1);
+
+							assert_eq!(placement_state.scheduling_state.get_slot_type_id(input_slot_id), placement_state.scheduling_state.get_slot_type_id(output_slot_id));
+
+							placement_state.scheduling_state.forward_slot(output_slot_id, input_slot_id);
+							let var_id = placement_state.slot_variable_ids.remove(& input_slot_id).unwrap();
+							let old = placement_state.slot_variable_ids.insert(output_slot_id, var_id);
+							assert!(old.is_none());
+						}
+					}
+				}
+
 				use std::convert::TryInto;
 				use std::iter::FromIterator;
 				//use core::slice::SlicePattern;
@@ -525,9 +580,11 @@ impl<'program> CodeGen<'program>
 				};
 				let dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(dimension_map)).into_boxed_slice();
 				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(argument_map)).into_boxed_slice();
+				let output_var_ids = output_slot_ids.iter().map(|x| placement_state.get_slot_var_id(* x).unwrap()).collect::<Box<[usize]>>();
 
 				let dimensions_slice : &[usize] = & dimension_var_ids;
-				let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
+				//let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
+				self.code_generator.build_compute_dispatch_with_outputs(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids, & output_var_ids);
 
 				for (index, output_type_id) in function.output_types.iter().enumerate()
 				{
@@ -536,7 +593,7 @@ impl<'program> CodeGen<'program>
 					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * output_type_id);
 					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::None);
 					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu);
-					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Encoded, raw_outputs[index]);
+					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Encoded, output_var_ids[index]);
 				}
 			}
 			_ => panic!("Node cannot be encoded to the gpu")
@@ -898,6 +955,15 @@ impl<'program> CodeGen<'program>
 							placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::None, var_id);
 						}
 					}
+				}
+				ir::Node::Forward { place, storage_type, operation } =>
+				{
+					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
+
+					let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * place, ir::ResourceQueueStage::Unbound);
+					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
+
+					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
 				}
 				ir::Node::EncodeDo { place, operation, inputs, outputs } =>
 				{

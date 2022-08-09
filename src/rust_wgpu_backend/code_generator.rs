@@ -301,7 +301,7 @@ impl<'program> CodeGenerator<'program>
 		self.active_shader_module_key = Some(shader_module_key);
 	}
 
-	fn set_active_bindings(&mut self, argument_vars : &[usize], output_vars : &[usize]) -> Box<[usize]>
+	fn set_active_bindings(&mut self, argument_vars : &[usize], output_vars : &[usize])// -> Box<[usize]>
 	{
 		let external_function_id = self.active_external_gpu_function_id.unwrap();
 		let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
@@ -337,8 +337,9 @@ impl<'program> CodeGenerator<'program>
 			let binding = input_binding_map[& input_index];
 			if let (_, Some(_output)) = bindings[& binding]
 			{
-				let variable_id = self.build_create_buffer_with_buffer_data(input_variable_id, type_id);
-				input_staging_variables.push(variable_id);
+				//panic!("Incorrectly handled");
+				//let variable_id = self.build_create_buffer_with_buffer_data(input_variable_id, type_id);
+				input_staging_variables.push(input_variable_id);
 			}
 			else
 			{
@@ -352,13 +353,16 @@ impl<'program> CodeGenerator<'program>
 			let binding = output_binding_map[& output_index];
 			if let (Some(input), _) = bindings[& binding]
 			{
+				//panic!("Incorrectly handled");
 				let variable_id = input_staging_variables[input];
+				assert_eq!(variable_id, output_vars[output_index]);
 				output_staging_variables.push(variable_id);
 			}
 			else
 			{
 				let type_id = external_gpu_function.output_types[output_index];
-				let variable_id = self.build_create_buffer(type_id);
+				//let variable_id = self.build_create_buffer(type_id);
+				let variable_id = output_vars[output_index];
 				output_staging_variables.push(variable_id);
 			}
 		};
@@ -389,7 +393,7 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "let bind_group = instance.state.get_device_mut().create_bind_group(& wgpu::BindGroupDescriptor {{label : None, layout : & instance.static_bind_group_layout_{}, entries : & entries}});\n", invocation_id);
 		write!(self.code_writer, "let pipeline = & instance.static_pipeline_{};\n", invocation_id);
 
-		output_staging_variables.into_boxed_slice()
+		//output_staging_variables.into_boxed_slice()
 	}
 
 	fn begin_command_encoding(&mut self)
@@ -466,7 +470,8 @@ impl<'program> CodeGenerator<'program>
 		assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 
 		self.set_active_external_gpu_function(external_function_id);
-		let output_staging_variables = self.set_active_bindings(argument_vars, output_vars);
+		//let output_staging_variables = 
+		self.set_active_bindings(argument_vars, output_vars);
 		
 		self.begin_command_encoding();
 
@@ -499,7 +504,7 @@ impl<'program> CodeGenerator<'program>
 		let mut output_temp_variables = Vec::<usize>::new();
 		for output_index in 0 .. external_gpu_function.output_types.len()
 		{
-			let staging_var_id = output_staging_variables[output_index];
+			let staging_var_id = output_vars[output_index];
 			let type_id = external_gpu_function.output_types[output_index];
 			let range_var_id = self.variable_tracker.generate();
 			let output_temp_var_id = self.variable_tracker.generate();
@@ -1511,12 +1516,12 @@ impl<'program> CodeGenerator<'program>
 		variable_id
 	}
 
-	pub fn build_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize]) -> Box<[usize]>
+	/*pub fn build_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize]) -> Box<[usize]>
 	{
 		let output_vars = self.generate_compute_dispatch_outputs(external_function_id);
 		self.generate_compute_dispatch(external_function_id, dimension_vars, argument_vars, & output_vars);
 		return output_vars;
-	}
+	}*/
 
 	pub fn build_compute_dispatch_with_outputs(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[usize; 3], argument_vars : &[usize], output_vars : &[usize])
 	{
