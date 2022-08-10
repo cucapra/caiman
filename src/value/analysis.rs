@@ -73,6 +73,10 @@ impl BlockArgs {
     fn delete(&mut self, index: usize) {
         self.args[index] = None;
     }
+    // An iterator over the current arguments (that is, all which haven't been deleted)
+    fn args(&self) -> impl Iterator<Item = &'_ GraphId> {
+        self.args.iter().filter_map(Option::as_ref)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -315,6 +319,13 @@ impl Analysis {
     }
     pub fn head(&self) -> ir::FuncletId {
         self.head
+    }
+    /// Returns an iterator over the nodes which the given funclet references. This
+    /// includes all nodes *currently* referenced by a tail edge and their recursive dependencies.
+    /// Funclet outputs which were inlined/deleted are *not* considered required.
+    pub fn referenced(&self, id: ir::FuncletId) -> impl Iterator<Item = &'_ GraphId> {
+        let jumps = self.blocks[&id].tail.jumps();
+        jumps.map(|j| j.args.args()).flatten()
     }
 }
 

@@ -1,5 +1,5 @@
 use super::*;
-use std::collections::hash_map::{Entry, HashMap, VacantEntry};
+use std::collections::hash_map::{Entry, HashMap};
 use std::hash::Hash;
 use std::rc::Rc;
 
@@ -84,13 +84,17 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
             depth: 0,
         }
     }
+    /// Pushes a new scope. The old values will remain available, but may be temporarily
+    /// overwritten by new insertions until the scope is popped.
     pub fn push_scope(&mut self) {
         self.journal.push(ShmRecord::Scope);
         self.depth += 1;
     }
+    /// Pops the current scope.
     /// # Panics
     /// Panics if no scope has been pushed.
     pub fn pop_scope(&mut self) {
+        self.depth -= 1;
         loop {
             match self.journal.pop().expect("no scopes") {
                 ShmRecord::Scope => return,
@@ -104,7 +108,6 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
                 }
             }
         }
-        self.depth -= 1;
     }
     pub fn get(&self, key: &K) -> Option<&'_ V> {
         self.hashmap.get(key).map(|sv| &sv.value)
@@ -120,7 +123,8 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
                 std::mem::swap(&mut value, existing.get_mut());
                 // replaced within same depth: no expecation that old val is saved,
                 // so no action needs to be taken
-                if value.depth != self.depth {
+                assert!(value.depth <= self.depth, "a scope wasn't cleared");
+                if value.depth < self.depth {
                     self.replaced.push(value);
                     self.journal.push(ShmRecord::Replace(key));
                 }
@@ -136,23 +140,53 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
     }
 }
 
-type NodeMemo = ScopedHashMap<Node, ()>;
-fn codegen_funclet(id: ir::FuncletId, memo: &mut NodeMemo) {
-    todo!()
+/// The "global location" of an IR node within the generated program.
+struct Location {
+    /// The ID of the funclet containing this IR node.
+    funclet_id: ir::FuncletId,
+    /// The ID of the IR node within the above funclet's node array.
+    node_id: ir::NodeId,
 }
-fn elaborate_funclet(id: ir::FuncletId, memo: &mut NodeMemo, domtree: &ir::utils::DomTree) {
-    memo.push_scope();
 
-    codegen_funclet(id, memo);
-    for &next in domtree.immediately_dominated(id) {
-        elaborate_funclet(next, memo, domtree);
+type NodeMemo = ScopedHashMap<GraphId, Location>;
+
+struct ElaborationCtx<'a> {
+    graph: &'a GraphInner,
+    bdoms: ir::utils::BakedDoms,
+    domtree: ir::utils::DomTree,
+}
+impl<'a> ElaborationCtx<'a> {
+    fn new(graph: &'a GraphInner) -> Self {
+        let bdoms = graph.analysis.bake_dominators();
+        let domtree = bdoms.dominator_tree();
+        Self {
+            graph,
+            bdoms,
+            domtree,
+        }
     }
-
-    memo.pop_scope();
+    fn elaborate_node(&self, memo: &mut NodeMemo, gid: GraphId) {
+        // canonicalize GID, so gid1 == gid2 <=> node1 == node2
+        let gid = self.graph.find(gid);
+        if let Some(location) = memo.get(&gid) {
+            todo!()
+        }
+        todo!()
+    }
+    fn elaborate_funclet(&self, memo: &mut NodeMemo, id: ir::FuncletId) {
+        memo.push_scope();
+        for &gid in self.graph.analysis.referenced(id) {
+            self.elaborate_node(memo, gid);
+        }
+        for &next in self.domtree.immediately_dominated(id) {
+            self.elaborate_funclet(memo, next);
+        }
+        memo.pop_scope();
+    }
 }
-pub fn the_thing_that_generates_code(graph: &GraphInner) {
-    let bdoms = graph.analysis.bake_dominators();
-    let domtree = bdoms.dominator_tree();
+
+pub fn elaborate(graph: &GraphInner, program: &mut ir::Program) {
+    let sctx = ElaborationCtx::new(graph);
     let mut memo = NodeMemo::new();
-    elaborate_funclet(graph.analysis.head(), &mut memo, &domtree)
+    sctx.elaborate_funclet(&mut memo, graph.analysis.head());
 }
