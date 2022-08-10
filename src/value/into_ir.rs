@@ -58,15 +58,22 @@ enum ShmRecord<K> {
     Insert(Rc<K>),
     Replace(Rc<K>),
 }
+struct ShmValue<V> {
+    value: V,
+    depth: usize,
+}
 pub struct ScopedHashMap<K, V> {
     /// The actual hashmap. Keys are reference countied to avoid potentially costly `clone`-s,
     /// since keys must live in both the hashmap and the `keys` structure.
-    hashmap: HashMap<Rc<K>, V>,
+    hashmap: HashMap<Rc<K>, ShmValue<V>>,
     /// A journal of the actions performed. This allows us to "rewind" when a scope is popped and
     /// undo all the changes we made in the reverse order.
     journal: Vec<ShmRecord<K>>,
     /// A stack of replaced values.
-    replaced: Vec<V>,
+    replaced: Vec<ShmValue<V>>,
+    /// Tracks the current depth. This is used to optimize replacing values at the current depth.
+    /// The user doesn't expect to recover the old values so they can be discarded.
+    depth: usize,
 }
 impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
     pub fn new() -> Self {
@@ -74,10 +81,12 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
             hashmap: HashMap::new(),
             journal: Vec::new(),
             replaced: Vec::new(),
+            depth: 0,
         }
     }
     pub fn push_scope(&mut self) {
         self.journal.push(ShmRecord::Scope);
+        self.depth += 1;
     }
     /// # Panics
     /// Panics if no scope has been pushed.
@@ -95,23 +104,35 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
                 }
             }
         }
+        self.depth -= 1;
     }
     pub fn get(&self, key: &K) -> Option<&'_ V> {
-        self.hashmap.get(key)
+        self.hashmap.get(key).map(|sv| &sv.value)
     }
-    pub fn insert(&mut self, key: K, mut value: V) {
+    pub fn insert(&mut self, key: K, value: V) {
         let key = Rc::new(key);
+        let mut value = ShmValue {
+            value,
+            depth: self.depth,
+        };
         match self.hashmap.entry(Rc::clone(&key)) {
             Entry::Occupied(mut existing) => {
                 std::mem::swap(&mut value, existing.get_mut());
-                self.replaced.push(value);
-                self.journal.push(ShmRecord::Replace(key));
+                // replaced within same depth: no expecation that old val is saved,
+                // so no action needs to be taken
+                if value.depth != self.depth {
+                    self.replaced.push(value);
+                    self.journal.push(ShmRecord::Replace(key));
+                }
             }
             Entry::Vacant(spot) => {
                 spot.insert(value);
                 self.journal.push(ShmRecord::Insert(key));
             }
         }
+    }
+    pub fn depth(&self) -> usize {
+        self.depth
     }
 }
 
