@@ -193,8 +193,6 @@ impl JoinGraph
 	}
 }
 
-// These don't handle the null timestamp -> first named timestamp case properly
-
 #[derive(Debug, Default)]
 struct TimeState
 {
@@ -207,7 +205,8 @@ struct TimeState
 #[derive(Debug, Default)]
 struct TimelineEnforcer
 {
-	place_time_states : HashMap<ir::Place, TimeState>
+	place_time_states : HashMap<ir::Place, TimeState>,
+	had_first_some : bool
 }
 
 impl TimelineEnforcer
@@ -223,12 +222,21 @@ impl TimelineEnforcer
 			let latest_slot_timestamp = LogicalTimestamp::new();
 			place_time_states.insert(* place, TimeState{slot_count : 0, external_timestamp_id_opt, earliest_logical_timestamp, latest_slot_timestamp});
 		}
-		Self { place_time_states }
+		Self { place_time_states, had_first_some : false }
 	}
 
 	fn record_slot_use(&mut self, place : ir::Place, timestamp : LogicalTimestamp, external_timestamp_id_opt : Option<ir::ExternalTimestampId>)
 	{
 		let time_state = self.place_time_states.get_mut(& place).unwrap();
+
+		// If we finally have something that isn't none, flush
+		if ! self.had_first_some && external_timestamp_id_opt.is_some()
+		{
+			self.had_first_some = true;
+			assert!(time_state.latest_slot_timestamp < timestamp);
+			* time_state = TimeState{slot_count : 0, external_timestamp_id_opt, earliest_logical_timestamp : timestamp, latest_slot_timestamp : timestamp};
+		}
+
 		time_state.latest_slot_timestamp = timestamp.max(time_state.latest_slot_timestamp);
 		assert!(time_state.earliest_logical_timestamp <= timestamp);
 		if time_state.slot_count > 0
@@ -259,14 +267,15 @@ impl TimelineEnforcer
 struct ExternalTimeState
 {
 	slot_count : usize,
-	external_timestamp_id_opt : Option<ir::ExternalTimestampId>,
+	destination_timestamp : Option<ir::ExternalTimestampId>,
 	latest_slot_timestamp : Option<ir::ExternalTimestampId>
 }
 
 #[derive(Debug, Default)]
 struct ExternalTimelineEnforcer
 {
-	place_time_states : HashMap<ir::Place, ExternalTimeState>
+	place_time_states : HashMap<ir::Place, ExternalTimeState>,
+	had_first_some : bool
 }
 
 impl ExternalTimelineEnforcer
@@ -276,28 +285,37 @@ impl ExternalTimelineEnforcer
 		let mut place_time_states = HashMap::<ir::Place, ExternalTimeState>::new();
 		for place in [ir::Place::Gpu, ir::Place::Local, ir::Place::Cpu].iter()
 		{
-			place_time_states.insert(* place, ExternalTimeState{slot_count : 0, external_timestamp_id_opt : None, latest_slot_timestamp : None});
+			place_time_states.insert(* place, ExternalTimeState{slot_count : 0, destination_timestamp : None, latest_slot_timestamp : None});
 		}
-		Self { place_time_states }
+		Self { place_time_states, had_first_some : false }
 	}
 
-	fn record_slot_use(&mut self, place : ir::Place, in_timestamp : Option<ir::ExternalTimestampId>, external_timestamp_id_opt : Option<ir::ExternalTimestampId>)
+	fn record_slot_use(&mut self, place : ir::Place, in_timestamp : Option<ir::ExternalTimestampId>, destination_timestamp : Option<ir::ExternalTimestampId>)
 	{
 		let time_state = self.place_time_states.get_mut(& place).unwrap();
+
+		// If we finally have something that isn't none, flush
+		if ! self.had_first_some && destination_timestamp.is_some()
+		{
+			self.had_first_some = true;
+			assert!(time_state.latest_slot_timestamp < in_timestamp);
+			* time_state = ExternalTimeState{slot_count : 0, destination_timestamp, latest_slot_timestamp : in_timestamp};
+		}
+
 		if time_state.slot_count > 0
 		{
 			assert_eq!(time_state.latest_slot_timestamp, in_timestamp);
-			assert_eq!(external_timestamp_id_opt, time_state.external_timestamp_id_opt);
+			assert_eq!(destination_timestamp, time_state.destination_timestamp);
 		}
 		else
 		{
 			time_state.latest_slot_timestamp = in_timestamp;
-			time_state.external_timestamp_id_opt = external_timestamp_id_opt;
+			time_state.destination_timestamp = destination_timestamp;
 		}
 		time_state.slot_count += 1;
 	}
 
-	fn record_fence_use(&mut self, place : ir::Place, in_timestamp : ir::ExternalTimestampId, external_timestamp_id : ir::ExternalTimestampId)
+	fn record_fence_use(&mut self, place : ir::Place, in_timestamp : ir::ExternalTimestampId, destination_timestamp : ir::ExternalTimestampId)
 	{
 		let time_state = self.place_time_states.get_mut(& place).unwrap();
 
@@ -306,12 +324,12 @@ impl ExternalTimelineEnforcer
 			assert!(old_timestamp_id < in_timestamp);
 		}
 
-		if let Some(old_timestamp_id) = time_state.external_timestamp_id_opt
+		if let Some(old_timestamp_id) = time_state.destination_timestamp
 		{
-			assert!(old_timestamp_id < external_timestamp_id);
+			assert!(old_timestamp_id < destination_timestamp);
 		}
 
-		* time_state = ExternalTimeState{slot_count : 0, external_timestamp_id_opt : Some(external_timestamp_id), latest_slot_timestamp : Some(in_timestamp)};
+		* time_state = ExternalTimeState{slot_count : 0, destination_timestamp : Some(destination_timestamp), latest_slot_timestamp : Some(in_timestamp)};
 	}
 }
 
