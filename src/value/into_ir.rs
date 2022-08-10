@@ -54,58 +54,62 @@ use std::rc::Rc;
 */
 
 enum ShmRecord<K> {
-    NewScope,
-    InsertKey(Rc<K>),
-}
-pub enum ShmEntry<'a, K, V> {
-    Occupied(&'a V),
-    Vacant(VacantEntry<'a, Rc<K>, V>),
+    Scope,
+    Insert(Rc<K>),
+    Replace(Rc<K>),
 }
 pub struct ScopedHashMap<K, V> {
     /// The actual hashmap. Keys are reference countied to avoid potentially costly `clone`-s,
     /// since keys must live in both the hashmap and the `keys` structure.
     hashmap: HashMap<Rc<K>, V>,
-    /// A record of the actions performed.
-    records: Vec<ShmRecord<K>>,
+    /// A journal of the actions performed. This allows us to "rewind" when a scope is popped and
+    /// undo all the changes we made in the reverse order.
+    journal: Vec<ShmRecord<K>>,
+    /// A stack of replaced values.
+    replaced: Vec<V>,
 }
 impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
     pub fn new() -> Self {
         Self {
             hashmap: HashMap::new(),
-            records: Vec::new(),
-        }
-    }
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            hashmap: HashMap::with_capacity(capacity),
-            records: Vec::with_capacity(capacity),
+            journal: Vec::new(),
+            replaced: Vec::new(),
         }
     }
     pub fn push_scope(&mut self) {
-        self.records.push(ShmRecord::NewScope);
+        self.journal.push(ShmRecord::Scope);
     }
     /// # Panics
     /// Panics if no scope has been pushed.
     pub fn pop_scope(&mut self) {
-        while let ShmRecord::InsertKey(k) = self.records.pop().expect("no scopes") {
-            let removed = self.hashmap.remove(&k);
-            assert!(removed.is_some(), "recorded key not in map");
+        loop {
+            match self.journal.pop().expect("no scopes") {
+                ShmRecord::Scope => return,
+                ShmRecord::Insert(k) => {
+                    let removed = self.hashmap.remove(&k);
+                    assert!(removed.is_some(), "inserted key not in map");
+                }
+                ShmRecord::Replace(k) => {
+                    let val = self.hashmap.get_mut(&k).expect("replaced key not in map");
+                    *val = self.replaced.pop().expect("out of sync w/ journal");
+                }
+            }
         }
     }
     pub fn get(&self, key: &K) -> Option<&'_ V> {
         self.hashmap.get(key)
     }
-    /// Adds a value to the hashmap at the current scope.
-    /// # Panics
-    /// Panics if a mapping for that key already exists.
-    pub fn add(&mut self, key: K, val: V) {
+    pub fn insert(&mut self, key: K, mut value: V) {
         let key = Rc::new(key);
-        let key2 = Rc::clone(&key);
-        match self.hashmap.entry(key) {
-            Entry::Occupied(_) => panic!("key already exists"),
+        match self.hashmap.entry(Rc::clone(&key)) {
+            Entry::Occupied(mut existing) => {
+                std::mem::swap(&mut value, existing.get_mut());
+                self.replaced.push(value);
+                self.journal.push(ShmRecord::Replace(key));
+            }
             Entry::Vacant(spot) => {
-                spot.insert(val);
-                self.records.push(ShmRecord::InsertKey(key2))
+                spot.insert(value);
+                self.journal.push(ShmRecord::Insert(key));
             }
         }
     }
