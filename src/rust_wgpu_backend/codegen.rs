@@ -47,7 +47,8 @@ struct RootJoinPoint
 {
 	value_funclet_id : ir::FuncletId,
 	input_types : Box<[ir::TypeId]>,
-	input_slot_value_tags : HashMap<usize, ir::ValueTag>
+	input_slot_value_tags : HashMap<usize, ir::ValueTag>,
+	input_external_timestamp_ids : HashMap<usize, ir::ExternalTimestampId>
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +136,28 @@ impl JoinPoint
 			}
 		}
 	}
+
+	fn get_scheduling_input_external_timestamp_id(&self, program : & ir::Program, index : usize) -> Option<ir::ExternalTimestampId>
+	{
+		match self
+		{
+			Self::SimpleJoinPoint(join_point) =>
+			{
+				let funclet = & program.funclets[& join_point.scheduling_funclet_id];
+				let extra = & program.scheduling_funclet_extras[& join_point.scheduling_funclet_id];
+				match & program.types[& funclet.input_types[index]]
+				{
+					ir::Type::Slot{..} => extra.input_slots[& index].external_timestamp_id_opt,
+					ir::Type::Fence{..} => Some(extra.input_fences[& index].external_timestamp_id),
+					_ => panic!("Unimplemented")
+				}
+			}
+			Self::RootJoinPoint(join_point) =>
+			{
+				join_point.input_external_timestamp_ids.get(& index).map(|x| * x)
+			}
+		}
+	}
 }
 
 #[derive(Debug, Default)]
@@ -167,6 +190,128 @@ impl JoinGraph
 	fn get_join(& self, join_point_id : JoinPointId) -> & JoinPoint
 	{
 		self.join_points[join_point_id.0].as_ref().unwrap()
+	}
+}
+
+// These don't handle the null timestamp -> first named timestamp case properly
+
+#[derive(Debug, Default)]
+struct TimeState
+{
+	slot_count : usize,
+	external_timestamp_id_opt : Option<ir::ExternalTimestampId>,
+	earliest_logical_timestamp : LogicalTimestamp,
+	latest_slot_timestamp : LogicalTimestamp
+}
+
+#[derive(Debug, Default)]
+struct TimelineEnforcer
+{
+	place_time_states : HashMap<ir::Place, TimeState>
+}
+
+impl TimelineEnforcer
+{
+	fn new() -> Self
+	{
+		let mut place_time_states = HashMap::<ir::Place, TimeState>::new();
+		for place in [ir::Place::Gpu, ir::Place::Local, ir::Place::Cpu].iter()
+		{
+			//let starting_external_timestamp_id = funclet_scheduling_extra.starting_timestamps[place];
+			let external_timestamp_id_opt = None;
+			let earliest_logical_timestamp = LogicalTimestamp::new();
+			let latest_slot_timestamp = LogicalTimestamp::new();
+			place_time_states.insert(* place, TimeState{slot_count : 0, external_timestamp_id_opt, earliest_logical_timestamp, latest_slot_timestamp});
+		}
+		Self { place_time_states }
+	}
+
+	fn record_slot_use(&mut self, place : ir::Place, timestamp : LogicalTimestamp, external_timestamp_id_opt : Option<ir::ExternalTimestampId>)
+	{
+		let time_state = self.place_time_states.get_mut(& place).unwrap();
+		time_state.latest_slot_timestamp = timestamp.max(time_state.latest_slot_timestamp);
+		assert!(time_state.earliest_logical_timestamp <= timestamp);
+		if time_state.slot_count > 0
+		{
+			assert_eq!(external_timestamp_id_opt, time_state.external_timestamp_id_opt);
+		}
+		else
+		{
+			time_state.external_timestamp_id_opt = external_timestamp_id_opt;
+		}
+		time_state.slot_count += 1;
+	}
+
+	fn record_fence_use(&mut self, place : ir::Place, timestamp : LogicalTimestamp, external_timestamp_id : ir::ExternalTimestampId)
+	{
+		let time_state = self.place_time_states.get_mut(& place).unwrap();
+
+		assert!(time_state.latest_slot_timestamp < timestamp);
+		if let Some(old_timestamp_id) = time_state.external_timestamp_id_opt
+		{
+			assert!(old_timestamp_id < external_timestamp_id);
+		}
+		* time_state = TimeState{slot_count : 0, external_timestamp_id_opt : Some(external_timestamp_id), earliest_logical_timestamp : timestamp, latest_slot_timestamp : timestamp};
+	}
+}
+
+#[derive(Debug, Default)]
+struct ExternalTimeState
+{
+	slot_count : usize,
+	external_timestamp_id_opt : Option<ir::ExternalTimestampId>,
+	latest_slot_timestamp : Option<ir::ExternalTimestampId>
+}
+
+#[derive(Debug, Default)]
+struct ExternalTimelineEnforcer
+{
+	place_time_states : HashMap<ir::Place, ExternalTimeState>
+}
+
+impl ExternalTimelineEnforcer
+{
+	fn new() -> Self
+	{
+		let mut place_time_states = HashMap::<ir::Place, ExternalTimeState>::new();
+		for place in [ir::Place::Gpu, ir::Place::Local, ir::Place::Cpu].iter()
+		{
+			place_time_states.insert(* place, ExternalTimeState{slot_count : 0, external_timestamp_id_opt : None, latest_slot_timestamp : None});
+		}
+		Self { place_time_states }
+	}
+
+	fn record_slot_use(&mut self, place : ir::Place, in_timestamp : Option<ir::ExternalTimestampId>, external_timestamp_id_opt : Option<ir::ExternalTimestampId>)
+	{
+		let time_state = self.place_time_states.get_mut(& place).unwrap();
+		if time_state.slot_count > 0
+		{
+			assert_eq!(time_state.latest_slot_timestamp, in_timestamp);
+			assert_eq!(external_timestamp_id_opt, time_state.external_timestamp_id_opt);
+		}
+		else
+		{
+			time_state.latest_slot_timestamp = in_timestamp;
+			time_state.external_timestamp_id_opt = external_timestamp_id_opt;
+		}
+		time_state.slot_count += 1;
+	}
+
+	fn record_fence_use(&mut self, place : ir::Place, in_timestamp : ir::ExternalTimestampId, external_timestamp_id : ir::ExternalTimestampId)
+	{
+		let time_state = self.place_time_states.get_mut(& place).unwrap();
+
+		if let Some(old_timestamp_id) = time_state.latest_slot_timestamp
+		{
+			assert!(old_timestamp_id < in_timestamp);
+		}
+
+		if let Some(old_timestamp_id) = time_state.external_timestamp_id_opt
+		{
+			assert!(old_timestamp_id < external_timestamp_id);
+		}
+
+		* time_state = ExternalTimeState{slot_count : 0, external_timestamp_id_opt : Some(external_timestamp_id), latest_slot_timestamp : Some(in_timestamp)};
 	}
 }
 
@@ -741,6 +886,7 @@ impl<'program> CodeGen<'program>
 	{
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
+		let funclet_extra = & self.program.scheduling_funclet_extras[& funclet_id];
 
 		let input_types = funclet.input_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
 		let output_types = funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
@@ -749,6 +895,7 @@ impl<'program> CodeGen<'program>
 		let mut placement_state = PlacementState::new();
 		let mut argument_node_results = Vec::<NodeResult>::new();
 		
+		let mut input_external_timestamp_ids = HashMap::<usize, ir::ExternalTimestampId>::new();
 		for (index, input_type_id) in funclet.input_types.iter().enumerate()
 		{
 			let result = 
@@ -762,6 +909,14 @@ impl<'program> CodeGen<'program>
 						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * queue_place, * queue_stage);
 						placement_state.slot_variable_ids.insert(slot_id, argument_variable_ids[index]);
 						argument_node_results.push(NodeResult::Slot{slot_id});
+						if let Some(timestamp_id) = funclet_extra.input_slots[& index].external_timestamp_id_opt
+						{
+							input_external_timestamp_ids.insert(index, timestamp_id);
+						}
+					}
+					ir::Type::Fence { queue_place } =>
+					{
+						input_external_timestamp_ids.insert(index, funclet_extra.input_fences[& index].external_timestamp_id);
 					}
 					_ => panic!("Unimplemented")
 				}
@@ -770,15 +925,14 @@ impl<'program> CodeGen<'program>
 
 		let mut default_join_point_id_opt = 
 		{
-			let extra = & self.program.scheduling_funclet_extras[& funclet_id];
 			let input_types = funclet.output_types.clone();
-			let value_funclet_id = extra.value_funclet_id;
+			let value_funclet_id = funclet_extra.value_funclet_id;
 			let mut input_slot_value_tags = HashMap::<usize, ir::ValueTag>::new();
-			for (input_index, input_slot) in extra.input_slots.iter()
+			for (input_index, input_slot) in funclet_extra.input_slots.iter()
 			{
 				input_slot_value_tags.insert(* input_index, ir::ValueTag::Output{funclet_id : value_funclet_id, index : * input_index});
 			}
-			let join_point_id = placement_state.join_graph.create(JoinPoint::RootJoinPoint(RootJoinPoint{value_funclet_id, input_types, input_slot_value_tags}));
+			let join_point_id = placement_state.join_graph.create(JoinPoint::RootJoinPoint(RootJoinPoint{value_funclet_id, input_types, input_slot_value_tags, input_external_timestamp_ids}));
 			Option::<JoinPointId>::Some(join_point_id)
 		};
 
@@ -1279,6 +1433,7 @@ impl<'program> CodeGen<'program>
 					// Join points can only be constructed for the value funclet they are created in
 					assert_eq!(extra.value_funclet_id, funclet_scoped_state.value_funclet_id);
 
+					let mut entry_timeline_enforcer = TimelineEnforcer::new();
 					for (capture_index, capture_node_id) in captures.iter().enumerate()
 					{
 						let node_result = funclet_scoped_state.move_node_result(* capture_node_id).unwrap();
@@ -1287,11 +1442,16 @@ impl<'program> CodeGen<'program>
 							NodeResult::Slot{slot_id} =>
 							{
 								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-								check_value_tag_compatibility_interior(& self.program, slot_value_tag, extra.input_slots[& capture_index].value_tag);
+								let slot_info = & extra.input_slots[& capture_index];
+								check_value_tag_compatibility_interior(& self.program, slot_value_tag, slot_info.value_tag);
+								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+								let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
+								entry_timeline_enforcer.record_slot_use(place, timestamp, slot_info.external_timestamp_id_opt);
 							}
-							/*NodeResult::Fence{ .. } =>
+							NodeResult::Fence{ place, timestamp } =>
 							{
-								// This means that fences go backwards in the argument list...
+								entry_timeline_enforcer.record_fence_use(place, timestamp, extra.input_fences[& capture_index].external_timestamp_id);
+								/*// This means that fences go backwards in the argument list...
 								let logical_timestamp = 0;
 								if let Some(old_timestamp) = &mut last_syncable_logical_timestamp
 								{
@@ -1307,13 +1467,14 @@ impl<'program> CodeGen<'program>
 								else
 								{
 									last_syncable_logical_timestamp = Some(logical_timestamp);
-								}
-							}*/
+								}*/
+							}
 							_ => panic!("Unimplemented")
 						}
 						captured_node_results.push(node_result);
 					}
 
+					let mut exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 					let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
 					let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
 
@@ -1322,10 +1483,26 @@ impl<'program> CodeGen<'program>
 						let continuation_input_index = continuation_join_point.get_capture_count() + join_output_index;
 						assert_eq!(* join_output_type, continuation_join_point.get_scheduling_input_type(& self.program, continuation_input_index));
 
-						let value_tag = extra.output_slots[& join_output_index].value_tag;
-						let value_tag_2 = continuation_join_point.get_scheduling_input_value_tag(& self.program, continuation_input_index);
+						match & self.program.types[& join_output_type]
+						{
+							ir::Type::Slot{queue_place, ..} =>
+							{
+								let slot_info = & extra.output_slots[& join_output_index];
+								let value_tag = slot_info.value_tag;
+								let value_tag_2 = continuation_join_point.get_scheduling_input_value_tag(& self.program, continuation_input_index);
 
-						check_value_tag_compatibility_interior(& self.program, value_tag, value_tag_2);
+								check_value_tag_compatibility_interior(& self.program, value_tag, value_tag_2);
+
+								let external_timestamp_id_opt = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, continuation_input_index);
+								exit_timeline_enforcer.record_slot_use(* queue_place, slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
+							}
+							ir::Type::Fence{queue_place} =>
+							{
+								let external_timestamp_id = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, continuation_input_index).unwrap();
+								exit_timeline_enforcer.record_fence_use(* queue_place, extra.output_fences[& join_output_index].external_timestamp_id, external_timestamp_id);
+							}
+							_ => panic!("Unimplemented")
+						}
 					}
 
 					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_node_results.into_boxed_slice(), continuation_join_point_id}));
@@ -1344,24 +1521,7 @@ impl<'program> CodeGen<'program>
 				let encoded_value_funclet_id = funclet_scheduling_extra.value_funclet_id;
 				let encoded_value_funclet = & self.program.funclets[& encoded_value_funclet_id];
 
-				struct TimeState
-				{
-					//starting_external_timestamp_id : ir::ExternalTimestampId,
-					slot_count : usize,
-					external_timestamp_id_opt : Option<ir::ExternalTimestampId>,
-					earliest_logical_timestamp : LogicalTimestamp,
-					latest_slot_timestamp : LogicalTimestamp
-				}
-
-				let mut place_time_states = HashMap::<ir::Place, TimeState>::new();
-				for place in [ir::Place::Gpu, ir::Place::Local, ir::Place::Cpu].iter()
-				{
-					//let starting_external_timestamp_id = funclet_scheduling_extra.starting_timestamps[place];
-					let external_timestamp_id_opt = None;
-					let earliest_logical_timestamp = LogicalTimestamp::new();
-					let latest_slot_timestamp = LogicalTimestamp::new();
-					place_time_states.insert(* place, TimeState{slot_count : 0, external_timestamp_id_opt, earliest_logical_timestamp, latest_slot_timestamp});
-				}
+				let mut timeline_enforcer = TimelineEnforcer::new();
 
 				let mut output_node_results = Vec::<NodeResult>::new();
 
@@ -1380,31 +1540,12 @@ impl<'program> CodeGen<'program>
 							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
 							check_slot_type(& self.program, funclet.output_types[return_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 							let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
-							let time_state = place_time_states.get_mut(& place).unwrap();
-							time_state.latest_slot_timestamp = logical_timestamp.max(time_state.latest_slot_timestamp);
-							assert!(time_state.earliest_logical_timestamp <= logical_timestamp);
-							if time_state.slot_count > 0
-							{
-								assert_eq!(slot_info.external_timestamp_id_opt, time_state.external_timestamp_id_opt);
-							}
-							else
-							{
-								time_state.external_timestamp_id_opt = slot_info.external_timestamp_id_opt;
-							}
-							time_state.slot_count += 1;
+							timeline_enforcer.record_slot_use(place, logical_timestamp, slot_info.external_timestamp_id_opt);
 						}
 						NodeResult::Fence { place, timestamp } =>
 						{
-							let time_state = place_time_states.get_mut(& place).unwrap();
 							let external_timestamp_id = funclet_scheduling_extra.output_fences[& return_index].external_timestamp_id;
-
-							// Check old state
-							assert!(time_state.latest_slot_timestamp < timestamp);
-							if let Some(old_timestamp_id) = time_state.external_timestamp_id_opt
-							{
-								assert!(old_timestamp_id < external_timestamp_id);
-							}
-							* time_state = TimeState{slot_count : 0, external_timestamp_id_opt : Some(external_timestamp_id), earliest_logical_timestamp : timestamp, latest_slot_timestamp : timestamp};
+							timeline_enforcer.record_fence_use(place, timestamp, external_timestamp_id);
 						}
 						_ => panic!("Unimplemented")
 					}
@@ -1448,18 +1589,32 @@ impl<'program> CodeGen<'program>
 				}
 
 				{
+					let mut timeline_enforcer = TimelineEnforcer::new();
 					let join_point = placement_state.join_graph.get_join(join_point_id);
 
 					// We shouldn't have to check outputs for join points because all join chains go up to the root
 
 					for (argument_index, argument_node_result) in argument_node_results.iter().enumerate()
 					{
-						let slot_id = argument_node_result.get_slot_id().unwrap();
-						let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-						// We need to shift the destination argument index to account for the captures (that are checked at construction)
-						let destination_argument_index = argument_index + join_point.get_capture_count();
-						check_value_tag_compatibility_interior(& self.program, slot_value_tag, join_point.get_scheduling_input_value_tag(& self.program, destination_argument_index));
-						check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+						match * argument_node_result
+						{
+							NodeResult::Slot {slot_id} =>
+							{
+								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+								// We need to shift the destination argument index to account for the captures (that are checked at construction)
+								let destination_argument_index = argument_index + join_point.get_capture_count();
+								check_value_tag_compatibility_interior(& self.program, slot_value_tag, join_point.get_scheduling_input_value_tag(& self.program, destination_argument_index));
+								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+								check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+								let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
+								timeline_enforcer.record_slot_use(place, logical_timestamp, join_point.get_scheduling_input_external_timestamp_id(& self.program, destination_argument_index));
+							}
+							NodeResult::Fence { place, timestamp } =>
+							{
+								timeline_enforcer.record_fence_use(place, timestamp, join_point.get_scheduling_input_external_timestamp_id(& self.program, argument_index).unwrap());
+							}
+							_ => panic!("Unimplemented")
+						}
 					}
 				}
 
@@ -1485,6 +1640,7 @@ impl<'program> CodeGen<'program>
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
 				// Step 1: Check current -> callee edge
+				let mut entry_timeline_enforcer = TimelineEnforcer::new();
 				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
@@ -1494,7 +1650,15 @@ impl<'program> CodeGen<'program>
 						NodeResult::Slot{slot_id} =>
 						{
 							let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-							check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, callee_funclet_scheduling_extra.input_slots[& argument_index].value_tag);
+							let slot_info = & callee_funclet_scheduling_extra.input_slots[& argument_index];
+							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+							check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, slot_info.value_tag);
+							let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
+							entry_timeline_enforcer.record_slot_use(place, timestamp, slot_info.external_timestamp_id_opt);
+						}
+						NodeResult::Fence{ place, timestamp } =>
+						{
+							entry_timeline_enforcer.record_fence_use(place, timestamp, callee_funclet_scheduling_extra.input_fences[& argument_index].external_timestamp_id);
 						}
 						_ => panic!("Unimplemented")
 					}
@@ -1502,35 +1666,50 @@ impl<'program> CodeGen<'program>
 				}
 
 				// Step 2: Check callee -> continuation edge
+				let mut exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 				for (callee_output_index, callee_output_type) in callee_funclet.output_types.iter().enumerate()
 				{
 					let continuation_input_index = continuation_join_point.get_capture_count() + callee_output_index;
 					assert_eq!(* callee_output_type, continuation_join_point.get_scheduling_input_type(& self.program, continuation_input_index));
 
-					let value_tag = callee_funclet_scheduling_extra.output_slots[& callee_output_index].value_tag;
-					let value_tag_2 = continuation_join_point.get_scheduling_input_value_tag(& self.program, continuation_input_index);
-
-					match (value_tag, value_tag_2)
+					match & self.program.types[callee_output_type]
 					{
-						(_, ir::ValueTag::None) => (),
-						(ir::ValueTag::Output{funclet_id, index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
+						ir::Type::Slot{queue_place, ..} =>
 						{
-							assert_eq!(remote_node_id.funclet_id, value_operation.funclet_id);
-							assert_eq!(funclet_id, callee_value_funclet_id);
+							let slot_info = & callee_funclet_scheduling_extra.output_slots[& callee_output_index];
+							exit_timeline_enforcer.record_slot_use(* queue_place, slot_info.external_timestamp_id_opt, continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, continuation_input_index));
 
-							let node = & self.program.funclets[& remote_node_id.funclet_id].nodes[remote_node_id.node_id];
-							if let ir::Node::ExtractResult{node_id : call_node_id, index} = node
+							let value_tag = callee_funclet_scheduling_extra.output_slots[& callee_output_index].value_tag;
+							let value_tag_2 = continuation_join_point.get_scheduling_input_value_tag(& self.program, continuation_input_index);
+
+							match (value_tag, value_tag_2)
 							{
-								assert_eq!(* index, output_index);
-								assert_eq!(* call_node_id, value_operation.node_id);
-							}
-							else
-							{
-								panic!("Target operation is not a result extraction: #{:?} {:?}", remote_node_id, node);
-							}
+								(_, ir::ValueTag::None) => (),
+								(ir::ValueTag::Output{funclet_id, index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
+								{
+									assert_eq!(remote_node_id.funclet_id, value_operation.funclet_id);
+									assert_eq!(funclet_id, callee_value_funclet_id);
+
+									let node = & self.program.funclets[& remote_node_id.funclet_id].nodes[remote_node_id.node_id];
+									if let ir::Node::ExtractResult{node_id : call_node_id, index} = node
+									{
+										assert_eq!(* index, output_index);
+										assert_eq!(* call_node_id, value_operation.node_id);
+									}
+									else
+									{
+										panic!("Target operation is not a result extraction: #{:?} {:?}", remote_node_id, node);
+									}
+								}
+								_ => panic!("Ill-formed: {:?} to {:?}", value_tag, value_tag_2)
+							};
 						}
-						_ => panic!("Ill-formed: {:?} to {:?}", value_tag, value_tag_2)
-					};
+						ir::Type::Fence{queue_place, ..} =>
+						{
+							exit_timeline_enforcer.record_fence_use(* queue_place, callee_funclet_scheduling_extra.output_fences[& callee_output_index].external_timestamp_id, continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, continuation_input_index).unwrap());
+						}
+						_ => panic!("Unimplemented")
+					}
 				}
 
 				// Don't need to check continuation -> current edge because we maintain the invariant that joins can't leave the value funclet scope they were created in
@@ -1575,6 +1754,8 @@ impl<'program> CodeGen<'program>
 				assert_eq!(callee_arguments.len(), true_funclet.input_types.len());
 				assert_eq!(callee_arguments.len(), false_funclet.input_types.len());
 
+				let mut true_entry_timeline_enforcer = TimelineEnforcer::new();
+				let mut false_entry_timeline_enforcer = TimelineEnforcer::new();
 				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
@@ -1584,14 +1765,25 @@ impl<'program> CodeGen<'program>
 						NodeResult::Slot{slot_id} =>
 						{
 							assert_eq!(true_funclet.input_types[argument_index], false_funclet.input_types[argument_index]);
-							check_slot_type(& self.program, true_funclet.input_types[argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							check_slot_type(& self.program, false_funclet.input_types[argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+							check_slot_type(& self.program, true_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							check_slot_type(& self.program, false_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 							//assert_eq!(true_funclet_extra.input_slots[& argument_index], false_funclet.input_types[argument_index]);
 							let argument_slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-							let true_input_value_tag = true_funclet_extra.input_slots[& argument_index].value_tag;
-							let false_input_value_tag = true_funclet_extra.input_slots[& argument_index].value_tag;
+							let true_slot_info = & true_funclet_extra.input_slots[& argument_index];
+							let true_input_value_tag = true_slot_info.value_tag;
+							let false_slot_info = & false_funclet_extra.input_slots[& argument_index];
+							let false_input_value_tag = false_slot_info.value_tag;
 							check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, true_input_value_tag);
 							check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, false_input_value_tag);
+							let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
+							true_entry_timeline_enforcer.record_slot_use(place, timestamp, true_slot_info.external_timestamp_id_opt);
+							false_entry_timeline_enforcer.record_slot_use(place, timestamp, false_slot_info.external_timestamp_id_opt);
+						}
+						NodeResult::Fence{place, timestamp} =>
+						{
+							true_entry_timeline_enforcer.record_fence_use(place, timestamp, true_funclet_extra.input_fences[& argument_index].external_timestamp_id);
+							false_entry_timeline_enforcer.record_fence_use(place, timestamp, false_funclet_extra.input_fences[& argument_index].external_timestamp_id);
 						}
 						_ => panic!("Unimplemented")
 					}
@@ -1599,6 +1791,8 @@ impl<'program> CodeGen<'program>
 					argument_node_results.push(node_result);
 				}
 
+				let mut true_exit_timeline_enforcer = ExternalTimelineEnforcer::new();
+				let mut false_exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 				let continuation_input_count = continuation_join_point.get_input_count(& self.program);
 				assert_eq!(continuation_input_count, true_funclet.output_types.len());
 				assert_eq!(continuation_input_count, false_funclet.output_types.len());
@@ -1607,22 +1801,42 @@ impl<'program> CodeGen<'program>
 					assert_eq!(true_funclet.output_types[output_index], false_funclet.output_types[output_index]);
 					let continuation_input_type = continuation_join_point.get_scheduling_input_type(& self.program, output_index);
 					assert_eq!(true_funclet.output_types[output_index], continuation_input_type);
-					let continuation_input_value_tag = continuation_join_point.get_scheduling_input_value_tag(& self.program, output_index);
-					let true_output_value_tag = true_funclet_extra.output_slots[& output_index].value_tag;
-					let false_output_value_tag = true_funclet_extra.output_slots[& output_index].value_tag;
 
-					match continuation_input_value_tag
+					match & self.program.types[& output_index]
 					{
-						ir::ValueTag::Operation {remote_node_id} if remote_node_id == * value_operation =>
+						ir::Type::Slot{queue_place, ..} =>
 						{
-							check_value_tag_compatibility_interior(& self.program, true_output_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : true_case_node_id}});
-							check_value_tag_compatibility_interior(& self.program, false_output_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : false_case_node_id}});
+							let continuation_input_value_tag = continuation_join_point.get_scheduling_input_value_tag(& self.program, output_index);
+							let true_slot_info = & true_funclet_extra.output_slots[& output_index];
+							let false_slot_info = & false_funclet_extra.output_slots[& output_index];
+							let true_output_value_tag = true_slot_info.value_tag;
+							let false_output_value_tag = false_slot_info.value_tag;
+
+							let external_timestamp_id_opt = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, output_index);
+							true_exit_timeline_enforcer.record_slot_use(* queue_place, true_slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
+							false_exit_timeline_enforcer.record_slot_use(* queue_place, false_slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
+
+							match continuation_input_value_tag
+							{
+								ir::ValueTag::Operation {remote_node_id} if remote_node_id == * value_operation =>
+								{
+									check_value_tag_compatibility_interior(& self.program, true_output_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : true_case_node_id}});
+									check_value_tag_compatibility_interior(& self.program, false_output_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : false_case_node_id}});
+								}
+								_ =>
+								{
+									check_value_tag_compatibility_interior(& self.program, true_output_value_tag, continuation_input_value_tag);
+									check_value_tag_compatibility_interior(& self.program, false_output_value_tag, continuation_input_value_tag);
+								}
+							}
 						}
-						_ =>
+						ir::Type::Fence{queue_place} =>
 						{
-							check_value_tag_compatibility_interior(& self.program, true_output_value_tag, continuation_input_value_tag);
-							check_value_tag_compatibility_interior(& self.program, false_output_value_tag, continuation_input_value_tag);
+							let external_timestamp_id = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, output_index).unwrap();
+							true_exit_timeline_enforcer.record_fence_use(* queue_place, true_funclet_extra.output_fences[& output_index].external_timestamp_id, external_timestamp_id);
+							false_exit_timeline_enforcer.record_fence_use(* queue_place, false_funclet_extra.output_fences[& output_index].external_timestamp_id, external_timestamp_id);
 						}
+						_ => panic!("Unimplemented")
 					}
 				}
 
