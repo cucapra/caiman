@@ -194,6 +194,11 @@ impl SchedulingState
 		self.slots[& slot_id.0].queue_place
 	}
 
+	pub fn get_slot_queue_timestamp(&self, slot_id : SlotId) -> LogicalTimestamp
+	{
+		self.slots[& slot_id.0].timestamp
+	}
+
 	pub fn discard_slot(&mut self, slot_id : SlotId)
 	{
 		let slot = &mut self.slots[& slot_id.0];

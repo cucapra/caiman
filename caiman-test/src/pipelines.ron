@@ -293,7 +293,7 @@
 				output_slots : {0 : (value_tag : None)},
 				input_fences : {},
 				output_fences : {},
-				timestamps : []
+				external_timestamps : []
 			),
 			12 : (
 				value_funclet_id : 9,
@@ -301,7 +301,7 @@
 				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0))},
 				input_fences : {},
 				output_fences : {},
-				timestamps : []
+				external_timestamps : [],
 			),
 			13 : (
 				value_funclet_id : 10,
@@ -309,7 +309,7 @@
 				output_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 0)) )},
 				input_fences : {},
 				output_fences : {},
-				timestamps : []
+				external_timestamps : [],
 			),
 			14 : (
 				value_funclet_id : 10,
@@ -317,7 +317,7 @@
 				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0))},
 				input_fences : {},
 				output_fences : {},
-				timestamps : []
+				external_timestamps : [],
 			)
 		},
 		pipelines : [

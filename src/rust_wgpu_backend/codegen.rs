@@ -910,52 +910,12 @@ impl<'program> CodeGen<'program>
 		let funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& funclet_id];
 		//let scheduled_value_funclet = & self.program.value_funclets[& scheduling_funclet.value_funclet_id];
 
-		let mut available_external_timestamps = funclet_scheduling_extra.timestamps.clone();
+		let mut available_external_timestamps = funclet_scheduling_extra.external_timestamps.clone();
+		//let mut last_syncable_logical_timestamp = Option::<LogicalTimestamp>::None;
+		//let mut last_synced_logical_timestamp = Option::<LogicalTimestamp>::None;
 		//let mut unsynced_external_timestamps = 
 
 		let mut funclet_scoped_state = FuncletScopedState::new(funclet_scheduling_extra.value_funclet_id, funclet_id);
-
-		// Ugly hack for now... in a pile of even worse hacks
-		/*let mut argument_node_results = Vec::<NodeResult>::new();
-		for (index, input_type_id) in funclet.input_types.iter().enumerate()
-		{
-			let is_valid = match & funclet.nodes[index]
-			{
-				ir::Node::None => true,
-				ir::Node::Phi { .. } => true,
-				_ => false
-			};
-			assert!(is_valid);
-			
-			let slot_id = argument_slot_ids[index];
-			let slot_info = & funclet_scheduling_extra.input_slots[& index];
-
-			match & self.program.types[input_type_id]
-			{
-				ir::Type::Slot { storage_type, queue_stage, queue_place } =>
-				{
-					let tag = match slot_info.value_tag
-					{
-						ir::ValueTag::None => ir::ValueTag::None,
-						ir::ValueTag::Operation{remote_node_id} => ir::ValueTag::Operation{remote_node_id},
-						ir::ValueTag::Input{funclet_id, index} => ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
-						_ => panic!("Unimplemented")
-					};
-					funclet_scoped_state.slot_value_tags.insert(slot_id, tag);
-				}
-				ir::Type::Fence { queue_place } =>
-				{
-					let fence_info = & funclet_scheduling_extra.input_fences[& index];
-					let timestamp_id = fence_info.timestamp_id;
-					//available_timestamps.remove(& timestamp_id);
-					//argument_node_results.push(NodeResult::Fence{queue_place : * queue_place, timestamp : ? });
-				}
-				_ => panic!("Unimplemented")
-			}
-			
-			let result = NodeResult::Slot{slot_id};
-			argument_node_results.push(result);
-		}*/
 
 		for (index, input_type_id) in funclet.input_types.iter().enumerate()
 		{
@@ -998,7 +958,7 @@ impl<'program> CodeGen<'program>
 					if let ir::Type::Fence { queue_place } = & self.program.types[input_type_id]
 					{
 						let fence_info = & funclet_scheduling_extra.input_fences[& index];
-						let timestamp_id = fence_info.timestamp_id;
+						let timestamp_id = fence_info.external_timestamp_id;
 						//available_timestamps.remove(& timestamp_id);
 						//argument_node_results.push(NodeResult::Fence{queue_place : * queue_place, timestamp : ? });
 					}
@@ -1313,7 +1273,6 @@ impl<'program> CodeGen<'program>
 				ir::Node::Join { funclet : funclet_id, captures, continuation : continuation_join_node_id } => 
 				{
 					let mut captured_node_results = Vec::<NodeResult>::new();
-					//let mut captured_var_ids = Vec::<usize>::new();
 					let join_funclet = & self.program.funclets[funclet_id];
 					let extra = & self.program.scheduling_funclet_extras[funclet_id];
 
@@ -1322,12 +1281,37 @@ impl<'program> CodeGen<'program>
 
 					for (capture_index, capture_node_id) in captures.iter().enumerate()
 					{
-						let slot_id = funclet_scoped_state.move_node_slot_id(* capture_node_id).unwrap();
-						captured_node_results.push(NodeResult::Slot{slot_id});
-						//captured_var_ids.push(placement_state.get_slot_var_id(slot_id).unwrap());
-
-						let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-						check_value_tag_compatibility_interior(& self.program, slot_value_tag, extra.input_slots[& capture_index].value_tag);
+						let node_result = funclet_scoped_state.move_node_result(* capture_node_id).unwrap();
+						match node_result
+						{
+							NodeResult::Slot{slot_id} =>
+							{
+								let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+								check_value_tag_compatibility_interior(& self.program, slot_value_tag, extra.input_slots[& capture_index].value_tag);
+							}
+							/*NodeResult::Fence{ .. } =>
+							{
+								// This means that fences go backwards in the argument list...
+								let logical_timestamp = 0;
+								if let Some(old_timestamp) = &mut last_syncable_logical_timestamp
+								{
+									if * old_timestamp >= logical_timestamp
+									{
+										* old_timestamp = logical_timestamp;
+									}
+									else
+									{
+										panic!("Join is capturing a fence that it cannot sync");
+									}
+								}
+								else
+								{
+									last_syncable_logical_timestamp = Some(logical_timestamp);
+								}
+							}*/
+							_ => panic!("Unimplemented")
+						}
+						captured_node_results.push(node_result);
 					}
 
 					let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
@@ -1344,12 +1328,6 @@ impl<'program> CodeGen<'program>
 						check_value_tag_compatibility_interior(& self.program, value_tag, value_tag_2);
 					}
 
-					/*let input_type_ids = & funclet.input_types[captures.len()..];
-					let join_var_id = self.code_generator.build_join(* funclet_id, captured_var_ids.as_slice(), input_type_ids, & funclet.output_types);
-					pipeline_context.pending_funclet_ids.push(* funclet_id);
-
-					//Some(* type_id)
-					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join(Join{funclet_id : * funclet_id, captures: captured_slot_ids.into_boxed_slice(), type_id_opt : None, variable_id_opt : Some(join_var_id)}));*/
 					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_node_results.into_boxed_slice(), continuation_join_point_id}));
 					println!("Created join point: {:?} {:?}", join_point_id, placement_state.join_graph.get_join(join_point_id));
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
@@ -1366,17 +1344,72 @@ impl<'program> CodeGen<'program>
 				let encoded_value_funclet_id = funclet_scheduling_extra.value_funclet_id;
 				let encoded_value_funclet = & self.program.funclets[& encoded_value_funclet_id];
 
+				struct TimeState
+				{
+					//starting_external_timestamp_id : ir::ExternalTimestampId,
+					slot_count : usize,
+					external_timestamp_id_opt : Option<ir::ExternalTimestampId>,
+					earliest_logical_timestamp : LogicalTimestamp,
+					latest_slot_timestamp : LogicalTimestamp
+				}
+
+				let mut place_time_states = HashMap::<ir::Place, TimeState>::new();
+				for place in [ir::Place::Gpu, ir::Place::Local, ir::Place::Cpu].iter()
+				{
+					//let starting_external_timestamp_id = funclet_scheduling_extra.starting_timestamps[place];
+					let external_timestamp_id_opt = None;
+					let earliest_logical_timestamp = LogicalTimestamp::new();
+					let latest_slot_timestamp = LogicalTimestamp::new();
+					place_time_states.insert(* place, TimeState{slot_count : 0, external_timestamp_id_opt, earliest_logical_timestamp, latest_slot_timestamp});
+				}
+
 				let mut output_node_results = Vec::<NodeResult>::new();
 
 				for (return_index, return_node_id) in return_values.iter().enumerate()
 				{
-					let slot_id = funclet_scoped_state.move_node_slot_id(* return_node_id).unwrap();
-					output_node_results.push(NodeResult::Slot{slot_id});
+					let node_result = funclet_scoped_state.move_node_result(* return_node_id).unwrap();
 
-					let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-					let value_tag = funclet_scheduling_extra.output_slots[& return_index].value_tag;
-					check_value_tag_compatibility_interior(& self.program, slot_value_tag, value_tag);
-					check_slot_type(& self.program, funclet.output_types[return_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+					match node_result
+					{
+						NodeResult::Slot { slot_id } =>
+						{
+							let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+							let slot_info = & funclet_scheduling_extra.output_slots[& return_index];
+							let value_tag = slot_info.value_tag;
+							check_value_tag_compatibility_interior(& self.program, slot_value_tag, value_tag);
+							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+							check_slot_type(& self.program, funclet.output_types[return_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
+							let time_state = place_time_states.get_mut(& place).unwrap();
+							time_state.latest_slot_timestamp = logical_timestamp.max(time_state.latest_slot_timestamp);
+							assert!(time_state.earliest_logical_timestamp <= logical_timestamp);
+							if time_state.slot_count > 0
+							{
+								assert_eq!(slot_info.external_timestamp_id_opt, time_state.external_timestamp_id_opt);
+							}
+							else
+							{
+								time_state.external_timestamp_id_opt = slot_info.external_timestamp_id_opt;
+							}
+							time_state.slot_count += 1;
+						}
+						NodeResult::Fence { place, timestamp } =>
+						{
+							let time_state = place_time_states.get_mut(& place).unwrap();
+							let external_timestamp_id = funclet_scheduling_extra.output_fences[& return_index].external_timestamp_id;
+
+							// Check old state
+							assert!(time_state.latest_slot_timestamp < timestamp);
+							if let Some(old_timestamp_id) = time_state.external_timestamp_id_opt
+							{
+								assert!(old_timestamp_id < external_timestamp_id);
+							}
+							* time_state = TimeState{slot_count : 0, external_timestamp_id_opt : Some(external_timestamp_id), earliest_logical_timestamp : timestamp, latest_slot_timestamp : timestamp};
+						}
+						_ => panic!("Unimplemented")
+					}
+
+					output_node_results.push(node_result);
 				}
 
 				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
@@ -1410,8 +1443,8 @@ impl<'program> CodeGen<'program>
 
 				for (argument_index, argument_node_id) in arguments.iter().enumerate()
 				{
-					let slot_id = funclet_scoped_state.move_node_slot_id(* argument_node_id).unwrap();
-					argument_node_results.push(NodeResult::Slot{slot_id});
+					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
+					argument_node_results.push(node_result);
 				}
 
 				{
@@ -1455,10 +1488,17 @@ impl<'program> CodeGen<'program>
 				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
-					let slot_id = funclet_scoped_state.move_node_slot_id(* argument_node_id).unwrap();
-					argument_node_results.push(NodeResult::Slot{slot_id});
-					let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-					check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, callee_funclet_scheduling_extra.input_slots[& argument_index].value_tag);
+					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
+					match node_result
+					{
+						NodeResult::Slot{slot_id} =>
+						{
+							let slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+							check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, callee_funclet_scheduling_extra.input_slots[& argument_index].value_tag);
+						}
+						_ => panic!("Unimplemented")
+					}
+					argument_node_results.push(node_result);
 				}
 
 				// Step 2: Check callee -> continuation edge
@@ -1538,18 +1578,25 @@ impl<'program> CodeGen<'program>
 				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
-					let slot_id = funclet_scoped_state.move_node_slot_id(* argument_node_id).unwrap();
-					argument_node_results.push(NodeResult::Slot{slot_id});
+					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
+					match node_result
+					{
+						NodeResult::Slot{slot_id} =>
+						{
+							assert_eq!(true_funclet.input_types[argument_index], false_funclet.input_types[argument_index]);
+							check_slot_type(& self.program, true_funclet.input_types[argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							check_slot_type(& self.program, false_funclet.input_types[argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							//assert_eq!(true_funclet_extra.input_slots[& argument_index], false_funclet.input_types[argument_index]);
+							let argument_slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
+							let true_input_value_tag = true_funclet_extra.input_slots[& argument_index].value_tag;
+							let false_input_value_tag = true_funclet_extra.input_slots[& argument_index].value_tag;
+							check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, true_input_value_tag);
+							check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, false_input_value_tag);
+						}
+						_ => panic!("Unimplemented")
+					}
 
-					assert_eq!(true_funclet.input_types[argument_index], false_funclet.input_types[argument_index]);
-					check_slot_type(& self.program, true_funclet.input_types[argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-					check_slot_type(& self.program, false_funclet.input_types[argument_index], placement_state.scheduling_state.get_slot_queue_place(slot_id), placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-					//assert_eq!(true_funclet_extra.input_slots[& argument_index], false_funclet.input_types[argument_index]);
-					let argument_slot_value_tag = funclet_scoped_state.slot_value_tags[& slot_id];
-					let true_input_value_tag = true_funclet_extra.input_slots[& argument_index].value_tag;
-					let false_input_value_tag = true_funclet_extra.input_slots[& argument_index].value_tag;
-					check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, true_input_value_tag);
-					check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, false_input_value_tag);
+					argument_node_results.push(node_result);
 				}
 
 				let continuation_input_count = continuation_join_point.get_input_count(& self.program);

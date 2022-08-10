@@ -41,7 +41,7 @@ pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
-pub type TimestampId = usize;
+pub type ExternalTimestampId = usize;
 //pub type LocalMetaVariableId = usize;
 pub type StorageTypeId = ffi::TypeId;
 
@@ -189,7 +189,7 @@ pub struct SlotInfo
 	//pub queue_stage : ResourceQueueStage,
 	//pub queue_place : Place,
 	//pub resource_id : ...
-	//pub timestamp_id_opt : Option<TimestampId>
+	pub external_timestamp_id_opt : Option<ExternalTimestampId>
 }
 
 // Funclet-relative join info goes here
@@ -202,7 +202,7 @@ pub struct JoinInfo
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FenceInfo
 {
-	pub timestamp_id : TimestampId,
+	pub external_timestamp_id : ExternalTimestampId,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -214,7 +214,7 @@ pub struct SchedulingFuncletExtra
 	pub input_fences : HashMap<usize, FenceInfo>,
 	pub output_fences : HashMap<usize, FenceInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
-	pub timestamps : BTreeSet<TimestampId>,
+	pub external_timestamps : BTreeSet<ExternalTimestampId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
