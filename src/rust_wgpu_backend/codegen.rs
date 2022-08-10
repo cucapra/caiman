@@ -1463,8 +1463,11 @@ impl<'program> CodeGen<'program>
 								let slot_info = & extra.input_slots[& capture_index];
 								check_value_tag_compatibility_interior(& self.program, slot_value_tag, slot_info.value_tag);
 								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+								let stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
 								let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
 								entry_timeline_enforcer.record_slot_use(place, timestamp, slot_info.external_timestamp_id_opt);
+								check_slot_type(& self.program, join_funclet.input_types[capture_index], place, stage, None);
+								assert_eq!(stage, ir::ResourceQueueStage::Ready);
 							}
 							NodeResult::Fence{ place, timestamp } =>
 							{
