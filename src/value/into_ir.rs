@@ -1,4 +1,8 @@
 use super::*;
+use std::collections::hash_map::{Entry, HashMap, VacantEntry};
+use std::hash::Hash;
+use std::rc::Rc;
+
 /*
 * The egraph -> IR conversion is an adaptation of Cranelift's [scoped elaboration][].
 * Most of the differences are due to differences between Cranelift's IR and ours.
@@ -49,38 +53,81 @@ use super::*;
 * [scoped elaboration]: https://github.com/cfallin/rfcs/blob/cranelift-egraphs/accepted/cranelift-egraph.md
 */
 
-struct ScopedHashMap {}
-impl ScopedHashMap {
-    fn new() -> Self {
-        todo!()
+enum ShmRecord<K> {
+    NewScope,
+    InsertKey(Rc<K>),
+}
+pub enum ShmEntry<'a, K, V> {
+    Occupied(&'a V),
+    Vacant(VacantEntry<'a, Rc<K>, V>),
+}
+pub struct ScopedHashMap<K, V> {
+    /// The actual hashmap. Keys are reference countied to avoid potentially costly `clone`-s,
+    /// since keys must live in both the hashmap and the `keys` structure.
+    hashmap: HashMap<Rc<K>, V>,
+    /// A record of the actions performed.
+    records: Vec<ShmRecord<K>>,
+}
+impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
+    pub fn new() -> Self {
+        Self {
+            hashmap: HashMap::new(),
+            records: Vec::new(),
+        }
     }
-    fn push_scope(&mut self) {
-        todo!()
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            hashmap: HashMap::with_capacity(capacity),
+            records: Vec::with_capacity(capacity),
+        }
     }
-    fn pop_scope(&mut self) {
-        todo!()
+    pub fn push_scope(&mut self) {
+        self.records.push(ShmRecord::NewScope);
+    }
+    /// # Panics
+    /// Panics if no scope has been pushed.
+    pub fn pop_scope(&mut self) {
+        while let ShmRecord::InsertKey(k) = self.records.pop().expect("no scopes") {
+            let removed = self.hashmap.remove(&k);
+            assert!(removed.is_some(), "recorded key not in map");
+        }
+    }
+    pub fn get(&self, key: &K) -> Option<&'_ V> {
+        self.hashmap.get(key)
+    }
+    /// Adds a value to the hashmap at the current scope.
+    /// # Panics
+    /// Panics if a mapping for that key already exists.
+    pub fn add(&mut self, key: K, val: V) {
+        let key = Rc::new(key);
+        let key2 = Rc::clone(&key);
+        match self.hashmap.entry(key) {
+            Entry::Occupied(_) => panic!("key already exists"),
+            Entry::Vacant(spot) => {
+                spot.insert(val);
+                self.records.push(ShmRecord::InsertKey(key2))
+            }
+        }
     }
 }
-fn codegen_funclet(id: ir::FuncletId, scoped_map: &mut ScopedHashMap) {
+
+type NodeMemo = ScopedHashMap<Node, ()>;
+fn codegen_funclet(id: ir::FuncletId, memo: &mut NodeMemo) {
     todo!()
 }
-fn elaborate_funclet(
-    id: ir::FuncletId,
-    scoped_map: &mut ScopedHashMap,
-    domtree: &ir::utils::DomTree,
-) {
-    scoped_map.push_scope();
+fn elaborate_funclet(id: ir::FuncletId, memo: &mut NodeMemo, domtree: &ir::utils::DomTree) {
+    memo.push_scope();
 
-    codegen_funclet(id, scoped_map);
+    codegen_funclet(id, memo);
     for &next in domtree.immediately_dominated(id) {
-        elaborate_funclet(next, scoped_map, domtree);
+        elaborate_funclet(next, memo, domtree);
     }
 
-    scoped_map.pop_scope();
+    memo.pop_scope();
 }
 pub fn the_thing_that_generates_code(graph: &GraphInner) {
     let bdoms = graph.analysis.bake_dominators();
     let domtree = bdoms.dominator_tree();
-    let mut scoped_map = ScopedHashMap::new();
-    elaborate_funclet(graph.analysis.head(), &mut scoped_map, &domtree)
+    let mut memo = NodeMemo::new();
+    elaborate_funclet(graph.analysis.head(), &mut memo, &domtree)
 }
