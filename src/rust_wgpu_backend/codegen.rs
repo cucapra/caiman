@@ -11,6 +11,7 @@ use crate::rust_wgpu_backend::code_generator::SubmissionId;
 use std::fmt::Write;
 use std::collections::BinaryHeap;
 use std::cmp::Reverse;
+use crate::type_system::value_tag::*;
 
 use crate::scheduling_state;
 use crate::scheduling_state::{LogicalTimestamp};
@@ -511,101 +512,6 @@ impl FuncletScopedState
 		}
 		
 		return None
-	}
-}
-
-// Check value tag in inner (source) scope transfering to outer (destination) scope
-fn check_value_tag_compatibility_exit(program : & ir::Program, source_value_tag : ir::ValueTag, destination_value_tag : ir::ValueTag)
-{
-	match (source_value_tag, destination_value_tag)
-	{
-		(_, ir::ValueTag::None) => (),
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Output{funclet_id, index}) =>
-		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id);
-
-			let source_value_funclet = & program.funclets[& funclet_id];
-			assert_eq!(source_value_funclet.kind, ir::FuncletKind::Value);
-
-			match & source_value_funclet.tail_edge
-			{
-				ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], remote_node_id.node_id),
-				_ => panic!("Not a unit")
-			}
-		}
-		_ => panic!("Ill-formed: {:?} to {:?}", source_value_tag, destination_value_tag)
-	}
-}
-
-fn check_value_tag_compatibility_enter(program : & ir::Program, call_operation : ir::RemoteNodeId, caller_value_tag : ir::ValueTag, callee_value_tag : ir::ValueTag)
-{
-	match (caller_value_tag, callee_value_tag)
-	{
-		(_, ir::ValueTag::None) => (),
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Input{funclet_id, index}) =>
-		{
-			assert_eq!(call_operation.funclet_id, remote_node_id.funclet_id);
-			let caller_value_funclet = & program.funclets[& call_operation.funclet_id];
-			if let ir::Node::CallValueFunction{function_id, arguments} = & caller_value_funclet.nodes[call_operation.node_id]
-			{
-				assert_eq!(arguments[index], remote_node_id.node_id);
-			}
-			else
-			{
-				panic!("Operation is not a call {:?}",  call_operation);
-			}
-		}
-		_ => panic!("Ill-formed: {:?} to {:?}", caller_value_tag, callee_value_tag)
-	}
-}
-
-// Check value tag transition in same scope
-fn check_value_tag_compatibility_interior(program : & ir::Program, source_value_tag : ir::ValueTag, destination_value_tag : ir::ValueTag)
-{
-	match (source_value_tag, destination_value_tag)
-	{
-		(ir::ValueTag::Halt{index}, ir::ValueTag::Halt{index : index_2}) => assert_eq!(index, index_2),
-		(ir::ValueTag::Halt{..}, _) => panic!("Halt can only match halt"),
-		(_, ir::ValueTag::None) => (),
-		(ir::ValueTag::Input{funclet_id, index}, ir::ValueTag::Operation{remote_node_id}) =>
-		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id);
-
-			let destination_value_funclet = & program.funclets[& funclet_id];
-			assert_eq!(destination_value_funclet.kind, ir::FuncletKind::Value);
-
-			if let ir::Node::Phi{index : phi_index} = & destination_value_funclet.nodes[remote_node_id.node_id]
-			{
-				assert_eq!(* phi_index, index);
-			}
-			else
-			{
-				panic!("Not a phi");
-			}
-		}
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Operation{remote_node_id : remote_node_id_2}) =>
-		{
-			assert_eq!(remote_node_id, remote_node_id_2);
-		}
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Output{funclet_id, index}) =>
-		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id);
-
-			let source_value_funclet = & program.funclets[& funclet_id];
-			assert_eq!(source_value_funclet.kind, ir::FuncletKind::Value);
-
-			match & source_value_funclet.tail_edge
-			{
-				ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], remote_node_id.node_id),
-				_ => panic!("Not a unit")
-			}
-		}
-		(ir::ValueTag::Output{funclet_id, index}, ir::ValueTag::Output{funclet_id : funclet_id_2, index : index_2}) =>
-		{
-			assert_eq!(funclet_id, funclet_id_2);
-			assert_eq!(index, index_2);
-		}
-		_ => panic!("Ill-formed: {:?} to {:?}", source_value_tag, destination_value_tag)
 	}
 }
 
@@ -1708,7 +1614,8 @@ impl<'program> CodeGen<'program>
 							let value_tag = callee_funclet_scheduling_extra.output_slots[& callee_output_index].value_tag;
 							let value_tag_2 = continuation_join_point.get_scheduling_input_value_tag(& self.program, continuation_input_index);
 
-							match (value_tag, value_tag_2)
+							check_value_tag_compatibility_exit(& self.program, callee_value_funclet_id, value_tag, value_operation, value_tag_2);
+							/*match (value_tag, value_tag_2)
 							{
 								(_, ir::ValueTag::None) => (),
 								(ir::ValueTag::Output{funclet_id, index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
@@ -1728,7 +1635,7 @@ impl<'program> CodeGen<'program>
 									}
 								}
 								_ => panic!("Ill-formed: {:?} to {:?}", value_tag, value_tag_2)
-							};
+							};*/
 						}
 						ir::Type::Fence{queue_place, ..} =>
 						{
@@ -1764,7 +1671,7 @@ impl<'program> CodeGen<'program>
 				let current_value_funclet = & self.program.funclets[& value_operation.funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
-				let (true_case_node_id, false_case_node_id) = if let ir::Node::Select{condition, true_case, false_case} = & current_value_funclet.nodes[value_operation.node_id]
+				/*let (true_case_node_id, false_case_node_id) = if let ir::Node::Select{condition, true_case, false_case} = & current_value_funclet.nodes[value_operation.node_id]
 				{
 					check_value_tag_compatibility_interior(& self.program, funclet_scoped_state.slot_value_tags[& condition_slot_id], ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : * condition}});
 					(* true_case, * false_case)
@@ -1772,7 +1679,9 @@ impl<'program> CodeGen<'program>
 				else
 				{
 					panic!("Scheduling select on a node that is not a select");
-				};
+				};*/
+
+				let condition_value_tag = funclet_scoped_state.slot_value_tags[& condition_slot_id];
 
 				assert_eq!(value_operation.funclet_id, true_funclet_extra.value_funclet_id);
 				assert_eq!(value_operation.funclet_id, false_funclet_extra.value_funclet_id);
@@ -1842,7 +1751,9 @@ impl<'program> CodeGen<'program>
 							true_exit_timeline_enforcer.record_slot_use(* queue_place, true_slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
 							false_exit_timeline_enforcer.record_slot_use(* queue_place, false_slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
 
-							match continuation_input_value_tag
+							check_value_tag_compatibility_interior_branch(& self.program, * value_operation, condition_value_tag, &[true_output_value_tag, false_output_value_tag], continuation_input_value_tag);
+
+							/*match continuation_input_value_tag
 							{
 								ir::ValueTag::Operation {remote_node_id} if remote_node_id == * value_operation =>
 								{
@@ -1854,7 +1765,7 @@ impl<'program> CodeGen<'program>
 									check_value_tag_compatibility_interior(& self.program, true_output_value_tag, continuation_input_value_tag);
 									check_value_tag_compatibility_interior(& self.program, false_output_value_tag, continuation_input_value_tag);
 								}
-							}
+							}*/
 						}
 						ir::Type::Fence{queue_place} =>
 						{

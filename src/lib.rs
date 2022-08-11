@@ -8,3 +8,4 @@ mod shadergen;
 pub mod frontend;
 mod rust_wgpu_backend;
 mod scheduling_state;
+mod type_system;
