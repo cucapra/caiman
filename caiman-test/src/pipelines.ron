@@ -293,7 +293,8 @@
 				output_slots : {0 : (value_tag : None)},
 				input_fences : {},
 				output_fences : {},
-				external_timestamps : []
+				external_timestamps : [],
+				external_spaces : [],
 			),
 			12 : (
 				value_funclet_id : 9,
@@ -302,6 +303,7 @@
 				input_fences : {},
 				output_fences : {},
 				external_timestamps : [],
+				external_spaces : [],
 			),
 			13 : (
 				value_funclet_id : 10,
@@ -310,6 +312,7 @@
 				input_fences : {},
 				output_fences : {},
 				external_timestamps : [],
+				external_spaces : [],
 			),
 			14 : (
 				value_funclet_id : 10,
@@ -318,6 +321,7 @@
 				input_fences : {},
 				output_fences : {},
 				external_timestamps : [],
+				external_spaces : [],
 			)
 		},
 		pipelines : [

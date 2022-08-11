@@ -42,6 +42,7 @@ pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
 pub type ExternalTimestampId = usize;
+pub type ExternalSpaceId = usize;
 //pub type LocalMetaVariableId = usize;
 pub type StorageTypeId = ffi::TypeId;
 
@@ -132,6 +133,7 @@ pub enum Type
 	Slot { storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
 	Fence { queue_place : Place },
+	Buffer { storage_place : Place },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -143,8 +145,15 @@ pub enum TailEdge
 	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
+	// Split value - what will be computed
 	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
 	ScheduleSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
+	
+	// Split time - when it will be computed
+	// SyncFence { fence : NodeId, immediate_funclet : FuncletId, deferred_funclet : FuncletId, arguments : Box<[NodeId]>, continuation_join : NodeId },
+
+	// Split space - where the computation will be observed
+	AllocFromBuffer { buffer : NodeId, slot_count : usize, success_funclet_id : FuncletId, failure_funclet_id : FuncletId, arguments : Box<[NodeId]>, continuation_join : NodeId }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -189,7 +198,8 @@ pub struct SlotInfo
 	//pub queue_stage : ResourceQueueStage,
 	//pub queue_place : Place,
 	//pub resource_id : ...
-	pub external_timestamp_id_opt : Option<ExternalTimestampId>
+	pub external_timestamp_id_opt : Option<ExternalTimestampId>,
+	pub external_space_id_opt : Option<ExternalSpaceId>
 }
 
 // Funclet-relative join info goes here
@@ -215,6 +225,7 @@ pub struct SchedulingFuncletExtra
 	pub output_fences : HashMap<usize, FenceInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
 	pub external_timestamps : BTreeSet<ExternalTimestampId>,
+	pub external_spaces : BTreeSet<ExternalSpaceId>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
