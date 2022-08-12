@@ -74,6 +74,8 @@ impl_binop!(add, a, b, (a.checked_add(b).ok_or(CFoldError::OutOfRange)?)
 impl_binop!(sub, a, b, (a.checked_sub(b).ok_or(CFoldError::OutOfRange)?)
     for {U8, U16, U32, U64, I8, I16, I32, I64}
 );
+impl_binop!(logical_and, a, b, (a && b) for {Bool});
+impl_binop!(logical_or, a, b, (a && b) for {Bool});
 
 fn cfold_binop(egraph: &GraphInner, binop: BinopKind, deps: &[egg::Id]) -> Option<Constant> {
     assert!(deps.len() == 2, "binop has two arguments");
@@ -86,6 +88,8 @@ fn cfold_binop(egraph: &GraphInner, binop: BinopKind, deps: &[egg::Id]) -> Optio
         // in codegen or at runtime. egg doesn't have a way to do fallible analyses AFAIK
         BinopKind::Add => Some(a.add(b).unwrap()),
         BinopKind::Sub => Some(a.sub(b).unwrap()),
+        BinopKind::LogicalAnd => Some(a.logical_and(b).unwrap()),
+        BinopKind::LogicalOr => Some(a.logical_or(b).unwrap()),
     }
 }
 impl Node {

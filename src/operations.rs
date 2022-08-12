@@ -31,6 +31,9 @@ pub enum BinopKind {
     // Arithmetic
     Add,
     Sub,
+    // Logical
+    LogicalAnd,
+    LogicalOr,
     // TODO
 }
 impl FromStr for BinopKind {
