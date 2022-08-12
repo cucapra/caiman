@@ -41,6 +41,15 @@ pub struct Node {
     /// You generally shouldn't be adding or removing children anyways.
     deps: Box<[GraphId]>,
 }
+impl Node {
+    // convenience function, almost like "unwrap"
+    fn operation(&self) -> Option<&'_ OperationKind> {
+        match &self.kind {
+            NodeKind::Operation { kind } => Some(kind),
+            _ => None,
+        }
+    }
+}
 impl egg::Language for Node {
     fn matches(&self, other: &Self) -> bool {
         self.kind == other.kind
