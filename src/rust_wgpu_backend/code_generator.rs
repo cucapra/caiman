@@ -197,7 +197,7 @@ pub struct CodeGenerator<'program>
 	type_code_writer : CodeWriter,
 	state_code_writer : CodeWriter,
 	code_writer : CodeWriter, // the "everything else" for now
-	types : Arena<ir::Type>,
+	types : ir::Types,
 	external_cpu_functions : & 'program [ir::ExternalCpuFunction],
 	external_gpu_functions : & 'program [ir::ExternalGpuFunction],
 	has_been_generated : HashSet<usize>,
@@ -217,7 +217,7 @@ pub struct CodeGenerator<'program>
 
 impl<'program> CodeGenerator<'program>
 {
-	pub fn new(types : Arena<ir::Type>, external_cpu_functions : & 'program [ir::ExternalCpuFunction], external_gpu_functions : & 'program [ir::ExternalGpuFunction]) -> Self
+	pub fn new(types : ir::Types, external_cpu_functions : & 'program [ir::ExternalCpuFunction], external_gpu_functions : & 'program [ir::ExternalGpuFunction]) -> Self
 	{
 		let variable_tracker = VariableTracker::new();
 		let type_code_writer = CodeWriter::new();
@@ -791,7 +791,7 @@ impl<'program> CodeGenerator<'program>
 				{
 					tuple_fields.push(*output_type);
 				}
-				let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+				let type_id = self.types.insert(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 				self.generate_type_definition(type_id);
 				write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(type_id));
 			}
@@ -821,7 +821,7 @@ impl<'program> CodeGenerator<'program>
 				let output_type = output_types[output_index];
 				tuple_fields.push(output_type);
 			}
-			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			let type_id = self.types.insert(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
 		}
@@ -864,7 +864,7 @@ impl<'program> CodeGenerator<'program>
 				let output_type = output_types[output_index];
 				tuple_fields.push(output_type);
 			}
-			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			let type_id = self.types.insert(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
 			//write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
 			type_id
@@ -915,7 +915,7 @@ impl<'program> CodeGenerator<'program>
 				let output_type = output_types[output_index];
 				tuple_fields.push(output_type);
 			}
-			let type_id = self.types.create(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			let type_id = self.types.insert(ir::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
 		}
@@ -1243,7 +1243,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.has_been_generated.insert(type_id);
 
-		let typ = & self.types[& type_id];
+		let typ = & self.types[type_id];
 		write!(self.type_code_writer, "// Type #{}: {:?}\n", type_id, typ);
 		match typ
 		{
@@ -1290,7 +1290,7 @@ impl<'program> CodeGenerator<'program>
 
 	fn get_type_name(& self, type_id : ir::TypeId) -> String
 	{
-		match & self.types[& type_id]
+		match & self.types[type_id]
 		{
 			ir::Type::F32 => "f32".to_string(),
 			ir::Type::F64 => "f64".to_string(),
@@ -1313,7 +1313,7 @@ impl<'program> CodeGenerator<'program>
 
 	fn get_type_binding_info(&self, type_id : ir::TypeId) -> TypeBindingInfo
 	{
-		match & self.types[& type_id]
+		match & self.types[type_id]
 		{
 			ir::Type::F32 => TypeBindingInfo { size : std::mem::size_of::<f32>(), alignment : std::mem::align_of::<f32>() },
 			ir::Type::F64 => TypeBindingInfo { size : std::mem::size_of::<f64>(), alignment : std::mem::align_of::<f64>() },
