@@ -31,6 +31,7 @@ pub enum OperationInputKind
 {
 	Type,
 	Place,
+	ImmediateBool,
 	ImmediateI64,
 	ImmediateU64,
 	Index,

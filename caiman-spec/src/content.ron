@@ -48,6 +48,15 @@
 			has_local_side_effect : false
 		),
 		(
+			name : "ConstantBool",
+			inputs : [
+				(name : "value", kind : ImmediateBool)
+			],
+			output : Single,
+			language_set : (functional : true, scheduling : false, intrinsic : true),
+			has_local_side_effect : false
+		),
+		(
 			name : "CallValueFunction",
 			inputs : [
 				(name : "function_id", kind : ValueFunction),

@@ -436,11 +436,7 @@ pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
             input_types: Box::new([]),
             output_types: Box::new([]),
             // we add one constant integer so branch nodes actually have a key
-            // TODO: switch this to constantbool
-            nodes: Box::new([Node::ConstantInteger {
-                value: 0,
-                type_id: 0,
-            }]),
+            nodes: Box::new([Node::ConstantBool { value: false }]),
             input_resource_states: Default::default(),
             output_resource_states: Default::default(),
             local_meta_variables: Default::default(),

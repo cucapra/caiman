@@ -17,37 +17,33 @@ enum Constant {
     I32(i32),
     I64(i64),
 }
-
+impl OperationKind {
+    fn constant(&self) -> Option<Constant> {
+        match self {
+            Self::ConstantBool { value } => Some(Constant::Bool(*value)),
+            Self::ConstantInteger { value, .. } => Some(Constant::I64(*value)),
+            Self::ConstantUnsignedInteger { value, .. } => Some(Constant::U64(*value)),
+            _ => None,
+        }
+    }
+}
 #[derive(Debug)]
 pub struct ClassAnalysis {
     constant: Option<Constant>,
 }
 impl ClassAnalysis {
     fn new(_egraph: &GraphInner, enode: &Node) -> Self {
-        let mut constant = None;
-        if let NodeKind::Operation { kind } = &enode.kind {
-            if let OperationKind::ConstantInteger { value, .. } = kind {
-                constant = Some(Constant::I64(*value));
-            } else if let OperationKind::ConstantUnsignedInteger { value, .. } = kind {
-                constant = Some(Constant::U64(*value));
-            }
-        }
+        let constant = match &enode.kind {
+            NodeKind::Operation { kind } => kind.constant(),
+            _ => None,
+        };
         Self { constant }
     }
     fn merge(&mut self, other: Self) -> egg::DidMerge {
-        let constant_merge = match (self.constant, other.constant) {
-            (None, None) => egg::DidMerge(false, false),
-            (Some(_), None) => egg::DidMerge(false, true),
-            (None, mut b @ Some(_)) => {
-                self.constant = b.take();
-                egg::DidMerge(true, false)
-            }
-            (Some(a), Some(b)) => {
-                assert!(a == b, "graph rewrite violated the type system");
-                egg::DidMerge(false, false)
-            }
-        };
-        constant_merge
+        egg::merge_option(&mut self.constant, other.constant, |a, b| {
+            assert_eq!(a, &b, "rewrite type violation (merge non-equal constants)");
+            egg::DidMerge(false, false)
+        })
     }
 }
 

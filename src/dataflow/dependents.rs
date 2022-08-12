@@ -152,6 +152,7 @@ impl ValueDependent for Sum {
 macro_rules! _lookup_type {
 	([$elem_type:ident]) => { Box<[_lookup_type!($elem_type)]> };
 	(Type) => { ir::TypeId };
+    (ImmediateBool) => { bool };
 	(ImmediateI64) => { i64 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };

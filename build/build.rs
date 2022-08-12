@@ -25,6 +25,7 @@ fn input_type(input: &spec::OperationInput) -> String {
     let base = match input.kind {
         OK::Type => "Type",
         OK::Place => "Place",
+        OK::ImmediateBool => "ImmediateBool",
         OK::ImmediateI64 => "ImmediateI64",
         OK::ImmediateU64 => "ImmediateU64",
         OK::Index => "Index",

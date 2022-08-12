@@ -5,6 +5,7 @@ use crate::value::from_op::{Attribs, FromOpError};
 macro_rules! _field_type {
 	([$elem_type:ident]) => { Box<[_field_type!($elem_type)]> };
 	(Type) => { ir::TypeId };
+    (ImmediateBool) => { bool };
 	(ImmediateI64) => { i64 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
