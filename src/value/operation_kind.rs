@@ -1,5 +1,6 @@
+use crate::ir;
 use crate::operations::{BinopKind, UnopKind};
-use crate::{ir, value};
+use crate::value::from_op::{Attribs, FromOpError};
 
 macro_rules! _field_type {
 	([$elem_type:ident]) => { Box<[_field_type!($elem_type)]> };
@@ -14,6 +15,38 @@ macro_rules! _field_type {
 	(Place) => { ir::Place };
     (Unop) => { UnopKind };
     (Binop) => { BinopKind };
+}
+macro_rules! _short_name {
+    (None) => {
+        "none"
+    };
+    (ExtractResult) => {
+        "extract"
+    };
+    (ConstantInteger) => {
+        "csi"
+    };
+    (ConstantUnsignedInteger) => {
+        "cui"
+    };
+    (ConstantBool) => {
+        "cb"
+    };
+    (CallValueFunction) => {
+        "call_val"
+    };
+    (CallExternalCpu) => {
+        "call_cpu"
+    };
+    (CallExternalGpuCompute) => {
+        "call_gpu"
+    };
+    (Unop) => {
+        "unop"
+    };
+    (Binop) => {
+        "binop"
+    };
 }
 macro_rules! _mok_impl {
     ($({
@@ -35,6 +68,24 @@ macro_rules! _mok_impl {
                         ir::Node::$name {$($arg,)* ..} => Self::$name { $($arg : $arg.clone()),* },
                     )*
                     _ => panic!("invalid value node for operation conversion")
+                }
+            }
+            #[allow(unused_mut)]
+            pub(super) fn num_deps(&self) -> usize{
+                match self {
+                    $( Self::$name { .. } => { let mut count = 0; $(count += 1; let $arg = (); )* count} )*
+                }
+            }
+            pub(super) fn from_description(kind: &str, attribs: &mut Attribs) -> Result<Self, FromOpError> {
+                match kind {
+                   $( _short_name!($name) => Ok(Self::$name {
+                            $($arg : attribs.get(stringify!($arg))?),*
+                    }),)*
+                    // convenience overrides
+                    "+" => Ok(Self::Binop {kind: BinopKind::Add}),
+                    "-" => Ok(Self::Binop {kind: BinopKind::Sub}),
+                    // fallback
+                    _ => Err(FromOpError::UnknownOp(kind.into()))
                 }
             }
         }

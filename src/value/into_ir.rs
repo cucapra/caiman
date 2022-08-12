@@ -2,7 +2,10 @@ use super::*;
 use std::collections::hash_map::{Entry, HashMap};
 use std::hash::Hash;
 use std::rc::Rc;
+use thiserror::Error;
 
+#[derive(Debug, Error)]
+pub enum IntoIrError {}
 /*
 * The egraph -> IR conversion is an adaptation of Cranelift's [scoped elaboration][].
 * Most of the differences are due to differences between Cranelift's IR and ours.
@@ -52,6 +55,11 @@ use std::rc::Rc;
 * as referenced. (This subsumes unused funclet input/output elimination.)
 * [scoped elaboration]: https://github.com/cfallin/rfcs/blob/cranelift-egraphs/accepted/cranelift-egraph.md
 */
+
+// We treat IR funclets as immutable. Instead of modifying the existing funclets, we simply
+// generate new funclets and return an updated head ID. This slightly simplifies the code
+// and allows multiple pipelines to reference the same funclets safely.
+// This isn't a fundamental design constraint and can be changed if necessary.
 
 enum ShmRecord<K> {
     Scope,
@@ -140,6 +148,37 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
     }
 }
 
+/// TODO: I think I might have to move to intra-funclet control flow
+/// A "psuedo-IR node" with a concrete operation which refers to an "IR location".
+/// Crucially, this location may be in a different funclet, which is why IR nodes aren't
+/// emitted directly.
+/// TODO: How to handle the entry funclet? We must keep its args EXACTLY the same.
+/// TODO: Should we convert IdLists back into arrays here, or should we wait?
+/// - advantages: it makes sense
+/// - disadvantages: how do we choose between arrays and stuff now?
+/// Conclusion: DO NOT convert IdLists back to arrays here.
+/// Wait - but then, what's the point of the psuedo IR layer, if the locations don't actually
+/// correspond? Let's just go *directly* into the IR.
+/// What happens if an IDlist gets chosen as an argument? Can that even happen?
+struct PsuedoIrNode {
+    kind: OperationKind,
+    from: egg::Id,
+    deps: Box<[Location]>,
+}
+
+struct FuncletBuilder {
+    /// A map from global node locations to a local location within the funclet.
+    /// Clearly, this map is partial, and the local location may refer to the node itself
+    /// (if it's truly local) or a Phi node (if it's passed in as an argument).
+    local_memo: HashMap<Location, ir::NodeId>,
+    /// Formal parameter `i` has type `input_types[i]`
+    input_types: Vec<ir::TypeId>,
+}
+impl FuncletBuilder {
+    fn add_node(&mut self, node: ir::Node) -> ir::NodeId {
+        todo!()
+    }
+}
 /// The "global location" of an IR node within the generated program.
 struct Location {
     /// The ID of the funclet containing this IR node.
@@ -165,10 +204,13 @@ impl<'a> ElaborationCtx<'a> {
             domtree,
         }
     }
-    fn elaborate_node(&self, memo: &mut NodeMemo, gid: GraphId) {
+    fn elaborate_node(&self, memo: &mut NodeMemo, gid: GraphId) -> Location {
         // canonicalize GID, so gid1 == gid2 <=> node1 == node2
         let gid = self.graph.find(gid);
         if let Some(location) = memo.get(&gid) {
+            // if this node is in a different funclet, we need to pass the value through the call
+            // graph so that it arrives as an input, and then emit a param...
+            // UNLESS we've already done that, in which case we can just use the cached param.
             todo!()
         }
         todo!()

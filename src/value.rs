@@ -5,12 +5,15 @@ mod from_ir;
 pub use from_ir::FromIrError;
 
 mod into_ir;
+pub use into_ir::IntoIrError;
 
 mod analysis;
 use analysis::Analysis;
 
 mod operation_kind;
 pub use operation_kind::OperationKind;
+
+mod from_op;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NodeKind {
@@ -106,7 +109,7 @@ impl Graph {
         // sad.
         self.runner = runner;
     }
-    pub fn elaborate_into(&self, program: &mut ir::Program) -> ir::FuncletId {
+    pub fn elaborate_into(&self, program: &mut ir::Program) -> Result<ir::FuncletId, IntoIrError> {
         todo!()
     }
 }

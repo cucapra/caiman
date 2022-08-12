@@ -7,14 +7,19 @@ use thiserror::Error;
 ///   1. occurs after the dependent, or
 ///   2. doesn't exist at all
 #[derive(Debug, Error)]
-#[error("IR conversion error (funclet {funclet_id}): {needed_by} depends on node #{dependency_id}")]
-pub struct FromIrError {
-    /// The ID of the funclet where the error occurred
-    pub funclet_id: ir::FuncletId,
-    /// The node ID of the dependency
-    pub dependency_id: ir::NodeId,
-    /// The dependent which caused the failure.
-    pub needed_by: ir::Dependent,
+
+pub enum FromIrError {
+    #[error(
+        "IR conversion error (funclet {funclet_id}): {needed_by} depends on node #{dependency_id}"
+    )]
+    InvalidDependency {
+        /// The ID of the funclet where the error occurred
+        funclet_id: ir::FuncletId,
+        /// The node ID of the dependency
+        dependency_id: ir::NodeId,
+        /// The dependent which caused the failure.
+        needed_by: ir::Dependent,
+    },
 }
 
 type Result = std::result::Result<value::GraphId, FromIrError>;
@@ -33,11 +38,14 @@ impl<'a> FuncletConverter<'a> {
         }
     }
     pub fn convert_node_id(&self, node_id: ir::NodeId, needed_by: ir::Dependent) -> Result {
-        self.node_ids.get(&node_id).copied().ok_or(FromIrError {
-            funclet_id: self.funclet_id,
-            dependency_id: node_id,
-            needed_by,
-        })
+        self.node_ids
+            .get(&node_id)
+            .copied()
+            .ok_or(FromIrError::InvalidDependency {
+                funclet_id: self.funclet_id,
+                dependency_id: node_id,
+                needed_by,
+            })
     }
     pub fn make_id_list(&mut self, node_ids: &[ir::NodeId], needed_by: ir::Dependent) -> Result {
         let deps: Box<_> = node_ids
