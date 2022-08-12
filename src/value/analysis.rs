@@ -32,11 +32,11 @@ enum Constant {
     I32(i32),
     I64(i64),
 }
-macro_rules! impl_std_unop {
-    ($trait:path, $name:ident, $out0:ident, $tok:tt for {$($variant:ident),*}) => {
-        impl $trait for Constant {
-            type Output = Result<Constant, CFoldError>;
-            fn $name(self) -> Self::Output {
+
+macro_rules! impl_unop {
+    ($name:ident, $out0:ident, $tok:tt for {$($variant:ident),*}) => {
+        impl Constant {
+            fn $name(self) -> Result<Constant, CFoldError> {
                 match self {
                     $(Self::$variant($out0) => Ok(Self::$variant $tok),)*
                     _ => return Err(CFoldError::IncompatibleTypes)
@@ -45,22 +45,20 @@ macro_rules! impl_std_unop {
         }
     };
 }
-
-impl_std_unop!(std::ops::Neg, neg, x, (-x) for {I8, I16, I32, I64});
+impl_unop!(negate, x, (-x) for {I8, I16, I32, I64});
 
 fn cfold_unop(egraph: &GraphInner, unop: UnopKind, deps: &[egg::Id]) -> Option<Constant> {
     assert!(deps.len() == 1, "unop has one argument");
     let x = egraph[deps[0]].data.constant?;
     match unop {
-        UnopKind::Neg => Some((-x).unwrap()),
+        UnopKind::Neg => Some(x.negate().unwrap()),
     }
 }
 
-macro_rules! impl_std_binop {
-    ($trait:path, $name:ident, $out0:ident, $out1:ident, $tok:tt for {$($variant:ident),*}) => {
-        impl $trait for Constant {
-            type Output = Result<Constant, CFoldError>;
-            fn $name(self, rhs: Self) -> Self::Output {
+macro_rules! impl_binop {
+    ($name:ident, $out0:ident, $out1:ident, $tok:tt for {$($variant:ident),*}) => {
+        impl Constant {
+            fn $name(self, rhs: Self) -> Result<Constant, CFoldError> {
                 match (self, rhs) {
                     $((Self::$variant($out0), Self::$variant($out1)) => Ok(Self::$variant $tok),)*
                     _ => return Err(CFoldError::IncompatibleTypes)
@@ -70,10 +68,10 @@ macro_rules! impl_std_binop {
     };
 }
 
-impl_std_binop!(std::ops::Add, add, a, b, (a.checked_add(b).ok_or(CFoldError::OutOfRange)?)
+impl_binop!(add, a, b, (a.checked_add(b).ok_or(CFoldError::OutOfRange)?)
     for {U8, U16, U32, U64, I8, I16, I32, I64}
 );
-impl_std_binop!(std::ops::Sub, sub, a, b, (a.checked_sub(b).ok_or(CFoldError::OutOfRange)?)
+impl_binop!(sub, a, b, (a.checked_sub(b).ok_or(CFoldError::OutOfRange)?)
     for {U8, U16, U32, U64, I8, I16, I32, I64}
 );
 
@@ -86,8 +84,8 @@ fn cfold_binop(egraph: &GraphInner, binop: BinopKind, deps: &[egg::Id]) -> Optio
         // (a + b).ok() but that seems like a disservice to a user wondering why their
         // value function is buggy, and the errors will almost certainly pop up later
         // in codegen or at runtime. egg doesn't have a way to do fallible analyses AFAIK
-        BinopKind::Add => Some((a + b).unwrap()),
-        BinopKind::Sub => Some((a - b).unwrap()),
+        BinopKind::Add => Some(a.add(b).unwrap()),
+        BinopKind::Sub => Some(a.sub(b).unwrap()),
     }
 }
 impl Node {
