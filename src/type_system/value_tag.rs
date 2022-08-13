@@ -25,25 +25,6 @@ pub fn check_value_tag_compatibility_enter(program : & ir::Program, call_operati
 // Check value tag in callee (source) scope transfering to caller (destination) scope
 pub fn check_value_tag_compatibility_exit(program : & ir::Program, callee_funclet_id : ir::FuncletId, source_value_tag : ir::ValueTag, continuation_value_operation : ir::RemoteNodeId, destination_value_tag : ir::ValueTag)
 {
-	/*match (source_value_tag, destination_value_tag)
-	{
-		(_, ir::ValueTag::None) => (),
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Output{funclet_id, index}) =>
-		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id);
-
-			let source_value_funclet = & program.funclets[& funclet_id];
-			assert_eq!(source_value_funclet.kind, ir::FuncletKind::Value);
-
-			match & source_value_funclet.tail_edge
-			{
-				ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], remote_node_id.node_id),
-				_ => panic!("Not a unit")
-			}
-		}
-		_ => panic!("Ill-formed: {:?} to {:?}", source_value_tag, destination_value_tag)
-	}*/
-
 	match (source_value_tag, destination_value_tag)
 	{
 		(_, ir::ValueTag::None) => (),

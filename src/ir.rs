@@ -26,6 +26,23 @@ pub enum ResourceQueueStage
 	Dead
 }
 
+/*impl ResourceQueueStage
+{
+	fn next_stage(self) -> Self
+	{
+		use Self::*;
+		match self
+		{
+			Unbound => Bound,
+			Bound => Encoded,
+			Encoded => Submitted,
+			Submitted => Ready,
+			Ready => Ready,
+			Dead => Dead,
+		}
+	}
+}*/
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct ResourceState
 {
@@ -125,15 +142,26 @@ pub enum ValueTag
 	Halt{index : usize}
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TimelineTag
+{
+	None, // Don't care
+	Operation{ remote_node_id : RemoteNodeId },
+	Input{ funclet_id : FuncletId, index : usize },
+	Output{ funclet_id : FuncletId, index : usize },
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
 	Integer { signed : bool, width : usize },
 
 	Slot { storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
-	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
+	SchedulingJoin { /*input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra*/ }, // Could possibly move part of funclet definition to Type in the future?
 	Fence { queue_place : Place },
 	Buffer { storage_place : Place },
+
+	Agent { place : Place }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -163,7 +191,8 @@ pub enum FuncletKind
 	MixedExplicit,
 	Value,
 	ScheduleExplicit,
-	Inline // Adopts the constraints of the calling funclet
+	Inline, // Adopts the constraints of the calling funclet
+	Timeline
 }
 
 impl FuncletKind
@@ -195,6 +224,7 @@ pub struct Funclet
 pub struct SlotInfo
 {
 	pub value_tag : ValueTag,
+	pub timeline_tag : TimelineTag, // marks the event that put the slot into its current state
 	//pub queue_stage : ResourceQueueStage,
 	//pub queue_place : Place,
 	//pub resource_id : ...
@@ -213,6 +243,7 @@ pub struct JoinInfo
 pub struct FenceInfo
 {
 	pub external_timestamp_id : ExternalTimestampId,
+	pub timeline_tag : TimelineTag,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -225,7 +256,9 @@ pub struct SchedulingFuncletExtra
 	pub output_fences : HashMap<usize, FenceInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
 	pub external_timestamps : BTreeSet<ExternalTimestampId>,
-	pub external_spaces : BTreeSet<ExternalSpaceId>
+	pub external_spaces : BTreeSet<ExternalSpaceId>,
+	pub in_timeline_tag : TimelineTag,
+	pub out_timeline_tag : TimelineTag,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]

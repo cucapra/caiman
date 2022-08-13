@@ -6,11 +6,13 @@ fn operation_language(operation: &spec::Operation) -> &'static str {
     match (
         operation.language_set.functional,
         operation.language_set.scheduling,
+        operation.language_set.timeline,
     ) {
-        (true, true) => "mixed",
-        (true, false) => "functional",
-        (false, true) => "scheduling",
-        (false, false) => panic!("operation doesn't belong to any languages?"),
+        (true, true, true) => "mixed",
+        (true, false, false) => "functional",
+        (false, true, false) => "scheduling",
+        (false, false, true) => "timeline",
+        (_, _, _) => panic!("Unknown language combination {:?}", operation),
     }
 }
 

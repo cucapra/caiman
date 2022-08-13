@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
 use std::fmt::Write;
 
+/*
 #[derive(Debug, Clone, Copy)]
 enum GpuResidencyState
 {
@@ -717,13 +718,13 @@ impl<'program> Explicator<'program>
 
 		return output_nodes.into_boxed_slice();
 	}
-}
+}*/
 
 // Converts the dataflow to control flow and makes the implicit scheduling explicit using a canonical interpretation when no hints are given
 // Transitions from a language where scheduling is optional to one where it is required
 pub fn explicate_scheduling(program : &mut ir::Program)
 {
-	let mut explicator = Explicator::new(program);
-	explicator.run();
+	//let mut explicator = Explicator::new(program);
+	//explicator.run();
 	//explicator.explicate_funclet();
 }

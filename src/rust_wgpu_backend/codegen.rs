@@ -12,6 +12,7 @@ use std::fmt::Write;
 use std::collections::BinaryHeap;
 use std::cmp::Reverse;
 use crate::type_system::value_tag::*;
+use crate::type_system::timeline_tag::*;
 
 use crate::scheduling_state;
 use crate::scheduling_state::{LogicalTimestamp};
@@ -49,7 +50,8 @@ struct RootJoinPoint
 	value_funclet_id : ir::FuncletId,
 	input_types : Box<[ir::TypeId]>,
 	input_slot_value_tags : HashMap<usize, ir::ValueTag>,
-	input_external_timestamp_ids : HashMap<usize, ir::ExternalTimestampId>
+	input_external_timestamp_ids : HashMap<usize, ir::ExternalTimestampId>,
+	in_timeline_tag : ir::TimelineTag
 }
 
 #[derive(Debug, Clone)]
@@ -102,6 +104,23 @@ impl JoinPoint
 		{
 			Self::SimpleJoinPoint(join_point) => join_point.captures.len(),
 			Self::RootJoinPoint(_) => 0,
+		}
+	}
+
+	fn get_scheduling_in_timeline_tag(&self, program : & ir::Program) -> ir::TimelineTag
+	{
+		match self
+		{
+			Self::SimpleJoinPoint(join_point) =>
+			{
+				let funclet = & program.funclets[& join_point.scheduling_funclet_id];
+				let extra = & program.scheduling_funclet_extras[& join_point.scheduling_funclet_id];
+				extra.in_timeline_tag
+			}
+			Self::RootJoinPoint(join_point) =>
+			{
+				join_point.in_timeline_tag
+			}
 		}
 	}
 
@@ -440,13 +459,14 @@ struct FuncletScopedState
 	// If we were to make this global, we'd need a key for disambiguation of different call instances and a way to define equivalence classes of valuetags (for example, between a phi and the node used as input for that phi)
 	// Because of this, we need to recreate this for each funclet instance
 	slot_value_tags : HashMap<scheduling_state::SlotId, ir::ValueTag>,
+	node_timeline_tags : HashMap<ir::NodeId, ir::TimelineTag>,
 }
 
 impl FuncletScopedState
 {
 	fn new(value_funclet_id : ir::FuncletId, scheduling_funclet_id : ir::FuncletId) -> Self
 	{
-		Self{ value_funclet_id, scheduling_funclet_id, node_results : Default::default(), slot_value_tags : HashMap::new()}
+		Self{ value_funclet_id, scheduling_funclet_id, node_results : Default::default(), slot_value_tags : HashMap::new(), node_timeline_tags : HashMap::new()}
 	}
 
 	fn move_node_result(&mut self, node_id : ir::NodeId) -> Option<NodeResult>
@@ -861,7 +881,7 @@ impl<'program> CodeGen<'program>
 			{
 				input_slot_value_tags.insert(* input_index, ir::ValueTag::Output{funclet_id : value_funclet_id, index : * input_index});
 			}
-			let join_point_id = placement_state.join_graph.create(JoinPoint::RootJoinPoint(RootJoinPoint{value_funclet_id, input_types, input_slot_value_tags, input_external_timestamp_ids}));
+			let join_point_id = placement_state.join_graph.create(JoinPoint::RootJoinPoint(RootJoinPoint{value_funclet_id, input_types, input_slot_value_tags, input_external_timestamp_ids, in_timeline_tag : funclet_extra.out_timeline_tag}));
 			Option::<JoinPointId>::Some(join_point_id)
 		};
 
@@ -1004,7 +1024,7 @@ impl<'program> CodeGen<'program>
 		{
 			let is_valid = match & funclet.nodes[index]
 			{
-				ir::Node::None => true,
+				//ir::Node::None => true,
 				ir::Node::Phi { .. } => true,
 				_ => false
 			};
@@ -1018,14 +1038,22 @@ impl<'program> CodeGen<'program>
 		
 					if let ir::Type::Slot { storage_type, queue_stage, queue_place } = & self.program.types[input_type_id]
 					{
-						let tag = match slot_info.value_tag
+						let value_tag = match slot_info.value_tag
 						{
 							ir::ValueTag::None => ir::ValueTag::None,
 							ir::ValueTag::Operation{remote_node_id} => ir::ValueTag::Operation{remote_node_id},
 							ir::ValueTag::Input{funclet_id, index} => ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
 							_ => panic!("Unimplemented")
 						};
-						funclet_scoped_state.slot_value_tags.insert(slot_id, tag);
+						let timeline_tag = match slot_info.timeline_tag
+						{
+							ir::TimelineTag::None => ir::TimelineTag::None,
+							ir::TimelineTag::Operation{remote_node_id} => ir::TimelineTag::Operation{remote_node_id},
+							ir::TimelineTag::Input{funclet_id, index} => ir::TimelineTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
+							_ => panic!("Unimplemented")
+						};
+						funclet_scoped_state.slot_value_tags.insert(slot_id, value_tag);
+						funclet_scoped_state.node_timeline_tags.insert(index, timeline_tag);
 					}
 					else
 					{
@@ -1053,6 +1081,15 @@ impl<'program> CodeGen<'program>
 				_ => ()
 			}
 		}
+
+		let mut current_timeline_tag = match funclet_scheduling_extra.in_timeline_tag
+		{
+			ir::TimelineTag::None => ir::TimelineTag::None,
+			ir::TimelineTag::Input{funclet_id, index} => ir::TimelineTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
+			ir::TimelineTag::Operation{remote_node_id} => ir::TimelineTag::Operation{remote_node_id},
+			ir::TimelineTag::Output{funclet_id, index} => ir::TimelineTag::Output{funclet_id, index},
+			_ => panic!("")
+		};
 
 		if self.print_codegen_debug_info
 		{
@@ -1096,6 +1133,7 @@ impl<'program> CodeGen<'program>
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
 
 					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
+					funclet_scoped_state.node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
 
 					// To do: Allocate from buffers for GPU/CPU and assign variable
 					match place
@@ -1117,6 +1155,7 @@ impl<'program> CodeGen<'program>
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id});
 
 					funclet_scoped_state.slot_value_tags.insert(slot_id, ir::ValueTag::Operation{remote_node_id : * operation});
+					funclet_scoped_state.node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
 				}
 				ir::Node::Drop { node : dropped_node_id } =>
 				{
@@ -1302,8 +1341,36 @@ impl<'program> CodeGen<'program>
 						_ => panic!("Unimplemented")
 					}
 				}
-				ir::Node::Submit { place } =>
+				ir::Node::Submit { place, event } =>
 				{
+					current_timeline_tag = check_next_timeline_tag_on_submit(& self.program, * event, current_timeline_tag);
+
+					let mut encoded_node_ids = Vec::<ir::NodeId>::new();
+
+					for (node_id, node_result) in funclet_scoped_state.node_results.iter()
+					{
+						//check_timeline_tag_compatibility_interior
+						//funclet_scoped_state.node_timeline_tags[]
+						match * node_result
+						{
+							NodeResult::Slot{slot_id} =>
+							{
+								let slot_place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+								let slot_stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
+								if * place == slot_place && ir::ResourceQueueStage::Encoded == slot_stage
+								{
+									encoded_node_ids.push(* node_id);
+									//check_timeline_tag_compatibility_interior(& self.program, , current_timeline_tag);
+									// To do : move to submitted
+									funclet_scoped_state.node_timeline_tags.insert(* node_id, current_timeline_tag);
+								}
+							}
+							_ => ()
+						}
+					}
+
+					// To do: Everything at this timeline tag should advance
+
 					let submission_id = placement_state.scheduling_state.insert_submission
 					(
 						* place,
@@ -1312,17 +1379,38 @@ impl<'program> CodeGen<'program>
 
 					placement_state.submission_map.insert(submission_id, self.code_generator.flush_submission());
 				}
-				ir::Node::EncodeFence { place } =>
+				ir::Node::EncodeFence { place, event } =>
 				{
 					let local_timestamp = self.advance_local_time(placement_state);
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Fence { place : * place, timestamp : local_timestamp });
+					funclet_scoped_state.node_timeline_tags.insert(current_node_id, current_timeline_tag);
 				}
-				ir::Node::SyncFence { place : synced_place, fence } =>
+				ir::Node::SyncFence { place : synced_place, fence, event } =>
 				{
+					current_timeline_tag = check_next_timeline_tag_on_sync(& self.program, * event, current_timeline_tag);
+					/*for (node_id, node_result) in funclet_scoped_state.node_results.iter()
+					{
+						//check_timeline_tag_compatibility_interior
+						funclet_scoped_state.node_timeline_tags[]
+					}*/
+
+					// To do: Everything at this timeline tag should advance
+
+
 					let local_timestamp = self.advance_local_time(placement_state);
 					// Only implemented for the local queue for now
 					assert_eq!(* synced_place, ir::Place::Local);
 					// To do: Need to update nodes
+					let fence_encoding_timeline_event = if let Some(ir::TimelineTag::Operation{remote_node_id}) = funclet_scoped_state.node_timeline_tags.remove(fence)
+					{
+						remote_node_id
+					}
+					else
+					{
+						panic!("Expected fence to have an operation for a timeline tag")
+					};
+
+
 					let value_opt = match funclet_scoped_state.move_node_result(* fence)
 					{
 						Some(NodeResult::Fence{place, timestamp}) =>
@@ -1332,14 +1420,84 @@ impl<'program> CodeGen<'program>
 						_ => panic!("Expected fence")
 					};
 
+
+					/*for (node_id, node_result) in funclet_scoped_state.node_results.iter()
+					{
+						//check_timeline_tag_compatibility_interior
+						funclet_scoped_state.node_timeline_tags[]
+					}*/
+
 					if let Some(NodeResult::Fence{place : fenced_place, timestamp}) = value_opt
 					{
 						assert_eq!(fenced_place, ir::Place::Gpu);
+
+						for (node_id, node_result) in funclet_scoped_state.node_results.iter()
+						{
+							//check_timeline_tag_compatibility_interior
+							//funclet_scoped_state.node_timeline_tags[]
+							match * node_result
+							{
+								NodeResult::Slot{slot_id} =>
+								{
+									let slot_place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
+									let slot_stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
+									if fenced_place == slot_place && ir::ResourceQueueStage::Submitted == slot_stage
+									{
+										let old_timeline_tag = funclet_scoped_state.node_timeline_tags[node_id];
+										match old_timeline_tag
+										{
+											ir::TimelineTag::None => (),
+											ir::TimelineTag::Operation{remote_node_id} =>
+											{
+												assert_eq!(remote_node_id.funclet_id, fence_encoding_timeline_event.funclet_id);
+												if remote_node_id.node_id == fence_encoding_timeline_event.node_id
+												{
+													// To do: Advance state
+													// To do : move to ready
+													funclet_scoped_state.node_timeline_tags.insert(* node_id, current_timeline_tag);
+												}
+											}
+											_ => panic!("Not a legal timeline tag")
+											//ir::TimelineTag::Output{..} => * node_timeline_tag,
+											//ir::TimelineTag::Input{..} => 
+										}
+										//check_timeline_tag_compatibility_interior(& self.program, , current_timeline_tag);
+									}
+								}
+								_ => ()
+							}
+						}
+
 						if let Some(newer_timestamp) = self.advance_known_place_time(placement_state, fenced_place, timestamp)
 						{
 							panic!("Have already synced to a later time")
 						}
 					}
+
+
+					/*for (node_id, node_timeline_tag) in funclet_scoped_state.node_timeline_tags.iter_mut()
+					{
+						* node_timeline_tag = match node_timeline_tag
+						{
+							ir::TimelineTag::None => ir::TimelineTag::None,
+							ir::TimelineTag::Operation{remote_node_id} =>
+							{
+								assert_eq!(remote_node_id.funclet_id, fence_encoding_timeline_event.funclet_id);
+								if remote_node_id.node_id == fence_encoding_timeline_event.node_id
+								{
+									// To do: Advance state
+									current_timeline_tag
+								}
+								else
+								{
+									* node_timeline_tag
+								}
+							}
+							_ => panic!("Not a legal timeline tag")
+							//ir::TimelineTag::Output{..} => * node_timeline_tag,
+							//ir::TimelineTag::Input{..} => 
+						}
+					}*/
 				}
 				ir::Node::DefaultJoin =>
 				{
@@ -1409,6 +1567,8 @@ impl<'program> CodeGen<'program>
 					let mut exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 					let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
 					let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
+
+					check_timeline_tag_compatibility_interior(& self.program, extra.out_timeline_tag, continuation_join_point.get_scheduling_in_timeline_tag(& self.program));
 
 					for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate()
 					{
@@ -1485,6 +1645,9 @@ impl<'program> CodeGen<'program>
 					output_node_results.push(node_result);
 				}
 
+				// Enforce timeline
+				check_timeline_tag_compatibility_interior(& self.program, current_timeline_tag, funclet_scheduling_extra.out_timeline_tag);
+
 				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
 			}
 			/*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
@@ -1523,6 +1686,8 @@ impl<'program> CodeGen<'program>
 				{
 					let mut timeline_enforcer = TimelineEnforcer::new();
 					let join_point = placement_state.join_graph.get_join(join_point_id);
+
+					check_timeline_tag_compatibility_interior(& self.program, current_timeline_tag, join_point.get_scheduling_in_timeline_tag(& self.program));
 
 					// We shouldn't have to check outputs for join points because all join chains go up to the root
 
@@ -1571,6 +1736,9 @@ impl<'program> CodeGen<'program>
 				let callee_value_funclet = & self.program.funclets[& callee_value_funclet_id];
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
+				check_timeline_tag_compatibility_interior(& self.program, current_timeline_tag, callee_funclet_scheduling_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, callee_funclet_scheduling_extra.out_timeline_tag, continuation_join_point.get_scheduling_in_timeline_tag(& self.program));
+
 				// Step 1: Check current -> callee edge
 				let mut entry_timeline_enforcer = TimelineEnforcer::new();
 				let mut argument_node_results = Vec::<NodeResult>::new();
@@ -1615,27 +1783,6 @@ impl<'program> CodeGen<'program>
 							let value_tag_2 = continuation_join_point.get_scheduling_input_value_tag(& self.program, continuation_input_index);
 
 							check_value_tag_compatibility_exit(& self.program, callee_value_funclet_id, value_tag, value_operation, value_tag_2);
-							/*match (value_tag, value_tag_2)
-							{
-								(_, ir::ValueTag::None) => (),
-								(ir::ValueTag::Output{funclet_id, index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
-								{
-									assert_eq!(remote_node_id.funclet_id, value_operation.funclet_id);
-									assert_eq!(funclet_id, callee_value_funclet_id);
-
-									let node = & self.program.funclets[& remote_node_id.funclet_id].nodes[remote_node_id.node_id];
-									if let ir::Node::ExtractResult{node_id : call_node_id, index} = node
-									{
-										assert_eq!(* index, output_index);
-										assert_eq!(* call_node_id, value_operation.node_id);
-									}
-									else
-									{
-										panic!("Target operation is not a result extraction: #{:?} {:?}", remote_node_id, node);
-									}
-								}
-								_ => panic!("Ill-formed: {:?} to {:?}", value_tag, value_tag_2)
-							};*/
 						}
 						ir::Type::Fence{queue_place, ..} =>
 						{
@@ -1671,16 +1818,6 @@ impl<'program> CodeGen<'program>
 				let current_value_funclet = & self.program.funclets[& value_operation.funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
-				/*let (true_case_node_id, false_case_node_id) = if let ir::Node::Select{condition, true_case, false_case} = & current_value_funclet.nodes[value_operation.node_id]
-				{
-					check_value_tag_compatibility_interior(& self.program, funclet_scoped_state.slot_value_tags[& condition_slot_id], ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : * condition}});
-					(* true_case, * false_case)
-				}
-				else
-				{
-					panic!("Scheduling select on a node that is not a select");
-				};*/
-
 				let condition_value_tag = funclet_scoped_state.slot_value_tags[& condition_slot_id];
 
 				assert_eq!(value_operation.funclet_id, true_funclet_extra.value_funclet_id);
@@ -1688,6 +1825,11 @@ impl<'program> CodeGen<'program>
 
 				assert_eq!(callee_arguments.len(), true_funclet.input_types.len());
 				assert_eq!(callee_arguments.len(), false_funclet.input_types.len());
+
+				check_timeline_tag_compatibility_interior(& self.program, current_timeline_tag, true_funclet_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, current_timeline_tag, false_funclet_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, true_funclet_extra.out_timeline_tag, continuation_join_point.get_scheduling_in_timeline_tag(& self.program));
+				check_timeline_tag_compatibility_interior(& self.program, false_funclet_extra.out_timeline_tag, continuation_join_point.get_scheduling_in_timeline_tag(& self.program));
 
 				let mut true_entry_timeline_enforcer = TimelineEnforcer::new();
 				let mut false_entry_timeline_enforcer = TimelineEnforcer::new();
@@ -1752,20 +1894,6 @@ impl<'program> CodeGen<'program>
 							false_exit_timeline_enforcer.record_slot_use(* queue_place, false_slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
 
 							check_value_tag_compatibility_interior_branch(& self.program, * value_operation, condition_value_tag, &[true_output_value_tag, false_output_value_tag], continuation_input_value_tag);
-
-							/*match continuation_input_value_tag
-							{
-								ir::ValueTag::Operation {remote_node_id} if remote_node_id == * value_operation =>
-								{
-									check_value_tag_compatibility_interior(& self.program, true_output_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : true_case_node_id}});
-									check_value_tag_compatibility_interior(& self.program, false_output_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : false_case_node_id}});
-								}
-								_ =>
-								{
-									check_value_tag_compatibility_interior(& self.program, true_output_value_tag, continuation_input_value_tag);
-									check_value_tag_compatibility_interior(& self.program, false_output_value_tag, continuation_input_value_tag);
-								}
-							}*/
 						}
 						ir::Type::Fence{queue_place} =>
 						{

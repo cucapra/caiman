@@ -15,6 +15,7 @@ pub struct LanguageSet
 {
 	pub functional : bool,
 	pub scheduling : bool,
+	pub timeline : bool,
 	pub intrinsic : bool
 }
 
