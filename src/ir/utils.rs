@@ -443,8 +443,8 @@ pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
         };
         funclets.create(funclet);
     }
-    let mut types = Types::new();
-    types.insert(Type::U32);
+    let mut types = Arena::new();
+    types.create(Type::U32);
 
     Program {
         funclets,

@@ -32,27 +32,7 @@ enum Constant {
     I32(i32),
     I64(i64),
 }
-impl Node {
-    fn from_constant(c: Constant, types: &mut ir::Types) -> Self {
-        let kind = match c {
-            Constant::Bool(value) => OperationKind::ConstantBool { value },
-            // TODO: fix type_id
-            Constant::I64(value) => OperationKind::ConstantInteger {
-                value,
-                type_id: types.insert(ir::Type::I64),
-            },
-            Constant::U64(value) => OperationKind::ConstantUnsignedInteger {
-                value,
-                type_id: types.insert(ir::Type::U64),
-            },
-            _ => todo!(),
-        };
-        Node {
-            kind: NodeKind::Operation { kind },
-            deps: Box::new([]),
-        }
-    }
-}
+
 macro_rules! impl_unop {
     ($name:ident, $out0:ident, $tok:tt for {$($variant:ident),*}) => {
         impl Constant {
@@ -427,13 +407,6 @@ impl egg::Analysis<Node> for Analysis {
     }
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
         a.merge(b)
-    }
-    fn modify(egraph: &mut egg::EGraph<Node, Self>, id: egg::Id) {
-        // TODO: also check that the user has enabled constant folding as an optimization
-        if let Some(c) = egraph[id].data.constant {
-            let folded = egraph.add(todo!());
-            egraph.union(id, folded);
-        }
     }
 }
 

@@ -1,7 +1,6 @@
-use std::collections::{hash_map::{HashMap, Entry}, BTreeMap};
+use std::collections::{HashMap, BTreeMap};
 use std::default::Default;
 use std::iter::{once, Once, Chain};
-use std::rc::Rc;
 
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
@@ -19,7 +18,7 @@ pub enum Place
 	Gpu,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum ResourceQueueStage
 {
 	None,
@@ -104,7 +103,7 @@ macro_rules! make_nodes {
 }
 with_operations!(make_nodes);
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StructField
 {
 	pub name : String,
@@ -113,12 +112,12 @@ pub struct StructField
 	pub byte_size : usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LocalValueTag
 {
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
 	// Value types
@@ -390,38 +389,13 @@ pub struct Pipeline
 	pub entry_funclet : FuncletId,
 	pub kind: PipelineKind
 }
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct Types {
-	storage: Vec<Type>,
-	inverse: HashMap<Type, TypeId>
-}
-impl Types {
-	pub fn new() -> Self {
-		Default::default()
-	}
-	pub fn insert(&mut self, t: Type) -> TypeId {
-		match self.inverse.entry(t.clone()) {
-			Entry::Occupied(id) => *id.get(),
-			Entry::Vacant(spot) => {
-				let id = self.storage.len();
-				self.storage.push(t);
-				spot.insert(id);
-				id
-			}
-		}
-	}
-}
-impl std::ops::Index<TypeId> for Types {
-	type Output = Type;
-	fn index(&self, index: TypeId) -> &Self::Output {
-		&self.storage[index]
-	}
-}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Program
 {
+	//pub types : HashMap<usize, Type>,
 	#[serde(default)]
-	pub types : Types,
+	pub types : Arena<Type>,
 	#[serde(default)]
 	pub funclets : Arena<Funclet>,
 	#[serde(default)]
