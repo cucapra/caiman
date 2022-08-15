@@ -43,14 +43,14 @@ pub struct FuncletChecker<'program>
 	value_funclet : & 'program ir::Funclet,
 	scheduling_funclet : & 'program ir::Funclet,
 	scheduling_funclet_extra : & 'program ir::SchedulingFuncletExtra,
-	pub scalar_node_value_tags : HashMap<ir::NodeId, ir::ValueTag>,
-	pub scalar_node_timeline_tags : HashMap<ir::NodeId, ir::TimelineTag>,
+	scalar_node_value_tags : HashMap<ir::NodeId, ir::ValueTag>,
+	scalar_node_timeline_tags : HashMap<ir::NodeId, ir::TimelineTag>,
 	//pub join_node_value_tags : HashMap<ir::NodeId, Box<[ir::ValueTag]>>,
 	//pub join_node_timeline_tags : HashMap<ir::NodeId, Box<[ir::TimelineTag]>>,
-	pub node_join_points : HashMap<ir::NodeId, JoinPoint>,
-	pub node_types : HashMap<ir::NodeId, NodeType>,
+	node_join_points : HashMap<ir::NodeId, JoinPoint>,
+	node_types : HashMap<ir::NodeId, NodeType>,
 	current_node_id : ir::NodeId,
-	pub current_timeline_tag : ir::TimelineTag,
+	current_timeline_tag : ir::TimelineTag,
 }
 
 impl<'program> FuncletChecker<'program>
@@ -161,13 +161,21 @@ impl<'program> FuncletChecker<'program>
 		}
 	}
 
-	fn transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_stage : ir::ResourceQueueStage, to_stage : ir::ResourceQueueStage)
+	fn transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)])
 	{
 		let node_type = self.node_types.remove(& slot_node_id).unwrap();
 		if let NodeType::Slot(Slot{storage_type, queue_stage, queue_place}) = node_type
 		{
 			assert_eq!(queue_place, place);
-			assert_eq!(queue_stage, from_stage);
+			let mut to_stage_opt = None;
+			for (from_stage, to_stage) in from_to_stage_pairs.iter()
+			{
+				if queue_stage == * from_stage
+				{
+					to_stage_opt = Some(* to_stage);
+				}
+			}
+			let to_stage = to_stage_opt.unwrap();
 			match to_stage
 			{
 				ir::ResourceQueueStage::Encoded => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
@@ -222,7 +230,7 @@ impl<'program> FuncletChecker<'program>
 						assert_eq!(inputs.len(), 0);
 						assert_eq!(outputs.len(), 1);
 
-						self.transition_slot(outputs[0], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 					}
 					ir::Node::ConstantUnsignedInteger { .. } =>
 					{
@@ -230,7 +238,7 @@ impl<'program> FuncletChecker<'program>
 						assert_eq!(inputs.len(), 0);
 						assert_eq!(outputs.len(), 1);
 
-						self.transition_slot(outputs[0], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 					}
 					ir::Node::Select { condition, true_case, false_case } =>
 					{
@@ -245,7 +253,7 @@ impl<'program> FuncletChecker<'program>
 							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_value_node_id}});
 						}
 
-						self.transition_slot(outputs[0], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 					}
 					ir::Node::CallExternalCpu { external_function_id, arguments } =>
 					{
@@ -253,9 +261,16 @@ impl<'program> FuncletChecker<'program>
 						let function = & self.program.native_interface.external_cpu_functions[external_function_id];
 						// To do: Input checks 
 
+						for (input_index, input_node_id) in arguments.iter().enumerate()
+						{
+							let value_tag = self.scalar_node_value_tags[input_node_id];
+							let funclet_id = self.value_funclet_id;
+							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
+						}
+
 						for (index, output_type_id) in function.output_types.iter().enumerate()
 						{
-							self.transition_slot(outputs[index], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+							self.transition_slot(outputs[index], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 						}
 					}
 					ir::Node::CallExternalGpuCompute { external_function_id, arguments, dimensions } =>
@@ -266,11 +281,27 @@ impl<'program> FuncletChecker<'program>
 						assert_eq!(inputs.len(), dimensions.len() + arguments.len());
 						assert_eq!(outputs.len(), function.output_types.len());
 
+						for (input_index, input_node_id) in dimensions.iter().chain(arguments.iter()).enumerate()
+						{
+							let value_tag = self.scalar_node_value_tags[input_node_id];
+							let funclet_id = self.value_funclet_id;
+							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
+						}
+
 						// To do: Input checks
+						for input_scheduling_node_id in inputs[dimensions.len() .. ].iter()
+						{
+							let transitions = [
+								(ir::ResourceQueueStage::Encoded, ir::ResourceQueueStage::Encoded),
+								(ir::ResourceQueueStage::Submitted, ir::ResourceQueueStage::Encoded),
+								(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Encoded),
+							];
+							self.transition_slot(* input_scheduling_node_id, * place, & transitions);
+						}
 						
 						for (index, output_type_id) in function.output_types.iter().enumerate()
 						{
-							self.transition_slot(outputs[index], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded);
+							self.transition_slot(outputs[index], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)]);
 						}
 					}
 					_ => panic!("Cannot encode {:?}", encoded_node)
@@ -341,8 +372,8 @@ impl<'program> FuncletChecker<'program>
 				
 				match place
 				{
-					ir::Place::Local => self.transition_slot(* output, * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready),
-					_ => self.transition_slot(* output, * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)
+					ir::Place::Local => self.transition_slot(* output, * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]),
+					_ => self.transition_slot(* output, * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)])
 				}
 
 			}

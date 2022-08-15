@@ -455,13 +455,13 @@ impl<'program> CodeGen<'program>
 				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
-				for (input_index, input_node_id) in dimensions.iter().chain(arguments.iter()).enumerate()
+				/*for (input_index, input_node_id) in dimensions.iter().chain(arguments.iter()).enumerate()
 				{
 					let slot_id = input_slot_ids[input_index];
 					let value_tag = funclet_checker.scalar_node_value_tags[input_node_id];
 					let funclet_id = funclet_scoped_state.value_funclet_id;
 					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
-				}
+				}*/
 
 				let mut input_slot_counts = HashMap::<scheduling_state::SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
 				let mut output_slot_bindings = HashMap::<scheduling_state::SlotId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
@@ -608,13 +608,13 @@ impl<'program> CodeGen<'program>
 
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
-				for (input_index, input_node_id) in arguments.iter().enumerate()
+				/*for (input_index, input_node_id) in arguments.iter().enumerate()
 				{
 					let slot_id = input_slot_ids[input_index];
 					let value_tag = funclet_checker.scalar_node_value_tags[input_node_id];
 					let funclet_id = funclet_scoped_state.value_funclet_id;
 					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
-				}
+				}*/
 
 				use std::iter::FromIterator;
 
@@ -937,63 +937,6 @@ impl<'program> CodeGen<'program>
 						}
 					}
 
-					let is_tuple = match encoded_node
-					{
-						// Single return nodes
-						ir::Node::ConstantInteger { .. } => false,
-						ir::Node::ConstantUnsignedInteger { .. } => false,
-						ir::Node::Select { .. } => false,
-						// Multiple return nodes
-						ir::Node::CallExternalCpu { .. } => true,
-						ir::Node::CallExternalGpuCompute { .. } => true,
-						_ => panic!("Cannot encode {:?}", encoded_node)
-					};
-
-					if is_tuple
-					{
-						for (slot_index, slot_id) in output_slot_ids.iter().enumerate()
-						{
-							let value_tag = funclet_checker.scalar_node_value_tags[& outputs[slot_index]];
-							match value_tag
-							{
-								ir::ValueTag::None => (),
-								ir::ValueTag::FunctionInput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-								ir::ValueTag::FunctionOutput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-								ir::ValueTag::Operation{remote_node_id} =>
-								{
-									assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
-									if let ir::Node::ExtractResult { node_id, index } = & encoded_funclet.nodes[remote_node_id.node_id]
-									{
-										assert_eq!(slot_index, * index);
-										assert_eq!(operation.node_id, * node_id);
-									}
-								}
-								ir::ValueTag::Input{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
-								ir::ValueTag::Output{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
-								ir::ValueTag::Halt{..} => panic!("")
-							}
-						}
-					}
-					else
-					{
-						assert_eq!(output_slot_ids.len(), 1);
-						let value_tag = funclet_checker.scalar_node_value_tags[& outputs[0]];
-						match value_tag
-						{
-							ir::ValueTag::None => (),
-							ir::ValueTag::FunctionInput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-							ir::ValueTag::FunctionOutput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-							ir::ValueTag::Operation{remote_node_id} =>
-							{
-								assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
-								assert_eq!(operation.node_id, remote_node_id.node_id);
-							}
-							ir::ValueTag::Input{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
-							ir::ValueTag::Output{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
-							ir::ValueTag::Halt{..} => panic!("")
-						}
-					}
-
 					match place
 					{
 						ir::Place::Local =>
@@ -1180,7 +1123,7 @@ impl<'program> CodeGen<'program>
 					{
 						NodeResult::Slot { slot_id } =>
 						{
-							let slot_value_tag = funclet_checker.scalar_node_value_tags[return_node_id];
+							//let slot_value_tag = funclet_checker.scalar_node_value_tags[return_node_id];
 							let slot_info = & funclet_scheduling_extra.output_slots[& return_index];
 							let value_tag = slot_info.value_tag;
 							//check_value_tag_compatibility_interior(& self.program, slot_value_tag, value_tag);
@@ -1290,7 +1233,6 @@ impl<'program> CodeGen<'program>
 					{
 						NodeResult::Slot{slot_id} =>
 						{
-							let slot_value_tag = funclet_checker.scalar_node_value_tags[argument_node_id];
 							let slot_info = & callee_funclet_scheduling_extra.input_slots[& argument_index];
 							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
 							//check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, slot_info.value_tag);
@@ -1307,7 +1249,6 @@ impl<'program> CodeGen<'program>
 				}
 
 				// Step 2: Check callee -> continuation edge
-				let continuation_join_value_tags = & funclet_checker.node_join_points[continuation_join_node_id].input_value_tags;
 				for (callee_output_index, callee_output_type) in callee_funclet.output_types.iter().enumerate()
 				{
 					let continuation_input_index = continuation_join_point.get_capture_count() + callee_output_index;
@@ -1340,8 +1281,6 @@ impl<'program> CodeGen<'program>
 				let current_value_funclet = & self.program.funclets[& value_operation.funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
-				let condition_value_tag = funclet_checker.scalar_node_value_tags[condition_slot_node_id];
-
 				assert_eq!(value_operation.funclet_id, true_funclet_extra.value_funclet_id);
 				assert_eq!(value_operation.funclet_id, false_funclet_extra.value_funclet_id);
 
@@ -1370,7 +1309,6 @@ impl<'program> CodeGen<'program>
 					argument_node_results.push(node_result);
 				}
 
-				let continuation_join_value_tags = & funclet_checker.node_join_points[continuation_join_node_id].input_value_tags;
 				let continuation_input_count = continuation_join_point.get_input_count(& self.program);
 				assert_eq!(continuation_input_count, true_funclet.output_types.len());
 				assert_eq!(continuation_input_count, false_funclet.output_types.len());
