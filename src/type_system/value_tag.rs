@@ -1,5 +1,17 @@
 use crate::ir;
 
+pub fn concretize_input_to_internal_value_tag(program : & ir::Program, value_tag : ir::ValueTag) -> ir::ValueTag
+{
+	match value_tag
+	{
+		ir::ValueTag::None => ir::ValueTag::None,
+		ir::ValueTag::Operation{remote_node_id} => ir::ValueTag::Operation{remote_node_id},
+		ir::ValueTag::Input{funclet_id, index} => ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
+		ir::ValueTag::Output{funclet_id, index} => ir::ValueTag::Output{funclet_id, index},
+		_ => panic!("Unimplemented")
+	}
+}
+
 pub fn check_value_tag_compatibility_enter(program : & ir::Program, call_operation : ir::RemoteNodeId, caller_value_tag : ir::ValueTag, callee_value_tag : ir::ValueTag)
 {
 	match (caller_value_tag, callee_value_tag)

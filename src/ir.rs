@@ -157,7 +157,7 @@ pub enum Type
 	Integer { signed : bool, width : usize },
 
 	Slot { storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
-	SchedulingJoin { /*input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra*/ }, // Could possibly move part of funclet definition to Type in the future?
+	SchedulingJoin { input_types : Box<[TypeId]>, output_types : Box<[TypeId]>, extra : SchedulingFuncletExtra }, // Could possibly move part of funclet definition to Type in the future?
 	Fence { queue_place : Place },
 	Buffer { storage_place : Place },
 
@@ -255,10 +255,11 @@ pub struct SchedulingFuncletExtra
 	pub input_fences : HashMap<usize, FenceInfo>,
 	pub output_fences : HashMap<usize, FenceInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
-	pub external_timestamps : BTreeSet<ExternalTimestampId>,
-	pub external_spaces : BTreeSet<ExternalSpaceId>,
+	//pub external_timestamps : BTreeSet<ExternalTimestampId>,
+	//pub external_spaces : BTreeSet<ExternalSpaceId>,
 	pub in_timeline_tag : TimelineTag,
 	pub out_timeline_tag : TimelineTag,
+	pub default_join_type_id_opt : Option<TypeId>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]

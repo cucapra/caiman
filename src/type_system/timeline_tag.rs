@@ -1,5 +1,17 @@
 use crate::ir;
 
+pub fn concretize_input_to_internal_timeline_tag(program : & ir::Program, timeline_tag : ir::TimelineTag) -> ir::TimelineTag
+{
+	match timeline_tag
+	{
+		ir::TimelineTag::None => ir::TimelineTag::None,
+		ir::TimelineTag::Input{funclet_id, index} => ir::TimelineTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
+		ir::TimelineTag::Operation{remote_node_id} => ir::TimelineTag::Operation{remote_node_id},
+		ir::TimelineTag::Output{funclet_id, index} => ir::TimelineTag::Output{funclet_id, index},
+		_ => panic!("Unimplemented")
+	}
+}
+
 // Are these timeline tags equivalent?
 pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source_timeline_tag : ir::TimelineTag, destination_timeline_tag : ir::TimelineTag)
 {
