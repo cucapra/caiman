@@ -82,15 +82,6 @@ impl<'program> FuncletChecker<'program>
 
 	fn initialize(&mut self)
 	{
-		/*self.current_timeline_tag = match self.current_timeline_tag
-		{
-			ir::TimelineTag::None => ir::TimelineTag::None,
-			ir::TimelineTag::Input{funclet_id, index} => ir::TimelineTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
-			ir::TimelineTag::Operation{remote_node_id} => ir::TimelineTag::Operation{remote_node_id},
-			ir::TimelineTag::Output{funclet_id, index} => ir::TimelineTag::Output{funclet_id, index},
-			_ => panic!("")
-		};*/
-
 		self.current_timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, self.current_timeline_tag);
 
 		for (index, input_type_id) in self.scheduling_funclet.input_types.iter().enumerate()
@@ -169,16 +160,6 @@ impl<'program> FuncletChecker<'program>
 			_ => panic!("Unimplemented")
 		}
 	}
-
-	/*fn get_value_node_inputs(&self, node : & ir::Node, place : ir::Place, input_index : usize) -> Box<[(ir::Place, ir::ValueTag)]>
-	{
-		let results = Vec::new();
-		match node
-		{
-			ir::Node::
-		}
-		results.into_boxed_slice()
-	}*/
 
 	fn transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_stage : ir::ResourceQueueStage, to_stage : ir::ResourceQueueStage)
 	{
@@ -351,12 +332,6 @@ impl<'program> FuncletChecker<'program>
 						ir::ValueTag::Halt{..} => panic!("")
 					}
 				}
-
-				/*for (input_index, node_id) in inputs.iter().enumerate()
-				{
-
-				}*/
-				//panic!("To do")
 			}
 			ir::Node::EncodeCopy { place, input, output } =>
 			{
@@ -486,7 +461,7 @@ impl<'program> FuncletChecker<'program>
 					let (value_tag, timeline_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, capture_index);
 					let node_value_tag = self.scalar_node_value_tags[capture_node_id];
 					let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
-
+					assert_eq!(node_timeline_tag, ir::TimelineTag::None);
 					check_value_tag_compatibility_interior(& self.program, node_value_tag, value_tag);
 					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
 				}

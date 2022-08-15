@@ -26,23 +26,6 @@ pub enum ResourceQueueStage
 	Dead
 }
 
-/*impl ResourceQueueStage
-{
-	fn next_stage(self) -> Self
-	{
-		use Self::*;
-		match self
-		{
-			Unbound => Bound,
-			Bound => Encoded,
-			Encoded => Submitted,
-			Submitted => Ready,
-			Ready => Ready,
-			Dead => Dead,
-		}
-	}
-}*/
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct ResourceState
 {
@@ -60,7 +43,6 @@ pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
 pub type ExternalTimestampId = usize;
 pub type ExternalSpaceId = usize;
-//pub type LocalMetaVariableId = usize;
 pub type StorageTypeId = ffi::TypeId;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -234,8 +216,6 @@ pub struct SlotInfo
 	//pub queue_stage : ResourceQueueStage,
 	//pub queue_place : Place,
 	//pub resource_id : ...
-	pub external_timestamp_id_opt : Option<ExternalTimestampId>,
-	pub external_space_id_opt : Option<ExternalSpaceId>
 }
 
 // Funclet-relative join info goes here
@@ -248,7 +228,6 @@ pub struct JoinInfo
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FenceInfo
 {
-	pub external_timestamp_id : ExternalTimestampId,
 	pub timeline_tag : TimelineTag,
 }
 
@@ -261,11 +240,9 @@ pub struct SchedulingFuncletExtra
 	pub input_fences : HashMap<usize, FenceInfo>,
 	pub output_fences : HashMap<usize, FenceInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
-	//pub external_timestamps : BTreeSet<ExternalTimestampId>,
 	//pub external_spaces : BTreeSet<ExternalSpaceId>,
 	pub in_timeline_tag : TimelineTag,
 	pub out_timeline_tag : TimelineTag,
-	//pub default_join_type_id_opt : Option<TypeId>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
