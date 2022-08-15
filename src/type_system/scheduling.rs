@@ -118,59 +118,43 @@ impl<'program> FuncletChecker<'program>
 		}
 	}
 
-	// Ideally, this would be an iterator/generator
-	fn get_funclet_input_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra) -> Box<[(ir::ValueTag, ir::TimelineTag)]>
+	fn get_funclet_input_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra, input_index : usize) -> (ir::ValueTag, ir::TimelineTag)
 	{
-		//let funclet = & self.program.funclets[& funclet_id];
-		//let funclet_extra = & self.program.scheduling_funclet_extras[& funclet_id];
-		let mut output_pairs = Vec::new();
-		for (index, type_id) in funclet.input_types.iter().enumerate()
+		let type_id = funclet.input_types[input_index];
+		match & self.program.types[& type_id]
 		{
-			// Doesn't work with joins as arguments
-			let pair = match & self.program.types[type_id]
+			ir::Type::Slot{..} =>
 			{
-				ir::Type::Slot{..} =>
-				{
-					let slot_info = & funclet_extra.input_slots[& index];
-					(slot_info.value_tag, slot_info.timeline_tag)
-				}
-				ir::Type::Fence{..} =>
-				{
-					let fence_info = & funclet_extra.input_fences[& index];
-					(ir::ValueTag::None, fence_info.timeline_tag)
-				}
-				_ => panic!("Unimplemented")
-			};
-			output_pairs.push(pair);
+				let slot_info = & funclet_extra.input_slots[& input_index];
+				(slot_info.value_tag, slot_info.timeline_tag)
+			}
+			ir::Type::Fence{..} =>
+			{
+				let fence_info = & funclet_extra.input_fences[& input_index];
+				(ir::ValueTag::None, fence_info.timeline_tag)
+			}
+			_ => panic!("Unimplemented")
 		}
-		output_pairs.into_boxed_slice()
 	}
 
-	fn get_funclet_output_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra) -> Box<[(ir::ValueTag, ir::TimelineTag)]>
+	fn get_funclet_output_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra, output_index : usize) -> (ir::ValueTag, ir::TimelineTag)
 	{
-		//let funclet = & self.program.funclets[& funclet_id];
-		//let funclet_extra = & self.program.scheduling_funclet_extras[& funclet_id];
-		let mut output_pairs = Vec::new();
-		for (index, type_id) in funclet.output_types.iter().enumerate()
+		let type_id = funclet.output_types[output_index];
+		// Doesn't work with joins as arguments
+		match & self.program.types[& type_id]
 		{
-			// Doesn't work with joins as arguments
-			let pair = match & self.program.types[type_id]
+			ir::Type::Slot{..} =>
 			{
-				ir::Type::Slot{..} =>
-				{
-					let slot_info = & funclet_extra.output_slots[& index];
-					(slot_info.value_tag, slot_info.timeline_tag)
-				}
-				ir::Type::Fence{..} =>
-				{
-					let fence_info = & funclet_extra.output_fences[& index];
-					(ir::ValueTag::None, fence_info.timeline_tag)
-				}
-				_ => panic!("Unimplemented")
-			};
-			output_pairs.push(pair);
+				let slot_info = & funclet_extra.output_slots[& output_index];
+				(slot_info.value_tag, slot_info.timeline_tag)
+			}
+			ir::Type::Fence{..} =>
+			{
+				let fence_info = & funclet_extra.output_fences[& output_index];
+				(ir::ValueTag::None, fence_info.timeline_tag)
+			}
+			_ => panic!("Unimplemented")
 		}
-		output_pairs.into_boxed_slice()
 	}
 
 	pub fn check_next_node(&mut self, current_node_id : ir::NodeId)
@@ -205,6 +189,7 @@ impl<'program> FuncletChecker<'program>
 			ir::Node::Submit { place, event } => (),
 			ir::Node::EncodeFence { place, event } =>
 			{
+				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::None);
 				self.scalar_node_timeline_tags.insert(current_node_id, self.current_timeline_tag);
 				self.node_types.insert(current_node_id, NodeType::Fence);
 			}
@@ -213,54 +198,11 @@ impl<'program> FuncletChecker<'program>
 			{
 				let mut value_tags = Vec::<ir::ValueTag>::new();
 				let mut timeline_tags = Vec::<ir::TimelineTag>::new();
-				/*if let Some(default_join_type_id) = self.scheduling_funclet_extra.default_join_type_id_opt
+				for index in 0 .. self.scheduling_funclet.output_types.len()
 				{
-					if let ir::Type::SchedulingJoin{input_types, input_slots, ..} = & self.program.types[& default_join_type_id]
-					{
-						for (index, input_type) in input_types.iter().enumerate()
-						{
-							// Doesn't work with joins as arguments
-							let value_tag = match & self.program.types[input_type]
-							{
-								ir::Type::Slot{..} => input_slots[& index].value_tag,
-								ir::Type::Fence{..} => ir::ValueTag::None,
-								_ => panic!("Unimplemented")
-							};
-							value_tags.push(value_tag);
-						}
-					}
-					else
-					{
-						panic!("Unsupported join type")
-					}
-				}
-				else*/
-				/*{
-					for (index, output_type) in self.scheduling_funclet.output_types.iter().enumerate()
-					{
-						// Doesn't work with joins as arguments
-						let (value_tag, timeline_tag) = match & self.program.types[output_type]
-						{
-							ir::Type::Slot{..} =>
-							{
-								let slot_info = & self.scheduling_funclet_extra.output_slots[& index];
-								(slot_info.value_tag, slot_info.timeline_tag)
-							}
-							ir::Type::Fence{..} =>
-							{
-								let fence_info = & self.scheduling_funclet_extra.output_fences[& index];
-								(ir::ValueTag::None, fence_info.timeline_tag)
-							}
-							_ => panic!("Unimplemented")
-						};
-						value_tags.push(value_tag);
-						timeline_tags.push(timeline_tag);
-					}
-				}*/
-				for (index, (value_tag, timeline_tag)) in self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra).iter().enumerate()
-				{
-					value_tags.push(* value_tag);
-					timeline_tags.push(* timeline_tag);
+					let (value_tag, timeline_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, index);
+					value_tags.push(value_tag);
+					timeline_tags.push(timeline_tag);
 				}
 				//self.join_node_value_tags.insert(current_node_id, value_tags.into_boxed_slice());
 				let join_point = JoinPoint { in_timeline_tag : self.scheduling_funclet_extra.out_timeline_tag, input_timeline_tags : timeline_tags.into_boxed_slice(), input_value_tags : value_tags.into_boxed_slice() };
@@ -277,48 +219,19 @@ impl<'program> FuncletChecker<'program>
 
 				for (capture_index, capture_node_id) in captures.iter().enumerate()
 				{
+					let (value_tag, timeline_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, capture_index);
+					let node_value_tag = self.scalar_node_value_tags[capture_node_id];
+					let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
 
-					match & self.program.types[& join_funclet.input_types[capture_index]]
-					{
-						ir::Type::Slot{..} => 
-						{
-							let node_value_tag = self.scalar_node_value_tags[capture_node_id];
-							let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
-							let slot_info = & join_funclet_extra.input_slots[& capture_index];
-
-							check_value_tag_compatibility_interior(& self.program, node_value_tag, slot_info.value_tag);
-							check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, slot_info.timeline_tag);
-						}
-						ir::Type::Fence{..} =>
-						{
-							let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
-							let fence_info = & join_funclet_extra.input_fences[& capture_index];
-
-							check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, fence_info.timeline_tag);
-						}
-						_ => panic!("Unimplemented")
-					}
+					check_value_tag_compatibility_interior(& self.program, node_value_tag, value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
 				}
 			
 				let mut remaining_input_value_tags = Vec::<ir::ValueTag>::new();
 				let mut remaining_input_timeline_tags = Vec::<ir::TimelineTag>::new();
 				for input_index in captures.len() .. join_funclet.input_types.len()
 				{
-					// Doesn't work with joins as arguments
-					let (value_tag, timeline_tag) = match & self.program.types[& join_funclet.input_types[input_index]]
-					{
-						ir::Type::Slot{..} =>
-						{
-							let slot_info = & join_funclet_extra.input_slots[& input_index];
-							(slot_info.value_tag, slot_info.timeline_tag)
-						}
-						ir::Type::Fence{..} =>
-						{
-							let fence_info = & join_funclet_extra.input_fences[& input_index];
-							(ir::ValueTag::None, fence_info.timeline_tag)
-						}
-						_ => panic!("Unimplemented")
-					};
+					let (value_tag, timeline_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, input_index);
 					remaining_input_value_tags.push(value_tag);
 					remaining_input_timeline_tags.push(timeline_tag);
 				}
@@ -328,23 +241,9 @@ impl<'program> FuncletChecker<'program>
 
 				for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate()
 				{
-					match & self.program.types[& join_output_type]
-					{
-						ir::Type::Slot{queue_place, ..} =>
-						{
-							let slot_info = & join_funclet_extra.output_slots[& join_output_index];
-
-							check_value_tag_compatibility_interior(& self.program, slot_info.value_tag, continuation_join_value_tags[join_output_index]);
-							check_timeline_tag_compatibility_interior(& self.program, slot_info.timeline_tag, continuation_join_timeline_tags[join_output_index]);
-						}
-						ir::Type::Fence{queue_place} =>
-						{
-							let fence_info = & join_funclet_extra.output_fences[& join_output_index];
-
-							check_timeline_tag_compatibility_interior(& self.program, fence_info.timeline_tag, continuation_join_timeline_tags[join_output_index]);
-						}
-						_ => panic!("Unimplemented")
-					}
+					let (value_tag, timeline_tag) = self.get_funclet_output_tags(join_funclet, join_funclet_extra, join_output_index);
+					check_value_tag_compatibility_interior(& self.program, value_tag, continuation_join_value_tags[join_output_index]);
+					check_timeline_tag_compatibility_interior(& self.program, timeline_tag, continuation_join_timeline_tags[join_output_index]);
 				}
 
 				let join_point = JoinPoint { in_timeline_tag : join_funclet_extra.in_timeline_tag, input_timeline_tags : remaining_input_timeline_tags.into_boxed_slice(), input_value_tags : remaining_input_value_tags.into_boxed_slice() };
@@ -368,65 +267,28 @@ impl<'program> FuncletChecker<'program>
 
 				for (return_index, return_node_id) in return_values.iter().enumerate()
 				{
-					match & self.program.types[& self.scheduling_funclet.output_types[return_index]]
-					{
-						ir::Type::Slot { storage_type, queue_stage, queue_place } =>
-						{
-							let node_timeline_tag = self.scalar_node_timeline_tags[return_node_id];
-							let node_value_tag = self.scalar_node_value_tags[return_node_id];
-							let slot_info = & self.scheduling_funclet_extra.output_slots[& return_index];
-							let value_tag = slot_info.value_tag;
-							check_value_tag_compatibility_interior(& self.program, node_value_tag, slot_info.value_tag);
-							check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, slot_info.timeline_tag);
-						}
-						ir::Type::Fence { queue_place } =>
-						{
-							let node_timeline_tag = self.scalar_node_timeline_tags[return_node_id];
-							let fence_info = & self.scheduling_funclet_extra.output_fences[& return_index];
-							check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, fence_info.timeline_tag);
-						}
-						_ => panic!("Unimplemented")
-					}
+					let node_timeline_tag = self.scalar_node_timeline_tags[return_node_id];
+					let node_value_tag = self.scalar_node_value_tags[return_node_id];
+					let (value_tag, timeline_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, return_index);
+					check_value_tag_compatibility_interior(& self.program, node_value_tag, value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
 				}
 			}
 			ir::TailEdge::Jump { join, arguments } =>
 			{
 				let join_point = & self.node_join_points[join];
+				let join_value_tags = & join_point.input_value_tags;
+				let join_timeline_tags = & join_point.input_timeline_tags;
+
 				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, join_point.in_timeline_tag);
-
-
-				/*let slot_value_tag = funclet_checker.scalar_node_value_tags[& arguments[argument_index]];
-
-				for (index, (value_tag, timeline_tag)) in self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra).iter().enumerate()
-				{
-					value_tags.push(* value_tag);
-					timeline_tags.push(* timeline_tag);
-				}
 
 				for (argument_index, argument_node_id) in arguments.iter().enumerate()
 				{
-					let slot_value_tag = funclet_checker.scalar_node_value_tags[& arguments[argument_index]];
-
-					match * argument_node_result
-					{
-						NodeResult::Slot {slot_id} =>
-						{
-							// We need to shift the destination argument index to account for the captures (that are checked at construction)
-							let destination_argument_index = argument_index + join_point.get_capture_count();
-							check_value_tag_compatibility_interior(& self.program, slot_value_tag, continuation_join_value_tags[argument_index]);
-							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-							check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
-							//timeline_enforcer.record_slot_use(place, logical_timestamp, join_point.get_scheduling_input_external_timestamp_id(& self.program, destination_argument_index));
-						}
-						NodeResult::Fence { place, timestamp } =>
-						{
-							timeline_enforcer.record_fence_use(place, timestamp, join_point.get_scheduling_input_external_timestamp_id(& self.program, argument_index).unwrap());
-						}
-						_ => panic!("Unimplemented")
-					}
-				}*/
-
+					let node_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
+					let node_value_tag = self.scalar_node_value_tags[argument_node_id];
+					check_value_tag_compatibility_interior(& self.program, node_value_tag, join_value_tags[argument_index]);
+					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, join_timeline_tags[argument_index]);
+				}
 			}
 			ir::TailEdge::ScheduleCall { value_operation : value_operation_ref, callee_funclet_id : callee_scheduling_funclet_id_ref, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{

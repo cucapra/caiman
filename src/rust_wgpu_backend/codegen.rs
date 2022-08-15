@@ -1732,9 +1732,9 @@ impl<'program> CodeGen<'program>
 					argument_node_results.push(node_result);
 				}
 
-				let continuation_join_value_tags = & funclet_checker.node_join_points[join].input_value_tags;
+				//let continuation_join_value_tags = & funclet_checker.node_join_points[join].input_value_tags;
 				{
-					let mut timeline_enforcer = TimelineEnforcer::new();
+					//let mut timeline_enforcer = TimelineEnforcer::new();
 					let join_point = placement_state.join_graph.get_join(join_point_id);
 
 					check_timeline_tag_compatibility_interior(& self.program, funclet_checker.current_timeline_tag, join_point.get_scheduling_in_timeline_tag(& self.program));
@@ -1747,10 +1747,10 @@ impl<'program> CodeGen<'program>
 						{
 							NodeResult::Slot {slot_id} =>
 							{
-								let slot_value_tag = funclet_checker.scalar_node_value_tags[& arguments[argument_index]];
+								//let slot_value_tag = funclet_checker.scalar_node_value_tags[& arguments[argument_index]];
 								// We need to shift the destination argument index to account for the captures (that are checked at construction)
 								let destination_argument_index = argument_index + join_point.get_capture_count();
-								check_value_tag_compatibility_interior(& self.program, slot_value_tag, continuation_join_value_tags[argument_index]);
+								//check_value_tag_compatibility_interior(& self.program, slot_value_tag, continuation_join_value_tags[argument_index]);
 								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
 								check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 								let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
@@ -1758,7 +1758,7 @@ impl<'program> CodeGen<'program>
 							}
 							NodeResult::Fence { place, timestamp } =>
 							{
-								timeline_enforcer.record_fence_use(place, timestamp, join_point.get_scheduling_input_external_timestamp_id(& self.program, argument_index).unwrap());
+								//timeline_enforcer.record_fence_use(place, timestamp, join_point.get_scheduling_input_external_timestamp_id(& self.program, argument_index).unwrap());
 							}
 							_ => panic!("Unimplemented")
 						}
