@@ -1,4 +1,5 @@
 use super::*;
+use crate::arena::Arena;
 use crate::ir;
 use crate::operations::{BinopKind, UnopKind};
 use constant::Constant;
@@ -132,6 +133,65 @@ impl BlockSkeleton {
         self.preds.iter()
     }
 }
+
+pub fn create(program: &ir::Program, head: ir::FuncletId) -> Result<GraphRunner, FromIrError> {
+    const OPAQUE: ir::FuncletId = usize::MAX;
+    let mut runner = GraphRunner::new(Analysis {
+        head,
+        blocks: HashMap::new(),
+        block_ids: BTreeSet::new(),
+        thread_candidates: Vec::new(),
+        native_interface: program.types.clone(),
+    });
+    let mut stack = vec![(head, OPAQUE)];
+    while let Some((id, pred)) = stack.pop() {
+        if let Some(block) = runner.egraph.analysis.blocks.get_mut(&id) {
+            block.add_pred(pred);
+            continue;
+        }
+        let preds = vec![pred];
+        let mut cvt = from_ir::FuncletConverter::new(&mut runner.egraph, id);
+        for (node_id, node) in program.funclets[&id].nodes.iter().enumerate() {
+            cvt.add_node(node, node_id)?;
+        }
+        let tail = match &program.funclets[&id].tail_edge {
+            ir::TailEdge::Return { return_values } => {
+                BlockTail::Return(BlockArgs::from_ir(&cvt, &return_values)?)
+            }
+            ir::TailEdge::Jump(jump) => {
+                stack.push((jump.target, id));
+                let cvt_jump = Jump::from_ir(&cvt, jump)?;
+                runner.egraph.analysis.thread_candidates.push(id);
+                BlockTail::Jump(cvt_jump)
+            }
+            ir::TailEdge::Branch { cond, j0, j1 } => {
+                stack.push((j0.target, id));
+                stack.push((j1.target, id));
+                BlockTail::Branch {
+                    cond: cvt.convert_node_id(*cond, ir::Dependent::Tail)?,
+                    j0: Jump::from_ir(&cvt, &j0)?,
+                    j1: Jump::from_ir(&cvt, &j1)?,
+                }
+            }
+        };
+        runner.egraph.analysis.block_ids.insert(id);
+        let prev = runner
+            .egraph
+            .analysis
+            .blocks
+            .insert(id, BlockSkeleton { preds, tail });
+        assert!(prev.is_none());
+    }
+    runner
+        .egraph
+        .analysis
+        .blocks
+        .get_mut(&head)
+        .unwrap()
+        .remove_pred(OPAQUE);
+    // We don't bother updating the runner roots, since they're not used anywhere.
+    Ok(runner)
+}
 pub struct Analysis {
     head: ir::FuncletId,
     blocks: HashMap<ir::FuncletId, BlockSkeleton>,
@@ -142,65 +202,14 @@ pub struct Analysis {
     /// A list of candidates for jump threading.
     /// Each entry in this list is guaranteed to have a jump tail edge.
     thread_candidates: Vec<ir::FuncletId>,
+
+    /// TODO: Post-merge, make this of type ffi::NativeInterface and adjust accordingly
+    /// TODO: This should be a reference, but that's a nightmare...
+    native_interface: Arena<ir::Type>,
 }
 impl Analysis {
-    pub fn new() -> Self {
-        Self {
-            head: 0, // HACK: this only works as long as funclet IDs are usize
-            // then again, new() only exists as part of a hack for building the graph...
-            blocks: HashMap::new(),
-            block_ids: BTreeSet::new(),
-            thread_candidates: Vec::new(),
-        }
-    }
-    pub(super) fn build_with_graph(
-        &mut self,
-        graph: &mut GraphInner,
-        program: &ir::Program,
-        start: ir::FuncletId,
-    ) -> Result<(), FromIrError> {
-        const OPAQUE: ir::FuncletId = usize::MAX;
-        let mut stack = vec![(start, OPAQUE)];
-        while let Some((id, pred)) = stack.pop() {
-            match self.blocks.entry(id) {
-                Entry::Occupied(mut block) => {
-                    block.get_mut().add_pred(pred);
-                }
-                Entry::Vacant(spot) => {
-                    let preds = vec![pred];
-                    let mut cvt = from_ir::FuncletConverter::new(graph, id);
-                    for (node_id, node) in program.funclets[&id].nodes.iter().enumerate() {
-                        cvt.add_node(node, node_id)?;
-                    }
-                    let tail = match &program.funclets[&id].tail_edge {
-                        ir::TailEdge::Return { return_values } => {
-                            BlockTail::Return(BlockArgs::from_ir(&cvt, &return_values)?)
-                        }
-                        ir::TailEdge::Jump(jump) => {
-                            self.thread_candidates.push(id);
-                            stack.push((jump.target, id));
-                            BlockTail::Jump(Jump::from_ir(&cvt, jump)?)
-                        }
-                        ir::TailEdge::Branch { cond, j0, j1 } => {
-                            stack.push((j0.target, id));
-                            stack.push((j1.target, id));
-                            BlockTail::Branch {
-                                cond: cvt.convert_node_id(*cond, ir::Dependent::Tail)?,
-                                j0: Jump::from_ir(&cvt, &j0)?,
-                                j1: Jump::from_ir(&cvt, &j1)?,
-                            }
-                        }
-                    };
-                    spot.insert(BlockSkeleton { preds, tail });
-                    self.block_ids.insert(id);
-                }
-            }
-        }
-        self.blocks.get_mut(&start).unwrap().remove_pred(OPAQUE);
-        Ok(())
-    }
     /// Attempts to collapse branches into jumps using constant folding.
-    fn collapse_branches(&mut self, graph: &GraphInner) {
+    fn collapse_branches(&mut self, graph: &Graph) {
         for id in self.block_ids.iter() {
             let block = self.blocks.get_mut(id).unwrap();
             if let BlockTail::Branch { cond, j0, j1 } = &block.tail {
@@ -271,6 +280,9 @@ impl Analysis {
     pub fn head(&self) -> ir::FuncletId {
         self.head
     }
+    pub fn lookup_type(&self, type_id: ir::TypeId) -> Option<&'_ ir::Type> {
+        self.native_interface.get(&type_id)
+    }
     /// Returns an iterator over the nodes which the given funclet references. This
     /// includes all nodes *currently* referenced by a tail edge and their recursive dependencies.
     /// Funclet outputs which were inlined/deleted are *not* considered required.
@@ -288,7 +300,7 @@ pub struct ClassAnalysis {
 
 impl egg::Analysis<Node> for Analysis {
     type Data = ClassAnalysis;
-    fn make(egraph: &GraphInner, enode: &Node) -> Self::Data {
+    fn make(egraph: &Graph, enode: &Node) -> Self::Data {
         Self::Data {
             constant: enode.to_constant(egraph),
             type_id: todo!(),
@@ -318,7 +330,7 @@ pub mod inline_args {
 
     /// If it's possible to inline paramater #`index` of funclet `id`, returns the ID of
     /// the equivalent eclass.
-    fn inline_param(id: ir::FuncletId, index: usize, egraph: &GraphInner) -> Option<egg::Id> {
+    fn inline_param(id: ir::FuncletId, index: usize, egraph: &Graph) -> Option<egg::Id> {
         let mut possible_ids: Vec<egg::Id> = egraph.analysis.blocks[&id]
             .preds()
             // find all incoming jumps - we may have multiple from the same predecessor
@@ -347,7 +359,7 @@ pub mod inline_args {
     impl egg::Searcher<Node, Analysis> for Searcher {
         fn search_eclass(
             &self,
-            egraph: &GraphInner,
+            egraph: &Graph,
             eclass: egg::Id,
         ) -> Option<egg::SearchMatches<Node>> {
             // An eclass must have at least one node. If it has more than one, then either:

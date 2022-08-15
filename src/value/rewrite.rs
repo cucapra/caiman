@@ -1,4 +1,5 @@
-use super::{constant::Constant, GraphInner, GraphRewrite};
+use super::{Graph, GraphRewrite};
+use crate::ir;
 use egg::rewrite as rw;
 
 #[rustfmt::skip]
@@ -33,18 +34,24 @@ pub fn logical() -> Vec<GraphRewrite> { vec![
     rw!("logical and false"; "(&& ?a cb{value=false})" => "cb{value=false}")
 ]}
 
-fn is_signed(var: &str) -> impl Fn(&mut GraphInner, egg::Id, &egg::Subst) -> bool {
+fn is_signed(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
-    move |egraph, _, subst| match egraph[subst[var]].data.constant {
-        Some(Constant::I8(_) | Constant::I16(_) | Constant::I32(_) | Constant::I64(_)) => true,
-        _ => false,
+    move |egraph, _, subst| {
+        let type_id = egraph[subst[var]].data.type_id;
+        matches!(
+            egraph.analysis.lookup_type(type_id).expect("unknown type"),
+            ir::Type::I8 | ir::Type::I16 | ir::Type::I32 | ir::Type::I64
+        )
     }
 }
 
-fn is_unsigned(var: &str) -> impl Fn(&mut GraphInner, egg::Id, &egg::Subst) -> bool {
+fn is_unsigned(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
-    move |egraph, _, subst| match egraph[subst[var]].data.constant {
-        Some(Constant::U8(_) | Constant::U16(_) | Constant::U32(_) | Constant::U64(_)) => true,
-        _ => false,
+    move |egraph, _, subst| {
+        let type_id = egraph[subst[var]].data.type_id;
+        matches!(
+            egraph.analysis.lookup_type(type_id).expect("unknown type"),
+            ir::Type::U8 | ir::Type::U16 | ir::Type::U32 | ir::Type::U64
+        )
     }
 }

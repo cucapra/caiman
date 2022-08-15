@@ -190,12 +190,12 @@ struct Location {
 type NodeMemo = ScopedHashMap<GraphId, Location>;
 
 struct ElaborationCtx<'a> {
-    graph: &'a GraphInner,
+    graph: &'a Graph,
     bdoms: ir::utils::BakedDoms,
     domtree: ir::utils::DomTree,
 }
 impl<'a> ElaborationCtx<'a> {
-    fn new(graph: &'a GraphInner) -> Self {
+    fn new(graph: &'a Graph) -> Self {
         let bdoms = graph.analysis.bake_dominators();
         let domtree = bdoms.dominator_tree();
         Self {
@@ -227,7 +227,7 @@ impl<'a> ElaborationCtx<'a> {
     }
 }
 
-pub fn elaborate(graph: &GraphInner, program: &mut ir::Program) {
+pub fn elaborate(graph: &Graph, program: &mut ir::Program) {
     let sctx = ElaborationCtx::new(graph);
     let mut memo = NodeMemo::new();
     sctx.elaborate_funclet(&mut memo, graph.analysis.head());

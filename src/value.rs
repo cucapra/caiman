@@ -64,63 +64,32 @@ impl egg::Language for Node {
     }
 }
 
-enum SealedRewrite {
-    RunnerHook(GraphRunnerHook),
-    RewriteRule(GraphRewrite),
-}
-/// An opaque value graph rewrite.
-/// This may be an "abstract" rewrite which isn't actually implemented as a rewrite rule,
-/// such as redundant branch elimination.
-pub struct Rewrite(SealedRewrite);
-
-type GraphInner = egg::EGraph<Node, Analysis>;
+type Graph = egg::EGraph<Node, Analysis>;
 type GraphRunner = egg::Runner<Node, Analysis, ()>;
-type GraphRunnerHook = Box<dyn FnMut(&mut GraphRunner) -> Result<(), String> + 'static>;
+type GraphHook = Box<dyn FnMut(&mut GraphRunner) -> Result<(), String> + 'static>;
 type GraphRewrite = egg::Rewrite<Node, Analysis>;
 type GraphId = egg::Id;
 
-pub struct Graph {
-    runner: GraphRunner,
+pub struct Optimizer {
+    /// Invariant: This is always Some(_). Why is it an option? See `optimize`
+    runner: Option<GraphRunner>,
     rules: Vec<GraphRewrite>,
 }
-impl Graph {
+impl Optimizer {
     pub fn new(program: &ir::Program, head: ir::FuncletId) -> Result<Self, FromIrError> {
-        // due to lifetime issues, we store the analysis separately while constructing it,
-        // and then move it into the graph once we're done
-        // TODO: does this hack cause issues with constant folding (lost class analyses?)
-        let mut egraph = egg::EGraph::new(Analysis::new());
-        let mut analysis = Analysis::new();
-        analysis.build_with_graph(&mut egraph, program, head)?;
-        egraph.analysis = analysis;
-        // this looks weird because egg::Runner has a weird API, don't blame me!
-        // I don't understand why there's not a constructor that takes an egraph...
         Ok(Self {
-            runner: GraphRunner::new(Analysis::new()).with_egraph(egraph),
+            runner: Some(analysis::create(program, head)?),
             rules: Vec::new(),
         })
     }
-    pub fn add_rewrite(&mut self, rewrite: Rewrite) {
-        match rewrite.0 {
-            SealedRewrite::RunnerHook(hook) => {
-                self.runner.hooks.push(hook);
-            }
-            SealedRewrite::RewriteRule(rule) => {
-                self.rules.push(rule);
-            }
-        }
-    }
-    pub fn analyze(&mut self) {
+    pub fn optimize(&mut self) {
         // `run` takes self by value and returns Self, instead of taking &mut self.
-        // This
-        let mut runner = GraphRunner::new(Analysis::new());
-        // makes
-        std::mem::swap(&mut runner, &mut self.runner);
-        // me
+        // This makes me incredibly sad, especially since there's literally no technical reason why.
+        let runner = self.runner.take().expect("invariant violated");
         let runner = runner.run(&self.rules);
-        // sad.
-        self.runner = runner;
+        self.runner = Some(runner);
     }
-    pub fn elaborate_into(&self, program: &mut ir::Program) -> Result<ir::FuncletId, IntoIrError> {
+    pub fn write_into(&self, program: &mut ir::Program) -> Result<ir::FuncletId, IntoIrError> {
         todo!()
     }
 }

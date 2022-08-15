@@ -27,14 +27,14 @@ type Result = std::result::Result<value::GraphId, FromIrError>;
 pub struct FuncletConverter<'a> {
     funclet_id: ir::FuncletId,
     node_ids: HashMap<ir::NodeId, value::GraphId>,
-    graph: &'a mut value::GraphInner,
+    egraph: &'a mut value::Graph,
 }
 impl<'a> FuncletConverter<'a> {
-    pub(super) fn new(graph: &'a mut value::GraphInner, funclet_id: ir::FuncletId) -> Self {
+    pub(super) fn new(egraph: &'a mut value::Graph, funclet_id: ir::FuncletId) -> Self {
         Self {
             funclet_id,
             node_ids: HashMap::new(),
-            graph,
+            egraph,
         }
     }
     pub fn convert_node_id(&self, node_id: ir::NodeId, needed_by: ir::Dependent) -> Result {
@@ -52,7 +52,7 @@ impl<'a> FuncletConverter<'a> {
             .iter()
             .map(|&node_id| self.convert_node_id(node_id, needed_by))
             .collect::<std::result::Result<_, _>>()?;
-        let bundled_id = self.graph.add(value::Node {
+        let bundled_id = self.egraph.add(value::Node {
             kind: value::NodeKind::IdList,
             deps,
         });
@@ -92,8 +92,8 @@ impl<'a> FuncletConverter<'a> {
                 deps: deps.into_boxed_slice(),
             }
         };
-        let graph_id = self.graph.add(graph_node);
-        self.node_ids.insert(node_id, graph_id);
-        Ok(graph_id)
+        let egraph_id = self.egraph.add(graph_node);
+        self.node_ids.insert(node_id, egraph_id);
+        Ok(egraph_id)
     }
 }

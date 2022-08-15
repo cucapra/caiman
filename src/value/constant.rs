@@ -120,7 +120,7 @@ impl_binop!(sub, a, b, (a.checked_sub(b).ok_or(CFoldError::OutOfRange)?)
 impl_binop!(logical_and, a, b, (a && b) for {Bool});
 impl_binop!(logical_or, a, b, (a && b) for {Bool});
 
-fn cfold_unop(egraph: &GraphInner, unop: UnopKind, deps: &[egg::Id]) -> Option<Constant> {
+fn cfold_unop(egraph: &Graph, unop: UnopKind, deps: &[egg::Id]) -> Option<Constant> {
     assert!(deps.len() == 1, "unop has one argument");
     let x = egraph[deps[0]].data.constant?;
     match unop {
@@ -128,7 +128,7 @@ fn cfold_unop(egraph: &GraphInner, unop: UnopKind, deps: &[egg::Id]) -> Option<C
     }
 }
 
-fn cfold_binop(egraph: &GraphInner, binop: BinopKind, deps: &[egg::Id]) -> Option<Constant> {
+fn cfold_binop(egraph: &Graph, binop: BinopKind, deps: &[egg::Id]) -> Option<Constant> {
     assert!(deps.len() == 2, "binop has two arguments");
     let a = egraph[deps[0]].data.constant?;
     let b = egraph[deps[1]].data.constant?;
@@ -144,7 +144,7 @@ fn cfold_binop(egraph: &GraphInner, binop: BinopKind, deps: &[egg::Id]) -> Optio
     }
 }
 impl Node {
-    pub fn to_constant(&self, egraph: &GraphInner) -> Option<Constant> {
+    pub fn to_constant(&self, egraph: &Graph) -> Option<Constant> {
         match self.operation()? {
             OperationKind::ConstantBool { value } => Some(Constant::Bool(*value)),
             OperationKind::ConstantInteger { value, .. } => Some(Constant::I64(*value)),

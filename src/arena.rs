@@ -64,6 +64,10 @@ impl<T> Arena<T>
 		id
 	}
 
+	pub fn get(&self, index: &usize) -> Option<&'_ T> {
+		self.elements.get(index)
+	}
+	
 	pub fn iter<'m> (& 'm self) -> Iterator<'m, T>
 	{
 		Iterator::<'m, T>{iter : self.elements.iter()}
