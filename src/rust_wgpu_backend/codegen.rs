@@ -1524,9 +1524,9 @@ impl<'program> CodeGen<'program>
 						{
 							NodeResult::Slot{slot_id} =>
 							{
-								let slot_value_tag = funclet_checker.scalar_node_value_tags[capture_node_id];
+								//let slot_value_tag = funclet_checker.scalar_node_value_tags[capture_node_id];
 								let slot_info = & extra.input_slots[& capture_index];
-								check_value_tag_compatibility_interior(& self.program, slot_value_tag, slot_info.value_tag);
+								//check_value_tag_compatibility_interior(& self.program, slot_value_tag, slot_info.value_tag);
 								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
 								let stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
 								let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
@@ -1560,7 +1560,7 @@ impl<'program> CodeGen<'program>
 						captured_node_results.push(node_result);
 					}
 
-					let mut remaining_input_value_tags = Vec::<ir::ValueTag>::new();
+					/*let mut remaining_input_value_tags = Vec::<ir::ValueTag>::new();
 					for input_index in captures.len() .. join_funclet.input_types.len()
 					{
 						// Doesn't work with joins as arguments
@@ -1571,7 +1571,7 @@ impl<'program> CodeGen<'program>
 							_ => panic!("Unimplemented")
 						};
 						remaining_input_value_tags.push(value_tag);
-					}
+					}*/
 
 					let mut exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 					let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
@@ -1606,8 +1606,18 @@ impl<'program> CodeGen<'program>
 						}
 					}*/
 
-					let continuation_join_value_tags = & funclet_checker.join_node_value_tags[continuation_join_node_id];
+					/*if let Some(default_join_type_id) = self.scheduling_funclet_extra.default_join_type_id_opt
+					{
+						if let ir::Type::SchedulingJoin{input_types, input_slots, ..} = & self.program.types[& default_join_type_id]
+						{
 
+						}
+					}
+					else
+					{
+					}*/
+
+					/*let continuation_join_value_tags = & funclet_checker.node_join_points[continuation_join_node_id].input_value_tags;
 					for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate()
 					{
 						let continuation_input_index = continuation_join_point.get_capture_count() + join_output_index;
@@ -1622,23 +1632,19 @@ impl<'program> CodeGen<'program>
 								let value_tag_2 = continuation_join_value_tags[continuation_input_index];
 
 								check_value_tag_compatibility_interior(& self.program, value_tag, value_tag_2);
-
-								//let external_timestamp_id_opt = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, continuation_input_index);
-								//exit_timeline_enforcer.record_slot_use(* queue_place, slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
 							}
 							ir::Type::Fence{queue_place} =>
 							{
-								//let external_timestamp_id = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, continuation_input_index).unwrap();
-								//exit_timeline_enforcer.record_fence_use(* queue_place, extra.output_fences[& join_output_index].external_timestamp_id, external_timestamp_id);
+
 							}
 							_ => panic!("Unimplemented")
 						}
-					}
+					}*/
 
 					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_node_results.into_boxed_slice(), continuation_join_point_id}));
 					println!("Created join point: {:?} {:?}", join_point_id, placement_state.join_graph.get_join(join_point_id));
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
-					funclet_checker.join_node_value_tags.insert(current_node_id, remaining_input_value_tags.into_boxed_slice());
+					//funclet_checker.join_node_value_tags.insert(current_node_id, remaining_input_value_tags.into_boxed_slice());
 				}
 				_ => panic!("Unknown node")
 			};
@@ -1726,7 +1732,7 @@ impl<'program> CodeGen<'program>
 					argument_node_results.push(node_result);
 				}
 
-				let continuation_join_value_tags = & funclet_checker.join_node_value_tags[join];
+				let continuation_join_value_tags = & funclet_checker.node_join_points[join].input_value_tags;
 				{
 					let mut timeline_enforcer = TimelineEnforcer::new();
 					let join_point = placement_state.join_graph.get_join(join_point_id);
@@ -1810,7 +1816,7 @@ impl<'program> CodeGen<'program>
 				}
 
 				// Step 2: Check callee -> continuation edge
-				let continuation_join_value_tags = & funclet_checker.join_node_value_tags[continuation_join_node_id];
+				let continuation_join_value_tags = & funclet_checker.node_join_points[continuation_join_node_id].input_value_tags;
 				let mut exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 				for (callee_output_index, callee_output_type) in callee_funclet.output_types.iter().enumerate()
 				{
@@ -1915,7 +1921,7 @@ impl<'program> CodeGen<'program>
 					argument_node_results.push(node_result);
 				}
 
-				let continuation_join_value_tags = & funclet_checker.join_node_value_tags[continuation_join_node_id];
+				let continuation_join_value_tags = & funclet_checker.node_join_points[continuation_join_node_id].input_value_tags;
 				let mut true_exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 				let mut false_exit_timeline_enforcer = ExternalTimelineEnforcer::new();
 				let continuation_input_count = continuation_join_point.get_input_count(& self.program);
@@ -1962,7 +1968,7 @@ impl<'program> CodeGen<'program>
 				// Probably need to clean things up soon...
 				// Value/fence checks are uninteresting because it's a space split and not a time or value split, so we could share and avoid the product explosion
 
-				let buffer_node_result = funclet_scoped_state.get_node_result(* buffer_node_id);
+				/*let buffer_node_result = funclet_scoped_state.get_node_result(* buffer_node_id);
 				//let (buffer_storage_place) = if let NodeResult::Buffer{} = {} else {};
 				let buffer_storage_place = ir::Place::Gpu; // not correct
 				panic!("Unimplemented");
@@ -2074,7 +2080,7 @@ impl<'program> CodeGen<'program>
 				}
 
 				assert!(default_join_point_id_opt.is_none());
-				//SplitPoint::Select{return_node_results : argument_node_results.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}
+				//SplitPoint::Select{return_node_results : argument_node_results.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}*/
 				panic!("Unimplemented")
 			}
 			_ => panic!("Umimplemented")

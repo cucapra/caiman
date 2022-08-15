@@ -328,7 +328,6 @@
 				external_spaces : [],
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
-				default_join_type_id_opt : None
 			),
 			/*12 : (
 				value_funclet_id : 9,
@@ -344,14 +343,11 @@
 			12 : (
 				value_funclet_id : 9,
 				input_slots : {0 : (value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
+				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None)},//Operation(remote_node_id : (funclet_id : 15, node_id : 1))
 				input_fences : {},
 				output_fences : {},
-				//external_timestamps : [],
-				//external_spaces : [],
 				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 0)),
 				out_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
-				default_join_type_id_opt : None
 			),
 			13 : (
 				value_funclet_id : 10,
@@ -359,11 +355,8 @@
 				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None )},
 				input_fences : {},
 				output_fences : {},
-				//external_timestamps : [],
-				//external_spaces : [],
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
-				default_join_type_id_opt : None
 			),
 			14 : (
 				value_funclet_id : 10,
@@ -371,11 +364,8 @@
 				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None)},
 				input_fences : {},
 				output_fences : {},
-				//external_timestamps : [],
-				//external_spaces : [],
 				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
-				default_join_type_id_opt : None
 			),
 			16 : (
 				value_funclet_id : 9,
@@ -383,11 +373,8 @@
 				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None)},
 				input_fences : {1 : (external_timestamp_id : 0, timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
 				output_fences : {},
-				//external_timestamps : [],
-				//external_spaces : [],
 				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)),
 				out_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
-				default_join_type_id_opt : None
 			)
 		},
 		pipelines : [
