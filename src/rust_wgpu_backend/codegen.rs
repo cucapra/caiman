@@ -1737,7 +1737,7 @@ impl<'program> CodeGen<'program>
 					//let mut timeline_enforcer = TimelineEnforcer::new();
 					let join_point = placement_state.join_graph.get_join(join_point_id);
 
-					check_timeline_tag_compatibility_interior(& self.program, funclet_checker.current_timeline_tag, join_point.get_scheduling_in_timeline_tag(& self.program));
+					//check_timeline_tag_compatibility_interior(& self.program, funclet_checker.current_timeline_tag, join_point.get_scheduling_in_timeline_tag(& self.program));
 
 					// We shouldn't have to check outputs for join points because all join chains go up to the root
 
@@ -1786,8 +1786,8 @@ impl<'program> CodeGen<'program>
 				let callee_value_funclet = & self.program.funclets[& callee_value_funclet_id];
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
-				check_timeline_tag_compatibility_interior(& self.program, funclet_checker.current_timeline_tag, callee_funclet_scheduling_extra.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, callee_funclet_scheduling_extra.out_timeline_tag, continuation_join_point.get_scheduling_in_timeline_tag(& self.program));
+				//check_timeline_tag_compatibility_interior(& self.program, funclet_checker.current_timeline_tag, callee_funclet_scheduling_extra.in_timeline_tag);
+				//check_timeline_tag_compatibility_interior(& self.program, callee_funclet_scheduling_extra.out_timeline_tag, continuation_join_point.get_scheduling_in_timeline_tag(& self.program));
 
 				// Step 1: Check current -> callee edge
 				let mut entry_timeline_enforcer = TimelineEnforcer::new();
@@ -1823,7 +1823,7 @@ impl<'program> CodeGen<'program>
 					let continuation_input_index = continuation_join_point.get_capture_count() + callee_output_index;
 					assert_eq!(* callee_output_type, continuation_join_point.get_scheduling_input_type(& self.program, continuation_input_index));
 
-					match & self.program.types[callee_output_type]
+					/*match & self.program.types[callee_output_type]
 					{
 						ir::Type::Slot{queue_place, ..} =>
 						{
@@ -1842,7 +1842,7 @@ impl<'program> CodeGen<'program>
 							//exit_timeline_enforcer.record_fence_use(* queue_place, callee_funclet_scheduling_extra.output_fences[& callee_output_index].external_timestamp_id, continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, continuation_input_index).unwrap());
 						}
 						_ => panic!("Unimplemented")
-					}
+					}*/
 				}
 
 				// Don't need to check continuation -> current edge because we maintain the invariant that joins can't leave the value funclet scope they were created in

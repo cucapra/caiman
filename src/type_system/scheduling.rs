@@ -556,11 +556,102 @@ impl<'program> FuncletChecker<'program>
 			}
 			ir::TailEdge::ScheduleCall { value_operation : value_operation_ref, callee_funclet_id : callee_scheduling_funclet_id_ref, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
+				let value_operation = * value_operation_ref;
+				let callee_scheduling_funclet_id = * callee_scheduling_funclet_id_ref;
+				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
 
+				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
+
+				let callee_funclet = & self.program.funclets[& callee_scheduling_funclet_id];
+				assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
+				let callee_funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& callee_scheduling_funclet_id];
+				let callee_value_funclet_id = callee_funclet_scheduling_extra.value_funclet_id;
+				let callee_value_funclet = & self.program.funclets[& callee_value_funclet_id];
+				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
+
+				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, callee_funclet_scheduling_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, callee_funclet_scheduling_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+
+				// Step 1: Check current -> callee edge
+				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
+				{
+					let node_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
+					let node_value_tag = self.scalar_node_value_tags[argument_node_id];
+					let (value_tag, timeline_tag) = self.get_funclet_input_tags(callee_funclet, callee_funclet_scheduling_extra, argument_index);
+					check_value_tag_compatibility_enter(& self.program, value_operation, node_value_tag, value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
+				}
+
+				// Step 2: Check callee -> continuation edge
+				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
+				let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
+				for (callee_output_index, callee_output_type) in callee_funclet.output_types.iter().enumerate()
+				{
+					let (value_tag, timeline_tag) = self.get_funclet_output_tags(callee_funclet, callee_funclet_scheduling_extra, callee_output_index);
+
+					//let intermediate_value_tag = ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : value_operation.node_id + 1 +  continuation_input_index}};
+					//let value_tag_2 = continuation_join_value_tags[callee_output_index];
+
+					check_value_tag_compatibility_exit(& self.program, callee_value_funclet_id, value_tag, value_operation, continuation_join_value_tags[callee_output_index]);
+					//check_value_tag_compatibility_interior(& self.program, intermediate_value_tag, continuation_join_value_tags[callee_output_index]);
+					check_timeline_tag_compatibility_interior(& self.program, timeline_tag, continuation_join_timeline_tags[callee_output_index]);
+				}
 			}
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
-				
+				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
+
+				let continuation_join_point = & self.node_join_points[condition_slot_node_id];
+
+				assert_eq!(callee_funclet_ids.len(), 2);
+				let true_funclet_id = callee_funclet_ids[0];
+				let false_funclet_id = callee_funclet_ids[1];
+				let true_funclet = & self.program.funclets[& true_funclet_id];
+				let false_funclet = & self.program.funclets[& false_funclet_id];
+				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
+				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
+
+				let current_value_funclet = & self.program.funclets[& value_operation.funclet_id];
+				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
+
+				let condition_value_tag = self.scalar_node_value_tags[condition_slot_node_id];
+
+				assert_eq!(value_operation.funclet_id, true_funclet_extra.value_funclet_id);
+				assert_eq!(value_operation.funclet_id, false_funclet_extra.value_funclet_id);
+
+				assert_eq!(callee_arguments.len(), true_funclet.input_types.len());
+				assert_eq!(callee_arguments.len(), false_funclet.input_types.len());
+
+				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, true_funclet_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, false_funclet_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, true_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, false_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+
+				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
+				{
+					let argument_slot_value_tag = self.scalar_node_value_tags[argument_node_id];
+					let argument_slot_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
+					let (true_input_value_tag, true_input_timeline_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, argument_index);
+					let (false_input_value_tag, false_input_timeline_tag) = self.get_funclet_input_tags(false_funclet, false_funclet_extra, argument_index);
+
+					check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, true_input_value_tag);
+					check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, false_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, argument_slot_timeline_tag, true_input_timeline_tag);
+					check_timeline_tag_compatibility_interior(& self.program, argument_slot_timeline_tag, false_input_timeline_tag);
+				}
+
+				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
+				let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
+				assert_eq!(true_funclet.output_types.len(), false_funclet.output_types.len());
+				for (output_index, _) in true_funclet.output_types.iter().enumerate()
+				{
+					let continuation_input_value_tag = continuation_join_value_tags[output_index];
+					let (true_output_value_tag, true_output_timeline_tag) = self.get_funclet_output_tags(true_funclet, true_funclet_extra, output_index);
+					let (false_output_value_tag, false_output_timeline_tag) = self.get_funclet_output_tags(false_funclet, false_funclet_extra, output_index);
+					check_value_tag_compatibility_interior_branch(& self.program, * value_operation, condition_value_tag, &[true_output_value_tag, false_output_value_tag], continuation_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, true_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+					check_timeline_tag_compatibility_interior(& self.program, false_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+				}
 			}
 			ir::TailEdge::AllocFromBuffer {buffer : buffer_node_id, slot_count, success_funclet_id, failure_funclet_id, arguments, continuation_join : continuation_join_node_id} =>
 			{
