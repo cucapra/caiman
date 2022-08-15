@@ -197,17 +197,18 @@ impl<'program> FuncletChecker<'program>
 	fn try_transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)]) -> bool
 	{
 		let node_type = self.node_types.remove(& slot_node_id).unwrap();
-		if let NodeType::Slot(Slot{storage_type, queue_stage, queue_place}) = node_type
+		if let NodeType::Slot(Slot{storage_type, queue_stage, queue_place}) = & node_type
 		{
-			if queue_place != place
+			if * queue_place != place
 			{
+				self.node_types.insert(slot_node_id, node_type);
 				return false;
 			}
 
 			let mut to_stage_opt = None;
 			for (from_stage, to_stage) in from_to_stage_pairs.iter()
 			{
-				if queue_stage == * from_stage
+				if * queue_stage == * from_stage
 				{
 					to_stage_opt = Some(* to_stage);
 				}
@@ -221,7 +222,7 @@ impl<'program> FuncletChecker<'program>
 					ir::ResourceQueueStage::Submitted => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
 					_ => self.scalar_node_timeline_tags.insert(slot_node_id, ir::TimelineTag::None)
 				};
-				self.node_types.insert(slot_node_id, NodeType::Slot(Slot{storage_type, queue_stage : to_stage, queue_place}));
+				self.node_types.insert(slot_node_id, NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : to_stage, queue_place : * queue_place}));
 				return true;
 			}
 		}
@@ -230,12 +231,53 @@ impl<'program> FuncletChecker<'program>
 			panic!("Not a slot");
 		}
 
+		self.node_types.insert(slot_node_id, node_type);
 		return false
 	}
 
 	fn transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)])
 	{
 		assert!(self.try_transition_slot(slot_node_id, place, from_to_stage_pairs));
+	}
+
+	fn forward_slot(&mut self, source_slot_node_id : ir::NodeId, destination_slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)])
+	{
+		let mut source_node_type = self.node_types.remove(& source_slot_node_id).unwrap();
+		let mut destination_node_type = self.node_types.remove(& destination_slot_node_id).unwrap();
+		match (&mut source_node_type, &mut destination_node_type)
+		{
+			(NodeType::Slot(source_slot), NodeType::Slot(destination_slot)) =>
+			{
+				assert_eq!(source_slot.queue_place, place);
+				assert_eq!(destination_slot.queue_place, place);
+				assert_eq!(source_slot.storage_type, destination_slot.storage_type);
+				assert_eq!(destination_slot.queue_stage, ir::ResourceQueueStage::Unbound);
+
+				let mut to_stage_opt = None;
+				for (from_stage, to_stage) in from_to_stage_pairs.iter()
+				{
+					if source_slot.queue_stage == * from_stage
+					{
+						to_stage_opt = Some(* to_stage);
+					}
+				}
+				
+				let to_stage = to_stage_opt.unwrap();
+				match to_stage
+				{
+					ir::ResourceQueueStage::Encoded => self.scalar_node_timeline_tags.insert(destination_slot_node_id, self.current_timeline_tag),
+					ir::ResourceQueueStage::Submitted => self.scalar_node_timeline_tags.insert(destination_slot_node_id, self.current_timeline_tag),
+					_ => self.scalar_node_timeline_tags.insert(destination_slot_node_id, ir::TimelineTag::None)
+				};
+
+				self.scalar_node_timeline_tags.insert(source_slot_node_id, ir::TimelineTag::None);
+				destination_slot.queue_stage = to_stage;
+				source_slot.queue_stage = ir::ResourceQueueStage::Dead;
+			}
+			_ => panic!("Not a slot")
+		}
+		self.node_types.insert(source_slot_node_id, source_node_type);
+		self.node_types.insert(destination_slot_node_id, destination_node_type);
 	}
 
 	pub fn check_next_node(&mut self, current_node_id : ir::NodeId)
@@ -356,20 +398,48 @@ impl<'program> FuncletChecker<'program>
 							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
 						}
 
+						let mut forwarding_input_scheduling_node_ids = HashSet::<ir::NodeId>::new();
+						let mut forwarded_output_scheduling_node_ids = HashSet::<ir::NodeId>::new();
+						for (input_index, _) in arguments.iter().enumerate()
+						{
+							if let Some(forwarded_output_index) = function.output_of_forwarding_input(input_index)
+							{
+								let transitions = [
+									(ir::ResourceQueueStage::Encoded, ir::ResourceQueueStage::Encoded),
+									(ir::ResourceQueueStage::Submitted, ir::ResourceQueueStage::Encoded),
+									(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Encoded),
+								];
+								self.forward_slot(inputs[input_index], outputs[forwarded_output_index], * place, & transitions);
+
+								forwarding_input_scheduling_node_ids.insert(inputs[input_index]);
+								forwarded_output_scheduling_node_ids.insert(outputs[forwarded_output_index]);
+							}
+						}
+
+						//output_of_forwarding_input
+
 						// To do: Input checks
 						for input_scheduling_node_id in inputs[dimensions.len() .. ].iter()
 						{
-							let transitions = [
-								(ir::ResourceQueueStage::Encoded, ir::ResourceQueueStage::Encoded),
-								(ir::ResourceQueueStage::Submitted, ir::ResourceQueueStage::Encoded),
-								(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Encoded),
-							];
-							self.transition_slot(* input_scheduling_node_id, * place, & transitions);
+							let is_forwarding = forwarding_input_scheduling_node_ids.contains(input_scheduling_node_id);
+							if ! is_forwarding
+							{
+								let transitions = [
+									(ir::ResourceQueueStage::Encoded, ir::ResourceQueueStage::Encoded),
+									(ir::ResourceQueueStage::Submitted, ir::ResourceQueueStage::Encoded),
+									(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Encoded),
+								];
+								self.transition_slot(* input_scheduling_node_id, * place, & transitions);
+							}
 						}
 						
 						for (index, output_type_id) in function.output_types.iter().enumerate()
 						{
-							self.transition_slot(outputs[index], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)]);
+							let is_forwarded = forwarded_output_scheduling_node_ids.contains(& outputs[index]);
+							if ! is_forwarded
+							{
+								self.transition_slot(outputs[index], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)]);
+							}
 						}
 					}
 					_ => panic!("Cannot encode {:?}", encoded_node)
@@ -786,7 +856,8 @@ impl<'program> FuncletChecker<'program>
 
 				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
 				let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
-				assert_eq!(true_funclet.output_types.len(), false_funclet.output_types.len());
+				assert_eq!(true_funclet.output_types.len(), continuation_join_point.input_types.len());
+				assert_eq!(false_funclet.output_types.len(), continuation_join_point.input_types.len());
 				for (output_index, _) in true_funclet.output_types.iter().enumerate()
 				{
 					assert_eq!(true_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);

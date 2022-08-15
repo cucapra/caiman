@@ -74,6 +74,26 @@ pub struct ExternalGpuFunction
 	//pub shader_module : usize,
 }
 
+impl ExternalGpuFunction
+{
+	// Once we stop needing to directly program in .ron files, we can make this more efficient
+	pub fn output_of_forwarding_input(& self, input_index : usize) -> Option<usize>
+	{
+		for resource_binding in self.resource_bindings.iter()
+		{
+			if let Some(index) = resource_binding.input
+			{
+				if index == input_index
+				{
+					return resource_binding.output;
+				}
+			}
+		}
+
+		return None;
+	}
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct NativeInterface
 {

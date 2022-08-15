@@ -68,60 +68,6 @@ enum JoinPoint
 	SimpleJoinPoint(SimpleJoinPoint),
 }
 
-// Should probably get rid of used and make a trait...
-impl JoinPoint
-{
-	fn get_value_funclet_id(&self) -> ir::FuncletId
-	{
-		match self
-		{
-			Self::SimpleJoinPoint(join_point) => join_point.value_funclet_id,
-			Self::RootJoinPoint(join_point) => join_point.value_funclet_id,
-		}
-	}
-
-	fn get_input_count(&self, program : & ir::Program) -> usize
-	{
-		match self
-		{
-			Self::SimpleJoinPoint(join_point) =>
-			{
-				let funclet = & program.funclets[& join_point.scheduling_funclet_id];
-				funclet.input_types.len()
-			}
-			Self::RootJoinPoint(join_point) =>
-			{
-				join_point.input_types.len()
-			}
-		}
-	}
-
-	fn get_capture_count(&self) -> usize
-	{
-		match self
-		{
-			Self::SimpleJoinPoint(join_point) => join_point.captures.len(),
-			Self::RootJoinPoint(_) => 0,
-		}
-	}
-
-	fn get_scheduling_input_type(&self, program : & ir::Program, index : usize) -> ir::TypeId
-	{
-		match self
-		{
-			Self::SimpleJoinPoint(join_point) =>
-			{
-				let funclet = & program.funclets[& join_point.scheduling_funclet_id];
-				funclet.input_types[index]
-			}
-			Self::RootJoinPoint(join_point) =>
-			{
-				join_point.input_types[index]
-			}
-		}
-	}
-}
-
 #[derive(Debug, Default)]
 struct JoinGraph
 {
@@ -1092,7 +1038,7 @@ impl<'program> CodeGen<'program>
 				let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
 
 				assert_eq!(value_operation.funclet_id, funclet_scoped_state.value_funclet_id);
-				assert_eq!(continuation_join_point.get_value_funclet_id(), funclet_scoped_state.value_funclet_id);
+				//assert_eq!(continuation_join_point.get_value_funclet_id(), funclet_scoped_state.value_funclet_id);
 
 				let callee_funclet = & self.program.funclets[& callee_scheduling_funclet_id];
 				assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
@@ -1144,10 +1090,6 @@ impl<'program> CodeGen<'program>
 					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
 					argument_node_results.push(node_result);
 				}
-
-				let continuation_input_count = continuation_join_point.get_input_count(& self.program);
-				assert_eq!(continuation_input_count, true_funclet.output_types.len());
-				assert_eq!(continuation_input_count, false_funclet.output_types.len());
 
 				assert!(default_join_point_id_opt.is_none());
 				SplitPoint::Select{return_node_results : argument_node_results.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}
