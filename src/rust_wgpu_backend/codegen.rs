@@ -257,12 +257,6 @@ struct FuncletScopedState
 	value_funclet_id : ir::FuncletId,
 	scheduling_funclet_id : ir::FuncletId,
 	node_results : HashMap<ir::NodeId, NodeResult>,
-	// ValueTag is only meaningful locally
-	// If we were to make this global, we'd need a key for disambiguation of different call instances and a way to define equivalence classes of valuetags (for example, between a phi and the node used as input for that phi)
-	// Because of this, we need to recreate this for each funclet instance
-	//slot_value_tags : HashMap<scheduling_state::SlotId, ir::ValueTag>,
-	//node_timeline_tags : HashMap<ir::NodeId, ir::TimelineTag>,
-	//join_value_tags : HashMap<ir::NodeId, Box<[ir::ValueTag]>>,
 }
 
 impl FuncletScopedState
@@ -338,24 +332,6 @@ impl FuncletScopedState
 	}
 }
 
-/*fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage, storage_type_opt : Option<ir::TypeId>)
-{
-	match & program.types[& type_id]
-	{
-		ir::Type::Slot { storage_type : storage_type_2, queue_stage : queue_stage_2, queue_place : queue_place_2 } =>
-		{
-			assert_eq!(* queue_place_2, queue_place);
-			assert_eq!(* queue_stage_2, queue_stage);
-			/*if let Some(storage_type) = storage_type_opt
-			{
-				assert_eq!(storage_type, * storage_type_2);
-			}*/
-			// To do: Fence
-		}
-		_ => panic!("Not a slot type")
-	}
-}*/
-
 fn get_slot_type_storage_type(program : & ir::Program, type_id : ir::TypeId) -> ir::ffi::TypeId
 {
 	match & program.types[& type_id]
@@ -407,7 +383,7 @@ impl<'program> CodeGen<'program>
 {
 	pub fn new(program : & 'program ir::Program) -> Self
 	{
-		Self { program : & program, code_generator : CodeGenerator::new(& program.native_interface/*, program.types.clone(), program.external_cpu_functions.as_slice(), program.external_gpu_functions.as_slice()*/), print_codegen_debug_info : false }
+		Self { program : & program, code_generator : CodeGenerator::new(& program.native_interface), print_codegen_debug_info : false }
 	}
 
 	pub fn set_print_codgen_debug_info(&mut self, to : bool)
@@ -454,14 +430,6 @@ impl<'program> CodeGen<'program>
 
 				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
-
-				/*for (input_index, input_node_id) in dimensions.iter().chain(arguments.iter()).enumerate()
-				{
-					let slot_id = input_slot_ids[input_index];
-					let value_tag = funclet_checker.scalar_node_value_tags[input_node_id];
-					let funclet_id = funclet_scoped_state.value_funclet_id;
-					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
-				}*/
 
 				let mut input_slot_counts = HashMap::<scheduling_state::SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
 				let mut output_slot_bindings = HashMap::<scheduling_state::SlotId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
@@ -583,14 +551,6 @@ impl<'program> CodeGen<'program>
 				assert_eq!(input_slot_ids.len(), 3);
 				assert_eq!(output_slot_ids.len(), 1);
 
-				/*for (input_index, input_node_id) in [* condition, * true_case, * false_case].iter().enumerate()
-				{
-					let slot_id = input_slot_ids[input_index];
-					let value_tag = funclet_checker.scalar_node_value_tags[input_node_id];
-					let funclet_id = funclet_scoped_state.value_funclet_id;
-					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
-				}*/
-
 				let input_var_ids = input_slot_ids.iter().map(|& slot_id| placement_state.get_slot_var_id(slot_id).unwrap()).collect::<Box<[usize]>>();
 
 				let slot_id = output_slot_ids[0];
@@ -607,14 +567,6 @@ impl<'program> CodeGen<'program>
 				let function = & self.program.native_interface.external_cpu_functions[external_function_id];
 
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
-
-				/*for (input_index, input_node_id) in arguments.iter().enumerate()
-				{
-					let slot_id = input_slot_ids[input_index];
-					let value_tag = funclet_checker.scalar_node_value_tags[input_node_id];
-					let funclet_id = funclet_scoped_state.value_funclet_id;
-					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
-				}*/
 
 				use std::iter::FromIterator;
 
@@ -674,11 +626,6 @@ impl<'program> CodeGen<'program>
 		{
 			let input_types = funclet.output_types.clone();
 			let value_funclet_id = funclet_extra.value_funclet_id;
-			/*let mut input_slot_value_tags = HashMap::<usize, ir::ValueTag>::new();
-			for (input_index, input_slot) in funclet_extra.input_slots.iter()
-			{
-				input_slot_value_tags.insert(* input_index, ir::ValueTag::Output{funclet_id : value_funclet_id, index : * input_index});
-			}*/
 			let join_point_id = placement_state.join_graph.create(JoinPoint::RootJoinPoint(RootJoinPoint{value_funclet_id, input_types}));
 			Option::<JoinPointId>::Some(join_point_id)
 		};
@@ -695,12 +642,10 @@ impl<'program> CodeGen<'program>
 		let mut current_output_node_results = argument_node_results.into_boxed_slice();
 		let mut current_funclet_id_opt = Some(funclet_id);
 
-		//while let Some(split_point_stack_entry) = split_point_stack.pop()
 		while current_funclet_id_opt.is_some()
 		{
 			while let Some(current_funclet_id) = current_funclet_id_opt
 			{
-				//current_output_slot_ids = 
 				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, default_join_point_id_opt);
 				println!("Split point: {:?}", split_point);
 				current_output_node_results = match split_point
@@ -1063,26 +1008,6 @@ impl<'program> CodeGen<'program>
 					for (capture_index, capture_node_id) in captures.iter().enumerate()
 					{
 						let node_result = funclet_scoped_state.move_node_result(* capture_node_id).unwrap();
-						match node_result
-						{
-							NodeResult::Slot{slot_id} =>
-							{
-								//let slot_value_tag = funclet_checker.scalar_node_value_tags[capture_node_id];
-								let slot_info = & extra.input_slots[& capture_index];
-								//check_value_tag_compatibility_interior(& self.program, slot_value_tag, slot_info.value_tag);
-								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-								let stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
-								let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
-								//entry_timeline_enforcer.record_slot_use(place, timestamp, slot_info.external_timestamp_id_opt);
-								//check_slot_type(& self.program, join_funclet.input_types[capture_index], place, stage, None);
-								assert_eq!(stage, ir::ResourceQueueStage::Ready);
-							}
-							NodeResult::Fence{ place, timestamp } =>
-							{
-								
-							}
-							_ => panic!("Unimplemented")
-						}
 						captured_node_results.push(node_result);
 					}
 
@@ -1092,7 +1017,6 @@ impl<'program> CodeGen<'program>
 					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_node_results.into_boxed_slice(), continuation_join_point_id}));
 					println!("Created join point: {:?} {:?}", join_point_id, placement_state.join_graph.get_join(join_point_id));
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
-					//funclet_checker.join_node_value_tags.insert(current_node_id, remaining_input_value_tags.into_boxed_slice());
 				}
 				_ => panic!("Unknown node")
 			};
@@ -1118,25 +1042,6 @@ impl<'program> CodeGen<'program>
 				for (return_index, return_node_id) in return_values.iter().enumerate()
 				{
 					let node_result = funclet_scoped_state.move_node_result(* return_node_id).unwrap();
-
-					match node_result
-					{
-						NodeResult::Slot { slot_id } =>
-						{
-							//let slot_value_tag = funclet_checker.scalar_node_value_tags[return_node_id];
-							let slot_info = & funclet_scheduling_extra.output_slots[& return_index];
-							let value_tag = slot_info.value_tag;
-							//check_value_tag_compatibility_interior(& self.program, slot_value_tag, value_tag);
-							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-							//check_slot_type(& self.program, funclet.output_types[return_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
-						}
-						NodeResult::Fence { place, timestamp } =>
-						{
-						}
-						_ => panic!("Unimplemented")
-					}
-
 					output_node_results.push(node_result);
 				}
 
@@ -1175,31 +1080,6 @@ impl<'program> CodeGen<'program>
 					argument_node_results.push(node_result);
 				}
 
-				{
-					let join_point = placement_state.join_graph.get_join(join_point_id);
-
-					// We shouldn't have to check outputs for join points because all join chains go up to the root
-
-					for (argument_index, argument_node_result) in argument_node_results.iter().enumerate()
-					{
-						match * argument_node_result
-						{
-							NodeResult::Slot {slot_id} =>
-							{
-								// We need to shift the destination argument index to account for the captures (that are checked at construction)
-								let destination_argument_index = argument_index + join_point.get_capture_count();
-								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-								//check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-								let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
-							}
-							NodeResult::Fence { place, timestamp } =>
-							{
-							}
-							_ => panic!("Unimplemented")
-						}
-					}
-				}
-
 				assert!(default_join_point_id_opt.is_none());
 				SplitPoint::Next { return_node_results : argument_node_results.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)}
 			}
@@ -1221,41 +1101,12 @@ impl<'program> CodeGen<'program>
 				let callee_value_funclet = & self.program.funclets[& callee_value_funclet_id];
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
-				//check_timeline_tag_compatibility_interior(& self.program, funclet_checker.current_timeline_tag, callee_funclet_scheduling_extra.in_timeline_tag);
-				//check_timeline_tag_compatibility_interior(& self.program, callee_funclet_scheduling_extra.out_timeline_tag, continuation_join_point.get_scheduling_in_timeline_tag(& self.program));
-
-				// Step 1: Check current -> callee edge
 				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
 					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
-					match node_result
-					{
-						NodeResult::Slot{slot_id} =>
-						{
-							let slot_info = & callee_funclet_scheduling_extra.input_slots[& argument_index];
-							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-							//check_value_tag_compatibility_enter(& self.program, value_operation, slot_value_tag, slot_info.value_tag);
-							let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
-							//entry_timeline_enforcer.record_slot_use(place, timestamp, slot_info.external_timestamp_id_opt);
-						}
-						NodeResult::Fence{ place, timestamp } =>
-						{
-							//entry_timeline_enforcer.record_fence_use(place, timestamp, callee_funclet_scheduling_extra.input_fences[& argument_index].external_timestamp_id);
-						}
-						_ => panic!("Unimplemented")
-					}
 					argument_node_results.push(node_result);
 				}
-
-				// Step 2: Check callee -> continuation edge
-				for (callee_output_index, callee_output_type) in callee_funclet.output_types.iter().enumerate()
-				{
-					let continuation_input_index = continuation_join_point.get_capture_count() + callee_output_index;
-					assert_eq!(* callee_output_type, continuation_join_point.get_scheduling_input_type(& self.program, continuation_input_index));
-				}
-
-				// Don't need to check continuation -> current edge because we maintain the invariant that joins can't leave the value funclet scope they were created in
 
 				assert!(default_join_point_id_opt.is_none());
 				let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : callee_value_funclet_id, scheduling_funclet_id : callee_scheduling_funclet_id, captures : vec![].into_boxed_slice(), continuation_join_point_id}));
@@ -1291,33 +1142,12 @@ impl<'program> CodeGen<'program>
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
 					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
-					match node_result
-					{
-						NodeResult::Slot{slot_id} =>
-						{
-							assert_eq!(true_funclet.input_types[argument_index], false_funclet.input_types[argument_index]);
-							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-							//check_slot_type(& self.program, true_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							//check_slot_type(& self.program, false_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-						}
-						NodeResult::Fence{place, timestamp} =>
-						{
-						}
-						_ => panic!("Unimplemented")
-					}
-
 					argument_node_results.push(node_result);
 				}
 
 				let continuation_input_count = continuation_join_point.get_input_count(& self.program);
 				assert_eq!(continuation_input_count, true_funclet.output_types.len());
 				assert_eq!(continuation_input_count, false_funclet.output_types.len());
-				for output_index in 0 .. continuation_input_count
-				{
-					assert_eq!(true_funclet.output_types[output_index], false_funclet.output_types[output_index]);
-					let continuation_input_type = continuation_join_point.get_scheduling_input_type(& self.program, output_index);
-					assert_eq!(true_funclet.output_types[output_index], continuation_input_type);
-				}
 
 				assert!(default_join_point_id_opt.is_none());
 				SplitPoint::Select{return_node_results : argument_node_results.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}
@@ -1445,28 +1275,6 @@ impl<'program> CodeGen<'program>
 			}
 			_ => panic!("Umimplemented")
 		};
-
-		// Enforce use of all nodes
-		for (node_id, node_result) in funclet_scoped_state.node_results.iter()
-		{
-			match node_result
-			{
-				NodeResult::None => (),
-				NodeResult::Slot { slot_id } =>
-				{
-					let queue_stage = placement_state.scheduling_state.get_slot_queue_stage(* slot_id);
-					// Ok to implicitly drop slots with no pending computation
-					match queue_stage
-					{
-						ir::ResourceQueueStage::Dead => (),
-						ir::ResourceQueueStage::Ready => (),
-						_ => panic!("Unused slot {:?} at node #{}", slot_id, node_id)
-					}
-				}
-				NodeResult::Join { .. } => panic!("Unused join at node #{}", node_id),
-				NodeResult::Fence { .. } => panic!("Unused fence at node #{}", node_id),
-			}
-		}
 
 		split_point
 	}
