@@ -782,13 +782,13 @@ impl<'program> CodeGen<'program>
 				assert_eq!(input_slot_ids.len(), 3);
 				assert_eq!(output_slot_ids.len(), 1);
 
-				for (input_index, input_node_id) in [* condition, * true_case, * false_case].iter().enumerate()
+				/*for (input_index, input_node_id) in [* condition, * true_case, * false_case].iter().enumerate()
 				{
 					let slot_id = input_slot_ids[input_index];
 					let value_tag = funclet_checker.scalar_node_value_tags[input_node_id];
 					let funclet_id = funclet_scoped_state.value_funclet_id;
 					check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
-				}
+				}*/
 
 				let input_var_ids = input_slot_ids.iter().map(|& slot_id| placement_state.get_slot_var_id(slot_id).unwrap()).collect::<Box<[usize]>>();
 
@@ -1339,9 +1339,9 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::Submit { place, event } =>
 				{
-					funclet_checker.current_timeline_tag = check_next_timeline_tag_on_submit(& self.program, * event, funclet_checker.current_timeline_tag);
+					//funclet_checker.current_timeline_tag = check_next_timeline_tag_on_submit(& self.program, * event, funclet_checker.current_timeline_tag);
 
-					let mut encoded_node_ids = Vec::<ir::NodeId>::new();
+					/*let mut encoded_node_ids = Vec::<ir::NodeId>::new();
 
 					for (node_id, node_result) in funclet_scoped_state.node_results.iter()
 					{
@@ -1363,7 +1363,7 @@ impl<'program> CodeGen<'program>
 							}
 							_ => ()
 						}
-					}
+					}*/
 
 					// To do: Everything at this timeline tag should advance
 
@@ -1382,7 +1382,7 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::SyncFence { place : synced_place, fence, event } =>
 				{
-					funclet_checker.current_timeline_tag = check_next_timeline_tag_on_sync(& self.program, * event, funclet_checker.current_timeline_tag);
+					//funclet_checker.current_timeline_tag = check_next_timeline_tag_on_sync(& self.program, * event, funclet_checker.current_timeline_tag);
 					/*for (node_id, node_result) in funclet_scoped_state.node_results.iter()
 					{
 						//check_timeline_tag_compatibility_interior
@@ -1396,14 +1396,14 @@ impl<'program> CodeGen<'program>
 					// Only implemented for the local queue for now
 					assert_eq!(* synced_place, ir::Place::Local);
 					// To do: Need to update nodes
-					let fence_encoding_timeline_event = if let Some(ir::TimelineTag::Operation{remote_node_id}) = funclet_checker.scalar_node_timeline_tags.remove(fence)
+					/*let fence_encoding_timeline_event = if let Some(ir::TimelineTag::Operation{remote_node_id}) = funclet_checker.scalar_node_timeline_tags.remove(fence)
 					{
 						remote_node_id
 					}
 					else
 					{
 						panic!("Expected fence to have an operation for a timeline tag")
-					};
+					};*/
 
 
 					let value_opt = match funclet_scoped_state.move_node_result(* fence)
@@ -1426,7 +1426,7 @@ impl<'program> CodeGen<'program>
 					{
 						assert_eq!(fenced_place, ir::Place::Gpu);
 
-						for (node_id, node_result) in funclet_scoped_state.node_results.iter()
+						/*for (node_id, node_result) in funclet_scoped_state.node_results.iter()
 						{
 							//check_timeline_tag_compatibility_interior
 							//funclet_scoped_state.node_timeline_tags[]
@@ -1462,7 +1462,7 @@ impl<'program> CodeGen<'program>
 								}
 								_ => ()
 							}
-						}
+						}*/
 
 						if let Some(newer_timestamp) = self.advance_known_place_time(placement_state, fenced_place, timestamp)
 						{

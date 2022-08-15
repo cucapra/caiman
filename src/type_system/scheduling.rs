@@ -5,6 +5,19 @@ use std::collections::{HashMap, BTreeMap, HashSet, BTreeSet};
 use std::default::Default;
 
 
+#[derive(Debug)]
+pub struct Slot
+{
+	storage_type : ir::ffi::TypeId,
+	queue_stage : ir::ResourceQueueStage,
+	queue_place : ir::Place
+}
+
+#[derive(Debug)]
+pub struct Fence
+{
+	queue_place : ir::Place
+}
 
 #[derive(Debug)]
 pub struct JoinPoint
@@ -17,8 +30,8 @@ pub struct JoinPoint
 #[derive(Debug)]
 pub enum NodeType
 {
-	Slot,
-	Fence,
+	Slot(Slot),
+	Fence(Fence),
 	JoinPoint,
 }
 
@@ -99,7 +112,7 @@ impl<'program> FuncletChecker<'program>
 					let timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, slot_info.timeline_tag);
 					self.scalar_node_value_tags.insert(index, value_tag);
 					self.scalar_node_timeline_tags.insert(index, timeline_tag);
-					NodeType::Slot
+					NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : * queue_stage, queue_place : * queue_place})
 				}
 				ir::Type::SchedulingJoin{ .. } =>
 				{
@@ -109,7 +122,7 @@ impl<'program> FuncletChecker<'program>
 				{
 					let fence_info = & self.scheduling_funclet_extra.input_fences[& index];
 					self.scalar_node_timeline_tags.insert(index, fence_info.timeline_tag);
-					NodeType::Fence
+					NodeType::Fence(Fence{queue_place : * queue_place})
 				}
 				_ => panic!("Not a legal argument type for a scheduling funclet")
 			};
@@ -157,6 +170,37 @@ impl<'program> FuncletChecker<'program>
 		}
 	}
 
+	/*fn get_value_node_inputs(&self, node : & ir::Node, place : ir::Place, input_index : usize) -> Box<[(ir::Place, ir::ValueTag)]>
+	{
+		let results = Vec::new();
+		match node
+		{
+			ir::Node::
+		}
+		results.into_boxed_slice()
+	}*/
+
+	fn transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_stage : ir::ResourceQueueStage, to_stage : ir::ResourceQueueStage)
+	{
+		let node_type = self.node_types.remove(& slot_node_id).unwrap();
+		if let NodeType::Slot(Slot{storage_type, queue_stage, queue_place}) = node_type
+		{
+			assert_eq!(queue_place, place);
+			assert_eq!(queue_stage, from_stage);
+			match to_stage
+			{
+				ir::ResourceQueueStage::Encoded => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
+				ir::ResourceQueueStage::Submitted => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
+				_ => self.scalar_node_timeline_tags.insert(slot_node_id, ir::TimelineTag::None)
+			};
+			self.node_types.insert(slot_node_id, NodeType::Slot(Slot{storage_type, queue_stage : to_stage, queue_place}));
+		}
+		else
+		{
+			panic!("Not a slot");
+		}
+	}
+
 	pub fn check_next_node(&mut self, current_node_id : ir::NodeId)
 	{
 		assert_eq!(self.current_node_id, current_node_id);
@@ -170,30 +214,248 @@ impl<'program> FuncletChecker<'program>
 			{
 				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Operation{remote_node_id : * operation});
 				self.scalar_node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
-				self.node_types.insert(current_node_id, NodeType::Slot);
+				self.node_types.insert(current_node_id, NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : ir::ResourceQueueStage::Bound, queue_place : * place}));
 			}
 			ir::Node::UnboundSlot { place, storage_type, operation } =>
 			{
 				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Operation{remote_node_id : * operation});
 				self.scalar_node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
-				self.node_types.insert(current_node_id, NodeType::Slot);
+				self.node_types.insert(current_node_id, NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : ir::ResourceQueueStage::Unbound, queue_place : * place}));
 			}
-			ir::Node::Drop { node : dropped_node_id } => (),
-			ir::Node::EncodeDo { place, operation, inputs, outputs } => (),
+			ir::Node::Drop { node : dropped_node_id } =>
+			{
+				panic!("To do")
+			}
+			ir::Node::EncodeDo { place, operation, inputs, outputs } =>
+			{
+				assert_eq!(self.scheduling_funclet_extra.value_funclet_id, operation.funclet_id);
+
+				let encoded_funclet = & self.program.funclets[& operation.funclet_id];
+				let encoded_node = & encoded_funclet.nodes[operation.node_id];
+
+				match encoded_node
+				{
+					ir::Node::ConstantInteger { .. } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						assert_eq!(inputs.len(), 0);
+						assert_eq!(outputs.len(), 1);
+
+						self.transition_slot(outputs[0], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+					}
+					ir::Node::ConstantUnsignedInteger { .. } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						assert_eq!(inputs.len(), 0);
+						assert_eq!(outputs.len(), 1);
+
+						self.transition_slot(outputs[0], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+					}
+					ir::Node::Select { condition, true_case, false_case } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						assert_eq!(inputs.len(), 3);
+						assert_eq!(outputs.len(), 1);
+		
+						for (input_index, input_value_node_id) in [* condition, * true_case, * false_case].iter().enumerate()
+						{
+							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
+							let funclet_id = self.value_funclet_id;
+							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_value_node_id}});
+						}
+
+						self.transition_slot(outputs[0], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+					}
+					ir::Node::CallExternalCpu { external_function_id, arguments } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						let function = & self.program.native_interface.external_cpu_functions[external_function_id];
+						// To do: Input checks 
+
+						for (index, output_type_id) in function.output_types.iter().enumerate()
+						{
+							self.transition_slot(outputs[index], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready);
+						}
+					}
+					ir::Node::CallExternalGpuCompute { external_function_id, arguments, dimensions } =>
+					{
+						assert_eq!(* place, ir::Place::Gpu);
+						let function = & self.program.native_interface.external_gpu_functions[external_function_id];
+		
+						assert_eq!(inputs.len(), dimensions.len() + arguments.len());
+						assert_eq!(outputs.len(), function.output_types.len());
+
+						// To do: Input checks
+						
+						for (index, output_type_id) in function.output_types.iter().enumerate()
+						{
+							self.transition_slot(outputs[index], * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded);
+						}
+					}
+					_ => panic!("Cannot encode {:?}", encoded_node)
+				}
+
+				let output_is_tuple = match encoded_node
+				{
+					// Single return nodes
+					ir::Node::ConstantInteger { .. } => false,
+					ir::Node::ConstantUnsignedInteger { .. } => false,
+					ir::Node::Select { .. } => false,
+					// Multiple return nodes
+					ir::Node::CallExternalCpu { .. } => true,
+					ir::Node::CallExternalGpuCompute { .. } => true,
+					_ => panic!("Cannot encode {:?}", encoded_node)
+				};
+
+				if output_is_tuple
+				{
+					for (output_index, output_scheduling_node_id) in outputs.iter().enumerate()
+					{
+						let value_tag = self.scalar_node_value_tags[output_scheduling_node_id];
+						match value_tag
+						{
+							ir::ValueTag::None => (),
+							ir::ValueTag::FunctionInput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+							ir::ValueTag::FunctionOutput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+							ir::ValueTag::Operation{remote_node_id} =>
+							{
+								assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
+								if let ir::Node::ExtractResult { node_id, index } = & encoded_funclet.nodes[remote_node_id.node_id]
+								{
+									assert_eq!(output_index, * index);
+									assert_eq!(operation.node_id, * node_id);
+								}
+							}
+							ir::ValueTag::Input{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
+							ir::ValueTag::Output{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
+							ir::ValueTag::Halt{..} => panic!("")
+						}
+					}
+				}
+				else
+				{
+					assert_eq!(outputs.len(), 1);
+					let value_tag = self.scalar_node_value_tags[& outputs[0]];
+					match value_tag
+					{
+						ir::ValueTag::None => (),
+						ir::ValueTag::FunctionInput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+						ir::ValueTag::FunctionOutput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
+						ir::ValueTag::Operation{remote_node_id} =>
+						{
+							assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
+							assert_eq!(operation.node_id, remote_node_id.node_id);
+						}
+						ir::ValueTag::Input{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
+						ir::ValueTag::Output{funclet_id, index} => panic!("{:?} can only appear in interface of funclet", value_tag),
+						ir::ValueTag::Halt{..} => panic!("")
+					}
+				}
+
+				/*for (input_index, node_id) in inputs.iter().enumerate()
+				{
+
+				}*/
+				//panic!("To do")
+			}
 			ir::Node::EncodeCopy { place, input, output } =>
 			{
 				let source_value_tag = self.scalar_node_value_tags[input];
 				let destination_value_tag = self.scalar_node_value_tags[output];
 				check_value_tag_compatibility_interior(& self.program, source_value_tag, destination_value_tag);
+				
+				match place
+				{
+					ir::Place::Local => self.transition_slot(* output, * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready),
+					_ => self.transition_slot(* output, * place, ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)
+				}
+
 			}
-			ir::Node::Submit { place, event } => (),
+			ir::Node::Submit { place, event } =>
+			{
+				self.current_timeline_tag = check_next_timeline_tag_on_submit(& self.program, * event, self.current_timeline_tag);
+
+				for (node_id, node_type) in self.node_types.iter_mut()
+				{
+					match * node_type
+					{
+						NodeType::Slot(Slot{storage_type, queue_place, queue_stage}) =>
+						{
+							if * place == queue_place && ir::ResourceQueueStage::Encoded == queue_stage
+							{
+								//submitted_node_ids.push(* node_id);
+								//check_timeline_tag_compatibility_interior(& self.program, , current_timeline_tag);
+								// To do : move to submitted
+								self.scalar_node_timeline_tags.insert(* node_id, self.current_timeline_tag);
+								* node_type = NodeType::Slot(Slot{storage_type, queue_place, queue_stage : ir::ResourceQueueStage::Submitted});
+							}
+						}
+						_ => ()
+					}
+				}
+			}
 			ir::Node::EncodeFence { place, event } =>
 			{
 				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::None);
 				self.scalar_node_timeline_tags.insert(current_node_id, self.current_timeline_tag);
-				self.node_types.insert(current_node_id, NodeType::Fence);
+				self.node_types.insert(current_node_id, NodeType::Fence(Fence{queue_place : * place}));
 			}
-			ir::Node::SyncFence { place : synced_place, fence, event } => (),
+			ir::Node::SyncFence { place : synced_place, fence, event } =>
+			{
+				self.current_timeline_tag = check_next_timeline_tag_on_sync(& self.program, * event, self.current_timeline_tag);
+
+				// Only implemented for the local queue for now
+				assert_eq!(* synced_place, ir::Place::Local);
+
+				let fenced_place = 
+					if let NodeType::Fence(Fence{queue_place}) = & self.node_types[fence]
+					{
+						* queue_place
+					}
+					else
+					{
+						panic!("Not a fence");
+					};
+
+				let fence_encoding_timeline_event =
+					if let Some(ir::TimelineTag::Operation{remote_node_id}) = self.scalar_node_timeline_tags.remove(fence)
+					{
+						remote_node_id
+					}
+					else
+					{
+						panic!("Expected fence to have an operation for a timeline tag")
+					};
+
+				for (node_id, node_type) in self.node_types.iter_mut()
+				{
+					match * node_type
+					{
+						NodeType::Slot(Slot{storage_type, queue_place, queue_stage}) =>
+						{
+							if fenced_place == queue_place && ir::ResourceQueueStage::Submitted == queue_stage
+							{
+								let old_timeline_tag = self.scalar_node_timeline_tags[node_id];
+								match old_timeline_tag
+								{
+									ir::TimelineTag::None => (),
+									ir::TimelineTag::Operation{remote_node_id} =>
+									{
+										assert_eq!(remote_node_id.funclet_id, fence_encoding_timeline_event.funclet_id);
+										if remote_node_id.node_id == fence_encoding_timeline_event.node_id
+										{
+											self.scalar_node_timeline_tags.remove(node_id);
+											* node_type = NodeType::Slot(Slot{storage_type, queue_place, queue_stage : ir::ResourceQueueStage::Ready})
+										}
+									}
+									_ => panic!("Not a legal timeline tag")
+								}
+							}
+						}
+						_ => ()
+					}
+				}
+			}
 			ir::Node::DefaultJoin =>
 			{
 				let mut value_tags = Vec::<ir::ValueTag>::new();
@@ -219,6 +481,8 @@ impl<'program> FuncletChecker<'program>
 
 				for (capture_index, capture_node_id) in captures.iter().enumerate()
 				{
+					let node_type = self.node_types.remove(capture_node_id);
+					panic!("To do: check slot type");
 					let (value_tag, timeline_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, capture_index);
 					let node_value_tag = self.scalar_node_value_tags[capture_node_id];
 					let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
@@ -306,51 +570,3 @@ impl<'program> FuncletChecker<'program>
 		}
 	}
 }
-
-/*#[derive(Debug)]
-pub struct FuncletChecker<'program>
-{
-	program : & 'program ir::Program,
-	value_funclet_id : ir::FuncletId,
-	scheduling_funclet_id : ir::FuncletId,
-	value_funclet : & 'program ir::Funclet,
-	scheduling_funclet : & 'program ir::Funclet,
-	scheduling_funclet_extra : & 'program ir::SchedulingFuncletExtra,
-	scalar_node_value_tags : HashMap<ir::NodeId, ir::ValueTag>,
-	scalar_node_timeline_tags : HashMap<ir::NodeId, ir::TimelineTag>,
-	join_node_value_tags : HashMap<ir::NodeId, Box<[ir::ValueTag]>>,
-	join_node_timeline_tags : HashMap<ir::NodeId, Box<[ir::TimelineTag]>>,
-	last_node_id : ir::NodeId
-}
-
-impl<'program> FuncletChecker<'program>
-{
-	pub fn new(program : & 'program ir::Program, scheduling_funclet_id : ir::FuncletId) -> Self
-	{
-		Self { program, scheduling_funclet_id }
-	}
-
-	pub fn check_next_node(&mut self, node_id : ir::NodeId)
-	{
-		self.last_node_id += 1;
-		assert!(self.last_node_id, node_id);
-
-		match & self.funclet[node_id]
-		{
-			ir::Node::None => (),
-			ir::Node::Phi { .. } => (),
-			ir::Node::ExtractResult { node_id, index } => (),
-			ir::Node::AllocTemporary{ place, storage_type, operation } => (),
-			ir::Node::UnboundSlot { place, storage_type, operation } => (),
-			ir::Node::Drop { node : dropped_node_id } => (),
-			ir::Node::EncodeDo { place, operation, inputs, outputs } => (),
-			ir::Node::EncodeCopy { place, input, output } => (),
-			ir::Node::Submit { place, event } => (),
-			ir::Node::EncodeFence { place, event } => (),
-			ir::Node::SyncFence { place : synced_place, fence, event } => (),
-			ir::Node::DefaultJoin => (),
-			ir::Node::Join { funclet : funclet_id, captures, continuation : continuation_join_node_id } => (),
-			_ => panic!("Unimplemented")
-		}
-	}
-}*/
