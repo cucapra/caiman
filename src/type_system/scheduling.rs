@@ -5,6 +5,41 @@ use std::collections::{HashMap, BTreeMap, HashSet, BTreeSet};
 use std::default::Default;
 
 
+fn validate_bindings(function : & ir::ffi::ExternalGpuFunction, input_slot_node_ids : &[ir::NodeId], output_slot_node_ids : &[ir::NodeId])
+{
+	use std::iter::FromIterator;
+	let mut input_slot_counts = HashMap::<ir::NodeId, usize>::from_iter(input_slot_node_ids.iter().chain(output_slot_node_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
+	let mut output_slot_bindings = HashMap::<ir::NodeId, Option<usize>>::from_iter(output_slot_node_ids.iter().map(|slot_id| (* slot_id, None)));
+	for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
+	{
+		if let Some(index) = resource_binding.input
+		{
+			* input_slot_counts.get_mut(& input_slot_node_ids[index]).unwrap() += 1;
+		}
+
+		if let Some(index) = resource_binding.output
+		{
+			* output_slot_bindings.get_mut(& output_slot_node_ids[index]).unwrap() = Some(binding_index);
+		}
+	}
+
+	for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
+	{
+		if let Some(output_index) = resource_binding.output
+		{
+			let output_slot_id = output_slot_node_ids[output_index];
+			assert_eq!(input_slot_counts[& output_slot_id], 0);
+			assert_eq!(output_slot_bindings[& output_slot_id], Some(binding_index));
+
+			if let Some(input_index) = resource_binding.input
+			{
+				let input_slot_id = input_slot_node_ids[input_index];
+				assert_eq!(input_slot_counts[& input_slot_id], 1);
+			}
+		}
+	}
+}
+
 #[derive(Debug)]
 struct Slot
 {
@@ -34,6 +69,19 @@ enum NodeType
 	Slot(Slot),
 	Fence(Fence),
 	JoinPoint,
+}
+
+impl NodeType
+{
+	fn storage_type(&self) -> Option<ir::ffi::TypeId>
+	{
+		match self
+		{
+			NodeType::Slot(slot) => Some(slot.storage_type),
+			NodeType::Fence(_) => None,
+			NodeType::JoinPoint => None,
+		}
+	}
 }
 
 fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, node_type : & NodeType)
@@ -261,7 +309,7 @@ impl<'program> FuncletChecker<'program>
 						to_stage_opt = Some(* to_stage);
 					}
 				}
-				
+
 				let to_stage = to_stage_opt.unwrap();
 				match to_stage
 				{
@@ -398,10 +446,16 @@ impl<'program> FuncletChecker<'program>
 							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
 						}
 
+						{
+							validate_bindings(function, & inputs[dimensions.len() .. ], outputs);
+						}
+
 						let mut forwarding_input_scheduling_node_ids = HashSet::<ir::NodeId>::new();
 						let mut forwarded_output_scheduling_node_ids = HashSet::<ir::NodeId>::new();
 						for (input_index, _) in arguments.iter().enumerate()
 						{
+							assert_eq!(self.node_types[& inputs[dimensions.len() + input_index]].storage_type().unwrap(), function.input_types[input_index]);
+
 							if let Some(forwarded_output_index) = function.output_of_forwarding_input(input_index)
 							{
 								let transitions = [
@@ -435,6 +489,8 @@ impl<'program> FuncletChecker<'program>
 						
 						for (index, output_type_id) in function.output_types.iter().enumerate()
 						{
+							assert_eq!(self.node_types[& outputs[index]].storage_type().unwrap(), function.output_types[index]);
+
 							let is_forwarded = forwarded_output_scheduling_node_ids.contains(& outputs[index]);
 							if ! is_forwarded
 							{

@@ -135,14 +135,6 @@ impl PlacementState
 		self.scheduling_state.advance_queue_stage(slot_id, stage);
 	}
 
-	/*fn forward_slot(&mut self, destination_slot_id : scheduling_state::SlotId, source_slot_id : scheduling_state::SlotId, stage)
-	{
-		assert!(! self.slot_variable_ids.contains_key(& destination_slot_id));
-		assert!(self.slot_variable_ids.contains_key(& source_slot_id));
-
-		self.slot_variable_ids.insert(destination_slot_id, self.slot_variable_ids[& source_slot_id]);
-	}*/
-
 	fn get_slot_var_ids(&self, slot_ids : &[scheduling_state::SlotId], place : ir::Place) -> Option<Box<[usize]>>
 	{
 		let mut var_ids = Vec::<usize>::new();
@@ -209,7 +201,7 @@ impl FuncletScopedState
 {
 	fn new(value_funclet_id : ir::FuncletId, scheduling_funclet_id : ir::FuncletId) -> Self
 	{
-		Self{ value_funclet_id, scheduling_funclet_id, node_results : Default::default()/*, slot_value_tags : HashMap::new(), node_timeline_tags : HashMap::new(), join_value_tags : HashMap::new()*/}
+		Self{ value_funclet_id, scheduling_funclet_id, node_results : Default::default()}
 	}
 
 	fn move_node_result(&mut self, node_id : ir::NodeId) -> Option<NodeResult>
@@ -377,7 +369,7 @@ impl<'program> CodeGen<'program>
 				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
-				let mut input_slot_counts = HashMap::<scheduling_state::SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
+				/*let mut input_slot_counts = HashMap::<scheduling_state::SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
 				let mut output_slot_bindings = HashMap::<scheduling_state::SlotId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
 				for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
 				{
@@ -413,6 +405,20 @@ impl<'program> CodeGen<'program>
 							assert!(old.is_none());
 						}
 					}
+				}*/
+
+
+				for (input_index, _) in arguments.iter().enumerate()
+				{
+					if let Some(forwarded_output_index) = function.output_of_forwarding_input(input_index)
+					{
+						let input_slot_id = input_slot_ids[dimensions.len() + input_index];
+						let output_slot_id = output_slot_ids[forwarded_output_index];
+						placement_state.scheduling_state.forward_slot(output_slot_id, input_slot_id);
+						let var_id = placement_state.slot_variable_ids[& input_slot_id];
+						let old = placement_state.slot_variable_ids.insert(output_slot_id, var_id);
+						assert!(old.is_none());
+					}
 				}
 
 				use std::convert::TryInto;
@@ -421,18 +427,11 @@ impl<'program> CodeGen<'program>
 				let dimension_map = |(index, x)| 
 				{
 					let slot_id = input_slot_ids[index];
-					// Need to check that this is int
-					//assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
-					assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded);
 					placement_state.slot_variable_ids[& slot_id]
 				};
 				let argument_map = |(index, x)|
 				{
 					let slot_id = input_slot_ids[dimensions.len() + index];
-					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), function.input_types[index]);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu);
-					assert!(placement_state.scheduling_state.get_slot_queue_stage(slot_id) >= ir::ResourceQueueStage::Encoded);
 					placement_state.slot_variable_ids[& slot_id]
 				};
 				let dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(dimension_map)).into_boxed_slice();
@@ -446,10 +445,6 @@ impl<'program> CodeGen<'program>
 				for (index, output_type_id) in function.output_types.iter().enumerate()
 				{
 					let slot_id = output_slot_ids[index];
-					// To do: Do something about the value
-					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * output_type_id);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Gpu);
 					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Encoded, output_var_ids[index]);
 				}
 			}
@@ -464,55 +459,34 @@ impl<'program> CodeGen<'program>
 		{
 			ir::Node::ConstantInteger{value, type_id} =>
 			{
-				assert_eq!(input_slot_ids.len(), 0);
-				assert_eq!(output_slot_ids.len(), 1);
-
 				let slot_id = output_slot_ids[0];
 				let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
 				let variable_id = self.code_generator.build_constant_integer(* value, storage_type_id);
 				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
-
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
 			}
 			ir::Node::ConstantUnsignedInteger{value, type_id} =>
 			{
-				assert_eq!(input_slot_ids.len(), 0);
-				assert_eq!(output_slot_ids.len(), 1);
-
 				let slot_id = output_slot_ids[0];
 				let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
 				let variable_id = self.code_generator.build_constant_unsigned_integer(* value, storage_type_id);
 				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
-
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
 			}
 			ir::Node::Select { condition, true_case, false_case } =>
 			{
-				assert_eq!(input_slot_ids.len(), 3);
-				assert_eq!(output_slot_ids.len(), 1);
-
 				let input_var_ids = input_slot_ids.iter().map(|& slot_id| placement_state.get_slot_var_id(slot_id).unwrap()).collect::<Box<[usize]>>();
 
 				let slot_id = output_slot_ids[0];
 				let variable_id = self.code_generator.build_select_hack(input_var_ids[0], input_var_ids[1], input_var_ids[2]);
-
-				//assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * type_id);
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
-				assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
 			}
 			ir::Node::CallExternalCpu { external_function_id, arguments } =>
 			{
 				let function = & self.program.native_interface.external_cpu_functions[external_function_id];
-
-				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
 				use std::iter::FromIterator;
 
@@ -522,9 +496,6 @@ impl<'program> CodeGen<'program>
 				for (index, output_type_id) in function.output_types.iter().enumerate()
 				{
 					let slot_id = output_slot_ids[index];
-					assert_eq!(placement_state.scheduling_state.get_slot_type_id(slot_id), * output_type_id);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(slot_id), ir::ResourceQueueStage::Bound);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_place(slot_id), ir::Place::Local);
 					placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, raw_outputs[index]);
 				}
 			}
@@ -769,30 +740,7 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::Drop { node : dropped_node_id } =>
 				{
-					// Enforce use of all nodes
-					if let Some(node_result) = funclet_scoped_state.move_node_result(* dropped_node_id)
-					{
-						match node_result
-						{
-							NodeResult::None => panic!("Node #{} has already been used", dropped_node_id),
-							NodeResult::Slot { slot_id } =>
-							{
-								let queue_stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
-								match queue_stage
-								{
-									ir::ResourceQueueStage::Dead => (),
-									ir::ResourceQueueStage::Ready => (),
-									_ => panic!("Cannot drop node #{}", dropped_node_id)
-								}
-							}
-							NodeResult::Join { .. } => panic!("Cannot drop node #{}", dropped_node_id),
-							NodeResult::Fence { .. } => panic!("Cannot drop node #{}", dropped_node_id),
-						}
-					}
-					else
-					{
-						panic!("No node named")
-					}
+					funclet_scoped_state.move_node_result(* dropped_node_id);
 				}
 				ir::Node::EncodeDo { place, operation, inputs, outputs } =>
 				{
@@ -852,9 +800,6 @@ impl<'program> CodeGen<'program>
 					let src_stage = placement_state.scheduling_state.get_slot_queue_stage(src_slot_id);
 
 					assert_eq!(placement_state.scheduling_state.get_slot_type_id(src_slot_id), placement_state.scheduling_state.get_slot_type_id(dst_slot_id));
-					assert!(src_stage > ir::ResourceQueueStage::Bound);
-					assert!(src_stage < ir::ResourceQueueStage::Dead);
-					assert_eq!(placement_state.scheduling_state.get_slot_queue_stage(dst_slot_id), ir::ResourceQueueStage::Bound);
 
 					match (* place, dst_place, src_place)
 					{
@@ -890,8 +835,6 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::Submit { place, event } =>
 				{
-					// To do: Everything at this timeline tag should advance
-
 					let submission_id = placement_state.scheduling_state.insert_submission
 					(
 						* place,
@@ -911,16 +854,7 @@ impl<'program> CodeGen<'program>
 					// Only implemented for the local queue for now
 					assert_eq!(* synced_place, ir::Place::Local);
 
-					let value_opt = match funclet_scoped_state.move_node_result(* fence)
-					{
-						Some(NodeResult::Fence{place, timestamp}) =>
-						{
-							Some(NodeResult::Fence{place, timestamp})
-						}
-						_ => panic!("Expected fence")
-					};
-
-					if let Some(NodeResult::Fence{place : fenced_place, timestamp}) = value_opt
+					if let Some(NodeResult::Fence{place : fenced_place, timestamp}) = funclet_scoped_state.move_node_result(* fence)
 					{
 						assert_eq!(fenced_place, ir::Place::Gpu);
 
@@ -928,6 +862,10 @@ impl<'program> CodeGen<'program>
 						{
 							panic!("Have already synced to a later time")
 						}
+					}
+					else
+					{
+						panic!("Expected fence")
 					}
 				}
 				ir::Node::DefaultJoin =>
@@ -961,7 +899,6 @@ impl<'program> CodeGen<'program>
 					let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
 
 					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_node_results.into_boxed_slice(), continuation_join_point_id}));
-					println!("Created join point: {:?} {:?}", join_point_id, placement_state.join_graph.get_join(join_point_id));
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 				}
 				_ => panic!("Unknown node")
