@@ -1,126 +1,9 @@
 use super::*;
 use crate::ir;
 use crate::operations::{BinopKind, UnopKind};
+use constant::Constant;
 use std::collections::hash_map::{Entry, HashMap};
 use std::collections::BTreeSet;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum CFoldError {
-    // TODO: something about upcasting? upcastable?
-    // probably not, we don't need Rust-quality diagnostics here :P
-    // It would be a good idea to improve these eventually though...
-    // somehow trace the chain of constant evaluations
-    // The math example for egg does this, but it's not friendly at all
-    #[error("constant folding operands have incompatible types")]
-    IncompatibleTypes,
-    #[error("constant folding produced an out-of-range value")]
-    OutOfRange,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Constant {
-    Bool(bool),
-
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-
-    I8(i8),
-    I16(i16),
-    I32(i32),
-    I64(i64),
-}
-
-macro_rules! impl_unop {
-    ($name:ident, $out0:ident, $tok:tt for {$($variant:ident),*}) => {
-        impl Constant {
-            fn $name(self) -> Result<Constant, CFoldError> {
-                match self {
-                    $(Self::$variant($out0) => Ok(Self::$variant $tok),)*
-                    _ => return Err(CFoldError::IncompatibleTypes)
-                }
-            }
-        }
-    };
-}
-impl_unop!(negate, x, (-x) for {I8, I16, I32, I64});
-
-fn cfold_unop(egraph: &GraphInner, unop: UnopKind, deps: &[egg::Id]) -> Option<Constant> {
-    assert!(deps.len() == 1, "unop has one argument");
-    let x = egraph[deps[0]].data.constant?;
-    match unop {
-        UnopKind::Neg => Some(x.negate().unwrap()),
-    }
-}
-
-macro_rules! impl_binop {
-    ($name:ident, $out0:ident, $out1:ident, $tok:tt for {$($variant:ident),*}) => {
-        impl Constant {
-            fn $name(self, rhs: Self) -> Result<Constant, CFoldError> {
-                match (self, rhs) {
-                    $((Self::$variant($out0), Self::$variant($out1)) => Ok(Self::$variant $tok),)*
-                    _ => return Err(CFoldError::IncompatibleTypes)
-                }
-            }
-        }
-    };
-}
-
-impl_binop!(add, a, b, (a.checked_add(b).ok_or(CFoldError::OutOfRange)?)
-    for {U8, U16, U32, U64, I8, I16, I32, I64}
-);
-impl_binop!(sub, a, b, (a.checked_sub(b).ok_or(CFoldError::OutOfRange)?)
-    for {U8, U16, U32, U64, I8, I16, I32, I64}
-);
-impl_binop!(logical_and, a, b, (a && b) for {Bool});
-impl_binop!(logical_or, a, b, (a && b) for {Bool});
-
-fn cfold_binop(egraph: &GraphInner, binop: BinopKind, deps: &[egg::Id]) -> Option<Constant> {
-    assert!(deps.len() == 2, "binop has two arguments");
-    let a = egraph[deps[0]].data.constant?;
-    let b = egraph[deps[1]].data.constant?;
-    match binop {
-        // I'm not sure how to handle errors here... we could silently ignore them by using
-        // (a + b).ok() but that seems like a disservice to a user wondering why their
-        // value function is buggy, and the errors will almost certainly pop up later
-        // in codegen or at runtime. egg doesn't have a way to do fallible analyses AFAIK
-        BinopKind::Add => Some(a.add(b).unwrap()),
-        BinopKind::Sub => Some(a.sub(b).unwrap()),
-        BinopKind::LogicalAnd => Some(a.logical_and(b).unwrap()),
-        BinopKind::LogicalOr => Some(a.logical_or(b).unwrap()),
-    }
-}
-impl Node {
-    fn constant_fold(&self, egraph: &GraphInner) -> Option<Constant> {
-        match self.operation()? {
-            OperationKind::ConstantBool { value } => Some(Constant::Bool(*value)),
-            OperationKind::ConstantInteger { value, .. } => Some(Constant::I64(*value)),
-            OperationKind::ConstantUnsignedInteger { value, .. } => Some(Constant::U64(*value)),
-            OperationKind::Unop { kind } => cfold_unop(egraph, *kind, &self.deps),
-            OperationKind::Binop { kind } => cfold_binop(egraph, *kind, &self.deps),
-            _ => None,
-        }
-    }
-}
-#[derive(Debug)]
-pub struct ClassAnalysis {
-    constant: Option<Constant>,
-}
-impl ClassAnalysis {
-    fn new(egraph: &GraphInner, enode: &Node) -> Self {
-        Self {
-            constant: enode.constant_fold(egraph),
-        }
-    }
-    fn merge(&mut self, other: Self) -> egg::DidMerge {
-        egg::merge_option(&mut self.constant, other.constant, |a, b| {
-            assert_eq!(a, &b, "rewrite type violation (merge non-equal constants)");
-            egg::DidMerge(false, false)
-        })
-    }
-}
 
 #[derive(Clone, PartialEq, Eq)]
 struct BlockArgs {
@@ -400,13 +283,35 @@ impl Analysis {
     }
 }
 
+#[derive(Debug)]
+pub struct ClassAnalysis {
+    pub constant: Option<Constant>,
+    pub type_id: ir::TypeId,
+}
+
 impl egg::Analysis<Node> for Analysis {
     type Data = ClassAnalysis;
     fn make(egraph: &GraphInner, enode: &Node) -> Self::Data {
-        ClassAnalysis::new(egraph, enode)
+        Self::Data {
+            constant: enode.to_constant(egraph),
+            type_id: todo!(),
+        }
     }
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
-        a.merge(b)
+        assert_eq!(a.type_id, b.type_id, "merged eclasses with different types");
+        egg::merge_option(&mut a.constant, b.constant, |a, b| {
+            assert_eq!(a, &b, "rewrite type violation (merge non-equal constants)");
+            egg::DidMerge(false, false)
+        })
+    }
+    fn modify(egraph: &mut egg::EGraph<Node, Self>, id: egg::Id) {
+        let data = &egraph[id].data;
+        let type_id = data.type_id;
+        if let Some(constant) = data.constant {
+            let folded = constant.to_node(type_id);
+            let folded_id = egraph.add(folded);
+            egraph.union(id, folded_id);
+        }
     }
 }
 

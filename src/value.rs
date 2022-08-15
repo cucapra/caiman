@@ -15,6 +15,8 @@ pub use operation_kind::OperationKind;
 
 mod from_op;
 
+mod constant;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NodeKind {
     /// An arbitrarily-sized list of graph ids. The list ordering is meaningful.
