@@ -221,15 +221,12 @@ impl Analysis {
     }
     /// Attempts to apply "generalized jump threading"
     fn thread_jumps(&mut self) {
-        fn unwrap_jump(tail: &BlockTail) -> &Jump {
-            if let BlockTail::Jump(jump) = &tail {
-                return jump;
-            }
-            unreachable!("thread_candidates invariant violation");
-        }
         while let Some(candidate) = self.thread_candidates.pop() {
             // according to dirty list invariant, this should never fail
-            let target = unwrap_jump(&self.blocks[&candidate].tail).dest;
+            let target = match &self.blocks[&candidate].tail {
+                BlockTail::Jump(jump) => jump.dest,
+                _ => unreachable!("thread_candidates invariant violation"),
+            };
             // if the target has a single predecessor, it *must* be the candidate
             if let &[pred] = self.blocks[&target].preds.as_slice() {
                 assert!(candidate == pred);

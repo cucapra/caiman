@@ -83,8 +83,11 @@ macro_rules! _mok_impl {
                             $($arg : attribs.get(stringify!($arg))?),*
                     }),)*
                     // convenience overrides
+                    "neg" => Ok(Self::Unop{kind: UnopKind::Neg}),
                     "+" => Ok(Self::Binop {kind: BinopKind::Add}),
                     "-" => Ok(Self::Binop {kind: BinopKind::Sub}),
+                    "&&" => Ok(Self::Binop {kind: BinopKind::LogicalAnd}),
+                    "||" => Ok(Self::Binop {kind: BinopKind::LogicalOr}),
                     // fallback
                     _ => Err(FromOpError::UnknownOp(kind.into()))
                 }

@@ -13,9 +13,9 @@ use analysis::Analysis;
 mod operation_kind;
 pub use operation_kind::OperationKind;
 
-mod from_op;
-
 mod constant;
+mod from_op;
+mod rewrite;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NodeKind {
@@ -66,7 +66,7 @@ impl egg::Language for Node {
 
 enum SealedRewrite {
     RunnerHook(GraphRunnerHook),
-    RewriteRule(GraphRewriteRule),
+    RewriteRule(GraphRewrite),
 }
 /// An opaque value graph rewrite.
 /// This may be an "abstract" rewrite which isn't actually implemented as a rewrite rule,
@@ -76,12 +76,12 @@ pub struct Rewrite(SealedRewrite);
 type GraphInner = egg::EGraph<Node, Analysis>;
 type GraphRunner = egg::Runner<Node, Analysis, ()>;
 type GraphRunnerHook = Box<dyn FnMut(&mut GraphRunner) -> Result<(), String> + 'static>;
-type GraphRewriteRule = egg::Rewrite<Node, Analysis>;
+type GraphRewrite = egg::Rewrite<Node, Analysis>;
 type GraphId = egg::Id;
 
 pub struct Graph {
     runner: GraphRunner,
-    rules: Vec<GraphRewriteRule>,
+    rules: Vec<GraphRewrite>,
 }
 impl Graph {
     pub fn new(program: &ir::Program, head: ir::FuncletId) -> Result<Self, FromIrError> {
