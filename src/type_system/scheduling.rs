@@ -6,7 +6,7 @@ use std::default::Default;
 
 
 #[derive(Debug)]
-pub struct Slot
+struct Slot
 {
 	storage_type : ir::ffi::TypeId,
 	queue_stage : ir::ResourceQueueStage,
@@ -14,7 +14,7 @@ pub struct Slot
 }
 
 #[derive(Debug)]
-pub struct Fence
+struct Fence
 {
 	queue_place : ir::Place
 }
@@ -22,17 +22,50 @@ pub struct Fence
 #[derive(Debug)]
 pub struct JoinPoint
 {
-	pub in_timeline_tag : ir::TimelineTag,
-	pub input_timeline_tags : Box<[ir::TimelineTag]>,
-	pub input_value_tags : Box<[ir::ValueTag]>
+	in_timeline_tag : ir::TimelineTag,
+	input_timeline_tags : Box<[ir::TimelineTag]>,
+	input_value_tags : Box<[ir::ValueTag]>,
+	input_types : Box<[ir::TypeId]>
 }
 
 #[derive(Debug)]
-pub enum NodeType
+enum NodeType
 {
 	Slot(Slot),
 	Fence(Fence),
 	JoinPoint,
+}
+
+fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, node_type : & NodeType)
+{
+	match & program.types[& type_id]
+	{
+		ir::Type::Slot { storage_type : storage_type_2, queue_stage : queue_stage_2, queue_place : queue_place_2 } =>
+		{
+			if let NodeType::Slot(Slot{storage_type, queue_stage, queue_place}) = node_type
+			{
+				assert_eq!(* queue_place_2, * queue_place);
+				assert_eq!(* queue_stage_2, * queue_stage);
+				assert_eq!(* storage_type, * storage_type_2);
+			}
+			else
+			{
+				panic!("type id is a slot type, but node is not a slot");
+			}
+		}
+		ir::Type::Fence { queue_place : queue_place_2 } =>
+		{
+			if let NodeType::Fence(Fence{queue_place}) = node_type
+			{
+				assert_eq!(* queue_place_2, * queue_place);
+			}
+			else
+			{
+				panic!("type id is a fence type, but node is not a fence");
+			}
+		}
+		_ => panic!("Not a slot type")
+	}
 }
 
 #[derive(Debug)]
@@ -161,12 +194,16 @@ impl<'program> FuncletChecker<'program>
 		}
 	}
 
-	fn transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)])
+	fn try_transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)]) -> bool
 	{
 		let node_type = self.node_types.remove(& slot_node_id).unwrap();
 		if let NodeType::Slot(Slot{storage_type, queue_stage, queue_place}) = node_type
 		{
-			assert_eq!(queue_place, place);
+			if queue_place != place
+			{
+				return false;
+			}
+
 			let mut to_stage_opt = None;
 			for (from_stage, to_stage) in from_to_stage_pairs.iter()
 			{
@@ -175,19 +212,30 @@ impl<'program> FuncletChecker<'program>
 					to_stage_opt = Some(* to_stage);
 				}
 			}
-			let to_stage = to_stage_opt.unwrap();
-			match to_stage
+
+			if let Some(to_stage) = to_stage_opt
 			{
-				ir::ResourceQueueStage::Encoded => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
-				ir::ResourceQueueStage::Submitted => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
-				_ => self.scalar_node_timeline_tags.insert(slot_node_id, ir::TimelineTag::None)
-			};
-			self.node_types.insert(slot_node_id, NodeType::Slot(Slot{storage_type, queue_stage : to_stage, queue_place}));
+				match to_stage
+				{
+					ir::ResourceQueueStage::Encoded => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
+					ir::ResourceQueueStage::Submitted => self.scalar_node_timeline_tags.insert(slot_node_id, self.current_timeline_tag),
+					_ => self.scalar_node_timeline_tags.insert(slot_node_id, ir::TimelineTag::None)
+				};
+				self.node_types.insert(slot_node_id, NodeType::Slot(Slot{storage_type, queue_stage : to_stage, queue_place}));
+				return true;
+			}
 		}
 		else
 		{
 			panic!("Not a slot");
 		}
+
+		return false
+	}
+
+	fn transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)])
+	{
+		assert!(self.try_transition_slot(slot_node_id, place, from_to_stage_pairs));
 	}
 
 	pub fn check_next_node(&mut self, current_node_id : ir::NodeId)
@@ -213,7 +261,27 @@ impl<'program> FuncletChecker<'program>
 			}
 			ir::Node::Drop { node : dropped_node_id } =>
 			{
-				panic!("To do")
+				if let Some(node_type) = self.node_types.remove(dropped_node_id)
+				{
+					match node_type
+					{
+						NodeType::Slot(Slot{queue_stage, ..}) =>
+						{
+							match queue_stage
+							{
+								ir::ResourceQueueStage::Dead => (),
+								ir::ResourceQueueStage::Ready => (),
+								_ => panic!("Cannot drop node #{}", dropped_node_id)
+							}
+						}
+						NodeType::JoinPoint => panic!("Cannot drop node #{}", dropped_node_id),
+						NodeType::Fence(_) => panic!("Cannot drop node #{}", dropped_node_id),
+					}
+				}
+				else
+				{
+					panic!("No node at #{}", dropped_node_id)
+				}
 			}
 			ir::Node::EncodeDo { place, operation, inputs, outputs } =>
 			{
@@ -373,7 +441,19 @@ impl<'program> FuncletChecker<'program>
 				match place
 				{
 					ir::Place::Local => self.transition_slot(* output, * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]),
-					_ => self.transition_slot(* output, * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)])
+					_ =>
+					{
+						let input_transitions = [
+							(ir::ResourceQueueStage::Encoded, ir::ResourceQueueStage::Encoded),
+							(ir::ResourceQueueStage::Submitted, ir::ResourceQueueStage::Encoded),
+							(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Encoded),
+						];
+						if !self.try_transition_slot(* input, ir::Place::Gpu, & input_transitions) || !self.try_transition_slot(* input, ir::Place::Local, &[(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Ready)])
+						{
+
+						}
+						self.transition_slot(* output, * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)])
+					}
 				}
 
 			}
@@ -414,7 +494,7 @@ impl<'program> FuncletChecker<'program>
 				assert_eq!(* synced_place, ir::Place::Local);
 
 				let fenced_place = 
-					if let NodeType::Fence(Fence{queue_place}) = & self.node_types[fence]
+					if let Some(NodeType::Fence(Fence{queue_place})) = & self.node_types.remove(fence)
 					{
 						* queue_place
 					}
@@ -424,9 +504,9 @@ impl<'program> FuncletChecker<'program>
 					};
 
 				let fence_encoding_timeline_event =
-					if let Some(ir::TimelineTag::Operation{remote_node_id}) = self.scalar_node_timeline_tags.remove(fence)
+					if let Some(ir::TimelineTag::Operation{remote_node_id}) = self.scalar_node_timeline_tags.get(fence)
 					{
-						remote_node_id
+						* remote_node_id
 					}
 					else
 					{
@@ -466,14 +546,16 @@ impl<'program> FuncletChecker<'program>
 			{
 				let mut value_tags = Vec::<ir::ValueTag>::new();
 				let mut timeline_tags = Vec::<ir::TimelineTag>::new();
-				for index in 0 .. self.scheduling_funclet.output_types.len()
+				let mut input_types = Vec::<ir::TypeId>::new();
+				for (index, type_id) in self.scheduling_funclet.output_types.iter().enumerate()
 				{
 					let (value_tag, timeline_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, index);
 					value_tags.push(value_tag);
 					timeline_tags.push(timeline_tag);
+					input_types.push(* type_id);
 				}
 				//self.join_node_value_tags.insert(current_node_id, value_tags.into_boxed_slice());
-				let join_point = JoinPoint { in_timeline_tag : self.scheduling_funclet_extra.out_timeline_tag, input_timeline_tags : timeline_tags.into_boxed_slice(), input_value_tags : value_tags.into_boxed_slice() };
+				let join_point = JoinPoint { in_timeline_tag : self.scheduling_funclet_extra.out_timeline_tag, input_timeline_tags : timeline_tags.into_boxed_slice(), input_value_tags : value_tags.into_boxed_slice(), input_types : input_types.into_boxed_slice() };
 				self.node_join_points.insert(current_node_id, join_point);
 				self.node_types.insert(current_node_id, NodeType::JoinPoint);
 			}
@@ -482,13 +564,23 @@ impl<'program> FuncletChecker<'program>
 				let join_funclet = & self.program.funclets[join_funclet_id];
 				let join_funclet_extra = & self.program.scheduling_funclet_extras[join_funclet_id];
 				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
+				
+				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
+				{
+					// Nothing, for now...
+				}
+				else
+				{
+					panic!("Node at #{} is not a join point", continuation_join_node_id)
+				}
 
 				check_timeline_tag_compatibility_interior(& self.program, join_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
 
 				for (capture_index, capture_node_id) in captures.iter().enumerate()
 				{
-					let node_type = self.node_types.remove(capture_node_id);
-					panic!("To do: check slot type");
+					let node_type = self.node_types.remove(capture_node_id).unwrap();
+					check_slot_type(& self.program, join_funclet.input_types[capture_index], & node_type);
+					
 					let (value_tag, timeline_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, capture_index);
 					let node_value_tag = self.scalar_node_value_tags[capture_node_id];
 					let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
@@ -499,24 +591,28 @@ impl<'program> FuncletChecker<'program>
 			
 				let mut remaining_input_value_tags = Vec::<ir::ValueTag>::new();
 				let mut remaining_input_timeline_tags = Vec::<ir::TimelineTag>::new();
+				let mut remaining_input_types = Vec::<ir::TypeId>::new();
 				for input_index in captures.len() .. join_funclet.input_types.len()
 				{
 					let (value_tag, timeline_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, input_index);
 					remaining_input_value_tags.push(value_tag);
 					remaining_input_timeline_tags.push(timeline_tag);
+					remaining_input_types.push(join_funclet.input_types[input_index]);
 				}
 
 				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
 				let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
+				let continuation_join_input_types = & continuation_join_point.input_types;
 
 				for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate()
 				{
+					assert_eq!(* join_output_type, continuation_join_input_types[join_output_index]);
 					let (value_tag, timeline_tag) = self.get_funclet_output_tags(join_funclet, join_funclet_extra, join_output_index);
 					check_value_tag_compatibility_interior(& self.program, value_tag, continuation_join_value_tags[join_output_index]);
 					check_timeline_tag_compatibility_interior(& self.program, timeline_tag, continuation_join_timeline_tags[join_output_index]);
 				}
 
-				let join_point = JoinPoint { in_timeline_tag : join_funclet_extra.in_timeline_tag, input_timeline_tags : remaining_input_timeline_tags.into_boxed_slice(), input_value_tags : remaining_input_value_tags.into_boxed_slice() };
+				let join_point = JoinPoint { in_timeline_tag : join_funclet_extra.in_timeline_tag, input_timeline_tags : remaining_input_timeline_tags.into_boxed_slice(), input_value_tags : remaining_input_value_tags.into_boxed_slice(), input_types : remaining_input_types.into_boxed_slice() };
 				self.node_join_points.insert(current_node_id, join_point);
 				self.node_types.insert(current_node_id, NodeType::JoinPoint);
 			}
@@ -537,6 +633,9 @@ impl<'program> FuncletChecker<'program>
 
 				for (return_index, return_node_id) in return_values.iter().enumerate()
 				{
+					let node_type = self.node_types.remove(return_node_id).unwrap();
+					check_slot_type(& self.program, self.scheduling_funclet.output_types[return_index], & node_type);
+
 					let node_timeline_tag = self.scalar_node_timeline_tags[return_node_id];
 					let node_value_tag = self.scalar_node_value_tags[return_node_id];
 					let (value_tag, timeline_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, return_index);
@@ -550,10 +649,22 @@ impl<'program> FuncletChecker<'program>
 				let join_value_tags = & join_point.input_value_tags;
 				let join_timeline_tags = & join_point.input_timeline_tags;
 
+				if let Some(NodeType::JoinPoint) = self.node_types.remove(join)
+				{
+					// Nothing, for now...
+				}
+				else
+				{
+					panic!("Node at #{} is not a join point", join)
+				}
+
 				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, join_point.in_timeline_tag);
 
 				for (argument_index, argument_node_id) in arguments.iter().enumerate()
 				{
+					let node_type = self.node_types.remove(argument_node_id).unwrap();
+					check_slot_type(& self.program, join_point.input_types[argument_index], & node_type);
+
 					let node_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let node_value_tag = self.scalar_node_value_tags[argument_node_id];
 					check_value_tag_compatibility_interior(& self.program, node_value_tag, join_value_tags[argument_index]);
@@ -565,6 +676,15 @@ impl<'program> FuncletChecker<'program>
 				let value_operation = * value_operation_ref;
 				let callee_scheduling_funclet_id = * callee_scheduling_funclet_id_ref;
 				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
+
+				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
+				{
+					// Nothing, for now...
+				}
+				else
+				{
+					panic!("Node at #{} is not a join point", continuation_join_node_id)
+				}
 
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
 
@@ -581,6 +701,9 @@ impl<'program> FuncletChecker<'program>
 				// Step 1: Check current -> callee edge
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
+					let node_type = self.node_types.remove(argument_node_id).unwrap();
+					check_slot_type(& self.program, continuation_join_point.input_types[argument_index], & node_type);
+
 					let node_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let node_value_tag = self.scalar_node_value_tags[argument_node_id];
 					let (value_tag, timeline_tag) = self.get_funclet_input_tags(callee_funclet, callee_funclet_scheduling_extra, argument_index);
@@ -593,6 +716,8 @@ impl<'program> FuncletChecker<'program>
 				let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
 				for (callee_output_index, callee_output_type) in callee_funclet.output_types.iter().enumerate()
 				{
+					assert_eq!(* callee_output_type, continuation_join_point.input_types[callee_output_index]);
+
 					let (value_tag, timeline_tag) = self.get_funclet_output_tags(callee_funclet, callee_funclet_scheduling_extra, callee_output_index);
 
 					//let intermediate_value_tag = ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : value_operation.node_id + 1 +  continuation_input_index}};
@@ -608,6 +733,15 @@ impl<'program> FuncletChecker<'program>
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
 
 				let continuation_join_point = & self.node_join_points[condition_slot_node_id];
+
+				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
+				{
+					// Nothing, for now...
+				}
+				else
+				{
+					panic!("Node at #{} is not a join point", continuation_join_node_id)
+				}
 
 				assert_eq!(callee_funclet_ids.len(), 2);
 				let true_funclet_id = callee_funclet_ids[0];
@@ -635,6 +769,10 @@ impl<'program> FuncletChecker<'program>
 
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
+					let node_type = self.node_types.remove(argument_node_id).unwrap();
+					check_slot_type(& self.program, true_funclet.input_types[argument_index], & node_type);
+					check_slot_type(& self.program, false_funclet.input_types[argument_index], & node_type);
+
 					let argument_slot_value_tag = self.scalar_node_value_tags[argument_node_id];
 					let argument_slot_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let (true_input_value_tag, true_input_timeline_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, argument_index);
@@ -651,6 +789,9 @@ impl<'program> FuncletChecker<'program>
 				assert_eq!(true_funclet.output_types.len(), false_funclet.output_types.len());
 				for (output_index, _) in true_funclet.output_types.iter().enumerate()
 				{
+					assert_eq!(true_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
+					assert_eq!(false_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
+
 					let continuation_input_value_tag = continuation_join_value_tags[output_index];
 					let (true_output_value_tag, true_output_timeline_tag) = self.get_funclet_output_tags(true_funclet, true_funclet_extra, output_index);
 					let (false_output_value_tag, false_output_timeline_tag) = self.get_funclet_output_tags(false_funclet, false_funclet_extra, output_index);
@@ -664,6 +805,26 @@ impl<'program> FuncletChecker<'program>
 				
 			}
 			_ => panic!("Unimplemented")
+		}
+
+		// Enforce use of all nodes
+		for (node_id, node_type) in self.node_types.iter()
+		{
+			match node_type
+			{
+				NodeType::Slot(Slot{queue_stage, ..}) =>
+				{
+					// Ok to implicitly drop slots with no pending computation
+					match queue_stage
+					{
+						ir::ResourceQueueStage::Dead => (),
+						ir::ResourceQueueStage::Ready => (),
+						_ => panic!("Unused slot at node #{}", node_id)
+					}
+				}
+				NodeType::JoinPoint => panic!("Unused join at node #{}", node_id),
+				NodeType::Fence(_) => panic!("Unused fence at node #{}", node_id),
+			}
 		}
 	}
 }

@@ -338,7 +338,7 @@ impl FuncletScopedState
 	}
 }
 
-fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage, storage_type_opt : Option<ir::TypeId>)
+/*fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, queue_place : ir::Place, queue_stage : ir::ResourceQueueStage, storage_type_opt : Option<ir::TypeId>)
 {
 	match & program.types[& type_id]
 	{
@@ -354,7 +354,7 @@ fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, queue_place : 
 		}
 		_ => panic!("Not a slot type")
 	}
-}
+}*/
 
 fn get_slot_type_storage_type(program : & ir::Program, type_id : ir::TypeId) -> ir::ffi::TypeId
 {
@@ -1074,7 +1074,7 @@ impl<'program> CodeGen<'program>
 								let stage = placement_state.scheduling_state.get_slot_queue_stage(slot_id);
 								let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
 								//entry_timeline_enforcer.record_slot_use(place, timestamp, slot_info.external_timestamp_id_opt);
-								check_slot_type(& self.program, join_funclet.input_types[capture_index], place, stage, None);
+								//check_slot_type(& self.program, join_funclet.input_types[capture_index], place, stage, None);
 								assert_eq!(stage, ir::ResourceQueueStage::Ready);
 							}
 							NodeResult::Fence{ place, timestamp } =>
@@ -1128,7 +1128,7 @@ impl<'program> CodeGen<'program>
 							let value_tag = slot_info.value_tag;
 							//check_value_tag_compatibility_interior(& self.program, slot_value_tag, value_tag);
 							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-							check_slot_type(& self.program, funclet.output_types[return_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							//check_slot_type(& self.program, funclet.output_types[return_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 							let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
 						}
 						NodeResult::Fence { place, timestamp } =>
@@ -1189,7 +1189,7 @@ impl<'program> CodeGen<'program>
 								// We need to shift the destination argument index to account for the captures (that are checked at construction)
 								let destination_argument_index = argument_index + join_point.get_capture_count();
 								let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-								check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+								//check_slot_type(& self.program, join_point.get_scheduling_input_type(& self.program, destination_argument_index), place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 								let logical_timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
 							}
 							NodeResult::Fence { place, timestamp } =>
@@ -1297,8 +1297,8 @@ impl<'program> CodeGen<'program>
 						{
 							assert_eq!(true_funclet.input_types[argument_index], false_funclet.input_types[argument_index]);
 							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-							check_slot_type(& self.program, true_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							check_slot_type(& self.program, false_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							//check_slot_type(& self.program, true_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
+							//check_slot_type(& self.program, false_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
 						}
 						NodeResult::Fence{place, timestamp} =>
 						{
