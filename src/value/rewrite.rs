@@ -37,27 +37,26 @@ pub fn logical() -> Vec<GraphRewrite> { vec![
 use ir::Type as Ty;
 
 /// Returns true if the eclass has a single output, AND `f` returns true.
-fn check_output(egraph: &Graph, eclass_id: egg::Id, f: impl Fn(&ir::Type) -> bool) -> bool {
-    let type_id = match egraph[eclass_id].data.output_types.get(0) {
-        Some(type_id) => *type_id,
-        None => return false, // aggregate (think ID list)
-    };
-    let ty = egraph.analysis.lookup_type(type_id).expect("unknown type");
-    f(ty)
+fn single_output(
+    v: egg::Var,
+    f: impl Fn(&ir::Type) -> bool,
+) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
+    move |egraph, _, subst| {
+        let type_id = match egraph[subst[v]].data.output_types.get(0) {
+            Some(type_id) => *type_id,
+            None => return false, // aggregate (think ID list)
+        };
+        let ty = egraph.analysis.lookup_type(type_id).expect("unknown type");
+        f(ty)
+    }
 }
 fn is_signed(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
-    let var = var.parse().unwrap();
-    move |egraph, _, subst| {
-        check_output(egraph, subst[var], |ty| {
-            matches!(ty, Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64)
-        })
-    }
+    single_output(var.parse().unwrap(), |ty| {
+        matches!(ty, Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64)
+    })
 }
 fn is_unsigned(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
-    let var = var.parse().unwrap();
-    move |egraph, _, subst| {
-        check_output(egraph, subst[var], |ty| {
-            matches!(ty, Ty::U8 | Ty::U16 | Ty::U32 | Ty::U64)
-        })
-    }
+    single_output(var.parse().unwrap(), |ty| {
+        matches!(ty, Ty::U8 | Ty::U16 | Ty::U32 | Ty::U64)
+    })
 }
