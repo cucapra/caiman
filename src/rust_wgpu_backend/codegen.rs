@@ -16,7 +16,7 @@ use crate::type_system::timeline_tag::*;
 use crate::type_system;
 
 use crate::scheduling_state;
-use crate::scheduling_state::{LogicalTimestamp};
+use crate::scheduling_state::SlotId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct JoinPointId(usize);
@@ -25,14 +25,14 @@ pub struct JoinPointId(usize);
 enum NodeResult
 {
 	None,
-	Slot { slot_id : scheduling_state::SlotId, queue_place : ir::Place, storage_type : ir::ffi::TypeId },
-	Fence { place : ir::Place, timestamp : LogicalTimestamp, fence_id : code_generator::FenceId },
+	Slot { slot_id : SlotId, queue_place : ir::Place, storage_type : ir::ffi::TypeId },
+	Fence { place : ir::Place, fence_id : code_generator::FenceId },
 	Join{ join_point_id : JoinPointId},
 }
 
 impl NodeResult
 {
-	fn get_slot_id(&self) -> Option<scheduling_state::SlotId>
+	fn get_slot_id(&self) -> Option<SlotId>
 	{
 		if let NodeResult::Slot{ slot_id, .. } = self
 		{
@@ -101,20 +101,11 @@ impl JoinGraph
 	}
 }
 
-// Records the most recent state of a place as known to the local coordinator
-#[derive(Debug, Default)]
-struct PlaceState
-{
-	//node_variable_ids : HashMap<ir::NodeId, usize>,
-}
-
 #[derive(Debug)]
 struct PlacementState
 {
-	place_states : HashMap<ir::Place, PlaceState>, // as known to the coordinator
 	scheduling_state : scheduling_state::SchedulingState,
-	submission_map : HashMap<scheduling_state::SubmissionId, SubmissionId>,
-	slot_variable_ids : HashMap<scheduling_state::SlotId, VarId>,
+	slot_variable_ids : HashMap<SlotId, VarId>,
 	join_graph : JoinGraph
 }
 
@@ -122,20 +113,17 @@ impl PlacementState
 {
 	fn new() -> Self
 	{
-		let mut place_states = HashMap::<ir::Place, PlaceState>::new();
-		place_states.insert(ir::Place::Gpu, PlaceState{ .. Default::default() });
-		place_states.insert(ir::Place::Local, PlaceState{ .. Default::default() });
-		Self{ place_states, scheduling_state : scheduling_state::SchedulingState::new(), /*node_results : Default::default(),*/ submission_map : HashMap::new(), slot_variable_ids : HashMap::new()/*, value_tags : HashMap::new()*/, join_graph : JoinGraph::new()}
+		Self{ scheduling_state : scheduling_state::SchedulingState::new(), slot_variable_ids : HashMap::new(), join_graph : JoinGraph::new()}
 	}
 
-	fn update_slot_state(&mut self, slot_id : scheduling_state::SlotId, stage : ir::ResourceQueueStage, var_id : VarId)
+	fn update_slot_state(&mut self, slot_id : SlotId, stage : ir::ResourceQueueStage, var_id : VarId)
 	{
 		self.slot_variable_ids.insert(slot_id, var_id);
 		// need to do place and stage
 		self.scheduling_state.advance_queue_stage(slot_id, stage);
 	}
 
-	fn get_slot_var_id(&self, slot_id : scheduling_state::SlotId) -> Option<VarId>
+	fn get_slot_var_id(&self, slot_id : SlotId) -> Option<VarId>
 	{
 		self.slot_variable_ids.get(& slot_id).map(|x| * x)
 	}
@@ -171,7 +159,7 @@ impl PlacementState
 enum SplitPoint
 {
 	Next { return_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
-	Select { return_node_results : Box<[NodeResult]>, condition_slot_id : scheduling_state::SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> }
+	Select { return_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> }
 }
 
 #[derive(Debug)]
@@ -199,7 +187,7 @@ impl FuncletScopedState
 		self.node_results.get(& node_id)
 	}
 
-	fn get_node_slot_id(&self, node_id : ir::NodeId) -> Option<scheduling_state::SlotId>
+	fn get_node_slot_id(&self, node_id : ir::NodeId) -> Option<SlotId>
 	{
 		match & self.node_results[& node_id]
 		{
@@ -208,7 +196,7 @@ impl FuncletScopedState
 		}
 	}
 
-	fn move_node_slot_id(&mut self, node_id : ir::NodeId) -> Option<scheduling_state::SlotId>
+	fn move_node_slot_id(&mut self, node_id : ir::NodeId) -> Option<SlotId>
 	{
 		let slot_id_opt = match & self.node_results[& node_id]
 		{
@@ -314,36 +302,7 @@ impl<'program> CodeGen<'program>
 		self.print_codegen_debug_info = to;
 	}
 
-	fn advance_local_time(&mut self, placement_state : &mut PlacementState) -> LogicalTimestamp
-	{
-		placement_state.scheduling_state.advance_local_time()
-	}
-
-	fn advance_known_place_time(&mut self, placement_state : &mut PlacementState, place : ir::Place, known_timestamp : LogicalTimestamp) -> Option<LogicalTimestamp>
-	{
-		use scheduling_state::SchedulingEvent;
-
-		let mut submission_ids = Vec::<scheduling_state::SubmissionId>::new();
-
-		let time_opt = placement_state.scheduling_state.advance_known_place_time
-		(
-			place, known_timestamp,
-			&mut |scheduling_state, event|
-			match event
-			{
-				SchedulingEvent::SyncSubmission{ submission_id } => { submission_ids.push(* submission_id); }
-			}
-		);
-
-		for submission_id in submission_ids
-		{
-			self.code_generator.sync_submission(placement_state.submission_map[& submission_id])
-		}
-
-		return time_opt;
-	}
-
-	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, funclet_checker : &mut type_system::scheduling::FuncletChecker, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : & [scheduling_state::SlotId])
+	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, funclet_checker : &mut type_system::scheduling::FuncletChecker, node : & ir::Node, input_slot_ids : & [SlotId], output_slot_ids : & [SlotId])
 	{
 		match node
 		{
@@ -354,8 +313,8 @@ impl<'program> CodeGen<'program>
 				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
 
-				/*let mut input_slot_counts = HashMap::<scheduling_state::SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
-				let mut output_slot_bindings = HashMap::<scheduling_state::SlotId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
+				/*let mut input_slot_counts = HashMap::<SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
+				let mut output_slot_bindings = HashMap::<SlotId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
 				for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
 				{
 					if let Some(index) = resource_binding.input
@@ -437,7 +396,7 @@ impl<'program> CodeGen<'program>
 		}
 	}
 
-	fn encode_do_node_local(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, funclet_checker : &mut type_system::scheduling::FuncletChecker, node : & ir::Node, input_slot_ids : & [scheduling_state::SlotId], output_slot_ids : &[scheduling_state::SlotId], output_slot_node_ids : & [ir::NodeId])
+	fn encode_do_node_local(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, funclet_checker : &mut type_system::scheduling::FuncletChecker, node : & ir::Node, input_slot_ids : & [SlotId], output_slot_ids : &[SlotId], output_slot_node_ids : & [ir::NodeId])
 	{
 		// To do: Do something about the value
 		match node
@@ -552,7 +511,7 @@ impl<'program> CodeGen<'program>
 
 		enum TraversalState
 		{
-			SelectIf { branch_input_node_results : Box<[NodeResult]>, condition_slot_id : scheduling_state::SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
+			SelectIf { branch_input_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
 			SelectElse { output_node_results : Box<[NodeResult]>, branch_input_node_results : Box<[NodeResult]>, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
 			SelectEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
 		}
@@ -669,7 +628,7 @@ impl<'program> CodeGen<'program>
 		self.code_generator.end_funclet();
 	}
 
-	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[scheduling_state::SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[scheduling_state::SlotId]>
+	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[SlotId]>
 	{
 		let funclet = & self.program.funclets[& funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
@@ -749,8 +708,8 @@ impl<'program> CodeGen<'program>
 				{
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
-					let mut input_slot_ids = Vec::<scheduling_state::SlotId>::new();
-					let mut output_slot_ids = Vec::<scheduling_state::SlotId>::new();
+					let mut input_slot_ids = Vec::<SlotId>::new();
+					let mut output_slot_ids = Vec::<SlotId>::new();
 
 					let encoded_funclet = & self.program.funclets[& operation.funclet_id];
 					let encoded_node = & encoded_funclet.nodes[operation.node_id];
@@ -850,36 +809,22 @@ impl<'program> CodeGen<'program>
 				ir::Node::Submit { place, event } =>
 				{
 					self.code_generator.flush_submission();
-					/*let submission_id = placement_state.scheduling_state.insert_submission
-					(
-						* place,
-						&mut |scheduling_state, event| ()
-					);
-
-					placement_state.submission_map.insert(submission_id, self.code_generator.flush_submission());*/
 				}
 				ir::Node::EncodeFence { place, event } =>
 				{
-					let local_timestamp = self.advance_local_time(placement_state);
 					let fence_id = self.code_generator.encode_gpu_fence();
-					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Fence { place : * place, timestamp : local_timestamp, fence_id });
+					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Fence { place : * place, fence_id });
 				}
 				ir::Node::SyncFence { place : synced_place, fence, event } =>
 				{
-					let local_timestamp = self.advance_local_time(placement_state);
 					// Only implemented for the local queue for now
 					assert_eq!(* synced_place, ir::Place::Local);
 
-					if let Some(NodeResult::Fence{place : fenced_place, timestamp, fence_id}) = funclet_scoped_state.move_node_result(* fence)
+					if let Some(NodeResult::Fence{place : fenced_place, fence_id}) = funclet_scoped_state.move_node_result(* fence)
 					{
 						self.code_generator.sync_gpu_fence(fence_id);
 
 						assert_eq!(fenced_place, ir::Place::Gpu);
-
-						/*if let Some(newer_timestamp) = self.advance_known_place_time(placement_state, fenced_place, timestamp)
-						{
-							panic!("Have already synced to a later time")
-						}*/
 					}
 					else
 					{
