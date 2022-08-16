@@ -2,7 +2,7 @@
 //! global invariants which must be maintained.
 //!
 //! - [`ClassAnalysis`] has a [`output_types`][ClassAnalysis] field which is stored as an `Option`.
-//!   However, when graph rewrites are performed, this field **MUST** contain a value.
+//!   However, when node unions are performed, this field **MUST** contain a value.
 //!
 //!   Explanation: Consider rewriting `a + b` to `a - (-b)`. This might be useful, especially when
 //!   combined with other optimizations. But you're only able to negate `b` if it's signed, so it's
@@ -355,7 +355,14 @@ impl egg::Analysis<Node> for Analysis {
     fn modify(egraph: &mut egg::EGraph<Node, Self>, id: egg::Id) {
         let data = &egraph[id].data;
         if let Some(constant) = data.constant {
-            let folded = constant.to_node(todo!());
+            let type_id = data
+                .output_types
+                .as_ref()
+                .expect("global invariant: all eclasses must have a type id before union")
+                .get(0)
+                .copied()
+                .expect("can't constant-fold aggregates, data.constant should be None");
+            let folded = constant.to_node(type_id);
             let folded_id = egraph.add(folded);
             egraph.union(id, folded_id);
         }
