@@ -1,6 +1,6 @@
 use crate::ir;
 use crate::shadergen;
-use crate::arena::Arena;
+use crate::collections::Arena;
 use std::default::Default;
 use std::collections::HashMap;
 use std::collections::HashSet;

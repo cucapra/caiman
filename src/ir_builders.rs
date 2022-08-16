@@ -1,6 +1,6 @@
 use std::collections::{HashMap, BTreeMap};
 use std::default::Default;
-use crate::arena::Arena;
+use crate::collections::Arena;
 use crate::ir::*;
 
 

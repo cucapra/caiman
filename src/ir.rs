@@ -5,7 +5,7 @@ use std::iter::{once, Once, Chain};
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
-use crate::arena::Arena;
+use crate::collections::Arena;
 use crate::operations::{UnopKind, BinopKind};
 
 pub mod utils;

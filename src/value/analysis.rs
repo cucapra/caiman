@@ -35,7 +35,7 @@
 //!   types from their inputs. The "fix" is retaining type IDs in constant nodes in the graph, even
 //!   though it may seem redundant with the class analysis data.
 use super::*;
-use crate::arena::Arena;
+use crate::collections::Arena;
 use crate::ir;
 use crate::operations::{BinopKind, UnopKind};
 use constant::Constant;
