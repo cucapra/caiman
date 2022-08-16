@@ -50,7 +50,8 @@
 		(
 			name : "ConstantBool",
 			inputs : [
-				(name : "value", kind : ImmediateBool)
+				(name : "value", kind : ImmediateBool),
+				(name : "type_id", kind : Type),
 			],
 			output : Single,
 			language_set : (functional : true, scheduling : false, intrinsic : true),

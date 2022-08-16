@@ -292,10 +292,14 @@ impl Analysis {
     }
 }
 
+pub fn infer_output_types(egraph: &Graph, enode: &Node) -> Box<[ir::TypeId]> {
+    todo!()
+}
+
 #[derive(Debug)]
 pub struct ClassAnalysis {
     pub constant: Option<Constant>,
-    pub type_id: ir::TypeId,
+    pub output_types: Box<[ir::TypeId]>,
 }
 
 impl egg::Analysis<Node> for Analysis {
@@ -303,11 +307,14 @@ impl egg::Analysis<Node> for Analysis {
     fn make(egraph: &Graph, enode: &Node) -> Self::Data {
         Self::Data {
             constant: enode.to_constant(egraph),
-            type_id: todo!(),
+            output_types: infer_output_types(egraph, enode),
         }
     }
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
-        assert_eq!(a.type_id, b.type_id, "merged eclasses with different types");
+        assert_eq!(
+            a.output_types, b.output_types,
+            "merged eclasses with different types"
+        );
         egg::merge_option(&mut a.constant, b.constant, |a, b| {
             assert_eq!(a, &b, "rewrite type violation (merge non-equal constants)");
             egg::DidMerge(false, false)
@@ -315,8 +322,9 @@ impl egg::Analysis<Node> for Analysis {
     }
     fn modify(egraph: &mut egg::EGraph<Node, Self>, id: egg::Id) {
         let data = &egraph[id].data;
-        let type_id = data.type_id;
         if let Some(constant) = data.constant {
+            assert!(data.output_types.len() == 1);
+            let type_id = data.output_types[0];
             let folded = constant.to_node(type_id);
             let folded_id = egraph.add(folded);
             egraph.union(id, folded_id);

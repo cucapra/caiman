@@ -436,7 +436,10 @@ pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
             input_types: Box::new([]),
             output_types: Box::new([]),
             // we add one constant integer so branch nodes actually have a key
-            nodes: Box::new([Node::ConstantBool { value: false }]),
+            nodes: Box::new([Node::ConstantBool {
+                value: false,
+                type_id: 0,
+            }]),
             input_resource_states: Default::default(),
             output_resource_states: Default::default(),
             local_meta_variables: Default::default(),
@@ -444,7 +447,7 @@ pub fn program_from_cfg(nodes: &[&[usize]]) -> Program {
         funclets.create(funclet);
     }
     let mut types = Arena::new();
-    types.create(Type::U32);
+    types.create(Type::Bool);
 
     Program {
         funclets,

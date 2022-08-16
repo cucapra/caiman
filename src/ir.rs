@@ -121,7 +121,7 @@ pub struct LocalValueTag
 pub enum Type
 {
 	// Value types
-
+	Bool,
 	F32,
 	F64,
 	U8,

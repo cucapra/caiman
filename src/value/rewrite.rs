@@ -14,7 +14,7 @@ pub fn arithmetic() -> Vec<GraphRewrite> { vec![
 
     // You might think constant folding would perform these. Well, caiman's constant folding 
     // currently only works when *all* dependencies are constants, but these rewrites are
-    // unique in that they can be applied even when ?a isn't known.
+    // unique because they can be applied even when ?a isn't known.
     rw!("uint add 0"; "(+ ?a cui{value=0})" => "?a"),
     rw!("sint add 0"; "(+ ?a csi{value=0})" => "?a"),
     rw!("uint sub 0"; "(- ?a cui{value=0})" => "?a"),
@@ -37,7 +37,10 @@ pub fn logical() -> Vec<GraphRewrite> { vec![
 fn is_signed(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst| {
-        let type_id = egraph[subst[var]].data.type_id;
+        let type_id = match egraph[subst[var]].data.output_types.get(0) {
+            Some(type_id) => *type_id,
+            None => return false, // aggregate (think ID list)
+        };
         matches!(
             egraph.analysis.lookup_type(type_id).expect("unknown type"),
             ir::Type::I8 | ir::Type::I16 | ir::Type::I32 | ir::Type::I64
@@ -48,7 +51,10 @@ fn is_signed(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
 fn is_unsigned(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst| {
-        let type_id = egraph[subst[var]].data.type_id;
+        let type_id = match egraph[subst[var]].data.output_types.get(0) {
+            Some(type_id) => *type_id,
+            None => return false, // aggregate (think ID list)
+        };
         matches!(
             egraph.analysis.lookup_type(type_id).expect("unknown type"),
             ir::Type::U8 | ir::Type::U16 | ir::Type::U32 | ir::Type::U64

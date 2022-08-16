@@ -39,7 +39,7 @@ impl Constant {
     /// the type_id doesn't actually refer to a bool.
     pub fn to_node(&self, type_id: ir::TypeId) -> Node {
         let kind = match self {
-            &Self::Bool(value) => OperationKind::ConstantBool { value },
+            &Self::Bool(value) => OperationKind::ConstantBool { value, type_id },
 
             // unsigned integers
             &Self::U8(value) => OperationKind::ConstantUnsignedInteger {
@@ -146,7 +146,7 @@ fn cfold_binop(egraph: &Graph, binop: BinopKind, deps: &[egg::Id]) -> Option<Con
 impl Node {
     pub fn to_constant(&self, egraph: &Graph) -> Option<Constant> {
         match self.operation()? {
-            OperationKind::ConstantBool { value } => Some(Constant::Bool(*value)),
+            OperationKind::ConstantBool { value, .. } => Some(Constant::Bool(*value)),
             OperationKind::ConstantInteger { value, .. } => Some(Constant::I64(*value)),
             OperationKind::ConstantUnsignedInteger { value, .. } => Some(Constant::U64(*value)),
             OperationKind::Unop { kind } => cfold_unop(egraph, *kind, &self.deps),
