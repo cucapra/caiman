@@ -3,6 +3,7 @@
 mod operations;
 mod id_generator;
 mod arena;
+mod collections;
 mod ir;
 mod ir_builders;
 mod shadergen;
