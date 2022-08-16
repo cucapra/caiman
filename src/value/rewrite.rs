@@ -45,17 +45,19 @@ fn check_output(egraph: &Graph, eclass_id: egg::Id, f: impl Fn(&ir::Type) -> boo
     let ty = egraph.analysis.lookup_type(type_id).expect("unknown type");
     f(ty)
 }
-fn is_type_signed(ty: &ir::Type) -> bool {
-    matches!(ty, Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64)
-}
-fn is_type_unsigned(ty: &ir::Type) -> bool {
-    matches!(ty, Ty::U8 | Ty::U16 | Ty::U32 | Ty::U64)
-}
 fn is_signed(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
-    move |egraph, _, subst| check_output(egraph, subst[var], is_type_signed)
+    move |egraph, _, subst| {
+        check_output(egraph, subst[var], |ty| {
+            matches!(ty, Ty::I8 | Ty::I16 | Ty::I32 | Ty::I64)
+        })
+    }
 }
 fn is_unsigned(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
-    move |egraph, _, subst| check_output(egraph, subst[var], is_type_unsigned)
+    move |egraph, _, subst| {
+        check_output(egraph, subst[var], |ty| {
+            matches!(ty, Ty::U8 | Ty::U16 | Ty::U32 | Ty::U64)
+        })
+    }
 }
