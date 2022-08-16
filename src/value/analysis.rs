@@ -15,10 +15,11 @@
 //!   The problem is that *egraph node creation* and *eclass merging* are two different steps. When
 //!   we create a node as the result of a rewrite, we need to give it an associated class analysis,
 //!   so we need to choose *something* for it's type ID. But the only information that `egg` gives
-//!   us is the egraph as a whole and the newly created node, so we can't base its type ID on its
-//!   "source" nodes. (We could if we smuggled parent info via the [`Node`][super::Node] itself, but
-//!   that's gross and would require a custom applier.) We could create a dummy "any" type ID which
-//!   is replaced during eclass merging, but wait, that's just a worse version of `Option`.
+//!   us is the egraph as a whole and the newly created node. We don't know its "source" nodes, so
+//!   we can't use them to derive the new node's type ID. (We could if we smuggled parent info via
+//!   the [`Node`][super::Node] itself, but that's gross and would require a custom applier.) We
+//!   could create a dummy "any" type ID which is replaced during eclass merging, but wait, that's
+//!   just a worse version of `Option`.
 //!
 //!   There's actually nothing to worry about during rewrites. By induction we assume the invariant
 //!   holds at the start of the rewrite. Then the "source" node(s) have a type ID. The "derived"
