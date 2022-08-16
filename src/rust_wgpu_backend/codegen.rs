@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeSet;
 use std::collections::BTreeMap;
+use crate::rust_wgpu_backend::code_generator;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
 use crate::rust_wgpu_backend::code_generator::SubmissionId;
 use std::fmt::Write;
@@ -26,7 +27,7 @@ enum NodeResult
 {
 	None,
 	Slot { slot_id : scheduling_state::SlotId, queue_place : ir::Place, storage_type : ir::ffi::TypeId },
-	Fence { place : ir::Place, timestamp : LogicalTimestamp },
+	Fence { place : ir::Place, timestamp : LogicalTimestamp, fence_id : code_generator::FenceId },
 	Join{ join_point_id : JoinPointId},
 }
 
@@ -860,7 +861,8 @@ impl<'program> CodeGen<'program>
 				ir::Node::EncodeFence { place, event } =>
 				{
 					let local_timestamp = self.advance_local_time(placement_state);
-					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Fence { place : * place, timestamp : local_timestamp });
+					let fence_id = self.code_generator.encode_fence();
+					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Fence { place : * place, timestamp : local_timestamp, fence_id });
 				}
 				ir::Node::SyncFence { place : synced_place, fence, event } =>
 				{
@@ -868,8 +870,10 @@ impl<'program> CodeGen<'program>
 					// Only implemented for the local queue for now
 					assert_eq!(* synced_place, ir::Place::Local);
 
-					if let Some(NodeResult::Fence{place : fenced_place, timestamp}) = funclet_scoped_state.move_node_result(* fence)
+					if let Some(NodeResult::Fence{place : fenced_place, timestamp, fence_id}) = funclet_scoped_state.move_node_result(* fence)
 					{
+						self.code_generator.sync_gpu_fence(fence_id);
+
 						assert_eq!(fenced_place, ir::Place::Gpu);
 
 						if let Some(newer_timestamp) = self.advance_known_place_time(placement_state, fenced_place, timestamp)

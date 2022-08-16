@@ -26,11 +26,15 @@ pub struct VarId(usize);
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 pub struct TypeId(usize);
 
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
+pub struct FenceId(usize);
+
 #[derive(Debug, Default)]
 struct SubmissionQueue
 {
 	//most_recently_synchronized_submission_id : Option<SubmissionId>,
-	next_submission_id : SubmissionId
+	next_submission_id : SubmissionId,
+	next_fence_id : FenceId
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -579,7 +583,7 @@ impl<'program> CodeGenerator<'program>
 		let submission_id = self.submission_queue.next_submission_id;
 		self.submission_queue.next_submission_id.0 += 1;
 
-		self.code_writer.write(format!("let future_var_{} = instance.state.get_queue_mut().on_submitted_work_done();\n", submission_id.0));
+		//self.code_writer.write(format!("let future_var_{} = instance.state.get_queue_mut().on_submitted_work_done();\n", submission_id.0));
 
 		submission_id
 	}
@@ -588,9 +592,23 @@ impl<'program> CodeGenerator<'program>
 	//pub fn sync_submissions(&mut self)
 	{
 		//self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
-		self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
-		self.code_writer.write(format!("futures::executor::block_on(future_var_{});\n", submission_id.0));
+		//self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
+		//self.code_writer.write(format!("futures::executor::block_on(future_var_{});\n", submission_id.0));
 		//self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
+	}
+
+	pub fn encode_fence(&mut self) -> FenceId
+	{
+		let fence_id = self.submission_queue.next_fence_id;
+		self.submission_queue.next_fence_id.0 += 1;
+		self.code_writer.write(format!("let future_var_{} = instance.state.get_queue_mut().on_submitted_work_done();\n", fence_id.0));
+		fence_id
+	}
+
+	pub fn sync_gpu_fence(&mut self, fence_id : FenceId)
+	{
+		self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
+		self.code_writer.write(format!("futures::executor::block_on(future_var_{});\n", fence_id.0));
 	}
 
 	pub fn insert_comment(&mut self, comment_string : &str)
