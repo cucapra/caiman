@@ -41,6 +41,7 @@ pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileO
 		{
 			assert_eq!(definition.version, (0, 0, 1));
 			crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition.program);
+			ir::validation::validate_program(& definition.program);
 			let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
 			if let Some(options) = options_opt
 			{

@@ -2,6 +2,20 @@ use crate::ir;
 use std::collections::{HashMap, BTreeMap, HashSet, BTreeSet};
 use std::default::Default;
 
+pub fn validate_program(program : & ir::Program)
+{
+	for (funclet_id, funclet) in program.funclets.iter()
+	{
+		validate_funclet_common(program, funclet);
+
+		match funclet.kind
+		{
+			ir::FuncletKind::Timeline => validate_timeline_funclet(program, funclet),
+			_ => (),
+		}
+	}
+}
+
 pub fn validate_external_gpu_function_bindings(function : & ir::ffi::ExternalGpuFunction, input_slot_node_ids : &[ir::NodeId], output_slot_node_ids : &[ir::NodeId])
 {
 	use std::iter::FromIterator;
