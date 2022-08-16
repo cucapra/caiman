@@ -7,6 +7,8 @@ use crate::arena::Arena;
 
 pub use crate::rust_wgpu_backend::ffi as ffi;
 
+pub mod validation;
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Place
 {
