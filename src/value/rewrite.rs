@@ -42,9 +42,11 @@ fn single_output(
     f: impl Fn(&ir::Type) -> bool,
 ) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     move |egraph, _, subst| {
-        let type_id = match egraph[subst[v]].data.output_types.get(0) {
-            Some(type_id) => *type_id,
-            None => return false, // aggregate (think ID list)
+        let id = subst[v];
+        let type_id = match egraph[id].data.output_types.as_deref() {
+            Some([type_id]) => *type_id,
+            Some(_) => return false, // aggregate (think ID list)
+            None => panic!("eclass with no type ID made it to the rewrite stage"),
         };
         let ty = egraph.analysis.lookup_type(type_id).expect("unknown type");
         f(ty)

@@ -1,3 +1,38 @@
+//! Due to egg's interface, lifetime restrictions, and efficiency concerns, there are some complex
+//! global invariants which must be maintained.
+//!
+//! - [`ClassAnalysis`] has a [`output_types`][ClassAnalysis] field which is stored as an `Option`.
+//!   However, when graph rewrites are performed, this field **MUST** contain a value.
+//!
+//!   Explanation: Consider rewriting `a + b` to `a - (-b)`. This might be useful, especially when
+//!   combined with other optimizations. But you're only able to negate `b` if it's signed, so it's
+//!   necessary to have type information available in the rewrite stage.
+//!
+//!   Type information should be stored in [`ClassAnalysis`] because all nodes in the same
+//!   equivalence class must have the same output type. We could force the class analysis to
+//!   *always* hold a type ID. (That is, `TypeId`, not `Option<TypeId>`.)
+//!
+//!   The problem is that *egraph node creation* and *eclass merging* are two different steps. When
+//!   we create a node as the result of a rewrite, we need to give it an associated class analysis,
+//!   so we need to choose *something* for it's type ID. But the only information that `egg` gives
+//!   us is the egraph as a whole and the newly created node, so we can't base its type ID on its
+//!   "source" nodes. (We could if we smuggled parent info via the [`Node`][super::Node] itself, but
+//!   that's gross and would require a custom applier.) We could create a dummy "any" type ID which
+//!   is replaced during eclass merging, but wait, that's just a worse version of `Option`.
+//!
+//!   There's actually nothing to worry about during rewrites. By induction we assume the invariant
+//!   holds at the start of the rewrite. Then the "source" node(s) have a type ID. The "derived"
+//!   node(s) are given no type ID when their node is created; the source & derived eclasses are
+//!   then merged, and the source's type ID is retained in the resulting eclass.
+//!
+//!   Instead, the area of concern is graph creation. The invariant will hold at the time of the
+//!   first rewrite *if and only if* each eclass has been assigned a type ID by that point. After
+//!   each node is added, you must look up its eclass and set its type ID manually.
+//!
+//!   Hashconsing complicates matters since two "identical" nodes can have different type IDs... or
+//!   can they? As it turns out, this is only true for constants. All other value nodes derive their
+//!   types from their inputs. The "fix" is retaining type IDs in constant nodes in the graph, even
+//!   though it may seem redundant with the class analysis data.
 use super::*;
 use crate::arena::Arena;
 use crate::ir;
@@ -292,14 +327,10 @@ impl Analysis {
     }
 }
 
-pub fn infer_output_types(egraph: &Graph, enode: &Node) -> Box<[ir::TypeId]> {
-    todo!()
-}
-
 #[derive(Debug)]
 pub struct ClassAnalysis {
     pub constant: Option<Constant>,
-    pub output_types: Box<[ir::TypeId]>,
+    pub output_types: Option<Box<[ir::TypeId]>>,
 }
 
 impl egg::Analysis<Node> for Analysis {
@@ -307,25 +338,23 @@ impl egg::Analysis<Node> for Analysis {
     fn make(egraph: &Graph, enode: &Node) -> Self::Data {
         Self::Data {
             constant: enode.to_constant(egraph),
-            output_types: infer_output_types(egraph, enode),
+            output_types: None,
         }
     }
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
-        assert_eq!(
-            a.output_types, b.output_types,
-            "merged eclasses with different types"
-        );
+        egg::merge_option(&mut a.output_types, b.output_types, |a, b| {
+            assert_eq!(a, &b, "merge eclasses with different types");
+            egg::DidMerge(false, false)
+        });
         egg::merge_option(&mut a.constant, b.constant, |a, b| {
-            assert_eq!(a, &b, "rewrite type violation (merge non-equal constants)");
+            assert_eq!(a, &b, "merge non-equal constants");
             egg::DidMerge(false, false)
         })
     }
     fn modify(egraph: &mut egg::EGraph<Node, Self>, id: egg::Id) {
         let data = &egraph[id].data;
         if let Some(constant) = data.constant {
-            assert!(data.output_types.len() == 1);
-            let type_id = data.output_types[0];
-            let folded = constant.to_node(type_id);
+            let folded = constant.to_node(todo!());
             let folded_id = egraph.add(folded);
             egraph.union(id, folded_id);
         }
