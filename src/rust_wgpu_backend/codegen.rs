@@ -7,8 +7,7 @@ use std::collections::HashSet;
 use std::collections::BTreeSet;
 use std::collections::BTreeMap;
 use crate::rust_wgpu_backend::code_generator;
-use crate::rust_wgpu_backend::code_generator::CodeGenerator;
-use crate::rust_wgpu_backend::code_generator::SubmissionId;
+use crate::rust_wgpu_backend::code_generator::{SubmissionId, CodeGenerator, VarId};
 use std::fmt::Write;
 use std::collections::BinaryHeap;
 use std::cmp::Reverse;
@@ -115,7 +114,7 @@ struct PlacementState
 	place_states : HashMap<ir::Place, PlaceState>, // as known to the coordinator
 	scheduling_state : scheduling_state::SchedulingState,
 	submission_map : HashMap<scheduling_state::SubmissionId, SubmissionId>,
-	slot_variable_ids : HashMap<scheduling_state::SlotId, usize>,
+	slot_variable_ids : HashMap<scheduling_state::SlotId, VarId>,
 	join_graph : JoinGraph
 }
 
@@ -129,19 +128,19 @@ impl PlacementState
 		Self{ place_states, scheduling_state : scheduling_state::SchedulingState::new(), /*node_results : Default::default(),*/ submission_map : HashMap::new(), slot_variable_ids : HashMap::new()/*, value_tags : HashMap::new()*/, join_graph : JoinGraph::new()}
 	}
 
-	fn update_slot_state(&mut self, slot_id : scheduling_state::SlotId, stage : ir::ResourceQueueStage, var_id : usize)
+	fn update_slot_state(&mut self, slot_id : scheduling_state::SlotId, stage : ir::ResourceQueueStage, var_id : VarId)
 	{
 		self.slot_variable_ids.insert(slot_id, var_id);
 		// need to do place and stage
 		self.scheduling_state.advance_queue_stage(slot_id, stage);
 	}
 
-	fn get_slot_var_id(&self, slot_id : scheduling_state::SlotId) -> Option<usize>
+	fn get_slot_var_id(&self, slot_id : scheduling_state::SlotId) -> Option<VarId>
 	{
 		self.slot_variable_ids.get(& slot_id).map(|x| * x)
 	}
 
-	fn get_node_result_var_id(&self, node_result : &NodeResult) -> Option<usize>
+	fn get_node_result_var_id(&self, node_result : &NodeResult) -> Option<VarId>
 	{
 		match node_result
 		{
@@ -150,9 +149,9 @@ impl PlacementState
 		}
 	}
 
-	fn get_node_result_var_ids(&self, node_results : &[NodeResult]) -> Option<Box<[usize]>>
+	fn get_node_result_var_ids(&self, node_results : &[NodeResult]) -> Option<Box<[VarId]>>
 	{
-		let mut var_ids = Vec::<usize>::new();
+		let mut var_ids = Vec::<VarId>::new();
 		for node_result in node_results.iter()
 		{	
 			if let Some(var_id) = self.get_node_result_var_id(node_result)
@@ -422,9 +421,9 @@ impl<'program> CodeGen<'program>
 				};
 				let dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(dimension_map)).into_boxed_slice();
 				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(argument_map)).into_boxed_slice();
-				let output_var_ids = output_slot_ids.iter().map(|x| placement_state.get_slot_var_id(* x).unwrap()).collect::<Box<[usize]>>();
+				let output_var_ids = output_slot_ids.iter().map(|x| placement_state.get_slot_var_id(* x).unwrap()).collect::<Box<[VarId]>>();
 
-				let dimensions_slice : &[usize] = & dimension_var_ids;
+				let dimensions_slice : &[VarId] = & dimension_var_ids;
 				//let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
 				self.code_generator.build_compute_dispatch_with_outputs(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids, & output_var_ids);
 
@@ -481,7 +480,7 @@ impl<'program> CodeGen<'program>
 			}
 			ir::Node::Select { condition, true_case, false_case } =>
 			{
-				let input_var_ids = input_slot_ids.iter().map(|& slot_id| placement_state.get_slot_var_id(slot_id).unwrap()).collect::<Box<[usize]>>();
+				let input_var_ids = input_slot_ids.iter().map(|& slot_id| placement_state.get_slot_var_id(slot_id).unwrap()).collect::<Box<[VarId]>>();
 
 				let slot_id = output_slot_ids[0];
 				let variable_id = self.code_generator.build_select_hack(input_var_ids[0], input_var_ids[1], input_var_ids[2]);
@@ -850,18 +849,19 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::Submit { place, event } =>
 				{
-					let submission_id = placement_state.scheduling_state.insert_submission
+					self.code_generator.flush_submission();
+					/*let submission_id = placement_state.scheduling_state.insert_submission
 					(
 						* place,
 						&mut |scheduling_state, event| ()
 					);
 
-					placement_state.submission_map.insert(submission_id, self.code_generator.flush_submission());
+					placement_state.submission_map.insert(submission_id, self.code_generator.flush_submission());*/
 				}
 				ir::Node::EncodeFence { place, event } =>
 				{
 					let local_timestamp = self.advance_local_time(placement_state);
-					let fence_id = self.code_generator.encode_fence();
+					let fence_id = self.code_generator.encode_gpu_fence();
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Fence { place : * place, timestamp : local_timestamp, fence_id });
 				}
 				ir::Node::SyncFence { place : synced_place, fence, event } =>
@@ -876,10 +876,10 @@ impl<'program> CodeGen<'program>
 
 						assert_eq!(fenced_place, ir::Place::Gpu);
 
-						if let Some(newer_timestamp) = self.advance_known_place_time(placement_state, fenced_place, timestamp)
+						/*if let Some(newer_timestamp) = self.advance_known_place_time(placement_state, fenced_place, timestamp)
 						{
 							panic!("Have already synced to a later time")
-						}
+						}*/
 					}
 					else
 					{
