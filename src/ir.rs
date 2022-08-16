@@ -151,7 +151,7 @@ pub enum Type
 	Fence { queue_place : Place },
 	Buffer { storage_place : Place },
 
-	Agent { place : Place }
+	Event { place : Place }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

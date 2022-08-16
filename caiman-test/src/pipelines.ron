@@ -37,7 +37,7 @@
 		types : {
 			0 : Integer(signed : true, width : 32),
 			1 : Slot(storage_type : (0), queue_stage : Ready, queue_place : Local ),
-			2 : Agent(place : Local),
+			2 : Event(place : Local),
 			3 : Slot(storage_type : (0), queue_stage : Submitted, queue_place : Gpu ),
 			4 : Fence( queue_place : Gpu ),
 		},
