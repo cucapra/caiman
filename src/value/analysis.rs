@@ -42,6 +42,9 @@ use constant::Constant;
 use std::collections::hash_map::{Entry, HashMap};
 use std::collections::BTreeSet;
 
+mod validate;
+pub use validate::validate;
+
 #[derive(Clone, PartialEq, Eq)]
 struct BlockArgs {
     args: Vec<Option<GraphId>>,

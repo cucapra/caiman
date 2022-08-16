@@ -69,6 +69,7 @@ type GraphRunner = egg::Runner<Node, Analysis, ()>;
 type GraphHook = Box<dyn FnMut(&mut GraphRunner) -> Result<(), String> + 'static>;
 type GraphRewrite = egg::Rewrite<Node, Analysis>;
 type GraphId = egg::Id;
+type GraphClass = egg::EClass<Node, analysis::ClassAnalysis>;
 
 pub struct Optimizer {
     /// Invariant: This is always Some(_). Why is it an option? See `optimize`
@@ -77,8 +78,10 @@ pub struct Optimizer {
 }
 impl Optimizer {
     pub fn new(program: &ir::Program, head: ir::FuncletId) -> Result<Self, FromIrError> {
+        let runner = analysis::create(program, head)?;
+        analysis::validate(&runner);
         Ok(Self {
-            runner: Some(analysis::create(program, head)?),
+            runner: Some(runner),
             rules: Vec::new(),
         })
     }
