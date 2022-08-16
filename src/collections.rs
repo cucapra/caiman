@@ -64,6 +64,9 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
     pub fn get(&self, key: &K) -> Option<&'_ V> {
         self.hashmap.get(key).map(|sv| &sv.value)
     }
+    pub fn get_mut(&mut self, key: &K) -> Option<&'_ mut V> {
+        self.hashmap.get_mut(key).map(|sv| &mut sv.value)
+    }
     pub fn insert(&mut self, key: K, value: V) {
         let key = Rc::new(key);
         let mut value = ShmValue {
