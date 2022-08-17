@@ -129,7 +129,16 @@ pub enum ValueTag
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TimelineTag
 {
-	None, // Don't care
+	None,
+	Operation{ remote_node_id : RemoteNodeId },
+	Input{ funclet_id : FuncletId, index : usize },
+	Output{ funclet_id : FuncletId, index : usize },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SpatialTag
+{
+	None,
 	Operation{ remote_node_id : RemoteNodeId },
 	Input{ funclet_id : FuncletId, index : usize },
 	Output{ funclet_id : FuncletId, index : usize },
@@ -142,16 +151,21 @@ pub enum Type
 
 	Slot { storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 	SchedulingJoin {
-		input_types : Box<[TypeId]>, 
+		/*input_types : Box<[TypeId]>, 
 		value_funclet_id : FuncletId,
 		input_slots : HashMap<usize, SlotInfo>,
 		input_fences : HashMap<usize, FenceInfo>,
-		in_timeline_tag : TimelineTag,
+		in_timeline_tag : TimelineTag,*/
 	},
 	Fence { queue_place : Place },
 	Buffer { storage_place : Place },
 
-	Event { place : Place }
+	// Timeline
+	Event { place : Place },
+	
+	// Space
+	FixedBuffer { storage_place : Place, alignment_bits : usize, byte_size : usize },
+	FlexBuffer { storage_place : Place },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -182,7 +196,8 @@ pub enum FuncletKind
 	Value,
 	ScheduleExplicit,
 	Inline, // Adopts the constraints of the calling funclet
-	Timeline
+	Timeline,
+	Spatial
 }
 
 impl FuncletKind
@@ -215,6 +230,7 @@ pub struct SlotInfo
 {
 	pub value_tag : ValueTag,
 	pub timeline_tag : TimelineTag, // marks the event that put the slot into its current state
+	pub spatial_tag : SpatialTag,
 	//pub queue_stage : ResourceQueueStage,
 	//pub queue_place : Place,
 	//pub resource_id : ...
@@ -234,6 +250,12 @@ pub struct FenceInfo
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BufferInfo
+{
+	pub spatial_tag : SpatialTag,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SchedulingFuncletExtra
 {
 	pub value_funclet_id : FuncletId,
@@ -241,8 +263,11 @@ pub struct SchedulingFuncletExtra
 	pub output_slots : HashMap<usize, SlotInfo>,
 	pub input_fences : HashMap<usize, FenceInfo>,
 	pub output_fences : HashMap<usize, FenceInfo>,
+	pub input_buffers : HashMap<usize, BufferInfo>,
+	pub output_buffers : HashMap<usize, BufferInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
-	//pub external_spaces : BTreeSet<ExternalSpaceId>,
+	
+	// Applies to the computation itself
 	pub in_timeline_tag : TimelineTag,
 	pub out_timeline_tag : TimelineTag,
 }

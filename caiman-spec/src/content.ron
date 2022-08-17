@@ -6,7 +6,7 @@
 			name : "None",
 			inputs : [],
 			output : None,
-			language_set : (functional : true, scheduling: true, timeline : true, intrinsic : true),
+			language_set : (functional : true, scheduling: true, timeline : true, spatial : true, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -15,7 +15,7 @@
 				(name : "index", kind : Index),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: true, timeline : true, intrinsic : true),
+			language_set : (functional : true, scheduling: true, timeline : true, spatial : true, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -25,7 +25,7 @@
 				(name : "index", kind : Index),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: true, timeline : true, intrinsic : true),
+			language_set : (functional : true, scheduling: true, timeline : true, spatial : true, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -35,7 +35,7 @@
 				(name : "type_id", kind : Type),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: false, timeline : false, intrinsic : true),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -45,7 +45,7 @@
 				(name : "type_id", kind : Type),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: false, timeline : false, intrinsic : true),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : false
 		),
 
@@ -58,7 +58,7 @@
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, intrinsic : false),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : false
 		),
 		(
@@ -69,7 +69,7 @@
 				(name : "false_case", kind : Operation),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: false, timeline : false, intrinsic : false),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : false
 		),
 
@@ -82,7 +82,7 @@
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, intrinsic : true),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : false
 		),
 		(
@@ -93,19 +93,19 @@
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, intrinsic : true),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : false
 		),
 
 		// Old scheduling nodes
 		// Likely to disappear
-		(
+		/*(
 			name : "SyncLocal",
 			inputs : [
 				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -114,9 +114,9 @@
 				(name : "values", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
-		),
+		),*/
 
 		// These are convenience instructions that rely on codegen doing some questionable magic
 		// Don't expect these to be predictable
@@ -129,7 +129,7 @@
 				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : true),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : true
 		),
 
@@ -142,7 +142,7 @@
 				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -151,7 +151,28 @@
 				(name : "node", kind : Operation)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "AllocFromFixedBuffer",
+			inputs : [
+				(name : "buffer", kind : Operation),
+				(name : "place", kind : Place),
+				(name : "storage_type", kind : StorageType),
+				(name : "operation", kind : RemoteOperation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "ResetFixedBuffer",
+			inputs : [
+				(name : "buffer", kind : Operation)
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : true
 		),
 
@@ -165,7 +186,7 @@
 				(name : "outputs", kind : Operation, is_array : true)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -176,7 +197,7 @@
 				(name : "output", kind : Operation)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -186,7 +207,7 @@
 				(name : "event", kind : RemoteOperation)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -196,7 +217,7 @@
 				(name : "event", kind : RemoteOperation)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -207,7 +228,7 @@
 				(name : "event", kind : RemoteOperation)
 			],
 			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
@@ -218,14 +239,14 @@
 				(name : "continuation", kind : Operation),
 			],
 			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
 			name : "DefaultJoin",
 			inputs : [],
 			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, intrinsic : false),
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 
@@ -238,7 +259,7 @@
 				(name : "local_past", kind : Operation),
 			],
 			output : Single,
-			language_set : (functional : false, scheduling: false, timeline : true, intrinsic : false),
+			language_set : (functional : false, scheduling: false, timeline : true, spatial : false, intrinsic : false),
 			has_local_side_effect : false
 		),
 		(
@@ -250,7 +271,29 @@
 				(name : "remote_local_past", kind : Operation), // Round trip: What does the remote agent know the local agent knows as its event history (the last submission)?
 			],
 			output : Single,
-			language_set : (functional : false, scheduling: false, timeline : true, intrinsic : false),
+			language_set : (functional : false, scheduling: false, timeline : true, spatial : false, intrinsic : false),
+			has_local_side_effect : false
+		),
+
+		// Space nodes
+		(
+			name : "SeparatedLinearSpace",
+			inputs : [
+				(name : "place", kind : Place),
+				(name : "space", kind : Operation),
+			],
+			output : Multiple,
+			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
+			has_local_side_effect : false
+		),
+		(
+			name : "MergedLinearSpace",
+			inputs : [
+				(name : "place", kind : Place),
+				(name : "spaces", kind : Operation, is_array : true),
+			],
+			output : Multiple,
+			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
 			has_local_side_effect : false
 		),
 	]

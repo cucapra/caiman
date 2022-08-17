@@ -7,12 +7,14 @@ fn operation_language(operation: &spec::Operation) -> &'static str {
         operation.language_set.functional,
         operation.language_set.scheduling,
         operation.language_set.timeline,
+        operation.language_set.spatial,
     ) {
-        (true, true, true) => "mixed",
-        (true, false, false) => "functional",
-        (false, true, false) => "scheduling",
-        (false, false, true) => "timeline",
-        (_, _, _) => panic!("Unknown language combination {:?}", operation),
+        (true, true, true, true) => "mixed",
+        (true, false, false, false) => "functional",
+        (false, true, false, false) => "scheduling",
+        (false, false, true, false) => "timeline",
+        (false, false, false, true) => "spatial",
+        (_, _, _, _) => panic!("Unknown language combination {:?}", operation),
     }
 }
 

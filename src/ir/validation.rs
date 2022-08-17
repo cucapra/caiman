@@ -158,3 +158,13 @@ pub fn validate_timeline_funclet(program : & ir::Program, funclet : & ir::Funcle
 		_ => panic!("Tail edge of a timeline funclet must be a return!")
 	}
 }
+
+
+pub fn validate_spatial_funclet(program : & ir::Program, funclet : & ir::Funclet)
+{
+	// To do once splitting is a feature we support
+	// GPU spaces can't be split in wgpu
+	// CPU spaces can
+	// Merging is associative
+	// Splitting is coassociative
+}

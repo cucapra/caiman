@@ -16,7 +16,8 @@ pub struct LanguageSet
 	pub functional : bool,
 	pub scheduling : bool,
 	pub timeline : bool,
-	pub intrinsic : bool
+	pub spatial : bool,
+	pub intrinsic : bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
