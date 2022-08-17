@@ -1,23 +1,28 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Borrow;
 use std::collections::hash_map::{Entry, HashMap};
 use std::collections::BTreeMap;
 use std::default::Default;
+use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Index;
 use std::rc::Rc;
 
 enum ShmRecord<K> {
     Scope,
-    Insert(Rc<K>),
-    Replace(Rc<K>),
+    Insert(K),
+    Replace(K),
 }
 struct ShmValue<V> {
     value: V,
     depth: usize,
 }
+/// Due to [interface considerations](https://users.rust-lang.org/t/transitive-borrow-trait/27001),
+/// inserting a key may cause that key to be cloned and stored. If your keys are large you should
+/// use a reference-counted wrapper over the key type instead.
 pub struct ScopedHashMap<K, V> {
-    /// The actual hashmap. Keys are reference countied to avoid potentially costly `clone`-s,
-    /// since keys must live in both the hashmap and the `keys` structure.
-    hashmap: HashMap<Rc<K>, ShmValue<V>>,
+    /// The actual hashmap.
+    hashmap: HashMap<K, ShmValue<V>>,
     /// A journal of the actions performed. This allows us to "rewind" when a scope is popped and
     /// undo all the changes we made in the reverse order.
     journal: Vec<ShmRecord<K>>,
@@ -27,7 +32,10 @@ pub struct ScopedHashMap<K, V> {
     /// The user doesn't expect to recover the old values so they can be discarded.
     depth: usize,
 }
-impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
+impl<K, V> ScopedHashMap<K, V>
+where
+    K: Clone + Eq + Hash,
+{
     pub fn new() -> Self {
         Self {
             hashmap: HashMap::new(),
@@ -61,19 +69,26 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
             }
         }
     }
-    pub fn get(&self, key: &K) -> Option<&'_ V> {
+    pub fn get<Q>(&self, key: &Q) -> Option<&'_ V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         self.hashmap.get(key).map(|sv| &sv.value)
     }
-    pub fn get_mut(&mut self, key: &K) -> Option<&'_ mut V> {
+    pub fn get_mut<Q>(&mut self, key: &Q) -> Option<&'_ mut V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         self.hashmap.get_mut(key).map(|sv| &mut sv.value)
     }
     pub fn insert(&mut self, key: K, value: V) {
-        let key = Rc::new(key);
         let mut value = ShmValue {
             value,
             depth: self.depth,
         };
-        match self.hashmap.entry(Rc::clone(&key)) {
+        match self.hashmap.entry(key.clone()) {
             Entry::Occupied(mut existing) => {
                 std::mem::swap(&mut value, existing.get_mut());
                 // replaced within same depth: no expecation that old val is saved,
@@ -94,7 +109,83 @@ impl<K: Eq + Hash, V> ScopedHashMap<K, V> {
         self.depth
     }
 }
+impl<K, V, Q> Index<&Q> for ScopedHashMap<K, V>
+where
+    K: Borrow<Q> + Clone + Eq + Hash,
+    Q: Eq + Hash + ?Sized,
+{
+    type Output = V;
+    fn index(&self, index: &Q) -> &Self::Output {
+        self.get(index).expect("unknown key in scoped hashmap")
+    }
+}
+#[cfg(test)]
+mod shm_tests {
+    use super::*;
+    #[test]
+    fn noscope() {
+        let mut shm = ScopedHashMap::new();
+        shm.insert("alpha", 360);
+        shm.insert("beta", 42);
+        shm.insert("gamma", 530);
+        shm.insert("alpha", 1);
+        assert_eq!(shm["alpha"], 1);
+        assert_eq!(shm["beta"], 42);
+        assert_eq!(shm["gamma"], 530);
+    }
+    #[test]
+    #[should_panic]
+    fn noscope_pop_empty() {
+        let mut shm = ScopedHashMap::<usize, usize>::new();
+        shm.pop_scope(); // panics, no scope pushed
+    }
+    #[test]
+    #[should_panic]
+    fn noscope_pop() {
+        let mut shm = ScopedHashMap::new();
+        shm.insert("alpha", 360);
+        shm.pop_scope(); // panics, no scope pushed
+    }
 
+    #[test]
+    fn stacking() {
+        let mut shm = ScopedHashMap::new();
+        shm.insert("layer0", 0);
+        shm.insert("layer1", 0);
+        shm.insert("layer2", 0);
+        shm.push_scope();
+        assert_eq!(shm["layer0"], 0);
+        assert_eq!(shm["layer1"], 0);
+        assert_eq!(shm["layer2"], 0);
+        shm.insert("layer1", 1);
+        shm.insert("layer2", 1);
+        assert_eq!(shm["layer0"], 0);
+        assert_eq!(shm["layer1"], 1);
+        assert_eq!(shm["layer2"], 1);
+        shm.push_scope();
+        assert_eq!(shm["layer0"], 0);
+        assert_eq!(shm["layer1"], 1);
+        assert_eq!(shm["layer2"], 1);
+        shm.insert("layer2", 6);
+        shm.insert("layer2", 2);
+        assert_eq!(shm["layer0"], 0);
+        assert_eq!(shm["layer1"], 1);
+        assert_eq!(shm["layer2"], 2);
+        shm.pop_scope();
+        assert_eq!(shm["layer0"], 0);
+        assert_eq!(shm["layer1"], 1);
+        assert_eq!(shm["layer2"], 1);
+        shm.insert("layer1", 7);
+        shm.insert("layer2", 19);
+        assert_eq!(shm["layer0"], 0);
+        assert_eq!(shm["layer1"], 7);
+        assert_eq!(shm["layer2"], 19);
+        shm.pop_scope();
+        assert_eq!(shm["layer0"], 0);
+        assert_eq!(shm["layer1"], 0);
+        assert_eq!(shm["layer2"], 0);
+    }
+}
 #[derive(Debug, Clone)]
 pub struct Arena<T> {
     elements: HashMap<usize, T>,
