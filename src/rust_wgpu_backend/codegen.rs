@@ -808,7 +808,11 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::Submit { place, event } =>
 				{
-					self.code_generator.flush_submission();
+					match place
+					{
+						ir::Place::Gpu => { self.code_generator.flush_submission(); }
+						_ => panic!("Unimplemented")
+					}
 				}
 				ir::Node::EncodeFence { place, event } =>
 				{
@@ -830,6 +834,10 @@ impl<'program> CodeGen<'program>
 					{
 						panic!("Expected fence")
 					}
+				}
+				ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
+				{
+					
 				}
 				ir::Node::DefaultJoin =>
 				{
@@ -994,7 +1002,7 @@ impl<'program> CodeGen<'program>
 				assert!(default_join_point_id_opt.is_none());
 				SplitPoint::Select{return_node_results : argument_node_results.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}
 			}
-			ir::TailEdge::AllocFromBuffer {buffer : buffer_node_id, slot_count, success_funclet_id, failure_funclet_id, arguments, continuation_join : continuation_join_node_id} =>
+			ir::TailEdge::DynamicAllocFromBuffer {buffer : buffer_node_id, dynamic_allocation_size_slots, success_funclet_id, failure_funclet_id, arguments, continuation_join : continuation_join_node_id} =>
 			{
 				// To do: Yet more type checks in every other tail edge + join...
 				// Probably need to clean things up soon...

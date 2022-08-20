@@ -144,11 +144,20 @@ pub enum SpatialTag
 	Output{ funclet_id : FuncletId, index : usize },
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct StaticBufferLayout
+{
+	pub alignment_bits : usize,
+	pub byte_size : usize
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
-	Integer { signed : bool, width : usize },
+	NativeValue { storage_type : StorageTypeId },
+	//Integer { signed : bool, width : usize },
 
+	// Scheduling
 	Slot { storage_type : ffi::TypeId, queue_stage : ResourceQueueStage, queue_place : Place },
 	SchedulingJoin {
 		/*input_types : Box<[TypeId]>, 
@@ -158,14 +167,13 @@ pub enum Type
 		in_timeline_tag : TimelineTag,*/
 	},
 	Fence { queue_place : Place },
-	Buffer { storage_place : Place },
+	Buffer { storage_place : Place, static_layout_opt : Option<StaticBufferLayout> },
 
 	// Timeline
 	Event { place : Place },
 	
 	// Space
-	FixedBuffer { storage_place : Place, alignment_bits : usize, byte_size : usize },
-	FlexBuffer { storage_place : Place },
+	BufferSpace,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -185,7 +193,7 @@ pub enum TailEdge
 	// SyncFence { fence : NodeId, immediate_funclet : FuncletId, deferred_funclet : FuncletId, arguments : Box<[NodeId]>, continuation_join : NodeId },
 
 	// Split space - where the computation will be observed
-	AllocFromBuffer { buffer : NodeId, slot_count : usize, success_funclet_id : FuncletId, failure_funclet_id : FuncletId, arguments : Box<[NodeId]>, continuation_join : NodeId }
+	DynamicAllocFromBuffer { buffer : NodeId, arguments : Box<[NodeId]>, dynamic_allocation_size_slots : Box<[NodeId]>, success_funclet_id : FuncletId, failure_funclet_id : FuncletId, continuation_join : NodeId }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

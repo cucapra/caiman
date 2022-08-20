@@ -123,12 +123,6 @@ struct ActiveFuncletState
 	next_funclet_input_types : Option<Box<[Box<[ffi::TypeId]>]>>
 }
 
-struct TypeBindingInfo
-{
-	size : usize,
-	alignment : usize,
-}
-
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 struct ShaderModuleKey
 {
@@ -1164,6 +1158,11 @@ impl<'program> CodeGenerator<'program>
 		}
 	}
 
+	fn get_type_binding_info(& self, type_id : ffi::TypeId) -> ffi::TypeBindingInfo
+	{
+		self.native_interface.calculate_type_binding_info(type_id)
+	}
+
 	fn get_type_name(& self, type_id : ffi::TypeId) -> String
 	{
 		match & self.native_interface.types[& type_id.0]
@@ -1211,31 +1210,6 @@ impl<'program> CodeGenerator<'program>
 				output_string
 			}*/
 			_ => format!("type_{}", type_id.0)
-		}
-	}
-
-	fn get_type_binding_info(&self, type_id : ffi::TypeId) -> TypeBindingInfo
-	{
-		match & self.native_interface.types[& type_id.0]
-		{
-			ffi::Type::F32 => TypeBindingInfo { size : std::mem::size_of::<f32>(), alignment : std::mem::align_of::<f32>() },
-			ffi::Type::F64 => TypeBindingInfo { size : std::mem::size_of::<f64>(), alignment : std::mem::align_of::<f64>() },
-			ffi::Type::U8 => TypeBindingInfo { size : std::mem::size_of::<u8>(), alignment : std::mem::align_of::<u8>() },
-			ffi::Type::U16 => TypeBindingInfo { size : std::mem::size_of::<u16>(), alignment : std::mem::align_of::<u16>() },
-			ffi::Type::U32 => TypeBindingInfo { size : std::mem::size_of::<u32>(), alignment : std::mem::align_of::<u32>() },
-			ffi::Type::U64 => TypeBindingInfo { size : std::mem::size_of::<u64>(), alignment : std::mem::align_of::<u64>() },
-			ffi::Type::I8 => TypeBindingInfo { size : std::mem::size_of::<i8>(), alignment : std::mem::align_of::<i8>() },
-			ffi::Type::I16 => TypeBindingInfo { size : std::mem::size_of::<i16>(), alignment : std::mem::align_of::<i16>() },
-			ffi::Type::I32 => TypeBindingInfo { size : std::mem::size_of::<i32>(), alignment : std::mem::align_of::<i32>() },
-			ffi::Type::I64 => TypeBindingInfo { size : std::mem::size_of::<i64>(), alignment : std::mem::align_of::<i64>() },
-			ffi::Type::ConstRef { element_type } => panic!("Unimplemented"),
-			ffi::Type::MutRef { element_type } => panic!("Unimplemented"),
-			ffi::Type::ConstSlice { element_type } => panic!("Unimplemented"),
-			ffi::Type::MutSlice { element_type } => panic!("Unimplemented"),
-			ffi::Type::Array { element_type, length } => panic!("Unimplemented"),
-			ffi::Type::Struct { fields, byte_alignment, byte_size } => panic!("Unimplemented"),
-			//ffi::Type::Slot{ value_type, .. } => self.get_type_binding_info(* value_type), // Probably not quite right
-			_ => panic!("Unimplemented")
 		}
 	}
 

@@ -16,6 +16,7 @@ pub struct StructField
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
+	// Value types
 	F32,
 	F64,
 	U8,
@@ -30,6 +31,7 @@ pub enum Type
 	Struct { fields : Box<[StructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
 	Tuple { fields : Box<[TypeId]> },
 
+	// Reference types
 	ConstRef { element_type : TypeId },
 	MutRef { element_type : TypeId },
 	ConstSlice { element_type : TypeId },
@@ -103,4 +105,49 @@ pub struct NativeInterface
 	pub external_cpu_functions : Arena<ExternalCpuFunction>,
 	#[serde(default)]
 	pub external_gpu_functions : Arena<ExternalGpuFunction>,
+}
+
+pub struct TypeBindingInfo
+{
+	pub size : usize,
+	pub alignment : usize,
+}
+
+impl NativeInterface
+{
+	// For the sake of an MVP, this is assuming that we're compiling for the machine we're running on
+
+	pub fn calculate_type_binding_info(&self, type_id : TypeId) -> TypeBindingInfo
+	{
+		match & self.types[& type_id.0]
+		{
+			Type::F32 => TypeBindingInfo { size : std::mem::size_of::<f32>(), alignment : std::mem::align_of::<f32>() },
+			Type::F64 => TypeBindingInfo { size : std::mem::size_of::<f64>(), alignment : std::mem::align_of::<f64>() },
+			Type::U8 => TypeBindingInfo { size : std::mem::size_of::<u8>(), alignment : std::mem::align_of::<u8>() },
+			Type::U16 => TypeBindingInfo { size : std::mem::size_of::<u16>(), alignment : std::mem::align_of::<u16>() },
+			Type::U32 => TypeBindingInfo { size : std::mem::size_of::<u32>(), alignment : std::mem::align_of::<u32>() },
+			Type::U64 => TypeBindingInfo { size : std::mem::size_of::<u64>(), alignment : std::mem::align_of::<u64>() },
+			Type::I8 => TypeBindingInfo { size : std::mem::size_of::<i8>(), alignment : std::mem::align_of::<i8>() },
+			Type::I16 => TypeBindingInfo { size : std::mem::size_of::<i16>(), alignment : std::mem::align_of::<i16>() },
+			Type::I32 => TypeBindingInfo { size : std::mem::size_of::<i32>(), alignment : std::mem::align_of::<i32>() },
+			Type::I64 => TypeBindingInfo { size : std::mem::size_of::<i64>(), alignment : std::mem::align_of::<i64>() },
+			Type::ConstRef { element_type } => panic!("Unimplemented"),
+			Type::MutRef { element_type } => panic!("Unimplemented"),
+			Type::ConstSlice { element_type } => panic!("Unimplemented"),
+			Type::MutSlice { element_type } => panic!("Unimplemented"),
+			Type::Array { element_type, length } => panic!("Unimplemented"),
+			Type::Struct { fields, byte_alignment, byte_size } => panic!("Unimplemented"),
+			_ => panic!("Unimplemented")
+		}
+	}
+
+	pub fn calculate_type_alignment_bits(&self, type_id : TypeId) -> usize
+	{
+		self.calculate_type_binding_info(type_id).alignment.trailing_zeros() as usize
+	}
+
+	pub fn calculate_type_byte_size(&self, type_id : TypeId) -> usize
+	{
+		self.calculate_type_binding_info(type_id).size
+	}
 }

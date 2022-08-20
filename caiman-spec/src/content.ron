@@ -155,21 +155,12 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "AllocFromFixedBuffer",
+			name : "StaticAllocFromStaticBuffer",
 			inputs : [
 				(name : "buffer", kind : Operation),
 				(name : "place", kind : Place),
 				(name : "storage_type", kind : StorageType),
-				(name : "operation", kind : RemoteOperation),
-			],
-			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
-			has_local_side_effect : true
-		),
-		(
-			name : "ResetFixedBuffer",
-			inputs : [
-				(name : "buffer", kind : Operation)
+				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),

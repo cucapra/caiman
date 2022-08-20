@@ -20,7 +20,7 @@ struct Fence
 }
 
 #[derive(Debug)]
-pub struct JoinPoint
+struct JoinPoint
 {
 	in_timeline_tag : ir::TimelineTag,
 	input_timeline_tags : Box<[ir::TimelineTag]>,
@@ -30,11 +30,19 @@ pub struct JoinPoint
 }
 
 #[derive(Debug)]
+struct Buffer
+{
+	storage_place : ir::Place,
+	static_layout_opt : Option<ir::StaticBufferLayout>
+}
+
+#[derive(Debug)]
 enum NodeType
 {
 	Slot(Slot),
 	Fence(Fence),
 	JoinPoint,
+	Buffer(Buffer),
 }
 
 impl NodeType
@@ -46,6 +54,7 @@ impl NodeType
 			NodeType::Slot(slot) => Some(slot.storage_type),
 			NodeType::Fence(_) => None,
 			NodeType::JoinPoint => None,
+			NodeType::Buffer(_) => None,
 		}
 	}
 }
@@ -168,9 +177,13 @@ impl<'program> FuncletChecker<'program>
 					self.scalar_node_spatial_tags.insert(index, ir::SpatialTag::None);
 					NodeType::Fence(Fence{queue_place : * queue_place})
 				}
-				ir::Type::FixedBuffer { storage_place, alignment_bits, byte_size } =>
+				ir::Type::Buffer { storage_place, static_layout_opt } =>
 				{
-					panic!("Unimplemented")
+					let buffer_info = & self.scheduling_funclet_extra.input_buffers[& index];
+					self.scalar_node_timeline_tags.insert(index, ir::TimelineTag::None);
+					self.scalar_node_value_tags.insert(index, ir::ValueTag::None);
+					self.scalar_node_spatial_tags.insert(index, buffer_info.spatial_tag);
+					NodeType::Buffer(Buffer{storage_place : * storage_place, static_layout_opt : * static_layout_opt})
 				}
 				_ => panic!("Not a legal argument type for a scheduling funclet")
 			};
@@ -354,6 +367,7 @@ impl<'program> FuncletChecker<'program>
 						}
 						NodeType::JoinPoint => panic!("Cannot drop node #{}", dropped_node_id),
 						NodeType::Fence(_) => panic!("Cannot drop node #{}", dropped_node_id),
+						NodeType::Buffer(_) => (),
 					}
 				}
 				else
@@ -560,9 +574,9 @@ impl<'program> FuncletChecker<'program>
 							(ir::ResourceQueueStage::Submitted, ir::ResourceQueueStage::Encoded),
 							(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Encoded),
 						];
-						if !self.try_transition_slot(* input, ir::Place::Gpu, & input_transitions) || !self.try_transition_slot(* input, ir::Place::Local, &[(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Ready)])
+						if !self.try_transition_slot(* input, ir::Place::Gpu, & input_transitions) && !self.try_transition_slot(* input, ir::Place::Local, &[(ir::ResourceQueueStage::Ready, ir::ResourceQueueStage::Ready)])
 						{
-
+							panic!("No valid transition for input of local encode copy with type: {:?}", self.node_types.get(input))
 						}
 						self.transition_slot(* output, * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Encoded)])
 					}
@@ -656,6 +670,47 @@ impl<'program> FuncletChecker<'program>
 					}
 				}
 			}
+			ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
+			{
+				// Temporary restriction
+				assert_eq!(* place, ir::Place::Gpu);
+				let buffer_spatial_tag = self.scalar_node_spatial_tags[buffer_node_id];
+				assert!(buffer_spatial_tag != ir::SpatialTag::None);
+				
+				if let Some(NodeType::Buffer(Buffer{storage_place, static_layout_opt : Some(static_layout)})) = self.node_types.get_mut(buffer_node_id)
+				{
+					// We might eventually separate storage places and queue places
+					assert_eq!(* storage_place, * place);
+					// To do check alignment compatibility
+					let storage_size = self.program.native_interface.calculate_type_byte_size(* storage_type);
+					let alignment_bits = self.program.native_interface.calculate_type_alignment_bits(* storage_type);
+					let starting_alignment_offset = 1usize << static_layout.alignment_bits;
+					let additional_alignment_offset =
+						if alignment_bits > static_layout.alignment_bits
+						{
+							let alignment_offset = 1usize << alignment_bits;
+							alignment_offset - starting_alignment_offset
+						}
+						else
+						{
+							0usize
+						};
+					let total_byte_size = storage_size + additional_alignment_offset;
+
+					assert!(static_layout.byte_size >= total_byte_size);
+					static_layout.byte_size -= total_byte_size;
+					static_layout.alignment_bits = (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;
+
+					self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Operation{remote_node_id : * operation});
+					self.scalar_node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
+					self.scalar_node_spatial_tags.insert(current_node_id, buffer_spatial_tag);
+					self.node_types.insert(current_node_id, NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : ir::ResourceQueueStage::Bound, queue_place : * place}));
+				}
+				else
+				{
+					panic!("No static buffer at node #{}", buffer_node_id)
+				}
+			}
 			ir::Node::DefaultJoin =>
 			{
 				let mut value_tags = Vec::<ir::ValueTag>::new();
@@ -702,6 +757,7 @@ impl<'program> FuncletChecker<'program>
 					let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
 					let node_spatial_tag = self.scalar_node_spatial_tags[capture_node_id];
 					assert_eq!(node_timeline_tag, ir::TimelineTag::None);
+					panic!("To do: Require that all values with the same spatial tag are also captured");
 					check_value_tag_compatibility_interior(& self.program, node_value_tag, value_tag);
 					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
 					check_spatial_tag_compatibility_interior(& self.program, node_spatial_tag, spatial_tag);
@@ -938,9 +994,125 @@ impl<'program> FuncletChecker<'program>
 					check_spatial_tag_compatibility_interior(& self.program, false_output_spatial_tag, continuation_join_spatial_tags[output_index]);
 				}
 			}
-			ir::TailEdge::AllocFromBuffer {buffer : buffer_node_id, slot_count, success_funclet_id, failure_funclet_id, arguments, continuation_join : continuation_join_node_id} =>
+			ir::TailEdge::DynamicAllocFromBuffer {buffer : buffer_node_id, dynamic_allocation_size_slots : dynamic_allocation_size_node_ids, success_funclet_id, failure_funclet_id, arguments, continuation_join : continuation_join_node_id} =>
 			{
-				
+				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
+
+				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
+				{
+					// Nothing, for now...
+				}
+				else
+				{
+					panic!("Node at #{} is not a join point", continuation_join_node_id)
+				}
+
+				let true_funclet_id = success_funclet_id;
+				let false_funclet_id = failure_funclet_id;
+				let true_funclet = & self.program.funclets[& true_funclet_id];
+				let false_funclet = & self.program.funclets[& false_funclet_id];
+				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
+				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
+
+				let current_value_funclet = & self.program.funclets[& self.value_funclet_id];
+				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
+
+				let buffer_spatial_tag = self.scalar_node_spatial_tags[buffer_node_id];
+				let buffer_storage_place = 
+					if let Some(NodeType::Buffer(Buffer{storage_place, static_layout_opt, ..})) = self.node_types.get_mut(buffer_node_id)
+					{
+						* static_layout_opt = None;
+						* storage_place
+					}
+					else
+					{
+						panic!("")
+					};
+
+				// Temporary restriction
+				assert_eq!(buffer_storage_place, ir::Place::Gpu);
+
+				assert_eq!(self.value_funclet_id, true_funclet_extra.value_funclet_id);
+				assert_eq!(self.value_funclet_id, false_funclet_extra.value_funclet_id);
+
+				assert_eq!(arguments.len() + dynamic_allocation_size_node_ids.len(), true_funclet.input_types.len());
+				assert_eq!(arguments.len(), false_funclet.input_types.len());
+
+				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, true_funclet_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, false_funclet_extra.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, true_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, false_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+
+				// Check these first because they don't take ownership
+				for (allocation_size_slot_index, allocation_size_node_id_opt) in dynamic_allocation_size_node_ids.iter().enumerate()
+				{
+					let input_index = allocation_size_slot_index + arguments.len();
+					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, input_index);
+					check_spatial_tag_compatibility_interior(& self.program, buffer_spatial_tag, true_input_spatial_tag);
+
+					if let Some(NodeType::Slot(Slot{queue_place, queue_stage, storage_type, ..})) = self.node_types.get(allocation_size_node_id_opt)
+					{
+						assert_eq!(* queue_place, ir::Place::Local);
+						assert_eq!(* queue_stage, ir::ResourceQueueStage::Ready);
+						// To do: Check storage type
+					}
+
+					let destination_type_id = true_funclet.input_types[input_index];
+					match & self.program.types[& destination_type_id]
+					{
+						ir::Type::Slot{queue_stage, queue_place, ..} =>
+						{
+							assert_eq!(* queue_place, buffer_storage_place);
+							assert_eq!(* queue_stage, ir::ResourceQueueStage::Bound);
+						}
+						ir::Type::Buffer{storage_place, static_layout_opt} =>
+						{
+							assert_eq!(* storage_place, buffer_storage_place);
+						}
+						_ => panic!("Allocation success funclet input #{} must be a slot or buffer", input_index)
+					}
+				}
+
+				for (argument_index, argument_node_id) in arguments.iter().enumerate()
+				{
+					let node_type = self.node_types.remove(argument_node_id).unwrap();
+					check_slot_type(& self.program, true_funclet.input_types[argument_index], & node_type);
+					check_slot_type(& self.program, false_funclet.input_types[argument_index], & node_type);
+
+					let argument_slot_value_tag = self.scalar_node_value_tags[argument_node_id];
+					let argument_slot_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
+					let argument_slot_spatial_tag = self.scalar_node_spatial_tags[argument_node_id];
+					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, argument_index);
+					let (false_input_value_tag, false_input_timeline_tag, false_input_spatial_tag) = self.get_funclet_input_tags(false_funclet, false_funclet_extra, argument_index);
+
+					check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, true_input_value_tag);
+					check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, false_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, argument_slot_timeline_tag, true_input_timeline_tag);
+					check_timeline_tag_compatibility_interior(& self.program, argument_slot_timeline_tag, false_input_timeline_tag);
+					check_spatial_tag_compatibility_interior(& self.program, argument_slot_spatial_tag, true_input_spatial_tag);
+					check_spatial_tag_compatibility_interior(& self.program, argument_slot_spatial_tag, false_input_spatial_tag);
+				}
+
+				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
+				let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
+				let continuation_join_spatial_tags = & continuation_join_point.input_spatial_tags;
+				assert_eq!(true_funclet.output_types.len(), continuation_join_point.input_types.len());
+				assert_eq!(false_funclet.output_types.len(), continuation_join_point.input_types.len());
+				for (output_index, _) in true_funclet.output_types.iter().enumerate()
+				{
+					assert_eq!(true_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
+					assert_eq!(false_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
+
+					let continuation_input_value_tag = continuation_join_value_tags[output_index];
+					let (true_output_value_tag, true_output_timeline_tag, true_output_spatial_tag) = self.get_funclet_output_tags(true_funclet, true_funclet_extra, output_index);
+					let (false_output_value_tag, false_output_timeline_tag, false_output_spatial_tag) = self.get_funclet_output_tags(false_funclet, false_funclet_extra, output_index);
+					check_value_tag_compatibility_interior(& self.program, true_output_value_tag, continuation_input_value_tag);
+					check_value_tag_compatibility_interior(& self.program, false_output_value_tag, continuation_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, true_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+					check_timeline_tag_compatibility_interior(& self.program, false_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+					check_spatial_tag_compatibility_interior(& self.program, true_output_spatial_tag, continuation_join_spatial_tags[output_index]);
+					check_spatial_tag_compatibility_interior(& self.program, false_output_spatial_tag, continuation_join_spatial_tags[output_index]);
+				}
 			}
 			_ => panic!("Unimplemented")
 		}
@@ -962,6 +1134,7 @@ impl<'program> FuncletChecker<'program>
 				}
 				NodeType::JoinPoint => panic!("Unused join at node #{}", node_id),
 				NodeType::Fence(_) => panic!("Unused fence at node #{}", node_id),
+				NodeType::Buffer(_) => (),
 			}
 		}
 	}
