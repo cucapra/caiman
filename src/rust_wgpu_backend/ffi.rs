@@ -23,11 +23,13 @@ pub enum Type
 	U16,
 	U32,
 	U64,
+	USize,
 	I8,
 	I16,
 	I32,
 	I64,
 	Array { element_type : TypeId, length : usize },
+	ErasedLengthArray { element_type : TypeId },
 	Struct { fields : Box<[StructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
 	Tuple { fields : Box<[TypeId]> },
 
@@ -36,6 +38,9 @@ pub enum Type
 	MutRef { element_type : TypeId },
 	ConstSlice { element_type : TypeId },
 	MutSlice { element_type : TypeId },
+	GpuBufferRef { element_type : TypeId },
+	GpuBufferSlice { element_type : TypeId },
+	GpuBufferAllocator,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -127,6 +132,7 @@ impl NativeInterface
 			Type::U16 => TypeBindingInfo { size : std::mem::size_of::<u16>(), alignment : std::mem::align_of::<u16>() },
 			Type::U32 => TypeBindingInfo { size : std::mem::size_of::<u32>(), alignment : std::mem::align_of::<u32>() },
 			Type::U64 => TypeBindingInfo { size : std::mem::size_of::<u64>(), alignment : std::mem::align_of::<u64>() },
+			Type::USize => TypeBindingInfo { size : std::mem::size_of::<usize>(), alignment : std::mem::align_of::<usize>() },
 			Type::I8 => TypeBindingInfo { size : std::mem::size_of::<i8>(), alignment : std::mem::align_of::<i8>() },
 			Type::I16 => TypeBindingInfo { size : std::mem::size_of::<i16>(), alignment : std::mem::align_of::<i16>() },
 			Type::I32 => TypeBindingInfo { size : std::mem::size_of::<i32>(), alignment : std::mem::align_of::<i32>() },

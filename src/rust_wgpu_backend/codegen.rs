@@ -243,18 +243,6 @@ impl FuncletScopedState
 	}
 }
 
-fn get_slot_type_storage_type(program : & ir::Program, type_id : ir::TypeId) -> ir::ffi::TypeId
-{
-	match & program.types[& type_id]
-	{
-		ir::Type::Slot { storage_type, queue_stage : _, queue_place : _ } =>
-		{
-			* storage_type
-		}
-		_ => panic!("Not a slot type")
-	}
-}
-
 fn check_storage_type_implements_value_type(program : & ir::Program, storage_type_id : ir::ffi::TypeId, value_type_id : ir::TypeId)
 {
 	let storage_type = & program.native_interface.types[& storage_type_id.0];
@@ -287,19 +275,66 @@ pub struct CodeGen<'program>
 {
 	program : & 'program ir::Program,
 	code_generator : CodeGenerator<'program>,
-	print_codegen_debug_info : bool
+	print_codegen_debug_info : bool,
+	generated_local_slot_ffi_type_map : HashMap<ir::TypeId, ir::ffi::TypeId>,
+	default_usize_ffi_type_id : ir::ffi::TypeId,
+	default_u64_ffi_type_id : ir::ffi::TypeId,
 }
 
 impl<'program> CodeGen<'program>
 {
 	pub fn new(program : & 'program ir::Program) -> Self
 	{
-		Self { program : & program, code_generator : CodeGenerator::new(& program.native_interface), print_codegen_debug_info : false }
+		let mut code_generator = CodeGenerator::new(& program.native_interface);
+		let default_usize_ffi_type_id = code_generator.create_ffi_type(ir::ffi::Type::USize);
+		let default_u64_ffi_type_id = code_generator.create_ffi_type(ir::ffi::Type::U64);
+		Self { program : & program, code_generator, print_codegen_debug_info : false, generated_local_slot_ffi_type_map : HashMap::new(), default_usize_ffi_type_id, default_u64_ffi_type_id }
 	}
 
 	pub fn set_print_codgen_debug_info(&mut self, to : bool)
 	{
 		self.print_codegen_debug_info = to;
+	}
+
+	// The (rust) ffi type we need to refer to the data from a cpu function
+	fn get_cpu_useable_type(&mut self, type_id : ir::TypeId) -> ir::ffi::TypeId
+	{
+		if let Some(ffi_type_id) = self.generated_local_slot_ffi_type_map.get(& type_id)
+		{
+			return * ffi_type_id;
+		}
+
+		let ffi_type_id = match & self.program.types[& type_id]
+		{
+			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Local } =>
+			{
+				// Should eventually be a MutRef
+				* storage_type
+			}
+			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Gpu} =>
+			{
+				match & self.program.native_interface.types[& storage_type.0]
+				{
+					ir::ffi::Type::ErasedLengthArray{element_type} =>
+					{
+						self.code_generator.create_ffi_type(ir::ffi::Type::GpuBufferSlice{ element_type : * storage_type })
+					}
+					_ => // To do: Should be more restrictive than this...
+					{
+						self.code_generator.create_ffi_type(ir::ffi::Type::GpuBufferRef{ element_type : * storage_type })
+					}
+				}
+			}
+			ir::Type::Buffer{ storage_place : ir::Place::Gpu, .. } =>
+			{
+				self.code_generator.create_ffi_type(ir::ffi::Type::GpuBufferAllocator)
+			}
+			_ => panic!("Not a valid type for referencing from the CPU")
+		};
+
+		self.generated_local_slot_ffi_type_map.insert(type_id, ffi_type_id);
+
+		ffi_type_id
 	}
 
 	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, funclet_checker : &mut type_system::scheduling::FuncletChecker, node : & ir::Node, input_slot_ids : & [SlotId], output_slot_ids : & [SlotId])
@@ -471,8 +506,8 @@ impl<'program> CodeGen<'program>
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 		let funclet_extra = & self.program.scheduling_funclet_extras[& funclet_id];
 
-		let input_types = funclet.input_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
-		let output_types = funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		let input_types = funclet.input_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		let output_types = funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
 		let argument_variable_ids = self.code_generator.begin_funclet(funclet_id, & input_types, & output_types);
 
 		let mut placement_state = PlacementState::new();
@@ -554,7 +589,7 @@ impl<'program> CodeGen<'program>
 								let true_funclet = & self.program.funclets[& true_funclet_id];
 								let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
 								//true_funclet_extra.input_slots[& output_index].value_tag
-								let output_types = true_funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+								let output_types = true_funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
 								let output_var_ids = self.code_generator.begin_if_else(condition_var_id, & output_types);
 								let mut output_node_results = Vec::<NodeResult>::new();
 								for (output_index, output_type) in true_funclet.output_types.iter().enumerate()
@@ -688,7 +723,9 @@ impl<'program> CodeGen<'program>
 						ir::Place::Local => (),
 						ir::Place::Gpu =>
 						{
-							let var_id = self.code_generator.build_create_buffer(* storage_type);
+							let buffer_var_id = self.code_generator.build_create_buffer(* storage_type);
+							let offset_var_id = self.code_generator.build_constant_unsigned_integer(0, self.default_u64_ffi_type_id);
+							let var_id = self.code_generator.build_buffer_ref(buffer_var_id, offset_var_id, * storage_type);
 							placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Bound, var_id);
 						}
 					}
@@ -1151,8 +1188,8 @@ impl<'program> CodeGen<'program>
 			}
 		}
 
-		let input_types = entry_funclet.input_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
-		let output_types = entry_funclet.output_types.iter().map(|slot_id| get_slot_type_storage_type(& self.program, * slot_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		let input_types = entry_funclet.input_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+		let output_types = entry_funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
 		self.code_generator.emit_pipeline_entry_point(entry_funclet_id, & input_types, & output_types);
 		
 		/*match & entry_funclet.tail_edge
