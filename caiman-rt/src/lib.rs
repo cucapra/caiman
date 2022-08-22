@@ -62,7 +62,13 @@ pub struct TypeLayout
 	pub alignment : usize
 }
 
-pub struct GpuBufferAllocator<'buffer>
+struct GpuBufferAllocatorSnapshot
+{
+	base_address : usize,
+	size : usize
+}
+
+struct GpuBufferAllocator<'buffer>
 {
 	pub buffer : & 'buffer wgpu::Buffer,
 	pub base_address : usize,
@@ -160,6 +166,50 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 		}
 		
 		return None;
+	}
+
+	// A very horribly implemented check
+	pub fn test_suballocate_many(&mut self, layouts : &[TypeLayout], element_counts : &[Option<usize>]) -> usize
+	{
+		let starting_snapshot = self.snapshot();
+		let mut success_count = 0usize;
+
+		for (i, layout) in layouts.iter().enumerate()
+		{
+			let can_allocate =
+				if let Some(element_count) = element_counts[i]
+				{
+					let (byte_size, overflowed) = layout.byte_size.overflowing_mul(element_count);
+					!overflowed && self.suballocate(byte_size, layout.alignment).is_some()
+				}
+				else
+				{
+					self.suballocate(layout.byte_size, layout.alignment).is_some()
+				};
+
+			if ! can_allocate
+			{
+				self.restore(starting_snapshot);
+				return success_count;
+			}
+
+			success_count += 1usize;
+		}
+
+		self.restore(starting_snapshot);
+
+		success_count
+	}
+
+	fn snapshot(&mut self) -> GpuBufferAllocatorSnapshot
+	{
+		GpuBufferAllocatorSnapshot{base_address : self.base_address, size : self.size}
+	}
+
+	fn restore(&mut self, snapshot : GpuBufferAllocatorSnapshot)
+	{
+		self.base_address = snapshot.base_address;
+		self.size = snapshot.size;
 	}
 }
 

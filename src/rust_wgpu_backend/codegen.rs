@@ -28,6 +28,7 @@ enum NodeResult
 	Slot { slot_id : SlotId, queue_place : ir::Place, storage_type : ir::ffi::TypeId },
 	Fence { place : ir::Place, fence_id : code_generator::FenceId },
 	Join{ join_point_id : JoinPointId},
+	Buffer { var_id : VarId }
 }
 
 impl NodeResult
@@ -133,6 +134,7 @@ impl PlacementState
 		match node_result
 		{
 			NodeResult::Slot{slot_id, ..} => self.get_slot_var_id(* slot_id),
+			NodeResult::Buffer{var_id, ..} => Some(* var_id),
 			_ => None
 		}
 	}
@@ -159,7 +161,8 @@ impl PlacementState
 enum SplitPoint
 {
 	Next { return_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
-	Select { return_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> }
+	Select { return_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
+	DynAlloc { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[SlotId]>, continuation_join_point_id_opt : Option<JoinPointId>}
 }
 
 #[derive(Debug)]
@@ -549,6 +552,9 @@ impl<'program> CodeGen<'program>
 			SelectIf { branch_input_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
 			SelectElse { output_node_results : Box<[NodeResult]>, branch_input_node_results : Box<[NodeResult]>, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
 			SelectEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
+			DynAllocIf { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[SlotId]>, continuation_join_point_id_opt : Option<JoinPointId>},
+			DynAllocElse { output_node_results : Box<[NodeResult]>, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId>},
+			DynAllocEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
 		}
 
 		let mut traversal_state_stack = Vec::<TraversalState>::new();
@@ -571,8 +577,14 @@ impl<'program> CodeGen<'program>
 					}
 					SplitPoint::Select{return_node_results, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt} =>
 					{
-						//assert!(default_join_point_id_opt.is_none());
+						assert!(default_join_point_id_opt.is_none());
 						traversal_state_stack.push(TraversalState::SelectIf{ branch_input_node_results : return_node_results, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt });
+						vec![].into_boxed_slice()
+					}
+					SplitPoint::DynAlloc { buffer_node_result, success_funclet_id, failure_funclet_id, argument_node_results, dynamic_allocation_size_slot_ids, continuation_join_point_id_opt} =>
+					{
+						assert!(default_join_point_id_opt.is_none());
+						traversal_state_stack.push(TraversalState::DynAllocIf{ buffer_node_result, success_funclet_id, failure_funclet_id, argument_node_results, dynamic_allocation_size_slot_ids, continuation_join_point_id_opt });
 						vec![].into_boxed_slice()
 					}
 				};
@@ -603,6 +615,7 @@ impl<'program> CodeGen<'program>
 										panic!("Not a slot")
 									};
 									let slot_id = placement_state.scheduling_state.insert_hacked_slot(storage_type, queue_place, queue_stage);
+									placement_state.slot_variable_ids.insert(slot_id, output_var_ids[output_index]);
 									output_node_results.push(NodeResult::Slot{slot_id, queue_place, storage_type});
 								}
 								current_funclet_id_opt = Some(true_funclet_id);
@@ -617,6 +630,88 @@ impl<'program> CodeGen<'program>
 								traversal_state_stack.push(TraversalState::SelectEnd{output_node_results, continuation_join_point_id_opt});
 							}
 							TraversalState::SelectEnd { output_node_results, continuation_join_point_id_opt } =>
+							{
+								self.code_generator.end_else(& placement_state.get_node_result_var_ids(& current_output_node_results).unwrap());
+								default_join_point_id_opt = continuation_join_point_id_opt;
+								current_output_node_results = output_node_results;
+							}
+							TraversalState::DynAllocIf { buffer_node_result, success_funclet_id, failure_funclet_id, argument_node_results, dynamic_allocation_size_slot_ids, continuation_join_point_id_opt} =>
+							{
+								let success_funclet = & self.program.funclets[& success_funclet_id];
+								let success_funclet_extra = & self.program.scheduling_funclet_extras[& success_funclet_id];
+
+								let (buffer_var_id, condition_var_id) = 
+									if let NodeResult::Buffer{var_id : buffer_var_id, ..} = buffer_node_result
+									{
+										let pairs = dynamic_allocation_size_slot_ids.iter().enumerate().map(|(index, slot_id)| (self.get_cpu_useable_type(success_funclet.input_types[argument_node_results.len() + index]), placement_state.get_slot_var_id(* slot_id).unwrap())).collect::<Box<[(ir::ffi::TypeId, VarId)]>>();
+										(buffer_var_id, self.code_generator.build_test_suballocate_many(buffer_var_id, & pairs))
+									}
+									else
+									{
+										panic!("Not a buffer")
+									};
+
+								let output_types = success_funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+								let output_var_ids = self.code_generator.begin_if_else(condition_var_id, & output_types);
+								let mut success_argument_node_results = Vec::<NodeResult>::new();
+								success_argument_node_results.extend_from_slice(& argument_node_results);
+								for (index, slot_id) in dynamic_allocation_size_slot_ids.iter().enumerate()
+								{
+									let allocation_size_var_id = placement_state.get_slot_var_id(* slot_id).unwrap();
+									let node_result = match & self.program.types[& success_funclet.input_types[argument_node_results.len() + index]]
+									{
+										ir::Type::Slot{queue_stage, queue_place, storage_type} =>
+										{
+											//
+											let var_id = match & self.program.native_interface.types[& storage_type.0]
+											{
+												ir::ffi::Type::ErasedLengthArray{element_type} =>
+												{
+													self.code_generator.build_buffer_suballocate_slice(buffer_var_id, * element_type, allocation_size_var_id)
+												}
+												_ => panic!("Must be an erased length array")
+											};
+											let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * queue_place, * queue_stage);
+											placement_state.slot_variable_ids.insert(slot_id, var_id);
+											NodeResult::Slot{queue_place : * queue_place, storage_type : * storage_type, slot_id}
+										}
+										ir::Type::Buffer{storage_place, static_layout_opt} =>
+										{
+											panic!("To do")
+											//NodeResult::Buffer{var_id}
+										}
+										_ => panic!("Wrong type for dynamic slot")
+									};
+									success_argument_node_results.push(node_result);
+								}
+
+								let mut output_node_results = Vec::<NodeResult>::new();
+								for (output_index, output_type) in success_funclet.output_types.iter().enumerate()
+								{
+									match & self.program.types[output_type]
+									{
+										ir::Type::Slot{storage_type, queue_stage, queue_place} => 
+										{
+											let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * queue_place, * queue_stage);
+											placement_state.slot_variable_ids.insert(slot_id, output_var_ids[output_index]);
+											output_node_results.push(NodeResult::Slot{slot_id, queue_place : * queue_place, storage_type : * storage_type});
+										}
+										_ => panic!("Unimplemented")
+									}
+								}
+
+								current_funclet_id_opt = Some(success_funclet_id);
+								current_output_node_results = success_argument_node_results.into_boxed_slice();
+								traversal_state_stack.push(TraversalState::DynAllocElse{output_node_results : output_node_results.into_boxed_slice(), argument_node_results, failure_funclet_id, continuation_join_point_id_opt});
+							}
+							TraversalState::DynAllocElse { output_node_results, failure_funclet_id, argument_node_results, continuation_join_point_id_opt} =>
+							{
+								self.code_generator.end_if_begin_else(& placement_state.get_node_result_var_ids(& current_output_node_results).unwrap());
+								current_funclet_id_opt = Some(failure_funclet_id);
+								current_output_node_results = argument_node_results;
+								traversal_state_stack.push(TraversalState::SelectEnd{output_node_results, continuation_join_point_id_opt});
+							}
+							TraversalState::DynAllocEnd { output_node_results, continuation_join_point_id_opt } =>
 							{
 								self.code_generator.end_else(& placement_state.get_node_result_var_ids(& current_output_node_results).unwrap());
 								default_join_point_id_opt = continuation_join_point_id_opt;
@@ -874,7 +969,21 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
 				{
-					
+					assert_eq!(* place, ir::Place::Gpu);
+					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
+
+					if let Some(NodeResult::Buffer{var_id}) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
+					{
+						let allocation_var_id = self.code_generator.build_buffer_suballocate_ref(* var_id, * storage_type);
+	
+						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * place, ir::ResourceQueueStage::Bound);
+						funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id, queue_place : * place, storage_type : * storage_type});
+						placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Bound, allocation_var_id);
+					}
+					else
+					{
+						panic!("Not a buffer")
+					}
 				}
 				ir::Node::DefaultJoin =>
 				{
@@ -1009,7 +1118,7 @@ impl<'program> CodeGen<'program>
 
 				let condition_slot_id = funclet_scoped_state.get_node_slot_id(* condition_slot_node_id).unwrap();
 
-				let mut continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
+				let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
 				let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
 
 				assert_eq!(callee_funclet_ids.len(), 2);
@@ -1041,16 +1150,9 @@ impl<'program> CodeGen<'program>
 			}
 			ir::TailEdge::DynamicAllocFromBuffer {buffer : buffer_node_id, dynamic_allocation_size_slots, success_funclet_id, failure_funclet_id, arguments, continuation_join : continuation_join_node_id} =>
 			{
-				// To do: Yet more type checks in every other tail edge + join...
-				// Probably need to clean things up soon...
-				// Value/fence checks are uninteresting because it's a space split and not a time or value split, so we could share and avoid the product explosion
+				let buffer_node_result = funclet_scoped_state.get_node_result(* buffer_node_id).unwrap().clone();
 
-				/*let buffer_node_result = funclet_scoped_state.get_node_result(* buffer_node_id);
-				//let (buffer_storage_place) = if let NodeResult::Buffer{} = {} else {};
-				let buffer_storage_place = ir::Place::Gpu; // not correct
-				panic!("Unimplemented");
-
-				let mut continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
+				let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
 				let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
 
 				let true_funclet_id = success_funclet_id;
@@ -1063,102 +1165,34 @@ impl<'program> CodeGen<'program>
 				assert_eq!(funclet_scoped_state.value_funclet_id, true_funclet_extra.value_funclet_id);
 				assert_eq!(funclet_scoped_state.value_funclet_id, false_funclet_extra.value_funclet_id);
 
-				assert_eq!(arguments.len(), true_funclet.input_types.len() + slot_count);
+				assert_eq!(arguments.len() + dynamic_allocation_size_slots.len(), true_funclet.input_types.len());
 				assert_eq!(arguments.len(), false_funclet.input_types.len());
 
-				let mut true_entry_timeline_enforcer = TimelineEnforcer::new();
-				let mut false_entry_timeline_enforcer = TimelineEnforcer::new();
+				// Do these first before they move
+				let mut dynamic_allocation_size_slot_ids = Vec::<SlotId>::new();
+				for (allocation_index, allocation_size_node_id) in dynamic_allocation_size_slots.iter().enumerate()
+				{
+					let node_result = funclet_scoped_state.get_node_result(* allocation_size_node_id).unwrap();
+					if let NodeResult::Slot{slot_id, ..} = node_result
+					{
+						dynamic_allocation_size_slot_ids.push(* slot_id);
+					}
+					else
+					{
+						panic!("Allocation size is not a slot")
+					}
+				}
+
 				let mut argument_node_results = Vec::<NodeResult>::new();
 				for (argument_index, argument_node_id) in arguments.iter().enumerate()
 				{
 					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
-					match node_result
-					{
-						NodeResult::Slot{slot_id} =>
-						{
-							assert_eq!(true_funclet.input_types[argument_index], false_funclet.input_types[argument_index]);
-							let place = placement_state.scheduling_state.get_slot_queue_place(slot_id);
-							check_slot_type(& self.program, true_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							check_slot_type(& self.program, false_funclet.input_types[argument_index], place, placement_state.scheduling_state.get_slot_queue_stage(slot_id), None);
-							//assert_eq!(true_funclet_extra.input_slots[& argument_index], false_funclet.input_types[argument_index]);
-							let argument_slot_value_tag = funclet_checker.scalar_node_value_tags[argument_node_id];
-							let true_slot_info = & true_funclet_extra.input_slots[& argument_index];
-							let true_input_value_tag = true_slot_info.value_tag;
-							let false_slot_info = & false_funclet_extra.input_slots[& argument_index];
-							let false_input_value_tag = false_slot_info.value_tag;
-							check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, true_input_value_tag);
-							check_value_tag_compatibility_interior(& self.program, argument_slot_value_tag, false_input_value_tag);
-							let timestamp = placement_state.scheduling_state.get_slot_queue_timestamp(slot_id);
-							//true_entry_timeline_enforcer.record_slot_use(place, timestamp, true_slot_info.external_timestamp_id_opt);
-							//false_entry_timeline_enforcer.record_slot_use(place, timestamp, false_slot_info.external_timestamp_id_opt);
-						}
-						NodeResult::Fence{place, timestamp} =>
-						{
-							//true_entry_timeline_enforcer.record_fence_use(place, timestamp, true_funclet_extra.input_fences[& argument_index].external_timestamp_id);
-							//false_entry_timeline_enforcer.record_fence_use(place, timestamp, false_funclet_extra.input_fences[& argument_index].external_timestamp_id);
-						}
-						_ => panic!("Unimplemented")
-					}
-
 					argument_node_results.push(node_result);
 				}
 
-				for input_index in arguments.len() .. arguments.len() + slot_count
-				{
-					let input_type = true_funclet.input_types[input_index];
-					match & self.program.types[& input_type]
-					{
-						ir::Type::Slot{storage_type, queue_stage, queue_place} =>
-						{
-							assert_eq!(* queue_stage, ir::ResourceQueueStage::Bound);
-							assert_eq!(* queue_place, buffer_storage_place);
-						}
-						_ => panic!("Must be a slot")
-					}
-				}
-
-				let continuation_join_value_tags = & funclet_checker.join_node_value_tags[continuation_join_node_id];
-				let mut true_exit_timeline_enforcer = ExternalTimelineEnforcer::new();
-				let mut false_exit_timeline_enforcer = ExternalTimelineEnforcer::new();
-				let continuation_input_count = continuation_join_point.get_input_count(& self.program);
-				assert_eq!(continuation_input_count, true_funclet.output_types.len());
-				assert_eq!(continuation_input_count, false_funclet.output_types.len());
-				for output_index in 0 .. continuation_input_count
-				{
-					assert_eq!(true_funclet.output_types[output_index], false_funclet.output_types[output_index]);
-					let continuation_input_type = continuation_join_point.get_scheduling_input_type(& self.program, output_index);
-					assert_eq!(true_funclet.output_types[output_index], continuation_input_type);
-
-					match & self.program.types[& output_index]
-					{
-						ir::Type::Slot{queue_place, ..} =>
-						{
-							let continuation_input_value_tag = continuation_join_value_tags[output_index];
-							let true_slot_info = & true_funclet_extra.output_slots[& output_index];
-							let false_slot_info = & false_funclet_extra.output_slots[& output_index];
-							let true_output_value_tag = true_slot_info.value_tag;
-							let false_output_value_tag = false_slot_info.value_tag;
-
-							let external_timestamp_id_opt = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, output_index);
-							//true_exit_timeline_enforcer.record_slot_use(* queue_place, true_slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
-							//false_exit_timeline_enforcer.record_slot_use(* queue_place, false_slot_info.external_timestamp_id_opt, external_timestamp_id_opt);
-
-							check_value_tag_compatibility_interior(& self.program, true_output_value_tag, continuation_input_value_tag);
-							check_value_tag_compatibility_interior(& self.program, false_output_value_tag, continuation_input_value_tag);
-						}
-						ir::Type::Fence{queue_place} =>
-						{
-							let external_timestamp_id = continuation_join_point.get_scheduling_input_external_timestamp_id(& self.program, output_index).unwrap();
-							//true_exit_timeline_enforcer.record_fence_use(* queue_place, true_funclet_extra.output_fences[& output_index].external_timestamp_id, external_timestamp_id);
-							//false_exit_timeline_enforcer.record_fence_use(* queue_place, false_funclet_extra.output_fences[& output_index].external_timestamp_id, external_timestamp_id);
-						}
-						_ => panic!("Unimplemented")
-					}
-				}
-
 				assert!(default_join_point_id_opt.is_none());
-				//SplitPoint::Select{return_node_results : argument_node_results.into_boxed_slice(), condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt : Some(continuation_join_point_id)}*/
-				panic!("Unimplemented")
+				SplitPoint::DynAlloc{buffer_node_result, success_funclet_id : * success_funclet_id, failure_funclet_id : * failure_funclet_id, argument_node_results : argument_node_results.into_boxed_slice(), dynamic_allocation_size_slot_ids : dynamic_allocation_size_slot_ids.into_boxed_slice(), continuation_join_point_id_opt : Some(continuation_join_point_id)}
+				//panic!("Unimplemented")
 			}
 			_ => panic!("Umimplemented")
 		};

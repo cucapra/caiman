@@ -1466,6 +1466,42 @@ impl<'program> CodeGenerator<'program>
 		variable_id
 	}
 
+	pub fn build_buffer_suballocate_ref(&mut self, buffer_allocator_var_id : VarId, type_id : ffi::TypeId) -> VarId
+	{
+		let variable_id = self.variable_tracker.create_local_data(type_id);
+		let type_binding_info = self.get_type_binding_info(type_id);
+		let type_name = self.get_type_name(type_id);
+		write!(self.code_writer, "let {} = {}.suballocate_ref::<'_, {}>().unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name);
+		variable_id
+	}
+
+	pub fn build_buffer_suballocate_slice(&mut self, buffer_allocator_var_id : VarId, type_id : ffi::TypeId, count_var_id : VarId) -> VarId
+	{
+		let variable_id = self.variable_tracker.create_local_data(type_id);
+		let type_binding_info = self.get_type_binding_info(type_id);
+		let type_name = self.get_type_name(type_id);
+		write!(self.code_writer, "let {} = {}.suballocate_slice::<'_, {}>({}).unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name, self.variable_tracker.get_var_name(count_var_id));
+		variable_id
+	}
+
+	pub fn build_test_suballocate_many(&mut self, buffer_allocator_var_id : VarId, type_id_and_count_var_id_pairs : &[(ffi::TypeId, VarId)] ) -> VarId
+	{
+		let mut layouts_string = String::from("");
+		let mut element_counts_string = String::from("");
+
+		for (type_id, count_var_id) in type_id_and_count_var_id_pairs.iter()
+		{
+			let type_binding_info = self.get_type_binding_info(* type_id);
+			write!(layouts_string, "caiman_rt::TypeLayout{{byte_size : {}, alignment : {}}}, ", type_binding_info.size, type_binding_info.alignment);
+			write!(element_counts_string, "Some({}), ", self.variable_tracker.get_var_name(* count_var_id));
+		}
+
+		let success_var_id = self.variable_tracker.generate();
+		write!(self.code_writer, "let {} = {}.test_suballocate_many(&[{}], &[{}]);\n", self.variable_tracker.get_var_name(success_var_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), layouts_string, element_counts_string);
+		
+		success_var_id
+	}
+
 	/*fn encode_copy_cpu_from_gpu(&mut self, destination_var : usize, source_var : usize)
 	{
 		
