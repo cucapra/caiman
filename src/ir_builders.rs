@@ -99,7 +99,7 @@ impl FuncletBuilder
 				}
 				TailEdge::Return{return_values : new_return_values.into_boxed_slice()}
 			}
-			TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
+			/*TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
 				let mut new_captured_arguments = Vec::<NodeId>::new();
 				for value in captured_arguments.iter()
@@ -114,7 +114,7 @@ impl FuncletBuilder
 				}
 
 				TailEdge::Yield { funclet_ids : funclet_ids.clone(), captured_arguments : new_captured_arguments.into_boxed_slice(), return_values : new_return_values.into_boxed_slice() }
-			}
+			}*/
 			_ => panic!("Umimplemented tail edge {:?}", old_tail_edge)
 		};
 		self.tail_edge = Some(tail_edge);

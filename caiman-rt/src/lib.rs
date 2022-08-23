@@ -41,16 +41,16 @@ pub struct TypeLayout
 	pub alignment : usize
 }
 
-pub struct GpuBufferAllocator<'buffer>
+#[derive(Clone)]
+struct AbstractAllocator
 {
-	pub buffer : & 'buffer wgpu::Buffer,
-	pub base_address : usize,
-	pub size : usize
+	base_address : usize,
+	size : usize
 }
 
-impl<'buffer> GpuBufferAllocator<'buffer>
+impl AbstractAllocator
 {
-	fn suballocate(&mut self, byte_size : usize, alignment : usize) -> Option<wgpu::BufferAddress>
+	fn suballocate(&mut self, byte_size : usize, alignment : usize) -> Option<usize>
 	{
 		if byte_size > self.size
 		{
@@ -95,37 +95,19 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 			return None;
 		}
 
-		let start_address_opt : Option<wgpu::BufferAddress> = start_address.try_into().ok();
-		if start_address_opt.is_none()
-		{
-			return None;
-		}
-
 		self.size -= start_address - self.base_address + byte_size;
 		self.base_address = start_address + byte_size;
 
-		start_address_opt
+		Some(start_address)
 	}
 
-	pub fn suballocate_ref<T : Sized>(&mut self, type_layout : & TypeLayout) -> Option<GpuBufferRef<'buffer, T>>
+	fn suballocate_erased_ref(&mut self, type_layout : & TypeLayout) -> Option<usize>
 	{
-		// Need to check that layout (generated at caiman compile time) agrees with the layout at rust compile time
-		assert_eq!(type_layout.byte_size, std::mem::size_of::<T>());
-		assert_eq!(type_layout.alignment, std::mem::align_of::<T>());
-
-		if let Some(starting_address) = self.suballocate(type_layout.byte_size, type_layout.alignment)
-		{
-			return Some(GpuBufferRef::new(self.buffer, starting_address));
-		}
-
-		return None;
+		self.suballocate(type_layout.byte_size, type_layout.alignment)
 	}
 
-	pub fn suballocate_slice<T : Sized>(&mut self, element_type_layout : & TypeLayout, count : usize) -> Option<GpuBufferSlice<'buffer, T>>
+	fn suballocate_erased_slice(&mut self, element_type_layout : & TypeLayout, count : usize) -> Option<(usize, usize)>
 	{
-		// Need to check that layout (generated at caiman compile time) agrees with the layout at rust compile time
-		assert_eq!(element_type_layout.byte_size, std::mem::size_of::<T>());
-		assert_eq!(element_type_layout.alignment, std::mem::align_of::<T>());
 		let (byte_size, overflowed) = element_type_layout.byte_size.overflowing_mul(count);
 
 		if overflowed
@@ -133,9 +115,88 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 			return None;
 		}
 
-		if let Some(starting_address) = self.suballocate(byte_size, element_type_layout.alignment)
+		self.suballocate(byte_size, element_type_layout.alignment).map(|address| (address, byte_size))
+	}
+
+	fn type_layout_of<T : Sized>() -> TypeLayout
+	{
+		TypeLayout{byte_size : std::mem::size_of::<T>(), alignment : std::mem::align_of::<T>()}
+	}
+
+	fn suballocate_ref<T : Sized>(&mut self) -> Option<usize>
+	{
+		self.suballocate_erased_ref(& Self::type_layout_of::<T>())
+	}
+
+	fn suballocate_slice<T : Sized>(&mut self, count : usize) -> Option<(usize, usize)>
+	{
+		return self.suballocate_erased_slice(& Self::type_layout_of::<T>(), count);
+	}
+}
+
+pub struct CpuBufferAllocator<'buffer>
+{
+	bytes : & 'buffer [u8],
+	abstract_allocator : AbstractAllocator
+}
+
+impl<'buffer> CpuBufferAllocator<'buffer>
+{
+	pub fn suballocate_ref<T : Sized>(&mut self) -> Option<& 'buffer mut std::mem::MaybeUninit<T>>
+	{
+		if let Some(starting_address) = self.abstract_allocator.suballocate_ref::<T>()
 		{
-			return Some(GpuBufferSlice::new(self.buffer, starting_address, Some(std::num::NonZeroU64::new(byte_size.try_into().unwrap()).unwrap())));
+			return unsafe
+			{
+				let bytes_pointer = std::mem::transmute::<& u8, * mut u8>(& self.bytes[starting_address]);
+				//let allocation_bytes_pointer = bytes_pointer.offset(starting_address);
+				Some(std::mem::transmute::<* mut u8, & 'buffer mut std::mem::MaybeUninit<T>>(bytes_pointer))
+			}
+		}
+
+		return None;
+	}
+
+	pub fn suballocate_slice<T : Sized>(&mut self, count : usize) -> Option<& 'buffer mut [std::mem::MaybeUninit<T>]>
+	{
+		if let Some((starting_address, byte_size)) = self.abstract_allocator.suballocate_slice::<T>(count)
+		{
+			return unsafe
+			{
+				let bytes_pointer = std::mem::transmute::<& u8, * mut u8>(& self.bytes[starting_address]);
+				//let allocation_bytes_pointer = bytes_pointer.offset(starting_address);
+				let allocation_base_pointer = std::mem::transmute::<* mut u8, * mut std::mem::MaybeUninit<T>>(bytes_pointer);
+				Some(std::slice::from_raw_parts_mut::<'buffer, std::mem::MaybeUninit<T>>(allocation_base_pointer, count))
+			}
+		}
+
+		return None;
+	}
+}
+
+pub struct GpuBufferAllocator<'buffer>
+{
+	buffer : & 'buffer wgpu::Buffer,
+	abstract_allocator : AbstractAllocator
+}
+
+impl<'buffer> GpuBufferAllocator<'buffer>
+{
+	pub fn suballocate_ref<T : Sized>(&mut self) -> Option<GpuBufferRef<'buffer, T>>
+	{
+		if let Some(starting_address) = self.abstract_allocator.suballocate_ref::<T>()
+		{
+			return Some(GpuBufferRef::new(self.buffer, starting_address.try_into().unwrap()));
+		}
+
+		return None;
+	}
+
+	pub fn suballocate_slice<T : Sized>(&mut self, count : usize) -> Option<GpuBufferSlice<'buffer, T>>
+	{
+		if let Some((starting_address, byte_size)) = self.abstract_allocator.suballocate_slice::<T>(count)
+		{
+			return Some(GpuBufferSlice::new(self.buffer, starting_address.try_into().unwrap(), Some(std::num::NonZeroU64::new(byte_size.try_into().unwrap()).unwrap())));
 		}
 		
 		return None;
@@ -144,7 +205,7 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 	// A very horribly implemented check
 	pub fn test_suballocate_many(& self, layouts : &[TypeLayout], element_counts : &[Option<usize>]) -> usize
 	{
-		let mut self_copy = Self{buffer : self.buffer, base_address : self.base_address, size : self.size};
+		let mut abstract_allocator = self.abstract_allocator.clone();
 
 		let mut success_count = 0usize;
 
@@ -153,12 +214,11 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 			let can_allocate =
 				if let Some(element_count) = element_counts[i]
 				{
-					let (byte_size, overflowed) = layout.byte_size.overflowing_mul(element_count);
-					!overflowed && self_copy.suballocate(byte_size, layout.alignment).is_some()
+					abstract_allocator.suballocate_erased_slice(layout, element_count).is_some()
 				}
 				else
 				{
-					self_copy.suballocate(layout.byte_size, layout.alignment).is_some()
+					abstract_allocator.suballocate_erased_ref(layout).is_some()
 				};
 
 			if ! can_allocate

@@ -1486,7 +1486,7 @@ impl<'program> CodeGenerator<'program>
 		let variable_id = self.variable_tracker.create_local_data(type_id);
 		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
-		write!(self.code_writer, "let {} = {}.suballocate_ref::<'callee, {}>(& caiman_rt::TypeLayout{{byte_size : {}, alignment : {}}}).unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name, type_binding_info.size, type_binding_info.alignment);
+		write!(self.code_writer, "let {} = {}.suballocate_ref::<'callee, {}>().unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name);
 		variable_id
 	}
 
@@ -1495,7 +1495,7 @@ impl<'program> CodeGenerator<'program>
 		let variable_id = self.variable_tracker.create_local_data(type_id);
 		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
-		write!(self.code_writer, "let {} = {}.suballocate_slice::<'callee, {}>(& caiman_rt::TypeLayout{{byte_size : {}, alignment : {}}}, {}).unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name, type_binding_info.size, type_binding_info.alignment, self.variable_tracker.get_var_name(count_var_id));
+		write!(self.code_writer, "let {} = {}.suballocate_slice::<'callee, {}>({}).unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name, self.variable_tracker.get_var_name(count_var_id));
 		variable_id
 	}
 

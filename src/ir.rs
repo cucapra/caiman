@@ -50,6 +50,9 @@ pub type StorageTypeId = ffi::TypeId;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PipelineYieldPointId(usize);
+
 macro_rules! lookup_abstract_type {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
 	(Type) => { TypeId };
@@ -181,7 +184,7 @@ pub enum TailEdge
 {
 	// Common?
 	Return { return_values : Box<[NodeId]> },
-	Yield { funclet_ids : Box<[FuncletId]>, captured_arguments : Box<[NodeId]>, return_values : Box<[NodeId]> },
+	//Yield { pipeline_yield_point_id : PipelineYieldPointId, return_values : Box<[NodeId]>, continuation_join : NodeId },
 	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
