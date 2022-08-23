@@ -27,8 +27,9 @@
 //!   then merged, and the source's type ID is retained in the resulting eclass.
 //!
 //!   Instead, the area of concern is graph creation. The invariant will hold at the time of the
-//!   first rewrite *if and only if* each eclass has been assigned a type ID by that point. After
-//!   each node is added, you must look up its eclass and set its type ID manually.
+//!   first rewrite *if and only if* each eclass has been assigned a type ID by that point. Don't
+//!   use [`EGraph::add`](egg::EGraph) unless you've thoroughly thought it through, use
+//!   [`create_node`] instead.
 //!
 //!   Hashconsing complicates matters since two "identical" nodes can have different type IDs... or
 //!   can they? As it turns out, this is only true for constants. All other value nodes derive their
@@ -44,6 +45,32 @@ use std::collections::BTreeSet;
 
 mod validate;
 pub use validate::validate;
+
+#[derive(Debug, PartialEq)]
+struct Output {
+    /// The constant-folded value of this output, if one exists.
+    folded: Option<Constant>,
+    type_id: ir::TypeId,
+}
+#[derive(Debug, PartialEq)]
+enum OutputSet {
+    Single(Output),
+    Multiple(Box<[Output]>),
+}
+impl OutputSet {
+    fn outputs(&self) -> &'_ [Output] {
+        match self {
+            Self::Single(o) => std::slice::from_ref(o),
+            Self::Multiple(os) => os.as_ref()
+        }
+    }
+    fn outputs_mut(&mut self) -> &'_ mut [Output] {
+        match self {
+            Self::Single(o) => std::slice::from_mut(o),
+            Self::Multiple(os) => os.as_mut()
+        }
+    }
+}
 
 #[derive(Clone, PartialEq, Eq)]
 struct BlockArgs {
@@ -331,35 +358,67 @@ impl Analysis {
     }
 }
 
-#[derive(Debug)]
-pub struct ClassAnalysis {
-    pub constant: Option<Constant>,
-    pub output_types: Option<Box<[ir::TypeId]>>,
+pub fn create_node(egraph: &mut Graph, node: Node, type_id: ir::TypeId) -> GraphId {
+    let id = egraph.add(node);
+    let output_info = match node {
+        _ => todo!()
+    };
+    let analysis = ClassAnalysis {
+        output_info: Some(output_info)
+    };
+    use egg::Analysis;
+    egraph.analysis.merge(&mut egraph[id].data, analysis);
+    Analysis::modify(egraph, id);
+    id
 }
 
+#[derive(Debug)]
+pub struct ClassAnalysis {
+    pub outputs: Option<OutputSet>,
+}
 impl egg::Analysis<Node> for Analysis {
     type Data = ClassAnalysis;
     fn make(egraph: &Graph, enode: &Node) -> Self::Data {
         Self::Data {
-            constant: enode.to_constant(egraph),
-            output_types: None,
+            outputs: None,
         }
     }
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
-        egg::merge_option(&mut a.output_types, b.output_types, |a, b| {
-            assert_eq!(a, &b, "merge eclasses with different types");
-            egg::DidMerge(false, false)
-        });
-        egg::merge_option(&mut a.constant, b.constant, |a, b| {
-            assert_eq!(a, &b, "merge non-equal constants");
-            egg::DidMerge(false, false)
+        egg::merge_option(&mut a.outputs, b.outputs, |a, b| {
+            match (a, b) {
+                (OutputSet::Single(a), OutputSet::Single(b)) => {
+                    assert_eq!(a.type_id, b.type_id, "merged nodes with different types");
+                    egg::merge_option(&mut a.folded, b.folded, |a, b| {
+                        assert_eq!(*a, b, "merged non-equal constants");
+                        egg::DidMerge(false, false)
+                    })
+                }
+                (OutputSet::Multiple(a), OutputSet::Multiple(b)) => {
+                    assert_eq!(a.len(), b.len(), "merged nodes with different num types");
+                    let mut merged = egg::DidMerge(false, false);
+                    for (a, b) in a.iter_mut().zip(b.into_iter()) {
+                        assert_eq!(a.type_id, b.type_id, "merged nodes with different types");
+                        merged = merged | egg::merge_option(&mut a.folded, b.folded, |a, b| {
+                            assert_eq!(*a, b, "merged non-equal constants");
+                            egg::DidMerge(false, false)
+                        });
+                    }
+                    merged
+                }
+                _ => panic!("merged single-output type with multiple-output type")
+            }
         })
     }
     fn modify(egraph: &mut egg::EGraph<Node, Self>, id: egg::Id) {
         let data = &egraph[id].data;
         if let Some(constant) = data.constant {
+            let output_kind = data
+                .output_kind
+                .as_ref()
+                .expect("global invariant: all eclasses must have a type id before union");
+            let type_id = output_kind.single().copied().expect("")
             let type_id = data
-                .output_types
+                .output_kind
                 .as_ref()
                 .expect("global invariant: all eclasses must have a type id before union")
                 .get(0)

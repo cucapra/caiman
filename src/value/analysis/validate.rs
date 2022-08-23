@@ -19,7 +19,7 @@ fn validate_eclass(egraph: &Graph, eclass: &GraphClass) {
 /// Invariants: The node's eclass has *some* associated type information.
 fn validate_node(egraph: &Graph, eclass: &GraphClass, node: &Node) {
     match &node.kind {
-        NodeKind::IdList => (),
+        NodeKind::IdList => validate_idlist(egraph, eclass, &node.deps),
         NodeKind::Operation { kind } => validate_operation(egraph, eclass, kind, &node.deps),
         NodeKind::Param { funclet_id, index } => {
             validate_param(egraph, eclass, *funclet_id, *index, &node.deps)
@@ -27,12 +27,14 @@ fn validate_node(egraph: &Graph, eclass: &GraphClass, node: &Node) {
     }
 }
 // Invariants: those from validate_node
+fn validate_idlist(egraph: &Graph, eclass: &GraphClass, deps: &[GraphId]) {}
+// Invariants: those from validate_node
 fn validate_param(
     egraph: &Graph,
     eclass: &GraphClass,
     funclet_id: ir::FuncletId,
     index: usize,
-    deps: &[egg::Id],
+    deps: &[GraphId],
 ) {
     // TODO: We should also validate the index
     assert!(deps.is_empty(), "param node has no deps");
@@ -43,7 +45,7 @@ fn validate_param(
 }
 
 // Invariants: those from validate_node
-fn validate_operation(egraph: &Graph, eclass: &GraphClass, kind: &OperationKind, deps: &[egg::Id]) {
+fn validate_operation(egraph: &Graph, eclass: &GraphClass, kind: &OperationKind, deps: &[GraphId]) {
     use constant::Constant as Cs;
     use ir::Type as Ty;
     use OperationKind as Ok;

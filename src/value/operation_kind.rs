@@ -18,9 +18,6 @@ macro_rules! _field_type {
     (Binop) => { BinopKind };
 }
 macro_rules! _short_name {
-    (None) => {
-        "none"
-    };
     (ExtractResult) => {
         "extract"
     };
@@ -193,6 +190,14 @@ macro_rules! _mok_op_step {
     // Filter out scheduling nodes
     (
         remaining: { scheduling $_n:ident ( $($_a:tt)* ) -> $_o:ident; $($remaining:tt)* },
+        processed: { $($processed:tt)* }
+    ) => {
+        _mok_op_step!(remaining: { $($remaining)* }, processed: { $($processed)* });
+    };
+
+    // Filter out nodes with no return (we don't want them in the value language anyways)
+    (
+        remaining: { $_l:ident $_n:ident ( $($_a:tt)* ) -> None; $($remaining:tt)* },
         processed: { $($processed:tt)* }
     ) => {
         _mok_op_step!(remaining: { $($remaining)* }, processed: { $($processed)* });
