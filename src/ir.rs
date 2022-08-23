@@ -193,7 +193,7 @@ pub enum TailEdge
 	// SyncFence { fence : NodeId, immediate_funclet : FuncletId, deferred_funclet : FuncletId, arguments : Box<[NodeId]>, continuation_join : NodeId },
 
 	// Split space - where the computation will be observed
-	DynamicAllocFromBuffer { buffer : NodeId, arguments : Box<[NodeId]>, dynamic_allocation_size_slots : Box<[NodeId]>, success_funclet_id : FuncletId, failure_funclet_id : FuncletId, continuation_join : NodeId }
+	DynamicAllocFromBuffer { buffer : NodeId, arguments : Box<[NodeId]>, dynamic_allocation_size_slots : Box<[Option<NodeId>]>, success_funclet_id : FuncletId, failure_funclet_id : FuncletId, continuation_join : NodeId }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

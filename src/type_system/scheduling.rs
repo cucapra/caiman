@@ -172,7 +172,8 @@ impl<'program> FuncletChecker<'program>
 				ir::Type::Fence { queue_place } =>
 				{
 					let fence_info = & self.scheduling_funclet_extra.input_fences[& index];
-					self.scalar_node_timeline_tags.insert(index, fence_info.timeline_tag);
+					let timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, fence_info.timeline_tag);
+					self.scalar_node_timeline_tags.insert(index, timeline_tag);
 					self.scalar_node_value_tags.insert(index, ir::ValueTag::None);
 					self.scalar_node_spatial_tags.insert(index, ir::SpatialTag::None);
 					NodeType::Fence(Fence{queue_place : * queue_place})
@@ -182,7 +183,8 @@ impl<'program> FuncletChecker<'program>
 					let buffer_info = & self.scheduling_funclet_extra.input_buffers[& index];
 					self.scalar_node_timeline_tags.insert(index, ir::TimelineTag::None);
 					self.scalar_node_value_tags.insert(index, ir::ValueTag::None);
-					self.scalar_node_spatial_tags.insert(index, buffer_info.spatial_tag);
+					let spatial_tag = concretize_input_to_internal_spatial_tag(& self.program, buffer_info.spatial_tag);
+					self.scalar_node_spatial_tags.insert(index, spatial_tag);
 					NodeType::Buffer(Buffer{storage_place : * storage_place, static_layout_opt : * static_layout_opt})
 				}
 				_ => panic!("Not a legal argument type for a scheduling funclet")
@@ -443,7 +445,7 @@ impl<'program> FuncletChecker<'program>
 
 						for (input_index, input_node_id) in dimensions.iter().chain(arguments.iter()).enumerate()
 						{
-							let value_tag = self.scalar_node_value_tags[input_node_id];
+							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
 							let funclet_id = self.value_funclet_id;
 							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
 						}
@@ -1044,21 +1046,24 @@ impl<'program> FuncletChecker<'program>
 				check_timeline_tag_compatibility_interior(& self.program, false_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
 
 				// Check these first because they don't take ownership
-				for (allocation_size_slot_index, allocation_size_node_id) in dynamic_allocation_size_node_ids.iter().enumerate()
+				for (allocation_size_slot_index, allocation_size_node_id_opt) in dynamic_allocation_size_node_ids.iter().enumerate()
 				{
 					let input_index = allocation_size_slot_index + arguments.len();
 					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, input_index);
 					check_spatial_tag_compatibility_interior(& self.program, buffer_spatial_tag, true_input_spatial_tag);
 
-					if let Some(NodeType::Slot(Slot{queue_place, queue_stage, storage_type, ..})) = self.node_types.get(allocation_size_node_id)
+					if let Some(allocation_size_node_id) = allocation_size_node_id_opt
 					{
-						assert_eq!(* queue_place, ir::Place::Local);
-						assert_eq!(* queue_stage, ir::ResourceQueueStage::Ready);
-						// To do: Check storage type
-					}
-					else
-					{
-						panic!("Allocation size slot #{} does not exist at node #{}", allocation_size_slot_index, allocation_size_node_id)
+						if let Some(NodeType::Slot(Slot{queue_place, queue_stage, storage_type, ..})) = self.node_types.get(allocation_size_node_id)
+						{
+							assert_eq!(* queue_place, ir::Place::Local);
+							assert_eq!(* queue_stage, ir::ResourceQueueStage::Ready);
+							// To do: Check storage type
+						}
+						else
+						{
+							panic!("Allocation size slot #{} does not exist at node #{}", allocation_size_slot_index, allocation_size_node_id)
+						}
 					}
 
 					let destination_type_id = true_funclet.input_types[input_index];
@@ -1068,17 +1073,24 @@ impl<'program> FuncletChecker<'program>
 						{
 							assert_eq!(* queue_place, buffer_storage_place);
 							assert_eq!(* queue_stage, ir::ResourceQueueStage::Bound);
-							match & self.program.native_interface.types[& storage_type.0]
+							if allocation_size_node_id_opt.is_some()
 							{
-								ir::ffi::Type::ErasedLengthArray{element_type} => (),
-								_ => panic!("Invalid storage type for dynamic allocation (native interface type {})", storage_type.0)
+								match & self.program.native_interface.types[& storage_type.0]
+								{
+									ir::ffi::Type::ErasedLengthArray{element_type} => (),
+									_ => panic!("Invalid storage type for dynamic allocation (native interface type {})", storage_type.0)
+								}
+							}
+							else
+							{
+								match & self.program.native_interface.types[& storage_type.0]
+								{
+									ir::ffi::Type::ErasedLengthArray{element_type} => panic!("Invalid storage type for dynamic allocation (native interface type {})", storage_type.0),
+									_ => ()
+								}
 							}
 						}
-						ir::Type::Buffer{storage_place, static_layout_opt} =>
-						{
-							assert_eq!(* storage_place, buffer_storage_place);
-						}
-						_ => panic!("Allocation success funclet input #{} must be a slot or buffer", input_index)
+						_ => panic!("Allocation success funclet input #{} must be a slot", input_index)
 					}
 				}
 

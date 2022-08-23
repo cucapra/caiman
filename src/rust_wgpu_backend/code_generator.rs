@@ -753,7 +753,7 @@ impl<'program> CodeGenerator<'program>
 		let mut next_trait_index = 0usize;
 
 		let mut argument_variable_ids = Vec::<VarId>::new();
-		write!(self.code_writer, "pub fn funclet{}_func<'state,  'cpu_functions, Callbacks : CpuFunctions>(instance : Instance<'state, 'cpu_functions, Callbacks>", funclet_id);
+		write!(self.code_writer, "pub fn funclet{}_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(instance : Instance<'state, 'cpu_functions, Callbacks>", funclet_id);
 
 		/*for (input_index, input_type) in input_types.iter().enumerate()
 		{
@@ -823,7 +823,19 @@ impl<'program> CodeGenerator<'program>
 			let variable_id = self.variable_tracker.create_local_data(* input_type);
 			argument_variable_ids.push(variable_id);
 			let type_name = self.get_type_name(*input_type);
-			self.code_writer.write(format!("{} : {}", self.variable_tracker.get_var_name(variable_id), type_name));
+			let is_mutable = match & self.native_interface.types[& input_type.0]
+			{
+				ffi::Type::GpuBufferAllocator => true,
+				_ => false
+			};
+			if is_mutable
+			{
+				self.code_writer.write(format!("mut {} : {}", self.variable_tracker.get_var_name(variable_id), type_name));
+			}
+			else
+			{
+				self.code_writer.write(format!("{} : {}", self.variable_tracker.get_var_name(variable_id), type_name));
+			}
 		}
 
 		write!(self.code_writer, " ) -> FuncletResult<'state, 'cpu_functions, Callbacks, {}>", self.get_tuple_definition_string(& funclet_result_type_ids));
@@ -1154,6 +1166,9 @@ impl<'program> CodeGenerator<'program>
 				}
 				self.type_code_writer.write_str("}\n\n");
 			}
+			ffi::Type::GpuBufferRef { element_type } => (),
+			ffi::Type::GpuBufferSlice { element_type } => (),
+			ffi::Type::GpuBufferAllocator => (),
 			/*ffi::Type::Slot { value_type, queue_stage, queue_place } =>
 			{
 				write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));
@@ -1193,9 +1208,9 @@ impl<'program> CodeGenerator<'program>
 			ffi::Type::ConstSlice { element_type } => ("& [").to_string() + self.get_type_name(* element_type).as_str() + "]",
 			ffi::Type::MutSlice { element_type } => ("&mut [").to_string() + self.get_type_name(* element_type).as_str() + "]",
 			ffi::Type::Array { element_type, length } => format!("[{}; {}]", self.get_type_name(* element_type), length),
-			ffi::Type::GpuBufferRef { element_type } => format!("caiman_rt::GpuBufferRef<{}>", self.get_type_name(* element_type)),
-			ffi::Type::GpuBufferSlice { element_type } => format!("caiman_rt::GpuBufferSlice<{}>", self.get_type_name(* element_type)),
-			ffi::Type::GpuBufferAllocator => format!("caiman_rt::GpuBufferAllocator"),
+			ffi::Type::GpuBufferRef { element_type } => format!("caiman_rt::GpuBufferRef<'callee, {}>", self.get_type_name(* element_type)),
+			ffi::Type::GpuBufferSlice { element_type } => format!("caiman_rt::GpuBufferSlice<'callee, {}>", self.get_type_name(* element_type)),
+			ffi::Type::GpuBufferAllocator => format!("caiman_rt::GpuBufferAllocator<'callee>"),
 			/*ffi::Type::SchedulingJoin { input_types, output_types, extra } =>
 			{
 				let mut output_string = String::new();
@@ -1471,7 +1486,8 @@ impl<'program> CodeGenerator<'program>
 		let variable_id = self.variable_tracker.create_local_data(type_id);
 		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
-		write!(self.code_writer, "let {} = {}.suballocate_ref::<'_, {}>().unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name);
+		write!(self.code_writer, "let ({}, {}) = {}.suballocate_ref_hack::<'callee, {}>(& caiman_rt::TypeLayout{{byte_size : {}, alignment : {}}});\n", self.variable_tracker.get_var_name(buffer_allocator_var_id), self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name, type_binding_info.size, type_binding_info.alignment);
+		write!(self.code_writer, "let {} = {}.unwrap();", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(variable_id));
 		variable_id
 	}
 
@@ -1480,20 +1496,28 @@ impl<'program> CodeGenerator<'program>
 		let variable_id = self.variable_tracker.create_local_data(type_id);
 		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
-		write!(self.code_writer, "let {} = {}.suballocate_slice::<'_, {}>({}).unwrap();\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name, self.variable_tracker.get_var_name(count_var_id));
+		write!(self.code_writer, "let ({}, {}) = {}.suballocate_slice_hack::<'callee, {}>(& caiman_rt::TypeLayout{{byte_size : {}, alignment : {}}}, {});\n", self.variable_tracker.get_var_name(buffer_allocator_var_id), self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), type_name, type_binding_info.size, type_binding_info.alignment, self.variable_tracker.get_var_name(count_var_id));
+		write!(self.code_writer, "let {} = {}.unwrap();", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(variable_id));
 		variable_id
 	}
 
-	pub fn build_test_suballocate_many(&mut self, buffer_allocator_var_id : VarId, type_id_and_count_var_id_pairs : &[(ffi::TypeId, VarId)] ) -> VarId
+	pub fn build_test_suballocate_many(&mut self, buffer_allocator_var_id : VarId, type_id_and_count_var_id_pairs : &[(ffi::TypeId, Option<VarId>)] ) -> VarId
 	{
 		let mut layouts_string = String::from("");
 		let mut element_counts_string = String::from("");
 
-		for (type_id, count_var_id) in type_id_and_count_var_id_pairs.iter()
+		for (type_id, count_var_id_opt) in type_id_and_count_var_id_pairs.iter()
 		{
 			let type_binding_info = self.get_type_binding_info(* type_id);
 			write!(layouts_string, "caiman_rt::TypeLayout{{byte_size : {}, alignment : {}}}, ", type_binding_info.size, type_binding_info.alignment);
-			write!(element_counts_string, "Some({}), ", self.variable_tracker.get_var_name(* count_var_id));
+			if let Some(count_var_id) = count_var_id_opt
+			{
+				write!(element_counts_string, "Some({}), ", self.variable_tracker.get_var_name(* count_var_id));
+			}
+			else
+			{
+				write!(element_counts_string, "None, ");
+			}
 		}
 
 		let success_var_id = self.variable_tracker.generate();

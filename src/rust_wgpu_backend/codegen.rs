@@ -28,7 +28,7 @@ enum NodeResult
 	Slot { slot_id : SlotId, queue_place : ir::Place, storage_type : ir::ffi::TypeId },
 	Fence { place : ir::Place, fence_id : code_generator::FenceId },
 	Join{ join_point_id : JoinPointId},
-	Buffer { var_id : VarId }
+	Buffer { storage_place : ir::Place, var_id : VarId }
 }
 
 impl NodeResult
@@ -162,7 +162,7 @@ enum SplitPoint
 {
 	Next { return_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
 	Select { return_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
-	DynAlloc { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[SlotId]>, continuation_join_point_id_opt : Option<JoinPointId>}
+	DynAlloc { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[Option<SlotId>]>, continuation_join_point_id_opt : Option<JoinPointId>}
 }
 
 #[derive(Debug)]
@@ -532,7 +532,13 @@ impl<'program> CodeGen<'program>
 					}
 					ir::Type::Fence { queue_place } =>
 					{
-						
+						panic!("Fences cannot currently cross a rust function boundary")
+						// To do
+						//argument_node_results.push(NodeResult::Fence{ place : * queue_place, fence_id : });
+					}
+					ir::Type::Buffer { storage_place, .. } =>
+					{
+						argument_node_results.push(NodeResult::Buffer{ storage_place : * storage_place, var_id : argument_variable_ids[index]});
 					}
 					_ => panic!("Unimplemented")
 				}
@@ -552,7 +558,7 @@ impl<'program> CodeGen<'program>
 			SelectIf { branch_input_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
 			SelectElse { output_node_results : Box<[NodeResult]>, branch_input_node_results : Box<[NodeResult]>, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
 			SelectEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
-			DynAllocIf { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[SlotId]>, continuation_join_point_id_opt : Option<JoinPointId>},
+			DynAllocIf { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[Option<SlotId>]>, continuation_join_point_id_opt : Option<JoinPointId>},
 			DynAllocElse { output_node_results : Box<[NodeResult]>, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId>},
 			DynAllocEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
 		}
@@ -643,7 +649,7 @@ impl<'program> CodeGen<'program>
 								let (buffer_var_id, condition_var_id) = 
 									if let NodeResult::Buffer{var_id : buffer_var_id, ..} = buffer_node_result
 									{
-										let pairs = dynamic_allocation_size_slot_ids.iter().enumerate().map(|(index, slot_id)| (self.get_cpu_useable_type(success_funclet.input_types[argument_node_results.len() + index]), placement_state.get_slot_var_id(* slot_id).unwrap())).collect::<Box<[(ir::ffi::TypeId, VarId)]>>();
+										let pairs = dynamic_allocation_size_slot_ids.iter().enumerate().map(|(index, slot_id_opt)| (self.get_cpu_useable_type(success_funclet.input_types[argument_node_results.len() + index]), slot_id_opt.map(|slot_id| placement_state.get_slot_var_id(slot_id).unwrap()) )).collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
 										(buffer_var_id, self.code_generator.build_test_suballocate_many(buffer_var_id, & pairs))
 									}
 									else
@@ -655,22 +661,30 @@ impl<'program> CodeGen<'program>
 								let output_var_ids = self.code_generator.begin_if_else(condition_var_id, & output_types);
 								let mut success_argument_node_results = Vec::<NodeResult>::new();
 								success_argument_node_results.extend_from_slice(& argument_node_results);
-								for (index, slot_id) in dynamic_allocation_size_slot_ids.iter().enumerate()
+								for (index, slot_id_opt) in dynamic_allocation_size_slot_ids.iter().enumerate()
 								{
-									let allocation_size_var_id = placement_state.get_slot_var_id(* slot_id).unwrap();
 									let node_result = match & self.program.types[& success_funclet.input_types[argument_node_results.len() + index]]
 									{
 										ir::Type::Slot{queue_stage, queue_place, storage_type} =>
 										{
 											//
-											let var_id = match & self.program.native_interface.types[& storage_type.0]
-											{
-												ir::ffi::Type::ErasedLengthArray{element_type} =>
+											let var_id =
+												if let Some(slot_id) = slot_id_opt
 												{
-													self.code_generator.build_buffer_suballocate_slice(buffer_var_id, * element_type, allocation_size_var_id)
+													match & self.program.native_interface.types[& storage_type.0]
+													{
+														ir::ffi::Type::ErasedLengthArray{element_type} =>
+														{
+															let allocation_size_var_id = placement_state.get_slot_var_id(* slot_id).unwrap();
+															self.code_generator.build_buffer_suballocate_slice(buffer_var_id, * element_type, allocation_size_var_id)
+														}
+														_ => panic!("Must be an erased length array if allocation size slot is present")
+													}
 												}
-												_ => panic!("Must be an erased length array")
-											};
+												else
+												{
+													self.code_generator.build_buffer_suballocate_ref(buffer_var_id, * storage_type)
+												};
 											let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * queue_place, * queue_stage);
 											placement_state.slot_variable_ids.insert(slot_id, var_id);
 											NodeResult::Slot{queue_place : * queue_place, storage_type : * storage_type, slot_id}
@@ -972,8 +986,9 @@ impl<'program> CodeGen<'program>
 					assert_eq!(* place, ir::Place::Gpu);
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
-					if let Some(NodeResult::Buffer{var_id}) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
+					if let Some(NodeResult::Buffer{var_id, storage_place, ..}) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
 					{
+						assert_eq!(* storage_place, * place);
 						let allocation_var_id = self.code_generator.build_buffer_suballocate_ref(* var_id, * storage_type);
 	
 						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * place, ir::ResourceQueueStage::Bound);
@@ -1169,17 +1184,24 @@ impl<'program> CodeGen<'program>
 				assert_eq!(arguments.len(), false_funclet.input_types.len());
 
 				// Do these first before they move
-				let mut dynamic_allocation_size_slot_ids = Vec::<SlotId>::new();
-				for (allocation_index, allocation_size_node_id) in dynamic_allocation_size_slots.iter().enumerate()
+				let mut dynamic_allocation_size_slot_ids = Vec::<Option<SlotId>>::new();
+				for (allocation_index, allocation_size_node_id_opt) in dynamic_allocation_size_slots.iter().enumerate()
 				{
-					let node_result = funclet_scoped_state.get_node_result(* allocation_size_node_id).unwrap();
-					if let NodeResult::Slot{slot_id, ..} = node_result
+					if let Some(allocation_size_node_id) = allocation_size_node_id_opt
 					{
-						dynamic_allocation_size_slot_ids.push(* slot_id);
+						let node_result = funclet_scoped_state.get_node_result(* allocation_size_node_id).unwrap();
+						if let NodeResult::Slot{slot_id, ..} = node_result
+						{
+							dynamic_allocation_size_slot_ids.push(Some(* slot_id));
+						}
+						else
+						{
+							panic!("Allocation size is not a slot")
+						}
 					}
 					else
 					{
-						panic!("Allocation size is not a slot")
+						dynamic_allocation_size_slot_ids.push(None);
 					}
 				}
 

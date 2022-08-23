@@ -62,13 +62,13 @@ pub struct TypeLayout
 	pub alignment : usize
 }
 
-struct GpuBufferAllocatorSnapshot
+/*struct GpuBufferAllocatorSnapshot
 {
 	base_address : usize,
 	size : usize
-}
+}*/
 
-struct GpuBufferAllocator<'buffer>
+pub struct GpuBufferAllocator<'buffer>
 {
 	pub buffer : & 'buffer wgpu::Buffer,
 	pub base_address : usize,
@@ -134,7 +134,7 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 		start_address_opt
 	}
 
-	pub fn suballocate_ref<T : Sized>(&mut self, type_layout : & TypeLayout) -> Option<GpuBufferRef<T>>
+	pub fn suballocate_ref<T : Sized>(&mut self, type_layout : & TypeLayout) -> Option<GpuBufferRef<'buffer, T>>
 	{
 		// Need to check that layout (generated at caiman compile time) agrees with the layout at rust compile time
 		assert_eq!(type_layout.byte_size, std::mem::size_of::<T>());
@@ -148,7 +148,7 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 		return None;
 	}
 
-	pub fn suballocate_slice<T : Sized>(&mut self, element_type_layout : & TypeLayout, count : usize) -> Option<GpuBufferSlice<T>>
+	pub fn suballocate_slice<T : Sized>(&mut self, element_type_layout : & TypeLayout, count : usize) -> Option<GpuBufferSlice<'buffer, T>>
 	{
 		// Need to check that layout (generated at caiman compile time) agrees with the layout at rust compile time
 		assert_eq!(element_type_layout.byte_size, std::mem::size_of::<T>());
@@ -168,10 +168,24 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 		return None;
 	}
 
-	// A very horribly implemented check
-	pub fn test_suballocate_many(&mut self, layouts : &[TypeLayout], element_counts : &[Option<usize>]) -> usize
+	pub fn suballocate_ref_hack<T : Sized>(mut self, type_layout : & TypeLayout) -> (Self, Option<GpuBufferRef<'buffer, T>>)
 	{
-		let starting_snapshot = self.snapshot();
+		let result = self.suballocate_ref::<T>(type_layout);
+		(self, result)
+	}
+
+	pub fn suballocate_slice_hack<T : Sized>(mut self, element_type_layout : & TypeLayout, count : usize) -> (Self, Option<GpuBufferSlice<'buffer, T>>)
+	{
+		let result = self.suballocate_slice::<T>(element_type_layout, count);
+		(self, result)
+	}
+
+	// A very horribly implemented check
+	pub fn test_suballocate_many(& self, layouts : &[TypeLayout], element_counts : &[Option<usize>]) -> usize
+	{
+		let mut self_copy = Self{buffer : self.buffer, base_address : self.base_address, size : self.size};
+
+		//let starting_snapshot = self.snapshot();
 		let mut success_count = 0usize;
 
 		for (i, layout) in layouts.iter().enumerate()
@@ -180,28 +194,28 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 				if let Some(element_count) = element_counts[i]
 				{
 					let (byte_size, overflowed) = layout.byte_size.overflowing_mul(element_count);
-					!overflowed && self.suballocate(byte_size, layout.alignment).is_some()
+					!overflowed && self_copy.suballocate(byte_size, layout.alignment).is_some()
 				}
 				else
 				{
-					self.suballocate(layout.byte_size, layout.alignment).is_some()
+					self_copy.suballocate(layout.byte_size, layout.alignment).is_some()
 				};
 
 			if ! can_allocate
 			{
-				self.restore(starting_snapshot);
+				//self_copy.restore(starting_snapshot);
 				return success_count;
 			}
 
 			success_count += 1usize;
 		}
 
-		self.restore(starting_snapshot);
+		//self.restore(starting_snapshot);
 
 		success_count
 	}
 
-	fn snapshot(&mut self) -> GpuBufferAllocatorSnapshot
+	/*fn snapshot(&mut self) -> GpuBufferAllocatorSnapshot
 	{
 		GpuBufferAllocatorSnapshot{base_address : self.base_address, size : self.size}
 	}
@@ -210,7 +224,7 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 	{
 		self.base_address = snapshot.base_address;
 		self.size = snapshot.size;
-	}
+	}*/
 }
 
 // A slot holding a pointer to gpu-resident data of type T
