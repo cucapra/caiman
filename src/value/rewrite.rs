@@ -43,13 +43,13 @@ fn single_output(
 ) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     move |egraph, _, subst| {
         let id = subst[v];
-        let type_id = match egraph[id].data.output_types.as_deref() {
-            Some([type_id]) => *type_id,
-            Some(_) => return false, // aggregate (think ID list)
-            None => panic!("eclass with no type ID made it to the rewrite stage"),
-        };
-        let ty = egraph.analysis.lookup_type(type_id).expect("unknown type");
-        f(ty)
+        match egraph[id].data.single() {
+            Some(o) => f(egraph
+                .analysis
+                .lookup_type(o.type_id)
+                .expect("unknown type")),
+            None => false,
+        }
     }
 }
 fn is_signed(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
@@ -66,7 +66,7 @@ fn is_unsigned(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
 fn is_zero(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
     move |egraph, _, subst| {
-        let cs = match egraph[subst[var]].data.constant {
+        let cs = match egraph[subst[var]].data.constant() {
             Some(cs) => cs,
             None => return false,
         };
@@ -79,11 +79,11 @@ fn is_zero(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
 }
 fn is_true(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
-    move |egraph, _, subst| matches!(egraph[subst[var]].data.constant, Some(Cs::Bool(true)))
+    move |egraph, _, subst| matches!(egraph[subst[var]].data.constant(), Some(Cs::Bool(true)))
 }
 fn is_false(var: &str) -> impl Fn(&mut Graph, egg::Id, &egg::Subst) -> bool {
     let var = var.parse().unwrap();
-    move |egraph, _, subst| matches!(egraph[subst[var]].data.constant, Some(Cs::Bool(false)))
+    move |egraph, _, subst| matches!(egraph[subst[var]].data.constant(), Some(Cs::Bool(false)))
 }
 
 struct CtdiApp {
@@ -106,11 +106,11 @@ impl egg::Applier<Node, Analysis> for CtdiApp {
         _rule_name: egg::Symbol,
     ) -> Vec<egg::Id> {
         let id = subst[self.var];
-        let type_id = match egraph[id].data.output_types.as_deref() {
-            Some([type_id]) => *type_id,
-            Some(_) => panic!("can't constant-fold aggregates"),
-            None => panic!("eclass with no type ID made it to the rewrite stage"),
-        };
+        let type_id = egraph[id]
+            .data
+            .single()
+            .expect("can't constant fold aggregates")
+            .type_id;
         let ty = egraph.analysis.lookup_type(type_id).expect("unknown type");
         let cs = match ty {
             Ty::I8 => Cs::I8(self.val.try_into().expect("out of range constant")),

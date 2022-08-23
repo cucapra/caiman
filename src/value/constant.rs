@@ -122,7 +122,7 @@ impl_binop!(logical_or, a, b, (a && b) for {Bool});
 
 fn cfold_unop(egraph: &Graph, unop: UnopKind, deps: &[egg::Id]) -> Option<Constant> {
     assert!(deps.len() == 1, "unop has one argument");
-    let x = egraph[deps[0]].data.constant?;
+    let x = egraph[deps[0]].data.constant()?;
     match unop {
         UnopKind::Neg => Some(x.negate().unwrap()),
     }
@@ -130,17 +130,17 @@ fn cfold_unop(egraph: &Graph, unop: UnopKind, deps: &[egg::Id]) -> Option<Consta
 
 fn cfold_binop(egraph: &Graph, binop: BinopKind, deps: &[egg::Id]) -> Option<Constant> {
     assert!(deps.len() == 2, "binop has two arguments");
-    let a = egraph[deps[0]].data.constant?;
-    let b = egraph[deps[1]].data.constant?;
+    let a = egraph[deps[0]].data.constant()?;
+    let b = egraph[deps[1]].data.constant()?;
     match binop {
         // I'm not sure how to handle errors here... we could silently ignore them by using
         // (a + b).ok() but that seems like a disservice to a user wondering why their
         // value function is buggy, and the errors will almost certainly pop up later
         // in codegen or at runtime. egg doesn't have a way to do fallible analyses AFAIK
-        BinopKind::Add => Some(a.add(b).unwrap()),
-        BinopKind::Sub => Some(a.sub(b).unwrap()),
-        BinopKind::LogicalAnd => Some(a.logical_and(b).unwrap()),
-        BinopKind::LogicalOr => Some(a.logical_or(b).unwrap()),
+        BinopKind::Add => Some(a.add(*b).unwrap()),
+        BinopKind::Sub => Some(a.sub(*b).unwrap()),
+        BinopKind::LogicalAnd => Some(a.logical_and(*b).unwrap()),
+        BinopKind::LogicalOr => Some(a.logical_or(*b).unwrap()),
     }
 }
 impl Node {

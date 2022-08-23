@@ -38,19 +38,27 @@
 use super::*;
 use crate::collections::Arena;
 use crate::ir;
-use crate::operations::{BinopKind, UnopKind};
 use constant::Constant;
-use std::collections::hash_map::{Entry, HashMap};
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 
 mod validate;
 pub use validate::validate;
 
 #[derive(Debug, PartialEq)]
-struct Output {
+pub struct Output {
     /// The constant-folded value of this output, if one exists.
-    folded: Option<Constant>,
-    type_id: ir::TypeId,
+    pub folded: Option<Constant>,
+    pub type_id: ir::TypeId,
+}
+impl Output {
+    fn merge(&mut self, other: Self) -> egg::DidMerge {
+        assert_eq!(self.type_id, other.type_id, "mismatched types");
+        egg::merge_option(&mut self.folded, other.folded, |a, b| {
+            assert_eq!(*a, b, "differing constants");
+            egg::DidMerge(false, false)
+        })
+    }
 }
 #[derive(Debug, PartialEq)]
 enum OutputSet {
@@ -58,16 +66,18 @@ enum OutputSet {
     Multiple(Box<[Output]>),
 }
 impl OutputSet {
-    fn outputs(&self) -> &'_ [Output] {
-        match self {
-            Self::Single(o) => std::slice::from_ref(o),
-            Self::Multiple(os) => os.as_ref()
-        }
-    }
-    fn outputs_mut(&mut self) -> &'_ mut [Output] {
-        match self {
-            Self::Single(o) => std::slice::from_mut(o),
-            Self::Multiple(os) => os.as_mut()
+    fn merge(&mut self, other: Self) -> egg::DidMerge {
+        match (self, other) {
+            (Self::Single(a), Self::Single(b)) => a.merge(b),
+            (Self::Multiple(a), Self::Multiple(b)) => {
+                assert_eq!(a.len(), b.len(), "multi-outputs have different num types");
+                let mut merged = egg::DidMerge(false, false);
+                let b = b.into_vec(); // so I can use drain...
+                a.iter_mut()
+                    .zip(b.into_iter())
+                    .fold(egg::DidMerge(false, false), |acc, (a, b)| acc | a.merge(b))
+            }
+            _ => panic!("can't merge a single-output and multiple-output eclass"),
         }
     }
 }
@@ -279,8 +289,8 @@ impl Analysis {
         for id in self.block_ids.iter() {
             let block = self.blocks.get_mut(id).unwrap();
             if let BlockTail::Branch { cond, j0, j1 } = &block.tail {
-                if let Some(Constant::Bool(cond)) = graph[*cond].data.constant {
-                    let (tail, other) = if cond { (j1, j0.dest) } else { (j0, j1.dest) };
+                if let Some(Constant::Bool(cond)) = graph[*cond].data.constant() {
+                    let (tail, other) = if *cond { (j1, j0.dest) } else { (j0, j1.dest) };
                     // collapse the tail, and update the other destination's branches
                     block.tail = BlockTail::Jump(tail.clone());
                     self.blocks.get_mut(&other).unwrap().remove_pred(*id);
@@ -359,12 +369,12 @@ impl Analysis {
 }
 
 pub fn create_node(egraph: &mut Graph, node: Node, type_id: ir::TypeId) -> GraphId {
-    let id = egraph.add(node);
-    let output_info = match node {
-        _ => todo!()
+    let outputs = match &node {
+        _ => todo!(),
     };
+    let id = egraph.add(node);
     let analysis = ClassAnalysis {
-        output_info: Some(output_info)
+        outputs: Some(outputs),
     };
     use egg::Analysis;
     egraph.analysis.merge(&mut egraph[id].data, analysis);
@@ -374,58 +384,66 @@ pub fn create_node(egraph: &mut Graph, node: Node, type_id: ir::TypeId) -> Graph
 
 #[derive(Debug)]
 pub struct ClassAnalysis {
-    pub outputs: Option<OutputSet>,
+    outputs: Option<OutputSet>,
+}
+impl ClassAnalysis {
+    /// # Panics
+    /// Panics if `[Self::finished]` returns false.
+    pub fn single(&self) -> Option<&'_ Output> {
+        // By the global invariant, we assume that the eclass has already been assigned
+        // output information.
+        // If it hasn't been assigned output information then either
+        //  1. We're in `create_node`, right in between adding the node & manually setting
+        //     it's analysis data. But `create_node` doesn't call this method, so this isn't it.
+        //  2. We're not in `create_node`. All nodes created by `create_node` have output info,
+        //     and if *any* node in an eclass has output info that output info will propagate to
+        //     the eclass. So *none* of the nodes in the eclass were created using `create_node`.
+        //     Since rewrites always add to existing eclasses, there must be at least one
+        //     "root" node in the eclass that all other nodes were derived from. That is,
+        //     at least one node in the eclass was manually added to the egraph.
+        //     That's a BUG since manually adding nodes must always be done through `create_node`.
+        assert!(self.finished(), "unfinished analysis");
+        match self.outputs.as_ref().unwrap() {
+            OutputSet::Single(s) => Some(s),
+            OutputSet::Multiple(_) => None,
+        }
+    }
+    /// # Panics
+    /// Panics if `[Self::finished]` returns false.
+    pub fn multiple(&self) -> Option<&'_ [Output]> {
+        // See the comment in `single`
+        assert!(self.finished(), "unfinished analysis");
+        match self.outputs.as_ref().unwrap() {
+            OutputSet::Single(_) => None,
+            OutputSet::Multiple(m) => Some(m),
+        }
+    }
+    /// # Panics
+    /// Panics if `[Self::finished]` returns false.
+    pub fn constant(&self) -> Option<&'_ Constant> {
+        self.single().map(|o| o.folded.as_ref()).flatten()
+    }
+    pub fn finished(&self) -> bool {
+        self.outputs.is_some()
+    }
 }
 impl egg::Analysis<Node> for Analysis {
     type Data = ClassAnalysis;
     fn make(egraph: &Graph, enode: &Node) -> Self::Data {
-        Self::Data {
-            outputs: None,
-        }
+        Self::Data { outputs: None }
     }
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
-        egg::merge_option(&mut a.outputs, b.outputs, |a, b| {
-            match (a, b) {
-                (OutputSet::Single(a), OutputSet::Single(b)) => {
-                    assert_eq!(a.type_id, b.type_id, "merged nodes with different types");
-                    egg::merge_option(&mut a.folded, b.folded, |a, b| {
-                        assert_eq!(*a, b, "merged non-equal constants");
-                        egg::DidMerge(false, false)
-                    })
-                }
-                (OutputSet::Multiple(a), OutputSet::Multiple(b)) => {
-                    assert_eq!(a.len(), b.len(), "merged nodes with different num types");
-                    let mut merged = egg::DidMerge(false, false);
-                    for (a, b) in a.iter_mut().zip(b.into_iter()) {
-                        assert_eq!(a.type_id, b.type_id, "merged nodes with different types");
-                        merged = merged | egg::merge_option(&mut a.folded, b.folded, |a, b| {
-                            assert_eq!(*a, b, "merged non-equal constants");
-                            egg::DidMerge(false, false)
-                        });
-                    }
-                    merged
-                }
-                _ => panic!("merged single-output type with multiple-output type")
-            }
-        })
+        egg::merge_option(&mut a.outputs, b.outputs, OutputSet::merge)
     }
     fn modify(egraph: &mut egg::EGraph<Node, Self>, id: egg::Id) {
         let data = &egraph[id].data;
-        if let Some(constant) = data.constant {
-            let output_kind = data
-                .output_kind
-                .as_ref()
-                .expect("global invariant: all eclasses must have a type id before union");
-            let type_id = output_kind.single().copied().expect("")
-            let type_id = data
-                .output_kind
-                .as_ref()
-                .expect("global invariant: all eclasses must have a type id before union")
-                .get(0)
-                .copied()
-                .expect("can't constant-fold aggregates, data.constant should be None");
-            let folded = constant.to_node(type_id);
-            let folded_id = egraph.add(folded);
+        if let Some(OutputSet::Single(Output {
+            folded: Some(c),
+            type_id,
+        })) = data.outputs
+        {
+            // TODO: assert the types are compatible?
+            let folded_id = egraph.add(c.to_node(type_id));
             egraph.union(id, folded_id);
         }
     }
