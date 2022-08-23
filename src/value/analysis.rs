@@ -45,7 +45,7 @@ use std::collections::HashMap;
 mod validate;
 pub use validate::validate;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Output {
     /// The constant-folded value of this output, if one exists.
     pub folded: Option<Constant>,
@@ -66,22 +66,109 @@ enum OutputSet {
     Multiple(Box<[Output]>),
 }
 impl OutputSet {
+    fn compute(node: &Node, egraph: &Graph, type_id: ir::TypeId) -> Self {
+        if let Some(folded) = node.to_constant(egraph) {
+            return OutputSet::Single(Output {
+                type_id,
+                folded: Some(folded),
+            });
+        }
+        match &node.kind {
+            NodeKind::IdList => {
+                let os = node
+                    .deps
+                    .iter()
+                    .map(|id| {
+                        egraph[*id]
+                            .data
+                            .single()
+                            .expect("can't have an idlist of idlists")
+                    })
+                    .map(|o| Output::clone(o))
+                    .collect::<Box<[Output]>>();
+                OutputSet::Multiple(os)
+            }
+            NodeKind::Param { funclet_id, index } => {
+                let type_id = egraph.analysis.blocks[&funclet_id].input_types[*index];
+                OutputSet::Single(Output {
+                    type_id,
+                    folded: None,
+                })
+            }
+            NodeKind::Operation { kind } => {
+                use OperationKind as Ok;
+                match kind {
+                    Ok::ExtractResult { index } => {
+                        let src = node.deps[0];
+                        let src_types = egraph[src]
+                            .data
+                            .multiple()
+                            .expect("can't extract from single value");
+                        OutputSet::Single(src_types[*index].clone())
+                    }
+                    Ok::Binop { kind: _ } => {
+                        let src0 = node.deps[0];
+                        let src0_type = egraph[src0]
+                            .data
+                            .single()
+                            .expect("can't use binop on aggregate");
+                        let src1 = node.deps[1];
+                        let src1_type = egraph[src1]
+                            .data
+                            .single()
+                            .expect("can't use binop on aggregate");
+
+                        // if we were to do implicit casts, this is where it would happen
+                        assert_eq!(src0_type, src1_type, "incompatible binop types");
+                        // if we're here clearly it couldn't be constant folded :(
+                        OutputSet::Single(Output {
+                            type_id: src0_type.type_id,
+                            folded: None,
+                        })
+                    }
+                    Ok::Unop { kind: _ } => {
+                        // if we were to do implicit casts, this is where it would happen
+                        // (we would have to match on kind)
+                        let src = node.deps[0];
+                        let src_type = egraph[src]
+                            .data
+                            .single()
+                            .expect("can't use unop on aggregate");
+                        // if we're here clearly it couldn't be constant folded :(
+                        OutputSet::Single(Output {
+                            type_id: src_type.type_id,
+                            folded: None,
+                        })
+                    }
+                    // all constant nodes were handled above...
+                    // TODO: this is really ugly
+                    Ok::ConstantBool { .. }
+                    | Ok::ConstantInteger { .. }
+                    | Ok::ConstantUnsignedInteger { .. } => unreachable!(),
+                    // TODO: blocked on ffi interface
+                    Ok::CallExternalCpu { .. } => todo!(),
+                    // TODO: blocked on ffi interface
+                    Ok::CallExternalGpuCompute { .. } => todo!(),
+                    // TODO: This needs mega analysis and really doesn't work in the value
+                    // tail control flow branch right now.
+                    Ok::CallValueFunction { .. } => todo!(),
+                }
+            }
+        }
+    }
     fn merge(&mut self, other: Self) -> egg::DidMerge {
         match (self, other) {
             (Self::Single(a), Self::Single(b)) => a.merge(b),
             (Self::Multiple(a), Self::Multiple(b)) => {
                 assert_eq!(a.len(), b.len(), "multi-outputs have different num types");
-                let mut merged = egg::DidMerge(false, false);
-                let b = b.into_vec(); // so I can use drain...
                 a.iter_mut()
-                    .zip(b.into_iter())
+                    .zip(b.into_vec().drain(..))
                     .fold(egg::DidMerge(false, false), |acc, (a, b)| acc | a.merge(b))
             }
             _ => panic!("can't merge a single-output and multiple-output eclass"),
         }
     }
 }
-
 #[derive(Clone, PartialEq, Eq)]
 struct BlockArgs {
     args: Vec<Option<GraphId>>,
@@ -184,6 +271,7 @@ struct BlockSkeleton {
     // I suspect a vector (with linear search) will be faster.
     // Invariant: No duplicates.
     preds: Vec<ir::FuncletId>,
+    input_types: Box<[ir::TypeId]>,
     tail: BlockTail,
 }
 impl BlockSkeleton {
@@ -250,12 +338,16 @@ pub fn create(program: &ir::Program, head: ir::FuncletId) -> Result<GraphRunner,
                 }
             }
         };
+        let input_types = program.funclets[&id].input_types.clone();
         runner.egraph.analysis.block_ids.insert(id);
-        let prev = runner
-            .egraph
-            .analysis
-            .blocks
-            .insert(id, BlockSkeleton { preds, tail });
+        let prev = runner.egraph.analysis.blocks.insert(
+            id,
+            BlockSkeleton {
+                preds,
+                input_types,
+                tail,
+            },
+        );
         assert!(prev.is_none());
     }
     runner
@@ -369,16 +461,12 @@ impl Analysis {
 }
 
 pub fn create_node(egraph: &mut Graph, node: Node, type_id: ir::TypeId) -> GraphId {
-    let outputs = match &node {
-        _ => todo!(),
-    };
+    let outputs = OutputSet::compute(&node, egraph, type_id);
     let id = egraph.add(node);
-    let analysis = ClassAnalysis {
+    egraph[id].data = ClassAnalysis {
         outputs: Some(outputs),
     };
-    use egg::Analysis;
-    egraph.analysis.merge(&mut egraph[id].data, analysis);
-    Analysis::modify(egraph, id);
+    <Analysis as egg::Analysis<Node>>::modify(egraph, id);
     id
 }
 
