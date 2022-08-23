@@ -192,6 +192,36 @@ impl<'program> FuncletChecker<'program>
 
 			self.node_types.insert(index, node_type);
 		}
+
+		for (output_index, output_type) in self.scheduling_funclet.output_types.iter().enumerate()
+		{
+			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, output_index);
+
+			match & self.program.types[output_type]
+			{
+				ir::Type::Slot{queue_place, ..} =>
+				{
+					// Local is the only place where data can be passed out of the function directly by value
+					if spatial_tag == ir::SpatialTag::None
+					{
+						assert_eq!(* queue_place, ir::Place::Local);
+					}
+				}
+				ir::Type::SchedulingJoin{ .. } =>
+				{
+					panic!("Join points can't escape their original context")
+				}
+				ir::Type::Fence { queue_place } =>
+				{
+					panic!("Returning fences is currently unimplemented")
+				}
+				ir::Type::Buffer { storage_place, static_layout_opt } =>
+				{
+					assert!(spatial_tag != ir::SpatialTag::None);
+				}
+				_ => ()
+			}
+		}
 	}
 
 	fn get_funclet_input_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra, input_index : usize) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag)
