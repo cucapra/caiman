@@ -35,38 +35,11 @@ impl<'device, 'queue> State for RootState<'device, 'queue>
 	}
 }
 
-pub struct GpuBuffer
-{
-	buffer : wgpu::Buffer,
-	byte_capacity : wgpu::BufferSize,
-	next_allocation_start : wgpu::BufferAddress
-}
-
-/*impl GpuBuffer
-{
-	pub fn new() -> Self
-	{
-
-	}
-}
-
-pub struct GpuBufferView<'buffer>
-{
-	gpu_buffer : & 'buffer 
-	next_allocation_start : wgpu::BufferAddress
-}*/
-
 pub struct TypeLayout
 {
 	pub byte_size : usize,
 	pub alignment : usize
 }
-
-/*struct GpuBufferAllocatorSnapshot
-{
-	base_address : usize,
-	size : usize
-}*/
 
 pub struct GpuBufferAllocator<'buffer>
 {
@@ -168,24 +141,11 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 		return None;
 	}
 
-	pub fn suballocate_ref_hack<T : Sized>(mut self, type_layout : & TypeLayout) -> (Self, Option<GpuBufferRef<'buffer, T>>)
-	{
-		let result = self.suballocate_ref::<T>(type_layout);
-		(self, result)
-	}
-
-	pub fn suballocate_slice_hack<T : Sized>(mut self, element_type_layout : & TypeLayout, count : usize) -> (Self, Option<GpuBufferSlice<'buffer, T>>)
-	{
-		let result = self.suballocate_slice::<T>(element_type_layout, count);
-		(self, result)
-	}
-
 	// A very horribly implemented check
 	pub fn test_suballocate_many(& self, layouts : &[TypeLayout], element_counts : &[Option<usize>]) -> usize
 	{
 		let mut self_copy = Self{buffer : self.buffer, base_address : self.base_address, size : self.size};
 
-		//let starting_snapshot = self.snapshot();
 		let mut success_count = 0usize;
 
 		for (i, layout) in layouts.iter().enumerate()
@@ -203,28 +163,14 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 
 			if ! can_allocate
 			{
-				//self_copy.restore(starting_snapshot);
 				return success_count;
 			}
 
 			success_count += 1usize;
 		}
 
-		//self.restore(starting_snapshot);
-
 		success_count
 	}
-
-	/*fn snapshot(&mut self) -> GpuBufferAllocatorSnapshot
-	{
-		GpuBufferAllocatorSnapshot{base_address : self.base_address, size : self.size}
-	}
-
-	fn restore(&mut self, snapshot : GpuBufferAllocatorSnapshot)
-	{
-		self.base_address = snapshot.base_address;
-		self.size = snapshot.size;
-	}*/
 }
 
 // A slot holding a pointer to gpu-resident data of type T
