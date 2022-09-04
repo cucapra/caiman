@@ -20,13 +20,22 @@ struct Fence
 }
 
 #[derive(Debug)]
+enum JoinKind
+{
+	Default,
+	Inline,
+	Serialized
+}
+
+#[derive(Debug)]
 struct JoinPoint
 {
 	in_timeline_tag : ir::TimelineTag,
 	input_timeline_tags : Box<[ir::TimelineTag]>,
 	input_value_tags : Box<[ir::ValueTag]>,
 	input_spatial_tags : Box<[ir::SpatialTag]>,
-	input_types : Box<[ir::TypeId]>
+	input_types : Box<[ir::TypeId]>,
+	join_kind : JoinKind
 }
 
 #[derive(Debug)]
@@ -763,78 +772,81 @@ impl<'program> FuncletChecker<'program>
 					input_types.push(* type_id);
 				}
 				//self.join_node_value_tags.insert(current_node_id, value_tags.into_boxed_slice());
-				let join_point = JoinPoint { in_timeline_tag : self.scheduling_funclet_extra.out_timeline_tag, input_timeline_tags : timeline_tags.into_boxed_slice(), input_value_tags : value_tags.into_boxed_slice(), input_spatial_tags : spatial_tags.into_boxed_slice(), input_types : input_types.into_boxed_slice() };
+				let join_point = JoinPoint { join_kind : JoinKind::Default, in_timeline_tag : self.scheduling_funclet_extra.out_timeline_tag, input_timeline_tags : timeline_tags.into_boxed_slice(), input_value_tags : value_tags.into_boxed_slice(), input_spatial_tags : spatial_tags.into_boxed_slice(), input_types : input_types.into_boxed_slice() };
 				self.node_join_points.insert(current_node_id, join_point);
 				self.node_types.insert(current_node_id, NodeType::JoinPoint);
 			}
-			ir::Node::Join { funclet : join_funclet_id, captures, continuation : continuation_join_node_id } =>
-			{
-				let join_funclet = & self.program.funclets[join_funclet_id];
-				let join_funclet_extra = & self.program.scheduling_funclet_extras[join_funclet_id];
-				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
-				
-				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
-				{
-					// Nothing, for now...
-				}
-				else
-				{
-					panic!("Node at #{} is not a join point", continuation_join_node_id)
-				}
-
-				check_timeline_tag_compatibility_interior(& self.program, join_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
-
-				for (capture_index, capture_node_id) in captures.iter().enumerate()
-				{
-					let node_type = self.node_types.remove(capture_node_id).unwrap();
-					check_slot_type(& self.program, join_funclet.input_types[capture_index], & node_type);
-					
-					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, capture_index);
-					let node_value_tag = self.scalar_node_value_tags[capture_node_id];
-					let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
-					let node_spatial_tag = self.scalar_node_spatial_tags[capture_node_id];
-					assert_eq!(node_timeline_tag, ir::TimelineTag::None);
-					panic!("To do: Require that all values with the same spatial tag are also captured");
-					check_value_tag_compatibility_interior(& self.program, node_value_tag, value_tag);
-					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
-					check_spatial_tag_compatibility_interior(& self.program, node_spatial_tag, spatial_tag);
-				}
-			
-				let mut remaining_input_value_tags = Vec::<ir::ValueTag>::new();
-				let mut remaining_input_timeline_tags = Vec::<ir::TimelineTag>::new();
-				let mut remaining_input_spatial_tags = Vec::<ir::SpatialTag>::new();
-				let mut remaining_input_types = Vec::<ir::TypeId>::new();
-				for input_index in captures.len() .. join_funclet.input_types.len()
-				{
-					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, input_index);
-					remaining_input_value_tags.push(value_tag);
-					remaining_input_timeline_tags.push(timeline_tag);
-					remaining_input_spatial_tags.push(spatial_tag);
-					remaining_input_types.push(join_funclet.input_types[input_index]);
-				}
-
-				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
-				let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
-				let continuation_join_spatial_tags = & continuation_join_point.input_spatial_tags;
-				let continuation_join_input_types = & continuation_join_point.input_types;
-
-				for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate()
-				{
-					assert_eq!(* join_output_type, continuation_join_input_types[join_output_index]);
-					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(join_funclet, join_funclet_extra, join_output_index);
-					check_value_tag_compatibility_interior(& self.program, value_tag, continuation_join_value_tags[join_output_index]);
-					check_timeline_tag_compatibility_interior(& self.program, timeline_tag, continuation_join_timeline_tags[join_output_index]);
-					check_spatial_tag_compatibility_interior(& self.program, spatial_tag, continuation_join_spatial_tags[join_output_index]);
-				}
-
-				let join_point = JoinPoint { in_timeline_tag : join_funclet_extra.in_timeline_tag, input_timeline_tags : remaining_input_timeline_tags.into_boxed_slice(), input_value_tags : remaining_input_value_tags.into_boxed_slice(), input_spatial_tags : remaining_input_spatial_tags.into_boxed_slice(), input_types : remaining_input_types.into_boxed_slice() };
-				self.node_join_points.insert(current_node_id, join_point);
-				self.node_types.insert(current_node_id, NodeType::JoinPoint);
-			}
+			ir::Node::InlineJoin { funclet : join_funclet_id, captures, continuation : continuation_join_node_id } => self.handle_join(* join_funclet_id, captures, * continuation_join_node_id, JoinKind::Inline),
+			ir::Node::SerializedJoin { funclet : join_funclet_id, captures, continuation : continuation_join_node_id } => self.handle_join(* join_funclet_id, captures, * continuation_join_node_id, JoinKind::Serialized),
 			_ => panic!("Unimplemented")
 		}
 
 		self.current_node_id += 1;
+	}
+
+	fn handle_join(&mut self, join_funclet_id : ir::FuncletId, captures : &[ir::NodeId], continuation_join_node_id : ir::NodeId, join_kind : JoinKind)
+	{
+		let join_funclet = & self.program.funclets[& join_funclet_id];
+		let join_funclet_extra = & self.program.scheduling_funclet_extras[& join_funclet_id];
+		let continuation_join_point = & self.node_join_points[& continuation_join_node_id];
+		
+		if let Some(NodeType::JoinPoint) = self.node_types.remove(& continuation_join_node_id)
+		{
+			// Nothing, for now...
+		}
+		else
+		{
+			panic!("Node at #{} is not a join point", continuation_join_node_id)
+		}
+
+		check_timeline_tag_compatibility_interior(& self.program, join_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+
+		for (capture_index, capture_node_id) in captures.iter().enumerate()
+		{
+			let node_type = self.node_types.remove(capture_node_id).unwrap();
+			check_slot_type(& self.program, join_funclet.input_types[capture_index], & node_type);
+			
+			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, capture_index);
+			let node_value_tag = self.scalar_node_value_tags[capture_node_id];
+			let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
+			let node_spatial_tag = self.scalar_node_spatial_tags[capture_node_id];
+			assert_eq!(node_timeline_tag, ir::TimelineTag::None);
+			panic!("To do: Require that all values with the same spatial tag are also captured");
+			check_value_tag_compatibility_interior(& self.program, node_value_tag, value_tag);
+			check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
+			check_spatial_tag_compatibility_interior(& self.program, node_spatial_tag, spatial_tag);
+		}
+	
+		let mut remaining_input_value_tags = Vec::<ir::ValueTag>::new();
+		let mut remaining_input_timeline_tags = Vec::<ir::TimelineTag>::new();
+		let mut remaining_input_spatial_tags = Vec::<ir::SpatialTag>::new();
+		let mut remaining_input_types = Vec::<ir::TypeId>::new();
+		for input_index in captures.len() .. join_funclet.input_types.len()
+		{
+			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, input_index);
+			remaining_input_value_tags.push(value_tag);
+			remaining_input_timeline_tags.push(timeline_tag);
+			remaining_input_spatial_tags.push(spatial_tag);
+			remaining_input_types.push(join_funclet.input_types[input_index]);
+		}
+
+		let continuation_join_value_tags = & continuation_join_point.input_value_tags;
+		let continuation_join_timeline_tags = & continuation_join_point.input_timeline_tags;
+		let continuation_join_spatial_tags = & continuation_join_point.input_spatial_tags;
+		let continuation_join_input_types = & continuation_join_point.input_types;
+
+		for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate()
+		{
+			assert_eq!(* join_output_type, continuation_join_input_types[join_output_index]);
+			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(join_funclet, join_funclet_extra, join_output_index);
+			check_value_tag_compatibility_interior(& self.program, value_tag, continuation_join_value_tags[join_output_index]);
+			check_timeline_tag_compatibility_interior(& self.program, timeline_tag, continuation_join_timeline_tags[join_output_index]);
+			check_spatial_tag_compatibility_interior(& self.program, spatial_tag, continuation_join_spatial_tags[join_output_index]);
+		}
+
+		let join_point = JoinPoint { join_kind, in_timeline_tag : join_funclet_extra.in_timeline_tag, input_timeline_tags : remaining_input_timeline_tags.into_boxed_slice(), input_value_tags : remaining_input_value_tags.into_boxed_slice(), input_spatial_tags : remaining_input_spatial_tags.into_boxed_slice(), input_types : remaining_input_types.into_boxed_slice() };
+		self.node_join_points.insert(self.current_node_id, join_point);
+		self.node_types.insert(self.current_node_id, NodeType::JoinPoint);
 	}
 
 	pub fn check_tail_edge(&mut self)

@@ -224,7 +224,18 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "Join",
+			name : "InlineJoin",
+			inputs : [
+				(name : "funclet", kind : Funclet),
+				(name : "captures", kind : Operation, is_array : true),
+				(name : "continuation", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "SerializedJoin",
 			inputs : [
 				(name : "funclet", kind : Funclet),
 				(name : "captures", kind : Operation, is_array : true),

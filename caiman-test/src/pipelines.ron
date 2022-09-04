@@ -239,7 +239,7 @@
 					//SyncFence(place : Local, fence : 9, event : (funclet_id : 15, node_id : 2)),
 					//EncodeCopy(place : Local, input : 5, output : 7),
 					DefaultJoin,
-					Join(funclet : 16, captures : [], continuation : 10),
+					InlineJoin(funclet : 16, captures : [], continuation : 10),
 				],
 				tail_edge : Jump(join : 11, arguments : [5, 9, 3])
 				//tail_edge : Return(return_values : [5, 9, 3])
@@ -253,7 +253,7 @@
 				nodes : [
 					Phi(index : 0),
 					DefaultJoin,
-					Join(funclet : 14, captures : [], continuation : 1),
+					InlineJoin(funclet : 14, captures : [], continuation : 1),
 					//JoinCall(operation : (funclet_id : 10, node_id : 1), funclet : 12, captures : [], continuation : 2)
 				],
 				//tail_edge : Jump( join : 3, arguments : [0] )

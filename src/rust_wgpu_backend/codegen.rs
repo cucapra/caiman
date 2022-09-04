@@ -65,11 +65,22 @@ struct SimpleJoinPoint
 	continuation_join_point_id : JoinPointId
 }
 
+#[derive(Debug, Clone)]
+struct SerializedJoinPoint
+{
+	value_funclet_id : ir::FuncletId,
+	scheduling_funclet_id : ir::FuncletId,
+	//captures : Box<[NodeResult]>,
+	continuation_join_point_id : JoinPointId,
+	argument_ffi_types : Box<[ir::ffi::TypeId]>
+}
+
 #[derive(Debug)]
 enum JoinPoint
 {
 	RootJoinPoint(RootJoinPoint),
 	SimpleJoinPoint(SimpleJoinPoint),
+	SerializedJoinPoint(SerializedJoinPoint),
 }
 
 #[derive(Debug, Default)]
@@ -110,7 +121,7 @@ struct PlacementState
 {
 	scheduling_state : scheduling_state::SchedulingState,
 	slot_variable_ids : HashMap<SlotId, VarId>,
-	join_graph : JoinGraph
+	join_graph : JoinGraph,
 }
 
 impl PlacementState
@@ -334,7 +345,8 @@ impl<'program> CodeGen<'program>
 			return * ffi_type_id;
 		}
 
-		let ffi_type_id = match & self.program.types[& type_id]
+		let typ = & self.program.types[& type_id];
+		let ffi_type_id = match typ
 		{
 			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Local } =>
 			{
@@ -359,7 +371,7 @@ impl<'program> CodeGen<'program>
 			{
 				self.code_generator.create_ffi_type(ir::ffi::Type::GpuBufferAllocator)
 			}
-			_ => panic!("Not a valid type for referencing from the CPU")
+			_ => panic!("Not a valid type for referencing from the CPU: {:?}", typ)
 		};
 
 		self.generated_local_slot_ffi_type_map.insert(type_id, ffi_type_id);
@@ -561,10 +573,10 @@ impl<'program> CodeGen<'program>
 					}
 					JoinPoint::SimpleJoinPoint(simple_join_point) =>
 					{
-						//simple_join_point.captures
-						
-						//current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
-						//panic!("Not yet implemented");
+						default_join_point_id_opt = Some(simple_join_point.continuation_join_point_id);
+					}
+					JoinPoint::SerializedJoinPoint(simple_join_point) =>
+					{
 						default_join_point_id_opt = Some(simple_join_point.continuation_join_point_id);
 					}
 					_ => panic!("Jump to invalid join point #{:?}: {:?}", default_join_point_id, join_point)
@@ -593,6 +605,39 @@ impl<'program> CodeGen<'program>
 			}
 		};
 		path.into_boxed_slice()
+	}
+
+	fn build_push_serialized_join(&mut self, funclet_id : ir::FuncletId, captures : & [NodeResult], placement_state : & PlacementState, pipeline_context : &mut PipelineContext)
+	{
+		let mut input_storage_types = Vec::<ir::ffi::TypeId>::new();
+		let mut output_storage_types = Vec::<ir::ffi::TypeId>::new();
+		let mut capture_var_ids = Vec::<VarId>::new();
+		let join_point_scheduling_funclet = & self.program.funclets[& funclet_id];
+		for (capture_index, captured_node_result) in captures.iter().enumerate()
+		{
+			let var_id = placement_state.get_node_result_var_id(& captured_node_result).unwrap();
+			capture_var_ids.push(var_id);
+			//capture_storage_types.push(self.get_cpu_useable_type(join_point_scheduling_funclet.input_types[capture_index]));
+			match captured_node_result
+			{
+				NodeResult::Slot{..} => (),
+				NodeResult::Buffer{..} => (),
+				_ => panic!("Not yet supported"),
+			}
+		}
+
+		for (input_index, input_type) in join_point_scheduling_funclet.input_types.iter().enumerate()
+		{
+			input_storage_types.push(self.get_cpu_useable_type(* input_type));
+		}
+
+		for (output_index, output_type) in join_point_scheduling_funclet.output_types.iter().enumerate()
+		{
+			output_storage_types.push(self.get_cpu_useable_type(* output_type));
+		}
+
+		self.code_generator.build_push_serialized_join(funclet_id, capture_var_ids.as_slice(), & input_storage_types[0 .. captures.len()], & input_storage_types[captures.len() .. ], & output_storage_types[0 .. ]);
+		pipeline_context.pending_funclet_ids.push(funclet_id);
 	}
 
 	fn compile_externally_visible_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, pipeline_context : &mut PipelineContext)
@@ -671,7 +716,7 @@ impl<'program> CodeGen<'program>
 
 						let mut join_point_offset_vars = HashMap::<JoinPointId, VarId>::new();
 
-						for & join_point_id in path_join_point_ids.iter().rev()
+						'serialization_loop: for & join_point_id in path_join_point_ids.iter().rev()
 						{
 							let join_point = placement_state.join_graph.get_join(join_point_id);
 				
@@ -680,7 +725,7 @@ impl<'program> CodeGen<'program>
 								JoinPoint::RootJoinPoint(_) => (),
 								JoinPoint::SimpleJoinPoint(simple_join_point) =>
 								{
-									//simple_join_point.captures
+									/*//simple_join_point.captures
 									let mut input_storage_types = Vec::<ir::ffi::TypeId>::new();
 									let mut output_storage_types = Vec::<ir::ffi::TypeId>::new();
 									let mut capture_var_ids = Vec::<VarId>::new();
@@ -709,7 +754,12 @@ impl<'program> CodeGen<'program>
 									}
 
 									self.code_generator.build_push_serialized_join(simple_join_point.scheduling_funclet_id, capture_var_ids.as_slice(), & input_storage_types[0 .. simple_join_point.captures.len()], & input_storage_types[simple_join_point.captures.len() .. ], & output_storage_types[0 .. ]);
-									pipeline_context.pending_funclet_ids.push(simple_join_point.scheduling_funclet_id);
+									pipeline_context.pending_funclet_ids.push(simple_join_point.scheduling_funclet_id);*/
+									self.build_push_serialized_join(simple_join_point.scheduling_funclet_id, & simple_join_point.captures, & placement_state, pipeline_context);
+								}
+								JoinPoint::SerializedJoinPoint(_) =>
+								{
+									break 'serialization_loop
 								}
 								_ => panic!("Jump to invalid join point #{:?}: {:?}", join_point_id, join_point)
 							}
@@ -911,6 +961,12 @@ impl<'program> CodeGen<'program>
 							current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
 							default_join_point_id_opt = Some(simple_join_point.continuation_join_point_id);
 							current_output_node_results = input_node_results.into_boxed_slice();
+						}
+						JoinPoint::SerializedJoinPoint(serialized_join_point) =>
+						{
+							//panic!("Need to insert jump here");
+							let argument_var_ids = placement_state.get_node_result_var_ids(& current_output_node_results).unwrap();
+							self.code_generator.build_indirect_stack_jump_to_popped_serialized_join(& argument_var_ids, & serialized_join_point.argument_ffi_types);
 						}
 						_ => panic!("Jump to invalid join point #{:?}: {:?}", join_point_id, join_point)
 					}
@@ -1165,7 +1221,7 @@ impl<'program> CodeGen<'program>
 						panic!("No default join point")
 					}
 				}
-				ir::Node::Join { funclet : funclet_id, captures, continuation : continuation_join_node_id } => 
+				ir::Node::InlineJoin { funclet : funclet_id, captures, continuation : continuation_join_node_id } => 
 				{
 					let mut captured_node_results = Vec::<NodeResult>::new();
 					let join_funclet = & self.program.funclets[funclet_id];
@@ -1184,6 +1240,31 @@ impl<'program> CodeGen<'program>
 					let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
 
 					let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, captures : captured_node_results.into_boxed_slice(), continuation_join_point_id}));
+					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
+				}
+				ir::Node::SerializedJoin { funclet : funclet_id, captures, continuation : continuation_join_node_id } => 
+				{
+					let mut captured_node_results = Vec::<NodeResult>::new();
+					let join_funclet = & self.program.funclets[funclet_id];
+					let extra = & self.program.scheduling_funclet_extras[funclet_id];
+
+					// Join points can only be constructed for the value funclet they are created in
+					assert_eq!(extra.value_funclet_id, funclet_scoped_state.value_funclet_id);
+
+					for (capture_index, capture_node_id) in captures.iter().enumerate()
+					{
+						let node_result = funclet_scoped_state.move_node_result(* capture_node_id).unwrap();
+						captured_node_results.push(node_result);
+					}
+
+					let argument_ffi_types = join_funclet.input_types[captures.len() .. ].iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+
+					let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
+					let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
+
+					//captures : captured_node_results.into_boxed_slice()
+					self.build_push_serialized_join(* funclet_id, captured_node_results.as_slice(), placement_state, pipeline_context);
+					let join_point_id = placement_state.join_graph.create(JoinPoint::SerializedJoinPoint(SerializedJoinPoint{value_funclet_id : extra.value_funclet_id, scheduling_funclet_id : * funclet_id, argument_ffi_types, continuation_join_point_id}));
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 				}
 				_ => panic!("Unknown node")

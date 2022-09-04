@@ -1197,6 +1197,18 @@ impl<'program> CodeGenerator<'program>
 		self.emit_pipeline_entry_point(funclet_id, input_types, output_types, Some(yield_points))
 	}
 
+	pub fn build_indirect_stack_jump_to_popped_serialized_join(&mut self, argument_var_ids : &[VarId], argument_types : & [ffi::TypeId])
+	{
+		let dispatcher_id = self.lookup_dispatcher_id(argument_types);
+		write!(self.code_writer, "return pop_join_and_dispatch_at_{}::<Callbacks, PipelineOutputTuple<'callee>>", dispatcher_id.0);
+		write!(self.code_writer, "(instance, join_stack");
+		for (argument_index, var_id) in argument_var_ids.iter().enumerate()
+		{
+			write!(self.code_writer, ", {}", self.variable_tracker.get_var_name(* var_id));
+		}
+		write!(self.code_writer, ")\n");
+	}
+
 	pub fn build_return(&mut self, output_var_ids : &[VarId])
 	{
 		//self.get_type_name(self.active_funclet_result_type_id.unwrap())
