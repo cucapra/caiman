@@ -31,6 +31,18 @@
 							output_0.field_0 = output.field_0;
 						}
 					")
+				),
+				1 : (
+					name : "do_thing_on_gpu_2", input_types : [(0)], output_types : [(0)], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
+					shader_module_content : Wgsl
+					("
+						struct InputOutput_0 { field_0 : i32; };
+						[[group(0), binding(0)]] var<storage, read_write> input_output_0 : InputOutput_0;
+						[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
+						{
+							input_output_0.field_0 = input_output_0.field_0 + 1;
+						}
+					")
 				)
 			},
 		),
@@ -324,7 +336,77 @@
 					Phi(index : 0),
 				],
 				tail_edge : Return(return_values : [0])
-			)
+			),
+
+			19 : (
+				kind : Value,
+				input_types : [0],
+				output_types : [0],
+				nodes : [
+					Phi(index : 0),
+					CallExternalGpuCompute(external_function_id : 1, dimensions : [], arguments : [0]),
+					ExtractResult(node_id : 1, index : 0),
+					CallValueFunction(function_id : 1, arguments : [2]),
+					ExtractResult(node_id : 3, index : 0),
+				],
+				tail_edge : Return(return_values : [4])
+			),
+
+			20 : (
+				kind : ScheduleExplicit,
+				input_types : [3],
+				output_types : [3],
+
+				nodes : [
+					Phi(index : 0),
+					UnboundSlot(place : Gpu, storage_type : (0), operation : (funclet_id : 19, node_id : 2)),
+					EncodeDo(place : Gpu, operation : (funclet_id : 19, node_id : 1), inputs : [0], outputs : [1]),
+					Submit(place : Gpu, event : (funclet_id : 22, node_id : 1)),
+					DefaultJoin,
+				],
+				tail_edge : Yield(pipeline_yield_point_id : (0), yielded_nodes : [], next_funclet : 21, arguments : [1], continuation_join : 4 )
+				//tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [1], continuation_join : 3)
+			),
+
+			21 : (
+				kind : ScheduleExplicit,
+				input_types : [3],
+				output_types : [3],
+
+				nodes : [
+					Phi(index : 0),
+					DefaultJoin,
+					//Join(funclet : 23, captures : [], continuation : 1),
+				],
+				tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [0], continuation_join : 1)
+			),
+
+
+			22 : (
+				kind : Timeline,
+				input_types : [2],
+				output_types : [2],
+
+				nodes : [
+					Phi(index : 0),
+					SubmissionEvent(here_place : Local, there_place : Gpu, local_past : 0),
+				],
+				tail_edge : Return(return_values : [1])
+			),
+
+			/*23 : (
+				kind : ScheduleExplicit,
+				input_types : [3],
+				output_types : [3],
+
+				nodes : [
+					Phi(index : 0),
+					DefaultJoin,
+					Join(funclet : 23, captures : [], continuation : 1),
+				],
+				tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [0], continuation_join : 2)
+			),*/
+
 		},
 		/*external_cpu_functions : [
 			(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
@@ -355,7 +437,8 @@
 			)
 		],*/
 		value_functions : {
-			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9))
+			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9)),
+			1 : (name : "looping_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(19))
 		},
 		scheduling_funclet_extras : {
 			11 : (
@@ -437,6 +520,32 @@
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
+			20 : (
+				value_funclet_id : 19,
+				input_slots : {0 : (value_tag : Input(funclet_id : 19, index : 0), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Input(funclet_id : 18, index : 0))},
+				output_slots : {0 : (value_tag : Output(funclet_id : 19, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
+				input_fences : {},
+				output_fences : {},
+				input_buffers : {},
+				output_buffers : {},
+				external_timestamps : [],
+				external_spaces : [],
+				in_timeline_tag : Input(funclet_id : 22, index : 0),
+				out_timeline_tag : Output(funclet_id : 22, index : 0),
+			),
+			21 : (
+				value_funclet_id : 19,
+				input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 2)), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Operation(remote_node_id : (funclet_id : 18, node_id : 0)))},
+				output_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 4)), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
+				input_fences : {},
+				output_fences : {},
+				input_buffers : {},
+				output_buffers : {},
+				external_timestamps : [],
+				external_spaces : [],
+				in_timeline_tag : Input(funclet_id : 22, index : 0), //Operation(remote_node_id : (funclet_id : 22, node_id : 1))
+				out_timeline_tag : Output(funclet_id : 22, index : 0),
+			),
 		},
 		pipelines : [
 			(name : "pipeline_1", entry_funclet : 11), 
@@ -448,6 +557,20 @@
 			(name : "pipeline_with_yield_enter_loop_exit", entry_funclet : 6),*/
 			(name : "pipeline_with_value_function", entry_funclet : 13),
 			(name : "allocation_test_pipeline", entry_funclet : 17),
-			]
+			(
+				name : "looping_pipeline",
+				entry_funclet : 20,
+				yield_points : {
+					(0) :  (
+						name : "loop",
+						yielded_types : [],
+						resuming_types : [],
+						yielded_timeline_tag : Output(funclet_id : 22, index : 0),
+						resuming_timeline_tag : Input(funclet_id : 22, index : 0),
+						spatial_funclet_id : 18
+					)
+				}
+			),
+		]
 	)
 )

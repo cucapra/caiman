@@ -18,6 +18,9 @@ use crate::type_system;
 use crate::scheduling_state;
 use crate::scheduling_state::SlotId;
 
+// I'm too lazy to get actual sizes, but 64 bytes ought to be enough for anything... for now.
+//const MAX_BYTES_PER_SLOT = 64usize;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct JoinPointId(usize);
 
@@ -161,8 +164,19 @@ impl PlacementState
 enum SplitPoint
 {
 	Next { return_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
+	Yield { pipeline_yield_point_id : ir::PipelineYieldPointId, yielded_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
 	Select { return_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
 	DynAlloc { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[Option<SlotId>]>, continuation_join_point_id_opt : Option<JoinPointId>}
+}
+
+enum TraversalState
+{
+	SelectIf { branch_input_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
+	SelectElse { output_node_results : Box<[NodeResult]>, branch_input_node_results : Box<[NodeResult]>, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
+	SelectEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
+	DynAllocIf { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[Option<SlotId>]>, continuation_join_point_id_opt : Option<JoinPointId>},
+	DynAllocElse { output_node_results : Box<[NodeResult]>, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId>},
+	DynAllocEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
 }
 
 #[derive(Debug)]
@@ -258,6 +272,19 @@ fn check_storage_type_implements_value_type(program : & ir::Program, storage_typ
 		}
 		_ => panic!("Unsupported")
 	}*/
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+struct AbstractContinuationLink
+{
+	funclet_id : ir::FuncletId,
+	capture_count : usize,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+struct AbstractEntryPoint
+{
+	continuation_chain : Vec<AbstractContinuationLink>
 }
 
 #[derive(Default)]
@@ -416,7 +443,16 @@ impl<'program> CodeGen<'program>
 					let slot_id = input_slot_ids[dimensions.len() + index];
 					placement_state.slot_variable_ids[& slot_id]
 				};
-				let dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(dimension_map)).into_boxed_slice();
+
+				let mut dimension_var_ids = Vec::from_iter(dimensions.iter().enumerate().map(dimension_map));
+				if dimension_var_ids.len() < 3
+				{
+					for i in dimension_var_ids.len() .. 3
+					{
+						dimension_var_ids.push(self.code_generator.build_constant_unsigned_integer(1, self.default_usize_ffi_type_id));
+					}
+				}
+				let dimension_var_ids = dimension_var_ids.into_boxed_slice();
 				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(argument_map)).into_boxed_slice();
 				let output_var_ids = output_slot_ids.iter().map(|x| placement_state.get_slot_var_id(* x).unwrap()).collect::<Box<[VarId]>>();
 
@@ -503,6 +539,62 @@ impl<'program> CodeGen<'program>
 		}
 	}
 
+	fn collect_join_graph_path(&mut self, placement_state : &mut PlacementState, traversal_state_stack : & [TraversalState], mut default_join_point_id_opt : Option<JoinPointId>) -> Box<[JoinPointId]>
+	{
+		let mut path = Vec::<JoinPointId>::new();
+		let mut traversal_state_iterator = traversal_state_stack.iter().rev();
+		'outer_loop: loop
+		{
+			while let Some(default_join_point_id) = default_join_point_id_opt
+			{
+				default_join_point_id_opt = None;
+				
+				let join_point = placement_state.join_graph.get_join(default_join_point_id);
+				path.push(default_join_point_id);
+	
+				match join_point
+				{
+					JoinPoint::RootJoinPoint(_) =>
+					{
+						// Depends on if we always interpret the root join as return?
+						//break 'outer_loop
+					}
+					JoinPoint::SimpleJoinPoint(simple_join_point) =>
+					{
+						//simple_join_point.captures
+						
+						//current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
+						//panic!("Not yet implemented");
+						default_join_point_id_opt = Some(simple_join_point.continuation_join_point_id);
+					}
+					_ => panic!("Jump to invalid join point #{:?}: {:?}", default_join_point_id, join_point)
+				}
+			}
+
+			assert!(default_join_point_id_opt.is_none());
+
+			if let Some(traversal_state) = traversal_state_iterator.next()
+			{
+				default_join_point_id_opt = match traversal_state
+				{
+					TraversalState::SelectIf { continuation_join_point_id_opt, .. } => panic!("SelectIf shouldn't remain in the traversal stack"),
+					TraversalState::SelectElse { continuation_join_point_id_opt, .. } => * continuation_join_point_id_opt,
+					TraversalState::SelectEnd { continuation_join_point_id_opt, .. } => * continuation_join_point_id_opt,
+					TraversalState::DynAllocIf { continuation_join_point_id_opt, .. } => panic!("DynAllocIf shouldn't remain in the traversal stack"),
+					TraversalState::DynAllocElse { continuation_join_point_id_opt, .. } => * continuation_join_point_id_opt,
+					TraversalState::DynAllocEnd { continuation_join_point_id_opt, .. } => * continuation_join_point_id_opt,
+					_ => panic!("Unimplemented")
+				}
+			}
+
+			if default_join_point_id_opt.is_none()
+			{
+				break 'outer_loop
+			}
+		};
+		path.into_boxed_slice()
+	}
+
 	fn compile_externally_visible_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, pipeline_context : &mut PipelineContext)
 	{
 		let funclet = & self.program.funclets[& funclet_id];
@@ -553,16 +645,6 @@ impl<'program> CodeGen<'program>
 			Option::<JoinPointId>::Some(join_point_id)
 		};
 
-		enum TraversalState
-		{
-			SelectIf { branch_input_node_results : Box<[NodeResult]>, condition_slot_id : SlotId, true_funclet_id : ir::FuncletId, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
-			SelectElse { output_node_results : Box<[NodeResult]>, branch_input_node_results : Box<[NodeResult]>, false_funclet_id : ir::FuncletId, continuation_join_point_id_opt : Option<JoinPointId> },
-			SelectEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
-			DynAllocIf { buffer_node_result : NodeResult, success_funclet_id : ir::FuncletId, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, dynamic_allocation_size_slot_ids : Box<[Option<SlotId>]>, continuation_join_point_id_opt : Option<JoinPointId>},
-			DynAllocElse { output_node_results : Box<[NodeResult]>, failure_funclet_id : ir::FuncletId, argument_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId>},
-			DynAllocEnd { output_node_results : Box<[NodeResult]>, continuation_join_point_id_opt : Option<JoinPointId> },
-		}
-
 		let mut traversal_state_stack = Vec::<TraversalState>::new();
 
 		let mut current_output_node_results = argument_node_results.into_boxed_slice();
@@ -573,13 +655,83 @@ impl<'program> CodeGen<'program>
 			while let Some(current_funclet_id) = current_funclet_id_opt
 			{
 				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, default_join_point_id_opt);
-				println!("Split point: {:?}", split_point);
+				//println!("Split point: {:?}", split_point);
 				current_output_node_results = match split_point
 				{
 					SplitPoint::Next{return_node_results, continuation_join_point_id_opt} =>
 					{
 						default_join_point_id_opt = continuation_join_point_id_opt;
 						return_node_results
+					}
+					SplitPoint::Yield { pipeline_yield_point_id, yielded_node_results, mut continuation_join_point_id_opt } =>
+					{
+						let path_join_point_ids = self.collect_join_graph_path(&mut placement_state, traversal_state_stack.as_slice(), continuation_join_point_id_opt);
+						//println!("Serializing join points: {:?} from root: {:?}", path_join_point_ids, continuation_join_point_id_opt);
+						//panic!("Serialized?");
+
+						let mut join_point_offset_vars = HashMap::<JoinPointId, VarId>::new();
+
+						for & join_point_id in path_join_point_ids.iter().rev()
+						{
+							let join_point = placement_state.join_graph.get_join(join_point_id);
+				
+							match join_point
+							{
+								JoinPoint::RootJoinPoint(_) => (),
+								JoinPoint::SimpleJoinPoint(simple_join_point) =>
+								{
+									//simple_join_point.captures
+									let mut input_storage_types = Vec::<ir::ffi::TypeId>::new();
+									let mut output_storage_types = Vec::<ir::ffi::TypeId>::new();
+									let mut capture_var_ids = Vec::<VarId>::new();
+									let join_point_scheduling_funclet = & self.program.funclets[& simple_join_point.scheduling_funclet_id];
+									for (capture_index, captured_node_result) in simple_join_point.captures.iter().enumerate()
+									{
+										let var_id = placement_state.get_node_result_var_id(& captured_node_result).unwrap();
+										capture_var_ids.push(var_id);
+										//capture_storage_types.push(self.get_cpu_useable_type(join_point_scheduling_funclet.input_types[capture_index]));
+										match captured_node_result
+										{
+											NodeResult::Slot{..} => (),
+											NodeResult::Buffer{..} => (),
+											_ => panic!("Not yet supported"),
+										}
+									}
+
+									for (input_index, input_type) in join_point_scheduling_funclet.input_types.iter().enumerate()
+									{
+										input_storage_types.push(self.get_cpu_useable_type(* input_type));
+									}
+
+									for (output_index, output_type) in join_point_scheduling_funclet.output_types.iter().enumerate()
+									{
+										output_storage_types.push(self.get_cpu_useable_type(* output_type));
+									}
+
+									self.code_generator.build_push_serialized_join(simple_join_point.scheduling_funclet_id, capture_var_ids.as_slice(), & input_storage_types[0 .. simple_join_point.captures.len()], & input_storage_types[simple_join_point.captures.len() .. ], & output_storage_types[0 .. ]);
+									pipeline_context.pending_funclet_ids.push(simple_join_point.scheduling_funclet_id);
+								}
+								_ => panic!("Jump to invalid join point #{:?}: {:?}", join_point_id, join_point)
+							}
+							//pipeline_context.pending_funclet_ids.push();
+						}
+
+						let mut yielded_var_ids = Vec::<VarId>::new();
+						for node_result in yielded_node_results.iter()
+						{
+							let var_id = placement_state.get_node_result_var_id(& node_result).unwrap();
+							yielded_var_ids.push(var_id);
+						}
+
+						self.code_generator.build_yield(pipeline_yield_point_id, yielded_var_ids.as_slice());
+
+						// To do: Technically, we should insert a join point that recursively forces a split of the funclet once branches merge.
+						// Should probably fix this by adding a new type of ir::Node::Join instead of inserting here and sifting upwards.
+
+						//panic!("Not yet implemented");
+						current_funclet_id_opt = None;
+						default_join_point_id_opt = None;
+						vec![].into_boxed_slice()
 					}
 					SplitPoint::Select{return_node_results, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt} =>
 					{
@@ -612,6 +764,7 @@ impl<'program> CodeGen<'program>
 								let mut output_node_results = Vec::<NodeResult>::new();
 								for (output_index, output_type) in true_funclet.output_types.iter().enumerate()
 								{
+									// Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
 									let (storage_type, queue_stage, queue_place) = if let ir::Type::Slot{storage_type, queue_stage, queue_place} = & self.program.types[output_type]
 									{
 										(* storage_type, * queue_stage, * queue_place)
@@ -1062,6 +1215,31 @@ impl<'program> CodeGen<'program>
 
 				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
 			}
+			ir::TailEdge::Yield{pipeline_yield_point_id, yielded_nodes, next_funclet : next_funclet_id, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
+			{
+				let continuation_join_point_id = funclet_scoped_state.move_node_join_point_id(* continuation_join_node_id).unwrap();
+				let continuation_join_point = placement_state.join_graph.get_join(continuation_join_point_id);
+
+				let mut output_node_results = Vec::<NodeResult>::new();
+
+				for (yield_index, yielded_node_id) in yielded_nodes.iter().enumerate()
+				{
+					let node_result = funclet_scoped_state.move_node_result(* yielded_node_id).unwrap();
+					output_node_results.push(node_result);
+				}
+
+				let mut argument_node_results = Vec::<NodeResult>::new();
+				for (argument_index, argument_node_id) in argument_node_ids.iter().enumerate()
+				{
+					let node_result = funclet_scoped_state.move_node_result(* argument_node_id).unwrap();
+					argument_node_results.push(node_result);
+				}
+
+				let join_funclet = & self.program.funclets[next_funclet_id];
+				let join_extra = & self.program.scheduling_funclet_extras[next_funclet_id];
+				let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : join_extra.value_funclet_id, scheduling_funclet_id : * next_funclet_id, captures : argument_node_results.into_boxed_slice(), continuation_join_point_id}));
+				SplitPoint::Yield{pipeline_yield_point_id : * pipeline_yield_point_id, yielded_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)}
+			}
 			/*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
 			{
 				let captured_argument_var_ids = placement_state.get_local_state_var_ids(captured_arguments).unwrap();
@@ -1222,8 +1400,11 @@ impl<'program> CodeGen<'program>
 		split_point
 	}
 
-	fn generate_pipeline(&mut self, entry_funclet_id : ir::FuncletId, pipeline_name : &str)
+	fn generate_pipeline(&mut self, pipeline : & ir::Pipeline)
 	{
+		let entry_funclet_id : ir::FuncletId = pipeline.entry_funclet;
+		let pipeline_name : &str = pipeline.name.as_str();
+
 		let entry_funclet = & self.program.funclets[& entry_funclet_id];
 		assert_eq!(entry_funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
@@ -1244,9 +1425,27 @@ impl<'program> CodeGen<'program>
 			}
 		}
 
-		let input_types = entry_funclet.input_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
-		let output_types = entry_funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
-		self.code_generator.emit_pipeline_entry_point(entry_funclet_id, & input_types, & output_types);
+		if pipeline.yield_points.len() == 0
+		{
+			let input_types = entry_funclet.input_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+			let output_types = entry_funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+			self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_id, & input_types, & output_types);
+		}
+		else
+		{
+			let mut ffi_yield_points = Vec::<(ir::PipelineYieldPointId, code_generator::YieldPoint)>::new();
+			for (yield_point_id, yield_point) in pipeline.yield_points.iter()
+			{
+				let mut ffi_yield_point : code_generator::YieldPoint = Default::default();
+				ffi_yield_point.name = yield_point.name.clone();
+				ffi_yield_point.yielded_types = yield_point.yielded_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+				ffi_yield_point.resuming_types = yield_point.resuming_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+				ffi_yield_points.push((* yield_point_id, ffi_yield_point));
+			}
+			let input_types = entry_funclet.input_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+			let output_types = entry_funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
+			self.code_generator.emit_yieldable_pipeline_entry_point(entry_funclet_id, & input_types, & output_types, ffi_yield_points.as_slice());
+		}
 		
 		/*match & entry_funclet.tail_edge
 		{
@@ -1271,9 +1470,9 @@ impl<'program> CodeGen<'program>
 	{
 		for pipeline in self.program.pipelines.iter()
 		{
-			self.generate_pipeline(pipeline.entry_funclet, pipeline.name.as_str());
+			self.generate_pipeline(pipeline);
 		}
-
+		//panic!("Test");
 		return self.code_generator.finish();
 	}
 }

@@ -33,6 +33,22 @@ pub fn check_spatial_tag_compatibility_interior(program : & ir::Program, source_
 				panic!("Not a phi");
 			}
 		}
+		(ir::SpatialTag::Operation{remote_node_id}, ir::SpatialTag::Input{funclet_id, index}) =>
+		{
+			assert_eq!(remote_node_id.funclet_id, funclet_id);
+
+			let destination_funclet = & program.funclets[& funclet_id];
+			assert_eq!(destination_funclet.kind, ir::FuncletKind::Spatial);
+
+			if let ir::Node::Phi{index : phi_index} = & destination_funclet.nodes[remote_node_id.node_id]
+			{
+				assert_eq!(* phi_index, index);
+			}
+			else
+			{
+				panic!("Not a phi");
+			}
+		}
 		(ir::SpatialTag::Operation{remote_node_id}, ir::SpatialTag::Operation{remote_node_id : remote_node_id_2}) =>
 		{
 			assert_eq!(remote_node_id, remote_node_id_2);

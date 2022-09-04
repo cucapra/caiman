@@ -57,6 +57,22 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 				panic!("Not a phi");
 			}
 		}
+		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Input{funclet_id, index}) =>
+		{
+			assert_eq!(remote_node_id.funclet_id, funclet_id);
+
+			let destination_timeline_funclet = & program.funclets[& funclet_id];
+			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
+
+			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[remote_node_id.node_id]
+			{
+				assert_eq!(* phi_index, index);
+			}
+			else
+			{
+				panic!("Not a phi");
+			}
+		}
 		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Operation{remote_node_id : remote_node_id_2}) =>
 		{
 			assert_eq!(remote_node_id, remote_node_id_2);

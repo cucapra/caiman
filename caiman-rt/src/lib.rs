@@ -41,7 +41,7 @@ pub struct TypeLayout
 	pub alignment : usize
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct AbstractAllocator
 {
 	base_address : usize,
@@ -50,6 +50,11 @@ struct AbstractAllocator
 
 impl AbstractAllocator
 {
+	fn new(size : usize) -> Self
+	{
+		Self { base_address : 0, size }
+	}
+
 	fn suballocate(&mut self, byte_size : usize, alignment : usize) -> Option<usize>
 	{
 		if byte_size > self.size
@@ -136,7 +141,7 @@ impl AbstractAllocator
 
 pub struct CpuBufferAllocator<'buffer>
 {
-	bytes : & 'buffer [u8],
+	bytes : & 'buffer mut [u8],
 	abstract_allocator : AbstractAllocator
 }
 
@@ -174,6 +179,112 @@ impl<'buffer> CpuBufferAllocator<'buffer>
 	}
 }
 
+#[derive(Debug)]
+pub struct JoinStack<'buffer>
+{
+	bytes : & 'buffer mut [u8],
+	abstract_allocator : AbstractAllocator
+}
+
+impl<'buffer> JoinStack<'buffer>
+{
+	pub fn new(bytes : & 'buffer mut [u8]) -> Self
+	{
+		let abstract_allocator = AbstractAllocator::new(bytes.len());
+		Self { bytes, abstract_allocator }
+	}
+
+	pub fn used_bytes(& self) -> & [u8]
+	{
+		& self.bytes[ 0 .. self.abstract_allocator.base_address ]
+	}
+
+	pub fn unused_bytes(& self) -> & [u8]
+	{
+		// To do: Check for overflow?
+		& self.bytes[ self.abstract_allocator.base_address .. (self.abstract_allocator.base_address + self.abstract_allocator.size) ]
+	}
+
+	pub fn push_raw(& mut self, bytes : & [u8]) -> Option<& 'buffer mut [u8]>
+	{
+		if let Some(starting_offset) = self.abstract_allocator.suballocate(bytes.len(), 1)
+		{
+			return unsafe
+			{
+				let bytes_pointer = std::mem::transmute::<& u8, * mut u8>(& self.bytes[starting_offset]);
+				let destination_subslice = std::slice::from_raw_parts_mut::<'buffer, u8>(bytes_pointer, bytes.len());
+				destination_subslice.copy_from_slice(bytes);
+				Some(destination_subslice)
+			}
+		}
+
+		return None;
+	}
+
+	pub unsafe fn push_unsafe_unaligned<T : Sized>(&mut self, data : T) -> Result<& 'buffer mut [u8], T>
+	{
+		let bytes = unsafe
+		{
+			let bytes_pointer = std::mem::transmute::<& T, * const u8>(& data);
+			std::slice::from_raw_parts::<'buffer, u8>(bytes_pointer, std::mem::size_of::<T>())
+		};
+
+		if let Some(slice) = self.push_raw(bytes)
+		{
+			std::mem::forget(data);
+			Result::Ok(slice)
+		}
+		else
+		{
+			Result::Err(data)
+		}
+	}
+
+	pub fn peek_raw(& self, size : usize) -> Option<& [u8]>
+	{
+		if self.abstract_allocator.base_address < size
+		{
+			return None;
+		}
+
+		let new_base_address = self.abstract_allocator.base_address - size;
+
+		return Some(& self.bytes[new_base_address .. self.abstract_allocator.base_address]);
+	}
+
+	pub fn pop_raw(&mut self, size : usize) -> Option<& [u8]>
+	{
+		if self.abstract_allocator.base_address < size
+		{
+			return None;
+		}
+
+		let old_base_address = self.abstract_allocator.base_address;
+		self.abstract_allocator.base_address -= size;
+		// To do: Theoretically we can get overflow for size here if we ever allow initializing at a nonzero base address
+		self.abstract_allocator.size += size;
+
+		return Some(& self.bytes[self.abstract_allocator.base_address .. old_base_address]);
+	}
+
+	pub unsafe fn pop_unsafe_unaligned<T : Sized>(&mut self) -> Option<T>
+	{
+		let size = std::mem::size_of::<T>();
+		if let Some(source_bytes) = self.pop_raw(size)
+		{
+			let mut uninit_data : std::mem::MaybeUninit<T> = unsafe { std::mem::uninitialized() };
+			let destination_bytes_pointer = std::mem::transmute::<& mut std::mem::MaybeUninit<T>, * mut u8>(&mut uninit_data);
+			let destination_subslice = std::slice::from_raw_parts_mut::<'buffer, u8>(destination_bytes_pointer, size);
+			destination_subslice.copy_from_slice(source_bytes);
+			//let uninit_data_ref = std::mem::transmute::<& u8, & std::mem::MaybeUninit<T>>(& destination_subslice[0]);
+			return Some(uninit_data.assume_init());
+		}
+
+		return None;
+	}
+}
+
+#[derive(Debug)]
 pub struct GpuBufferAllocator<'buffer>
 {
 	buffer : & 'buffer wgpu::Buffer,
@@ -233,6 +344,7 @@ impl<'buffer> GpuBufferAllocator<'buffer>
 	}
 }
 
+#[derive(Debug)]
 // A slot holding a pointer to gpu-resident data of type T
 pub struct GpuBufferRef<'buffer, T : Sized>
 {
@@ -265,6 +377,7 @@ impl<'buffer, T : Sized> GpuBufferRef<'buffer, T>
 	}
 }
 
+#[derive(Debug)]
 // A slot holding a pointer to gpu-resident array of elements of type T
 pub struct GpuBufferSlice<'buffer, T : Sized>
 {
@@ -304,6 +417,104 @@ impl<'buffer, T : Sized> GpuBufferSlice<'buffer, T>
 		}
 	}
 }
+
+/*pub struct SerializedGpuBufferSlot
+{
+	pub offset : usize,
+	pub type_layout : TypeLayout,
+	pub size : usize
+}*/
+
+/*pub struct SerializedGpuSlot
+{
+	
+}
+
+pub enum SerializedSlot
+{
+	Cpu,
+	Gpu,
+}*/
+
+/*pub struct CpuJoinGraph<'buffer>
+{
+	cpu_buffer_allocator : CpuBufferAllocator<'buffer>
+}
+
+impl<'buffer> CpuJoinGraph<'buffer>
+{
+
+}*/
+
+/*pub enum CapturedSlot<'buffer>
+{
+	GpuBufferRef(GpuBufferRef<'buffer>),
+	GpuBufferSlice(GpuBufferSlice<'buffer>),
+}*/
+
+/*pub struct SerializedGpuBufferSlotIterator<'buffer>
+{
+
+}*/
+
+/*impl<'buffer> std::iter::Iterator for SerializedGpuBufferSlotIterator<'buffer>
+{
+	type Item = SerializedGpuBufferSlot;
+	
+	fn next(&mut self) -> Option<Self::Item>
+	{
+
+	}
+}*/
+
+/*pub struct JoinPointSpace<'join_point>
+{
+	gpu_slot_slice : & 'join_point mut [SerializedGpuBufferSlot]
+}
+
+impl<'join_point> JoinPointSpace<'buffer, 'join_point>
+{
+	fn gpu_slots(& 'join_point mut self) -> & 'join_point mut [SerializedGpuBufferSlot]
+	{
+		self.gpu_slot_slice
+	}
+}
+
+pub trait JoinPoint<'buffer>
+{
+	//fn next(&self) -> Option<& 'buffer dyn JoinPoint<'buffer>>;
+	//fn gpu_slots(& 'self self) -> SerializedGpuBufferSlotIterator<'buffer>;
+	fn spaces<'self_lifetime>(& 'self_lifetime mut self) -> & 'self_lifetime mut [JoinPointSpace<'self_lifetime>];
+}*/
+
+/*impl<'buffer> std::iter::Iterator for SerializedGpuBufferSlotIterator<'buffer>
+{
+	type Item = SerializedGpuBufferSlot;
+	
+	fn next(&mut self) -> Option<Self::Item>
+	{
+
+	}
+}*/
+
+/*pub trait JoinPointGraph<'buffer>
+{
+	type JoinPointIterator : std::iter::Iterator<Item = dyn JoinPoint<'buffer>>;
+	fn join_points(& mut self) -> Self::JoinPointIterator;
+}*/
+
+/*pub struct BufferSlotIterator
+{
+
+}*/
+
+/*struct JoinGraphEntryHeader
+{
+	entry_byte_size : u16,
+	funclet_id : u16,
+}*/
+
+
 
 #[cfg(test)]
 	mod tests {

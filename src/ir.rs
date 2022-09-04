@@ -28,13 +28,6 @@ pub enum ResourceQueueStage
 	Dead
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-pub struct ResourceState
-{
-	pub stage : ResourceQueueStage,
-	pub is_exclusive : bool
-}
-
 pub type ExternalCpuFunctionId = usize;
 pub type ExternalGpuFunctionId = usize;
 pub type FuncletId = usize;
@@ -43,15 +36,13 @@ pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
-pub type ExternalTimestampId = usize;
-pub type ExternalSpaceId = usize;
 pub type StorageTypeId = ffi::TypeId;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PipelineYieldPointId(usize);
+pub struct PipelineYieldPointId(pub usize);
 
 macro_rules! lookup_abstract_type {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
@@ -184,7 +175,7 @@ pub enum TailEdge
 {
 	// Common?
 	Return { return_values : Box<[NodeId]> },
-	//Yield { pipeline_yield_point_id : PipelineYieldPointId, return_values : Box<[NodeId]>, continuation_join : NodeId },
+	Yield { pipeline_yield_point_id : PipelineYieldPointId, yielded_nodes : Box<[NodeId]>, next_funclet : FuncletId, continuation_join : NodeId, arguments : Box<[NodeId]> },
 	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
@@ -228,11 +219,6 @@ pub struct Funclet
 	pub output_types : Box<[TypeId]>,
 	pub nodes : Box<[Node]>,
 	pub tail_edge : TailEdge,
-
-	#[serde(default)]
-	pub input_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
-	#[serde(default)]
-	pub output_resource_states : Box<[BTreeMap<Place, ResourceState>]>,
 }
 
 // Funclet-relative slot info goes here
@@ -242,9 +228,6 @@ pub struct SlotInfo
 	pub value_tag : ValueTag,
 	pub timeline_tag : TimelineTag, // marks the event that put the slot into its current state
 	pub spatial_tag : SpatialTag,
-	//pub queue_stage : ResourceQueueStage,
-	//pub queue_place : Place,
-	//pub resource_id : ...
 }
 
 // Funclet-relative join info goes here
@@ -270,6 +253,7 @@ pub struct BufferInfo
 pub struct SchedulingFuncletExtra
 {
 	pub value_funclet_id : FuncletId,
+	//pub spatial_funclet_id : FuncletId,
 	pub input_slots : HashMap<usize, SlotInfo>,
 	pub output_slots : HashMap<usize, SlotInfo>,
 	pub input_fences : HashMap<usize, FenceInfo>,
@@ -309,24 +293,26 @@ pub struct ValueFunction
 	pub default_funclet_id : Option<FuncletId>
 }
 
-// A user-facing entry point into the pipeline
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PipelineMethod
-{
-	pub name : String,
-	pub capture_types : Box<[TypeId]>,
-	pub argument_types : Box<[TypeId]>,
-	pub output_types : Box<[TypeId]>,
-	pub entry_funclet : Option<FuncletId>,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pipeline
 {
 	pub name : String,
 	pub entry_funclet : FuncletId,
 	#[serde(default)]
-	pub reentry_methods : Box<[PipelineMethod]>,
+	pub yield_points : BTreeMap<PipelineYieldPointId, PipelineYieldPoint>
+}
+
+// Callee is permitted to change the location of slots within a buffer, the size of a space, and the timeline
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PipelineYieldPoint
+{
+	pub name : String,
+	pub yielded_types : Box<[TypeId]>,
+	pub resuming_types : Box<[TypeId]>, // All value tags must be None (callee cannot change value)
+
+	pub yielded_timeline_tag : TimelineTag,
+	pub resuming_timeline_tag : TimelineTag,
+	pub spatial_funclet_id : FuncletId,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -356,17 +342,3 @@ impl Program
 		Default::default()
 	}
 }
-
-/*#[derive(Debug, Default)]
-pub struct ProgramBuilder
-{
-
-}
-
-impl ProgramBuilder
-{
-	fn new() -> Self
-	{
-		Default::default()
-	}
-}*/

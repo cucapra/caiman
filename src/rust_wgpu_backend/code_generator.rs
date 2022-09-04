@@ -29,6 +29,20 @@ pub struct TypeId(usize);
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 pub struct FenceId(usize);
 
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+pub struct ClosureId(usize);
+
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+pub struct DispatcherId(usize);
+
+#[derive(Debug, Default)]
+pub struct YieldPoint
+{
+	pub name : String,
+	pub yielded_types : Box<[ffi::TypeId]>,
+	pub resuming_types : Box<[ffi::TypeId]>,
+}
+
 #[derive(Debug, Default)]
 struct SubmissionQueue
 {
@@ -172,6 +186,20 @@ struct GpuFunctionInvocation
 	shader_module_key : ShaderModuleKey,
 }
 
+#[derive(Debug)]
+struct Closure
+{
+	capture_types : Box<[ir::ffi::TypeId]>,
+	argument_types : Box<[ir::ffi::TypeId]>,
+	closure_id : ClosureId,
+	dispatcher_id : DispatcherId
+}
+
+struct Dispatcher
+{
+	dispatcher_id : DispatcherId
+}
+
 pub struct CodeGenerator<'program>
 {
 	type_code_writer : CodeWriter,
@@ -195,6 +223,11 @@ pub struct CodeGenerator<'program>
 	gpu_function_invocations : Vec<GpuFunctionInvocation>,
 	original_native_interface : & 'program ffi::NativeInterface,
 	native_interface : ffi::NativeInterface,
+	active_closures : HashMap<(ir::FuncletId, usize), Closure>,
+	closure_id_generator : IdGenerator,
+	active_yield_point_ids : HashSet<ir::PipelineYieldPointId>,
+	dispatcher_id_generator : IdGenerator,
+	active_dispatchers : HashMap<Box<[ffi::TypeId]>, Dispatcher>,
 }
 
 impl<'program> CodeGenerator<'program>
@@ -206,7 +239,7 @@ impl<'program> CodeGenerator<'program>
 		let state_code_writer = CodeWriter::new();
 		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		let mut code_generator = Self {original_native_interface : native_interface, native_interface : native_interface.clone(), type_code_writer, state_code_writer, code_writer, /*types,*/ has_been_generated, variable_tracker, /*external_cpu_functions, external_gpu_functions,*/ active_pipeline_name : None, active_funclet_result_type_ids : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0), gpu_function_invocations : Vec::new()};
+		let mut code_generator = Self {original_native_interface : native_interface, native_interface : native_interface.clone(), type_code_writer, state_code_writer, code_writer, /*types,*/ has_been_generated, variable_tracker, /*external_cpu_functions, external_gpu_functions,*/ active_pipeline_name : None, active_funclet_result_type_ids : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0), gpu_function_invocations : Vec::new(), active_closures : HashMap::new(), closure_id_generator : IdGenerator::new(), active_yield_point_ids : HashSet::new(), dispatcher_id_generator : IdGenerator::new(), active_dispatchers : HashMap::new()};
 
 		let type_ids = code_generator.native_interface.types.iter().map(|(type_id, _)| ffi::TypeId(* type_id)).collect::<Box<[ffi::TypeId]>>();
 		for & type_id in type_ids.iter()
@@ -642,6 +675,9 @@ impl<'program> CodeGenerator<'program>
 	pub fn begin_pipeline(&mut self, pipeline_name : &str)
 	{
 		self.reset_pipeline();
+		self.active_closures.clear();
+		self.active_yield_point_ids.clear();
+		self.active_dispatchers.clear();
 
 		self.active_pipeline_name = Some(String::from(pipeline_name));
 		self.code_writer.begin_module(pipeline_name);
@@ -753,7 +789,7 @@ impl<'program> CodeGenerator<'program>
 		let mut next_trait_index = 0usize;
 
 		let mut argument_variable_ids = Vec::<VarId>::new();
-		write!(self.code_writer, "pub fn funclet{}_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(instance : Instance<'state, 'cpu_functions, Callbacks>", funclet_id);
+		write!(self.code_writer, "fn funclet{}_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut caiman_rt::JoinStack<'callee>", funclet_id);
 
 		/*for (input_index, input_type) in input_types.iter().enumerate()
 		{
@@ -838,7 +874,7 @@ impl<'program> CodeGenerator<'program>
 			}
 		}
 
-		write!(self.code_writer, " ) -> FuncletResult<'state, 'cpu_functions, Callbacks, {}>", self.get_tuple_definition_string(& funclet_result_type_ids));
+		write!(self.code_writer, " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, {}>", self.get_tuple_definition_string(& funclet_result_type_ids));
 		self.code_writer.write("\n{\n\tuse std::convert::TryInto;\n".to_string());
 
 		self.active_funclet_state = Some(ActiveFuncletState{funclet_id, result_type_ids : funclet_result_type_ids, next_funclet_ids : None, capture_count : 0, output_count : 0, output_type_ids : output_types.to_vec().into_boxed_slice(), next_funclet_input_types : None});
@@ -846,7 +882,7 @@ impl<'program> CodeGenerator<'program>
 		argument_variable_ids.into_boxed_slice()
 	}
 
-	pub fn emit_oneshot_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId])
+	/*pub fn emit_oneshot_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId])
 	{
 		self.code_writer.begin_module("pipeline_outputs");
 		{
@@ -900,21 +936,96 @@ impl<'program> CodeGenerator<'program>
 			write!(self.code_writer, "field_{} : result.field_{}", output_index, output_index);
 		}
 		write!(self.code_writer, "}};\n}}\n");
-	}
+	}*/
 
-	pub fn emit_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId])
+	fn emit_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId], yield_points_opt : Option<& [(ir::PipelineYieldPointId, YieldPoint)]>)
 	{
+		//Option<(ir::PipelineYieldPointId, Box<[ffi::TypeId])>>
 		let pipeline_name = self.active_pipeline_name.as_ref().unwrap();
 
 		let funclet_result_definition_string = "
-		pub struct FuncletResult<'state, 'cpu_functions, Callbacks : CpuFunctions, Intermediates>
+		pub struct FuncletResult<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>
 		{
 			instance : Instance<'state, 'cpu_functions, Callbacks>,
-			pub intermediates : Intermediates
+			phantom : std::marker::PhantomData<& 'callee ()>,
+			intermediates : FuncletResultIntermediates<Intermediates>
 		}
+
+		impl<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, Intermediates>
+		{
+			pub fn returned(&self) -> Option<& Intermediates>
+			{
+				if let FuncletResultIntermediates::Return(intermediates) = & self.intermediates
+				{
+					return Some(& intermediates);
+				}
+
+				None
+			}
+
+			pub fn prepare_next(self) -> Instance<'state, 'cpu_functions, Callbacks>
+			{
+				self.instance
+			}
+		}
+
 		";
 
 		write!(self.code_writer, "{}", funclet_result_definition_string);
+
+		let pipeline_output_tuple_string = self.get_tuple_definition_string(output_types);
+		write!(self.code_writer, "type PipelineOutputTuple<'callee> = {};\n", pipeline_output_tuple_string);
+
+		write!(self.code_writer, "enum FuncletResultIntermediates<Intermediates>\n{{ Return(Intermediates), ");
+		let mut yield_point_ref_map = HashMap::<ir::PipelineYieldPointId, & YieldPoint>::new();
+		if let Some(yield_points) = yield_points_opt
+		{
+			for (yield_point_id, yield_point) in yield_points.iter()
+			{
+				yield_point_ref_map.insert(* yield_point_id, yield_point);
+				write!(self.code_writer, "Yield{}{{ yielded : {} }}, ", yield_point_id.0, self.get_tuple_definition_string(& yield_point.yielded_types));
+			}
+		}
+		write!(self.code_writer, "}}");
+
+
+		write!(self.code_writer, "impl<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, Intermediates>\n{{\n");
+		if let Some(yield_points) = yield_points_opt
+		{
+			for (yield_point_id, yield_point) in yield_points.iter()
+			{
+				write!(self.code_writer, "pub fn yielded_at_{}(&self) -> Option<& {}> {{ if let FuncletResultIntermediates::Yield{}{{yielded}} = & self.intermediates {{ Some(yielded) }} else {{ None }} }}\n", yield_point.name, self.get_tuple_definition_string(& yield_point.yielded_types), yield_point_id.0);
+				
+				//let dispatcher_id = self.lookup_dispatcher_id(& yield_point.resuming_types);
+				//write!(self.code_writer, "pub fn resume_at_{}(self) -> "
+			}
+		}
+		write!(self.code_writer, "}}");
+
+		/*for yield_point_id in self.active_yield_point_ids.iter()
+		{
+			write!(self.code_writer, "fn pop_and_dispatch_join_from_yield_at_{}<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut JoinStack<'callee>", yield_point_id);
+
+			let yield_point = yield_point_ref_map[yield_point_id];
+
+			for (resuming_argument_index, resuming_type) in yield_point.resuming_types.iter().enumerate()
+			{
+				write!(self.code_writer, ", arg_{} : {}", resuming_argument_index, self.get_type_name(* resuming_type));
+			}
+			write!(self.code_writer, " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, {}>\n", pipeline_output_tuple_string);
+			write!(self.code_writer, "{{\n",);
+			write!(self.code_writer, "match ",);
+
+			for ((funclet_id, capture_count), closure) in self.active_closures.iter()
+			{
+				write!(self.code_writer, "Funclet{}Capturing{}, ", funclet_id, capture_count);
+			}
+			
+			write!(self.code_writer, "}}");
+		}*/
+
+		/**/
+		//panic!("Implement closure table");
 
 		// Write the instance state
 		write!(self.code_writer, "pub struct Instance<'state, 'cpu_functions, F : CpuFunctions>{{state : & 'state mut dyn caiman_rt::State, cpu_functions : & 'cpu_functions F");
@@ -979,42 +1090,151 @@ impl<'program> CodeGenerator<'program>
 
 		");
 
-		/*write!(self.code_writer, "\t\tpub fn start(mut self");
-
-		for (input_index, input_type) in input_types.iter().enumerate()
-		{
-			let type_name = self.get_type_name(*input_type);
-			self.code_writer.write(format!(", input_{} : {}", input_index, type_name));
-		}
-
-		write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, F> \n{{\n\t Funclet{}::new(self", funclet_id, funclet_id);
-
-		for (input_index, input_type) in input_types.iter().enumerate()
-		{
-			self.code_writer.write(format!(", input_{}", input_index));
-		}
-
-		write!(self.code_writer, ")\n}}\n");*/
-
 		write!(self.code_writer, "{}", "
 		}
 		");
+
+
+		write!(self.code_writer, "impl<'state, 'cpu_functions, F : CpuFunctions> Instance<'state, 'cpu_functions, F>\n");
+		write!(self.code_writer, "{{\n");
+		{
+			write!(self.code_writer, "pub fn start<'callee>(self, join_stack : &mut caiman_rt::JoinStack<'callee>");
+			for (input_index, input_type) in input_types.iter().enumerate()
+			{
+				write!(self.code_writer, ", arg_{} : {}", input_index, self.get_type_name(* input_type));
+			}
+			write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ funclet{}_func(self, join_stack", funclet_id);
+			for (input_index, input_type) in input_types.iter().enumerate()
+			{
+				write!(self.code_writer, ", arg_{}", input_index);
+			}
+			write!(self.code_writer, ") }}", );
+		}
+		if let Some(yield_points) = yield_points_opt
+		{
+			for (yield_point_id, yield_point) in yield_points.iter()
+			{
+				//write!(self.code_writer, "pub fn yielded_at_{}(&self) -> Option<& {}> {{ if let FuncletResultIntermediates::Yield{}{{yielded}} = & self.intermediates {{ Some(yielded) }} else {{ None }} }}\n", yield_point.name, self.get_tuple_definition_string(& yield_point.yielded_types), yield_point_id.0);
+				
+				let dispatcher_id = self.lookup_dispatcher_id(& yield_point.resuming_types);
+				write!(self.code_writer, "pub fn resume_at_{}<'callee>(self, join_stack : &mut caiman_rt::JoinStack<'callee>", yield_point.name);
+				for (resuming_argument_index, resuming_type) in yield_point.resuming_types.iter().enumerate()
+				{
+					write!(self.code_writer, ", arg_{} : {}", resuming_argument_index, self.get_type_name(* resuming_type));
+				}
+				write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ pop_join_and_dispatch_at_{}::<F, PipelineOutputTuple<'callee>>(self, join_stack", dispatcher_id.0);
+				for (resuming_argument_index, resuming_type) in yield_point.resuming_types.iter().enumerate()
+				{
+					write!(self.code_writer, ", arg_{}", resuming_argument_index);
+				}
+				write!(self.code_writer, ") }}\n");
+
+				
+			}
+		}
+		write!(self.code_writer, "}}\n");
+
+		// Generate closures all the way at the end
+
+		write!(self.code_writer, "#[derive(Debug)] enum ClosureHeader {{ Root, ");
+		for ((funclet_id, capture_count), closure) in self.active_closures.iter()
+		{
+			write!(self.code_writer, "Funclet{}Capturing{}, ", funclet_id, capture_count);
+		}
+		write!(self.code_writer, "}}\n");
+
+
+		for ((funclet_id, capture_count), closure) in self.active_closures.iter()
+		{
+			write!(self.code_writer, "type Funclet{}Capturing{}CapturedTuple<'callee> = {};\n", funclet_id, capture_count, self.get_tuple_definition_string(& closure.capture_types));
+		}
+
+		for (argument_types, dispatcher) in self.active_dispatchers.iter()
+		{
+			write!(self.code_writer, "fn pop_join_and_dispatch_at_{}<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut caiman_rt::JoinStack<'callee>", dispatcher.dispatcher_id.0);
+
+			for (resuming_argument_index, resuming_type) in argument_types.iter().enumerate()
+			{
+				write!(self.code_writer, ", arg_{} : {}", resuming_argument_index, self.get_type_name(* resuming_type));
+			}
+			write!(self.code_writer, " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, {}>\n", pipeline_output_tuple_string);
+			write!(self.code_writer, "{{\n",);
+
+			write!(self.code_writer, "let closure_header = unsafe {{ join_stack.pop_unsafe_unaligned::<ClosureHeader>().unwrap() }}; match closure_header {{\n",);
+
+			for ((funclet_id, capture_count), closure) in self.active_closures.iter()
+			{
+				if closure.dispatcher_id != dispatcher.dispatcher_id
+				{
+					continue;
+				}
+
+				//write!(self.code_writer, "ClosureHeader::Funclet{}Capturing{} => {{ let join_captures = unsafe {{ join_stack.pop_unsafe_unaligned::<{}>().unwrap() }}; funclet{}_func(instance, join_stack", funclet_id, capture_count, self.get_tuple_definition_string(& closure.capture_types), funclet_id);
+				write!(self.code_writer, "ClosureHeader::Funclet{}Capturing{} => {{ let join_captures = unsafe {{ join_stack.pop_unsafe_unaligned::<Funclet{}Capturing{}CapturedTuple<'callee>>().unwrap() }}; funclet{}_func(instance, join_stack", funclet_id, capture_count, funclet_id, capture_count, funclet_id);
+				for capture_index in 0 .. * capture_count
+				{
+					write!(self.code_writer, ", join_captures.{}", capture_index);
+				}
+				for (argument_index, _argument_type) in argument_types.iter().enumerate()
+				{
+					write!(self.code_writer, ", arg_{}", argument_index);
+				}
+				write!(self.code_writer, ") }}\n");
+			}
+			
+			write!(self.code_writer, "_ => panic!(\"Dispatcher cannot dispatch given closure {{:?}}\", closure_header), }} }}", );
+		}
+	}
+
+
+	pub fn emit_oneshot_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId])
+	{
+		self.emit_pipeline_entry_point(funclet_id, input_types, output_types, None)
+	}
+
+	pub fn emit_yieldable_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId], yield_points : & [(ir::PipelineYieldPointId, YieldPoint)])
+	{
+		self.emit_pipeline_entry_point(funclet_id, input_types, output_types, Some(yield_points))
 	}
 
 	pub fn build_return(&mut self, output_var_ids : &[VarId])
 	{
-		self.require_local(output_var_ids);
 		//self.get_type_name(self.active_funclet_result_type_id.unwrap())
 		//self.active_funclet_state.as_ref().unwrap().funclet_id
-		write!(self.code_writer, "return FuncletResult {{instance, intermediates : (");
+		if let Some(result_type_ids) = & self.active_funclet_result_type_ids
+		{
+			let result_type_ids = result_type_ids.clone(); // Make a copy for now to satisfy the borrowchecking gods...
+			let dispatcher_id = self.lookup_dispatcher_id(& result_type_ids);
+			write!(self.code_writer, "if join_stack.used_bytes().len() > 0 {{ ");
+			write!(self.code_writer, "return pop_join_and_dispatch_at_{}::<Callbacks, PipelineOutputTuple<'callee>>", dispatcher_id.0);//::<'state, 'cpu_functions, 'callee>
+			write!(self.code_writer, "(instance, join_stack");
+			for (return_index, var_id) in output_var_ids.iter().enumerate()
+			{
+				write!(self.code_writer, ", {}", self.variable_tracker.get_var_name(* var_id));
+			}
+			write!(self.code_writer, ") }}");
+		}
+		write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{instance, phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((");
 		for (return_index, var_id) in output_var_ids.iter().enumerate()
 		{
 			write!(self.code_writer, "{}, ", self.variable_tracker.get_var_name(* var_id));
 		}
-		write!(self.code_writer, ")}};");
+		write!(self.code_writer, "))}};");
 	}
 
-	pub fn build_yield(&mut self, next_funclet_ids : &[ir::FuncletId], next_funclet_input_types : Box<[Box<[ffi::TypeId]>]>, capture_var_ids : &[VarId], output_var_ids : &[VarId])
+	pub fn build_yield(&mut self, yield_point_id : ir::PipelineYieldPointId, yielded_var_ids : &[VarId])
+	{
+		//self.get_type_name(self.active_funclet_result_type_id.unwrap())
+		//self.active_funclet_state.as_ref().unwrap().funclet_id
+		write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{instance, phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Yield{}{{ yielded : (", yield_point_id.0);
+		for (return_index, var_id) in yielded_var_ids.iter().enumerate()
+		{
+			write!(self.code_writer, "{}, ", self.variable_tracker.get_var_name(* var_id));
+		}
+		write!(self.code_writer, ") }} }};");
+	}
+
+	/*pub fn build_yield(&mut self, next_funclet_ids : &[ir::FuncletId], next_funclet_input_types : Box<[Box<[ffi::TypeId]>]>, capture_var_ids : &[VarId], output_var_ids : &[VarId])
 	{
 		self.active_funclet_state.as_mut().unwrap().next_funclet_ids = Some(next_funclet_ids.to_vec().into_boxed_slice());
 
@@ -1033,7 +1253,7 @@ impl<'program> CodeGenerator<'program>
 		self.active_funclet_state.as_mut().unwrap().output_count = output_var_ids.len();
 		self.active_funclet_state.as_mut().unwrap().next_funclet_input_types = Some(next_funclet_input_types);
 		self.code_writer.write(format!("}}}};"));
-	}
+	}*/
 
 	//fn build_oneshot_entry_point()
 
@@ -1247,6 +1467,41 @@ impl<'program> CodeGenerator<'program>
 		let type_id = ffi::TypeId(self.native_interface.types.create(typ));
 		self.generate_type_definition(type_id);
 		type_id
+	}
+
+	pub fn lookup_closure_id(&mut self, funclet_id : ir::FuncletId, capture_types : &[ffi::TypeId], argument_types : &[ffi::TypeId]) -> ClosureId
+	{
+		if let Some(closure) = self.active_closures.get(& (funclet_id, capture_types.len()))
+		{
+			for (capture_index, capture_type) in capture_types.iter().enumerate()
+			{
+				assert_eq!(closure.capture_types[capture_index], * capture_type);
+			}
+			closure.closure_id
+		}
+		else
+		{
+			let closure_id = ClosureId(self.closure_id_generator.generate());
+			let dispatcher_id = self.lookup_dispatcher_id(argument_types);
+			let old = self.active_closures.insert((funclet_id, capture_types.len()), Closure{capture_types : capture_types.to_vec().into_boxed_slice(), argument_types : argument_types.to_vec().into_boxed_slice(), closure_id, dispatcher_id});
+			assert!(old.is_none());
+			closure_id
+		}
+	}
+
+	pub fn lookup_dispatcher_id(&mut self, argument_types : &[ffi::TypeId]) -> DispatcherId
+	{
+		if let Some(dispatcher) = self.active_dispatchers.get(argument_types)
+		{
+			dispatcher.dispatcher_id
+		}
+		else
+		{
+			let dispatcher_id = DispatcherId(self.dispatcher_id_generator.generate());
+			let old = self.active_dispatchers.insert(argument_types.to_vec().into_boxed_slice(), Dispatcher{dispatcher_id});
+			assert!(old.is_none());
+			dispatcher_id
+		}
 	}
 
 	pub fn build_constant_integer(&mut self, value : i64, type_id : ffi::TypeId) -> VarId
@@ -1522,6 +1777,26 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "let {} = {}.test_suballocate_many(&[{}], &[{}]);\n", self.variable_tracker.get_var_name(success_var_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), layouts_string, element_counts_string);
 		
 		success_var_id
+	}
+
+	pub fn build_push_serialized_join(&mut self, funclet_id : ir::FuncletId, capture_var_ids : & [VarId], capture_types : &[ffi::TypeId], argument_types : & [ffi::TypeId], output_types : & [ffi::TypeId])
+	{
+		let _closure_id = self.lookup_closure_id(funclet_id, capture_types, argument_types);
+		let _argument_dispatcher_id = self.lookup_dispatcher_id(argument_types);
+		//let _output_dispatcher_id = self.lookup_dispatcher_id(output_types);
+		println!("Pushed serialzed join for funclet {}: {:?}", funclet_id, self.active_closures.get(& (funclet_id, capture_types.len())));
+
+
+		let tuple_definition_string = self.get_tuple_definition_string(capture_types);
+		//write!(self.code_writer, "{{ let join_data : {} = (", tuple_definition_string);
+		write!(self.code_writer, "{{ let join_data : Funclet{}Capturing{}CapturedTuple<'callee> = (", funclet_id, capture_types.len());
+		for var_id in capture_var_ids.iter()
+		{
+			write!(self.code_writer, "{}, ", self.variable_tracker.get_var_name(* var_id));
+		}
+		write!(self.code_writer, "); let closure_header = ClosureHeader::Funclet{}Capturing{}; unsafe {{ join_stack.push_unsafe_unaligned(join_data).expect(\"Ran out of memory while serializing join\"); join_stack.push_unsafe_unaligned(closure_header).expect(\"Ran out of memory while serializing join\"); }}", funclet_id, capture_types.len());
+
+		write!(self.code_writer, "}}");
 	}
 
 	/*fn encode_copy_cpu_from_gpu(&mut self, destination_var : usize, source_var : usize)

@@ -341,6 +341,11 @@ impl<'program> FuncletChecker<'program>
 					}
 				}
 
+				if let Some(source_spatial_tag) = self.scalar_node_spatial_tags.get(& source_slot_node_id)
+				{
+					self.scalar_node_spatial_tags.insert(destination_slot_node_id, * source_spatial_tag);
+				}
+
 				let to_stage = to_stage_opt.unwrap();
 				match to_stage
 				{
@@ -854,6 +859,37 @@ impl<'program> FuncletChecker<'program>
 					check_timeline_tag_compatibility_interior(& self.program, node_timeline_tag, timeline_tag);
 					check_spatial_tag_compatibility_interior(& self.program, node_spatial_tag, spatial_tag);
 				}
+			}
+			ir::TailEdge::Yield{pipeline_yield_point_id, yielded_nodes : yielded_node_ids, next_funclet, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
+			{
+				// To do: Need pipeline to check yield point types
+				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
+
+				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
+				{
+					// Nothing, for now...
+				}
+				else
+				{
+					panic!("Node at #{} is not a join point", continuation_join_node_id)
+				}
+
+				for node_id in yielded_node_ids.iter()
+				{
+					self.node_types.remove(node_id);
+				}
+
+				for argument_node_id in argument_node_ids.iter()
+				{
+					self.node_types.remove(argument_node_id);
+				}
+
+				/*assert_eq!(true_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
+				assert_eq!(false_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
+				for (return_index, return_node_id) in return_values.iter().enumerate()
+				{
+					check_slot_type(& self.program, true_funclet.input_types[argument_index], & node_type);
+				}*/
 			}
 			ir::TailEdge::Jump { join, arguments } =>
 			{
