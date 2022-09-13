@@ -2,7 +2,10 @@
 	operations : [
 		// Essential nodes
 		// These are mostly artifacts of program encoding
+		// As such, they might not be meaningful in a different representation
 		(
+			// Represents an unused space in the node array
+			// Does nothing, cannot be referenced, and should probably be removed before passing to later stages
 			name : "None",
 			inputs : [],
 			output : None,
@@ -10,6 +13,10 @@
 			has_local_side_effect : false
 		),
 		(
+			// Represents an input to the funclet, where "index" is the input number
+			// Is not a true phi node (inputs are explicit), but the term has stuck because it helps explain what it is to people more familiar with a standard SSA BB representation.
+			// A Phi node with index n must appear as the nth node in the node array
+			// This facilitates quick lookup of input nodes and preserves ordering and linearity
 			name : "Phi",
 			inputs : [
 				(name : "index", kind : Index),
@@ -19,6 +26,9 @@
 			has_local_side_effect : false
 		),
 		(
+			// Extracts a field (index) from the result tuple of a node with multiple returns (at node_id)
+			// An ExtractResult with index n must be at node_id + n
+			// This facilitates quick lookup of output nodes and preserves ordering and linearity
 			name : "ExtractResult",
 			inputs : [
 				(name : "node_id", kind : Operation),
@@ -28,30 +38,37 @@
 			language_set : (functional : true, scheduling: true, timeline : true, spatial : true, intrinsic : true),
 			has_local_side_effect : false
 		),
+
+		// Functional-only nodes
 		(
+			// Represents a constant signed integer
+			// For EncodeDo: Is a value operation with no inputs and one output
 			name : "ConstantInteger",
 			inputs : [
 				(name : "value", kind : ImmediateI64),
 				(name : "type_id", kind : Type),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : false
 		),
 		(
+			// Represents a constant unsigned integer
+			// For EncodeDo: Is a value operation with no inputs and one output
 			name : "ConstantUnsignedInteger",
 			inputs : [
 				(name : "value", kind : ImmediateU64),
 				(name : "type_id", kind : Type),
 			],
 			output : Single,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : false
 		),
-
-		// Value function nodes
-		// Unlikely to have any meaning when evaluated
 		(
+			// Represents a function call with multiple arguments and multiple returns
+			// Does not invoke a funclet directly
+			// Instead, it represents a call to any funclet that is a member of the given equivalence class
+			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
 			name : "CallValueFunction",
 			inputs : [
 				(name : "function_id", kind : ValueFunction),
@@ -62,6 +79,11 @@
 			has_local_side_effect : false
 		),
 		(
+			// Represents an if-then-else node that unifies with true_case if condition is not zero
+			// Unifies with false_case if it is zero
+			// A schedule may implement with a conditional move or a branch, among other things
+			// For EncodeDo: Is a value operation where condition is the 0th input slot, true_case is the 1st input slot, and false_case is the 2nd input slot
+			// Has a single output slot
 			name : "Select",
 			inputs : [
 				(name : "condition", kind : Operation),
@@ -74,8 +96,13 @@
 		),
 
 		// Intrinsic nodes
-		// exposes functionality that should be used with caution to implement other functionality
+		// Exposes functionality that should be used with caution to implement other functionality
+		// These break the illusion that the value language doesn't know about cpu vs gpu
+		// It's intended that these are used as part of an ffi and then hidden via indirection through function equivalence classes
 		(
+			// Invokes an external cpu function with multiple arguments and multiple returns (encoded as a tuple on the host code side)
+			// Doesn't (yet) implement mutable in-out arguments (unbound slots with forwarding) so all outputs must be value types
+			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
 			name : "CallExternalCpu",
 			inputs : [
 				(name : "external_function_id", kind : ExternalCpuFunction),
@@ -86,6 +113,9 @@
 			has_local_side_effect : false
 		),
 		(
+			// Invokes an external gpu compute kernel with multiple arguments, multiple returns, and up to 3 dimensions
+			// For EncodeDo: Is a value operation where the first 0-3 input slots are the corresponding dimensions
+			// Each of the remaining input slots corresponds to a single argument node and each output corresponds to a single field of the output tuple
 			name : "CallExternalGpuCompute",
 			inputs : [
 				(name : "external_function_id", kind : ExternalGpuFunction),
@@ -97,31 +127,14 @@
 			has_local_side_effect : false
 		),
 
-		// Old scheduling nodes
-		// Likely to disappear
-		/*(
-			name : "SyncLocal",
-			inputs : [
-				(name : "values", kind : Operation, is_array : true)
-			],
-			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : true
-		),
-		(
-			name : "EncodeGpu",
-			inputs : [
-				(name : "values", kind : Operation, is_array : true)
-			],
-			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : true
-		),*/
-
 		// These are convenience instructions that rely on codegen doing some questionable magic
 		// Don't expect these to be predictable
 		// It's possible for them to do the worst thing possible that is still legal without knowing the future
 		(
+			// Temporarily allocates memory to create a slot in the bound state in the given place of the given storage type and for the given operation
+			// The allocated slot has no space, so it cannot leave the scope it is created in and cannot be captured (caiman doesn't check this yet)
+			// Is intended that caiman does static analysis to preallocate enough memory to hold the stack of temporaries
+			// This is feasible since caiman forbids infinitely nested schedule calls without yielding back to the host
 			name : "AllocTemporary",
 			inputs : [
 				(name : "place", kind : Place),
@@ -135,6 +148,9 @@
 
 		// State management
 		(
+			// Creates a slot in the unbound state that has no associated memory (yet)
+			// May be used as the associated forwarding target of an operation that consumes an input slot
+			// Has no space yet so cannot be captured (caiman doesn't check this yet).
 			name : "UnboundSlot",
 			inputs : [
 				(name : "place", kind : Place),
@@ -147,6 +163,7 @@
 			has_local_side_effect : true
 		),
 		(
+			// Consumes resources with no pending operation (not in the encoded or submitted state)
 			name : "Drop",
 			inputs : [
 				(name : "node", kind : Operation)
@@ -156,6 +173,9 @@
 			has_local_side_effect : true
 		),
 		(
+			// Allocates a slot from a specific buffer
+			// Such inherit their space from the buffer, and may be captured and returned, but all resources of a space msut be captured or returned together
+			// (caiman does not check this yet)
 			name : "StaticAllocFromStaticBuffer",
 			inputs : [
 				(name : "buffer", kind : Operation),
@@ -170,6 +190,7 @@
 
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(
+			// Encodes a computation of the given operation to the queue for the given place
 			name : "EncodeDo",
 			inputs : [
 				(name : "place", kind : Place),
@@ -182,6 +203,8 @@
 			has_local_side_effect : true
 		),
 		(
+			// Encodes a copy of a slot holding the result of the given operation on the queue for the given place
+			// Currently, the queue must match the place of the output 
 			name : "EncodeCopy",
 			inputs : [
 				(name : "place", kind : Place),
@@ -193,6 +216,9 @@
 			has_local_side_effect : true
 		),
 		(
+			// Submits pending encoded commands to the queue for the given place
+			// Currently, must be invoked within the funclet that does the encoding (this needs to be fixed)
+			// Event encodes a point in the timeline funclet that this submission advances the current timeline to
 			name : "Submit",
 			inputs : [
 				(name : "place", kind : Place),
@@ -203,16 +229,21 @@
 			has_local_side_effect : true
 		),
 		(
+			// Creates a fence that will be signalled when the given place completes the most recently submitted command
+			// Currently, can only be created for the gpu
+			// Event encodes a point in the timeline funclet that this fence observes
 			name : "EncodeFence",
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "event", kind : RemoteOperation)
 			],
-			output : None,
+			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 		(
+			// Synchronizes the given place on the fence
+			// Event encodes a point in the timeline funclet that this synchronization advances the current timeline to
 			name : "SyncFence",
 			inputs : [
 				(name : "place", kind : Place),
@@ -224,6 +255,8 @@
 			has_local_side_effect : true
 		),
 		(
+			// Creates a linear join point that will be inlined upon invocation
+			// Is a second class continuation and cannot leave the scope it is created in
 			name : "InlineJoin",
 			inputs : [
 				(name : "funclet", kind : Funclet),
@@ -235,6 +268,10 @@
 			has_local_side_effect : true
 		),
 		(
+			// Creates a linear join point that is recorded to the join stack immediately upon creation
+			// Is a second class continuation and cannot leave the scope it is created in
+			// As it is serialized, it can cross the yield/resume boundary (absent any join stack hackery by the host)
+			// Will currently fail at runtime if there is not enough memory on the join stack
 			name : "SerializedJoin",
 			inputs : [
 				(name : "funclet", kind : Funclet),
@@ -246,6 +283,8 @@
 			has_local_side_effect : true
 		),
 		(
+			// Gets the default continuation for the active funclet (used implicitly by Return)
+			// Once this is invoked, the funclet no longer has a default continuation!
 			name : "DefaultJoin",
 			inputs : [],
 			output : Single,
@@ -255,6 +294,8 @@
 
 		// Timeline nodes
 		(
+			// Represents the state of the coordinator (at here_place) after a submission to there_place
+			// local_past is the previous state of the coordinator as known by the coordinator
 			name : "SubmissionEvent",
 			inputs : [
 				(name : "here_place", kind : Place),
@@ -266,19 +307,22 @@
 			has_local_side_effect : false
 		),
 		(
+			// Represents the state of the coordinator (at here_place) after a synchonization on there_place
+			// local_past is the previous state of the coordinator as known by the coordinator
+			// remote_local_past is the previous state of the coordinator as known by there_place (a round trip)
 			name : "SynchronizationEvent",
 			inputs : [
 				(name : "here_place", kind : Place),
 				(name : "there_place", kind : Place),
 				(name : "local_past", kind : Operation),
-				(name : "remote_local_past", kind : Operation), // Round trip: What does the remote agent know the local agent knows as its event history (the last submission)?
+				(name : "remote_local_past", kind : Operation),
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: false, timeline : true, spatial : false, intrinsic : false),
 			has_local_side_effect : false
 		),
 
-		// Space nodes
+		// Space nodes (ignore for now)
 		(
 			name : "SeparatedLinearSpace",
 			inputs : [
