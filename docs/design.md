@@ -126,19 +126,43 @@ These correspond to the "what", "when", and "where" of computation, respectively
 
 Abstractly, each of these (non-scheduling) funclets encodes a finite-state machine (a tree automaton in the case of the value language), slots are a subset of the product states of all three machines, and the scheduling funclet is choosing a linear path through a subset of the states where all three machines have a valid transition.  Thus, while most languages start with a subgraph of the product automaton and use static analysis to identify alternative paths (via optimizations), caiman is starting with all parts factored such that all paths are easily visible and is just checking the validity of the user-chosen path through the product automaton.
 
-## The Core Scheduling Language
+## The Scheduling Language
 
 To do
 
+See `caiman-spec/src/content.ron` for now.
+
 ### Control Flow
+
+All scheduling funclets are associated with exactly one value funclet, exactly one timeline funclet, and exactly one spatial funclet.  Scheduling funclets are basic blocks where (most) control flow operations are pushed to the terminating "tail edge".  The exceptions (for now) are commands that synchronously occur on the local queue and contain no invocation of other funclets, where while control flow might technically appear in the target language, it isn't expressed in the language of funclets.  `Submit` and `SyncFence` are instructions that should probably be tail edges and not nodes since they could, conceptually, invoke other funclets (and potentially result in a whole-funclet type transition).
+
+Because the scheduling language is sensitive to execution order, the scheduling language part will, in general, contain more than one funclet per value language funclet.
+
+Caiman tracks the call stack via second class continuations called "join points".  These may be passed down the stack, but may never escape (except when explicitly serialized to survive a `Yield`).  There are two kinds of join points: inlined and serialized.  Inlined join points are directly emitted as code in the target language and carry their state through local variables.  Serialized join points have their state immediately written into a "join stack" provided by the host, and will be invoked via an indirect table dispatch.  A future extension may provide a nicer middle ground.
+
+Each funclet invocation tracks an implicit call stack in the form of a single linear continuation called the "default join".  The simplest control flow tail edge is `Return` which returns control to the default join.  A `Jump` edge transfers control to the provided continuation.
+
+A scheduling funclet may invoke a `call_f(q_0, q_1, q_2, ...)` node with a `ScheduleCall` tail edge by providing the value language node for the call, a callee scheduling funclet implementing that value function, and an array of slots that correspond to the type of the scheduling funclet's inputs.  Upon the call, for all `i` the `Operation` tag of `q_i` in the caller value funclet unifies with an `Input` tag with index `i` in the callee's value funclet.  The continuation scheduling funclet must have the same value funclet as the caller, and for the continuation, `Output` tags in the callee value funclet will unify with the corresponding `ExtractResult` nodes in the caller value funclet.
+
+A `ScheduleSelect` tail edge works in a similar way for `select(q_c, q_t, q_f)` nodes.  It will check if the slot for `q_c` is nonzero, and if so, will invoke the funclet intended to produce `q_t`.  If not, it will invoke the funclet intended to produce `q_f`.  `q_t` and `q_f` will unify with the `select` node in the output of each funclet respectively.  The continuation will receive a slot containining the result of the `select`.
+
+`DynamicAllocFromBuffer` will check if there is enough memory to allocate from a buffer and will run a success funclet if there is, otherwise it will invoke a failure funclet.
+
+Each run of the pipeline is provided a fixed size "join stack" by the compiler to encode the dynamic state of the call stack and preserve it across pipeline yields.  Upon completion of a scheduling funclet, caiman will automatically invoke the top of the join stack if there is something there.
+
+A `Yield` tail edge returns control to the calling host code.  The host code should not attempt to modify the join stack, the size of buffers, or attempt to synchronize, except to grow the join stack.  This a restriction that will need to be loosened in the future.
 
 ## The Timeline Language
 
 To do
 
+See `caiman-spec/src/content.ron` for now.
+
 ## The Spatial Language
 
 To do
+
+See `caiman-spec/src/content.ron` for now.
 
 ## Explication
 
