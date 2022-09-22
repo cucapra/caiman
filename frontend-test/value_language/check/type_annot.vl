@@ -1,0 +1,42 @@
+let x : i32 = 6;
+let b : bool = false;
+let y : i32 = x;
+let z : i32 = x + y;
+let b2 : bool = b || false;
+let u : bool = !b2;
+let i : bool = input();
+let j : i32 = input();
+let jj : i32 = input() + 5;
+let jjj : bool = true || input();
+let g : i32 = { label1: 5 };
+
+let x : i32 = 1;
+fn foo() -> i32 { 5 }
+fn foob(hi : i32) -> i32 {
+  fn bar(j : bool) -> i32 { hi + 1 }
+  let asdf : i32 = hi + x;
+  asdf + 1
+}
+
+let foo_output : i32 = foo();
+let foob_out : i32 = foob(100);
+foo();
+foob(10000);
+
+while true {
+  let g : i32 = x;
+  let asdf : i32 = 5;
+  let test_if : i32 = asdf;
+}
+
+fn bar(a: i32, b: bool) -> bool {
+  let useless : i32 = a;
+  b && false 
+}
+
+bar(5, true);
+
+if bar(100, false) { }
+
+x = 1;
+

@@ -1,0 +1,10 @@
+mod parser;
+mod ast;
+mod ast_factory;
+mod error;
+mod run_parser;
+mod typing;
+mod check;
+mod type_elab;
+mod to_ir;
+pub mod compiler;
