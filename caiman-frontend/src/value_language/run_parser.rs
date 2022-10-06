@@ -1,9 +1,9 @@
-use crate::parser;
-use crate::ast;
-use crate::ast_factory::ASTFactory;
-use crate::error::LocalError;
-use crate::error::ErrorKind;
-use crate::error::ErrorLocation;
+use crate::value_language::parser;
+use crate::value_language::ast;
+use crate::value_language::ast_factory::ASTFactory;
+use crate::value_language::error::LocalError;
+use crate::value_language::error::ErrorKind;
+use crate::value_language::error::ErrorLocation;
 use std::path::Path;
 use std::fs::File;
 

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::check::SemanticError;
+use crate::value_language::check::SemanticError;
 
 type Var = String;
 
@@ -213,5 +213,4 @@ pub fn min_expr_type(t1: ExprType, t2: ExprType) -> ExprType
 {
     if t1.order() >= t2.order() { t1 } else { t2 }
 }
-
 

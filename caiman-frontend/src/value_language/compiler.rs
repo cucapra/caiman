@@ -1,15 +1,8 @@
-use crate::run_parser;
-use crate::check;
-use crate::to_ir;
-use crate::error;
-use crate::ast::ParsedProgram;
-use caiman::ir;
-
-pub enum Stage
-{
-    Parse,
-    Check,
-}
+use crate::value_language::run_parser;
+use crate::value_language::check;
+use crate::value_language::error;
+use crate::value_language::ast::ParsedProgram;
+use crate::stage::Stage;
 
 enum StageOutput
 {

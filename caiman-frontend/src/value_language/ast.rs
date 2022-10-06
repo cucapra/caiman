@@ -1,5 +1,5 @@
 // AST
-use crate::typing::Type;
+use crate::value_language::typing::Type;
 
 pub type Var = String;
 

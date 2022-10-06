@@ -1,6 +1,6 @@
-use crate::ast::*;
-use crate::typing::Type;
-use crate::ast_factory::ASTFactory;
+use crate::value_language::ast::*;
+use crate::value_language::typing::Type;
+use crate::value_language::ast_factory::ASTFactory;
 
 grammar(astf: &ASTFactory);
 

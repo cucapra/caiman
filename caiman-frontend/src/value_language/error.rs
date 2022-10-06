@@ -1,14 +1,11 @@
 use std::fmt;
-use crate::run_parser::ParsingError;
-use crate::check::SemanticError;
-use crate::to_ir::ToIRError;
-use crate::ast::Info;
+use crate::value_language::run_parser::ParsingError;
+use crate::value_language::check::SemanticError;
 
 pub enum ErrorKind
 {
     Parsing(ParsingError),
     Semantic(SemanticError),
-    ToIR(ToIRError),
 }
 
 pub enum ErrorLocation
@@ -50,7 +47,6 @@ impl fmt::Display for Error
         {
             ErrorKind::Parsing(e) => write!(f, "Parsing Error: {}", e),
             ErrorKind::Semantic(e) => write!(f, "Semantic Error: {}", e),
-            ErrorKind::ToIR(e) => write!(f, "{}", e),
         }
     }
 }
@@ -118,10 +114,3 @@ impl fmt::Display for SemanticError
     }
 }
 
-impl fmt::Display for ToIRError
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
-    {
-        write!(f, "there was an error in making the ir")
-    }
-}

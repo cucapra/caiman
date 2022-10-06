@@ -8,19 +8,18 @@
 // calculates line and column number from byte offset:
 // https://github.com/sampsyo/bril/blob/main/bril-rs/bril2json/src/lib.rs
 
-use crate::ast::*;
-use crate::typing::Type;
+use crate::value_language::ast::*;
+use crate::value_language::typing::Type;
 
 pub struct ASTFactory 
 { 
     line_ending_byte_offsets: Vec<usize>,
-    filename: String,
 }
 
 impl ASTFactory
 {
     
-    pub fn new(filename: &str, s: &str) -> Self { 
+    pub fn new(_filename: &str, s: &str) -> Self { 
         Self {
             line_ending_byte_offsets: s
                 .as_bytes()
@@ -30,7 +29,6 @@ impl ASTFactory
                     |(idx, b)| if *b == b'\n' { Some(idx) } else { None }
                 )
                 .collect(),
-            filename: filename.to_string(),
         } 
     }
 

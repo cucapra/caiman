@@ -1,8 +1,8 @@
 // auto-generated: "lalrpop 0.19.8"
-// sha3: bc1547ce05d406352669ce39034a88510a97cebfbf99b52533dc3c55fe702631
-use crate::ast::*;
-use crate::typing::Type;
-use crate::ast_factory::ASTFactory;
+// sha3: 24d1cbd0710b443d67d6a548ba06bd1643162d5ad395773d79b47c26fbe69e52
+use crate::value_language::ast::*;
+use crate::value_language::typing::Type;
+use crate::value_language::ast_factory::ASTFactory;
 #[allow(unused_extern_crates)]
 extern crate lalrpop_util as __lalrpop_util;
 #[allow(unused_imports)]
@@ -14,9 +14,9 @@ extern crate alloc;
 mod __parse__Program {
     #![allow(non_snake_case, non_camel_case_types, unused_mut, unused_variables, unused_imports, unused_parens, clippy::all)]
 
-    use crate::ast::*;
-    use crate::typing::Type;
-    use crate::ast_factory::ASTFactory;
+    use crate::value_language::ast::*;
+    use crate::value_language::typing::Type;
+    use crate::value_language::ast_factory::ASTFactory;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]
@@ -2900,9 +2900,9 @@ pub use self::__parse__Program::ProgramParser;
 mod __parse__Stmt {
     #![allow(non_snake_case, non_camel_case_types, unused_mut, unused_variables, unused_imports, unused_parens, clippy::all)]
 
-    use crate::ast::*;
-    use crate::typing::Type;
-    use crate::ast_factory::ASTFactory;
+    use crate::value_language::ast::*;
+    use crate::value_language::typing::Type;
+    use crate::value_language::ast_factory::ASTFactory;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]
@@ -5779,9 +5779,9 @@ pub use self::__parse__Stmt::StmtParser;
 #[cfg_attr(rustfmt, rustfmt_skip)]
 mod __intern_token {
     #![allow(unused_imports)]
-    use crate::ast::*;
-    use crate::typing::Type;
-    use crate::ast_factory::ASTFactory;
+    use crate::value_language::ast::*;
+    use crate::value_language::typing::Type;
+    use crate::value_language::ast_factory::ASTFactory;
     #[allow(unused_extern_crates)]
     extern crate lalrpop_util as __lalrpop_util;
     #[allow(unused_imports)]
