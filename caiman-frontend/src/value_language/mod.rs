@@ -1,9 +1,9 @@
 mod parser;
-mod ast;
+pub mod ast;
 mod ast_factory;
-mod error;
+pub mod error;
 mod run_parser;
-mod typing;
+pub mod typing;
 mod calc_expr_typing;
 mod check;
 mod type_elab;

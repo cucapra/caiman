@@ -22,6 +22,7 @@ impl HasInfo for Info
 
 // End of copied section
 
+#[derive(Debug)]
 pub enum StmtKind//<S> 
 {
     Var(Var),

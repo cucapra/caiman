@@ -3,7 +3,7 @@ use crate::value_language::check::SemanticError;
 
 type Var = String;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Type
 {
     I32,

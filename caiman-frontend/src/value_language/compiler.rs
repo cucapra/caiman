@@ -35,6 +35,26 @@ fn handle_output(s: StageOutput)
     }
 }
 
+pub fn run_output(filename: &str) -> ParsedProgram
+{
+    match run_with_result(filename, Stage::Parse)
+    {
+        Ok(s) => match s {
+            StageOutput::Parse(ast) => ast,
+            _ => panic!("Should be impossible"),
+        },
+        Err(e) => {
+            let e_global = error::Error {
+                kind: e.kind,
+                location: e.location,
+                filename: filename.to_string(),
+            };
+            println!("{}", e_global);
+            panic!("TODO: handle errors properly.");
+        },
+    }
+}
+
 pub fn run(filename: &str, stage: Stage)
 {
     match run_with_result(filename, stage)
