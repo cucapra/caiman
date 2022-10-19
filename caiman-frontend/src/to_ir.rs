@@ -1,6 +1,7 @@
 use crate::scheduling_language::ast as schedule_ast;
 use crate::value_language::ast as value_ast;
 use crate::value_language::typing;
+use caiman::arena::Arena;
 use caiman::ir;
 use std::collections::HashMap;
 
@@ -23,6 +24,12 @@ struct InnerFunclet
     pub output_types: Box<[ir::TypeId]>,
     pub nodes: Box<[ir::Node]>,
     pub tail_edge: ir::TailEdge,
+}
+
+trait Funclet
+{
+    fn inner(self) -> InnerFunclet;
+    fn kind(&self) -> ir::FuncletKind;
 }
 
 struct ValueFunclet
@@ -52,16 +59,31 @@ pub fn go(
         schedule_ast,
     );
     // TODO: timeline funclets,
-    // last lil pipeline step
-    /*let pipe1 = ir::Pipeline {
-        name: String::from("A"),
-        entry_funclet: 0,
-        yield_points: Default::default(),
-    };*/
-    ir::Program {
-        //pipelines: vec![pipe1],
+
+    // Finally, constructing the program out of other stuff we just made
+    let pipelines: Vec<ir::Pipeline> = schedule_explicit_funclets
+        .iter()
+        .enumerate()
+        .map(|(i, _sef)| ir::Pipeline {
+            name: String::from("Pipeline") + &i.to_string(),
+            entry_funclet: value_funclets.len() + i,
+            yield_points: Default::default(),
+        })
+        .collect();
+    let types =
+        map_index_to_arena(types_index, &|t| to_ir_type(&ffi_types_index, t));
+    let native_interface = ir::ffi::NativeInterface {
+        types: map_index_to_arena(ffi_types_index, &to_ffi_type),
         ..Default::default()
-    }
+    };
+    let funclets = vec_to_arena(
+        value_funclets
+            .into_iter()
+            .map(make_ir_funclet)
+            .chain(schedule_explicit_funclets.into_iter().map(make_ir_funclet))
+            .collect(),
+    );
+    ir::Program { native_interface, types, funclets, pipelines, ..Default::default() }
 }
 
 fn value_funclets(
@@ -166,8 +188,8 @@ fn schedule_explicit_funclets(
                     storage_type,
                     operation,
                 });
-                let inputs_v : Vec<usize> = vec![];
-                let outputs_v : Vec<usize> = vec![node_id];
+                let inputs_v: Vec<usize> = vec![];
+                let outputs_v: Vec<usize> = vec![node_id];
                 nodes.push(ir::Node::EncodeDo {
                     place,
                     operation,
@@ -286,4 +308,73 @@ fn types_index(
         }
     }
     types_index
+}
+
+impl Funclet for ValueFunclet
+{
+    fn inner(self) -> InnerFunclet { self.inner_funclet }
+    fn kind(&self) -> ir::FuncletKind { ir::FuncletKind::Value }
+}
+impl Funclet for ScheduleExplicitFunclet
+{
+    fn inner(self) -> InnerFunclet { self.inner_funclet }
+    fn kind(&self) -> ir::FuncletKind { ir::FuncletKind::ScheduleExplicit }
+}
+
+fn make_ir_funclet<T: Funclet>(f: T) -> ir::Funclet
+{
+    let kind = f.kind();
+    let inner = f.inner();
+    ir::Funclet {
+        kind,
+        input_types: inner.input_types,
+        output_types: inner.output_types,
+        nodes: inner.nodes,
+        tail_edge: inner.tail_edge,
+    }
+}
+
+fn to_ffi_type(t: typing::Type) -> ir::ffi::Type
+{
+    use typing::Type::*;
+    match t
+    {
+        I32 => ir::ffi::Type::I32,
+        Bool => ir::ffi::Type::I8,
+    }
+}
+
+fn to_ir_type(ffi_types_index: &Index<typing::Type>, t: Type) -> ir::Type
+{
+    match t
+    {
+        Type::Native(t) => ir::Type::NativeValue {
+            storage_type: ir::ffi::TypeId(ffi_types_index[&t]),
+        },
+        Type::Slot(t, queue_stage, queue_place) => ir::Type::Slot {
+            storage_type: ir::ffi::TypeId(ffi_types_index[&t]),
+            queue_stage,
+            queue_place,
+        },
+    }
+}
+
+fn vec_to_arena<T>(ts: Vec<T>) -> Arena<T>
+{
+    let mut map: HashMap<usize, T> = HashMap::new();
+    for (i, elt) in ts.into_iter().enumerate()
+    {
+        map.insert(i, elt);
+    }
+    Arena::from_hash_map(map)
+}
+
+fn map_index_to_arena<T, U>(index: Index<T>, f: &dyn Fn(T) -> U) -> Arena<U>
+{
+    let mut map: HashMap<usize, U> = HashMap::new();
+    for (t, i) in index.into_iter()
+    {
+        map.insert(i, f(t));
+    }
+    Arena::from_hash_map(map)
 }
