@@ -1,7 +1,7 @@
 #[macro_use]
 mod operations;
 mod id_generator;
-mod arena;
+pub mod arena;
 pub mod ir;
 //mod ir_builders;
 mod shadergen;
