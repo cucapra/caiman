@@ -2,7 +2,8 @@
 // separate elaboration file that assumes tree has been 
 // checked beforehand.
 
-use crate::value_language::error;
+use crate::error;
+use crate::error::{Info, HasInfo};
 use crate::value_language::ast::*;
 use crate::value_language::typing::{Context, FunctionContext, Type, ExprType};
 use crate::value_language::calc_expr_typing::{expr_type, call_type, context_get, 

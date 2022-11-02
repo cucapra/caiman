@@ -1,5 +1,5 @@
 // The idea behind using this module is to 1. Easily convert
-// LALRpop's less-than-optimal byte offset data into line and
+// LALRpop's less-than-ideal byte offset data into line and
 // column number, and 2. Keep the parser code clean by
 // using LALRpop's <> syntax. It is not a very elegant or
 // visually-appealing file. 
@@ -8,6 +8,7 @@
 // calculates line and column number from byte offset:
 // https://github.com/sampsyo/bril/blob/main/bril-rs/bril2json/src/lib.rs
 
+use crate::error::Info;
 use crate::value_language::ast::*;
 use crate::value_language::typing::Type;
 

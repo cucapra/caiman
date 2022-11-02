@@ -1,6 +1,7 @@
 // Factors out code between type-checking and elaboration
 
 use crate::value_language::check::SemanticError;
+use crate::error::{Info, HasInfo};
 use crate::value_language::ast::*;
 use crate::value_language::typing::{Context, FunctionContext, Type, ExprType};
 use crate::value_language::typing;

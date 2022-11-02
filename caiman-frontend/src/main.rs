@@ -67,6 +67,12 @@ fn main()
         let schedule_ast =
             scheduling_language::compiler::run_output(&scheduling_file);
         let ir = to_ir::go(&value_ast, &schedule_ast);
-        println!("{:?}", ir)
+        println!("{:?}", ir);
+        /*let ir_op = to_ir::go(&value_ast, &schedule_ast);
+        match ir_op 
+        {
+            Ok(ir) => println!("{:?}", ir),
+            Err(e) => println!("{}", e),
+        }*/
     }
 }

@@ -1,9 +1,10 @@
 // AST
 use crate::value_language::typing::Type;
+use crate::error::{Info, HasInfo};
 
 pub type Var = String;
 
-#[derive(Clone, Copy, Debug)]
+/*#[derive(Clone, Copy, Debug)]
 pub struct Info {
     // (Line, Column) and (Beginning, Ending)
     pub location: ((usize, usize), (usize, usize)),
@@ -12,7 +13,7 @@ pub struct Info {
 pub trait HasInfo
 {
     fn info(&self) -> Info;
-}
+}*/
 
 // Negative numbers are parsed as negative at a later stage
 // because we store all numbers as Strings here

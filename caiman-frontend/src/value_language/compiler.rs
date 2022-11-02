@@ -1,6 +1,6 @@
 use crate::value_language::run_parser;
 use crate::value_language::check;
-use crate::value_language::error;
+use crate::error;
 use crate::value_language::ast::ParsedProgram;
 use crate::stage::Stage;
 
