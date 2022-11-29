@@ -18,8 +18,8 @@ struct PartialFunclet {
 	pub tail_edge : Option<ir::TailEdge>,
 }
 
-struct SchedulingContext<'a> {
-    program : &'a mut ir::Program,
+struct SchedulingContext {
+    program : ir::Program,
     new_funclet : PartialFunclet
 }
 
