@@ -1,5 +1,4 @@
 use crate::ir;
-
 use crate::shadergen;
 use crate::arena::Arena;
 use std::default::Default;
@@ -9,32 +8,37 @@ use std::collections::BTreeSet;
 use std::collections::BTreeMap;
 use crate::rust_wgpu_backend::code_generator::CodeGenerator;
 use std::fmt::Write;
+pub use crate::rust_wgpu_backend::ffi as ffi;
 
 struct PartialFunclet {
     pub kind : Option<ir::FuncletKind>,
-	pub input_types : Option<Box<[ir::TypeId]>>,
-	pub output_types : Option<Box<[ir::TypeId]>>,
-	pub nodes : Option<Box<[ir::Node]>>,
+	pub input_types : Vec<ir::TypeId>,
+	pub output_types : Vec<ir::TypeId>,
+	pub nodes : Vec<ir::Node>,
 	pub tail_edge : Option<ir::TailEdge>,
 }
 
-struct SchedulingContext {
-    program : ir::Program,
-    new_funclet : PartialFunclet
+struct SchedulingContext<'a> {
+    program : &'a mut ir::Program,
+    new_funclet : PartialFunclet,
+    funclet_id : usize,
+    node_id : usize
 }
 
 fn new_partial_funclet() -> PartialFunclet {
-    PartialFunclet { kind: None, input_types: None, 
-        output_types: None, nodes: None, tail_edge: None }
+    PartialFunclet { kind: None, input_types: Vec::new(), 
+        output_types: Vec::new(), nodes: Vec::new(), tail_edge: None }
 }
 
 fn add_new_funclet(context : &mut SchedulingContext) {
+    let mut updated_funclet = new_partial_funclet();
+    std::mem::swap(&mut updated_funclet, &mut context.new_funclet);
     let new_funclet = ir::Funclet {
-        kind : context.new_funclet.kind.as_ref().unwrap().to_owned(),
-        input_types : context.new_funclet.input_types.as_ref().unwrap().to_owned(),
-        output_types : context.new_funclet.output_types.as_ref().unwrap().to_owned(),
-        nodes : context.new_funclet.nodes.as_ref().unwrap().to_owned(),
-        tail_edge : context.new_funclet.tail_edge.as_ref().unwrap().to_owned(),
+        kind : updated_funclet.kind.as_ref().unwrap().to_owned(),
+        input_types : updated_funclet.input_types.into_boxed_slice(),
+        output_types : updated_funclet.output_types.into_boxed_slice(),
+        nodes : updated_funclet.nodes.into_boxed_slice(),
+        tail_edge : updated_funclet.tail_edge.as_ref().unwrap().to_owned(),
     };
     context.program.funclets.create(new_funclet);
     context.new_funclet = new_partial_funclet();
@@ -49,8 +53,14 @@ fn explicate_extract_result(node : &ir::Node, context : &mut SchedulingContext) 
 }
 
 fn explicate_constant(type_id : &usize, context : &mut SchedulingContext) {
-    new_node = ir::Node::AllocTemporary { 
-        place: (), storage_type: type_id, operation: () }
+        let new_id = ir::RemoteNodeId {
+            funclet_id: context.funclet_id,
+            node_id: context.node_id
+        };
+        let new_node = ir::Node::AllocTemporary { 
+            place: ir::Place::Local, storage_type: ffi::TypeId {0: *type_id}, 
+            operation: new_id };
+        context.new_funclet.nodes.push(new_node);
 }
 
 fn explicate_value_function(node : &ir::Node, context : &mut SchedulingContext) {
@@ -85,7 +95,8 @@ fn explicate_node(node : &ir::Node, context : &mut SchedulingContext) {
             dimensions, arguments } => 
             explicate_external(node, context),
         _ => ()
-    }
+    };
+    context.node_id += 1;
 }
 
 fn explicate_funclet(funclet : &ir::Funclet, context : &mut SchedulingContext) {
@@ -107,7 +118,7 @@ pub fn explicate_scheduling(program : &mut ir::Program)
     let original = program.funclets.clone();
     let mut initial_context = 
         SchedulingContext{program : program, new_funclet : 
-            new_partial_funclet()};
+            new_partial_funclet(), funclet_id : 0, node_id : 0};
     for funclet in original.iter() {
         explicate_funclet(funclet.1, &mut initial_context)
     }
