@@ -40,6 +40,10 @@ impl<T> Arena<T>
 		Self{elements, unused_ids, next_id}
 	}
 
+	pub fn get_next_id(&self) -> usize {
+		self.next_id
+	}
+
 	fn pop_unused_id(&mut self) -> usize
 	{
 		if let Some(id) = self.unused_ids.pop()
