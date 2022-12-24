@@ -253,4 +253,22 @@ mod tests
 		let final_value : i32 = i32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);
 		assert_eq!(6, final_value);
 	}
+
+	#[test]
+	fn test_scheduling_explication_basic()
+	{
+		use caiman_rt::wgpu;
+		let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+		let adapter = futures::executor::block_on(instance.request_adapter(& wgpu::RequestAdapterOptions { power_preference : wgpu::PowerPreference::default(), compatible_surface : None, force_fallback_adapter : false })).unwrap();
+		let (mut device, mut queue) = futures::executor::block_on(adapter.request_device(& std::default::Default::default(), None)).unwrap();
+		let callbacks = crate::Callbacks;
+		let mut root_state = caiman_rt::RootState::new(&mut device, &mut queue);
+		let mut join_stack_bytes = [0u8; 4096usize];
+		let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
+		let instance = crate::pipelines::pipeline_with_value_function::Instance::new(&mut root_state, & callbacks);
+		//let result = crate::pipelines::pipeline_1::run(&mut root_state, & callbacks, 1);
+		//let result = crate::pipelines::pipeline_with_value_function::funclet13_func(instance, &mut join_stack, 1);
+		let result = instance.start(&mut join_stack, 1);
+		assert_eq!(2, result.returned().unwrap().0);
+	}
 }

@@ -49,7 +49,7 @@ struct SchedulingContext<'a> {
     resolved_map : HashMap<ir::RemoteNodeId, ResolvedNode>, 
 }
 
-fn get_partial_funclet<'a>(context : &'a mut SchedulingContext, value_index : &usize)
+fn get_partial_funclet<'a>(value_index : &usize, context : &'a mut SchedulingContext)
     -> &'a mut PartialFunclet {
     
     match context.new_funclets.entry(*value_index) {
@@ -82,8 +82,8 @@ fn get_current_funclet_id(context : &mut SchedulingContext) -> usize {
     }
 }
 
-fn add_finished_funclet(context : &mut SchedulingContext, tail_edge : ir::TailEdge) {
-    let funclet_id = &get_current_funclet_id(context);
+fn add_funclet(tail_edge : ir::TailEdge, funclet_id : &usize,
+    context : &mut SchedulingContext) {
     match context.new_funclets.remove(funclet_id) {
         None => {
             panic!("Attempting to add uncreated partial funclet")
@@ -101,11 +101,18 @@ fn add_finished_funclet(context : &mut SchedulingContext, tail_edge : ir::TailEd
     }
 }
 
-fn add_current_node(context : &mut SchedulingContext, 
-    resolution : ResolvedNode, node : ir::Node) {
+fn add_current_funclet(tail_edge : ir::TailEdge, 
+    context : &mut SchedulingContext) {
+    let funclet_id = &get_current_funclet_id(context);
+    add_funclet(tail_edge, funclet_id, context);
+}
+
+fn add_current_node(
+    resolution : ResolvedNode, node : ir::Node,
+    context : &mut SchedulingContext) {
     let target_id = context.location.funclet_id;
     let mut funclet = 
-        get_partial_funclet(context, &target_id);
+        get_partial_funclet(&target_id, context);
     funclet.nodes.push(node);
     let location = ir::RemoteNodeId { 
         funclet_id : context.location.funclet_id, 
@@ -141,7 +148,7 @@ fn explicate_extract_result(node_id : &usize,
             let resolution = ResolvedNode {
                 type_info : ResolvedType::NoType
             };
-            add_current_node(context, resolution, node);
+            add_current_node(resolution, node, context);
             true
         }
         None => {
@@ -163,7 +170,7 @@ fn explicate_constant(type_id : &usize,
     let resolution = ResolvedNode {
         type_info : ResolvedType::NoType
     };
-    add_current_node(context, resolution, node);
+    add_current_node(resolution, node, context);
     true
 }
 
@@ -175,7 +182,7 @@ fn explicate_value_function(function_id : &usize, arguments : &Box<[usize]>,
         callee_arguments: Box::new([0]), // TODO: clearly wrong
         continuation_join: 0
     };
-    add_finished_funclet(context, tail_edge);
+    add_current_funclet(tail_edge, context);
     true
 }
 
@@ -213,25 +220,52 @@ fn explicate_node(node : &ir::Node, context : &mut SchedulingContext) -> bool {
     resolved
 }
 
-fn explicate_funclet(funclet : &ir::Funclet, 
-    context : &mut SchedulingContext) -> i32 {
-    // Calculates the new funclets to add (if any)
+fn explicate_nodes(nodes : &Box<[ir::Node]>, 
+    context : &mut SchedulingContext) -> bool {
+    let mut resolved = false;
+    for node in &**nodes {
+        if !context.resolved_map.contains_key(&context.location) {
+            resolved = resolved || explicate_node(node, context);
+            context.location.node_id += 1
+        }
+    }
+    !resolved
+}
+
+fn explicate_funclet(funclet : &ir::Funclet,
+    context : &mut SchedulingContext) -> bool {
+    // Calculates the new funclets to work with (if any)
     context.location.node_id = 0; // reset node_id to new funclet
-    let modified = match funclet.kind {
-        ir::FuncletKind::MixedImplicit => todo!(),
-        ir::FuncletKind::MixedExplicit => todo!(),
-        ir::FuncletKind::Value => todo!(),
-        ir::FuncletKind::ScheduleExplicit => todo!(),
-        ir::FuncletKind::Inline => todo!(),
-        ir::FuncletKind::Timeline => todo!(),
-        ir::FuncletKind::Spatial => todo!(),
+    let unresolved = match funclet.kind {
+        ir::FuncletKind::MixedImplicit => false,
+        ir::FuncletKind::MixedExplicit => false,
+        ir::FuncletKind::Value => explicate_nodes(&funclet.nodes, context),
+        ir::FuncletKind::ScheduleExplicit => false,
+        ir::FuncletKind::Inline => false,
+        ir::FuncletKind::Timeline => false,
+        ir::FuncletKind::Spatial => false,
     };
     context.location.funclet_id += 1;
-    todo!()
+    unresolved
+}
+
+fn cleanup_partials(context : &mut SchedulingContext) {
+    let mut funclets = HashMap::new();
+    std::mem::swap(&mut funclets, &mut context.new_funclets);
+    for partials in funclets.drain() {
+        let tail_edge = ir::TailEdge::Return { 
+            return_values: Box::new([]) 
+        };
+        add_funclet(tail_edge, &partials.0, context);
+    }
 }
 
 pub fn explicate_scheduling(program : &mut ir::Program)
 {
+    if !program.explicate { 
+        return; 
+    }
+    
     let original = program.funclets.clone();
     let mut initial_location = ir::RemoteNodeId 
         { funclet_id : 0, node_id : 0 };
@@ -240,13 +274,15 @@ pub fn explicate_scheduling(program : &mut ir::Program)
         SchedulingContext{program : program, new_funclets : HashMap::new(),
             funclet_index : starting_index,
             location : initial_location, resolved_map : HashMap::new()};
-    let mut unresolved_count = 1;
-    while unresolved_count > 0 {
-        unresolved_count = 0; // reset the count
+
+    let mut unresolved = true;
+    while unresolved {
+        unresolved = false; // reset the count
         context.location.funclet_id = 0; // reset the funclet number
         for funclet in original.iter() {
-            unresolved_count += explicate_funclet(
-                funclet.1, &mut context)
+            unresolved = unresolved || explicate_funclet(
+                funclet.1, &mut context);
         }
     }
+    cleanup_partials(&mut context);
 }
