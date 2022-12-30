@@ -1,3 +1,4 @@
+use crate::to_ir::ToIRError;
 use crate::value_language::check::SemanticError;
 use crate::value_language::run_parser::ParsingError;
 use std::fmt;
@@ -18,6 +19,7 @@ pub enum ErrorKind
 {
     Parsing(ParsingError),
     Semantic(SemanticError),
+    ToIR(ToIRError),
 }
 
 pub enum ErrorLocation
@@ -32,6 +34,19 @@ pub struct LocalError
 {
     pub kind: ErrorKind,
     pub location: ErrorLocation,
+}
+
+pub enum FileKind
+{
+    Value,
+    Scheduling,
+}
+
+// Local to one value-scheduling compilation unit
+pub struct DualLocalError
+{
+    pub error: LocalError,
+    pub file_kind: FileKind,
 }
 
 pub struct Error
@@ -61,6 +76,7 @@ impl fmt::Display for Error
         {
             ErrorKind::Parsing(e) => write!(f, "Parsing Error: {}", e),
             ErrorKind::Semantic(e) => write!(f, "Semantic Error: {}", e),
+            ErrorKind::ToIR(e) => write!(f, "ToIR Error: {}", e),
         }
     }
 }
@@ -131,6 +147,20 @@ impl fmt::Display for SemanticError
             SemanticError::WrongNumberArgs(exp, act) =>
             {
                 write!(f, "Expected {} arguments, got {}", exp, act)
+            },
+        }
+    }
+}
+
+impl fmt::Display for ToIRError
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        match self
+        {
+            ToIRError::UnboundScheduleVar(v) =>
+            {
+                write!(f, "Variable {} is unbound in the value language", v)
             },
         }
     }

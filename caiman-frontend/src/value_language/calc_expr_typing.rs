@@ -48,17 +48,20 @@ where
     {
         ExprKind::Num(n) => Ok(expr_type_of_num(n)),
         ExprKind::Bool(_) => Ok(ExprType::Ordinary(Type::Bool)),
-        ExprKind::Var(x) => {
-            context_get(info, context, x).map(|t| ExprType::Ordinary(t))
-        },
+        ExprKind::Var(x) => context_get(info, context, x).map(|t| ExprType::Ordinary(t)),
         ExprKind::Input() => Ok(ExprType::Any),
-        ExprKind::Binop(bop, e1, e2) => {
+        ExprKind::Binop(bop, e1, e2) => 
+        {
             let t1 = expr_type(e1, context, function_context)?;
             let t2 = expr_type(e2, context, function_context)?;
             binop_type(info, bop, t1, t2)
         },
         ExprKind::Unop(unop, e) => 
             unop_type(info, unop, expr_type(e, context, function_context)?),
+        ExprKind::If(e1, e2, e3) => 
+        {
+            panic!("TODO: expr kind if type")
+        },
         ExprKind::Call(f, args) => 
             call_type(info, context, function_context, f, args),
         ExprKind::Labeled(_, e) => expr_type(e, context, function_context),

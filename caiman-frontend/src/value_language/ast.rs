@@ -4,17 +4,6 @@ use crate::error::{Info, HasInfo};
 
 pub type Var = String;
 
-/*#[derive(Clone, Copy, Debug)]
-pub struct Info {
-    // (Line, Column) and (Beginning, Ending)
-    pub location: ((usize, usize), (usize, usize)),
-}
-
-pub trait HasInfo
-{
-    fn info(&self) -> Info;
-}*/
-
 // Negative numbers are parsed as negative at a later stage
 // because we store all numbers as Strings here
 #[derive(Debug, Clone, Copy)]
@@ -44,17 +33,11 @@ pub enum ExprKind<E>
     Input(),
     Binop(Binop, Box<Expr<E>>, Box<Expr<E>>),
     Unop(Unop, Box<Expr<E>>),
+    If(Box<Expr<E>>, Box<Expr<E>>, Box<Expr<E>>),
     Call(Var, Vec<Expr<E>>),
     Labeled(Var, Box<Expr<E>>),
 }
 pub type Expr<E> = (E, ExprKind<E>);
-
-// TODO:
-// Add type annotations!
-// It's a construct that occurs in two places: let and function.
-// Will need to expand the types file as well
-// Probably don't need reference or array types yet because
-//   no way to initialize them
 
 // bool true <==> var is mutable
 pub type VarWithType = (bool, Var, Type);

@@ -2,9 +2,9 @@
 // LALRpop's less-than-ideal byte offset data into line and
 // column number, and 2. Keep the parser code clean by
 // using LALRpop's <> syntax. It is not a very elegant or
-// visually-appealing file. 
+// visually-appealing file.
 
-// Credit to the following for the code that 
+// Credit to the following for the code that
 // calculates line and column number from byte offset:
 // https://github.com/sampsyo/bril/blob/main/bril-rs/bril2json/src/lib.rs
 
@@ -12,32 +12,42 @@ use crate::error::Info;
 use crate::value_language::ast::*;
 use crate::value_language::typing::Type;
 
-pub struct ASTFactory 
-{ 
+pub struct ASTFactory
+{
     line_ending_byte_offsets: Vec<usize>,
 }
 
 impl ASTFactory
 {
-    
-    pub fn new(_filename: &str, s: &str) -> Self { 
+    pub fn new(_filename: &str, s: &str) -> Self
+    {
         Self {
             line_ending_byte_offsets: s
                 .as_bytes()
                 .iter()
                 .enumerate()
-                .filter_map(
-                    |(idx, b)| if *b == b'\n' { Some(idx) } else { None }
-                )
+                .filter_map(|(idx, b)| {
+                    if *b == b'\n'
+                    {
+                        Some(idx)
+                    }
+                    else
+                    {
+                        None
+                    }
+                })
                 .collect(),
-        } 
+        }
     }
 
     pub fn line_and_column(&self, u: usize) -> (usize, usize)
     {
-        if let Some(b) = self.line_ending_byte_offsets.last() 
+        if let Some(b) = self.line_ending_byte_offsets.last()
         {
-            if u > *b { panic!("Byte offset too big: {}", u); }
+            if u > *b
+            {
+                panic!("Byte offset too big: {}", u);
+            }
         }
         self.line_ending_byte_offsets
             .iter()
@@ -51,16 +61,14 @@ impl ASTFactory
 
     fn info(&self, l: usize, r: usize) -> Info
     {
-        Info {
-            location: (self.line_and_column(l), self.line_and_column(r)),
-        }
+        Info { location: (self.line_and_column(l), self.line_and_column(r)) }
     }
 
     pub fn binop(
         &self,
         l: usize,
-        e1: ParsedExpr, 
-        b: Binop, 
+        e1: ParsedExpr,
+        b: Binop,
         e2: ParsedExpr,
         r: usize,
     ) -> ParsedExpr
@@ -72,11 +80,26 @@ impl ASTFactory
         &self,
         l: usize,
         u: Unop,
-        e: ParsedExpr, 
+        e: ParsedExpr,
         r: usize,
     ) -> ParsedExpr
     {
         (self.info(l, r), ExprKind::Unop(u, Box::new(e)))
+    }
+
+    pub fn if_expr(
+        &self,
+        l: usize,
+        e1: ParsedExpr,
+        e2: ParsedExpr,
+        e3: ParsedExpr,
+        r: usize,
+    ) -> ParsedExpr
+    {
+        (
+            self.info(l, r),
+            ExprKind::If(Box::new(e1), Box::new(e2), Box::new(e3)),
+        )
     }
 
     pub fn num(&self, l: usize, n: String, r: usize) -> ParsedExpr
@@ -88,7 +111,7 @@ impl ASTFactory
     {
         (self.info(l, r), ExprKind::Var(i))
     }
-    
+
     pub fn bool_expr(&self, l: usize, b: bool, r: usize) -> ParsedExpr
     {
         (self.info(l, r), ExprKind::Bool(b))
@@ -100,8 +123,8 @@ impl ASTFactory
     }
 
     pub fn ecall(
-        &self, 
-        l: usize, 
+        &self,
+        l: usize,
         name: String,
         es: Vec<ParsedExpr>,
         r: usize,
@@ -111,8 +134,8 @@ impl ASTFactory
     }
 
     pub fn labeled(
-        &self, 
-        l: usize, 
+        &self,
+        l: usize,
         label: String,
         e: ParsedExpr,
         r: usize,
@@ -122,10 +145,10 @@ impl ASTFactory
     }
 
     pub fn if_stmt(
-        &self, 
-        l: usize, 
-        e: ParsedExpr, 
-        v: Vec<ParsedStmt>, 
+        &self,
+        l: usize,
+        e: ParsedExpr,
+        v: Vec<ParsedStmt>,
         r: usize,
     ) -> ParsedStmt
     {
@@ -133,10 +156,10 @@ impl ASTFactory
     }
 
     pub fn while_stmt(
-        &self, 
-        l: usize, 
-        e: ParsedExpr, 
-        v: Vec<ParsedStmt>, 
+        &self,
+        l: usize,
+        e: ParsedExpr,
+        v: Vec<ParsedStmt>,
         r: usize,
     ) -> ParsedStmt
     {
@@ -185,8 +208,8 @@ impl ASTFactory
     }
 
     pub fn ccall(
-        &self, 
-        l: usize, 
+        &self,
+        l: usize,
         name: String,
         es: Vec<ParsedExpr>,
         r: usize,
@@ -194,5 +217,4 @@ impl ASTFactory
     {
         (self.info(l, r), StmtKind::Call(name, es))
     }
-
 }

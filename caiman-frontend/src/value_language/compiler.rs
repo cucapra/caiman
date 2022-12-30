@@ -7,7 +7,7 @@ use crate::stage::Stage;
 enum StageOutput
 {
     Parse(ParsedProgram),
-    Check,
+    Check(ParsedProgram),
     //TypeElaborate
 }
 
@@ -17,11 +17,11 @@ fn run_with_result(
 ) -> Result<StageOutput, error::LocalError>
 {
     let parsed_ast = run_parser::parse_file(filename)?;
-    check::check_program(&parsed_ast)?;
+    //check::check_program(&parsed_ast)?;
     Ok(match stage
     {
         Stage::Parse => StageOutput::Parse(parsed_ast),
-        Stage::Check => StageOutput::Check,
+        Stage::Check => StageOutput::Check(parsed_ast),
     })
 }
 
@@ -31,17 +31,17 @@ fn handle_output(s: StageOutput)
     match s
     {
         Parse(ast) => println!("{:?}", ast),
-        Check => println!("Program OK."),
+        Check(_) => println!("Program OK."),
     }
 }
 
-pub fn run_output(filename: &str) -> ParsedProgram
+pub fn run_output(filename: &str) -> Result<ParsedProgram, error::Error>
 {
-    match run_with_result(filename, Stage::Parse)
+    match run_with_result(filename, Stage::Check)
     {
         Ok(s) => match s {
-            StageOutput::Parse(ast) => ast,
-            _ => panic!("Should be impossible"),
+            StageOutput::Parse(ast) => Ok(ast),
+            StageOutput::Check(ast) => Ok(ast),
         },
         Err(e) => {
             let e_global = error::Error {
@@ -49,8 +49,7 @@ pub fn run_output(filename: &str) -> ParsedProgram
                 location: e.location,
                 filename: filename.to_string(),
             };
-            println!("{}", e_global);
-            panic!("TODO: handle errors properly.");
+            Err(e_global)
         },
     }
 }

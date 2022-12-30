@@ -1,14 +1,8 @@
 // AST
 
-// Copied from value language:
+use crate::error::Info;
 
 pub type Var = String;
-
-#[derive(Clone, Copy, Debug)]
-pub struct Info {
-    // (Line, Column) and (Beginning, Ending)
-    pub location: ((usize, usize), (usize, usize)),
-}
 
 /*pub trait HasInfo
 {

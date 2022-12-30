@@ -1,0 +1,2 @@
+At unbound_schedule_var.sl:1:0, 
+  ToIR Error: Variable x is unbound in the value language

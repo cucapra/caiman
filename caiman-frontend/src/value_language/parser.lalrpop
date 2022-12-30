@@ -8,7 +8,7 @@ match {
   r"[a-zA-Z][a-zA-Z0-9_]*", // Id
   r"[-]?[0-9]+([.][0-9]+)?", // Constant
 
-  "let", "mut", "input", "print", "if", "while", "fn", "return",
+  "let", "mut", "input", "print", "if", "while", "fn", "return", "else",
   "=", ";", "(", ")", ",", "{", "}", ":", "->",
   "+", "-", "*", "/", "&&", "||", "==", "!",
   "true", "false",
@@ -40,12 +40,14 @@ Expr: ParsedExpr = {
 }
 
 TermExpr: ParsedExpr = {
-    <@L> <Constant> <@R>                     => astf.num(<>),
-    <@L> <Id> <@R>                           => astf.var(<>),
-    <@L> <Bool> <@R>                         => astf.bool_expr(<>),
-    <@L> "input" "(" ")" <@R>                => astf.input(<>),
-    <@L> <Id> "(" <CommaList<Expr>> ")" <@R> => astf.ecall(<>),
-    <@L> "{" <Id> ":" <Expr> "}" <@R>  => astf.labeled(<>), 
+    <@L> <Constant> <@R>                      => astf.num(<>),
+    <@L> <Id> <@R>                            => astf.var(<>),
+    <@L> "if" <Expr> "{" <Expr> "}" 
+      "else" "{" <Expr> "}" <@R>              => astf.if_expr(<>),
+    <@L> <Bool> <@R>                          => astf.bool_expr(<>),
+    <@L> "input" "(" ")" <@R>                 => astf.input(<>),
+    <@L> <Id> "(" <CommaList<Expr>> ")" <@R>  => astf.ecall(<>),
+    <@L> "{" <Id> ":" <Expr> "}" <@R>         => astf.labeled(<>), 
     UnopExpr,
     "(" <Expr> ")",
 }

@@ -4,6 +4,7 @@ use caiman_frontend::scheduling_language;
 use caiman_frontend::stage;
 use caiman_frontend::to_ir;
 use caiman_frontend::value_language;
+use caiman_frontend::error;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -26,7 +27,7 @@ struct Arguments
 fn stage(args: &Arguments) -> stage::Stage
 {
     use stage::Stage::*;
-    let last = Check;
+    let last = Parse;
     if args.parse
     {
         Parse
@@ -62,17 +63,27 @@ fn main()
     }
     else
     {
-        let (value_file, scheduling_file) = filenames(&args.filename);
-        let value_ast = value_language::compiler::run_output(&value_file);
-        let schedule_ast =
-            scheduling_language::compiler::run_output(&scheduling_file);
-        let ir = to_ir::go(&value_ast, &schedule_ast);
-        println!("{:?}", ir);
-        /*let ir_op = to_ir::go(&value_ast, &schedule_ast);
-        match ir_op 
+        let run = || -> Result<caiman::ir::Program, error::Error> {
+            let (value_file, scheduling_file) = filenames(&args.filename);
+            let value_ast = value_language::compiler::run_output(&value_file)?;
+            let schedule_ast =
+                scheduling_language::compiler::run_output(&scheduling_file)?;
+            let ir = to_ir::go(&value_ast, &schedule_ast).map_err(|e| {
+                error::Error {
+                    kind: e.error.kind,
+                    location: e.error.location,
+                    filename: match e.file_kind {
+                        error::FileKind::Value => value_file,
+                        error::FileKind::Scheduling => scheduling_file,
+                    },
+                }
+            })?;
+            Ok(ir)
+        };
+        match run()
         {
-            Ok(ir) => println!("{:?}", ir),
+            Ok(ir) => println!("{:#?}", ir),
             Err(e) => println!("{}", e),
-        }*/
+        }
     }
 }

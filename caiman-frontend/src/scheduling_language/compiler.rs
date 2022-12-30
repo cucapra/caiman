@@ -2,6 +2,7 @@ use crate::scheduling_language::ast_factory::ASTFactory;
 use crate::scheduling_language::parser;
 use crate::scheduling_language::ast;
 use crate::stage::Stage;
+use crate::error;
 use std::path::Path;
 use std::fs::File;
 
@@ -31,11 +32,9 @@ fn parse_file(filename: &str) -> ast::ParsedProgram
     parse_read(input_file)
 }
 
-// TODO: not this haha
-
-pub fn run_output(filename: &str) -> ast::ParsedProgram
+pub fn run_output(filename: &str) -> Result<ast::ParsedProgram, error::Error>
 {
-    parse_file(filename)
+    Ok(parse_file(filename))
 }
 
 pub fn run(filename: &str, stage: Stage) 

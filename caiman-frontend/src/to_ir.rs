@@ -1,3 +1,4 @@
+use crate::error;
 use crate::scheduling_language::ast as schedule_ast;
 use crate::value_language::ast as value_ast;
 use crate::value_language::typing;
@@ -5,11 +6,28 @@ use caiman::arena::Arena;
 use caiman::ir;
 use std::collections::HashMap;
 
-// TODO: turn panics into results
-// should be pretty easy; can map a lot of options to results and then use
-// '?' operator
+pub enum ToIRError
+{
+    UnboundScheduleVar(String),
+}
+
+fn make_error(e: ToIRError, i: error::Info) -> error::DualLocalError
+{
+    let file_kind = match &e
+    {
+        ToIRError::UnboundScheduleVar(_) => error::FileKind::Scheduling,
+    };
+    error::DualLocalError {
+        error: error::LocalError {
+            kind: error::ErrorKind::ToIR(e),
+            location: error::ErrorLocation::Double(i.location),
+        },
+        file_kind,
+    }
+}
 
 type Index<T> = HashMap<T, usize>;
+type ToIRResult<T> = Result<T, error::DualLocalError>;
 
 #[derive(Eq, PartialEq, Hash)]
 enum Type
@@ -46,18 +64,14 @@ struct ScheduleExplicitFunclet
 pub fn go(
     value_ast: &value_ast::ParsedProgram,
     schedule_ast: &schedule_ast::ParsedProgram,
-) -> ir::Program
+) -> ToIRResult<ir::Program>
 {
     let ffi_types_index = ffi_types_index(value_ast);
-    let context = generate_context(value_ast);
-    let types_index = types_index(&ffi_types_index, &context, schedule_ast);
-    let value_funclets = value_funclets(&types_index, value_ast);
-    let schedule_explicit_funclets = schedule_explicit_funclets(
-        &types_index,
-        &context,
-        &value_funclets,
-        schedule_ast,
-    );
+    let context = generate_context(value_ast)?;
+    let types_index = types_index(&ffi_types_index, &context, schedule_ast)?;
+    let value_funclets = value_funclets(&types_index, value_ast)?;
+    let schedule_explicit_funclets =
+        schedule_explicit_funclets(&types_index, &context, &value_funclets, schedule_ast)?;
     // TODO: timeline funclets,
 
     // Finally, constructing the program out of other stuff we just made
@@ -70,8 +84,7 @@ pub fn go(
             yield_points: Default::default(),
         })
         .collect();
-    let types =
-        map_index_to_arena(types_index, &|t| to_ir_type(&ffi_types_index, t));
+    let types = map_index_to_arena(types_index, &|t| to_ir_type(&ffi_types_index, t));
     let native_interface = ir::ffi::NativeInterface {
         types: map_index_to_arena(ffi_types_index, &to_ffi_type),
         ..Default::default()
@@ -83,66 +96,115 @@ pub fn go(
             .chain(schedule_explicit_funclets.into_iter().map(make_ir_funclet))
             .collect(),
     );
-    ir::Program { native_interface, types, funclets, pipelines, ..Default::default() }
+    Ok(ir::Program { native_interface, types, funclets, pipelines, ..Default::default() })
+}
+
+fn get_native_type_index(
+    types_index: &Index<Type>,
+    native_type: &typing::Type,
+    info: error::Info,
+) -> usize
+{
+    match types_index.get(&Type::Native(*native_type))
+    {
+        None => panic!(
+            "Type index improperly constructed: Type {:?} not found at {:?}",
+            *native_type, info
+        ),
+        Some(i) => *i,
+    }
+}
+
+struct ValueFuncletContext<'a>
+{
+    pub nodes_vec: Vec<ir::Node>,
+    pub involved_variables: Index<String>,
+    pub types_index: &'a Index<Type>,
+}
+
+fn add_value_expr(
+    exp: &value_ast::ParsedExpr,
+    t: &typing::Type,
+    ctx: &mut ValueFuncletContext,
+) -> ToIRResult<usize>
+{
+    use value_ast::ExprKind::*;
+    let (info, kind) = exp;
+    match kind
+    {
+        Var(x) =>
+        {
+            let x_index = ctx.involved_variables.get(x)
+                .unwrap_or_else(|| 
+                    panic!("Unbound var {}, type checker is either bugged or disabled.", x)
+                );
+            Ok(*x_index)
+        },
+        Num(s) =>
+        {
+            let value: i64 = s.parse().unwrap();
+            let type_id = get_native_type_index(ctx.types_index, t, *info);
+            ctx.nodes_vec.push(ir::Node::ConstantInteger { value, type_id });
+            Ok(ctx.nodes_vec.len() - 1)
+        },
+        Bool(b) =>
+        {
+            let value: i64 = if *b { 1 } else { 0 };
+            let type_id = get_native_type_index(ctx.types_index, t, *info);
+            ctx.nodes_vec.push(ir::Node::ConstantInteger { value, type_id });
+            Ok(ctx.nodes_vec.len() - 1)
+        },
+        If(e1, e2, e3) =>
+        {
+            let condition = add_value_expr(e1, &typing::Type::Bool, ctx)?;
+            let true_case = add_value_expr(e2, t, ctx)?;
+            let false_case = add_value_expr(e3, t, ctx)?;
+            ctx.nodes_vec.push(ir::Node::Select { condition, true_case, false_case });
+            Ok(ctx.nodes_vec.len() - 1)
+        },
+        _ => panic!("TODO"),
+    }
 }
 
 fn value_funclets(
     types_index: &Index<Type>,
     value_ast: &value_ast::ParsedProgram,
-) -> Vec<ValueFunclet>
+) -> ToIRResult<Vec<ValueFunclet>>
 {
     // Just gonna make one big value funclet... for now??
-    let mut nodes_vec = vec![ir::Node::Phi { index: 0 }];
-    let mut involved_variables: Index<String> = HashMap::new();
+    let mut ctx = ValueFuncletContext {
+        nodes_vec: vec![ir::Node::Phi { index: 0 }],
+        involved_variables: HashMap::new(),
+        types_index: &types_index,
+    };
     for stmt in value_ast.iter()
     {
         let (info_s, kind_s) = stmt;
-        use value_ast::ExprKind::*;
         use value_ast::StmtKind::*;
         match kind_s
         {
             Let((_mut, var, t), exp) =>
             {
-                let (info_e, kind_e) = exp;
-                match kind_e
+                let expr_index = add_value_expr(exp, t, &mut ctx)?;
+                if ctx.involved_variables.insert(var.clone(), expr_index).is_some()
                 {
-                    Num(s) =>
-                    {
-                        // TODO: not this
-                        let value: i64 = s.parse().unwrap();
-                        let type_id = match types_index.get(&Type::Native(*t))
-                        {
-                            None => panic!("Type not found {:?}", info_e),
-                            Some(i) => *i,
-                        };
-                        nodes_vec.push(ir::Node::ConstantInteger {
-                            value,
-                            type_id,
-                        });
-                    },
-                    _ => panic!("TODO"),
-                };
-                if involved_variables
-                    .insert(var.clone(), nodes_vec.len())
-                    .is_some()
-                {
-                    panic!("Involved variable issue {:?}", info_s)
+                    panic!("Duplicate {:?} in involved variables, {:?}", var.clone(), info_s)
                 }
             },
             _ => panic!("TODO"),
         }
     }
     // TODO: not this
-    let return_values = Box::new([nodes_vec.len()]);
-    vec![ValueFunclet {
-        involved_variables,
+    let return_values = Box::new([ctx.nodes_vec.len() - 1]);
+    Ok(vec![ValueFunclet {
+        involved_variables: ctx.involved_variables,
         inner_funclet: InnerFunclet {
             input_types: Box::new([0]),  // TODO
             output_types: Box::new([0]), // TODO
-            nodes: nodes_vec.into_boxed_slice(),
+            nodes: ctx.nodes_vec.into_boxed_slice(),
             tail_edge: ir::TailEdge::Return { return_values },
         },
-    }]
+    }])
 }
 
 fn schedule_explicit_funclets(
@@ -150,7 +212,7 @@ fn schedule_explicit_funclets(
     context: &HashMap<String, typing::Type>,
     value_funclets: &Vec<ValueFunclet>,
     schedule_ast: &schedule_ast::ParsedProgram,
-) -> Vec<ScheduleExplicitFunclet>
+) -> ToIRResult<Vec<ScheduleExplicitFunclet>>
 {
     let mut nodes = vec![];
     for (info, kind) in schedule_ast.iter()
@@ -165,29 +227,18 @@ fn schedule_explicit_funclets(
                     .iter()
                     .enumerate()
                     .find(|(_, vf)| vf.involved_variables.contains_key(x))
-                    .ok_or_else(|| {
-                        panic!("Unbound variable {} at {:?}", x, info)
-                    })
-                    .unwrap();
+                    .ok_or(make_error(ToIRError::UnboundScheduleVar(x.to_string()), *info))?;
                 let node_id = x_vf.involved_variables[x];
                 let x_type = context[x];
                 let place = ir::Place::Local;
                 let storage_type = ir::ffi::TypeId(
                     *types_index
-                        .get(&Type::Slot(
-                            x_type,
-                            ir::ResourceQueueStage::Ready,
-                            place,
-                        ))
-                        .ok_or_else(|| panic!(""))
+                        .get(&Type::Slot(x_type, ir::ResourceQueueStage::Ready, place))
+                        .ok_or_else(|| panic!("Necessary storage type not created in index"))
                         .unwrap(),
                 );
                 let operation = ir::RemoteNodeId { funclet_id, node_id };
-                nodes.push(ir::Node::AllocTemporary {
-                    place,
-                    storage_type,
-                    operation,
-                });
+                nodes.push(ir::Node::AllocTemporary { place, storage_type, operation });
                 let inputs_v: Vec<usize> = vec![];
                 let outputs_v: Vec<usize> = vec![node_id];
                 nodes.push(ir::Node::EncodeDo {
@@ -199,18 +250,17 @@ fn schedule_explicit_funclets(
             },
         }
     }
-    vec![ScheduleExplicitFunclet {
+    Ok(vec![ScheduleExplicitFunclet {
         inner_funclet: InnerFunclet {
             input_types: Box::new([0]),  // TODO
             output_types: Box::new([0]), // TODO
             nodes: nodes.into_boxed_slice(),
             tail_edge: ir::TailEdge::Return { return_values: Box::new([0]) },
         },
-    }]
+    }])
 }
 
-fn ffi_types_index(value_ast: &value_ast::ParsedProgram)
-    -> Index<typing::Type>
+fn ffi_types_index(value_ast: &value_ast::ParsedProgram) -> Index<typing::Type>
 {
     let mut map: HashMap<typing::Type, usize> = HashMap::new();
     let mut index = 0;
@@ -245,7 +295,7 @@ fn types_of_value_stmt(stmt: &value_ast::ParsedStmt) -> Vec<typing::Type>
 
 fn generate_context(
     value_ast: &value_ast::ParsedProgram,
-) -> HashMap<String, typing::Type>
+) -> ToIRResult<HashMap<String, typing::Type>>
 {
     let mut ctx: HashMap<String, typing::Type> = HashMap::new();
     for (info, kind) in value_ast.iter()
@@ -257,20 +307,20 @@ fn generate_context(
             {
                 if ctx.insert(var.to_string(), *t).is_some()
                 {
-                    panic!("Variable name collision {:?}", info);
+                    panic!("Variable name collision bypassed value language checker {:?}", info);
                 }
             },
             _ => (),
         }
     }
-    ctx
+    Ok(ctx)
 }
 
 fn types_index(
     ffi_types_index: &Index<typing::Type>,
     context: &HashMap<String, typing::Type>,
     schedule_ast: &schedule_ast::ParsedProgram,
-) -> Index<Type>
+) -> ToIRResult<Index<Type>>
 {
     let mut index = 0;
     let mut types_index: Index<Type> = HashMap::new();
@@ -278,7 +328,7 @@ fn types_index(
     {
         if types_index.insert(Type::Native(*t), index).is_some()
         {
-            panic!("Native conversion error");
+            panic!("Unexpected index type collision from FFI types");
         }
         index += 1;
     }
@@ -289,16 +339,11 @@ fn types_index(
         {
             Var(x) =>
             {
-                let x_type = match context.get(x)
-                {
-                    None => panic!("Unbound var {:?} {:?}", x, info),
-                    Some(t) => t,
-                };
-                let inserted_type = Type::Slot(
-                    *x_type,
-                    ir::ResourceQueueStage::Ready,
-                    ir::Place::Local,
-                );
+                let x_type = context
+                    .get(x)
+                    .ok_or(make_error(ToIRError::UnboundScheduleVar(x.to_string()), *info))?;
+                let inserted_type =
+                    Type::Slot(*x_type, ir::ResourceQueueStage::Ready, ir::Place::Local);
                 if !types_index.contains_key(&inserted_type)
                 {
                     types_index.insert(inserted_type, index);
@@ -307,7 +352,7 @@ fn types_index(
             },
         }
     }
-    types_index
+    Ok(types_index)
 }
 
 impl Funclet for ValueFunclet
@@ -348,8 +393,9 @@ fn to_ir_type(ffi_types_index: &Index<typing::Type>, t: Type) -> ir::Type
 {
     match t
     {
-        Type::Native(t) => ir::Type::NativeValue {
-            storage_type: ir::ffi::TypeId(ffi_types_index[&t]),
+        Type::Native(t) =>
+        {
+            ir::Type::NativeValue { storage_type: ir::ffi::TypeId(ffi_types_index[&t]) }
         },
         Type::Slot(t, queue_stage, queue_place) => ir::Type::Slot {
             storage_type: ir::ffi::TypeId(ffi_types_index[&t]),

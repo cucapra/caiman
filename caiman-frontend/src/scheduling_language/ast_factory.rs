@@ -1,4 +1,5 @@
 use crate::scheduling_language::ast::*;
+use crate::error::Info;
 
 pub struct ASTFactory 
 { 
