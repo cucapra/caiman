@@ -1,0 +1,142 @@
+use crate::value_language::ast::*;
+use crate::value_language::typing::Type;
+use crate::value_language::ast_factory::ASTFactory;
+
+grammar(astf: &ASTFactory);
+
+match {
+  r"[a-zA-Z][a-zA-Z0-9_]*", // Id
+  r"[-]?[0-9]+([.][0-9]+)?", // Constant
+
+  "let", "mut", "input", "print", "if", "while", "fn", "return", "else",
+  "=", ";", "(", ")", ",", "{", "}", ":", "->",
+  "+", "-", "*", "/", "&&", "||", "==", "!",
+  "true", "false",
+  "i32", "bool",
+
+  r"\s*" => { }, // Whitespace
+  r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
+}
+
+pub Program: ParsedProgram = { Stmt* => <> }
+
+pub Stmt: ParsedStmt = {
+    <@L> "if" <Expr> "{" <Stmt*> "}" <@R>              => astf.if_stmt(<>), 
+    <@L> "while" <Expr> "{" <Stmt*> "}" <@R>           => astf.while_stmt(<>),
+    <@L> "print" "(" <Expr> ")" ";" <@R>               => astf.print(<>),
+    <@L> "let" <VarWithType> "=" <Expr> ";" <@R>       => astf.let_stmt(<>),
+    <@L> <Id> "=" <Expr> ";" <@R>                      => astf.assign(<>),
+    <@L> <Id> "(" <CommaList<Expr>> ")" ";" <@R>       => astf.ccall(<>),
+    <@L> "fn" <Id> "(" <CommaList<VarWithType>> ")" 
+      "->" <Type> "{" <Stmt*> <Expr> "}" <@R>          => astf.function(<>),
+}
+
+VarWithType: VarWithType = {
+    <Mut> <Id> ":" <Type> => (<>)
+}
+
+Expr: ParsedExpr = {
+    BinopExpr, // Includes terminal exps
+}
+
+TermExpr: ParsedExpr = {
+    <@L> <Constant> <@R>                      => astf.num(<>),
+    <@L> <Id> <@R>                            => astf.var(<>),
+    <@L> "if" <Expr> "{" <Expr> "}" 
+      "else" "{" <Expr> "}" <@R>              => astf.if_expr(<>),
+    <@L> <Bool> <@R>                          => astf.bool_expr(<>),
+    <@L> "input" "(" ")" <@R>                 => astf.input(<>),
+    <@L> <Id> "(" <CommaList<Expr>> ")" <@R>  => astf.ecall(<>),
+    <@L> "{" <Id> ":" <Expr> "}" <@R>         => astf.labeled(<>), 
+    UnopExpr,
+    "(" <Expr> ")",
+}
+
+Bool: bool = {
+  "true" => true,
+  "false" => false,
+}
+
+UnopExpr: ParsedExpr = {
+    <@L> <UnopNot> <TermExpr> <@R> => astf.unop(<>),
+}
+
+UnopNot: Unop = { "!" => Unop::Not }
+
+// BEGIN Binop Section
+// Numbers here (1, 2, ...) indicate predence level for levels containing
+// two or more options (so not And or Or)
+
+BinopExpr: ParsedExpr = { BinopEOr }
+
+BinopEOr: ParsedExpr = {
+    <@L> <BinopEOr> <BinopOr> <BinopEAnd> <@R> => astf.binop(<>),
+    BinopEAnd,
+}
+
+BinopEAnd: ParsedExpr = {
+    <@L> <BinopEAnd> <BinopAnd> <BinopE1> <@R> => astf.binop(<>),
+    BinopE1,
+}
+
+BinopE1: ParsedExpr = {
+    <@L> <BinopE1> <Binop1> <BinopE2> <@R> => astf.binop(<>),
+    BinopE2,
+}
+
+BinopE2: ParsedExpr = {
+    <@L> <BinopE2> <Binop2> <BinopE3> <@R> => astf.binop(<>),
+    BinopE3,
+}
+
+BinopE3: ParsedExpr = {
+    <@L> <BinopE3> <Binop3> <TermExpr> <@R> => astf.binop(<>),
+    TermExpr, 
+}
+
+BinopAnd: Binop = { "&&" => Binop::And, }
+
+BinopOr: Binop = { "||" => Binop::Or, }
+
+Binop1: Binop = {
+    "==" => Binop::Equals,
+}
+
+Binop2: Binop = {
+    "+" => Binop::Plus,
+    "-" => Binop::Minus,
+}
+
+Binop3: Binop = {
+    "*" => Binop::Mult,
+    "/" => Binop::Div,
+}
+
+// END Binop Section
+
+Mut: bool = { <m: "mut"?> => m.is_some() }
+
+Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
+
+Constant: String = {
+    <r"[-]?[0-9]+([.][0-9]+)?"> => String::from(<>),
+}
+
+CommaList<T>: Vec<T> = {
+    <mut v: (<T> ",")*> <e: T?> => match e { 
+        None => v, 
+        Some(e) => {
+            v.push(e);
+            v
+        },
+    }
+}
+
+Type: Type = {
+    "i32" => Type::I32,
+    "bool" => Type::Bool,
+}
+
+
+        // test!!!!!
+        

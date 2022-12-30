@@ -134,10 +134,9 @@ fn add_value_expr(
     {
         Var(x) =>
         {
-            let x_index = ctx.involved_variables.get(x)
-                .unwrap_or_else(|| 
-                    panic!("Unbound var {}, type checker is either bugged or disabled.", x)
-                );
+            let x_index = ctx.involved_variables.get(x).unwrap_or_else(|| {
+                panic!("Unbound var {}, type checker is either bugged or disabled.", x)
+            });
             Ok(*x_index)
         },
         Num(s) =>
