@@ -2,29 +2,31 @@
 use ron::value;
 
 use crate::ir;
-use crate::ir::Funclet;
-use crate::ir::Program;
-use crate::ir::RemoteNodeId;
-use crate::ir::SchedulingFuncletExtra;
-use crate::ir::TailEdge;
-use crate::shadergen;
-use crate::arena::Arena;
-use std::collections::btree_map::VacantEntry;
-use std::collections::hash_map::Entry;
-use std::default;
-use std::default::Default;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::BTreeSet;
-use std::collections::BTreeMap;
-use std::hash;
-use std::hash::Hash;
-use crate::rust_wgpu_backend::code_generator::CodeGenerator;
-use std::fmt::Write;
+use std::collections::{HashMap, hash_map::Entry};
 pub use crate::rust_wgpu_backend::ffi as ffi;
 
+// TODO: for mutual recursion enum BackReferences
+
 #[derive(Debug)]
-struct PartialData {
+enum ResolvedType {
+    NoType,
+    Single (ffi::TypeId),
+    Multiple (Vec<ffi::TypeId>)
+}
+
+#[derive(Debug)]
+struct ResolvedValueNode {
+    schedule_id : usize, // TODO: breaks on mutual recursion
+    timeline_id : usize
+}
+
+#[derive(Debug)]
+struct ResolvedScheduleNode {
+    type_info : ResolvedType,
+}
+
+#[derive(Debug)]
+struct PartialData { // a dumb distinction with the rework, but whatever
     input_types : Vec<ir::TypeId>,
     output_types : Vec<ir::TypeId>,
     nodes : Vec<ir::Node>,
@@ -50,28 +52,40 @@ struct PartialInformation {
 #[derive(Debug)]
 struct PartialSchedule {
 	core : PartialData,
+}
+
+#[derive(Debug)]
+struct ScheduleBlob {
+    schedule : PartialSchedule,
     information : PartialInformation,
-    timeline : PartialTimeline
+    timeline : PartialTimeline,
+    to_update : Vec<ir::RemoteNodeId>
 }
 
 #[derive(Debug)]
-enum ResolvedType {
-    NoType,
-    Single (ffi::TypeId),
-    Multiple (Vec<ffi::TypeId>)
-}
-
-#[derive(Debug)]
-struct ResolvedNode {
-    type_info : ResolvedType
-}
-
 struct SchedulingContext<'a> {
     program : &'a mut ir::Program,
-    new_schedules : HashMap<usize, PartialSchedule>,
+    new_schedules : HashMap<usize, ScheduleBlob>,
     location : ir::RemoteNodeId,
-    // scheduled node map
-    resolved_map : HashMap<ir::RemoteNodeId, ResolvedNode>, 
+    head : Option<ir::RemoteNodeId>, // stupid pipeline setup stuff
+    // scheduled node maps
+    resolved_schedules : HashMap<ir::RemoteNodeId, ResolvedScheduleNode>, 
+    resolved_values : HashMap<ir::RemoteNodeId, ResolvedValueNode>
+}
+
+fn new_partial_schedule() -> PartialSchedule {
+    let mut schedule = PartialSchedule { 
+        core: PartialData { 
+            input_types: Vec::new(), 
+            output_types: Vec::new(), 
+            nodes: Vec::new(),
+            tail_edge : None,
+        }
+    };
+    schedule.core.input_types.push(1);
+    schedule.core.output_types.push(1);
+    schedule.core.nodes.push(ir::Node::Phi { index: 0 });
+    schedule
 }
 
 fn new_partial_timeline() -> PartialTimeline {
@@ -105,13 +119,18 @@ fn new_information(value_index : &usize)
         output_buffers: HashMap::new(),
     };
     // todo: based on number of inputs, which we're lazily taking to be one
-    information.input_slots.insert(0, empty_slot());
+    let mut input_slots_default = empty_slot();
+    input_slots_default.value_tag = ir::ValueTag::Input { 
+        funclet_id: *value_index, 
+        index: 0 
+    };
+    information.input_slots.insert(0, input_slots_default);
     information.output_slots.insert(0, empty_slot());
     information
 }
 
 fn get_partial_schedule<'a>(value_index : &usize, 
-context : &'a mut SchedulingContext) -> &'a mut PartialSchedule {
+context : &'a mut SchedulingContext) -> &'a mut ScheduleBlob {
     let entry = 
         context.new_schedules.entry(*value_index);
     match entry {
@@ -119,23 +138,17 @@ context : &'a mut SchedulingContext) -> &'a mut PartialSchedule {
             entry.into_mut() 
         },
         Entry::Vacant(entry) =>  {
+            let schedule = new_partial_schedule();
             let information = 
                 new_information(value_index);
             let timeline = new_partial_timeline();
-            let mut new_funclet = PartialSchedule { 
-                core: PartialData { 
-                    input_types: Vec::new(), 
-                    output_types: Vec::new(), 
-                    nodes: Vec::new(),
-                    tail_edge : None,
-                },
-                information: information,
-                timeline: timeline,
+            let mut new_funclet = ScheduleBlob { 
+                schedule,
+                information,
+                timeline,
+                to_update: Vec::new()
             };
             // todo: based on number of inputs, which we're lazily taking to be one
-            new_funclet.core.input_types.push(1);
-            new_funclet.core.output_types.push(1);
-            new_funclet.core.nodes.push(ir::Node::Phi { index: 0 });
             entry.insert(new_funclet)
         }
     }
@@ -150,9 +163,10 @@ fn default_tail(partial : &PartialData, context : &mut SchedulingContext)
             _ => { node_count += 1 }
         }
     }
-    let mut return_values = Box::new([]);
+    dbg!(node_count);
+    let mut return_values = Box::new([0]);
     if node_count > 0 {
-        Box::new([node_count-1]);
+        return_values[0] = node_count-1;
     }
     ir::TailEdge::Return { 
         return_values: return_values  // zero-indexing
@@ -198,16 +212,23 @@ context : &mut SchedulingContext) -> ir::SchedulingFuncletExtra {
     }
 }
 
-fn add_funclet(partial : PartialSchedule, context : &mut SchedulingContext) {
-    let new_schedule = build_funclet(partial.core, 
+fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
+    let new_schedule = build_funclet(blob.schedule.core, 
         ir::FuncletKind::ScheduleExplicit, context);
-    let new_timeline = build_funclet(partial.timeline.core, 
+    let new_timeline = build_funclet(blob.timeline.core, 
         ir::FuncletKind::Timeline, context);
     let schedule_id = context.program.funclets.create(new_schedule);
     let timeline_id = context.program.funclets.create(new_timeline);
-    let extra = build_extra(partial.information, 
+    let extra = build_extra(blob.information, 
         &timeline_id, context);
     context.program.scheduling_funclet_extras.insert(schedule_id, extra);
+    for location in blob.to_update.drain(..) {
+        let resolved = ResolvedValueNode {
+            schedule_id : schedule_id,
+            timeline_id : timeline_id
+        };
+        context.resolved_values.insert(location, resolved);
+    }
 }
 
 fn finish_funclet(tail_edge : ir::TailEdge, funclet_id : &usize,
@@ -217,43 +238,47 @@ context : &mut SchedulingContext) {
             panic!("Attempting to add uncreated partial funclet")
         }
         Some(partial) => {
-            add_funclet(partial, context);
+            add_blob(partial, context);
         }
     }
 }
 
 fn add_current_funclet(tail_edge : ir::TailEdge, 
-    context : &mut SchedulingContext) {
+context : &mut SchedulingContext) {
     let funclet_id = context.location.funclet_id;
     finish_funclet(tail_edge, &funclet_id, context);
 }
 
-fn add_nodes(resolution : ResolvedNode, nodes : Vec<ir::Node>,
+fn add_schedule_node(
+resolved : ResolvedScheduleNode, 
+nodes : Vec<ir::Node>,
 context : &mut SchedulingContext) {
     let target_id = context.location.funclet_id;
-    let mut funclet = 
+    let mut blob = 
         get_partial_schedule(&target_id, context);
+
     for node in nodes {
-        funclet.core.nodes.push(node);
+        blob.schedule.core.nodes.push(node);
     }
     let location = ir::RemoteNodeId { 
         funclet_id : context.location.funclet_id, 
         node_id : context.location.node_id
     };
-    context.resolved_map.insert(location, resolution);
+
+    context.resolved_schedules.insert(location, resolved);
 }
 
 fn explicate_extract_result(node_id : &usize, 
 index : &usize, context : &mut SchedulingContext) -> bool {
     // The goal here is to maintain the hashmaps to keep track of ids
     // Specifically the funclet and node to extract from (or to)
-    match context.resolved_map.get(&context.location) {
-        Some(callInfo) => {
+    match context.resolved_schedules.get(&context.location) {
+        Some(info) => {
             let remote = ir::RemoteNodeId {
                 funclet_id : context.location.funclet_id,
                 node_id : context.location.node_id
             };
-            let typ = match &callInfo.type_info {
+            let typ = match &info.type_info {
                 ResolvedType::NoType => {
                     panic!("Invalid lack of type")
                 }
@@ -262,17 +287,19 @@ index : &usize, context : &mut SchedulingContext) -> bool {
                     assert!(*index == 0);
                     typ.0 
                 },
-                ResolvedType::Multiple(typs) => { typs[*index].0 }
+                ResolvedType::Multiple(typs) => 
+                    { typs[*index].0 }
             };
             let node = ir::Node::StaticAllocFromStaticBuffer { buffer: 0, 
                 place: ir::Place::Gpu,
                 storage_type: ffi::TypeId{0: typ}, operation: remote };
-            let resolution = ResolvedNode {
-                type_info : ResolvedType::NoType
+
+            let resolved = ResolvedScheduleNode {
+                type_info: ResolvedType::NoType
             };
-            add_nodes(resolution, vec![node], context);
+            add_schedule_node(resolved, vec![node], context);
             true
-        }
+        }         
         None => {
             false
         }
@@ -300,10 +327,10 @@ context : &mut SchedulingContext) -> bool {
         inputs: Box::new([]), 
         outputs: Box::new([1]) // todo: probably wrong in general
     });
-    let resolution = ResolvedNode {
-        type_info : ResolvedType::Single(ffi::TypeId(*type_id))
+    let resolved = ResolvedScheduleNode {
+        type_info: ResolvedType::Single(ffi::TypeId(*type_id))
     };
-    add_nodes(resolution, nodes, context);
+    add_schedule_node(resolved, nodes, context);
     true
 }
 
@@ -357,8 +384,27 @@ fn explicate_nodes(nodes : &Box<[ir::Node]>,
 context : &mut SchedulingContext) -> bool {
     let mut resolved = false;
     for node in &**nodes {
-        if !context.resolved_map.contains_key(&context.location) {
-            resolved = explicate_node(node, context) || resolved;
+        match context.head { // get the head if we don't have it
+            None => {
+                match node {
+                    ir::Node::Phi { index:_ } => {},
+                    _ => { 
+                        context.head = Some(context.location.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+        if !context.resolved_schedules.contains_key(&context.location) {
+            let node_resolved = explicate_node(node, context);
+            if node_resolved {
+                let value_index = context.location.funclet_id;
+                let location = context.location.clone();
+                let mut blob = 
+                    get_partial_schedule(&value_index, context);
+                blob.to_update.push(location);
+                resolved = true;
+            }
         }
         context.location.node_id += 1;
     }
@@ -378,7 +424,6 @@ context : &mut SchedulingContext) -> bool {
         ir::FuncletKind::Timeline => false,
         ir::FuncletKind::Spatial => false,
     };
-    context.location.funclet_id += 1;
     unresolved
 }
 
@@ -386,11 +431,31 @@ fn cleanup_partials(context : &mut SchedulingContext) {
     let mut funclets = HashMap::new();
     std::mem::swap(&mut funclets, &mut context.new_schedules);
     for (index, mut partial) in funclets.drain() {
-        add_funclet(partial, context);
+        add_blob(partial, context);
     }
 }
 
-fn print_funclets(program : &ir::Program) {
+fn construct_pipeline(context : &mut SchedulingContext) {
+    let head = match &context.head {
+        None => { panic!("No head found") },
+        Some(v) => { v }
+    };
+
+    let start_funclet = match context.resolved_values.get(head) {
+        None => { panic!("Invalid head") },
+        Some(f) => { f.schedule_id }
+    };
+
+    let pipeline = ir::Pipeline {
+        name: context.program.explicate.clone(),
+        entry_funclet: start_funclet,
+        yield_points: std::collections::BTreeMap::new(),
+    };
+
+    context.program.pipelines.push(pipeline);
+}
+
+fn debug_funclets(program : &ir::Program) {
     // cause I'm dumb
     let mut ordered = Vec::new();
     for index in 0..(program.funclets.get_next_id()) {
@@ -400,17 +465,21 @@ fn print_funclets(program : &ir::Program) {
         ordered[*items.0] = Some(items.1);
     }
     let mut id = 0;
+    println!("Funclets: ");
     for funclet in ordered {
         print!("{} : ", id);
-        println!("{:#?}", funclet);
+        println!("{:#?}", funclet.unwrap());
         id += 1;
     }
-    println!("{:#?}", program.scheduling_funclet_extras);
+    println!("Extras: {:#?}", program.scheduling_funclet_extras);
+    println!("Pipelines: {:#?}", program.pipelines);
+
+    panic!("Explicated"); // to see debug information
 }
 
 pub fn explicate_scheduling(program : &mut ir::Program)
 {
-    if !program.explicate { 
+    if program.explicate == "" { 
         return;
     }
     
@@ -419,18 +488,25 @@ pub fn explicate_scheduling(program : &mut ir::Program)
         { funclet_id : 0, node_id : 0 };
     let starting_index = program.funclets.get_next_id();
     let mut context = 
-        SchedulingContext{program : program, new_schedules : HashMap::new(),
-            location : initial_location, resolved_map : HashMap::new()};
+        SchedulingContext{
+            program : program, 
+            new_schedules : HashMap::new(),
+            location : initial_location,
+            head : None,
+            resolved_schedules : HashMap::new(),
+            resolved_values : HashMap::new()
+        };
     let mut unresolved = true;
     while unresolved {
         unresolved = false; // reset the count
         context.location.funclet_id = 0; // reset the funclet number
         for funclet in original.iter() {
+            context.location.funclet_id = *funclet.0;
             unresolved = unresolved || explicate_funclet(
                 funclet.1, &mut context);
         }
     }
     cleanup_partials(&mut context);
-    print_funclets(&program);
-    panic!("Explicated");
+    construct_pipeline(&mut context);
+    // debug_funclets(&program);
 }

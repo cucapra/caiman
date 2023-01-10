@@ -1,7 +1,7 @@
 (
 	version : (0, 0, 1),
 	program : (
-		explicate : true,
+		explicate : "pipeline_1",
 		native_interface : (
 			types : {
 				0 : I32,

@@ -319,7 +319,7 @@ pub struct PipelineYieldPoint
 pub struct Program
 {
 	#[serde(default)]
-	pub explicate : bool,
+	pub explicate : String,
 	#[serde(default)]
 	pub native_interface : ffi::NativeInterface,
 	#[serde(default)]
