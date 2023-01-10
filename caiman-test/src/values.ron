@@ -48,6 +48,7 @@
 				nodes : [
 					Phi(index : 0),
 					ConstantInteger(value: 1, type_id : 0),
+					ConstantInteger(value: 2, type_id : 0),
 				],
 				tail_edge : Return(return_values : [1])
 			),
@@ -64,6 +65,11 @@
 			// 		EncodeDo(place : Local, 
 			// 			operation : (funclet_id : 0, node_id : 1), 
 			// 			inputs : [], outputs : [1]),
+			// 		AllocTemporary(place : Local, storage_type : (0), 
+			// 			operation : (funclet_id : 0, node_id : 2)),
+			// 		EncodeDo(place : Local, 
+			// 			operation : (funclet_id : 0, node_id : 2), 
+			// 			inputs : [], outputs : [3]),
 			// 	],
 			// 	tail_edge : Return(return_values : [1])
 			// ),
@@ -98,7 +104,7 @@
 			// )
 		},
 		pipelines : [
-			// (name : "pipeline_1", entry_funclet : 1),
+			(name : "pipeline_1", entry_funclet : 0),
 		]
 	)
 )

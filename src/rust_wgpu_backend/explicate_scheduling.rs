@@ -2,7 +2,7 @@
 use ron::value;
 
 use crate::ir;
-use std::collections::{HashMap, hash_map::Entry};
+use std::{collections::{HashMap, hash_map::Entry}, any};
 pub use crate::rust_wgpu_backend::ffi as ffi;
 
 // TODO: for mutual recursion enum BackReferences
@@ -66,11 +66,11 @@ struct ScheduleBlob {
 struct SchedulingContext<'a> {
     program : &'a mut ir::Program,
     new_schedules : HashMap<usize, ScheduleBlob>,
+    current_blob : Option<&'a mut ScheduleBlob>,
     location : ir::RemoteNodeId,
-    head : Option<ir::RemoteNodeId>, // stupid pipeline setup stuff
     // scheduled node maps
     resolved_schedules : HashMap<ir::RemoteNodeId, ResolvedScheduleNode>, 
-    resolved_values : HashMap<ir::RemoteNodeId, ResolvedValueNode>
+    resolved_values : HashMap<usize, ResolvedValueNode>
 }
 
 fn new_partial_schedule() -> PartialSchedule {
@@ -129,7 +129,7 @@ fn new_information(value_index : &usize)
     information
 }
 
-fn get_partial_schedule<'a>(value_index : &usize, 
+fn get_blob<'a>(value_index : &usize, 
 context : &'a mut SchedulingContext) -> &'a mut ScheduleBlob {
     let entry = 
         context.new_schedules.entry(*value_index);
@@ -154,6 +154,12 @@ context : &'a mut SchedulingContext) -> &'a mut ScheduleBlob {
     }
 }
 
+fn get_current_blob<'a>(context : &'a mut SchedulingContext)
+-> &'a mut ScheduleBlob {
+    let value_index = context.location.funclet_id;
+    get_blob(&value_index, context)
+}
+
 fn default_tail(partial : &PartialData, context : &mut SchedulingContext) 
 -> ir::TailEdge {
     let mut node_count = 0;
@@ -163,7 +169,6 @@ fn default_tail(partial : &PartialData, context : &mut SchedulingContext)
             _ => { node_count += 1 }
         }
     }
-    dbg!(node_count);
     let mut return_values = Box::new([0]);
     if node_count > 0 {
         return_values[0] = node_count-1;
@@ -227,7 +232,7 @@ fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
             schedule_id : schedule_id,
             timeline_id : timeline_id
         };
-        context.resolved_values.insert(location, resolved);
+        context.resolved_values.insert(location.funclet_id, resolved);
     }
 }
 
@@ -254,8 +259,7 @@ resolved : ResolvedScheduleNode,
 nodes : Vec<ir::Node>,
 context : &mut SchedulingContext) {
     let target_id = context.location.funclet_id;
-    let mut blob = 
-        get_partial_schedule(&target_id, context);
+    let mut blob = get_blob(&target_id, context);
 
     for node in nodes {
         blob.schedule.core.nodes.push(node);
@@ -313,6 +317,7 @@ context : &mut SchedulingContext) -> bool {
         node_id: context.location.node_id
     };
     let mut nodes = Vec::new();
+    let ret_index = get_current_blob(context).schedule.core.nodes.len();
     nodes.push(ir::Node::AllocTemporary { 
         place: ir::Place::Local, 
         storage_type: ffi::TypeId {0: *type_id}, 
@@ -325,7 +330,7 @@ context : &mut SchedulingContext) -> bool {
             node_id: context.location.node_id
         }, 
         inputs: Box::new([]), 
-        outputs: Box::new([1]) // todo: probably wrong in general
+        outputs: Box::new([ret_index])
     });
     let resolved = ResolvedScheduleNode {
         type_info: ResolvedType::Single(ffi::TypeId(*type_id))
@@ -384,24 +389,11 @@ fn explicate_nodes(nodes : &Box<[ir::Node]>,
 context : &mut SchedulingContext) -> bool {
     let mut resolved = false;
     for node in &**nodes {
-        match context.head { // get the head if we don't have it
-            None => {
-                match node {
-                    ir::Node::Phi { index:_ } => {},
-                    _ => { 
-                        context.head = Some(context.location.clone());
-                    }
-                }
-            }
-            _ => {}
-        }
-        if !context.resolved_schedules.contains_key(&context.location) {
+        if !context.resolved_values.contains_key(&context.location.funclet_id) {
             let node_resolved = explicate_node(node, context);
             if node_resolved {
-                let value_index = context.location.funclet_id;
                 let location = context.location.clone();
-                let mut blob = 
-                    get_partial_schedule(&value_index, context);
+                let mut blob = get_current_blob(context);
                 blob.to_update.push(location);
                 resolved = true;
             }
@@ -436,23 +428,14 @@ fn cleanup_partials(context : &mut SchedulingContext) {
 }
 
 fn construct_pipeline(context : &mut SchedulingContext) {
-    let head = match &context.head {
-        None => { panic!("No head found") },
-        Some(v) => { v }
-    };
-
-    let start_funclet = match context.resolved_values.get(head) {
-        None => { panic!("Invalid head") },
-        Some(f) => { f.schedule_id }
-    };
-
-    let pipeline = ir::Pipeline {
-        name: context.program.explicate.clone(),
-        entry_funclet: start_funclet,
-        yield_points: std::collections::BTreeMap::new(),
-    };
-
-    context.program.pipelines.push(pipeline);
+    for mut pipeline in context.program.pipelines.iter_mut() {
+        match context.resolved_values.get(&pipeline.entry_funclet) {
+            Some(resolved) => {
+                pipeline.entry_funclet = resolved.schedule_id;
+            }
+            _ => { panic!("Unresolved funclet") }
+        }
+    }
 }
 
 fn debug_funclets(program : &ir::Program) {
@@ -477,10 +460,30 @@ fn debug_funclets(program : &ir::Program) {
     panic!("Explicated"); // to see debug information
 }
 
+fn should_explicate(program : &mut ir::Program) -> bool {
+    let mut any_pipelines = false;
+    let mut all_value_pipelines = true;
+    for pipeline in program.pipelines.iter() {
+        any_pipelines = true;
+        match program.funclets.get(&pipeline.entry_funclet) {
+            None => { panic!(format!("Undefined funclet {}", 
+                pipeline.entry_funclet)); }
+            Some(funclet) => {
+                match funclet.kind {
+                    ir::FuncletKind::Value => {}, // dumb, but whatever
+                    _ => { all_value_pipelines = false; }
+                }
+            }
+        }
+    }
+    any_pipelines && all_value_pipelines
+}
+
 pub fn explicate_scheduling(program : &mut ir::Program)
 {
-    if program.explicate == "" { 
-        return;
+    // only explicate if there are pipelines to explicate (value funclet pipes)
+    if !should_explicate(program) {
+        return
     }
     
     let original = program.funclets.clone();
@@ -491,8 +494,8 @@ pub fn explicate_scheduling(program : &mut ir::Program)
         SchedulingContext{
             program : program, 
             new_schedules : HashMap::new(),
+            current_blob : None,
             location : initial_location,
-            head : None,
             resolved_schedules : HashMap::new(),
             resolved_values : HashMap::new()
         };

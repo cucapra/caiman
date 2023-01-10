@@ -319,8 +319,6 @@ pub struct PipelineYieldPoint
 pub struct Program
 {
 	#[serde(default)]
-	pub explicate : String,
-	#[serde(default)]
 	pub native_interface : ffi::NativeInterface,
 	#[serde(default)]
 	pub types : Arena<Type>,

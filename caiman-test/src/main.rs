@@ -45,6 +45,6 @@ mod tests
 		let instance = crate::values::pipeline_1::Instance::new(&mut root_state, & callbacks);
 		let result = instance.start(&mut join_stack, 1);
 		//let result = crate::values::pipeline_1::funclet11_func(instance, &mut join_stack, 1);
-		assert_eq!(1, result.returned().unwrap().0);
+		assert_eq!(2, result.returned().unwrap().0);
 	}
 }

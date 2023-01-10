@@ -282,7 +282,7 @@ impl<'program> FuncletChecker<'program>
 		}
 	}
 
-	fn try_transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)]) -> bool
+	fn 	try_transition_slot(&mut self, slot_node_id : ir::NodeId, place : ir::Place, from_to_stage_pairs : &[(ir::ResourceQueueStage, ir::ResourceQueueStage)]) -> bool
 	{
 		let node_type = self.node_types.remove(& slot_node_id).unwrap();
 		if let NodeType::Slot(Slot{storage_type, queue_stage, queue_place}) = & node_type

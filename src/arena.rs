@@ -73,6 +73,10 @@ impl<T> Arena<T>
 	{
 		IteratorMut::<'m, T>{iter : self.elements.iter_mut()}
 	}
+
+	pub fn get<'m> (& 'm mut self, index : &usize) -> std::option::Option<&T> {
+		self.elements.get(index)
+	}
 }
 
 impl <T> Default for Arena<T>
