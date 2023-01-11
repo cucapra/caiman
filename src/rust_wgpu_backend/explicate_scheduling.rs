@@ -58,7 +58,7 @@ struct ScheduleBlob {
     information : PartialInformation,
     timeline : PartialTimeline,
     remote_update : Vec<ir::RemoteNodeId>,
-    allocated : HashMap<usize, HashSet<usize>>
+    allocated : HashMap<usize, HashMap<usize, usize>>
 }
 
 #[derive(Debug)]
@@ -127,47 +127,77 @@ fn new_information(value_index : &usize)
     information
 }
 
-fn get_blob<'a>(value_index : &usize, 
-context : &'a mut SchedulingContext) -> &'a mut ScheduleBlob {
-    let entry = 
-        context.new_schedules.entry(*value_index);
-    match entry {
-        Entry::Occupied(entry) => { 
-            entry.into_mut() 
-        },
-        Entry::Vacant(entry) =>  {
-            let schedule = new_partial_schedule();
-            let information = 
-                new_information(value_index);
-            let timeline = new_partial_timeline();
-            let mut new_funclet = ScheduleBlob { 
-                schedule,
-                information,
-                timeline,
-                remote_update: Vec::new(),
-                allocated: HashMap::new()
-            };
-            // todo: based on number of inputs, which we're lazily taking to be one
-            entry.insert(new_funclet)
-        }
+fn new_blob(value_index : &usize) -> ScheduleBlob {
+    let schedule = new_partial_schedule();
+    let information = new_information(value_index);
+    let timeline = new_partial_timeline();
+    ScheduleBlob { 
+        schedule,
+        information,
+        timeline,
+        remote_update: Vec::new(),
+        allocated: HashMap::new()
     }
 }
 
+fn get_blob<'a>(value_index : &usize, 
+context : &'a mut SchedulingContext) -> &'a ScheduleBlob {
+    context.new_schedules.entry(*value_index).
+        or_insert(new_blob(value_index))
+}
+
+fn get_blob_mut<'a>(value_index : &usize, 
+context : &'a mut SchedulingContext) -> &'a mut ScheduleBlob {
+    context.new_schedules.entry(*value_index).
+        or_insert(new_blob(value_index))
+}
+
 fn get_current_blob<'a>(context : &'a mut SchedulingContext)
--> &'a mut ScheduleBlob {
+-> &'a ScheduleBlob {
     let value_index = context.location.funclet_id;
     get_blob(&value_index, context)
 }
 
-fn get_funclet<'a>(index : &usize, context : &'a mut SchedulingContext)
+fn get_current_blob_mut<'a>(context : &'a mut SchedulingContext)
+-> &'a mut ScheduleBlob {
+    let value_index = context.location.funclet_id;
+    get_blob_mut(&value_index, context)
+}
+
+fn get_funclet<'a>(index : &usize, context : &'a SchedulingContext)
 -> &'a ir::Funclet {
     context.program.funclets.get(index).unwrap()
 }
 
-fn get_current_funclet<'a>(context : &'a mut SchedulingContext)
+fn get_current_funclet<'a>(context : &'a SchedulingContext)
 -> &'a ir::Funclet {
     let index = context.location.funclet_id;
     get_funclet(&index, context)
+}
+
+fn get_external<'a>(external_function_id: &usize,
+context: &'a SchedulingContext) -> &'a ffi::ExternalCpuFunction {
+    context.program.native_interface.external_cpu_functions.
+    get(&external_function_id).unwrap()
+}
+
+fn get_current_allocated<'a>(node_id : &usize, argument : &usize,
+context : &'a mut SchedulingContext) -> Option<&'a usize> {
+    let blob = get_current_blob_mut(context);
+    match blob.allocated.get(node_id) {
+        None => { None }
+        Some(map) => { map.get(argument) }
+    }
+}
+
+fn update_current_allocated(node_id : &usize, index : &usize,
+context : &mut SchedulingContext) {
+    // Assumes we _haven't_ added this node yet
+    let blob = get_current_blob_mut(context);
+    let current_node = blob.schedule.core.nodes.len();
+    let entry = blob.allocated.entry(*node_id).
+        or_insert(HashMap::new());
+    entry.insert(*index, current_node);
 }
 
 fn default_tail(partial : &PartialData, context : &mut SchedulingContext) 
@@ -269,17 +299,13 @@ resolved : ResolvedScheduleNode,
 nodes : Vec<ir::Node>,
 context : &mut SchedulingContext) {
     let target_id = context.location.funclet_id;
-    let mut blob = get_blob(&target_id, context);
+    let mut blob = get_blob_mut(&target_id, context);
 
     for node in nodes {
         blob.schedule.core.nodes.push(node);
     }
-    let location = ir::RemoteNodeId { 
-        funclet_id : context.location.funclet_id, 
-        node_id : context.location.node_id
-    };
 
-    context.resolved_schedules.insert(location, resolved);
+    context.resolved_schedules.insert(context.location.clone(), resolved);
 }
 
 fn explicate_extract_result(node_id : &usize, 
@@ -295,22 +321,23 @@ index : &usize, context : &mut SchedulingContext) -> bool {
         ir::Node::CallExternalCpu { 
         external_function_id, 
         arguments } => {
-            let external = context.program.native_interface.
-                external_cpu_functions.get(&external_function_id).unwrap();
+            let output = get_external(external_function_id, 
+                context).output_types[*index];
             let node = ir::Node::AllocTemporary {
                 place: ir::Place::Local,
-                storage_type: external.output_types[*index], 
+                storage_type: output, 
                 operation: remote 
             };
-    
+
+            update_current_allocated(node_id, index, context);
             let resolved = ResolvedScheduleNode {};
             add_schedule_node(resolved, vec![node], context);
-            true
         }
         _ => {
             panic!("Unimplemented extract type")
         }
-    }
+    };
+    true
 }         
 
 fn explicate_constant(type_id : &usize, 
@@ -350,21 +377,52 @@ context : &mut SchedulingContext) -> bool {
     //     continuation_join: 0
     // };
     // add_current_funclet(tail_edge, context);
-    true
+    todo!()
 }
 
 fn explicate_select(condition : &usize, true_case : &usize, false_case : &usize, 
     context : &mut SchedulingContext) -> bool {
-    true
+    todo!()
 }
 
-fn explicate_external(node : &ir::Node, context : &mut SchedulingContext) -> bool {
+// TODO: GPU externals
+fn explicate_external(
+    external_function_id : &usize,
+    dimensions : Option<&Box<[usize]>>, // None in case of CPU things
+    arguments : &Box<[usize]>,
+    context : &mut SchedulingContext) 
+-> bool {
+    let external_size = get_external(external_function_id, context)
+        .output_types.len();
+    let mut allocations = Vec::new();
+    // Get the spot of all the return values
+    let current_id = context.location.node_id;
+    for out_index in 0..external_size {
+        match get_current_allocated(&current_id, &out_index, context) {
+            None => { return false }
+            Some(node_id) => { allocations.push(*node_id) }
+        }
+    };
+    // just so we don't screw this up
+    assert_eq!(allocations.len(), external_size);
+    let place = match dimensions {
+        None => { ir::Place::Local }
+        Some(_) => { todo!() }
+    };
+    let node = ir::Node::EncodeDo { 
+        place: place, 
+        operation: context.location.clone(),
+        inputs: arguments.clone(), 
+        outputs: allocations.into_boxed_slice() 
+    };
+    let resolved = ResolvedScheduleNode {};
+    add_schedule_node(resolved, vec![node], context);
     true
 }
 
 fn explicate_node(node : &ir::Node, 
 context : &mut SchedulingContext) -> bool {
-    let resolved = match node {
+    match node {
         ir::Node::ExtractResult { node_id, 
             index } => explicate_extract_result(
                 node_id, 
@@ -381,31 +439,40 @@ context : &mut SchedulingContext) -> bool {
             false_case } => 
             explicate_select(condition, true_case, false_case, context),
         ir::Node::CallExternalCpu { external_function_id, 
-            arguments } => explicate_external(node, context),
+            arguments } => 
+            explicate_external(
+                external_function_id, 
+                None, 
+                arguments,
+                context),
         ir::Node::CallExternalGpuCompute { external_function_id, 
             dimensions, arguments } => 
-            explicate_external(node, context),
+            explicate_external(
+                external_function_id,
+                Some(dimensions),
+                arguments,
+                context),
         _ => true
-    };
-    resolved
+    }
 }
 
 fn explicate_nodes(nodes : &Box<[ir::Node]>, 
 context : &mut SchedulingContext) -> bool {
-    let mut resolved = false;
+    let mut unresolved = false;
     for node in &**nodes {
-        if !context.resolved_values.contains_key(&context.location.funclet_id) {
+        if !context.resolved_schedules.contains_key(&context.location.clone()) {
             let node_resolved = explicate_node(node, context);
             if node_resolved {
                 let location = context.location.clone();
-                let mut blob = get_current_blob(context);
+                let blob = &mut get_current_blob_mut(context);
                 blob.remote_update.push(location);
-                resolved = true;
+            } else {
+                unresolved = true;
             }
         }
         context.location.node_id += 1;
     }
-    !resolved
+    unresolved
 }
 
 fn explicate_funclet(funclet : &ir::Funclet,
@@ -517,5 +584,5 @@ pub fn explicate_scheduling(program : &mut ir::Program)
     }
     cleanup_partials(&mut context);
     construct_pipeline(&mut context);
-    debug_funclets(&program);
+    // debug_funclets(&program);
 }
