@@ -2,7 +2,7 @@
 use ron::value;
 
 use crate::ir;
-use std::{collections::{HashMap, hash_map::Entry}, any};
+use std::{collections::{HashMap, hash_map::Entry, HashSet}, any, hash::Hash};
 pub use crate::rust_wgpu_backend::ffi as ffi;
 
 // TODO: for mutual recursion enum BackReferences
@@ -21,9 +21,7 @@ struct ResolvedValueNode {
 }
 
 #[derive(Debug)]
-struct ResolvedScheduleNode {
-    type_info : ResolvedType,
-}
+struct ResolvedScheduleNode {}
 
 #[derive(Debug)]
 struct PartialData { // a dumb distinction with the rework, but whatever
@@ -59,14 +57,14 @@ struct ScheduleBlob {
     schedule : PartialSchedule,
     information : PartialInformation,
     timeline : PartialTimeline,
-    to_update : Vec<ir::RemoteNodeId>
+    remote_update : Vec<ir::RemoteNodeId>,
+    allocated : HashMap<usize, HashSet<usize>>
 }
 
 #[derive(Debug)]
 struct SchedulingContext<'a> {
     program : &'a mut ir::Program,
     new_schedules : HashMap<usize, ScheduleBlob>,
-    current_blob : Option<&'a mut ScheduleBlob>,
     location : ir::RemoteNodeId,
     // scheduled node maps
     resolved_schedules : HashMap<ir::RemoteNodeId, ResolvedScheduleNode>, 
@@ -146,7 +144,8 @@ context : &'a mut SchedulingContext) -> &'a mut ScheduleBlob {
                 schedule,
                 information,
                 timeline,
-                to_update: Vec::new()
+                remote_update: Vec::new(),
+                allocated: HashMap::new()
             };
             // todo: based on number of inputs, which we're lazily taking to be one
             entry.insert(new_funclet)
@@ -158,6 +157,17 @@ fn get_current_blob<'a>(context : &'a mut SchedulingContext)
 -> &'a mut ScheduleBlob {
     let value_index = context.location.funclet_id;
     get_blob(&value_index, context)
+}
+
+fn get_funclet<'a>(index : &usize, context : &'a mut SchedulingContext)
+-> &'a ir::Funclet {
+    context.program.funclets.get(index).unwrap()
+}
+
+fn get_current_funclet<'a>(context : &'a mut SchedulingContext)
+-> &'a ir::Funclet {
+    let index = context.location.funclet_id;
+    get_funclet(&index, context)
 }
 
 fn default_tail(partial : &PartialData, context : &mut SchedulingContext) 
@@ -227,7 +237,7 @@ fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
     let extra = build_extra(blob.information, 
         &timeline_id, context);
     context.program.scheduling_funclet_extras.insert(schedule_id, extra);
-    for location in blob.to_update.drain(..) {
+    for location in blob.remote_update.drain(..) {
         let resolved = ResolvedValueNode {
             schedule_id : schedule_id,
             timeline_id : timeline_id
@@ -276,39 +286,32 @@ fn explicate_extract_result(node_id : &usize,
 index : &usize, context : &mut SchedulingContext) -> bool {
     // The goal here is to maintain the hashmaps to keep track of ids
     // Specifically the funclet and node to extract from (or to)
-    match context.resolved_schedules.get(&context.location) {
-        Some(info) => {
-            let remote = ir::RemoteNodeId {
-                funclet_id : context.location.funclet_id,
-                node_id : context.location.node_id
+    let remote = ir::RemoteNodeId {
+        funclet_id : context.location.funclet_id,
+        node_id : context.location.node_id
+    };
+    let node = &get_current_funclet(context).nodes[*node_id];
+    match node {
+        ir::Node::CallExternalCpu { 
+        external_function_id, 
+        arguments } => {
+            let external = context.program.native_interface.
+                external_cpu_functions.get(&external_function_id).unwrap();
+            let node = ir::Node::AllocTemporary {
+                place: ir::Place::Local,
+                storage_type: external.output_types[*index], 
+                operation: remote 
             };
-            let typ = match &info.type_info {
-                ResolvedType::NoType => {
-                    panic!("Invalid lack of type")
-                }
-                ResolvedType::Single(typ) => 
-                {
-                    assert!(*index == 0);
-                    typ.0 
-                },
-                ResolvedType::Multiple(typs) => 
-                    { typs[*index].0 }
-            };
-            let node = ir::Node::StaticAllocFromStaticBuffer { buffer: 0, 
-                place: ir::Place::Gpu,
-                storage_type: ffi::TypeId{0: typ}, operation: remote };
-
-            let resolved = ResolvedScheduleNode {
-                type_info: ResolvedType::NoType
-            };
+    
+            let resolved = ResolvedScheduleNode {};
             add_schedule_node(resolved, vec![node], context);
             true
-        }         
-        None => {
-            false
+        }
+        _ => {
+            panic!("Unimplemented extract type")
         }
     }
-}
+}         
 
 fn explicate_constant(type_id : &usize, 
 context : &mut SchedulingContext) -> bool {
@@ -332,23 +335,21 @@ context : &mut SchedulingContext) -> bool {
         inputs: Box::new([]), 
         outputs: Box::new([ret_index])
     });
-    let resolved = ResolvedScheduleNode {
-        type_info: ResolvedType::Single(ffi::TypeId(*type_id))
-    };
+    let resolved = ResolvedScheduleNode {};
     add_schedule_node(resolved, nodes, context);
     true
 }
 
 fn explicate_value_function(function_id : &usize, arguments : &Box<[usize]>, 
 context : &mut SchedulingContext) -> bool {
-    let id = context.program.funclets.get_next_id();
-    let tail_edge = ir::TailEdge::ScheduleCall { 
-        value_operation: context.location, 
-        callee_funclet_id: id,
-        callee_arguments: Box::new([]), // TODO: clearly wrong
-        continuation_join: 0
-    };
-    add_current_funclet(tail_edge, context);
+    // let id = context.program.funclets.get_next_id();
+    // let tail_edge = ir::TailEdge::ScheduleCall { 
+    //     value_operation: context.location, 
+    //     callee_funclet_id: id,
+    //     callee_arguments: Box::new([]), // TODO: clearly wrong
+    //     continuation_join: 0
+    // };
+    // add_current_funclet(tail_edge, context);
     true
 }
 
@@ -361,10 +362,14 @@ fn explicate_external(node : &ir::Node, context : &mut SchedulingContext) -> boo
     true
 }
 
-fn explicate_node(node : &ir::Node, context : &mut SchedulingContext) -> bool {
+fn explicate_node(node : &ir::Node, 
+context : &mut SchedulingContext) -> bool {
     let resolved = match node {
         ir::Node::ExtractResult { node_id, 
-            index } => explicate_extract_result(node_id, index, context),
+            index } => explicate_extract_result(
+                node_id, 
+                index, 
+                context),
         ir::Node::ConstantInteger { value, 
             type_id } => explicate_constant(type_id, context),
         ir::Node::ConstantUnsignedInteger { value, 
@@ -394,7 +399,7 @@ context : &mut SchedulingContext) -> bool {
             if node_resolved {
                 let location = context.location.clone();
                 let mut blob = get_current_blob(context);
-                blob.to_update.push(location);
+                blob.remote_update.push(location);
                 resolved = true;
             }
         }
@@ -422,7 +427,7 @@ context : &mut SchedulingContext) -> bool {
 fn cleanup_partials(context : &mut SchedulingContext) {
     let mut funclets = HashMap::new();
     std::mem::swap(&mut funclets, &mut context.new_schedules);
-    for (index, mut partial) in funclets.drain() {
+    for (_, mut partial) in funclets.drain() {
         add_blob(partial, context);
     }
 }
@@ -451,7 +456,10 @@ fn debug_funclets(program : &ir::Program) {
     println!("Funclets: ");
     for funclet in ordered {
         print!("{} : ", id);
-        println!("{:#?}", funclet.unwrap());
+        match funclet {
+            None => {}
+            Some(f) => { println!("{:#?}", f); } 
+        }
         id += 1;
     }
     println!("Extras: {:#?}", program.scheduling_funclet_extras);
@@ -494,22 +502,20 @@ pub fn explicate_scheduling(program : &mut ir::Program)
         SchedulingContext{
             program : program, 
             new_schedules : HashMap::new(),
-            current_blob : None,
             location : initial_location,
             resolved_schedules : HashMap::new(),
             resolved_values : HashMap::new()
         };
-    let mut unresolved = true;
+    let mut unresolved = true; // see if there are any nodes left to resolve
     while unresolved {
-        unresolved = false; // reset the count
-        context.location.funclet_id = 0; // reset the funclet number
+        unresolved = false;
         for funclet in original.iter() {
             context.location.funclet_id = *funclet.0;
-            unresolved = unresolved || explicate_funclet(
-                funclet.1, &mut context);
+            unresolved = explicate_funclet(
+                funclet.1, &mut context) || unresolved;
         }
     }
     cleanup_partials(&mut context);
     construct_pipeline(&mut context);
-    // debug_funclets(&program);
+    debug_funclets(&program);
 }

@@ -538,7 +538,13 @@ impl<'program> CodeGen<'program>
 
 				use std::iter::FromIterator;
 
-				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| { let slot_id = input_slot_ids[index]; placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
+				dbg!(function);
+				dbg!(arguments);
+				dbg!(input_slot_ids);
+
+				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| 
+					{ let slot_id = input_slot_ids[index]; 
+						placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
 				let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, & argument_var_ids);
 
 				for (index, output_type_id) in function.output_types.iter().enumerate()
