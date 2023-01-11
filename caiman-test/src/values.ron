@@ -40,17 +40,17 @@
 			2 : Event(place : Local),
 		},
 		funclets : {
-			// 0 : (
-			// 	kind : Value,
-			// 	input_types : [0],
-			// 	output_types : [0],
-			// 	nodes : [
-			// 		Phi(index : 0),
-			// 		ConstantInteger(value: 1, type_id : 0),
-			// 		ConstantInteger(value: 2, type_id : 0),
-			// 	],
-			// 	tail_edge : Return(return_values : [1])
-			// ),
+			0 : (
+				kind : Value,
+				input_types : [0],
+				output_types : [0],
+				nodes : [
+					Phi(index : 0),
+					ConstantInteger(value: 1, type_id : 0),
+					ConstantInteger(value: 2, type_id : 0),
+				],
+				tail_edge : Return(return_values : [1])
+			),
 
 			// 1 : (
 			// 	kind : ScheduleExplicit,
@@ -162,7 +162,7 @@
 			// )
 		},
 		pipelines : [
-			// (name : "pipeline_1", entry_funclet : 0),
+			(name : "pipeline_1", entry_funclet : 0),
 			(name : "pipeline_2", entry_funclet : 3),
 		]
 	)
