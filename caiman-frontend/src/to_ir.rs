@@ -4,11 +4,13 @@ use crate::value_language::ast as value_ast;
 use crate::value_language::typing;
 use caiman::arena::Arena;
 use caiman::ir;
+use crate::spec;
 use std::collections::HashMap;
 
 pub enum ToIRError
 {
     UnboundScheduleVar(String),
+    IncompatibleArgumentNum(usize, usize),
 }
 
 fn make_error(e: ToIRError, i: error::Info) -> error::DualLocalError
@@ -16,6 +18,7 @@ fn make_error(e: ToIRError, i: error::Info) -> error::DualLocalError
     let file_kind = match &e
     {
         ToIRError::UnboundScheduleVar(_) => error::FileKind::Scheduling,
+        ToIRError::IncompatibleArgumentNum(_,_) => error::FileKind::Value,
     };
     error::DualLocalError {
         error: error::LocalError {
@@ -78,7 +81,7 @@ pub fn go(
     let pipelines: Vec<ir::Pipeline> = schedule_explicit_funclets
         .iter()
         .enumerate()
-        .map(|(i, _sef)| ir::Pipeline {
+        .map(|(i, _se_funclet)| ir::Pipeline {
             name: String::from("Pipeline") + &i.to_string(),
             entry_funclet: value_funclets.len() + i,
             yield_points: Default::default(),
@@ -115,6 +118,34 @@ fn get_native_type_index(
     }
 }
 
+enum ValueExprOutput
+{
+    Single(usize, error::Info),
+    Multi(Box<[usize]>, error::Info),
+}
+
+impl ValueExprOutput
+{
+    fn single(self) -> ToIRResult<usize>
+    {
+        match self
+        {
+            ValueExprOutput::Single(u, _) => Ok(u),
+            ValueExprOutput::Multi(v, info) => 
+                Err(make_error(ToIRError::IncompatibleArgumentNum(1, v.len()), info)),
+        }
+    }
+
+    fn multi(self) -> Box<[usize]>
+    {
+        match self
+        {
+            ValueExprOutput::Multi(v, _) => v,
+            ValueExprOutput::Single(u, _) => Box::new([u]),
+        }
+    }
+}
+
 struct ValueFuncletContext<'a>
 {
     pub nodes_vec: Vec<ir::Node>,
@@ -126,7 +157,7 @@ fn add_value_expr(
     exp: &value_ast::ParsedExpr,
     t: &typing::Type,
     ctx: &mut ValueFuncletContext,
-) -> ToIRResult<usize>
+) -> ToIRResult<ValueExprOutput>
 {
     use value_ast::ExprKind::*;
     let (info, kind) = exp;
@@ -137,31 +168,47 @@ fn add_value_expr(
             let x_index = ctx.involved_variables.get(x).unwrap_or_else(|| {
                 panic!("Unbound var {}, type checker is either bugged or disabled.", x)
             });
-            Ok(*x_index)
+            Ok(ValueExprOutput::Single(*x_index, *info))
         },
         Num(s) =>
         {
             let value: i64 = s.parse().unwrap();
             let type_id = get_native_type_index(ctx.types_index, t, *info);
             ctx.nodes_vec.push(ir::Node::ConstantInteger { value, type_id });
-            Ok(ctx.nodes_vec.len() - 1)
+            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
         },
         Bool(b) =>
         {
             let value: i64 = if *b { 1 } else { 0 };
             let type_id = get_native_type_index(ctx.types_index, t, *info);
             ctx.nodes_vec.push(ir::Node::ConstantInteger { value, type_id });
-            Ok(ctx.nodes_vec.len() - 1)
+            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
         },
         If(e1, e2, e3) =>
         {
-            let condition = add_value_expr(e1, &typing::Type::Bool, ctx)?;
-            let true_case = add_value_expr(e2, t, ctx)?;
-            let false_case = add_value_expr(e3, t, ctx)?;
+            let condition = add_value_expr(e1, &typing::Type::Bool, ctx)?.single()?;
+            let true_case = add_value_expr(e2, t, ctx)?.single()?;
+            let false_case = add_value_expr(e3, t, ctx)?.single()?;
             ctx.nodes_vec.push(ir::Node::Select { condition, true_case, false_case });
-            Ok(ctx.nodes_vec.len() - 1)
+            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
         },
-        _ => panic!("TODO"),
+        IRNode(spec_kind, es) =>
+        {
+            let mut node_inputs: Vec<spec::input::SpecNodeInput> = Vec::new();
+            for e in es.iter()
+            {
+                let value_e = add_value_expr(e, t, ctx)?;
+                node_inputs.push(match value_e
+                {
+                    ValueExprOutput::Single(u, _) => spec::input::SpecNodeInput::Usize(u),
+                    ValueExprOutput::Multi(us, _) => spec::input::SpecNodeInput::UsizeSlice(us),
+                });
+            }
+            ctx.nodes_vec.push(spec_kind.to_ir(node_inputs));
+            // XXX multi output nodes!!!
+            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
+        },
+        n => panic!("TODO {:?}", n),
     }
 }
 
@@ -184,7 +231,7 @@ fn value_funclets(
         {
             Let((_mut, var, t), exp) =>
             {
-                let expr_index = add_value_expr(exp, t, &mut ctx)?;
+                let expr_index = add_value_expr(exp, t, &mut ctx)?.single()?;
                 if ctx.involved_variables.insert(var.clone(), expr_index).is_some()
                 {
                     panic!("Duplicate {:?} in involved variables, {:?}", var.clone(), info_s)

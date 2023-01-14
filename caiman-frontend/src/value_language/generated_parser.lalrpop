@@ -1,6 +1,7 @@
 use crate::value_language::ast::*;
 use crate::value_language::typing::Type;
 use crate::value_language::ast_factory::ASTFactory;
+use crate::spec;
 
 grammar(astf: &ASTFactory);
 
@@ -16,6 +17,8 @@ match {
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
+
+  _,
 }
 
 pub Program: ParsedProgram = { Stmt* => <> }
@@ -40,14 +43,16 @@ Expr: ParsedExpr = {
 }
 
 TermExpr: ParsedExpr = {
-    <@L> <Constant> <@R>                      => astf.num(<>),
-    <@L> <Id> <@R>                            => astf.var(<>),
+    <@L> <Constant> <@R>                          => astf.num(<>),
+    <@L> <Id> <@R>                                => astf.var(<>),
     <@L> "if" <Expr> "{" <Expr> "}" 
-      "else" "{" <Expr> "}" <@R>              => astf.if_expr(<>),
-    <@L> <Bool> <@R>                          => astf.bool_expr(<>),
-    <@L> "input" "(" ")" <@R>                 => astf.input(<>),
-    <@L> <Id> "(" <CommaList<Expr>> ")" <@R>  => astf.ecall(<>),
-    <@L> "{" <Id> ":" <Expr> "}" <@R>         => astf.labeled(<>), 
+      "else" "{" <Expr> "}" <@R>                  => astf.if_expr(<>),
+    <@L> <Bool> <@R>                              => astf.bool_expr(<>),
+    <@L> "input" "(" ")" <@R>                     => astf.input(<>),
+    <@L> <IRNodeE> "(" <CommaList<Expr>> ")" <@R> => astf.ir_node_expr(<>),
+    <@L> <Id> "(" <CommaList<Expr>> ")" <@R>      => astf.ecall(<>),
+    <@L> "(" <OnePlusCommaList<Expr>> ")" <@R>    => astf.tuple(<>),
+    <@L> "{" <Id> ":" <Expr> "}" <@R>             => astf.labeled(<>), 
     UnopExpr,
     "(" <Expr> ")",
 }
@@ -137,6 +142,23 @@ Type: Type = {
     "bool" => Type::Bool,
 }
 
+OnePlusCommaList<T>: Vec<T> = {
+    <e_start: T> "," <mut v: (<T> ",")*> <e_end: T?> => {
+        if let Some(e) = e_end {
+            v.push(e);
+        }
+        v.insert(0, e_start);
+        v
+    }
+}
 
-        // test!!!!!
-        
+IRNodeE: spec::nodes::FunctionalExprNodeKind = {
+"IR::Phi" => spec::nodes::FunctionalExprNodeKind::Phi,
+"IR::ExtractResult" => spec::nodes::FunctionalExprNodeKind::ExtractResult,
+"IR::ConstantInteger" => spec::nodes::FunctionalExprNodeKind::ConstantInteger,
+"IR::ConstantUnsignedInteger" => spec::nodes::FunctionalExprNodeKind::ConstantUnsignedInteger,
+"IR::CallValueFunction" => spec::nodes::FunctionalExprNodeKind::CallValueFunction,
+"IR::Select" => spec::nodes::FunctionalExprNodeKind::Select,
+"IR::CallExternalCpu" => spec::nodes::FunctionalExprNodeKind::CallExternalCpu,
+"IR::CallExternalGpuCompute" => spec::nodes::FunctionalExprNodeKind::CallExternalGpuCompute,
+}

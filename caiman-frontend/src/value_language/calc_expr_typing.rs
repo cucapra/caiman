@@ -65,6 +65,8 @@ where
         ExprKind::Call(f, args) => 
             call_type(info, context, function_context, f, args),
         ExprKind::Labeled(_, e) => expr_type(e, context, function_context),
+        ExprKind::Tuple(es) => panic!("TODO tuple checking"),
+        ExprKind::IRNode(_n, _es) => panic!("TODO ir node check"),
     }
 }
 

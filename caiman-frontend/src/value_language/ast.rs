@@ -1,6 +1,7 @@
 // AST
 use crate::value_language::typing::Type;
 use crate::error::{Info, HasInfo};
+use crate::spec;
 
 pub type Var = String;
 
@@ -36,6 +37,8 @@ pub enum ExprKind<E>
     If(Box<Expr<E>>, Box<Expr<E>>, Box<Expr<E>>),
     Call(Var, Vec<Expr<E>>),
     Labeled(Var, Box<Expr<E>>),
+    Tuple(Vec<Expr<E>>),
+    IRNode(spec::nodes::FunctionalExprNodeKind, Vec<Expr<E>>),
 }
 pub type Expr<E> = (E, ExprKind<E>);
 

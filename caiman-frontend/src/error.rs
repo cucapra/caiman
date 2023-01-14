@@ -160,7 +160,11 @@ impl fmt::Display for ToIRError
         {
             ToIRError::UnboundScheduleVar(v) =>
             {
-                write!(f, "Variable {} is unbound in the value language", v)
+                write!(f, "Variable {} is unbound in the scheduling language", v)
+            },
+            ToIRError::IncompatibleArgumentNum(exp, act) => 
+            {
+                write!(f, "Expected {} arguments but got {}", exp, act)
             },
         }
     }

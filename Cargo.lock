@@ -139,6 +139,7 @@ name = "caiman-frontend"
 version = "0.0.1"
 dependencies = [
  "caiman",
+ "caiman-spec",
  "clap 3.2.20",
  "lalrpop",
  "lalrpop-util",

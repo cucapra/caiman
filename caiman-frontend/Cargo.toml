@@ -8,6 +8,7 @@ resolver = "2"
 
 [build-dependencies]
 lalrpop = "0.19.7"
+caiman-spec = { path = "../caiman-spec" }
 
 [dependencies]
 lalrpop-util = { version="0.19.7", features=["lexer"] }

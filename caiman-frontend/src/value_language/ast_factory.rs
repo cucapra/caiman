@@ -11,6 +11,7 @@
 use crate::error::Info;
 use crate::value_language::ast::*;
 use crate::value_language::typing::Type;
+use crate::spec::nodes::FunctionalExprNodeKind;
 
 pub struct ASTFactory
 {
@@ -102,6 +103,20 @@ impl ASTFactory
         )
     }
 
+    pub fn ir_node_expr(
+        &self,
+        l: usize,
+        node: FunctionalExprNodeKind,
+        args: Vec<ParsedExpr>,
+        r: usize,
+    ) -> ParsedExpr
+    {
+        (
+            self.info(l, r),
+            ExprKind::IRNode(node, args),
+        )
+    }
+
     pub fn num(&self, l: usize, n: String, r: usize) -> ParsedExpr
     {
         (self.info(l, r), ExprKind::Num(n))
@@ -120,6 +135,16 @@ impl ASTFactory
     pub fn input(&self, l: usize, r: usize) -> ParsedExpr
     {
         (self.info(l, r), ExprKind::Input())
+    }
+
+    pub fn tuple(
+        &self,
+        l: usize,
+        es: Vec<ParsedExpr>,
+        r: usize,
+    ) -> ParsedExpr
+    {
+        (self.info(l, r), ExprKind::Tuple(es))
     }
 
     pub fn ecall(
