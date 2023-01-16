@@ -3,7 +3,7 @@ use ron::value;
 
 use crate::ir;
 use std::{collections::{HashMap, hash_map::Entry, HashSet}, any, hash::Hash};
-pub use crate::rust_wgpu_backend::ffi as ffi;
+use crate::rust_wgpu_backend::ffi as ffi;
 
 // TODO: for mutual recursion enum BackReferences
 

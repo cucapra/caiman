@@ -46,43 +46,43 @@
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
+					ConstantInteger(value: 4, type_id : 0),
 					ConstantInteger(value: 2, type_id : 0),
 				],
 				tail_edge : Return(return_values : [1])
 			),
 
-			// 1 : (
-			// 	kind : ScheduleExplicit,
-			// 	input_types : [1],
-			// 	output_types : [1],
+			1 : (
+				kind : ScheduleExplicit,
+				input_types : [1],
+				output_types : [1],
 
-			// 	nodes : [
-			// 		Phi(index : 0),
-			// 		AllocTemporary(place : Local, storage_type : (0), 
-			// 			operation : (funclet_id : 0, node_id : 1)),
-			// 		EncodeDo(place : Local, 
-			// 			operation : (funclet_id : 0, node_id : 1), 
-			// 			inputs : [], outputs : [1]),
-			// 		AllocTemporary(place : Local, storage_type : (0), 
-			// 			operation : (funclet_id : 0, node_id : 2)),
-			// 		EncodeDo(place : Local, 
-			// 			operation : (funclet_id : 0, node_id : 2), 
-			// 			inputs : [], outputs : [3]),
-			// 	],
-			// 	tail_edge : Return(return_values : [3])
-			// ),
+				nodes : [
+					Phi(index : 0),
+					AllocTemporary(place : Local, storage_type : (0), 
+						operation : (funclet_id : 0, node_id : 1)),
+					EncodeDo(place : Local, 
+						operation : (funclet_id : 0, node_id : 1), 
+						inputs : [], outputs : [1]),
+					AllocTemporary(place : Local, storage_type : (0), 
+						operation : (funclet_id : 0, node_id : 2)),
+					EncodeDo(place : Local, 
+						operation : (funclet_id : 0, node_id : 2), 
+						inputs : [], outputs : [3]),
+				],
+				tail_edge : Return(return_values : [3])
+			),
 
-			// 2 : (
-			// 	kind : Timeline,
-			// 	input_types : [2],
-			// 	output_types : [2],
+			2 : (
+				kind : Timeline,
+				input_types : [2],
+				output_types : [2],
 
-			// 	nodes : [
-			// 		Phi(index : 0),
-			// 	],
-			// 	tail_edge : Return(return_values : [0])
-			// ),
+				nodes : [
+					Phi(index : 0),
+				],
+				tail_edge : Return(return_values : [0])
+			),
 
 			3 : (
 				kind : Value,
@@ -97,37 +97,37 @@
 				tail_edge : Return(return_values : [2])
 			),
 
-			// 4 : (
-			// 	kind : ScheduleExplicit,
-			// 	input_types : [1],
-			// 	output_types : [1],
+			4 : (
+				kind : ScheduleExplicit,
+				input_types : [1],
+				output_types : [1],
 
-			// 	nodes : [
-			// 		Phi(index : 0),
-			// 		AllocTemporary(place : Local, storage_type : (0), 
-			// 			operation : (funclet_id : 3, node_id : 1)),
-			// 		EncodeDo(place : Local, 
-			// 			operation : (funclet_id : 3, node_id : 1), 
-			// 			inputs : [], outputs : [1]),
-			// 		AllocTemporary(place : Local, storage_type : (0), 
-			// 			operation : (funclet_id : 3, node_id : 2)),
-			// 		EncodeDo(place : Local, 
-			// 			operation : (funclet_id : 3, node_id : 3), 
-			// 			inputs : [0], outputs : [3]),
-			// 	],
-			// 	tail_edge : Return(return_values : [3])
-			// ),
+				nodes : [
+					Phi(index : 0),
+					AllocTemporary(place : Local, storage_type : (0), 
+						operation : (funclet_id : 3, node_id : 1)),
+					EncodeDo(place : Local, 
+						operation : (funclet_id : 3, node_id : 1), 
+						inputs : [], outputs : [1]),
+					AllocTemporary(place : Local, storage_type : (0), 
+						operation : (funclet_id : 3, node_id : 2)),
+					EncodeDo(place : Local, 
+						operation : (funclet_id : 3, node_id : 3), 
+						inputs : [0], outputs : [3]),
+				],
+				tail_edge : Return(return_values : [3])
+			),
 
-			// 5 : (
-			// 	kind : Timeline,
-			// 	input_types : [2],
-			// 	output_types : [2],
+			5 : (
+				kind : Timeline,
+				input_types : [2],
+				output_types : [2],
 
-			// 	nodes : [
-			// 		Phi(index : 0),
-			// 	],
-			// 	tail_edge : Return(return_values : [0])
-			// ),
+				nodes : [
+					Phi(index : 0),
+				],
+				tail_edge : Return(return_values : [0])
+			),
 		},
 		value_functions : {
 			// 0 : (name : "trivial_function", input_types : [0], output_types : [0], default_funclet_id : Some(3)),

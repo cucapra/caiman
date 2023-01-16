@@ -4,7 +4,7 @@ use std::default::Default;
 use serde_derive::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct Definition
+pub struct Definition
 {
 	version : (u32, u32, u32),
 	program : ir::Program
@@ -33,7 +33,13 @@ impl std::fmt::Display for CompileError
 
 pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileOptions>) -> Result<String, CompileError>
 {
-	let result : Result<Definition, ron::de::Error> = ron::from_str(& input_string);
+	let result : Result<Definition, ron::de::Error> = 
+		if input_string.ends_with(".caimainir") {
+			crate::assembly::frontend::parse_assembly(input_string)
+		}
+		else {
+			 ron::from_str(& input_string)
+		};
 	match result
 	{
 		Err(why) => Err(CompileError{ message: format!("Parse error: {}", why)}),
