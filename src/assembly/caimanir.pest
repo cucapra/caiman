@@ -1,0 +1,54 @@
+// Definitions
+//   pest
+WHITESPACE = _{ "\t" | " " | NEWLINE }
+COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
+sep = _{ WHITESPACE+ }
+
+//   baseline
+id = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+n = @{ ASCII_DIGIT+ }
+str_single = @{ "'" ~ (!"'" ~ !NEWLINE ~ ANY)* ~ "'" }
+str_double = @{ "\"" ~ (!"\"" ~ !NEWLINE ~ ANY)* ~ "\"" }
+str = @{ str_single | str_double }
+type_name = @{ "$" ~ id }
+type_name_sep = @{ type_name ~ sep }
+var_name = @{ "%" ~ (id | n) }
+var_name_sep = @{ var_name ~ sep }
+fn_name = @{ "@" ~ id }
+fn_name_sep = @{ fn_name ~ sep }
+funclet_loc = @{ fn_name ~ "." ~ var_name }
+funclet_loc_sep = @{ funclet_loc ~ sep }
+
+//   names
+typ = @{ "i32" | type_name }
+place = @{ "local" | "cpu" | "gpu" }
+stage = @{ "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" }
+constant = @{ n ~ "i32" }
+
+//   tags
+tag_locs = @{ "operation" | "input" | "output" | "function_input" | "function_output" }
+tag = @{ "none" | tag_locs ~ sep ~ funclet_loc | "halt" ~ sep ~ n}
+
+//   extras
+dict_key = { id | var_name }
+unchecked_value = { funclet_loc | var_name | fn_name | typ | place | stage | tag | unchecked_dict }
+dict_value = { unchecked_value | "[" ~ (unchecked_value ~ ",")* ~ "]" }
+dict_element = { dict_key ~ ":" ~ dict_value }
+unchecked_dict = { "{" ~ (dict_element ~ ",")* ~ "}" }
+
+// Program
+program = { SOI ~ typs? ~ extras? ~ pipelines? ~ EOI }
+
+// Types
+typs = { "types" ~ "[" ~ (type_def ~ ",")* ~ "]" }
+typ_decl = @{ ("slot" | "event") ~ sep }
+type_def = { typ | typ_decl ~ type_name ~ unchecked_dict }
+
+// Extras
+extras = { "extras" ~ "{" ~ (extra ~ ",")* ~ "}" }
+extra = { fn_name_sep ~ unchecked_dict }
+
+// Pipelines
+pipelines = { (pipeline ~ ";")+ }
+pipeline_sep = @{ "pipeline" ~ sep }
+pipeline = { pipeline_sep ~ str ~ "=" ~ fn_name }

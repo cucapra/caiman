@@ -1,0 +1,53 @@
+types [
+    i32,
+    slot $slot0 {
+        type : i32,
+        stage : ready,
+        place : local,
+    },
+    event $event0 {
+        place : local,
+    },
+]
+//
+//external_cpu i32 @do_thing_on_cpu(i32);
+//
+//value i32 @foo(i32 %x) {
+//    %0 = phi 0;
+//    %1 = constant 4i32;
+//    return %1;
+//}
+//
+//schedule $slot0 @bar($slot0 %s) {
+//    %0 = phi 0;
+//    %x = alloc-local-i32 @foo.%1;
+//    do-local @foo.%1() -> @bar.%x;
+//    return %x;
+//}
+//
+//timeline $event0 @time($event0 %s) {
+//    %0 = phi 0;
+//    return %0;
+//}
+//
+extras {
+    @bar {
+        value : @foo,
+        input_slots : {
+            %x : {
+                value : input @foo.%0,
+            },
+        },
+        output_slots : [],
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        external_timestamps : [],
+        external_spaces : [],
+        in_timeline_tag : input @time.%0,
+        out_timeline_tag : input @time.%0,
+    },
+}
+
+pipeline "pipeline_1" = @foo;

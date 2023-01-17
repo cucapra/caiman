@@ -1,4 +1,6 @@
 extern crate clap;
+
+use std::env;
 use clap::{Arg, App, SubCommand};
 
 use caiman::frontend;
@@ -24,7 +26,8 @@ fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option
 		Ok(_) => ()
 	};
 
-	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, options_opt);
+	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition
+		(& input_string, options_opt, true);
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
@@ -58,6 +61,17 @@ fn explicate(input_file : &mut File, output_file : &mut File)
 
 fn main()
 {
+	let input_path = Path::new(&r"C:\Users\d-gei\caiman\src\test.caimanir");
+	let mut input_file = match File::open(&input_path) {
+		Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
+		Ok(file) => file,
+	};
+	let mut input_string = String::new();
+	match input_file.read_to_string(&mut input_string) {
+		Err(why) => panic!("Couldn't read file: {}", why),
+		Ok(_) => (),
+	};
+	crate::frontend::compile_ron_definition(input_string.as_str(), None, true);
 	let arguments =
 	{
 		let matches =

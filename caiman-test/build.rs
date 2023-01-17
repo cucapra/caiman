@@ -15,6 +15,7 @@ fn compile(input_file: &mut File, output_file: &mut File) {
             Some(caiman::frontend::CompileOptions {
                 print_codegen_debug_info: true,
             }),
+            true
         );
 
     match result {
@@ -26,9 +27,9 @@ fn compile(input_file: &mut File, output_file: &mut File) {
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=src/values.ron");
+    println!("cargo:rerun-if-changed=src/trivial.caimanir");
 
-    let input_path = Path::new(&"src/values.ron");
+    let input_path = Path::new(&"src/trivial.caimanir");
     let mut input_file = match File::open(&input_path) {
         Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
         Ok(file) => file,
@@ -37,6 +38,6 @@ fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let generated_path = format!("{}/generated", out_dir);
     std::fs::create_dir(&generated_path);
-    let mut output_file = File::create(format!("{}/generated/values.txt", out_dir)).unwrap();
+    let mut output_file = File::create(format!("{}/generated/trivial.txt", out_dir)).unwrap();
     compile(&mut input_file, &mut output_file);
 }

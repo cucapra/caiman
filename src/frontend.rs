@@ -31,14 +31,16 @@ impl std::fmt::Display for CompileError
 	}
 }
 
-pub fn compile_ron_definition(input_string : &str, options_opt : Option<CompileOptions>) -> Result<String, CompileError>
+pub fn compile_ron_definition(input_string : &str,
+                              options_opt : Option<CompileOptions>,
+                              assembly : bool) -> Result<String, CompileError>
 {
 	let result : Result<Definition, ron::de::Error> = 
-		if input_string.ends_with(".caimainir") {
-			crate::assembly::frontend::parse_assembly(input_string)
+		if assembly {
+			crate::assembly::parser::parse(input_string)
 		}
 		else {
-			 ron::from_str(& input_string)
+			ron::from_str(& input_string)
 		};
 	match result
 	{
