@@ -269,8 +269,8 @@ fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
     context.program.scheduling_funclet_extras.insert(schedule_id, extra);
     for location in blob.remote_update.drain(..) {
         let resolved = ResolvedValueNode {
-            schedule_id : schedule_id,
-            timeline_id : timeline_id
+            schedule_id,
+            timeline_id
         };
         context.resolved_values.insert(location.funclet_id, resolved);
     }

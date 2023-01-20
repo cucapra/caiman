@@ -1,3 +1,5 @@
+extern crate core;
+
 #[macro_use]
 mod operations;
 mod id_generator;

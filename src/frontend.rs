@@ -6,8 +6,8 @@ use serde_derive::{Serialize, Deserialize};
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Definition
 {
-	version : (u32, u32, u32),
-	program : ir::Program
+	pub version : (u32, u32, u32),
+	pub program : ir::Program
 }
 
 
@@ -20,7 +20,7 @@ pub struct CompileOptions
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct CompileError
 {
-	message : String
+	pub message : String
 }
 
 impl std::fmt::Display for CompileError
@@ -35,16 +35,19 @@ pub fn compile_ron_definition(input_string : &str,
                               options_opt : Option<CompileOptions>,
                               assembly : bool) -> Result<String, CompileError>
 {
-	let result : Result<Definition, ron::de::Error> = 
+	let result : Result<Definition, CompileError> =
 		if assembly {
 			crate::assembly::parser::parse(input_string)
 		}
 		else {
-			ron::from_str(& input_string)
+			match ron::from_str(& input_string) {
+				Err(why) => Err(CompileError{ message: format!("Parse error: {}", why) }),
+				Ok(v) => Ok(v)
+			}
 		};
 	match result
 	{
-		Err(why) => Err(CompileError{ message: format!("Parse error: {}", why)}),
+		Err(why) => Err(why),
 		Ok(mut definition) =>
 		{
 			assert_eq!(definition.version, (0, 0, 1));
