@@ -91,9 +91,14 @@ macro_rules! make_parser_nodes {
 with_operations!(make_parser_nodes);
 
 #[derive(Debug)]
+pub enum TailCommand {
+	Return{ var : String }
+}
+
+#[derive(Debug)]
 pub enum Command {
 	IRNode(Node),
-	Return{ var : String }
+	Tail(TailCommand)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,7 +149,7 @@ pub enum Value {
 #[derive(Debug, Clone)]
 pub enum DictValue {
 	Raw(Value),
-	List(Vec<Value>),
+	List(Vec<DictValue>),
 	Dict(UncheckedDict)
 }
 
@@ -156,17 +161,11 @@ pub struct DictPair {
 
 pub type UncheckedDict = Vec<DictPair>;
 
-#[derive(Debug, Clone)]
-pub struct Argument {
-	pub typ : Type,
-	pub var : String
-}
-
 #[derive(Debug)]
 pub struct FuncletHeader {
 	pub ret : Type,
 	pub name : String,
-	pub args : Vec<Argument>,
+	pub args : Vec<Type>,
 }
 
 #[derive(Debug)]
@@ -185,15 +184,11 @@ pub struct LocalType {
 
 #[derive(Debug)]
 pub enum TypeDecl {
-    FFI(ffi::Type),
+    FFI(String),
     Local(LocalType)
 }
 
-#[derive(Debug)]
-pub struct Types {
-    pub ffi_types: Vec<ffi::Type>,
-	pub local_types: Vec<LocalType>
-}
+pub type Types = Vec<TypeDecl>;
 
 #[derive(Debug)]
 pub struct Var {
@@ -204,16 +199,16 @@ pub struct Var {
 pub struct ExternalCpuFunction
 {
 	pub name : String,
-	pub input_types : Vec<ffi::Type>,
-	pub output_types : Vec<ffi::Type>,
+	pub input_types : Vec<String>,
+	pub output_types : Vec<String>,
 }
 
 #[derive(Debug)]
 pub struct ExternalGpuFunction
 {
 	pub name : String,
-	pub input_types : Vec<ffi::Type>,
-	pub output_types : Vec<ffi::Type>,
+	pub input_types : Vec<String>,
+	pub output_types : Vec<String>,
 	// Contains pipeline and single render pass state
 	pub entry_point : String,
 	pub resource_bindings : Vec<ffi::ExternalGpuFunctionResourceBinding>,

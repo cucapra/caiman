@@ -274,7 +274,7 @@ fn rule_id<'a>() -> RuleApp<'a, ast::Value> {
     rule_str(Rule::id, read_id)
 }
 
-fn read_ffi_raw(s : String, context : &mut Context) -> ffi::Type {
+pub fn read_ffi_raw(s : String, context : &mut Context) -> ffi::Type {
     match s.as_str() {
         "i32" => { ffi::Type::I32 },
         s => panic!("Unknown type name {}", s)
@@ -327,8 +327,8 @@ fn rule_fn_name_sep<'a>() -> RuleApp<'a, String> {
 }
 
 fn read_funclet_loc(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::RemoteNodeId {
-    let rule_func = rule_str(Rule::fn_name, read_string);
-    let rule_var = rule_str(Rule::var_name, read_string);
+    let rule_func = rule_str_unwrap(Rule::fn_name, 1,Box::new(read_string));
+    let rule_var = rule_str_unwrap(Rule::var_name, 1,Box::new(read_string));
     let fun_name = expect(rule_func, pairs, context);
     let var_name = expect(rule_var, pairs, context);
     ast::RemoteNodeId { funclet_id : fun_name, node_id : var_name }
@@ -462,11 +462,12 @@ fn rule_value<'a>() -> RuleApp<'a, ast::Value> {
     rule_pair(Rule::value, read_value)
 }
 
-fn read_list_values(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::Value> {
-    expect_all(rule_value(), pairs, context)
+fn read_list_values(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::DictValue> {
+    let rule = rule_pair(Rule::dict_value, read_dict_value);
+    expect_all(rule, pairs, context)
 }
 
-fn read_list(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::Value> {
+fn read_list(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::DictValue> {
     let rule = rule_pair(Rule::list_values, read_list_values);
     option_to_vec(optional(rule, pairs, context))
 }
@@ -523,17 +524,17 @@ fn read_version(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Versio
     ast::Version { major, minor, detailed }
 }
 
-fn is_slot(s : String, context : &mut Context) -> bool {
+fn is_event(s : String, context : &mut Context) -> bool {
     match s.as_str() {
-        "slot" => true,
-        "event" => false,
+        "event" => true,
+        "slot" => false,
         _ => panic!(format!("Unexpected slot check {}", s))
     }
 }
 
 fn read_ir_type_decl(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TypeDecl {
     let event_rule = rule_str_unwrap(
-        Rule::type_decl_sep, 1, Box::new(is_slot));
+        Rule::type_decl_sep, 1, Box::new(is_event));
     let event = expect(event_rule, pairs, context);
     let name_rule = rule_str_unwrap(Rule::type_name, 1, Box::new(read_string));
     let name = expect(name_rule, pairs, context);
@@ -545,7 +546,7 @@ fn read_ir_type_decl(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::T
 
 fn read_ffi_type_decl(s : String, context : &mut Context) -> ast::TypeDecl {
     context.add_ffi_type(s.to_string());
-    ast::TypeDecl::FFI(read_ffi_raw(s, context))
+    ast::TypeDecl::FFI(read_string(s, context))
 }
 
 fn read_type_def(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TypeDecl {
@@ -556,26 +557,21 @@ fn read_type_def(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TypeD
 
 fn read_types(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Types {
     let rule = rule_pair(Rule::type_def,read_type_def);
-    let mut result = ast::Types { ffi_types : Vec::new(), local_types : Vec::new() };
-    for next in expect_all(rule, pairs, context).drain(..) {
-        match next {
-            ast::TypeDecl::FFI(t) => { result.ffi_types.push(t); },
-            ast::TypeDecl::Local(t) => { result.local_types.push(t); }
-        }
-    }
-    result
+    expect_all(rule, pairs, context)
 }
 
-fn read_external_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ffi::Type> {
-    expect_all(rule_ffi_type(), pairs, context)
+fn read_external_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
+    let rule_type = rule_str(Rule::ffi_type, read_string);
+    expect_all(rule_type, pairs, context)
 }
 
 fn read_external_cpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ExternalCpuFunction {
-    let output_type = expect(rule_ffi_typ_sep(), pairs, context);
+    let rule_output = rule_str_unwrap(Rule::ffi_type_sep, 1, Box::new(read_string));
+    let output_type = expect(rule_output, pairs, context);
     let name = expect(rule_fn_name(), pairs, context);
     let rule_extern_args = rule_pair(Rule::external_args, read_external_args);
     let input_types = expect(rule_extern_args, pairs, context);
-    context.add_ffi_funclet(name.clone());
+    context.add_cpu_funclet(name.clone());
     ast::ExternalCpuFunction {
         name,
         input_types,
@@ -597,14 +593,8 @@ fn read_external_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> as
     }
 }
 
-fn read_funclet_arg(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Argument {
-    let typ = expect(rule_type_sep(), pairs, context);
-    let var = expect(rule_var_name(), pairs, context);
-    ast::Argument { typ, var }
-}
-
-fn read_funclet_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::Argument> {
-    expect_all(rule_pair(Rule::funclet_arg, read_funclet_arg), pairs, context)
+fn read_funclet_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::Type> {
+    expect_all(rule_type(), pairs, context)
 }
 
 fn read_funclet_header(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FuncletHeader {
@@ -638,7 +628,7 @@ fn rule_phi_command<'a>() -> RuleApp<'a, ast::Command> {
 
 fn read_return_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
     let var = expect(rule_var_name(), pairs, context);
-    ast::Command::Return { var }
+    ast::Command::Tail ( ast::TailCommand::Return { var } )
 }
 
 fn rule_return_command<'a>() -> RuleApp<'a, ast::Command> {
@@ -845,15 +835,20 @@ fn read_definition(pairs : &mut Pairs<Rule>, context : &mut Context) -> frontend
     let program = expect(
         rule_pair(Rule::program, read_program), pairs, context);
 
-    ast_to_ir(program, context)
+    dbg!(ast_to_ir(program, context));
+    todo!()
+    // ast_to_ir(program, context)
 }
 
 pub fn parse(code : &str) ->
 Result<frontend::Definition, frontend::CompileError> {
+    std::env::set_var("RUST_BACKTRACE", "1"); // help with debugging I guess
     let parsed = IRParser::parse(Rule::program, code);
     let mut context = new_context();
-    match parsed {
+    let result = match parsed {
         Err(why) => Err(crate::frontend::CompileError{ message: (format!("{}", why)) }),
         Ok(mut parse_result) => Ok(read_definition(&mut parse_result, &mut context))
-    }
+    };
+    std::env::set_var("RUST_BACKTRACE", "0"); // help with debugging I guess
+    result
 }
