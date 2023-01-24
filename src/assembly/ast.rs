@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
-use clap::App;
 use crate::{ir, frontend};
 use crate::ir::ffi;
 use crate::ir::{Place, ResourceQueueStage, PlaceId};
@@ -10,14 +9,20 @@ use serde_derive::{Serialize, Deserialize};
 
 // Parser "AST"
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum Type {
+	FFI(String),
+	Local(String)
+}
+
 pub type ExternalCpuFunctionId = String;
 pub type ExternalGpuFunctionId = String;
 pub type FuncletId = String;
 pub type NodeId = String;
 pub type OperationId = NodeId;
-pub type TypeId = String;
+pub type TypeId = Type;
 pub type ValueFunctionId = String;
-pub type StorageTypeId = String;
+pub type StorageTypeId = Type;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
@@ -43,9 +48,9 @@ macro_rules! lookup_abstract_type_parser {
 macro_rules! map_parser_refs {
 	// When mapping referenced nodes, we only care about mapping the Operation types,
 	// since those are the actual references.
-	($map:ident, $arg:ident : Operation) => {$map(*$arg)};
+	($map:ident, $arg:ident : Operation) => {$map((*$arg).clone().to_string())};
 	($map:ident, $arg:ident : [Operation]) => {
-		$arg.iter().map(|op| $map(*op)).collect()
+		$arg.iter().map(|op| $map((*op).clone().to_string())).collect()
 	};
 	($_map:ident, $arg:ident : $_arg_type:tt) => {$arg.clone()};
 }
@@ -86,19 +91,45 @@ macro_rules! make_parser_nodes {
 with_operations!(make_parser_nodes);
 
 #[derive(Debug)]
-pub enum AnyTag {
-    ValueTag(ir::ValueTag),
-    TimelineTag(ir::TimelineTag),
-    SpatialTag(ir::SpatialTag)
+pub enum Command {
+	IRNode(Node),
+	Return{ var : String }
 }
 
-#[derive(Debug)]
-pub enum Type {
-	FFI(ffi::Type),
-	IR(String)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TagCore {
+	None,
+	Operation(RemoteNodeId),
+	Input(RemoteNodeId),
+	Output(RemoteNodeId),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValueTag {
+	Core(TagCore),
+	FunctionInput(RemoteNodeId),
+	FunctionOutput(RemoteNodeId),
+	Halt(NodeId)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TimelineTag {
+	Core(TagCore)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpatialTag {
+	Core(TagCore)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Tag {
+    ValueTag(ValueTag),
+    TimelineTag(TimelineTag),
+    SpatialTag(SpatialTag)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
 	ID(String),
     FunctionLoc(RemoteNodeId),
@@ -107,17 +138,17 @@ pub enum Value {
     Type(Type),
     Place(ir::Place),
     Stage(ir::ResourceQueueStage),
-    Tag(AnyTag),
+    Tag(Tag),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DictValue {
 	Raw(Value),
 	List(Vec<Value>),
 	Dict(UncheckedDict)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DictPair {
 	pub key : Value,
 	pub value : DictValue
@@ -125,24 +156,43 @@ pub struct DictPair {
 
 pub type UncheckedDict = Vec<DictPair>;
 
+#[derive(Debug, Clone)]
+pub struct Argument {
+	pub typ : Type,
+	pub var : String
+}
+
 #[derive(Debug)]
-pub struct IRType {
-	pub id : usize,
+pub struct FuncletHeader {
+	pub ret : Type,
+	pub name : String,
+	pub args : Vec<Argument>,
+}
+
+#[derive(Debug)]
+pub struct Funclet {
+	pub kind : ir::FuncletKind,
+	pub header : FuncletHeader,
+	pub commands : Vec<Command>
+}
+
+#[derive(Debug)]
+pub struct LocalType {
 	pub event : bool,
-	pub type_name : String,
+	pub name : String,
 	pub data : UncheckedDict
 }
 
 #[derive(Debug)]
 pub enum TypeDecl {
     FFI(ffi::Type),
-    IR(IRType)
+    Local(LocalType)
 }
 
 #[derive(Debug)]
 pub struct Types {
-    pub ffi_types: Arena<ffi::Type>,
-	pub ir_types: Arena<IRType>
+    pub ffi_types: Vec<ffi::Type>,
+	pub local_types: Vec<LocalType>
 }
 
 #[derive(Debug)]
@@ -151,33 +201,51 @@ pub struct Var {
 }
 
 #[derive(Debug)]
-pub struct Argument {
-    pub typ : Type,
-    pub name : String
+pub struct ExternalCpuFunction
+{
+	pub name : String,
+	pub input_types : Vec<ffi::Type>,
+	pub output_types : Vec<ffi::Type>,
 }
 
 #[derive(Debug)]
-pub struct Funclet {
-	pub id : usize,
-	pub kind : ir::FuncletKind,
-	pub ret : Type,
-	pub args : Vec<Argument>,
-	pub commands : Vec<Node>
+pub struct ExternalGpuFunction
+{
+	pub name : String,
+	pub input_types : Vec<ffi::Type>,
+	pub output_types : Vec<ffi::Type>,
+	// Contains pipeline and single render pass state
+	pub entry_point : String,
+	pub resource_bindings : Vec<ffi::ExternalGpuFunctionResourceBinding>,
+	pub shader_module_content : ffi::ShaderModuleContent,
+	//pub shader_module : usize,
 }
 
 #[derive(Debug)]
-pub struct Funclets {
-	pub external_cpu: Arena<ffi::ExternalCpuFunction>,
-	pub external_gpu: Arena<ffi::ExternalGpuFunction>,
-	pub caiman: HashMap<String, Funclet>
+pub struct Version {
+	pub major : u32,
+	pub minor : u32,
+	pub detailed : u32
 }
 
 #[derive(Debug)]
-pub struct Extras {
-	pub value_funclet_extras: HashMap<ir::FuncletId, ir::ValueFuncletExtra>,
-	pub scheduling_funclet_extras: HashMap<ir::FuncletId, ir::SchedulingFuncletExtra>
+pub enum FuncletDef {
+	ExternalCPU(ExternalCpuFunction),
+	ExternalGPU(ExternalGpuFunction),
+	Local(Funclet)
 }
 
+pub type FuncletDefs = Vec<FuncletDef>;
+
+#[derive(Debug)]
+pub struct Extra {
+	pub name : String,
+	pub data : UncheckedDict
+}
+
+pub type Extras = Vec<Extra>;
+
+#[derive(Debug)]
 pub struct Pipeline {
 	pub name : String,
 	pub funclet : String
@@ -185,9 +253,11 @@ pub struct Pipeline {
 
 pub type Pipelines = Vec<Pipeline>;
 
+#[derive(Debug)]
 pub struct Program {
+	pub version : Version,
     pub types : Types,
-	pub funclets : Funclets,
+	pub funclets : FuncletDefs,
 	pub extras : Extras,
 	pub pipelines : Pipelines
 }
