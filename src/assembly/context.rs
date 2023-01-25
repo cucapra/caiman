@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use crate::ir;
-use crate::assembly::ast;
+use crate::ast;
 
 #[derive(Debug, Clone)]
 struct TypeIndices {

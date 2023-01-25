@@ -1,43 +1,17 @@
 
 use std::any::Any;
 use std::collections::HashMap;
-use crate::{ir, frontend};
+use crate::{ast, frontend, ir};
 use crate::ir::{ffi, FuncletKind};
 use crate::arena::Arena;
-use crate::assembly::{ast, context, parser};
-use crate::assembly::ast::DictValue;
+use crate::assembly::{context, parser};
+use crate::ast::DictValue;
 use crate::assembly::context::Context;
 
 // Utility
 
-fn contains_value(dict : &ast::UncheckedDict, key : &ast::Value) -> bool {
-    for pair in dict.iter() {
-        if *key == pair.key {
-            return true
-        }
-    }
-    false
-}
-
-fn contains(dict : &ast::UncheckedDict, key : &str) -> bool {
-    contains_value(dict, &ast::Value::ID(key.to_string()))
-}
-
-fn remote_conversion(remote : &ast::RemoteNodeId, context : &mut Context) -> ir::RemoteNodeId {
-    context.remote_id(remote.funclet_id.clone(), remote.node_id.clone())
-}
-
-fn lookup_value(dict : &ast::UncheckedDict, key : &ast::Value) -> ast::DictValue {
-    for pair in dict.iter() {
-        if *key == pair.key {
-            return pair.value.clone()
-        }
-    }
-    panic!(format!("Missing dictionary element {:?}", key));
-}
-
-fn lookup_full(dict : &ast::UncheckedDict, key : &str) -> ast::DictValue {
-    lookup_value(dict, &ast::Value::ID(key.to_string()))
+fn as_key(k : &str) -> ast::Value {
+    ast::Value::ID(k.to_string())
 }
 
 fn as_value(value : ast::DictValue) -> ast::Value {
@@ -61,29 +35,20 @@ fn as_dict(value : ast::DictValue) -> ast::UncheckedDict {
     }
 }
 
-fn lookup(dict : &ast::UncheckedDict, key : &str) -> ast::Value {
-    as_value(lookup_full(dict, key))
+fn remote_conversion(remote : &ast::RemoteNodeId, context : &mut Context) -> ir::RemoteNodeId {
+    context.remote_id(remote.funclet_id.clone(), remote.node_id.clone())
 }
 
-/*
-	ID(String),
-    FunctionLoc(RemoteNodeId),
-    VarName(String),
-    FnName(String),
-    Type(Type),
-    Place(ir::Place),
-    Stage(ir::ResourceQueueStage),
-    Tag(Tag),
- */
-
-fn value_string(v : &ast::Value, context : &mut Context) -> String {
+fn value_string(d : &ast::DictValue, context : &mut Context) -> String {
+    let v = as_value(d.clone());
     match v {
         ast::Value::ID(s) => s.clone(),
         _ => panic!(format!("Expected id got {:?}", v))
     }
 }
 
-fn value_function_loc(v : &ast::Value, context : &mut Context) -> ir::RemoteNodeId {
+fn value_function_loc(d : &ast::DictValue, context : &mut Context) -> ir::RemoteNodeId {
+    let v = as_value(d.clone());
     match v {
         ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
             funclet_id : *context.local_funclet_id(remote.funclet_id.clone()),
@@ -93,21 +58,24 @@ fn value_function_loc(v : &ast::Value, context : &mut Context) -> ir::RemoteNode
     }
 }
 
-fn value_var_name(v : &ast::Value, context : &mut Context) -> usize {
+fn value_var_name(d : &ast::DictValue, context : &mut Context) -> usize {
+    let v = as_value(d.clone());
     match v {
         ast::Value::VarName(s) => *context.node_id(s.clone()),
         _ => panic!(format!("Expected variable name got {:?}", v))
     }
 }
 
-fn value_funclet_name(v : &ast::Value, context : &mut Context) -> context::Location {
+fn value_funclet_name(d : &ast::DictValue, context : &mut Context) -> context::Location {
+    let v = as_value(d.clone());
     match v {
         ast::Value::FnName(s) => context.funclet_id(s.clone()),
         _ => panic!(format!("Expected funclet name got {:?}", v))
     }
 }
 
-fn value_type(v : &ast::Value, context : &mut Context) -> context::Location {
+fn value_type(d : &ast::DictValue, context : &mut Context) -> context::Location {
+    let v = as_value(d.clone());
     match v {
         ast::Value::Type(t) => match t {
             ast::Type::FFI(name) => context::Location::FFI(
@@ -119,14 +87,16 @@ fn value_type(v : &ast::Value, context : &mut Context) -> context::Location {
     }
 }
 
-fn value_place(v : &ast::Value, context : &mut Context) -> ir::Place {
+fn value_place(d : &ast::DictValue, context : &mut Context) -> ir::Place {
+    let v = as_value(d.clone());
     match v {
         ast::Value::Place(p) => p.clone(),
         _ => panic!(format!("Expected place got {:?}", v))
     }
 }
 
-fn value_stage(v : &ast::Value, context : &mut Context) -> ir::ResourceQueueStage {
+fn value_stage(d : &ast::DictValue, context : &mut Context) -> ir::ResourceQueueStage {
+    let v = as_value(d.clone());
     match v {
         ast::Value::Stage(s) => s.clone(),
         _ => panic!(format!("Expected stage got {:?}", v))
@@ -134,11 +104,11 @@ fn value_stage(v : &ast::Value, context : &mut Context) -> ir::ResourceQueueStag
 }
 
 // This all feels very dumb
-fn value_core_tag(v : &ast::TagCore, context : &mut Context) -> ir::ValueTag {
+fn value_core_tag(v : ast::TagCore, context : &mut Context) -> ir::ValueTag {
     match v {
         ast::TagCore::None => ir::ValueTag::None,
         ast::TagCore::Operation(r) => ir::ValueTag::Operation {
-            remote_node_id:  remote_conversion(r, context)
+            remote_node_id:  remote_conversion(&r, context)
         },
         ast::TagCore::Input(r) => ir::ValueTag::Input {
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
@@ -151,11 +121,11 @@ fn value_core_tag(v : &ast::TagCore, context : &mut Context) -> ir::ValueTag {
     }
 }
 
-fn timeline_core_tag(v : &ast::TagCore, context : &mut Context) -> ir::TimelineTag {
+fn timeline_core_tag(v : ast::TagCore, context : &mut Context) -> ir::TimelineTag {
     match v {
         ast::TagCore::None => ir::TimelineTag::None,
         ast::TagCore::Operation(r) => ir::TimelineTag::Operation {
-            remote_node_id:  remote_conversion(r, context)
+            remote_node_id:  remote_conversion(&r, context)
         },
         ast::TagCore::Input(r) => ir::TimelineTag::Input {
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
@@ -168,11 +138,11 @@ fn timeline_core_tag(v : &ast::TagCore, context : &mut Context) -> ir::TimelineT
     }
 }
 
-fn spatial_core_tag(v : &ast::TagCore, context : &mut Context) -> ir::SpatialTag {
+fn spatial_core_tag(v : ast::TagCore, context : &mut Context) -> ir::SpatialTag {
     match v {
         ast::TagCore::None => ir::SpatialTag::None,
         ast::TagCore::Operation(r) => ir::SpatialTag::Operation {
-            remote_node_id:  remote_conversion(r, context)
+            remote_node_id:  remote_conversion(&r, context)
         },
         ast::TagCore::Input(r) => ir::SpatialTag::Input {
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
@@ -185,24 +155,29 @@ fn spatial_core_tag(v : &ast::TagCore, context : &mut Context) -> ir::SpatialTag
     }
 }
 
-fn value_value_tag(v : &ast::Value, context : &mut Context) -> ir::ValueTag {
+fn value_value_tag(t : &ast::ValueTag, context : &mut Context) -> ir::ValueTag {
+    match t {
+        ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
+        ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
+            function_id : *context.local_funclet_id(r.funclet_id.clone()),
+            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+        },
+        ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
+            function_id : *context.local_funclet_id(r.funclet_id.clone()),
+            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+        },
+        ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
+            index: *context.node_id(n.clone())
+        }
+    }
+}
+
+fn value_dict_value_tag(d : &ast::DictValue, context : &mut Context) -> ir::ValueTag {
+    let v = as_value(d.clone());
     match v {
         ast::Value::Tag(t) => match t {
             ast::Tag::ValueTag(v) => {
-                match v {
-                    ast::ValueTag::Core(c) => value_core_tag(c, context),
-                    ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
-                        function_id : *context.local_funclet_id(r.funclet_id.clone()),
-                        index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
-                    },
-                    ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
-                        function_id : *context.local_funclet_id(r.funclet_id.clone()),
-                        index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
-                    },
-                    ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
-                        index: *context.node_id(n.clone())
-                    }
-                }
+                value_value_tag(&v, context)
             },
             _ => panic!(format!("Expected value tag got {:?}", v))
         },
@@ -210,33 +185,75 @@ fn value_value_tag(v : &ast::Value, context : &mut Context) -> ir::ValueTag {
     }
 }
 
-fn value_timeline_tag(v : &ast::Value, context : &mut Context) -> ir::TimelineTag {
+fn value_timeline_tag(t : &ast::TimelineTag, context : &mut Context) -> ir::TimelineTag {
+    match t {
+        ast::TimelineTag::Core(c) => timeline_core_tag(c.clone(), context)
+    }
+}
+
+fn value_dict_timeline_tag(d : &ast::DictValue, context : &mut Context) -> ir::TimelineTag {
+    let v = as_value(d.clone());
     match v {
         ast::Value::Tag(t) => match t {
-            ast::Tag::TimelineTag(t) => match t {
-                ast::TimelineTag::Core(c) => timeline_core_tag(c, context)
-            },
+            ast::Tag::TimelineTag(t) => value_timeline_tag(&t, context),
             _ => panic!(format!("Expected timeline tag got {:?}", v))
         },
         _ => panic!(format!("Expected tag got {:?}", v))
     }
 }
 
-fn value_spatial_tag(v : &ast::Value, context : &mut Context) -> ir::SpatialTag {
+fn value_spatial_tag(t : &ast::SpatialTag, context : &mut Context) -> ir::SpatialTag {
+    match t {
+        ast::SpatialTag::Core(c) => spatial_core_tag(c.clone(), context)
+    }
+}
+
+fn value_dict_spatial_tag(d : &ast::DictValue, context : &mut Context) -> ir::SpatialTag {
+    let v = as_value(d.clone());
     match v {
         ast::Value::Tag(t) => match t {
-            ast::Tag::SpatialTag(t) => match t {
-                ast::SpatialTag::Core(c) => spatial_core_tag(c, context)
-            },
+            ast::Tag::SpatialTag(t) => value_spatial_tag(&t, context),
             _ => panic!(format!("Expected spatial tag got {:?}", v))
         },
         _ => panic!(format!("Expected tag got {:?}", v))
     }
 }
 
-fn value_list<T>(v : ast::DictValue, f : fn(&ast::DictValue, &mut Context) -> T,
+fn value_slot_info(d : &ast::DictValue, context : &mut Context) -> ir::SlotInfo {
+    let v = as_value(d.clone());
+    match v {
+        ast::Value::SlotInfo(s) => ir::SlotInfo {
+            value_tag: value_value_tag(&s.value_tag, context),
+            timeline_tag: value_timeline_tag(&s.timeline_tag, context),
+            spatial_tag: value_spatial_tag(&s.spatial_tag, context),
+        },
+        _ => panic!(format!("Expected tag got {:?}", v))
+    }
+}
+
+fn value_fence_info(d : &ast::DictValue, context : &mut Context) -> ir::FenceInfo {
+    let v = as_value(d.clone());
+    match v {
+        ast::Value::FenceInfo(s) => ir::FenceInfo {
+            timeline_tag: value_timeline_tag(&s.timeline_tag, context),
+        },
+        _ => panic!(format!("Expected tag got {:?}", v))
+    }
+}
+
+fn value_buffer_info(d : &ast::DictValue, context : &mut Context) -> ir::BufferInfo {
+    let v = as_value(d.clone());
+    match v {
+        ast::Value::BufferInfo(s) => ir::BufferInfo {
+            spatial_tag: value_spatial_tag(&s.spatial_tag, context),
+        },
+        _ => panic!(format!("Expected tag got {:?}", v))
+    }
+}
+
+fn value_list<T>(v : &ast::DictValue, f : fn(&ast::DictValue, &mut Context) -> T,
                 context : &mut Context) -> HashMap<usize, T> {
-    let lst = as_list(v);
+    let lst = as_list(v.clone());
         let mut result = HashMap::new();
         let index = 0;
         for value in lst.iter() {
@@ -245,13 +262,13 @@ fn value_list<T>(v : ast::DictValue, f : fn(&ast::DictValue, &mut Context) -> T,
         result
 }
 
-fn value_index_var_dict<T>(v : ast::DictValue, f : fn(&ast::DictValue, &mut Context) -> T,
+fn value_index_var_dict<T>(v : &ast::DictValue, f : fn(&ast::DictValue, &mut Context) -> T,
                 context : &mut Context) -> HashMap<usize, T> {
-    let d = as_dict(v);
+    let d = as_dict(v.clone());
     let mut result = HashMap::new();
     for pair in d.iter() {
-        let index = value_var_name(&pair.key.clone(), context);
-        result.insert(index, f(&pair.value.clone(), context));
+        let index = value_var_name(&ast::DictValue::Raw(pair.0.clone()), context);
+        result.insert(index, f(&pair.1.clone(), context));
     };
     result
 }
@@ -323,15 +340,16 @@ fn ir_types(types : &Vec<ast::TypeDecl>, context : &mut Context) -> Arena<ir::Ty
                 { // only supported custom types atm
                     true => {
                     ir::Type::Event {
-                        place: value_place(&lookup(&typ.data, "place"), context),
+                        place: value_place(
+                            typ.data.get(&as_key("place")).unwrap(), context),
                     }
                 },
                     false => {
                     ir::Type::Slot {
                         storage_type: ffi::TypeId(value_type(
-                            &lookup(&typ.data, "type"), context).unpack()),
-                        queue_stage: value_stage(&lookup(&typ.data, "stage"), context),
-                        queue_place: value_place(&lookup(&typ.data, "place"), context),
+                            typ.data.get(&as_key("type")).unwrap(), context).unpack()),
+                        queue_stage: value_stage(typ.data.get(&as_key("stage")).unwrap(), context),
+                        queue_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
                     }
                 }
                 }
@@ -502,9 +520,9 @@ fn ir_node(node : &ast::Node, context : &mut Context) -> ir::Node {
     }
 }
 
-fn ir_tail_edge(tail : &ast::TailCommand, context : &mut Context) -> ir::TailEdge {
+fn ir_tail_edge(tail : &ast::TailEdge, context : &mut Context) -> ir::TailEdge {
     match tail {
-        ast::TailCommand::Return { var } => {
+        ast::TailEdge::Return { var } => {
             ir::TailEdge::Return { return_values: Box::new([*context.node_id(var.clone())]) }
         }
     }
@@ -529,9 +547,9 @@ fn ir_funclet(funclet : &ast::Funclet, context : &mut Context) -> ir::Funclet {
     let l = funclet.commands.len() - 1;
     for command in &funclet.commands {
         match command {
-            ast::Command::IRNode(n) => {
+            ast::Command::IRNode{name, node} => {
                 if index < l {
-                    nodes.push(ir_node(n, context));
+                    nodes.push(ir_node(node, context));
                 } else {
                     panic!(format!("Last command must be a tail edge in {:?}", funclet.header.name));
                 }
@@ -618,46 +636,17 @@ fn ir_value_extras(funclets : &ast::FuncletDefs, extras : &ast::Extras, context 
     result
 }
 
-fn ir_slot_info(v : &ast::DictValue, context : &mut Context) -> ir::SlotInfo {
-    let d = &as_dict(v.clone());
-    let mut value_tag = ir::ValueTag::None;
-    let mut timeline_tag = ir::TimelineTag::None;
-    let mut spatial_tag = ir::SpatialTag::None;
-    if contains(d, "value") {
-        value_tag = value_value_tag(&lookup(d, "value"), context);
-    }
-    if contains(d, "timeline") {
-        timeline_tag = value_timeline_tag(&lookup(d, "timeline"), context);
-    }
-    if contains(d, "spatial") {
-        spatial_tag = value_spatial_tag(&lookup(d, "spatial"), context);
-    }
-    ir::SlotInfo { value_tag, timeline_tag, spatial_tag }
-}
-
-fn fence_info(v : &ast::DictValue, context : &mut Context) -> ir::FenceInfo {
-    let d = &as_dict(v.clone());
-    let timeline_tag = value_timeline_tag(&lookup(d, "timeline"), context);
-    ir::FenceInfo { timeline_tag }
-}
-
-fn buffer_info(v : &ast::DictValue, context : &mut Context) -> ir::BufferInfo {
-    let d = &as_dict(v.clone());
-    let spatial_tag = value_spatial_tag(&lookup(d, "spatial"), context);
-    ir::BufferInfo { spatial_tag }
-}
-
 fn ir_scheduling_extra(id : &usize, d: &ast::UncheckedDict, context : &mut Context) -> ir::SchedulingFuncletExtra {
     ir::SchedulingFuncletExtra {
         value_funclet_id: *id,
-        input_slots: value_index_var_dict(lookup_full(d, "input_slots"), ir_slot_info, context),
-        output_slots: value_list(lookup_full(d, "output_slots"), ir_slot_info, context),
-        input_fences: value_index_var_dict(lookup_full(d, "input_fences"), fence_info, context),
-        output_fences: value_index_var_dict(lookup_full(d, "output_fences"), fence_info, context),
-        input_buffers: value_index_var_dict(lookup_full(d, "input_buffers"), buffer_info, context),
-        output_buffers: value_index_var_dict(lookup_full(d, "output_buffers"), buffer_info, context),
-        in_timeline_tag: value_timeline_tag(&lookup(d, "in_timeline_tag"), context),
-        out_timeline_tag: value_timeline_tag(&lookup(d, "out_timeline_tag"), context),
+        input_slots: value_index_var_dict(d.get(&as_key("input_slots")).unwrap(), value_slot_info, context),
+        output_slots: value_list(d.get(&as_key("output_slots")).unwrap(), value_slot_info, context),
+        input_fences: value_index_var_dict(d.get(&as_key("input_fences")).unwrap(), value_fence_info, context),
+        output_fences: value_index_var_dict(d.get(&as_key("output_fences")).unwrap(), value_fence_info, context),
+        input_buffers: value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context),
+        output_buffers: value_index_var_dict(d.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context),
+        in_timeline_tag: value_dict_timeline_tag(d.get(&as_key("in_timeline_tag")).unwrap(), context),
+        out_timeline_tag: value_dict_timeline_tag(d.get(&as_key("out_timeline_tag")).unwrap(), context),
     }
 }
 

@@ -41,8 +41,11 @@ spatial_tag = { tag_core }
 tag = ${ "value_tag" ~ sep ~ value_tag | "timeline_tag" ~ sep ~ timeline_tag | "spatial_tag" ~ sep ~ spatial_tag }
 
 //   extras
+slot_info = { "slot_info" ~ "(" ~ (tag ~ ("," ~ tag)*)? ~ ")" }
+fence_info = { "fence_info" ~ "(" ~ (tag ~ ("," ~ tag)*)? ~ ")" }
+buffer_info = { "buffer_info" ~ "(" ~ (tag ~ ("," ~ tag)*)? ~ ")" }
 dict_key = { id | var_name }
-value = { funclet_loc | var_name | fn_name | typ | place | stage | tag }
+value = { funclet_loc | var_name | fn_name | typ | place | stage | tag | slot_info | fence_info | buffer_info }
 list_values = { dict_value ~ ("," ~ dict_value)* ~ ","? }
 list = { "[" ~ list_values? ~ "]" }
 dict_value = { value | list | unchecked_dict }

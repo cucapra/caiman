@@ -9,7 +9,7 @@ pub struct IRParser;
 use crate::{ir, frontend};
 use crate::ir::{ffi};
 use crate::arena::Arena;
-use crate::assembly::ast;
+use crate::ast;
 use crate::assembly::ast_to_ir::ast_to_ir;
 use crate::assembly::context::{new_context, Context};
 
@@ -438,6 +438,38 @@ fn read_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Tag {
     expect_vec(rules, pairs, context)
 }
 
+fn read_slot_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::SlotInfo {
+    let mut rules = vec![];
+    let value_app = compose_pair(read_value_tag, ast::Tag::ValueTag);
+    rules.push(rule_pair_boxed(Rule::value_tag, value_app));
+    let timeline_app = compose_pair(read_timeline_tag, ast::Tag::TimelineTag);
+    rules.push(rule_pair_boxed(Rule::timeline_tag, timeline_app));
+    let spatial_app = compose_pair(read_spatial_tag, ast::Tag::SpatialTag);
+    rules.push(rule_pair_boxed(Rule::spatial_tag, spatial_app));
+    let tags = expect_all_vec(rules, pairs, context);
+    let mut value_tag = ast::ValueTag::Core(ast::TagCore::None);
+    let mut timeline_tag = ast::TimelineTag::Core(ast::TagCore::None);
+    let mut spatial_tag = ast::SpatialTag::Core(ast::TagCore::None);
+    for tag in tags.iter() {
+        match tag { // duplicates are whatever
+            ast::Tag::ValueTag(t) => { value_tag = t.clone() }
+            ast::Tag::TimelineTag(t) => { timeline_tag = t.clone() }
+            ast::Tag::SpatialTag(t) => { spatial_tag = t.clone() }
+        }
+    }
+    ast::SlotInfo { value_tag, timeline_tag, spatial_tag }
+}
+
+fn read_fence_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FenceInfo {
+    let rule = rule_pair(Rule::timeline_tag, read_timeline_tag);
+    ast::FenceInfo { timeline_tag : expect(rule, pairs, context) }
+}
+
+fn read_buffer_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::BufferInfo {
+    let rule = rule_pair(Rule::spatial_tag, read_spatial_tag);
+    ast::BufferInfo { spatial_tag : expect(rule, pairs, context) }
+}
+
 fn read_value(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Value {
     // funclet_loc | var_name | fn_name | typ | place | stage | tag
     let mut rules = Vec::new();
@@ -453,6 +485,12 @@ fn read_value(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Value {
     let rule_stage = compose_str(read_stage, ast::Value::Stage);
     rules.push(rule_str_boxed(Rule::stage, rule_stage));
     let rule_tag = compose_pair(read_tag, ast::Value::Tag);
+    rules.push(rule_pair_boxed(Rule::tag, rule_tag));
+    let rule_tag = compose_pair(read_slot_info, ast::Value::SlotInfo);
+    rules.push(rule_pair_boxed(Rule::tag, rule_tag));
+    let rule_tag = compose_pair(read_fence_info, ast::Value::FenceInfo);
+    rules.push(rule_pair_boxed(Rule::tag, rule_tag));
+    let rule_tag = compose_pair(read_buffer_info, ast::Value::BufferInfo);
     rules.push(rule_pair_boxed(Rule::tag, rule_tag));
 
     expect_vec(rules, pairs, context)
@@ -492,17 +530,26 @@ fn read_dict_key(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Value
     expect_vec(vec![rule_id(), rule_var_name], pairs, context)
 }
 
-fn read_dict_element(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::DictPair {
+struct DictPair {
+    key: ast::Value,
+    value: ast::DictValue
+}
+
+fn read_dict_element(pairs : &mut Pairs<Rule>, context : &mut Context) -> DictPair {
     let rule_key = rule_pair(Rule::dict_key, read_dict_key);
     let rule_value = rule_pair(Rule::dict_value, read_dict_value);
     let key = expect(rule_key, pairs, context);
     let value = expect(rule_value, pairs, context);
-    ast::DictPair { key, value }
+    DictPair { key, value }
 }
 
 fn read_unchecked_dict(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::UncheckedDict {
     let rule = rule_pair(Rule::dict_element, read_dict_element);
-    expect_all(rule, pairs, context)
+    let mut result = HashMap::new();
+    for pair in expect_all(rule, pairs, context) {
+        result.insert(pair.key, pair.value);
+    }
+    result
 }
 
 fn rule_unchecked_dict<'a>() -> RuleApp<'a, ast::UncheckedDict> {
@@ -610,16 +657,17 @@ fn rule_funclet_header<'a>() -> RuleApp<'a, ast::FuncletHeader> {
     rule_pair(Rule::funclet_header, read_funclet_header)
 }
 
-fn read_var_assign(pairs : &mut Pairs<Rule>, context : &mut Context) {
+fn read_var_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> String {
     let var = expect(rule_var_name(), pairs, context);
-    context.add_node(var);
+    context.add_node(var.clone());
+    var
 }
 
 fn read_phi_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    read_var_assign(pairs, context);
+    let name = read_var_assign(pairs, context);
     let index_rule = rule_str_unwrap(Rule::phi_right, 1,Box::new(read_n));
     let index = expect(index_rule, pairs, context);
-    ast::Command::IRNode(ast::Node::Phi { index })
+    ast::Command::IRNode{ name, node : ast::Node::Phi { index } }
 }
 
 fn rule_phi_command<'a>() -> RuleApp<'a, ast::Command> {
@@ -628,7 +676,7 @@ fn rule_phi_command<'a>() -> RuleApp<'a, ast::Command> {
 
 fn read_return_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
     let var = expect(rule_var_name(), pairs, context);
-    ast::Command::Tail ( ast::TailCommand::Return { var } )
+    ast::Command::Tail ( ast::TailEdge::Return { var } )
 }
 
 fn rule_return_command<'a>() -> RuleApp<'a, ast::Command> {
@@ -648,11 +696,11 @@ fn read_constant(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node 
 }
 
 fn read_constant_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    read_var_assign(pairs, context);
+    let name = read_var_assign(pairs, context);
     require_rule(Rule::constant_sep, pairs, context);
     let rule_constant = rule_pair(Rule::constant, read_constant);
     let node = expect(rule_constant, pairs, context);
-    ast::Command::IRNode(node)
+    ast::Command::IRNode{name, node}
 }
 
 fn rule_constant_command<'a>() -> RuleApp<'a, ast::Command> {
@@ -667,21 +715,22 @@ fn read_value_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::
     expect_vec(rules, pairs, context)
 }
 
-fn read_alloc_right(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
+fn read_alloc_right(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
     let place = expect(rule_place(), pairs, context);
     let storage_type = expect(rule_type(), pairs, context);
     let operation = expect(rule_funclet_loc(), pairs, context);
-    ast::Command::IRNode(ast::Node::AllocTemporary {
+    ast::Node::AllocTemporary {
         place,
         storage_type,
         operation,
-    })
+    }
 }
 
 fn read_alloc_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    read_var_assign(pairs, context);
+    let name = read_var_assign(pairs, context);
     let rule_alloc_right = rule_pair(Rule::alloc_right, read_alloc_right);
-    expect(rule_alloc_right, pairs, context)
+    let node = expect(rule_alloc_right, pairs, context);
+    ast::Command::IRNode {name, node}
 }
 
 fn rule_alloc_command<'a>() -> RuleApp<'a, ast::Command> {
@@ -699,12 +748,14 @@ fn read_do_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Com
     let rule_args = rule_pair(Rule::do_args, read_do_args);
     let inputs = option_to_vec(optional(rule_args, pairs, context));
     let output = expect(rule_var_name(), pairs, context);
-    ast::Command::IRNode(ast::Node::EncodeDo {
-        place,
-        operation,
-        inputs: inputs.into_boxed_slice(),
-        outputs: Box::new([output]),
-    })
+    ast::Command::IRNode{
+        name: "".to_string(),
+        node: ast::Node::EncodeDo {
+            place,
+            operation,
+            inputs: inputs.into_boxed_slice(),
+            outputs: Box::new([output]),
+    }}
 }
 
 fn rule_do_command<'a>() -> RuleApp<'a, ast::Command> {
@@ -835,9 +886,7 @@ fn read_definition(pairs : &mut Pairs<Rule>, context : &mut Context) -> frontend
     let program = expect(
         rule_pair(Rule::program, read_program), pairs, context);
 
-    dbg!(ast_to_ir(program, context));
-    todo!()
-    // ast_to_ir(program, context)
+    ast_to_ir(program, context)
 }
 
 pub fn parse(code : &str) ->

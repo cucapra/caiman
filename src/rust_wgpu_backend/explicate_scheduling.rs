@@ -2,6 +2,7 @@
 use ron::value;
 
 use crate::ir;
+use crate::ast;
 use std::{collections::{HashMap, hash_map::Entry, HashSet}, any, hash::Hash};
 use crate::rust_wgpu_backend::ffi as ffi;
 
@@ -25,10 +26,10 @@ struct ResolvedScheduleNode {}
 
 #[derive(Debug)]
 struct PartialData { // a dumb distinction with the rework, but whatever
-    input_types : Vec<ir::TypeId>,
-    output_types : Vec<ir::TypeId>,
-    nodes : Vec<ir::Node>,
-    tail_edge : Option<ir::TailEdge>
+    input_types : Vec<ast::TypeId>,
+    output_types : Vec<ast::TypeId>,
+    nodes : Vec<ast::Node>,
+    tail_edge : Option<ast::TailEdge>
 }
 
 #[derive(Debug)]
@@ -38,13 +39,14 @@ struct PartialTimeline {
 
 #[derive(Debug)]
 struct PartialInformation {
-    pub value_funclet_id : ir::FuncletId,
-	pub input_slots : HashMap<usize, ir::SlotInfo>,
-	pub output_slots : HashMap<usize, ir::SlotInfo>,
-	pub input_fences : HashMap<usize, ir::FenceInfo>,
-	pub output_fences : HashMap<usize, ir::FenceInfo>,
-	pub input_buffers : HashMap<usize, ir::BufferInfo>,
-	pub output_buffers : HashMap<usize, ir::BufferInfo>,
+    // todo: add ast slots and fences and crap
+    pub value_funclet_id : ast::FuncletId,
+	pub input_slots : ast::UncheckedDict,
+	pub output_slots : ast::UncheckedDict,
+	pub input_fences : ast::UncheckedDict,
+	pub output_fences : ast::UncheckedDict,
+	pub input_buffers : ast::UncheckedDict,
+	pub output_buffers : ast::UncheckedDict,
 }
 
 #[derive(Debug)]
@@ -57,21 +59,67 @@ struct ScheduleBlob {
     schedule : PartialSchedule,
     information : PartialInformation,
     timeline : PartialTimeline,
-    remote_update : Vec<ir::RemoteNodeId>,
-    allocated : HashMap<usize, HashMap<usize, usize>>
+    remote_update : Vec<ast::RemoteNodeId>,
+    allocated : HashMap<String, HashMap<String, String>>
 }
 
 #[derive(Debug)]
 struct SchedulingContext<'a> {
-    program : &'a mut ir::Program,
-    new_schedules : HashMap<usize, ScheduleBlob>,
-    location : ir::RemoteNodeId,
+    program : &'a mut ast::Program,
+    new_schedules : HashMap<String, ScheduleBlob>,
+    location : ast::RemoteNodeId,
     // scheduled node maps
-    resolved_schedules : HashMap<ir::RemoteNodeId, ResolvedScheduleNode>, 
-    resolved_values : HashMap<usize, ResolvedValueNode>
+    resolved_schedules : HashMap<ast::RemoteNodeId, ResolvedScheduleNode>, 
+    resolved_values : HashMap<String, ResolvedValueNode>
 }
 
-fn new_partial_schedule() -> PartialSchedule {
+fn id(s : &str) -> ast::Value {
+    ast::Value::ID(s.to_string())
+}
+
+fn get_slot(context : &mut SchedulingContext) -> String {
+    for potential in context.program.types {
+        match potential {
+            ast::TypeDecl::Local(typ) => {
+                if !typ.event {
+                    return typ.name
+                }
+            }
+            _ => {}
+        }
+    }
+    let name = "s0".to_string(); // lazy for now
+    let result = ast::TypeDecl::Local(ast::LocalType {
+        event: false,
+        name : name.clone(),
+        data: HashMap::new(),
+    });
+    context.program.types.push(result);
+    name
+}
+
+fn get_event(context : &mut SchedulingContext) -> String {
+    for potential in context.program.types {
+        match potential {
+            ast::TypeDecl::Local(typ) => {
+                if typ.event {
+                    return typ.name
+                }
+            }
+            _ => {}
+        }
+    }
+    let name = "e0".to_string(); // lazy for now
+    let result = ast::TypeDecl::Local(ast::LocalType {
+        event: true,
+        name : name.clone(),
+        data: HashMap::new(),
+    });
+    context.program.types.push(result);
+    name
+}
+
+fn new_partial_schedule(context : &mut SchedulingContext) -> PartialSchedule {
     let mut schedule = PartialSchedule { 
         core: PartialData { 
             input_types: Vec::new(), 
@@ -80,35 +128,35 @@ fn new_partial_schedule() -> PartialSchedule {
             tail_edge : None,
         }
     };
-    schedule.core.input_types.push(1);
-    schedule.core.output_types.push(1);
-    schedule.core.nodes.push(ir::Node::Phi { index: 0 });
+    schedule.core.input_types.push(ast::Type::Local(get_slot(context)));
+    schedule.core.output_types.push(ast::Type::Local(get_slot(context)));
+    schedule.core.nodes.push(ast::Node::Phi { index: 0 });
     schedule
 }
 
-fn new_partial_timeline() -> PartialTimeline {
+fn new_partial_timeline(context : &mut SchedulingContext) -> PartialTimeline {
     PartialTimeline {
         core: PartialData { 
-            input_types: vec![2],
-            output_types: vec![2],
-            nodes: vec![ir::Node::Phi { index: 0 }],
+            input_types: vec![ast::Type::Local(get_event(context))],
+            output_types: vec![ast::Type::Local(get_event(context))],
+            nodes: vec![ast::Node::Phi { index: 0 }],
             tail_edge: None,
         }
     }
 }
 
-fn empty_slot() -> ir::SlotInfo {
-    ir::SlotInfo {
-        value_tag : ir::ValueTag::None,
-        timeline_tag: ir::TimelineTag::None,
-        spatial_tag: ir::SpatialTag::None,
+fn empty_slot(context : &mut SchedulingContext) -> ast::SlotInfo {
+    ast::SlotInfo {
+        value_tag: ast::ValueTag::Core(ast::TagCore::None),
+        timeline_tag: ast::TimelineTag::Core(ast::TagCore::None),
+        spatial_tag: ast::SpatialTag::Core(ast::TagCore::None),
     }
 }
 
-fn new_information(value_index : &usize) 
+fn new_information(value_index : &String, context : &mut SchedulingContext)
 -> PartialInformation {
     let mut information = PartialInformation {
-        value_funclet_id: *value_index,
+        value_funclet_id: value_index.clone(),
         input_slots: HashMap::new(),
         output_slots: HashMap::new(),
         input_fences: HashMap::new(),
@@ -117,20 +165,22 @@ fn new_information(value_index : &usize)
         output_buffers: HashMap::new(),
     };
     // todo: based on number of inputs, which we're lazily taking to be one
-    let mut input_slots_default = empty_slot();
-    input_slots_default.value_tag = ir::ValueTag::Input { 
-        funclet_id: *value_index, 
-        index: 0 
-    };
-    information.input_slots.insert(0, input_slots_default);
-    information.output_slots.insert(0, empty_slot());
+    let mut input_slots_default = empty_slot(context);
+    input_slots_default.value_tag = ast::ValueTag::Core(ast::TagCore::Input(ast::RemoteNodeId {
+        funclet_id: value_index.clone(),
+        node_id: "".to_string(), // not ideal
+    }));
+    information.input_slots.insert(ast::Value::ID("".to_string()),
+                                   ast::DictValue::Raw(ast::Value::SlotInfo(input_slots_default)));
+    information.output_slots.insert(ast::Value::ID("".to_string()),
+                                    ast::DictValue::Raw(ast::Value::SlotInfo(empty_slot(context))));
     information
 }
 
-fn new_blob(value_index : &usize) -> ScheduleBlob {
-    let schedule = new_partial_schedule();
-    let information = new_information(value_index);
-    let timeline = new_partial_timeline();
+fn new_blob(value_index : &String, context : &mut SchedulingContext) -> ScheduleBlob {
+    let schedule = new_partial_schedule(context);
+    let information = new_information(value_index, context);
+    let timeline = new_partial_timeline(context);
     ScheduleBlob { 
         schedule,
         information,
@@ -140,128 +190,166 @@ fn new_blob(value_index : &usize) -> ScheduleBlob {
     }
 }
 
-fn get_blob<'a>(value_index : &usize, 
+fn get_blob<'a>(value_index : &String,
 context : &'a mut SchedulingContext) -> &'a ScheduleBlob {
-    context.new_schedules.entry(*value_index).
-        or_insert(new_blob(value_index))
+    context.new_schedules.entry(value_index.clone()).
+        or_insert(new_blob(value_index, context))
 }
 
-fn get_blob_mut<'a>(value_index : &usize, 
+fn get_blob_mut<'a>(value_index : &String,
 context : &'a mut SchedulingContext) -> &'a mut ScheduleBlob {
-    context.new_schedules.entry(*value_index).
-        or_insert(new_blob(value_index))
+    context.new_schedules.entry(value_index.clone()).
+        or_insert(new_blob(value_index, context))
 }
 
 fn get_current_blob<'a>(context : &'a mut SchedulingContext)
 -> &'a ScheduleBlob {
-    let value_index = context.location.funclet_id;
+    let value_index = context.location.funclet_id.clone();
     get_blob(&value_index, context)
 }
 
 fn get_current_blob_mut<'a>(context : &'a mut SchedulingContext)
 -> &'a mut ScheduleBlob {
-    let value_index = context.location.funclet_id;
+    let value_index = context.location.funclet_id.clone();
     get_blob_mut(&value_index, context)
 }
 
-fn get_funclet<'a>(index : &usize, context : &'a SchedulingContext)
--> &'a ir::Funclet {
-    context.program.funclets.get(index).unwrap()
+fn get_local_funclet<'a>(name : &String, context : &'a SchedulingContext)
+-> &'a ast::Funclet {
+    for funclet in context.program.funclets {
+        match funclet {
+            ast::FuncletDef::Local(f) => {
+                if f.header.name == *name {
+                    return &f
+                }
+            },
+            _ => {}
+        }
+    };
+    panic!(format!("No funclet named {:?} found", name))
+}
+
+fn get_index(funclet_id : &String, index : usize, context : &mut SchedulingContext) -> String {
+    let funclet = get_local_funclet(funclet_id, context);
+    let command = funclet.commands.get(index).unwrap();
+    match command {
+        ast::Command::IRNode {
+            name, node
+        } => {
+            if name != "" {
+                name.clone()
+            }
+            else {
+                panic!(format!("Invalid index {} for funclet {:?}", index, funclet_id))
+            }
+        },
+        _ => panic!(format!("Unknown funclet {:?}", funclet_id))
+    }
 }
 
 fn get_current_funclet<'a>(context : &'a SchedulingContext)
--> &'a ir::Funclet {
-    let index = context.location.funclet_id;
-    get_funclet(&index, context)
+-> &'a ast::Funclet {
+    let index = context.location.funclet_id.clone();
+    get_local_funclet(&index, context)
 }
 
-fn get_external<'a>(external_function_id: &usize,
-context: &'a SchedulingContext) -> &'a ffi::ExternalCpuFunction {
-    context.program.native_interface.external_cpu_functions.
-    get(&external_function_id).unwrap()
+fn get_external_cpu<'a>(name: &String,
+context: &'a SchedulingContext) -> &'a ast::ExternalCpuFunction {
+    for funclet in context.program.funclets {
+        match funclet {
+            ast::FuncletDef::ExternalCPU(f) => {
+                if f.name == *name {
+                    return &f
+                }
+            },
+            _ => {}
+        }
+    };
+    panic!(format!("No external funclet named {:?} found", name))
 }
 
-fn get_current_allocated<'a>(node_id : &usize, argument : &usize,
-context : &'a mut SchedulingContext) -> Option<&'a usize> {
+fn get_current_allocated<'a>(node_id : &String, argument : &String,
+context : &'a mut SchedulingContext) -> Option<&'a String> {
     let blob = get_current_blob_mut(context);
-    match blob.allocated.get(node_id) {
+    match blob.allocated.get(node_id.as_str()) {
         None => { None }
         Some(map) => { map.get(argument) }
     }
 }
 
-fn update_current_allocated(node_id : &usize, index : &usize,
+fn update_current_allocated(node_id : &String, index : &String,
 context : &mut SchedulingContext) {
     // Assumes we _haven't_ added this node yet
     let blob = get_current_blob_mut(context);
     let current_node = blob.schedule.core.nodes.len();
-    let entry = blob.allocated.entry(*node_id).
+    let entry = blob.allocated.entry(node_id.clone()).
         or_insert(HashMap::new());
-    entry.insert(*index, current_node);
+    entry.insert(index.clone(), format!("{}", current_node));
 }
 
 fn default_tail(partial : &PartialData, context : &mut SchedulingContext) 
--> ir::TailEdge {
+-> ast::TailEdge {
     let mut node_count = 0;
     for node in &partial.nodes {
         match node {
-            ir::Node::Phi{index:_} => {}
+            ast::Node::Phi{index:_} => {}
             _ => { node_count += 1 }
         }
     }
-    let mut return_values = Box::new([0]);
+    let mut var = format!("{}", 0);
     if node_count > 0 {
-        return_values[0] = node_count-1;
+        var = format!("{}", node_count-1);
     }
-    ir::TailEdge::Return { 
-        return_values: return_values  // zero-indexing
-    }
+    ast::TailEdge::Return { var }
 }
 
-fn build_funclet(core : PartialData, kind : ir::FuncletKind,
-context : &mut SchedulingContext) -> ir::Funclet {
-    let default = default_tail(&core, context);
-    ir::Funclet {
-        kind : kind,
-        input_types : core.input_types.into_boxed_slice(),
-        output_types : core.output_types.into_boxed_slice(),
-        nodes : core.nodes.into_boxed_slice(),
-        tail_edge : match core.tail_edge {
-            None => { default },
-            Some(tail) => { tail }
+fn build_funclet(mut core : PartialData, kind : ir::FuncletKind,
+context : &mut SchedulingContext) -> ast::Funclet {
+    let mut commands = Vec::new();
+    let tail_found = false;
+    for node in core.nodes.drain(..) {
+        commands.push(ast::Command::IRNode(node));
+    }
+    if !tail_found {
+        commands.push(ast::Command::Tail(default_tail(&core, context)));
+    }
+    ast::Funclet {
+        kind,
+        header: ast::FuncletHeader {
+            ret: core.output_types[0].clone(),
+            name: "".to_string(),
+            args: core.input_types,
         },
+        commands,
     }
 }
 
-fn build_extra(info : PartialInformation, timeline_id : &usize,
-context : &mut SchedulingContext) -> ir::SchedulingFuncletExtra {
+fn build_extra(info : PartialInformation, timeline_id : &String,
+context : &mut SchedulingContext) -> ast::Extra {
     // todo: lazy location information
-    let in_timeline = ir::TimelineTag::Input { 
-        funclet_id: *timeline_id, 
-        index: 0, 
-    };
-    let out_timeline = ir::TimelineTag::Input { 
-        funclet_id: *timeline_id, 
-        index: 0, 
-    };
-    ir::SchedulingFuncletExtra {
-        value_funclet_id: info.value_funclet_id,
-        input_slots: info.input_slots,
-        output_slots: info.output_slots,
-        input_fences: info.input_fences,
-        output_fences: info.output_fences,
-        input_buffers: info.input_buffers,
-        output_buffers: info.output_buffers,
-        in_timeline_tag: in_timeline,
-        out_timeline_tag: out_timeline,
+    let mut data = HashMap::new();
+    data.insert(id("value_funclet_id"), ast::DictValue::Raw(ast::Value::FnName(info.value_funclet_id)));
+    data.insert(id("input_slots"), ast::DictValue::Dict(info.input_slots));
+    data.insert(id("output_slots"), ast::DictValue::Dict(info.output_slots));
+    data.insert(id("input_fences"), ast::DictValue::Dict(info.input_fences));
+    data.insert(id("output_fences"), ast::DictValue::Dict(info.output_fences));
+    data.insert(id("input_buffers"), ast::DictValue::Dict(info.input_buffers));
+    data.insert(id("output_buffers"), ast::DictValue::Dict(info.output_buffers));
+
+    let
+    data.insert(id("in_timeline"), ast::TimelineTag::Core(ast::TagCore::Input(timeline_id));
+    data.insert(id("in_timeline"), ast::DictValue::Dict(out_timeline));
+    ast::Extra {
+        name: context.location.funclet_id.clone(),
+        data,
     }
 }
 
 fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
     let new_schedule = build_funclet(blob.schedule.core, 
-        ir::FuncletKind::ScheduleExplicit, context);
+        ast::FuncletKind::ScheduleExplicit, context);
     let new_timeline = build_funclet(blob.timeline.core, 
-        ir::FuncletKind::Timeline, context);
+        ast::FuncletKind::Timeline, context);
     let schedule_id = context.program.funclets.create(new_schedule);
     let timeline_id = context.program.funclets.create(new_timeline);
     let extra = build_extra(blob.information, 
@@ -276,7 +364,7 @@ fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
     }
 }
 
-fn finish_funclet(tail_edge : ir::TailEdge, funclet_id : &usize,
+fn finish_funclet(tail_edge : ast::TailEdge, funclet_id : &usize,
 context : &mut SchedulingContext) {
     match context.new_schedules.remove(funclet_id) {
         None => {
@@ -288,7 +376,7 @@ context : &mut SchedulingContext) {
     }
 }
 
-fn add_current_funclet(tail_edge : ir::TailEdge, 
+fn add_current_funclet(tail_edge : ast::TailEdge, 
 context : &mut SchedulingContext) {
     let funclet_id = context.location.funclet_id;
     finish_funclet(tail_edge, &funclet_id, context);
@@ -296,7 +384,7 @@ context : &mut SchedulingContext) {
 
 fn add_schedule_node(
 resolved : ResolvedScheduleNode, 
-nodes : Vec<ir::Node>,
+nodes : Vec<ast::Node>,
 context : &mut SchedulingContext) {
     let target_id = context.location.funclet_id;
     let mut blob = get_blob_mut(&target_id, context);
@@ -312,19 +400,19 @@ fn explicate_extract_result(node_id : &usize,
 index : &usize, context : &mut SchedulingContext) -> bool {
     // The goal here is to maintain the hashmaps to keep track of ids
     // Specifically the funclet and node to extract from (or to)
-    let remote = ir::RemoteNodeId {
+    let remote = ast::RemoteNodeId {
         funclet_id : context.location.funclet_id,
         node_id : context.location.node_id
     };
     let node = &get_current_funclet(context).nodes[*node_id];
     match node {
-        ir::Node::CallExternalCpu { 
+        ast::Node::CallExternalCpu { 
         external_function_id, 
         arguments } => {
             let output = get_external(external_function_id, 
                 context).output_types[*index];
-            let node = ir::Node::AllocTemporary {
-                place: ir::Place::Local,
+            let node = ast::Node::AllocTemporary {
+                place: ast::Place::Local,
                 storage_type: output, 
                 operation: remote 
             };
@@ -342,20 +430,20 @@ index : &usize, context : &mut SchedulingContext) -> bool {
 
 fn explicate_constant(type_id : &usize, 
 context : &mut SchedulingContext) -> bool {
-    let new_id = ir::RemoteNodeId {
+    let new_id = ast::RemoteNodeId {
         funclet_id: context.location.funclet_id,
         node_id: context.location.node_id
     };
     let mut nodes = Vec::new();
     let ret_index = get_current_blob(context).schedule.core.nodes.len();
-    nodes.push(ir::Node::AllocTemporary { 
-        place: ir::Place::Local, 
+    nodes.push(ast::Node::AllocTemporary { 
+        place: ast::Place::Local, 
         storage_type: ffi::TypeId {0: *type_id}, 
         operation: new_id
     });
-    nodes.push(ir::Node::EncodeDo { 
-        place: ir::Place::Local, 
-        operation: ir::RemoteNodeId {
+    nodes.push(ast::Node::EncodeDo { 
+        place: ast::Place::Local, 
+        operation: ast::RemoteNodeId {
             funclet_id: context.location.funclet_id,
             node_id: context.location.node_id
         }, 
@@ -370,7 +458,7 @@ context : &mut SchedulingContext) -> bool {
 fn explicate_value_function(function_id : &usize, arguments : &Box<[usize]>, 
 context : &mut SchedulingContext) -> bool {
     // let id = context.program.funclets.get_next_id();
-    // let tail_edge = ir::TailEdge::ScheduleCall { 
+    // let tail_edge = ast::TailEdge::ScheduleCall { 
     //     value_operation: context.location, 
     //     callee_funclet_id: id,
     //     callee_arguments: Box::new([]), // TODO: clearly wrong
@@ -406,11 +494,11 @@ fn explicate_external(
     // just so we don't screw this up
     assert_eq!(allocations.len(), external_size);
     let place = match dimensions {
-        None => { ir::Place::Local }
+        None => { ast::Place::Local }
         Some(_) => { todo!() }
     };
-    let node = ir::Node::EncodeDo { 
-        place: place, 
+    let node = ast::Node::EncodeDo { 
+        place,
         operation: context.location.clone(),
         inputs: arguments.clone(), 
         outputs: allocations.into_boxed_slice() 
@@ -420,32 +508,32 @@ fn explicate_external(
     true
 }
 
-fn explicate_node(node : &ir::Node, 
+fn explicate_node(node : &ast::Node, 
 context : &mut SchedulingContext) -> bool {
     match node {
-        ir::Node::ExtractResult { node_id, 
+        ast::Node::ExtractResult { node_id, 
             index } => explicate_extract_result(
                 node_id, 
                 index, 
                 context),
-        ir::Node::ConstantInteger { value, 
+        ast::Node::ConstantInteger { value, 
             type_id } => explicate_constant(type_id, context),
-        ir::Node::ConstantUnsignedInteger { value, 
+        ast::Node::ConstantUnsignedInteger { value, 
             type_id } => explicate_constant(type_id, context),
-        ir::Node::CallValueFunction { function_id, 
+        ast::Node::CallValueFunction { function_id, 
             arguments } => 
             explicate_value_function(function_id, arguments, context),
-        ir::Node::Select { condition, true_case, 
+        ast::Node::Select { condition, true_case, 
             false_case } => 
             explicate_select(condition, true_case, false_case, context),
-        ir::Node::CallExternalCpu { external_function_id, 
+        ast::Node::CallExternalCpu { external_function_id, 
             arguments } => 
             explicate_external(
                 external_function_id, 
                 None, 
                 arguments,
                 context),
-        ir::Node::CallExternalGpuCompute { external_function_id, 
+        ast::Node::CallExternalGpuCompute { external_function_id, 
             dimensions, arguments } => 
             explicate_external(
                 external_function_id,
@@ -456,7 +544,7 @@ context : &mut SchedulingContext) -> bool {
     }
 }
 
-fn explicate_nodes(nodes : &Box<[ir::Node]>, 
+fn explicate_nodes(nodes : &Box<[ast::Node]>, 
 context : &mut SchedulingContext) -> bool {
     let mut unresolved = false;
     for node in &**nodes {
@@ -475,18 +563,18 @@ context : &mut SchedulingContext) -> bool {
     unresolved
 }
 
-fn explicate_funclet(funclet : &ir::Funclet,
+fn explicate_funclet(funclet : &ast::Funclet,
 context : &mut SchedulingContext) -> bool {
     // Calculates the new funclets to work with (if any)
     context.location.node_id = 0; // reset node_id to new funclet
     let unresolved = match funclet.kind {
-        ir::FuncletKind::MixedImplicit => false,
-        ir::FuncletKind::MixedExplicit => false,
-        ir::FuncletKind::Value => explicate_nodes(&funclet.nodes, context),
-        ir::FuncletKind::ScheduleExplicit => false,
-        ir::FuncletKind::Inline => false,
-        ir::FuncletKind::Timeline => false,
-        ir::FuncletKind::Spatial => false,
+        ast::FuncletKind::MixedImplicit => false,
+        ast::FuncletKind::MixedExplicit => false,
+        ast::FuncletKind::Value => explicate_nodes(&funclet.nodes, context),
+        ast::FuncletKind::ScheduleExplicit => false,
+        ast::FuncletKind::Inline => false,
+        ast::FuncletKind::Timeline => false,
+        ast::FuncletKind::Spatial => false,
     };
     unresolved
 }
@@ -510,7 +598,7 @@ fn construct_pipeline(context : &mut SchedulingContext) {
     }
 }
 
-fn debug_funclets(program : &ir::Program) {
+fn debug_funclets(program : &ast::Program) {
     // cause I'm dumb
     let mut ordered = Vec::new();
     for index in 0..(program.funclets.get_next_id()) {
@@ -535,7 +623,7 @@ fn debug_funclets(program : &ir::Program) {
     panic!("Explicated"); // to see debug information
 }
 
-fn should_explicate(program : &mut ir::Program) -> bool {
+fn should_explicate(program : &mut ast::Program) -> bool {
     let mut any_pipelines = false;
     let mut all_value_pipelines = true;
     for pipeline in program.pipelines.iter() {
@@ -545,7 +633,7 @@ fn should_explicate(program : &mut ir::Program) -> bool {
                 pipeline.entry_funclet)); }
             Some(funclet) => {
                 match funclet.kind {
-                    ir::FuncletKind::Value => {}, // dumb, but whatever
+                    ast::FuncletKind::Value => {}, // dumb, but whatever
                     _ => { all_value_pipelines = false; }
                 }
             }
@@ -554,7 +642,7 @@ fn should_explicate(program : &mut ir::Program) -> bool {
     any_pipelines && all_value_pipelines
 }
 
-pub fn explicate_scheduling(program : &mut ir::Program)
+pub fn explicate_scheduling(program : &mut ast::Program)
 {
     // only explicate if there are pipelines to explicate (value funclet pipes)
     if !should_explicate(program) {
@@ -562,12 +650,12 @@ pub fn explicate_scheduling(program : &mut ir::Program)
     }
     
     let original = program.funclets.clone();
-    let mut initial_location = ir::RemoteNodeId 
+    let mut initial_location = ast::RemoteNodeId
         { funclet_id : 0, node_id : 0 };
     let starting_index = program.funclets.get_next_id();
     let mut context = 
         SchedulingContext{
-            program : program, 
+            program,
             new_schedules : HashMap::new(),
             location : initial_location,
             resolved_schedules : HashMap::new(),

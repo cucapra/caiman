@@ -1,15 +1,13 @@
 use std::collections::HashMap;
-use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
-use crate::{ir, frontend};
-use crate::ir::ffi;
-use crate::ir::{Place, ResourceQueueStage, PlaceId};
+use crate::ir;
+use crate::rust_wgpu_backend::ffi;
 use crate::arena::Arena;
 use serde_derive::{Serialize, Deserialize};
 
 // Parser "AST"
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum Type {
 	FFI(String),
 	Local(String)
@@ -40,7 +38,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
 	(RemoteOperation) => { RemoteNodeId };
-	(Place) => { Place };
+	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
 }
@@ -90,18 +88,38 @@ macro_rules! make_parser_nodes {
 
 with_operations!(make_parser_nodes);
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SlotInfo {
+	pub value_tag : ValueTag,
+	pub timeline_tag : TimelineTag,
+	pub spatial_tag : SpatialTag
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FenceInfo {
+	pub timeline_tag : TimelineTag,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BufferInfo {
+	pub spatial_tag : SpatialTag,
+}
+
 #[derive(Debug)]
-pub enum TailCommand {
+pub enum TailEdge {
 	Return{ var : String }
 }
 
 #[derive(Debug)]
 pub enum Command {
-	IRNode(Node),
-	Tail(TailCommand)
+	IRNode{
+		node : Node,
+		name : String
+	},
+	Tail(TailEdge)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TagCore {
 	None,
 	Operation(RemoteNodeId),
@@ -109,7 +127,7 @@ pub enum TagCore {
 	Output(RemoteNodeId),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueTag {
 	Core(TagCore),
 	FunctionInput(RemoteNodeId),
@@ -117,24 +135,24 @@ pub enum ValueTag {
 	Halt(NodeId)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TimelineTag {
 	Core(TagCore)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SpatialTag {
 	Core(TagCore)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
     ValueTag(ValueTag),
     TimelineTag(TimelineTag),
     SpatialTag(SpatialTag)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
 	ID(String),
     FunctionLoc(RemoteNodeId),
@@ -144,6 +162,9 @@ pub enum Value {
     Place(ir::Place),
     Stage(ir::ResourceQueueStage),
     Tag(Tag),
+	SlotInfo(SlotInfo),
+	FenceInfo(FenceInfo),
+	BufferInfo(BufferInfo)
 }
 
 #[derive(Debug, Clone)]
@@ -153,13 +174,7 @@ pub enum DictValue {
 	Dict(UncheckedDict)
 }
 
-#[derive(Debug, Clone)]
-pub struct DictPair {
-	pub key : Value,
-	pub value : DictValue
-}
-
-pub type UncheckedDict = Vec<DictPair>;
+pub type UncheckedDict = HashMap<Value, DictValue>;
 
 #[derive(Debug)]
 pub struct FuncletHeader {
