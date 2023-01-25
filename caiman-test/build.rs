@@ -26,11 +26,9 @@ fn compile(input_file: &mut File, output_file: &mut File) {
     }
 }
 
-fn main() {
-    println!("cargo:rerun-if-changed=src/trivial.caimanir");
-    println!("cargo:rerun-if-changed=../src/");
-
-    let input_path = Path::new(&"src/trivial.caimanir");
+fn compile_target(filename : &str) {
+    let inp = format!("src/{}.caimanir", filename);
+    let input_path = Path::new(&inp);
     let mut input_file = match File::open(&input_path) {
         Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
         Ok(file) => file,
@@ -39,6 +37,14 @@ fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let generated_path = format!("{}/generated", out_dir);
     std::fs::create_dir(&generated_path);
-    let mut output_file = File::create(format!("{}/generated/trivial.txt", out_dir)).unwrap();
+    let mut output_file = File::create(format!("{}/generated/{}.txt", out_dir, filename)).unwrap();
     compile(&mut input_file, &mut output_file);
+}
+
+fn main() {
+    println!("cargo:rerun-if-changed=src/trivial.caimanir");
+    println!("cargo:rerun-if-changed=../src/");
+
+    compile_target("trivial");
+    compile_target("schedule_trivial");
 }

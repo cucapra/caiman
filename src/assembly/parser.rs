@@ -440,12 +440,7 @@ fn read_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Tag {
 
 fn read_slot_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::SlotInfo {
     let mut rules = vec![];
-    let value_app = compose_pair(read_value_tag, ast::Tag::ValueTag);
-    rules.push(rule_pair_boxed(Rule::value_tag, value_app));
-    let timeline_app = compose_pair(read_timeline_tag, ast::Tag::TimelineTag);
-    rules.push(rule_pair_boxed(Rule::timeline_tag, timeline_app));
-    let spatial_app = compose_pair(read_spatial_tag, ast::Tag::SpatialTag);
-    rules.push(rule_pair_boxed(Rule::spatial_tag, spatial_app));
+    rules.push(rule_pair(Rule::tag, read_tag));
     let tags = expect_all_vec(rules, pairs, context);
     let mut value_tag = ast::ValueTag::Core(ast::TagCore::None);
     let mut timeline_tag = ast::TimelineTag::Core(ast::TagCore::None);
@@ -487,11 +482,11 @@ fn read_value(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Value {
     let rule_tag = compose_pair(read_tag, ast::Value::Tag);
     rules.push(rule_pair_boxed(Rule::tag, rule_tag));
     let rule_tag = compose_pair(read_slot_info, ast::Value::SlotInfo);
-    rules.push(rule_pair_boxed(Rule::tag, rule_tag));
+    rules.push(rule_pair_boxed(Rule::slot_info, rule_tag));
     let rule_tag = compose_pair(read_fence_info, ast::Value::FenceInfo);
-    rules.push(rule_pair_boxed(Rule::tag, rule_tag));
+    rules.push(rule_pair_boxed(Rule::fence_info, rule_tag));
     let rule_tag = compose_pair(read_buffer_info, ast::Value::BufferInfo);
-    rules.push(rule_pair_boxed(Rule::tag, rule_tag));
+    rules.push(rule_pair_boxed(Rule::buffer_info, rule_tag));
 
     expect_vec(rules, pairs, context)
 }
@@ -742,12 +737,12 @@ fn read_do_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String>
 }
 
 fn read_do_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
+    let output = expect(rule_var_name(), pairs, context);
     let rule_place = rule_str_unwrap(Rule::do_sep, 1, Box::new(read_place));
     let place = expect(rule_place, pairs, context);
     let operation = expect(rule_funclet_loc(), pairs, context);
     let rule_args = rule_pair(Rule::do_args, read_do_args);
     let inputs = option_to_vec(optional(rule_args, pairs, context));
-    let output = expect(rule_var_name(), pairs, context);
     ast::Command::IRNode{
         name: "".to_string(),
         node: ast::Node::EncodeDo {
@@ -887,6 +882,8 @@ fn read_definition(pairs : &mut Pairs<Rule>, context : &mut Context) -> frontend
         rule_pair(Rule::program, read_program), pairs, context);
 
     ast_to_ir(program, context)
+    // dbg!(ast_to_ir(program, context));
+    // todo!()
 }
 
 pub fn parse(code : &str) ->

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::default::Default;
 use serde_derive::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
 pub struct Definition
 {
 	pub version : (u32, u32, u32),
@@ -29,6 +29,22 @@ impl std::fmt::Display for CompileError
 	{
 		write!(f, "{}", self.message)
 	}
+}
+
+pub fn explicate_compare(input_string1 : &str, input_string2 : &str) -> Result<bool, CompileError> {
+	let result1 = crate::assembly::parser::parse(input_string1);
+	let result2 = crate::assembly::parser::parse(input_string2);
+	let mut definition1 = match result1 {
+		Err(e) => { return Err(e) }
+		Ok(definition) => definition
+	};
+	let mut definition2 = match result2 {
+		Err(e) => { return Err(e) }
+		Ok(definition) => definition
+	};
+	crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition1.program);
+	crate::rust_wgpu_backend::explicate_scheduling::explicate_scheduling(&mut definition2.program);
+	Ok(definition1 == definition2)
 }
 
 pub fn compile_ron_definition(input_string : &str,

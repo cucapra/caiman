@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::default::Default;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arena<T>
 {
 	elements : HashMap<usize, T>,

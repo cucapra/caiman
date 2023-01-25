@@ -99,7 +99,7 @@ alloc_right = ${ "alloc-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc}
 alloc_command = { var_name ~ "=" ~ alloc_right }
 do_sep = ${ "do-" ~ place ~ sep }
 do_args = { var_name ~ ("," ~ var_name)* }
-do_command = { do_sep ~ funclet_loc ~ "(" ~ do_args? ~ ")" ~ "->" ~ var_name }
+do_command = { var_name ~ "<-" ~ do_sep ~ funclet_loc ~ "(" ~ do_args? ~ ")" }
 schedule_command = { phi_command | return_command | alloc_command | do_command }
 timeline_command = { phi_command | return_command }
 

@@ -179,9 +179,9 @@ fn value_dict_value_tag(d : &ast::DictValue, context : &mut Context) -> ir::Valu
             ast::Tag::ValueTag(v) => {
                 value_value_tag(&v, context)
             },
-            _ => panic!(format!("Expected value tag got {:?}", v))
+            _ => panic!(format!("Expected value tag got {:?}", d))
         },
-        _ => panic!(format!("Expected tag got {:?}", v))
+        _ => panic!(format!("Expected tag got {:?}", d))
     }
 }
 
@@ -196,9 +196,9 @@ fn value_dict_timeline_tag(d : &ast::DictValue, context : &mut Context) -> ir::T
     match v {
         ast::Value::Tag(t) => match t {
             ast::Tag::TimelineTag(t) => value_timeline_tag(&t, context),
-            _ => panic!(format!("Expected timeline tag got {:?}", v))
+            _ => panic!(format!("Expected timeline tag got {:?}", d))
         },
-        _ => panic!(format!("Expected tag got {:?}", v))
+        _ => panic!(format!("Expected tag got {:?}", d))
     }
 }
 
@@ -213,9 +213,9 @@ fn value_dict_spatial_tag(d : &ast::DictValue, context : &mut Context) -> ir::Sp
     match v {
         ast::Value::Tag(t) => match t {
             ast::Tag::SpatialTag(t) => value_spatial_tag(&t, context),
-            _ => panic!(format!("Expected spatial tag got {:?}", v))
+            _ => panic!(format!("Expected spatial tag got {:?}", d))
         },
-        _ => panic!(format!("Expected tag got {:?}", v))
+        _ => panic!(format!("Expected tag got {:?}", d))
     }
 }
 
@@ -445,7 +445,7 @@ fn ir_node(node : &ast::Node, context : &mut Context) -> ir::Node {
                 place : place.clone(),
                 operation: remote_conversion(operation, context),
                 inputs: inputs.iter().map(|n| *context.node_id(n.clone())).collect(),
-                outputs: inputs.iter().map(|n| *context.node_id(n.clone())).collect(),
+                outputs: outputs.iter().map(|n| *context.node_id(n.clone())).collect(),
             }
         },
         ast::Node::EncodeCopy { place, input, output } => {
@@ -636,11 +636,15 @@ fn ir_value_extras(funclets : &ast::FuncletDefs, extras : &ast::Extras, context 
     result
 }
 
-fn ir_scheduling_extra(id : &usize, d: &ast::UncheckedDict, context : &mut Context) -> ir::SchedulingFuncletExtra {
+fn ir_scheduling_extra(d: &ast::UncheckedDict, context : &mut Context) -> ir::SchedulingFuncletExtra {
+    let index = match value_funclet_name(d.get(&as_key("value")).unwrap(), context) {
+        context::Location::Local(n) => n,
+        context::Location::FFI(n) => n
+    };
     ir::SchedulingFuncletExtra {
-        value_funclet_id: *id,
+        value_funclet_id: index,
         input_slots: value_index_var_dict(d.get(&as_key("input_slots")).unwrap(), value_slot_info, context),
-        output_slots: value_list(d.get(&as_key("output_slots")).unwrap(), value_slot_info, context),
+        output_slots: value_index_var_dict(d.get(&as_key("output_slots")).unwrap(), value_slot_info, context),
         input_fences: value_index_var_dict(d.get(&as_key("input_fences")).unwrap(), value_fence_info, context),
         output_fences: value_index_var_dict(d.get(&as_key("output_fences")).unwrap(), value_fence_info, context),
         input_buffers: value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context),
@@ -669,7 +673,7 @@ fn ir_scheduling_extras(funclets : &ast::FuncletDefs, extras : &ast::Extras, con
                                 }
                                 result.insert(
                                     *index,
-                                    ir_scheduling_extra(&index.clone(), &extra.data, context)
+                                    ir_scheduling_extra(&extra.data, context)
                                 );
                             }
                         }

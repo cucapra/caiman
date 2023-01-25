@@ -4,7 +4,7 @@ use crate::arena::Arena;
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
 pub struct TypeId(pub usize); // temporarily exposed internals
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct StructField
 {
 	pub name : String,
@@ -13,7 +13,7 @@ pub struct StructField
 	pub byte_size : usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Type
 {
 	// Value types
@@ -43,7 +43,7 @@ pub enum Type
 	GpuBufferAllocator,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ExternalCpuFunction
 {
 	pub name : String,
@@ -53,7 +53,7 @@ pub struct ExternalCpuFunction
 
 // This describes the initial mapping from the binding in the shader to the IR
 // It's expected codegen will emit a module with a different mapping
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ExternalGpuFunctionResourceBinding
 {
 	pub group : usize,
@@ -62,13 +62,13 @@ pub struct ExternalGpuFunctionResourceBinding
 	pub output : Option<usize>
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum ShaderModuleContent
 {
 	Wgsl(String)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ExternalGpuFunction
 {
 	pub name : String,
@@ -101,7 +101,7 @@ impl ExternalGpuFunction
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq)]
 pub struct NativeInterface
 {
 	#[serde(default)]
