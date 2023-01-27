@@ -20,7 +20,21 @@ funclet_loc = ${ fn_name ~ "." ~ var_name }
 funclet_loc_sep = ${ funclet_loc ~ sep }
 
 //   names
-ffi_type = { "i32" }
+ffi_ref_parameter = { "<" ~ ffi_type ~ ">"}
+ffi_array_parameters = { "<" ~ ffi_type ~ "," ~ n ~ ">" }
+ffi_tuple_parameters = { "<" ~ ffi_type ~ ("," ~ ffi_type)* ~ ">" } // must have at least one field
+ffi_type_parameterized = !{ "array" ~ ffi_array_parameters
+    | "erased_length_array" ~ ffi_ref_parameter
+    // | "struct" ~ ???
+    | "tuple" ~ ffi_tuple_parameters
+    | "const_ref" ~ ffi_ref_parameter
+    | "mut_ref" ~ ffi_ref_parameter
+    | "const_slice" ~ ffi_ref_parameter
+    | "mut_slice" ~ ffi_ref_parameter
+    | "gpu_buffer_ref" ~ ffi_ref_parameter
+    | "gpu_buffer_slice" ~ ffi_ref_parameter }
+ffi_type = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
+    "i16" | "i32" | "i64" | "gpu_buffer_allocator" | ffi_type_parameterized }
 ffi_type_sep = ${ ffi_type ~ sep }
 typ = { ffi_type | type_name }
 typ_sep = ${ typ ~ sep }
@@ -53,7 +67,7 @@ dict_element = { dict_key ~ ":" ~ dict_value }
 unchecked_dict = { "{" ~ (dict_element ~ ("," ~ dict_element)*)? ~ ","? ~ "}" }
 
 // Program
-program = { SOI ~ version ~ types ~ funclets ~ extras ~ pipelines ~ EOI }
+program = { SOI ~ version ~ types ~ funclets ~ value_functions ~ extras ~ pipelines ~ EOI }
 
 version_keyword = @{ "version" ~ sep }
 version = ${ version_keyword ~ n ~ "." ~ n ~ "." ~ n }
@@ -71,9 +85,15 @@ funclets = { funclet_def* }
 funclet_def = { external_funclet | funclet }
 
 //   external
-external_name = @{ ("external_cpu" | "external_gpu") ~ sep }
+external_cpu_sep = @{ "external_cpu" ~ sep }
+external_gpu_sep = @{ "external_gpu" ~ sep }
 external_args = { ffi_type ~ ("," ~ ffi_type)* }
-external_funclet = { external_name ~ ffi_type_sep ~ fn_name ~ "(" ~ external_args? ~ ")" ~ ";" }
+external_header = { ffi_type_sep ~ fn_name ~ "(" ~ external_args? ~ ")" }
+external_cpu = { external_cpu_sep ~ external_header ~ ";" }
+external_gpu_resource = { "resource" ~ unchecked_dict }
+external_gpu_body = { external_gpu_resource ~ ("," ~ external_gpu_resource)* }
+external_gpu = { external_cpu_sep ~ external_header ~ "{" ~ external_gpu_body ~ "}" }
+external_funclet = { external_cpu | external_gpu }
 
 //   funclet
 value_sep = @{ "value" ~ sep }
@@ -102,6 +122,11 @@ do_args = { var_name ~ ("," ~ var_name)* }
 do_command = { var_name ~ "<-" ~ do_sep ~ funclet_loc ~ "(" ~ do_args? ~ ")" }
 schedule_command = { phi_command | return_command | alloc_command | do_command }
 timeline_command = { phi_command | return_command }
+
+// Value functions
+value_function_sep = @{ "value_function" ~ sep }
+value_function_args = { typ ~ ("," ~ typ)* }
+value_function = { value_function_sep ~ typ_sep ~ fn_name ~ "(" ~ value_function_args? ~ ")" ~ ":" ~ fn_name ~ ";" }
 
 // Extras
 extras = { "extras" ~ "{" ~ (extra ~ ",")* ~ "}" }

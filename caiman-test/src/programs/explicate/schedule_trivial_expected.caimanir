@@ -16,7 +16,7 @@ external_cpu i32 @do_thing_on_cpu(i32);
 
 value i32 @foo(i32) {
     %0 = phi 0;
-    %1 = constant 4i32;
+    %1 = constant 3i32;
     return %1;
 }
 

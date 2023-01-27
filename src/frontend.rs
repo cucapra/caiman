@@ -31,7 +31,7 @@ impl std::fmt::Display for CompileError
 	}
 }
 
-pub fn explicate_compare(input_string1 : &str, input_string2 : &str) -> Result<bool, CompileError> {
+fn explicate_compare(input_string1 : &str, input_string2 : &str) -> Result<bool, CompileError> {
 	let result1 = crate::assembly::parser::parse(input_string1);
 	let result2 = crate::assembly::parser::parse(input_string2);
 	let mut definition1 = match result1 {
@@ -47,20 +47,23 @@ pub fn explicate_compare(input_string1 : &str, input_string2 : &str) -> Result<b
 	Ok(definition1 == definition2)
 }
 
-pub fn compile_ron_definition(input_string : &str,
+fn read_definition(input_string : &str, assembly : bool) -> Result<Definition, CompileError> {
+	if assembly {
+		crate::assembly::parser::parse(input_string)
+	}
+	else {
+		match ron::from_str(& input_string) {
+			Err(why) => Err(CompileError{ message: format!("Parse error: {}", why) }),
+			Ok(v) => Ok(v)
+		}
+	}
+}
+
+pub fn compile_caiman(input_string : &str,
                               options_opt : Option<CompileOptions>,
                               assembly : bool) -> Result<String, CompileError>
 {
-	let result : Result<Definition, CompileError> =
-		if assembly {
-			crate::assembly::parser::parse(input_string)
-		}
-		else {
-			match ron::from_str(& input_string) {
-				Err(why) => Err(CompileError{ message: format!("Parse error: {}", why) }),
-				Ok(v) => Ok(v)
-			}
-		};
+	let result = read_definition(input_string, assembly);
 	match result
 	{
 		Err(why) => Err(why),
@@ -81,11 +84,12 @@ pub fn compile_ron_definition(input_string : &str,
 	}
 }
 
-pub fn explicate_ron_definition(input_string : &str, options : Option<CompileOptions>) -> Result<String, CompileError>
+pub fn explicate_caiman(input_string : &str, options : Option<CompileOptions>,
+	assembly : bool) -> Result<String, CompileError>
 {
 	let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
 
-	let mut result : Result<Definition, ron::de::Error> = ron::from_str(& input_string);
+	let mut result = read_definition(input_string, assembly);
 	match result
 	{
 		Err(why) => Err(CompileError{ message: format!("Parse error: {}", why)}),

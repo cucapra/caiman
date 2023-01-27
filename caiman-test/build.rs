@@ -10,7 +10,7 @@ fn compile(input_file: &mut File, output_file: &mut File) {
     };
 
     let result: Result<String, caiman::frontend::CompileError> =
-        caiman::frontend::compile_ron_definition(
+        caiman::frontend::compile_caiman(
             &input_string,
             Some(caiman::frontend::CompileOptions {
                 print_codegen_debug_info: true,
@@ -27,7 +27,7 @@ fn compile(input_file: &mut File, output_file: &mut File) {
 }
 
 fn compile_target(filename : &str) {
-    let inp = format!("src/{}.caimanir", filename);
+    let inp = format!("src/programs/{}.caimanir", filename);
     let input_path = Path::new(&inp);
     let mut input_file = match File::open(&input_path) {
         Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
@@ -42,9 +42,8 @@ fn compile_target(filename : &str) {
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=src/trivial.caimanir");
+    println!("cargo:rerun-if-changed=src/programs/");
     println!("cargo:rerun-if-changed=../src/");
 
     compile_target("trivial");
-    compile_target("schedule_trivial");
 }
