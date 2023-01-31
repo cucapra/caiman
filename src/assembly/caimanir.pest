@@ -100,7 +100,7 @@ external_cpu = { external_cpu_sep ~ ffi_type_sep ~ fn_name ~ "(" ~ external_cpu_
 external_gpu_sep = @{ "external_gpu" ~ sep }
 external_gpu_resource = { "resource" ~ unchecked_dict }
 external_gpu_body = { external_gpu_resource ~ ("," ~ external_gpu_resource)* }
-external_gpu_arg = { ffi_type_sep ~ var_name }
+external_gpu_arg = { var_name ~ ":" ~ ffi_type }
 external_gpu_args = { external_gpu_arg ~ ("," ~ external_gpu_arg)* }
 external_gpu = { external_gpu_sep ~ ffi_type_sep ~ fn_name ~ "(" ~ external_gpu_args? ~ ")" ~
     ":" ~ str ~ "{" ~ external_gpu_body ~ "}" }
@@ -120,7 +120,8 @@ schedule_sep = @{ "schedule" ~ sep }
 timeline_sep = @{ "timeline" ~ sep }
 funclet = { value_sep ~ value_funclet | schedule_sep ~ schedule_funclet |
     timeline_sep ~ timeline_funclet }
-funclet_args = {  typ ~ ("," ~ typ)* }
+funclet_arg = { (var_name ~ ":")? ~ typ }
+funclet_args = {  funclet_arg ~ ("," ~ funclet_arg)* }
 funclet_header = { typ_sep ~ fn_name ~ "(" ~ funclet_args? ~ ")" }
 
 return_command = ${ "return" ~ sep ~ var_name }

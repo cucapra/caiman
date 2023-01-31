@@ -211,7 +211,7 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 pub struct FuncletHeader {
 	pub ret : Type,
 	pub name : String,
-	pub args : Vec<Type>,
+	pub args : Vec<(Option<String>, Type)>,
 }
 
 #[derive(Debug)]

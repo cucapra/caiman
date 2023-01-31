@@ -14,22 +14,19 @@ types [
 
 external_cpu i64 @do_thing_on_cpu(i64);
 
-value i64 @foo(i64) {
-    %0 = phi 0;
+value i64 @foo(%0 : i64) {
     %1 = constant 4i64;
     return %1;
 }
 
-schedule $slot0 @bar($slot0) {
-    %0 = phi 0;
+schedule $slot0 @bar(%0 : $slot0) {
     %x = alloc-temporary-local-i64 @foo.%1;
     %1 = encode-do-local @foo.%1() -> %x;
     return %x;
 }
 
-timeline $event0 @time($event0) {
-    %0 = phi 0;
-    return %0;
+timeline $event0 @time(%e : $event0) {
+    return %e;
 }
 
 extras {
@@ -45,8 +42,8 @@ extras {
         output_fences : {},
         input_buffers : {},
         output_buffers : {},
-        in_timeline_tag : timeline_tag input @time.%0,
-        out_timeline_tag : timeline_tag input @time.%0,
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
     },
 }
 
