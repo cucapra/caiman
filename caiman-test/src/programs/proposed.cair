@@ -16,27 +16,30 @@ types [
 ]
 
 external_cpu i32 @do_thing_on_cpu(i32);
-external_gpu i32 @do_thing_on_gpu(i32) {
+external_gpu @do_thing_on_gpu(gpu_buffer_ref<i32> %x) -> [i32, ...] {
     resource {
         group : 0,
         binding : 0,
-        input : i32,
+        input : %x,
     },
     resource {
         group : 0,
         binding : 1,
-        output : i32,
+        output : %x,
     }
 }
 
-value i32 @foo(i32) {
+
+value @foo(i32) -> i32 {
     // other commands
     %0 = phi 0;
     %1 = constant 4i32;
     return %0;
 }
 
-schedule $slot0 @bar($slot0) {
+type _T = i32 & val @foo.1 & timeline @bar.1 & fence;
+
+schedule $slot0 @bar($slot0) : @time.%0 -> @time.%0 {
     %0 = phi 0;
     %x = alloc-local-i32 @foo.%1;
     %x <- do-local @foo.%1();
@@ -48,11 +51,12 @@ timeline $event0 @time($event0) {
     return %0;
 }
 
-value_function i32 @value1(i32) : @foo;
+value_function i32 @value1(i32) : [@foo, ...];
 
 extras {
     @bar {
         value : @foo,
+        //
         input_slots : {
             %0 : slot_info(value_tag input @foo.%0)
         },

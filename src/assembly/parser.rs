@@ -10,8 +10,9 @@ use crate::{ir, frontend};
 use crate::ir::{ffi};
 use crate::arena::Arena;
 use crate::ast;
-use crate::assembly::ast_to_ir::ast_to_ir;
+use crate::assembly::ast_to_ir;
 use crate::assembly::context::{new_context, Context};
+use crate::ast::UncheckedDict;
 
 // Fanciness
 
@@ -274,25 +275,99 @@ fn rule_id<'a>() -> RuleApp<'a, ast::Value> {
     rule_str(Rule::id, read_id)
 }
 
-pub fn read_ffi_raw(s : String, context : &mut Context) -> ffi::Type {
+fn read_ffi_type_base(s : String, context : &mut Context) -> ast::FFIType {
     match s.as_str() {
-        "i32" => { ffi::Type::I32 },
-        s => panic!("Unknown type name {}", s)
+        "f32" => { ast::FFIType::F32 },
+        "f64" => { ast::FFIType::F64 },
+        "u8" => { ast::FFIType::U8 },
+        "u16" => { ast::FFIType::U16 },
+        "u32" => { ast::FFIType::U32 },
+        "u64" => { ast::FFIType::U64 },
+        "i8" => { ast::FFIType::I8 },
+        "i16" => { ast::FFIType::I16 },
+        "i32" => { ast::FFIType::I32 },
+        "i64" => { ast::FFIType::I64 },
+        "usize" => { ast::FFIType::USize },
+        "gpu_buffer_allocator" => { ast::FFIType::GpuBufferAllocator },
+        _ => panic!("Unknown type name {}", s)
     }
 }
 
-fn rule_ffi_type<'a>() -> RuleApp<'a, ffi::Type> {
-    rule_str(Rule::ffi_type, read_ffi_raw)
+fn read_ffi_ref_parameter(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FFIType {
+    expect(rule_ffi_type(), pairs, context)
 }
 
-fn rule_ffi_typ_sep<'a>() -> RuleApp<'a, ffi::Type> {
-    rule_str_unwrap(Rule::ffi_type_sep, 1, Box::new(read_ffi_raw))
+fn read_ffi_array_params(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FFIType {
+    let element_type = Box::new(expect(rule_ffi_type(), pairs, context));
+    let length = expect(rule_n(), pairs, context);
+    ast::FFIType::Array { element_type, length }
+}
+
+fn read_ffi_tuple_params(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FFIType {
+    let elements = expect_all(rule_ffi_type(), pairs, context);
+    ast::FFIType::Tuple(elements)
+}
+
+fn read_ffi_parameterized_ref_name(s : String, context : &mut Context)
+-> Box<dyn Fn(ast::FFIType) -> ast::FFIType> {
+    fn box_up<F>(f : &'static F) -> Box<dyn Fn(ast::FFIType) -> ast::FFIType>
+        where
+        F: Fn(Box<ast::FFIType>) -> ast::FFIType,
+    {
+        Box::new(move |x| f(Box::new(x)))
+    }
+    match s.as_str() {
+        "erased_length_array" => box_up(&ast::FFIType::ErasedLengthArray),
+        "const_ref" => box_up(&ast::FFIType::ConstRef),
+        "mut_ref" => box_up(&ast::FFIType::MutRef),
+        "const_slice" => box_up(&ast::FFIType::ConstSlice),
+        "mut_slice" => box_up(&ast::FFIType::MutSlice),
+        "gpu_buffer_ref" => box_up(&ast::FFIType::GpuBufferRef),
+        "gpu_buffer_slice" => box_up(&ast::FFIType::GpuBufferSlice),
+        _ => panic!("Unknown type name {}", s)
+    }
+}
+
+fn read_ffi_parameterized_ref(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FFIType {
+    let rule = rule_str(Rule::ffi_parameterized_ref_name,
+                        read_ffi_parameterized_ref_name);
+    let kind = expect(rule, pairs, context);
+    let rule = rule_pair(Rule::ffi_ref_parameter, read_ffi_ref_parameter);
+    let value = expect(rule, pairs, context);
+    kind(value)
+}
+
+fn read_ffi_parameterized_type(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FFIType {
+    let mut rules = Vec::new();
+    let func = Box::new(read_ffi_array_params);
+    rules.push(rule_pair_unwrap(Rule::ffi_parameterized_array, 1, func));
+
+    rules.push(rule_pair(Rule::ffi_parameterized_ref, read_ffi_parameterized_ref));
+    let func = Box::new(read_ffi_tuple_params);
+    rules.push(rule_pair_unwrap(Rule::ffi_parameterized_tuple, 1, func));
+
+    expect_vec(rules, pairs, context)
+}
+
+fn read_ffi_type(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FFIType {
+    let mut rules = Vec::new();
+    rules.push(rule_str(Rule::ffi_type_base, read_ffi_type_base));
+    rules.push(rule_pair(Rule::ffi_parameterized_type, read_ffi_parameterized_type));
+    expect_vec(rules, pairs, context)
+}
+
+fn rule_ffi_type<'a>() -> RuleApp<'a, ast::FFIType> {
+    rule_pair(Rule::ffi_type, read_ffi_type)
+}
+
+fn rule_ffi_type_sep<'a>() -> RuleApp<'a, ast::FFIType> {
+    rule_pair_unwrap(Rule::ffi_type_sep, 1, Box::new(read_ffi_type))
 }
 
 fn read_type(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Type {
     let mut rules = Vec::new();
-    let ffi_fn = compose_str(read_string, ast::Type::FFI);
-    rules.push(rule_str_boxed(Rule::ffi_type, ffi_fn));
+    let ffi_fn = compose_pair(read_ffi_type, ast::Type::FFI);
+    rules.push(rule_pair_boxed(Rule::ffi_type, ffi_fn));
     let rule_ir= compose_str(read_string, ast::Type::Local);
     rules.push(rule_str_unwrap(Rule::type_name, 1, rule_ir));
     expect_vec(rules, pairs, context)
@@ -393,14 +468,6 @@ fn rule_tag_core<'a>() -> RuleApp<'a, ast::TagCore> {
     rule_pair(Rule::tag_core, read_tag_core)
 }
 
-fn read_timeline_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TimelineTag {
-    ast::TimelineTag::Core(expect(rule_tag_core(), pairs, context))
-}
-
-fn read_spatial_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::SpatialTag {
-    ast::SpatialTag::Core(expect(rule_tag_core(), pairs, context))
-}
-
 fn read_value_tag_loc(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ValueTag {
     let op_type = expect(rule_string(Rule::value_tag_op), pairs, context);
     let funclet_loc = expect(rule_funclet_loc(), pairs, context);
@@ -412,7 +479,7 @@ fn read_value_tag_loc(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::
     }
 }
 
-fn read_value_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ValueTag {
+fn read_value_tag_data(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ValueTag {
     let mut rules = vec![];
     let app = compose_pair(read_tag_core, ast::ValueTag::Core);
     let rule = rule_pair_boxed(Rule::tag_core, app);
@@ -425,6 +492,44 @@ fn read_value_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Valu
     let rule = rule_pair_unwrap(Rule::tag_halt, 1, app);
     rules.push(rule);
     expect_vec(rules, pairs, context)
+}
+
+fn read_value_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ValueTag {
+    require_rule(Rule::value_tag_sep, pairs, context);
+    let rule = rule_pair(Rule::value_tag_data, read_value_tag_data);
+    expect(rule, pairs, context)
+}
+
+fn rule_value_tag<'a>() -> RuleApp<'a, ast::ValueTag> {
+    rule_pair(Rule::value_tag, read_value_tag)
+}
+
+fn read_timeline_tag_data(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TimelineTag {
+    ast::TimelineTag::Core(expect(rule_tag_core(), pairs, context))
+}
+
+fn read_timeline_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TimelineTag {
+    require_rule(Rule::timeline_tag_sep, pairs, context);
+    let rule = rule_pair(Rule::timeline_tag_data, read_timeline_tag_data);
+    expect(rule, pairs, context)
+}
+
+fn rule_timeline_tag<'a>() -> RuleApp<'a, ast::TimelineTag> {
+    rule_pair(Rule::timeline_tag, read_timeline_tag)
+}
+
+fn read_spatial_tag_data(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::SpatialTag {
+    ast::SpatialTag::Core(expect(rule_tag_core(), pairs, context))
+}
+
+fn read_spatial_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::SpatialTag {
+    require_rule(Rule::spatial_tag_sep, pairs, context);
+    let rule = rule_pair(Rule::spatial_tag_data, read_spatial_tag_data);
+    expect(rule, pairs, context)
+}
+
+fn rule_spatial_tag<'a>() -> RuleApp<'a, ast::SpatialTag> {
+    rule_pair(Rule::spatial_tag, read_spatial_tag)
 }
 
 fn read_tag(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Tag {
@@ -457,36 +562,47 @@ fn read_slot_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Slot
 
 fn read_fence_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FenceInfo {
     let rule = rule_pair(Rule::timeline_tag, read_timeline_tag);
-    ast::FenceInfo { timeline_tag : expect(rule, pairs, context) }
+    match pairs.peek() {
+        None => ast::FenceInfo { timeline_tag : ast::TimelineTag::Core(ast::TagCore::None) },
+        Some(_) => ast::FenceInfo { timeline_tag : expect(rule, pairs, context) }
+    }
+
 }
 
 fn read_buffer_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::BufferInfo {
     let rule = rule_pair(Rule::spatial_tag, read_spatial_tag);
-    ast::BufferInfo { spatial_tag : expect(rule, pairs, context) }
+    match pairs.peek() {
+        None => ast::BufferInfo { spatial_tag: expect(rule, pairs, context) },
+        Some(_) => ast::BufferInfo { spatial_tag: expect(rule, pairs, context) }
+    }
 }
 
 fn read_value(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Value {
     // funclet_loc | var_name | fn_name | typ | place | stage | tag
     let mut rules = Vec::new();
 
-    let rule_function_loc = compose_pair(read_funclet_loc, ast::Value::FunctionLoc);
-    rules.push(rule_pair_boxed(Rule::funclet_loc, rule_function_loc));
-    let rule_fn_name = compose_pair(read_fn_name, ast::Value::FnName);
-    rules.push(rule_pair_boxed(Rule::fn_name, rule_fn_name));
-    let rule_type = compose_pair(read_type, ast::Value::Type);
-    rules.push(rule_pair_boxed(Rule::typ, rule_type));
-    let rule_place = compose_str(read_place, ast::Value::Place);
-    rules.push(rule_str_boxed(Rule::place, rule_place));
-    let rule_stage = compose_str(read_stage, ast::Value::Stage);
-    rules.push(rule_str_boxed(Rule::stage, rule_stage));
-    let rule_tag = compose_pair(read_tag, ast::Value::Tag);
-    rules.push(rule_pair_boxed(Rule::tag, rule_tag));
-    let rule_tag = compose_pair(read_slot_info, ast::Value::SlotInfo);
-    rules.push(rule_pair_boxed(Rule::slot_info, rule_tag));
-    let rule_tag = compose_pair(read_fence_info, ast::Value::FenceInfo);
-    rules.push(rule_pair_boxed(Rule::fence_info, rule_tag));
-    let rule_tag = compose_pair(read_buffer_info, ast::Value::BufferInfo);
-    rules.push(rule_pair_boxed(Rule::buffer_info, rule_tag));
+    let rule = compose_str(read_n, ast::Value::Num);
+    rules.push(rule_str_boxed(Rule::n, rule));
+    let rule = compose_pair(read_fn_name, ast::Value::VarName);
+    rules.push(rule_pair_boxed(Rule::var_name, rule));
+    let rule = compose_pair(read_funclet_loc, ast::Value::FunctionLoc);
+    rules.push(rule_pair_boxed(Rule::funclet_loc, rule));
+    let rule = compose_pair(read_fn_name, ast::Value::FnName);
+    rules.push(rule_pair_boxed(Rule::fn_name, rule));
+    let rule = compose_pair(read_type, ast::Value::Type);
+    rules.push(rule_pair_boxed(Rule::typ, rule));
+    let rule = compose_str(read_place, ast::Value::Place);
+    rules.push(rule_str_boxed(Rule::place, rule));
+    let rule = compose_str(read_stage, ast::Value::Stage);
+    rules.push(rule_str_boxed(Rule::stage, rule));
+    let rule = compose_pair(read_tag, ast::Value::Tag);
+    rules.push(rule_pair_boxed(Rule::tag, rule));
+    let rule = compose_pair(read_slot_info, ast::Value::SlotInfo);
+    rules.push(rule_pair_boxed(Rule::slot_info, rule));
+    let rule = compose_pair(read_fence_info, ast::Value::FenceInfo);
+    rules.push(rule_pair_boxed(Rule::fence_info, rule));
+    let rule = compose_pair(read_buffer_info, ast::Value::BufferInfo);
+    rules.push(rule_pair_boxed(Rule::buffer_info, rule));
 
     expect_vec(rules, pairs, context)
 }
@@ -586,15 +702,17 @@ fn read_ir_type_decl(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::T
     ast::TypeDecl::Local(result)
 }
 
-fn read_ffi_type_decl(s : String, context : &mut Context) -> ast::TypeDecl {
-    context.add_ffi_type(s.to_string());
-    ast::TypeDecl::FFI(read_string(s, context))
+fn read_ffi_type_decl(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TypeDecl {
+    let ffi_typ = expect(rule_ffi_type(), pairs, context);
+    context.add_ffi_type(ffi_typ.clone());
+    ast::TypeDecl::FFI(ffi_typ)
 }
 
 fn read_type_def(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TypeDecl {
-    let ffi_rule = rule_str(Rule::ffi_type, read_ffi_type_decl);
-    let ir_rule = rule_pair(Rule::ir_type_decl, read_ir_type_decl);
-    expect_vec(vec![ffi_rule, ir_rule], pairs, context)
+    let mut rules = Vec::new();
+    rules.push(rule_pair(Rule::ffi_type_decl, read_ffi_type_decl));
+    rules.push(rule_pair(Rule::ir_type_decl, read_ir_type_decl));
+    expect_vec(rules, pairs, context)
 }
 
 fn read_types(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Types {
@@ -602,37 +720,76 @@ fn read_types(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Types {
     expect_all(rule, pairs, context)
 }
 
-fn read_external_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
-    let rule_type = rule_str(Rule::ffi_type, read_string);
-    expect_all(rule_type, pairs, context)
+fn read_external_cpu_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::FFIType> {
+    expect_all(rule_ffi_type(), pairs, context)
 }
 
 fn read_external_cpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ExternalCpuFunction {
-    let rule_output = rule_str_unwrap(Rule::ffi_type_sep, 1, Box::new(read_string));
-    let output_type = expect(rule_output, pairs, context);
+    require_rule(Rule::external_cpu_sep, pairs, context);
+
+    let output_types = vec![expect(rule_ffi_type_sep(), pairs, context)];
     let name = expect(rule_fn_name(), pairs, context);
-    let rule_extern_args = rule_pair(Rule::external_args, read_external_args);
+
+    let rule_extern_args = rule_pair(Rule::external_cpu_args, read_external_cpu_args);
     let input_types = expect(rule_extern_args, pairs, context);
     context.add_cpu_funclet(name.clone());
     ast::ExternalCpuFunction {
         name,
         input_types,
-        output_types : vec![output_type]
+        output_types
     }
+}
+
+fn read_external_gpu_arg(pairs : &mut Pairs<Rule>, context : &mut Context) -> (ast::FFIType, String) {
+    let typ = expect(rule_ffi_type_sep(), pairs, context);
+    let name = expect(rule_var_name(), pairs, context);
+    (typ, name)
+}
+
+fn read_external_gpu_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<(ast::FFIType, String)> {
+    let rule = rule_pair(Rule::external_gpu_arg, read_external_gpu_arg);
+    expect_all(rule, pairs, context)
+}
+
+fn read_external_gpu_body(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<UncheckedDict> {
+    let rule = rule_pair_unwrap(Rule::external_gpu_resource, 1,
+                                Box::new(read_unchecked_dict));
+    expect_all(rule, pairs, context)
 }
 
 fn read_external_gpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ExternalGpuFunction {
-    // TODO: Don't forget to add the ffi_funclet!
-    todo!()
+    require_rule(Rule::external_gpu_sep, pairs, context);
+
+    let output_types = vec![expect(rule_ffi_type_sep(), pairs, context)];
+
+    let name = expect(rule_fn_name(), pairs, context);
+
+    let rule_extern_args = rule_pair(Rule::external_gpu_args, read_external_gpu_args);
+    let input_args = expect(rule_extern_args, pairs, context);
+
+    let shader_module = expect(rule_string_clean(), pairs, context);
+
+    let rule_binding = rule_pair(Rule::external_gpu_body, read_external_gpu_body);
+    let resource_bindings = expect(rule_binding, pairs, context);
+
+    context.add_gpu_funclet(name.clone());
+    ast::ExternalGpuFunction {
+        name,
+        input_args,
+        output_types,
+        shader_module,
+        entry_point: "main".to_string(), // todo: uhhhh, allow syntax perhaps
+        resource_bindings
+    }
 }
 
 fn read_external_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FuncletDef {
-    let extern_name = expect(rule_string(Rule::external_name), pairs, context);
-    match extern_name.trim() {
-        "external_cpu" => ast::FuncletDef::ExternalCPU(read_external_cpu_funclet(pairs, context)),
-        "external_gpu" => ast::FuncletDef::ExternalGPU(read_external_gpu_funclet(pairs, context)),
-        _ => panic!(unexpected(extern_name))
-    }
+    let mut rules = Vec::new();
+    let comp = compose_pair(read_external_cpu_funclet, ast::FuncletDef::ExternalCPU);
+    rules.push(rule_pair_boxed(Rule::external_cpu, comp));
+    let comp = compose_pair(read_external_gpu_funclet, ast::FuncletDef::ExternalGPU);
+    rules.push(rule_pair_boxed(Rule::external_gpu, comp));
+    expect_vec(rules, pairs, context)
 }
 
 fn read_funclet_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::Type> {
@@ -658,144 +815,417 @@ fn read_var_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> String {
     var
 }
 
-fn read_phi_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    let name = read_var_assign(pairs, context);
-    let index_rule = rule_str_unwrap(Rule::phi_right, 1,Box::new(read_n));
-    let index = expect(index_rule, pairs, context);
-    ast::Command::IRNode{ name, node : ast::Node::Phi { index } }
-}
-
-fn rule_phi_command<'a>() -> RuleApp<'a, ast::Command> {
-    rule_pair(Rule::phi_command, read_phi_command)
-}
-
-fn read_return_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
+fn read_return_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TailEdge {
     let var = expect(rule_var_name(), pairs, context);
-    ast::Command::Tail ( ast::TailEdge::Return { var } )
+    ast::TailEdge::Return { var }
 }
 
-fn rule_return_command<'a>() -> RuleApp<'a, ast::Command> {
+fn rule_return_command<'a>() -> RuleApp<'a, ast::TailEdge> {
     rule_pair(Rule::return_command, read_return_command)
+}
+
+fn read_tail_edge(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::TailEdge {
+    let mut rules = Vec::new();
+    rules.push(rule_return_command());
+    expect_vec(rules, pairs, context)
+}
+
+fn read_phi_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let index = expect(rule_n(), pairs, context);
+    ast::Node::Phi { index }
+}
+
+fn rule_phi_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::phi_command, read_phi_command)
 }
 
 fn read_constant(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
     let rule_value = rule_str(Rule::n, read_string);
     let value_string = expect(rule_value, pairs, context);
-    let value = value_string.parse::<i64>().unwrap();
+    let value = value_string.parse::<i64>().unwrap(); // BAD
 
-    let ffi_app = compose_str(read_string, ast::Type::FFI);
-    let rule_ffi = rule_str_boxed(Rule::ffi_type, ffi_app);
-    let type_id = expect(rule_ffi, pairs, context);
+    // let ffi_app = compose_pair(read_ffi_typ, ast::Type::FFI);
+    // let rule_ffi = rule_pair_boxed(Rule::ffi_type, ffi_app);
+    // let type_id = expect(rule_ffi, pairs, context);
+
+    let check_id = expect(rule_ffi_type(), pairs, context);
+
+    if check_id != ast::FFIType::I64 {
+        panic!("Constant can only be i64 for now");
+    }
+
+    let type_id = ast::Type::FFI(ast::FFIType::I64);
 
     ast::Node::ConstantInteger { value, type_id }
 }
 
-fn read_constant_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    let name = read_var_assign(pairs, context);
-    require_rule(Rule::constant_sep, pairs, context);
-    let rule_constant = rule_pair(Rule::constant, read_constant);
-    let node = expect(rule_constant, pairs, context);
-    ast::Command::IRNode{name, node}
+fn read_constant_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let rule = rule_pair(Rule::constant, read_constant);
+    expect(rule, pairs, context)
 }
 
-fn rule_constant_command<'a>() -> RuleApp<'a, ast::Command> {
+fn rule_constant_command<'a>() -> RuleApp<'a, ast::Node> {
     rule_pair(Rule::constant_command, read_constant_command)
 }
 
-fn read_value_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    let mut rules = Vec::new();
-    rules.push(rule_phi_command());
-    rules.push(rule_return_command());
-    rules.push(rule_constant_command());
-    expect_vec(rules, pairs, context)
+fn read_constant_unsigned(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+     // todo: remove this function
+    let rule_value = rule_str(Rule::n, read_string);
+    let value_string = expect(rule_value, pairs, context);
+    let value = value_string.parse::<u64>().unwrap(); // BAD
+
+    let check_id = expect(rule_ffi_type(), pairs, context);
+
+    if check_id != ast::FFIType::U64 {
+        panic!("Unsigned constant can only be u64 for now");
+    }
+
+    let type_id = ast::Type::FFI(ast::FFIType::U64);
+
+    ast::Node::ConstantUnsignedInteger { value, type_id }
 }
 
-fn read_alloc_right(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
-    let place = expect(rule_place(), pairs, context);
-    let storage_type = expect(rule_type(), pairs, context);
-    let operation = expect(rule_funclet_loc(), pairs, context);
-    ast::Node::AllocTemporary {
-        place,
-        storage_type,
-        operation,
+fn read_constant_unsigned_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let rule = rule_pair(Rule::constant, read_constant_unsigned);
+    expect(rule, pairs, context)
+}
+
+fn rule_constant_unsigned_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::constant_unsigned_command, read_constant_unsigned_command)
+}
+
+fn read_extract_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    require_rule(Rule::extract_sep, pairs, context);
+    let node_id = expect(rule_var_name(), pairs, context);
+    let index = expect(rule_n(), pairs, context);
+    ast::Node::ExtractResult { node_id, index }
+}
+
+fn rule_extract_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::extract_command, read_extract_command)
+}
+
+fn read_call_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
+    expect_all(rule_var_name(), pairs, context)
+}
+
+fn read_call_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    require_rule(Rule::call_sep, pairs, context);
+    let external_function_id = expect(rule_fn_name(), pairs, context);
+    let rule = rule_pair(Rule::call_args, read_call_args);
+    let args = expect(rule, pairs, context).into_boxed_slice();
+    match pairs.peek() {
+        None => {
+            // NOTE: semi-arbitrary choice for unification
+            ast::Node::CallExternalCpu { external_function_id, arguments : args }
+        }
+        Some(_) => {
+            let rule = rule_pair(Rule::call_args, read_call_args);
+            let arguments = expect(rule, pairs, context).into_boxed_slice();
+            ast::Node::CallExternalGpuCompute { external_function_id, arguments, dimensions : args }
+        }
     }
 }
 
-fn read_alloc_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    let name = read_var_assign(pairs, context);
-    let rule_alloc_right = rule_pair(Rule::alloc_right, read_alloc_right);
-    let node = expect(rule_alloc_right, pairs, context);
-    ast::Command::IRNode {name, node}
+fn rule_call_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::call_command, read_call_command)
 }
 
-fn rule_alloc_command<'a>() -> RuleApp<'a, ast::Command> {
-    rule_pair(Rule::alloc_command, read_alloc_command)
+fn read_select_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    require_rule(Rule::select_sep, pairs, context);
+    let condition = expect(rule_var_name(), pairs, context);
+    let true_case = expect(rule_var_name(), pairs, context);
+    let false_case = expect(rule_var_name(), pairs, context);
+    ast::Node::Select { condition, true_case, false_case }
+}
+
+fn rule_select_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::select_command, read_select_command)
+}
+
+fn read_value_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let mut rules = Vec::new();
+    rules.push(rule_phi_command());
+    rules.push(rule_constant_command());
+    rules.push(rule_constant_unsigned_command());
+    rules.push(rule_extract_command());
+    rules.push(rule_call_command());
+    rules.push(rule_select_command());
+    expect_vec(rules, pairs, context)
+}
+
+fn read_value_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let name = expect(rule_var_name(), pairs, context);
+    context.add_node(name);
+    let rule = rule_pair(Rule::value_command, read_value_command);
+    expect(rule, pairs, context)
+}
+
+fn read_alloc_temporary_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let place = expect(rule_place(), pairs, context);
+    let storage_type = expect(rule_type(), pairs, context);
+    let operation = expect(rule_funclet_loc(), pairs, context);
+    ast::Node::AllocTemporary { place, storage_type, operation }
+}
+
+fn rule_alloc_temporary_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::alloc_temporary_command, read_alloc_temporary_command)
 }
 
 fn read_do_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
     expect_all(rule_var_name(), pairs, context)
 }
 
-fn read_do_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    let output = expect(rule_var_name(), pairs, context);
+fn read_do_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
     let rule_place = rule_str_unwrap(Rule::do_sep, 1, Box::new(read_place));
     let place = expect(rule_place, pairs, context);
     let operation = expect(rule_funclet_loc(), pairs, context);
     let rule_args = rule_pair(Rule::do_args, read_do_args);
     let inputs = option_to_vec(optional(rule_args, pairs, context));
-    ast::Command::IRNode{
-        name: "".to_string(),
-        node: ast::Node::EncodeDo {
-            place,
-            operation,
-            inputs: inputs.into_boxed_slice(),
-            outputs: Box::new([output]),
-    }}
-}
-
-fn rule_do_command<'a>() -> RuleApp<'a, ast::Command> {
-    rule_pair(Rule::do_command, read_do_command)
-}
-
-fn read_schedule_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    let mut rules = Vec::new();
-    rules.push(rule_phi_command());
-    rules.push(rule_return_command());
-    rules.push(rule_alloc_command());
-    rules.push(rule_do_command());
-    expect_vec(rules, pairs, context)
-}
-
-fn read_timeline_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Command {
-    let mut rules = Vec::new();
-    rules.push(rule_phi_command());
-    rules.push(rule_return_command());
-    expect_vec(rules, pairs, context)
-}
-
-fn read_funclet_blob(kind : ir::FuncletKind, rule_command : RuleApp<ast::Command>,
-pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Funclet {
-    let header = expect(rule_funclet_header(), pairs, context);
-    let commands = expect_all(rule_command, pairs, context);
-    ast::Funclet {
-        kind,
-        header,
-        commands,
+    let output = expect(rule_var_name(), pairs, context);
+    ast::Node::EncodeDo {
+        place,
+        operation,
+        inputs: inputs.into_boxed_slice(),
+        outputs: Box::new([output]),
     }
 }
 
+fn rule_do_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::do_command, read_do_command)
+}
+
+fn read_create_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let place = expect(rule_place(), pairs, context);
+    let storage_type = expect(rule_type(), pairs, context);
+    let operation = expect(rule_funclet_loc(), pairs, context);
+    ast::Node::UnboundSlot { place, storage_type, operation }
+}
+
+fn rule_create_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::create_command, read_create_command)
+}
+
+fn read_drop_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let node = expect(rule_var_name(), pairs, context);
+    ast::Node::Drop { node }
+}
+
+fn rule_drop_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::drop_command, read_drop_command)
+}
+
+fn read_alloc_sep(pairs : &mut Pairs<Rule>, context : &mut Context) -> (ir::Place, ast::Type) {
+    let place = expect(rule_place(), pairs, context);
+    let storage_type = expect(rule_type(), pairs, context);
+    (place, storage_type)
+}
+
+fn read_alloc_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let rule = rule_pair(Rule::alloc_sep, read_alloc_sep);
+    let (place, storage_type) = expect(rule, pairs, context);
+    let buffer = expect(rule_var_name(), pairs, context);
+    let operation = expect(rule_funclet_loc(), pairs, context);
+    ast::Node::StaticAllocFromStaticBuffer { buffer, place, storage_type, operation }
+}
+
+fn rule_alloc_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::alloc_command, read_alloc_command)
+}
+
+fn read_encode_copy_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let rule = rule_str_unwrap(Rule::encode_copy_sep, 1, Box::new(read_place));
+    let place = expect(rule, pairs, context);
+    let input = expect(rule_var_name(), pairs, context);
+    let output = expect(rule_var_name(), pairs, context);
+    ast::Node::EncodeCopy { place, input, output }
+}
+
+fn rule_encode_copy_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::encode_copy_command, read_encode_copy_command)
+}
+
+fn read_encode_fence_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let place = expect(rule_place(), pairs, context);
+    let event = expect(rule_funclet_loc(), pairs, context);
+    ast::Node::EncodeFence { place, event }
+}
+
+fn rule_encode_fence_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::encode_fence_command, read_encode_fence_command)
+}
+
+fn read_submit_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let place = expect(rule_place(), pairs, context);
+    let event = expect(rule_funclet_loc(), pairs, context);
+    ast::Node::Submit { place, event }
+}
+
+fn rule_submit_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::submit_command, read_submit_command)
+}
+
+fn read_sync_fence_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let rule = rule_str_unwrap(Rule::sync_fence_sep, 1, Box::new(read_place));
+    let place = expect(rule, pairs, context);
+    let fence = expect(rule_var_name(), pairs, context);
+    let event = expect(rule_funclet_loc(), pairs, context);
+    ast::Node::SyncFence { place, fence, event }
+}
+
+fn rule_sync_fence_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::sync_fence_command, read_sync_fence_command)
+}
+
+fn read_inline_join_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    require_rule(Rule::inline_join_sep, pairs, context);
+    let funclet = expect(rule_fn_name(), pairs, context);
+    let continuation = expect(rule_var_name(), pairs, context);
+    // empty captures re conversation
+    ast::Node::InlineJoin { funclet, captures: Box::new([]), continuation }
+}
+
+fn rule_inline_join_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::inline_join_command, read_inline_join_command)
+}
+
+fn read_serialized_join_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    require_rule(Rule::serialized_join_sep, pairs, context);
+    let funclet = expect(rule_fn_name(), pairs, context);
+    let continuation = expect(rule_var_name(), pairs, context);
+    ast::Node::InlineJoin { funclet, captures: Box::new([]), continuation }
+}
+
+fn rule_serialized_join_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::serialized_join_command, read_serialized_join_command)
+}
+
+fn read_default_join_command(s : String, context : &mut Context) -> ast::Node {
+    ast::Node::DefaultJoin
+}
+
+fn rule_default_join_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_str(Rule::default_join_command, read_default_join_command)
+}
+
+fn read_schedule_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let mut rules = Vec::new();
+    rules.push(rule_phi_command());
+    rules.push(rule_alloc_command());
+    rules.push(rule_do_command());
+    rules.push(rule_create_command());
+    rules.push(rule_drop_command());
+    rules.push(rule_alloc_temporary_command());
+    rules.push(rule_encode_copy_command());
+    rules.push(rule_encode_fence_command());
+    rules.push(rule_submit_command());
+    rules.push(rule_sync_fence_command());
+    rules.push(rule_inline_join_command());
+    rules.push(rule_serialized_join_command());
+    rules.push(rule_default_join_command());
+    expect_vec(rules, pairs, context)
+}
+
+fn read_schedule_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let name = expect(rule_var_name(), pairs, context);
+    context.add_node(name);
+    let rule = rule_pair(Rule::schedule_command, read_schedule_command);
+    expect(rule, pairs, context)
+}
+
+fn read_sync_sep(pairs : &mut Pairs<Rule>, context : &mut Context) -> (ir::Place, ir::Place) {
+    let place1 = expect(rule_place(), pairs, context);
+    let place2 = expect(rule_place(), pairs, context);
+    (place1, place2)
+}
+
+fn read_sync_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let rule = rule_pair(Rule::sync_sep, read_sync_sep);
+    let (here_place, there_place) = expect(rule, pairs, context);
+    let local_past = expect(rule_var_name(), pairs, context);
+    let remote_local_past = expect(rule_var_name(), pairs, context);
+    ast::Node::SynchronizationEvent {
+        here_place,
+        there_place,
+        local_past,
+        remote_local_past
+    }
+}
+
+fn rule_sync_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::sync_command, read_sync_command)
+}
+
+fn read_submission_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let here_place= expect(rule_place(), pairs, context);
+    let there_place = expect(rule_place(), pairs, context);
+    let local_past = expect(rule_var_name(), pairs, context);
+    ast::Node::SubmissionEvent {
+        here_place,
+        there_place,
+        local_past,
+    }
+}
+
+fn rule_submission_command<'a>() -> RuleApp<'a, ast::Node> {
+    rule_pair(Rule::submission_command, read_submission_command)
+}
+
+fn read_timeline_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let mut rules = Vec::new();
+    rules.push(rule_phi_command());
+    rules.push(rule_sync_command());
+    rules.push(rule_submission_command());
+    expect_vec(rules, pairs, context)
+}
+
+fn read_timeline_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Node {
+    let name = expect(rule_var_name(), pairs, context);
+    context.add_node(name);
+    let rule = rule_pair(Rule::timeline_command, read_timeline_command);
+    expect(rule, pairs, context)
+}
+
+fn read_funclet_blob(kind : ir::FuncletKind, rule_command : RuleApp<ast::Node>,
+pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Funclet {
+    let header = expect(rule_funclet_header(), pairs, context);
+    let mut commands = Vec::new();
+    for pair in pairs {
+        let rule = pair.as_rule();
+        if rule == Rule::tail_edge {
+            let tail_edge = read_tail_edge(&mut pair.into_inner(), context);
+            return ast::Funclet {
+                kind,
+                header,
+                commands,
+                tail_edge
+            };
+        }
+        else if rule == rule_command.rule {
+            commands.push(match &rule_command.application {
+                Application::P(f) => f(&mut pair.into_inner(), context),
+                _ => panic!("Internal error with rules")
+            });
+        }
+        else {
+            panic!(unexpected_rule(&vec![rule_command], rule));
+        }
+    }
+    panic!(format!("No tail edge found for funclet {}", context.funclet_name()))
+}
+
 fn read_value_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Funclet {
-    let rule_command = rule_pair(Rule::value_command, read_value_command);
+    let rule_command = rule_pair(Rule::value_assign, read_value_assign);
     read_funclet_blob(ir::FuncletKind::Value, rule_command, pairs, context)
 }
 
 fn read_schedule_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Funclet {
-    let rule_command = rule_pair(Rule::schedule_command, read_schedule_command);
+    let rule_command = rule_pair(Rule::schedule_assign, read_schedule_assign);
     read_funclet_blob(ir::FuncletKind::ScheduleExplicit, rule_command, pairs, context)
 }
 
 fn read_timeline_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Funclet {
-    let rule_command = rule_pair(Rule::timeline_command, read_timeline_command);
+    let rule_command = rule_pair(Rule::timeline_assign, read_timeline_assign);
     read_funclet_blob(ir::FuncletKind::Timeline, rule_command, pairs, context)
 }
 
@@ -815,9 +1245,31 @@ fn read_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Funcle
 fn read_funclet_def(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FuncletDef {
     let mut rules = Vec::new();
     rules.push(rule_pair(Rule::external_funclet, read_external_funclet));
-    let local_rule = compose_pair(read_funclet, ast::FuncletDef::Local);
-    rules.push(rule_pair_boxed(Rule::funclet, local_rule));
+    let rule = compose_pair(read_funclet, ast::FuncletDef::Local);
+    rules.push(rule_pair_boxed(Rule::funclet, rule));
+    let rule = compose_pair(read_value_function, ast::FuncletDef::ValueFunction);
+    rules.push(rule_pair_boxed(Rule::value_function, rule));
     expect_vec(rules, pairs, context)
+}
+
+fn read_value_function_funclets(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
+    expect_all(rule_fn_name(), pairs, context)
+}
+
+fn read_value_function(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::ValueFunction {
+    require_rule(Rule::value_function_sep, pairs, context);
+    let output_types = vec![expect(rule_type_sep(), pairs, context)];
+    let name = expect(rule_fn_name(), pairs, context);
+
+    let rule = rule_pair(Rule::value_function_args, read_funclet_args);
+    let input_types = expect(rule, pairs, context);
+
+    let rule = rule_pair(Rule::value_function_funclets, read_value_function_funclets);
+    let allowed_funclets = expect(rule, pairs, context);
+
+    context.add_value_function(name.clone());
+
+    ast::ValueFunction { name, input_types, output_types, allowed_funclets } // todo add syntax
 }
 
 fn read_funclets(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FuncletDefs {
@@ -881,8 +1333,8 @@ fn read_definition(pairs : &mut Pairs<Rule>, context : &mut Context) -> frontend
     let program = expect(
         rule_pair(Rule::program, read_program), pairs, context);
 
-    ast_to_ir(program, context)
-    // dbg!(ast_to_ir(program, context));
+    ast_to_ir::transform(program, context)
+    // dbg!(ast_to_ir::transform(program, context));
     // todo!()
 }
 

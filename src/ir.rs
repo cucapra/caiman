@@ -72,7 +72,7 @@ macro_rules! map_refs {
 
 macro_rules! make_nodes {
 	(@ $map:ident {} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
-		#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+		#[derive(Serialize, Deserialize, Debug, Clone)]
 		pub enum Node {
 			$($fields)*
 		}
@@ -138,14 +138,14 @@ pub enum SpatialTag
 	Output{ funclet_id : FuncletId, index : usize },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct StaticBufferLayout
 {
 	pub alignment_bits : usize,
 	pub byte_size : usize
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type
 {
 	NativeValue { storage_type : StorageTypeId },
@@ -165,12 +165,12 @@ pub enum Type
 
 	// Timeline
 	Event { place : Place },
-	
+
 	// Space
 	BufferSpace,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge
 {
 	// Common?
@@ -182,7 +182,7 @@ pub enum TailEdge
 	// Split value - what will be computed
 	ScheduleCall { value_operation : RemoteNodeId, callee_funclet_id : FuncletId, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
 	ScheduleSelect { value_operation : RemoteNodeId, condition : NodeId, callee_funclet_ids : Box<[FuncletId]>, callee_arguments : Box<[NodeId]>, continuation_join : NodeId },
-	
+
 	// Split time - when it will be computed
 	// SyncFence { fence : NodeId, immediate_funclet : FuncletId, deferred_funclet : FuncletId, arguments : Box<[NodeId]>, continuation_join : NodeId },
 
@@ -198,7 +198,7 @@ pub enum FuncletKind
 	Value,
 	ScheduleExplicit,
 	Inline, // Adopts the constraints of the calling funclet
-	Timeline,
+Timeline,
 	Spatial
 }
 
@@ -210,7 +210,7 @@ impl FuncletKind
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet
 {
 	#[serde(default = "FuncletKind::easy_default")]
@@ -222,34 +222,34 @@ pub struct Funclet
 }
 
 // Funclet-relative slot info goes here
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SlotInfo
 {
 	pub value_tag : ValueTag,
 	pub timeline_tag : TimelineTag, // marks the event that put the slot into its current state
-	pub spatial_tag : SpatialTag,
+pub spatial_tag : SpatialTag,
 }
 
 // Funclet-relative join info goes here
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct JoinInfo
 {
 	// To do: Which subregions of resources are reserved by this join
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FenceInfo
 {
 	pub timeline_tag : TimelineTag,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BufferInfo
 {
 	pub spatial_tag : SpatialTag,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SchedulingFuncletExtra
 {
 	pub value_funclet_id : FuncletId,
@@ -261,7 +261,7 @@ pub struct SchedulingFuncletExtra
 	pub input_buffers : HashMap<usize, BufferInfo>,
 	pub output_buffers : HashMap<usize, BufferInfo>,
 	//pub input_joins : HashMap<usize, JoinInfo>,
-	
+
 	// Applies to the computation itself
 	pub in_timeline_tag : TimelineTag,
 	pub out_timeline_tag : TimelineTag,
@@ -274,7 +274,7 @@ pub struct CompatibleValueFunctionKey
 	pub capture_count : usize
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValueFuncletExtra
 {
 	// Value functions this funclet implements and the number of captures
@@ -284,7 +284,7 @@ pub struct ValueFuncletExtra
 
 // A value function is just an equivalence class over functions that behave identically at the value level
 // A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValueFunction
 {
 	pub name : String,
@@ -293,7 +293,7 @@ pub struct ValueFunction
 	pub default_funclet_id : Option<FuncletId>
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pipeline
 {
 	pub name : String,
@@ -303,7 +303,7 @@ pub struct Pipeline
 }
 
 // Callee is permitted to change the location of slots within a buffer, the size of a space, and the timeline
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PipelineYieldPoint
 {
 	pub name : String,
@@ -315,7 +315,7 @@ pub struct PipelineYieldPoint
 	pub spatial_funclet_id : FuncletId,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Program
 {
 	#[serde(default)]

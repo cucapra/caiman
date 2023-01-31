@@ -27,7 +27,7 @@ fn compile(input_file: &mut File, output_file: &mut File) {
 }
 
 fn compile_target(filename : &str) {
-    let inp = format!("src/programs/{}.caimanir", filename);
+    let inp = format!("src/programs/{}.cair", filename);
     let input_path = Path::new(&inp);
     let mut input_file = match File::open(&input_path) {
         Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),

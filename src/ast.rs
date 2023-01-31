@@ -8,8 +8,47 @@ use serde_derive::{Serialize, Deserialize};
 // Parser "AST"
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub struct FFIStructField
+{
+	pub name : String,
+	pub type_id : TypeId,
+	pub byte_offset : usize,
+	pub byte_size : usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub enum FFIType
+{
+	// Value types
+	F32,
+	F64,
+	U8,
+	U16,
+	U32,
+	U64,
+	USize,
+	I8,
+	I16,
+	I32,
+	I64,
+	Array { element_type : Box<FFIType>, length : usize },
+	ErasedLengthArray ( Box<FFIType> ),
+	Struct { fields : Box<[FFIStructField]>, byte_alignment : Option<usize>, byte_size : Option<usize> },
+	Tuple ( Vec<FFIType> ),
+
+	// Reference types
+	ConstRef ( Box<FFIType> ),
+	MutRef ( Box<FFIType> ),
+	ConstSlice ( Box<FFIType> ),
+	MutSlice ( Box<FFIType> ),
+	GpuBufferRef ( Box<FFIType> ),
+	GpuBufferSlice ( Box<FFIType> ),
+	GpuBufferAllocator,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum Type {
-	FFI(String),
+	FFI(FFIType),
 	Local(String)
 }
 
@@ -105,18 +144,9 @@ pub struct BufferInfo {
 	pub spatial_tag : SpatialTag,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TailEdge {
 	Return{ var : String }
-}
-
-#[derive(Debug)]
-pub enum Command {
-	IRNode{
-		node : Node,
-		name : String
-	},
-	Tail(TailEdge)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -158,6 +188,7 @@ pub enum Value {
     FunctionLoc(RemoteNodeId),
     VarName(String),
     FnName(String),
+	Num(usize),
     Type(Type),
     Place(ir::Place),
     Stage(ir::ResourceQueueStage),
@@ -176,7 +207,7 @@ pub enum DictValue {
 
 pub type UncheckedDict = HashMap<Value, DictValue>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncletHeader {
 	pub ret : Type,
 	pub name : String,
@@ -187,7 +218,8 @@ pub struct FuncletHeader {
 pub struct Funclet {
 	pub kind : ir::FuncletKind,
 	pub header : FuncletHeader,
-	pub commands : Vec<Command>
+	pub commands : Vec<Node>,
+	pub tail_edge : TailEdge
 }
 
 #[derive(Debug)]
@@ -199,7 +231,7 @@ pub struct LocalType {
 
 #[derive(Debug)]
 pub enum TypeDecl {
-    FFI(String),
+    FFI(FFIType),
     Local(LocalType)
 }
 
@@ -214,21 +246,20 @@ pub struct Var {
 pub struct ExternalCpuFunction
 {
 	pub name : String,
-	pub input_types : Vec<String>,
-	pub output_types : Vec<String>,
+	pub input_types : Vec<FFIType>,
+	pub output_types : Vec<FFIType>,
 }
 
 #[derive(Debug)]
 pub struct ExternalGpuFunction
 {
 	pub name : String,
-	pub input_types : Vec<String>,
-	pub output_types : Vec<String>,
+	pub input_args : Vec<(FFIType, String)>,
+	pub output_types : Vec<FFIType>,
 	// Contains pipeline and single render pass state
+	pub shader_module : String,
 	pub entry_point : String,
-	pub resource_bindings : Vec<ffi::ExternalGpuFunctionResourceBinding>,
-	pub shader_module_content : ffi::ShaderModuleContent,
-	//pub shader_module : usize,
+	pub resource_bindings : Vec<UncheckedDict>, // do the work later
 }
 
 #[derive(Debug)]
@@ -239,10 +270,19 @@ pub struct Version {
 }
 
 #[derive(Debug)]
+pub struct ValueFunction {
+	pub name : String,
+	pub input_types : Vec<TypeId>,
+	pub output_types : Vec<TypeId>,
+	pub allowed_funclets : Vec<FuncletId>
+}
+
+#[derive(Debug)]
 pub enum FuncletDef {
 	ExternalCPU(ExternalCpuFunction),
 	ExternalGPU(ExternalGpuFunction),
-	Local(Funclet)
+	Local(Funclet),
+	ValueFunction(ValueFunction)
 }
 
 pub type FuncletDefs = Vec<FuncletDef>;

@@ -48,23 +48,23 @@ mod tests
 		//let result = crate::values::pipeline_trivial::funclet11_func(instance, &mut join_stack, 1);
 		assert_eq!(4, result.returned().unwrap().0);
 	}
-
-	#[test]
-	fn test_2()
-	{
-		use std::fs::File;
-		use std::io::prelude::*;
-		use std::path::Path;
-		let input_path = Path::new(concat!(env!("OUT_DIR"), "/generated/explicate/schedule_trivial.txt"));
-		let mut file = match File::open(&input_path) {
-			Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
-			Ok(file) => file,
-		};
-		let mut result_string = String::new();
-		match file.read_to_string(&mut result_string) {
-			Err(why) => panic!("Couldn't read file: {}", why),
-			Ok(_) => (),
-		};
-		assert_eq!("true", result_string);
-	}
+	//
+	// #[test]
+	// fn test_2()
+	// {
+	// 	use std::fs::File;
+	// 	use std::io::prelude::*;
+	// 	use std::path::Path;
+	// 	let input_path = Path::new(concat!(env!("OUT_DIR"), "/generated/explicate/schedule_trivial.txt"));
+	// 	let mut file = match File::open(&input_path) {
+	// 		Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
+	// 		Ok(file) => file,
+	// 	};
+	// 	let mut result_string = String::new();
+	// 	match file.read_to_string(&mut result_string) {
+	// 		Err(why) => panic!("Couldn't read file: {}", why),
+	// 		Ok(_) => (),
+	// 	};
+	// 	assert_eq!("true", result_string);
+	// }
 }

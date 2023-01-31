@@ -5,10 +5,62 @@ use crate::{ast, frontend, ir};
 use crate::ir::{ffi, FuncletKind};
 use crate::arena::Arena;
 use crate::assembly::{context, parser};
-use crate::ast::DictValue;
-use crate::assembly::context::Context;
+use crate::ast::{DictValue, FFIType};
+use crate::assembly::context::{Context, FuncletLocation};
+
+// for reading GPU stuff
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 // Utility
+
+fn ffi_to_ffi(value : ast::FFIType, context : &mut Context) -> ffi::Type {
+    fn box_map(b : Box<[ast::FFIType]>, context : &mut Context) -> Box<[ffi::TypeId]> {
+        b.iter().map(|x| ffi::TypeId(*context.ffi_type_id(x))).collect()
+    }
+    fn type_id(element_type : Box<ast::FFIType>, context : &mut Context) -> ffi::TypeId {
+        ffi::TypeId(*context.ffi_type_id(element_type.as_ref()))
+    }
+    match value {
+        FFIType::F32 => ffi::Type::F32,
+        FFIType::F64 => ffi::Type::F64,
+        FFIType::U8 => ffi::Type::U8,
+        FFIType::U16 => ffi::Type::U16,
+        FFIType::U32 => ffi::Type::U32,
+        FFIType::U64 => ffi::Type::U64,
+        FFIType::USize => ffi::Type::USize,
+        FFIType::I8 => ffi::Type::I8,
+        FFIType::I16 => ffi::Type::I16,
+        FFIType::I32 => ffi::Type::I32,
+        FFIType::I64 => ffi::Type::I64,
+        FFIType::Array { element_type, length } => ffi::Type::Array {
+            element_type: type_id(element_type, context),
+            length
+        },
+        FFIType::ErasedLengthArray(element_type) =>
+            ffi::Type::ErasedLengthArray { element_type: type_id(element_type, context) },
+        FFIType::Struct { fields,
+            byte_alignment,
+            byte_size } => todo!(),
+        FFIType::Tuple(element_types) => ffi::Type::Tuple {
+            fields: box_map(element_types.into_boxed_slice(), context),
+        },
+        FFIType::ConstRef(element_type) =>
+            ffi::Type::ConstRef { element_type: type_id(element_type, context) },
+        FFIType::MutRef(element_type) =>
+            ffi::Type::MutRef { element_type: type_id(element_type, context) },
+        FFIType::ConstSlice(element_type) =>
+            ffi::Type::ConstSlice { element_type: type_id(element_type, context) },
+        FFIType::MutSlice(element_type) =>
+            ffi::Type::MutSlice { element_type: type_id(element_type, context) },
+        FFIType::GpuBufferRef(element_type) =>
+            ffi::Type::GpuBufferRef { element_type: type_id(element_type, context) },
+        FFIType::GpuBufferSlice(element_type) =>
+            ffi::Type::GpuBufferSlice { element_type: type_id(element_type, context) },
+        FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator
+    }
+}
 
 fn as_key(k : &str) -> ast::Value {
     ast::Value::ID(k.to_string())
@@ -47,6 +99,14 @@ fn value_string(d : &ast::DictValue, context : &mut Context) -> String {
     }
 }
 
+fn value_num(d : &ast::DictValue, context : &mut Context) -> usize {
+    let v = as_value(d.clone());
+    match v {
+        ast::Value::Num(n) => n.clone(),
+        _ => panic!(format!("Expected num got {:?}", v))
+    }
+}
+
 fn value_function_loc(d : &ast::DictValue, context : &mut Context) -> ir::RemoteNodeId {
     let v = as_value(d.clone());
     match v {
@@ -66,10 +126,10 @@ fn value_var_name(d : &ast::DictValue, context : &mut Context) -> usize {
     }
 }
 
-fn value_funclet_name(d : &ast::DictValue, context : &mut Context) -> context::Location {
+fn value_funclet_name(d : &ast::DictValue, context : &mut Context) -> context::FuncletLocation {
     let v = as_value(d.clone());
     match v {
-        ast::Value::FnName(s) => context.funclet_id(s.clone()),
+        ast::Value::FnName(s) => context.funclet_id(s.clone()).clone(),
         _ => panic!(format!("Expected funclet name got {:?}", v))
     }
 }
@@ -78,8 +138,8 @@ fn value_type(d : &ast::DictValue, context : &mut Context) -> context::Location 
     let v = as_value(d.clone());
     match v {
         ast::Value::Type(t) => match t {
-            ast::Type::FFI(name) => context::Location::FFI(
-                *context.ffi_type_id(name.clone())),
+            ast::Type::FFI(typ) => context::Location::FFI(
+                *context.ffi_type_id(&typ)),
             ast::Type::Local(name) => context::Location::Local(
                 *context.local_type_id(name.clone()))
         }
@@ -285,16 +345,90 @@ fn ir_external_cpu(external : &ast::ExternalCpuFunction, context : &mut Context)
     let mut output_types = Vec::new();
 
     for name in &external.input_types {
-        input_types.push(ffi::TypeId(*context.ffi_type_id(name.clone())))
+        input_types.push(ffi::TypeId(*context.ffi_type_id(name)))
     }
     for name in &external.output_types {
-        output_types.push(ffi::TypeId(*context.ffi_type_id(name.clone())))
+        output_types.push(ffi::TypeId(*context.ffi_type_id(name)))
     }
 
     ffi::ExternalCpuFunction {
         name: external.name.clone(),
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
+    }
+}
+
+fn ir_external_gpu_resource(d : &ast::UncheckedDict, arg_names : &Vec<String>, context : &mut Context)
+    -> ffi::ExternalGpuFunctionResourceBinding {
+    fn local_name(d : &ast::DictValue, arg_names : &Vec<String>) -> usize {
+        let v = as_value(d.clone());
+        match v {
+            ast::Value::VarName(n) => {
+                let mut index = 0;
+                for arg in arg_names {
+                    if n == *arg {
+                        return index
+                    }
+                    index += 1;
+                }
+                panic!(format!("Unknown GPU variable {:?}", n))
+            }
+            _ => panic!(format!("Invalid argument {:?}", d))
+        }
+    }
+    let group = value_num(d.get(&as_key("group")).unwrap(), context);
+    let binding = value_num(d.get(&as_key("binding")).unwrap(), context);
+    let mut input = None;
+    if d.contains_key(&as_key("input")) {
+        input = Some(local_name(d.get(&as_key("input")).unwrap(), arg_names));
+    }
+    let mut output = None;
+    if d.contains_key(&as_key("output")) {
+        output = Some(local_name(d.get(&as_key("output")).unwrap(), arg_names));
+    }
+    ffi::ExternalGpuFunctionResourceBinding { group, binding, input, output }
+}
+
+fn ir_external_gpu(external : &ast::ExternalGpuFunction, context : &mut Context)
+    -> ffi::ExternalGpuFunction {
+    let mut input_types = Vec::new();
+    let mut arg_names = Vec::new();
+    let mut output_types = Vec::new();
+    let mut resource_bindings = Vec::new();
+
+    for name in &external.input_args {
+        input_types.push(ffi::TypeId(*context.ffi_type_id(&name.0)));
+        arg_names.push(name.1.clone());
+    }
+    for name in &external.output_types {
+        output_types.push(ffi::TypeId(*context.ffi_type_id(name)))
+    }
+    for resource in &external.resource_bindings {
+        resource_bindings.push(ir_external_gpu_resource(resource, &arg_names, context));
+    }
+
+    // Very silly
+    let input_path = Path::new(&external.shader_module);
+    assert!(external.shader_module.ends_with(".wgsl"));
+    let mut input_file = match File::open(& input_path)
+    {
+        Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
+        Ok(file) => file
+    };
+    let mut content = String::new();
+    match input_file.read_to_string(&mut content)
+    {
+        Err(why) => panic!("Couldn't read file: {}", why),
+        Ok(_) => ()
+    };
+
+    ffi::ExternalGpuFunction {
+        name: external.name.clone(),
+        input_types: input_types.into_boxed_slice(),
+        output_types: output_types.into_boxed_slice(),
+        entry_point: external.entry_point.clone(),
+        resource_bindings : resource_bindings.into_boxed_slice(),
+        shader_module_content : ffi::ShaderModuleContent::Wgsl(content),
     }
 }
 
@@ -306,7 +440,7 @@ fn ir_native_interface(program : &ast::Program, context : &mut Context) -> ffi::
     for typ in &program.types {
         match typ {
             ast::TypeDecl::FFI(t) => {
-                types.create(parser::read_ffi_raw(t.clone(), context));
+                types.create(ffi_to_ffi(t.clone(), context));
             }
             _ => {}
         }
@@ -318,7 +452,7 @@ fn ir_native_interface(program : &ast::Program, context : &mut Context) -> ffi::
                 external_cpu_functions.create(ir_external_cpu(external, context));
             },
             ast::FuncletDef::ExternalGPU(external) => {
-                todo!()
+                external_gpu_functions.create(ir_external_gpu(external, context));
             },
             _ => {}
         }
@@ -356,7 +490,7 @@ fn ir_types(types : &Vec<ast::TypeDecl>, context : &mut Context) -> Arena<ir::Ty
             }
             ast::TypeDecl::FFI(name) => {
                 ir::Type::NativeValue {
-                    storage_type: ffi::TypeId(*context.ffi_type_id(name.clone()))
+                    storage_type: ffi::TypeId(*context.ffi_type_id(name))
                 }
             }
         };
@@ -388,7 +522,7 @@ fn ir_node(node : &ast::Node, context : &mut Context) -> ir::Node {
             }
         },
         ast::Node::CallValueFunction { function_id, arguments } => {
-            todo!()
+            unimplemented!() // arbitrary trick for unification of calls
         },
         ast::Node::Select { condition, true_case, false_case } => {
             ir::Node::Select {
@@ -398,8 +532,15 @@ fn ir_node(node : &ast::Node, context : &mut Context) -> ir::Node {
             }
         },
         ast::Node::CallExternalCpu { external_function_id, arguments } => {
+            let name = external_function_id.clone();
+            let external_function_id = *match context.funclet_id(name.clone()) {
+                FuncletLocation::Local(_) => panic!(format!("Cannot directly call local funclet {}", name)),
+                FuncletLocation::ValueFun(i) => i,
+                FuncletLocation::CpuFun(i) => i,
+                FuncletLocation::GpuFun(i) => i
+            };
             ir::Node::CallExternalCpu {
-                external_function_id: *context.cpu_funclet_id(external_function_id.clone()),
+                external_function_id,
                 arguments: arguments.iter().map(|n| *context.node_id(n.clone())).collect(),
             }
         },
@@ -532,7 +673,6 @@ fn ir_funclet(funclet : &ast::Funclet, context : &mut Context) -> ir::Funclet {
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
-    let mut tail_edge = None;
 
     for input_type in &funclet.header.args {
         input_types.push(*context.loc_type_id(input_type.clone()))
@@ -540,39 +680,18 @@ fn ir_funclet(funclet : &ast::Funclet, context : &mut Context) -> ir::Funclet {
 
     output_types.push(*context.loc_type_id(funclet.header.ret.clone()));
 
-    let mut index = 0;
-    if funclet.commands.len() == 0 {
-        panic!(format!("Empty funclet {:?}", funclet.header.name));
+    for node in &funclet.commands {
+        nodes.push(ir_node(node, context));
     }
-    let l = funclet.commands.len() - 1;
-    for command in &funclet.commands {
-        match command {
-            ast::Command::IRNode{name, node} => {
-                if index < l {
-                    nodes.push(ir_node(node, context));
-                } else {
-                    panic!(format!("Last command must be a tail edge in {:?}", funclet.header.name));
-                }
-            },
-            ast::Command::Tail(t) => {
-                if index == l {
-                    tail_edge = Some(ir_tail_edge(t, context));
-                } else {
-                    panic!(format!("Unexpected tail edge before the last command in {:?}",
-                                   funclet.header.name));
-                }
-            }
-        }
 
-        index += 1;
-    }
+    let tail_edge = ir_tail_edge(&funclet.tail_edge, context);
 
     ir::Funclet {
         kind: funclet.kind.clone(),
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         nodes: nodes.into_boxed_slice(),
-        tail_edge: tail_edge.unwrap(), // actually safe, oddly enough
+        tail_edge // actually safe, oddly enough
     }
 }
 
@@ -587,6 +706,46 @@ fn ir_funclets(funclets : &ast::FuncletDefs, context : &mut Context) -> Arena<ir
         }
     }
     context.clear_local_funclet();
+    result
+}
+
+fn ir_value_function(function : &ast::ValueFunction, context : &mut Context) -> ir::ValueFunction {
+    let mut input_types = Vec::new();
+    let mut output_types = Vec::new();
+    let mut default_funclet_id = None;
+
+    for typ in &function.input_types {
+        input_types.push(*context.loc_type_id(typ.clone()));
+    }
+    for typ in &function.output_types {
+        output_types.push(*context.loc_type_id(typ.clone()));
+    }
+    if function.allowed_funclets.len() > 0 {
+        let name = function.allowed_funclets.get(0).unwrap();
+        let index = match context.funclet_id(name.clone()) {
+            context::FuncletLocation::Local(i) => i,
+            _ => panic!(format!("Non-local funclet used for value function {}", name))
+        };
+        default_funclet_id = Some(*index);
+    }
+
+    ir::ValueFunction {
+        name: function.name.clone(),
+        input_types: input_types.into_boxed_slice(),
+        output_types: output_types.into_boxed_slice(),
+        default_funclet_id,
+    }
+}
+
+fn ir_value_functions(funclets : &ast::FuncletDefs, context : &mut Context) -> Arena<ir::ValueFunction> {
+    let mut result = Arena::new();
+    for def in funclets {
+        match def {
+            ast::FuncletDef::ValueFunction(f) => {
+                result.create(ir_value_function(f, context)); },
+            _ => {}
+        }
+    }
     result
 }
 
@@ -638,8 +797,10 @@ fn ir_value_extras(funclets : &ast::FuncletDefs, extras : &ast::Extras, context 
 
 fn ir_scheduling_extra(d: &ast::UncheckedDict, context : &mut Context) -> ir::SchedulingFuncletExtra {
     let index = match value_funclet_name(d.get(&as_key("value")).unwrap(), context) {
-        context::Location::Local(n) => n,
-        context::Location::FFI(n) => n
+        context::FuncletLocation::Local(n) => n,
+        context::FuncletLocation::GpuFun(n) => n,
+        context::FuncletLocation::CpuFun(n) => n,
+        context::FuncletLocation::ValueFun(n) => n
     };
     ir::SchedulingFuncletExtra {
         value_funclet_id: index,
@@ -692,14 +853,14 @@ fn ir_program(program : ast::Program, context : &mut Context) -> ir::Program {
         native_interface: ir_native_interface(&program, context),
         types: ir_types(&program.types, context),
         funclets: ir_funclets(&program.funclets, context),
-        value_functions: Arena::new(),
+        value_functions: ir_value_functions(&program.funclets, context),
         pipelines: ir_pipelines(&program.pipelines, context),
         value_funclet_extras: ir_value_extras(&program.funclets, &program.extras, context),
         scheduling_funclet_extras: ir_scheduling_extras(&program.funclets, &program.extras, context),
     }
 }
 
-pub fn ast_to_ir(program : ast::Program, context : &mut Context) -> frontend::Definition {
+pub fn transform(program : ast::Program, context : &mut Context) -> frontend::Definition {
     frontend::Definition {
         version: ir_version(&program.version, context),
         program: ir_program(program, context),
