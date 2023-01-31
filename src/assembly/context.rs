@@ -207,7 +207,7 @@ impl Context {
     pub fn ffi_type_id(&mut self, name : &ast::FFIType) -> &usize {
         match self.ffi_type_map.get(name) {
             Some(i) => i,
-            None => panic!(format!("Unknown FFI type {:?}", name))
+            None => panic!(format!("Un-indexed FFI type {:?}", name))
         }
     }
 

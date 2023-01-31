@@ -1,9 +1,9 @@
 version 0.0.1
 
 types [
-    i32,
+    i64,
     slot $slot0 {
-        type : i32,
+        type : i64,
         stage : ready,
         place : local,
     },
@@ -12,18 +12,18 @@ types [
     },
 ]
 
-external_cpu i32 @do_thing_on_cpu(i32);
+external_cpu i64 @do_thing_on_cpu(i64);
 
-value i32 @foo(i32) {
+value i64 @foo(i64) {
     %0 = phi 0;
-    %1 = constant 4i32;
+    %1 = constant 4i64;
     return %1;
 }
 
 schedule $slot0 @bar($slot0) {
     %0 = phi 0;
-    %x = alloc-local-i32 @foo.%1;
-    %x <- do-local @foo.%1();
+    %x = alloc-temporary-local-i64 @foo.%1;
+    %1 = encode-do-local @foo.%1() -> %x;
     return %x;
 }
 

@@ -1340,13 +1340,13 @@ fn read_definition(pairs : &mut Pairs<Rule>, context : &mut Context) -> frontend
 
 pub fn parse(code : &str) ->
 Result<frontend::Definition, frontend::CompileError> {
-    std::env::set_var("RUST_BACKTRACE", "1"); // help with debugging I guess
+    // std::env::set_var("RUST_BACKTRACE", "1"); // help with debugging I guess
     let parsed = IRParser::parse(Rule::program, code);
     let mut context = new_context();
     let result = match parsed {
         Err(why) => Err(crate::frontend::CompileError{ message: (format!("{}", why)) }),
         Ok(mut parse_result) => Ok(read_definition(&mut parse_result, &mut context))
     };
-    std::env::set_var("RUST_BACKTRACE", "0"); // help with debugging I guess
+    // std::env::set_var("RUST_BACKTRACE", "0"); // help with debugging I guess
     result
 }
