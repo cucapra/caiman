@@ -7,7 +7,7 @@ types [
     tuple<f32, u8>,const_ref<u64>,mut_ref<const_ref<u64>>,const_slice<array<i32, 2>>,mut_slice<i32>,
     gpu_buffer_ref<i32>,gpu_buffer_slice<i32>,gpu_buffer_allocator,
     slot $slot0 {
-        type : i32,
+        type : i64,
         stage : ready,
         place : local,
     },
@@ -18,9 +18,9 @@ types [
 
 // ---
 
-external_cpu i32 @do_thing_on_cpu(i32);
+external_cpu i64 @do_thing_on_cpu(i64);
 // the path is required, and is relative to where you run this thing at the moment (unfortunately)
-external_gpu i32 @do_thing_on_gpu(i32 %x) : "caiman-test/src/programs/example.wgsl"
+external_gpu i64 @do_thing_on_gpu(%x : i64) : "caiman-test/src/programs/example.wgsl"
 {
     resource {
         group : 0,
@@ -34,8 +34,7 @@ external_gpu i32 @do_thing_on_gpu(i32 %x) : "caiman-test/src/programs/example.wg
     }
 }
 
-value i32 @foo(i32) {
-    %0 = phi 0;
+value i32 @foo(%test : i32) {
     %1 = constant 4i64;
     %3 = constant-unsigned 4u64;
     %2 = extract %1 0;
@@ -46,8 +45,7 @@ value i32 @foo(i32) {
     return %1; // todo: add more tail edges
 }
 
-schedule $slot0 @bar($slot0) {
-    %0 = phi 0;
+schedule $slot0 @bar(%0 : $slot0) {
     %x = alloc-temporary-local-i64 @foo.%1;
     %2 = encode-do-local @foo.%1() -> %x;
     %1 = create-local-i64 @foo.%x; // unbound slot
@@ -63,11 +61,10 @@ schedule $slot0 @bar($slot0) {
     return %x;
 }
 
-timeline $event0 @time($event0) {
-    %0 = phi 0;
-    %1 = submission-cpu->gpu %0;
-    %2 = sync-cpu->gpu %0 %1;
-    return %0;
+timeline $event0 @time(%e : $event0) {
+    %1 = submission-cpu->gpu %e;
+    %2 = sync-cpu->gpu %e %1;
+    return %e;
 }
 
 value_function i64 @simple(i64) : [@foo];
@@ -78,17 +75,17 @@ extras {
     @bar {
         value : @foo,
         input_slots : {
-            %0 : slot_info(value_tag input @foo.%0)
+            %0 : slot_info(value_tag input @foo.%test)
         },
         output_slots : {
             %0 : slot_info()
         },
         input_fences : {%0:fence_info(timeline_tag none)},
         output_fences : {},
-        input_buffers : {%0:buffer_info(spatial_tag output @foo.%0)},
+        input_buffers : {%0:buffer_info(spatial_tag output @foo.%test)},
         output_buffers : {},
-        in_timeline_tag : timeline_tag input @time.%0,
-        out_timeline_tag : timeline_tag input @time.%0,
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
     },
 }
 

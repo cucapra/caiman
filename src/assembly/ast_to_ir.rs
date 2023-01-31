@@ -674,8 +674,13 @@ fn ir_funclet(funclet : &ast::Funclet, context : &mut Context) -> ir::Funclet {
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
 
+    let mut index = 0;
     for input_type in &funclet.header.args {
-        input_types.push(*context.loc_type_id(input_type.clone()))
+        match input_type.0.clone() { // adding the phi node
+            None => {},
+            Some(s) => { nodes.push(ir::Node::Phi { index } ) }
+        };
+        input_types.push(*context.loc_type_id(input_type.1.clone()))
     }
 
     output_types.push(*context.loc_type_id(funclet.header.ret.clone()));

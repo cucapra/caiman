@@ -741,8 +741,8 @@ fn read_external_cpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -
 }
 
 fn read_external_gpu_arg(pairs : &mut Pairs<Rule>, context : &mut Context) -> (ast::FFIType, String) {
-    let typ = expect(rule_ffi_type_sep(), pairs, context);
     let name = expect(rule_var_name(), pairs, context);
+    let typ = expect(rule_ffi_type(), pairs, context);
     (typ, name)
 }
 
@@ -792,16 +792,34 @@ fn read_external_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> as
     expect_vec(rules, pairs, context)
 }
 
-fn read_funclet_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::Type> {
-    expect_all(rule_type(), pairs, context)
+fn read_funclet_arg(pairs : &mut Pairs<Rule>, context : &mut Context) -> (Option<String>, ast::Type) {
+    let pair = pairs.next().unwrap();
+    let rule = pair.as_rule();
+    match rule {
+        Rule::var_name => {
+            // You gotta add the phi node when translating IRs when you do this!
+            let var = read_var_name(&mut pair.into_inner(), context);
+            context.add_node(var.clone());
+            let typ = expect(rule_type(), pairs, context);
+            (Some(var), typ)
+        },
+        Rule::typ => (None, read_type(&mut pair.into_inner(), context)),
+        _ => panic!(unexpected_rule_raw(vec![Rule::var_name, Rule::typ], rule))
+    }
+}
+
+fn read_funclet_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<(Option<String>, ast::Type)> {
+    let rule = rule_pair(Rule::funclet_arg, read_funclet_arg);
+    expect_all(rule, pairs, context)
 }
 
 fn read_funclet_header(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::FuncletHeader {
     let ret = expect(rule_type_sep(), pairs, context);
     let name = expect(rule_fn_name(), pairs, context);
+    context.add_local_funclet(name.clone());
+
     let rule_args = rule_pair(Rule::funclet_args, read_funclet_args);
     let args = option_to_vec(optional(rule_args, pairs, context));
-    context.add_local_funclet(name.clone());
     ast::FuncletHeader { ret, name, args }
 }
 
@@ -1252,6 +1270,10 @@ fn read_funclet_def(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast::Fu
     expect_vec(rules, pairs, context)
 }
 
+fn read_value_function_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<ast::Type> {
+    expect_all(rule_type(), pairs, context)
+}
+
 fn read_value_function_funclets(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
     expect_all(rule_fn_name(), pairs, context)
 }
@@ -1261,7 +1283,7 @@ fn read_value_function(pairs : &mut Pairs<Rule>, context : &mut Context) -> ast:
     let output_types = vec![expect(rule_type_sep(), pairs, context)];
     let name = expect(rule_fn_name(), pairs, context);
 
-    let rule = rule_pair(Rule::value_function_args, read_funclet_args);
+    let rule = rule_pair(Rule::value_function_args, read_value_function_args);
     let input_types = expect(rule, pairs, context);
 
     let rule = rule_pair(Rule::value_function_funclets, read_value_function_funclets);
