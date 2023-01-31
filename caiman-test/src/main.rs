@@ -9,7 +9,7 @@ struct Callbacks;
 
 impl values::pipeline_trivial::CpuFunctions for Callbacks
 {
-	fn do_thing_on_cpu(& self, state : &mut dyn caiman_rt::State, value : i32 )
+	fn do_thing_on_cpu(& self, state : &mut dyn caiman_rt::State, value : i64 )
 					   -> values::pipeline_trivial::outputs::do_thing_on_cpu
 	{
 		return ( value + 1, );
