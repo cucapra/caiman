@@ -1,0 +1,160 @@
+(
+    version: (0, 0, 1),
+    program: (
+        native_interface: (
+            types: [
+                (0, I64),
+            ],
+            external_cpu_functions: [
+                (0, (
+                    name: "do_thing_on_cpu",
+                    input_types: [
+                        (0),
+                    ],
+                    output_types: [
+                        (0),
+                    ],
+                )),
+            ],
+            external_gpu_functions: [],
+        ),
+        types: [
+            (0, NativeValue(
+                storage_type: (0),
+            )),// [0]
+            (1, Slot(
+                storage_type: (0),
+                queue_stage: Ready,
+                queue_place: Local,
+            )),// [1]
+            (2, Event(
+                place: Local,
+            )),
+        ],
+        funclets: [
+            (0, (
+                kind: Value,
+                input_types: [
+                    0,
+                ],
+                output_types: [
+                    0,
+                ],
+                nodes: [
+                    Phi(
+                        index: 0,
+                    ),// [0]
+                    ConstantInteger(
+                        value: 4,
+                        type_id: 0,
+                    ),
+                ],
+                tail_edge: Return(
+                    return_values: [
+                        1,
+                    ],
+                ),
+            )),// [0]
+            (1, (
+                kind: ScheduleExplicit,
+                input_types: [
+                    1,
+                ],
+                output_types: [
+                    1,
+                ],
+                nodes: [
+                    Phi(
+                        index: 0,
+                    ),// [0]
+                    AllocTemporary(
+                        place: Local,
+                        storage_type: (0),
+                        operation: (
+                            funclet_id: 0,
+                            node_id: 1,
+                        ),
+                    ),// [1]
+                    EncodeDo(
+                        place: Local,
+                        operation: (
+                            funclet_id: 0,
+                            node_id: 1,
+                        ),
+                        inputs: [],
+                        outputs: [
+                            1,
+                        ],
+                    ),
+                ],
+                tail_edge: Return(
+                    return_values: [
+                        1,
+                    ],
+                ),
+            )),// [1]
+            (2, (
+                kind: Timeline,
+                input_types: [
+                    2,
+                ],
+                output_types: [
+                    2,
+                ],
+                nodes: [
+                    Phi(
+                        index: 0,
+                    ),
+                ],
+                tail_edge: Return(
+                    return_values: [
+                        0,
+                    ],
+                ),
+            )),
+        ],
+        value_functions: [],
+        pipelines: [
+            (
+                name: "pipeline_trivial",
+                entry_funclet: 1,
+                yield_points: {},
+            ),
+        ],
+        value_funclet_extras: [],
+        scheduling_funclet_extras: [
+            (1, (
+                value_funclet_id: 0,
+                input_states: [
+                    (0, (
+                        value_tag: Input(
+                            funclet_id: 0,
+                            index: 0,
+                        ),
+                        timeline_tag: None,
+                        spatial_tag: None,
+                    )),
+                ],
+                output_states: [
+                    (0, (
+                        value_tag: None,
+                        timeline_tag: None,
+                        spatial_tag: None,
+                    )),
+                ],
+                input_fences: [],
+                output_fences: [],
+                input_buffers: [],
+                output_buffers: [],
+                in_timeline_tag: Input(
+                    funclet_id: 2,
+                    index: 0,
+                ),
+                out_timeline_tag: Input(
+                    funclet_id: 2,
+                    index: 0,
+                ),
+            )),
+        ],
+    ),
+)

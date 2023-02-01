@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::default::Default;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use itertools::Itertools;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arena<T>
@@ -110,7 +111,12 @@ impl<T> Serialize for Arena<T>
 	fn serialize<S>(& self, serializer : S) -> std::result::Result<<S as Serializer>::Ok, <S as Serializer>::Error>
 		where S : Serializer
 	{
-		self.elements.serialize(serializer)
+		let mut sorted_elements = Vec::new();
+		for key in self.elements.keys().sorted() {
+			// kinda sloppy, but gets the job done
+			sorted_elements.push((key, self.elements.get(key).unwrap()));
+		}
+		sorted_elements.serialize(serializer)
 	}
 }
 

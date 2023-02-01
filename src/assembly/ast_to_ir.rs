@@ -314,12 +314,12 @@ fn value_buffer_info(d : &ast::DictValue, context : &mut Context) -> ir::BufferI
 fn value_list<T>(v : &ast::DictValue, f : fn(&ast::DictValue, &mut Context) -> T,
                 context : &mut Context) -> HashMap<usize, T> {
     let lst = as_list(v.clone());
-        let mut result = HashMap::new();
-        let index = 0;
-        for value in lst.iter() {
-            result.insert(index, f(value, context));
-        }
-        result
+    let mut result = HashMap::new();
+    let index = 0;
+    for value in lst.iter() {
+        result.insert(index, f(value, context));
+    }
+    result
 }
 
 fn value_index_var_dict<T>(v : &ast::DictValue, f : fn(&ast::DictValue, &mut Context) -> T,
