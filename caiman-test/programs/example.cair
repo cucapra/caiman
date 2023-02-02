@@ -54,7 +54,25 @@ value i64 @j(%abc : i64) {
     jump %abc [%abc, %abc];
 }
 
-schedule $slot0 @bar(%0 : $slot0) {
+// Scheduling funclets pin down an implementation of a value funclet. You can write an explicit
+// schedule for each value node; alternately, you can only schedule the "most important"
+// computations yourself and let Caiman explicate the rest. (TODO: But explication is
+// "all-or-nothing" right now, right?)
+//
+// Mathematically speaking, a scheduling funclet is a *function* which maps a value funclet to its
+// implementation. However, it's a function which can only be applied once. The application occurs
+// in the `extras` block and can be thought of as "binding" the scheduling funclet to a specific
+// value funclet.
+//
+// It's worth noting that a scheduling funclet does not necesarilly schedule the entirety of the
+// value funclet. For example: if value funclet `foo` calls a value function, you'll have *two*
+// scheduling funclets. `foo`'s first scheduling funclet will schedule everything that should come
+// before the call. It's `ScheduleCall` tail edge will choose a specific implementation of the value
+// function and specify a continuation scheduling funclet to execute after the value function
+// returns. The continuation funclet is `foo`'s second scheduling funclet and will schedule any
+// remaining operations.
+schedule $slot0 @bar($slot0) {
+    %0 = phi 0;
     %x = alloc-temporary-local-i64 @foo.%1;
     %2 = encode-do-local @foo.%1() -> %x;
     %1 = create-local-i64 @foo.%x; // unbound slot
@@ -85,6 +103,11 @@ schedule i64 @dalloc(%abc : i64) {
     dynamic-alloc %abc [] [%abc, none, %abc] @foo @j %abc;
 }
 
+// Timeline funclets are used for timeline verification. Caiman uses them to (TODO: statically?
+// dynamically?) check that resources aren't used before they're allocated/initialized. A sound
+// timeline funclet extends a guarantee of soundness to compatible scheduling funclets and also
+// serves as a useful way for the compiler to sanity check its output. (TODO: I know it helps with
+// inter-funclet reasoning, but what makes it better at this than scheduling funclets?)
 timeline $event0 @time(%e : $event0) {
     %1 = submission-cpu->gpu %e;
     %2 = sync-cpu->gpu %e %1;
@@ -97,6 +120,16 @@ value_function i64 @simple(i64) : [@foo];
 
 extras {
     @bar {
+        // This is where @bar is actually "applied" to @foo.
+        //
+        // Eventually, this should replace the hardcoded tags
+        // inside the scheduling funclet itself, since the
+        // scheduling funclet is meant to be a higher-order
+        // function over value funclets.
+        //
+        // Since pipelines reference scheduling funclets
+        // (not value funclets), this means that a scheduling
+        // funclet can only be applied to a single value funclet.
         value : @foo,
         input_slots : {
             %0 : slot_info(value_tag input @foo.%test)
@@ -113,6 +146,9 @@ extras {
     },
 }
 
-// ---
-
+// The pipeline's entry point refers to a scheduling funclet because the scheduling function
+// determines the implementation of the value funclet. 
+//
+// TODO: Based off trivial.cair, it seems like you can also provide a value funclet here,
+// in which case a schedule will be generated for you.
 pipeline "pipeline_trivial" = @bar;
