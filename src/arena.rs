@@ -28,12 +28,14 @@ enum Entry<T> {
     },
 }
 impl<T> Entry<T> {
+    /// If this entry is used, returns an immutable reference to the contents.
     fn used(&self) -> Option<&'_ T> {
         match self {
             Self::Used { contents } => Some(contents),
             Self::Free { .. } => None,
         }
     }
+    /// If this entry is unused, returns a mutable reference to the contents.
     fn used_mut(&mut self) -> Option<&'_ mut T> {
         match self {
             Self::Used { contents } => Some(contents),
@@ -149,6 +151,96 @@ impl<T> core::ops::IndexMut<&Key> for Arena2<T> {
             .expect("invalid index")
     }
 }
+impl<T: Serialize> Serialize for Arena2<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_map(self.iter())
+    }
+}
+
+struct Visitor<T> {
+    marker: std::marker::PhantomData<fn() -> Arena2<T>>,
+}
+impl<T> Visitor<T> {
+    fn new() -> Self {
+        Visitor {
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+impl<'de, T> serde::de::Visitor<'de> for Visitor<T>
+where
+    T: Clone + Deserialize<'de>,
+{
+    type Value = Arena2<T>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a map with nonnegative integer keys")
+    }
+
+    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+    where
+        M: serde::de::MapAccess<'de>,
+    {
+        // Optimistically assume that the keys go from 0..n where n is the total number of keys
+        let mut collection = Arena2::with_capacity(access.size_hint().unwrap_or(0));
+        let storage = &mut collection.storage;
+
+        //  We directly edit the storage, breaking its invariants! We can't call methods
+        //  until we fix up the invariants at the end.
+        while let Some((key, contents)) = access.next_entry::<usize, T>()? {
+            // Ensure that the given index actually exists, padding the gap with
+            let needed_len = key + 1;
+            if needed_len >= storage.len() {
+                storage.resize(needed_len, Entry::Free { next: INVALID_KEY });
+            }
+            if (matches!(storage[key], Entry::Used { .. })) {
+                return Err(serde::de::Error::duplicate_field("(numeric)"));
+            }
+            storage[key] = Entry::Used { contents };
+        }
+
+        // Linearly scan through the arena and fix up the free list invariants.
+        for (i, entry) in storage.iter_mut().enumerate() {
+            if let Entry::Free { next } = entry {
+                *next = collection.free_head;
+                collection.free_head = i;
+            }
+        }
+
+        Ok(collection)
+    }
+}
+
+impl<'de, T> Deserialize<'de> for Arena2<T>
+where
+    T: Clone + Deserialize<'de>,
+{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_map(Visitor::new())
+    }
+}
+
+// Specialized PartialEq implementation because we need to ignore free entries
+impl<T: PartialEq> PartialEq for Arena2<T> {
+    fn eq(&self, other: &Self) -> bool {
+        let len = std::cmp::max(self.storage.len(), other.storage.len());
+        for i in 0..len {
+            match (self.storage.get(i), other.storage.get(i)) {
+                (Some(Entry::Used { contents: a }), Some(Entry::Used { contents: b }))
+                    if a != b =>
+                {
+                    return false
+                }
+                (Some(Entry::Used { .. }), None) | (None, Some(Entry::Used { .. })) => {
+                    return false
+                }
+                _ => continue,
+            }
+        }
+        return true;
+    }
+}
+impl<T: Eq> Eq for Arena2<T> {}
 
 #[derive(Debug, Clone)]
 pub struct Arena<T> {
