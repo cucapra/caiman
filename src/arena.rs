@@ -87,6 +87,38 @@ impl<T> Arena2<T> {
         };
         self.free_head = key;
     }
+
+    /// An iterator visiting all key-value pairs from lowest key to highest.
+    pub fn iter(&self) -> impl std::iter::Iterator<Item = (usize, &'_ T)> {
+        self.storage
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Used { contents } => Some(contents),
+                Entry::Free { .. } => None,
+            })
+            .enumerate()
+    }
+    /// An iterator visiting all key-value pairs from lowest key to highest, with mutable references
+    /// to the values.
+    pub fn iter_mut(&mut self) -> impl std::iter::Iterator<Item = (usize, &'_ mut T)> {
+        self.storage
+            .iter_mut()
+            .filter_map(|entry| match entry {
+                Entry::Used { contents } => Some(contents),
+                Entry::Free { .. } => None,
+            })
+            .enumerate()
+    }
+}
+impl<T: std::default::Default> std::default::Default for Arena2<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl<T: std::fmt::Debug> std::fmt::Debug for Arena2<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
+    }
 }
 
 #[derive(Debug, Clone)]
