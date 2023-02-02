@@ -87,7 +87,20 @@ impl<T> Arena2<T> {
         };
         self.free_head = key;
     }
-
+    /// Returns an immutable reference to an element, or None if the index is out of bounds.
+    pub fn get(&self, key: Key) -> Option<&'_ T> {
+        match self.storage.get(key) {
+            Some(Entry::Used { contents }) => Some(contents),
+            _ => None,
+        }
+    }
+    /// Returns a mutable reference to an element, or None if the index is out of bounds.
+    pub fn get_mut(&mut self, key: Key) -> Option<&'_ mut T> {
+        match self.storage.get_mut(key) {
+            Some(Entry::Used { contents }) => Some(contents),
+            _ => None,
+        }
+    }
     /// An iterator visiting all key-value pairs from lowest key to highest.
     pub fn iter(&self) -> impl std::iter::Iterator<Item = (usize, &'_ T)> {
         self.storage
@@ -118,6 +131,23 @@ impl<T: std::default::Default> std::default::Default for Arena2<T> {
 impl<T: std::fmt::Debug> std::fmt::Debug for Arena2<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
+    }
+}
+impl<T> core::ops::Index<&Key> for Arena2<T> {
+    type Output = T;
+    fn index(&self, key: &Key) -> &Self::Output {
+        match self.storage.get(*key) {
+            Some(Entry::Used { contents }) => contents,
+            _ => panic!("invalid index"),
+        }
+    }
+}
+impl<T> core::ops::IndexMut<&Key> for Arena2<T> {
+    fn index_mut(&mut self, key: &Key) -> &mut Self::Output {
+        match self.storage.get_mut(*key) {
+            Some(Entry::Used { contents }) => contents,
+            _ => panic!("invalid index"),
+        }
     }
 }
 
