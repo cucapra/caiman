@@ -27,6 +27,20 @@ enum Entry<T> {
         next: Key,
     },
 }
+impl<T> Entry<T> {
+    fn used(&self) -> Option<&'_ T> {
+        match self {
+            Self::Used { contents } => Some(contents),
+            Self::Free { .. } => None,
+        }
+    }
+    fn used_mut(&mut self) -> Option<&'_ mut T> {
+        match self {
+            Self::Used { contents } => Some(contents),
+            Self::Free { .. } => None,
+        }
+    }
+}
 
 /// From an API perspective
 #[derive(Clone)]
@@ -89,37 +103,22 @@ impl<T> Arena2<T> {
     }
     /// Returns an immutable reference to an element, or None if the index is out of bounds.
     pub fn get(&self, key: Key) -> Option<&'_ T> {
-        match self.storage.get(key) {
-            Some(Entry::Used { contents }) => Some(contents),
-            _ => None,
-        }
+        self.storage.get(key)?.used()
     }
     /// Returns a mutable reference to an element, or None if the index is out of bounds.
     pub fn get_mut(&mut self, key: Key) -> Option<&'_ mut T> {
-        match self.storage.get_mut(key) {
-            Some(Entry::Used { contents }) => Some(contents),
-            _ => None,
-        }
+        self.storage.get_mut(key)?.used_mut()
     }
     /// An iterator visiting all key-value pairs from lowest key to highest.
     pub fn iter(&self) -> impl std::iter::Iterator<Item = (usize, &'_ T)> {
-        self.storage
-            .iter()
-            .filter_map(|entry| match entry {
-                Entry::Used { contents } => Some(contents),
-                Entry::Free { .. } => None,
-            })
-            .enumerate()
+        self.storage.iter().filter_map(Entry::used).enumerate()
     }
     /// An iterator visiting all key-value pairs from lowest key to highest, with mutable references
     /// to the values.
     pub fn iter_mut(&mut self) -> impl std::iter::Iterator<Item = (usize, &'_ mut T)> {
         self.storage
             .iter_mut()
-            .filter_map(|entry| match entry {
-                Entry::Used { contents } => Some(contents),
-                Entry::Free { .. } => None,
-            })
+            .filter_map(Entry::used_mut)
             .enumerate()
     }
 }
@@ -136,18 +135,18 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Arena2<T> {
 impl<T> core::ops::Index<&Key> for Arena2<T> {
     type Output = T;
     fn index(&self, key: &Key) -> &Self::Output {
-        match self.storage.get(*key) {
-            Some(Entry::Used { contents }) => contents,
-            _ => panic!("invalid index"),
-        }
+        self.storage
+            .get(*key)
+            .and_then(Entry::used)
+            .expect("invalid index")
     }
 }
 impl<T> core::ops::IndexMut<&Key> for Arena2<T> {
     fn index_mut(&mut self, key: &Key) -> &mut Self::Output {
-        match self.storage.get_mut(*key) {
-            Some(Entry::Used { contents }) => contents,
-            _ => panic!("invalid index"),
-        }
+        self.storage
+            .get_mut(*key)
+            .and_then(Entry::used_mut)
+            .expect("invalid index")
     }
 }
 
