@@ -1,5 +1,5 @@
 [envs.expected]
-command = "..\\..\\target\\debug\\caimanc.exe --input {base}_baseline.cair --explicate_only"
+command = "cargo run --manifest-path ../../Cargo.toml --features=build-binary -- --input {base}_baseline.cair --explicate_only"
 
 [envs.explicate]
-command = "..\\..\\target\\debug\\caimanc.exe --input {filename} --explicate_only"
+command = "cargo run --manifest-path ../../Cargo.toml --features=build-binary -- --input {filename} --explicate_only"
