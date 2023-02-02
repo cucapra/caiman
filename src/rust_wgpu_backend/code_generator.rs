@@ -241,7 +241,7 @@ impl<'program> CodeGenerator<'program>
 		let has_been_generated = HashSet::new();
 		let mut code_generator = Self {original_native_interface : native_interface, native_interface : native_interface.clone(), type_code_writer, state_code_writer, code_writer, /*types,*/ has_been_generated, variable_tracker, /*external_cpu_functions, external_gpu_functions,*/ active_pipeline_name : None, active_funclet_result_type_ids : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0), gpu_function_invocations : Vec::new(), active_closures : HashMap::new(), closure_id_generator : IdGenerator::new(), active_yield_point_ids : HashSet::new(), dispatcher_id_generator : IdGenerator::new(), active_dispatchers : HashMap::new()};
 
-		let type_ids = code_generator.native_interface.types.iter().map(|(type_id, _)| ffi::TypeId(* type_id)).collect::<Box<[ffi::TypeId]>>();
+		let type_ids = code_generator.native_interface.types.iter().map(|(type_id, _)| ffi::TypeId(type_id)).collect::<Box<[ffi::TypeId]>>();
 		for & type_id in type_ids.iter()
 		{
 			code_generator.generate_type_definition(type_id);
@@ -692,7 +692,7 @@ impl<'program> CodeGenerator<'program>
 				{
 					tuple_fields.push(*output_type);
 				}
-				//let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+				//let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 				//self.generate_type_definition(ffi::TypeId(type_id));
 				//write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(ffi::TypeId(type_id)));
 				write!(self.code_writer, "pub type {} = {};\n", external_cpu_function.name, self.get_tuple_definition_string(tuple_fields.as_slice()));
@@ -725,7 +725,7 @@ impl<'program> CodeGenerator<'program>
 				tuple_fields.push(output_type);
 				self.generate_type_definition(output_type);
 			}
-			let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
 		}
@@ -769,7 +769,7 @@ impl<'program> CodeGenerator<'program>
 				//self.generate_type_definition(output_type);
 				tuple_fields.push(output_type);
 			}
-			/*let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			/*let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(ffi::TypeId(type_id));
 			//write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
 			type_id*/
@@ -892,7 +892,7 @@ impl<'program> CodeGenerator<'program>
 				let output_type = output_types[output_index];
 				tuple_fields.push(output_type);
 			}
-			//let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			//let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			//self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = {};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_tuple_definition_string(tuple_fields.as_slice()));
 		}
@@ -1476,7 +1476,7 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn create_ffi_type(&mut self, typ : ffi::Type) -> ffi::TypeId
 	{
-		let type_id = ffi::TypeId(self.native_interface.types.create(typ));
+		let type_id = ffi::TypeId(self.native_interface.types.add(typ));
 		self.generate_type_definition(type_id);
 		type_id
 	}

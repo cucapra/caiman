@@ -121,7 +121,7 @@ impl SchedulingState
 	{
 		let timestamp = self.get_local_time();
 		let slot = Slot{type_id, value_tag_opt : None, /*value_instance_id_opt : None,*/ timestamp, queue_place, queue_stage, state_binding : StateBinding::TemporaryHack};
-		SlotId(self.slots.create(slot))
+		SlotId(self.slots.add(slot))
 	}
 
 	/*pub fn bind_slot_value(&mut self, slot_id : SlotId, value_tag_opt : Option<ir::ValueTag>, value_instance_id_opt : Option<ValueInstanceId>)
@@ -139,7 +139,7 @@ impl SchedulingState
 	/*pub fn insert_value_instance(&mut self) -> ValueInstanceId
 	{
 		use std::iter::FromIterator;
-		ValueInstanceId(self.value_instances.create(ValueInstance{}))
+		ValueInstanceId(self.value_instances.add(ValueInstance{}))
 	}*/
 
 	pub fn insert_submission<Listener>(&mut self, queue_place : ir::Place, listener : &mut Listener) -> SubmissionId
@@ -165,7 +165,7 @@ impl SchedulingState
 			}
 		}
 
-		SubmissionId(self.submissions.create(Submission{queue_place, timestamp}))
+		SubmissionId(self.submissions.add(Submission{queue_place, timestamp}))
 	}
 
 
