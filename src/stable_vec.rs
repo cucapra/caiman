@@ -234,3 +234,162 @@ impl<T: PartialEq> PartialEq for StableVec<T> {
     }
 }
 impl<T: Eq> Eq for StableVec<T> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn add() {
+        let mut sv = StableVec::new();
+        let seven = sv.add(7i32);
+        let four = sv.add(4i32);
+        let nfive = sv.add(-5i32);
+
+        assert_eq!(sv[seven], 7);
+        assert_eq!(sv[four], 4);
+        assert_eq!(sv[nfive], -5);
+
+        assert_eq!(sv.get(seven), Some(&7));
+        assert_eq!(sv.get(four), Some(&4));
+        assert_eq!(sv.get(nfive), Some(&-5));
+
+        assert_eq!(sv.get_mut(four), Some(&mut 4));
+        assert_eq!(sv.get_mut(seven), Some(&mut 7));
+        assert_eq!(sv.get_mut(nfive), Some(&mut -5));
+    }
+    #[test]
+    fn mutate() {
+        let mut sv = StableVec::new();
+        let a = sv.add(7i32);
+        let b = sv.add(4i32);
+
+        *sv.get_mut(a).unwrap() = 62;
+        sv[b] = 108;
+
+        assert_eq!(sv[a], 62);
+        assert_eq!(sv.get(b), Some(&108));
+    }
+    #[test]
+    fn remove() {
+        let mut sv = StableVec::new();
+        let a = sv.add(1234);
+        let b = sv.add(5678);
+        let c = sv.add(9101112);
+        // In general, I can't test that it will fill the most recently freed entry, since I don't
+        // want to make that guarantee. But if there's only one entry free then it must fill it.
+        sv.remove(a);
+        let d = sv.add(4321);
+        // This will break if generational indices are added
+        assert_eq!(a, d);
+        assert_eq!(sv[d], 4321);
+        sv.remove(a);
+        let _ = sv.add(1324); // should fill in a again
+        sv.remove(b);
+        sv.remove(c);
+        sv.remove(a);
+        let _ = sv.add(1);
+        let _ = sv.add(2);
+        let _ = sv.add(3);
+        let f = sv.add(4);
+        // Again, this will break if generational indices are added
+        assert_eq!(f, 3);
+    }
+    #[test]
+    #[should_panic]
+    fn access_unallocated() {
+        let mut sv = StableVec::new();
+        let _ = sv.add(8i32);
+        sv[33] = 47;
+    }
+    #[test]
+    #[should_panic]
+    fn access_freed() {
+        let mut sv = StableVec::new();
+        let a = sv.add(9i32);
+        let _ = sv.add(-80);
+        sv.remove(a);
+        sv[a] = 10;
+    }
+    #[test]
+    #[should_panic]
+    fn remove_unallocated() {
+        let mut sv = StableVec::<i32>::new();
+        sv.remove(33);
+    }
+    #[test]
+    #[should_panic]
+    fn remove_freed() {
+        let mut sv = StableVec::new();
+        let a = sv.add(9i32);
+        let _ = sv.add(-80);
+        sv.remove(a);
+        sv.remove(a);
+    }
+    #[test]
+    fn basic_equality() {
+        let mut sv1 = StableVec::new();
+        let _ = sv1.add(8i32);
+        let _ = sv1.add(7i32);
+        let mut sv2 = StableVec::new();
+        let _ = sv2.add(8i32);
+        let _ = sv2.add(7i32);
+        let mut sv3 = StableVec::new();
+        let _ = sv3.add(7i32);
+        let _ = sv3.add(7i32);
+        let mut sv4 = StableVec::new();
+        let _ = sv4.add(8i32);
+        let _ = sv4.add(8i32);
+        let mut sv5 = StableVec::new();
+        let _ = sv5.add(8i32);
+        let _ = sv5.add(7i32);
+        let _ = sv4.add(6i32);
+
+        assert_eq!(sv1, sv2);
+        assert_ne!(sv1, sv3);
+        assert_ne!(sv1, sv4);
+        assert_ne!(sv1, sv5);
+    }
+    #[test]
+    #[allow(unused_variables)]
+    fn freed_equality() {
+        let mut sv1 = StableVec::new();
+        let a1 = sv1.add(1);
+        let b1 = sv1.add(2);
+        let c1 = sv1.add(3);
+        sv1.remove(a1);
+        sv1.remove(c1);
+
+        let mut sv2 = StableVec::new();
+        let a2 = sv2.add(1);
+        let b2 = sv2.add(2);
+        let c2 = sv2.add(3);
+        sv2.remove(c2);
+        sv2.remove(a2);
+        assert_eq!(sv1, sv2);
+
+        let mut sv3 = StableVec::new();
+        let a3 = sv3.add(1);
+        let b3 = sv3.add(2);
+        let c3 = sv3.add(3);
+        sv3.remove(a3);
+        assert_ne!(sv1, sv3);
+
+        let mut sv4 = StableVec::new();
+        let a4 = sv4.add(1);
+        let b4 = sv4.add(2);
+        let c4 = sv4.add(3);
+        let d4 = sv4.add(4);
+        sv4.remove(a4);
+        sv4.remove(d4);
+        sv4.remove(c4);
+        assert_eq!(sv1, sv4);
+
+        let mut sv5 = StableVec::new();
+        let a5 = sv5.add(1);
+        let b5 = sv5.add(2);
+        let c5 = sv5.add(2);
+        sv5.remove(a5);
+        sv5.remove(b5);
+        assert_ne!(sv1, sv5);
+    }
+}
