@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// A key used to access an element in the arena. Currently, this is just a `usize` index into a
+/// A key used to access an element in the StableVec. Currently, this is just a `usize` index into a
 /// backing array, but this is an implementation detail and may eventually change. In particular
 /// this may become an opaque type which holds a generational index for bug-catching purposes.
 pub type Key = usize;
@@ -21,7 +21,7 @@ enum Entry<T> {
     Free {
         /// The index of the next free entry in the data structure's internal storage. This induces
         /// a chain of free entries (a "free list"). The chain terminates when the contained value
-        /// is [`INVALID_KEY`] then it is the last entry in the chain.
+        /// is [`INVALID_KEY`].
         next: Key,
     },
 }
@@ -45,7 +45,7 @@ impl<T> Entry<T> {
 /// From an API perspective, this is like a HashMap where you don't get to choose the keys.
 /// O(1) insert, O(1) index, O(1) iteration, O(1) remove, O(|max concurrent entries|) space
 #[derive(Clone)]
-pub struct Arena<T> {
+pub struct StableVec<T> {
     /// The backing storage for the entries.
     storage: Vec<Entry<T>>,
     /// The index of the head of the free list, or [`INVALID_KEY`] if all entries are used.
@@ -55,15 +55,15 @@ pub struct Arena<T> {
     ///   entry or [`INVALID_KEY`].
     free_head: Key,
 }
-impl<T> Arena<T> {
-    /// Creates a new, empty [`Arena`]. Does not allocate until elements are added.
+impl<T> StableVec<T> {
+    /// Creates a new, empty [`StableVec`]. Does not allocate until elements are added.
     pub fn new() -> Self {
         Self {
             storage: Vec::new(),
             free_head: INVALID_KEY,
         }
     }
-    /// Creates a new, empty [`Arena`] with enough space preallocated to hold `capacity` elements.
+    /// Creates a new, empty [`StableVec`] with enough space preallocated to hold `capacity` elements.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             storage: Vec::with_capacity(capacity),
@@ -123,17 +123,17 @@ impl<T> Arena<T> {
             .enumerate()
     }
 }
-impl<T> std::default::Default for Arena<T> {
+impl<T> std::default::Default for StableVec<T> {
     fn default() -> Self {
         Self::new()
     }
 }
-impl<T: std::fmt::Debug> std::fmt::Debug for Arena<T> {
+impl<T: std::fmt::Debug> std::fmt::Debug for StableVec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
-impl<T> core::ops::Index<&Key> for Arena<T> {
+impl<T> core::ops::Index<&Key> for StableVec<T> {
     type Output = T;
     fn index(&self, key: &Key) -> &Self::Output {
         self.storage
@@ -142,7 +142,7 @@ impl<T> core::ops::Index<&Key> for Arena<T> {
             .expect("invalid index")
     }
 }
-impl<T> core::ops::IndexMut<&Key> for Arena<T> {
+impl<T> core::ops::IndexMut<&Key> for StableVec<T> {
     fn index_mut(&mut self, key: &Key) -> &mut Self::Output {
         self.storage
             .get_mut(*key)
@@ -150,14 +150,14 @@ impl<T> core::ops::IndexMut<&Key> for Arena<T> {
             .expect("invalid index")
     }
 }
-impl<T: Serialize> Serialize for Arena<T> {
+impl<T: Serialize> Serialize for StableVec<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_map(self.iter())
     }
 }
 
 struct Visitor<T> {
-    marker: std::marker::PhantomData<fn() -> Arena<T>>,
+    marker: std::marker::PhantomData<fn() -> StableVec<T>>,
 }
 impl<T> Visitor<T> {
     fn new() -> Self {
@@ -170,7 +170,7 @@ impl<'de, T> serde::de::Visitor<'de> for Visitor<T>
 where
     T: Clone + Deserialize<'de>,
 {
-    type Value = Arena<T>;
+    type Value = StableVec<T>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("a map with nonnegative integer keys")
@@ -181,7 +181,7 @@ where
         M: serde::de::MapAccess<'de>,
     {
         // Optimistically assume that the keys go from 0..n where n is the total number of keys
-        let mut collection = Arena::with_capacity(access.size_hint().unwrap_or(0));
+        let mut collection = StableVec::with_capacity(access.size_hint().unwrap_or(0));
         let storage = &mut collection.storage;
 
         //  We directly edit the storage, breaking its invariants! We can't call methods
@@ -198,7 +198,7 @@ where
             storage[key] = Entry::Used { contents };
         }
 
-        // Linearly scan through the arena and fix up the free list invariants.
+        // Linearly scan through the StableVec and fix up the free list invariants.
         for (i, entry) in storage.iter_mut().enumerate() {
             if let Entry::Free { next } = entry {
                 *next = collection.free_head;
@@ -210,7 +210,7 @@ where
     }
 }
 
-impl<'de, T> Deserialize<'de> for Arena<T>
+impl<'de, T> Deserialize<'de> for StableVec<T>
 where
     T: Clone + Deserialize<'de>,
 {
@@ -220,7 +220,7 @@ where
 }
 
 // Specialized PartialEq implementation because we need to ignore free entries
-impl<T: PartialEq> PartialEq for Arena<T> {
+impl<T: PartialEq> PartialEq for StableVec<T> {
     fn eq(&self, other: &Self) -> bool {
         let len = std::cmp::max(self.storage.len(), other.storage.len());
         for i in 0..len {
@@ -239,4 +239,4 @@ impl<T: PartialEq> PartialEq for Arena<T> {
         return true;
     }
 }
-impl<T: Eq> Eq for Arena<T> {}
+impl<T: Eq> Eq for StableVec<T> {}

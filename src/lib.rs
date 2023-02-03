@@ -1,7 +1,7 @@
 #[macro_use]
 mod operations;
 mod id_generator;
-mod arena;
+mod stable_vec;
 mod ir;
 //mod ir_builders;
 mod shadergen;

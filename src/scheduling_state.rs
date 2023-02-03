@@ -1,5 +1,5 @@
 use crate::ir;
-use crate::arena::Arena;
+use crate::stable_vec::StableVec;
 use std::default::Default;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -96,9 +96,9 @@ struct PlaceState
 pub struct SchedulingState
 {
 	place_states : HashMap<ir::Place, PlaceState>, // as known to the coordinator
-	slots : Arena<Slot>,
+	slots : StableVec<Slot>,
 	//value_instances : Arena<ValueInstance>,
-	submissions : Arena<Submission>
+	submissions : StableVec<Submission>
 }
 
 #[derive(Debug)]

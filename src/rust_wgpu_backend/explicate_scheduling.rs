@@ -2,7 +2,7 @@ use crate::ir;
 //use crate::ir_builders;
 
 use crate::shadergen;
-use crate::arena::Arena;
+use crate::stable_vec::StableVec;
 use std::default::Default;
 use std::collections::HashMap;
 use std::collections::HashSet;
