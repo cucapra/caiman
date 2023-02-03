@@ -393,4 +393,18 @@ mod tests {
         sv5.remove(b5);
         assert_ne!(sv1, sv5);
     }
+    #[test]
+    fn serde() {
+        let mut initial = StableVec::new();
+        let _ = initial.add(5);
+        let a = initial.add(8);
+        let _ = initial.add(7);
+        let _ = initial.add(2);
+        let b = initial.add(6);
+        initial.remove(a);
+        initial.remove(b);
+        let serialized = ron::to_string(&initial).unwrap();
+        let deserialized = ron::from_str(&serialized).unwrap();
+        assert_eq!(initial, deserialized);
+    }
 }
