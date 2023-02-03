@@ -1,5 +1,5 @@
 use serde_derive::{Serialize, Deserialize};
-use crate::arena::Arena;
+use crate::stable_vec::StableVec;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
 pub struct TypeId(pub usize); // temporarily exposed internals
@@ -105,11 +105,11 @@ impl ExternalGpuFunction
 pub struct NativeInterface
 {
 	#[serde(default)]
-	pub types : Arena<Type>,
+	pub types : StableVec<Type>,
 	#[serde(default)]
-	pub external_cpu_functions : Arena<ExternalCpuFunction>,
+	pub external_cpu_functions : StableVec<ExternalCpuFunction>,
 	#[serde(default)]
-	pub external_gpu_functions : Arena<ExternalGpuFunction>,
+	pub external_gpu_functions : StableVec<ExternalGpuFunction>,
 }
 
 pub struct TypeBindingInfo
@@ -124,7 +124,7 @@ impl NativeInterface
 
 	pub fn calculate_type_binding_info(&self, type_id : TypeId) -> TypeBindingInfo
 	{
-		match & self.types[& type_id.0]
+		match & self.types[type_id.0]
 		{
 			Type::F32 => TypeBindingInfo { size : std::mem::size_of::<f32>(), alignment : std::mem::align_of::<f32>() },
 			Type::F64 => TypeBindingInfo { size : std::mem::size_of::<f64>(), alignment : std::mem::align_of::<f64>() },

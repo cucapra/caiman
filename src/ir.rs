@@ -3,7 +3,7 @@ use std::default::Default;
 //use serde::{Serialize, Deserialize};
 use serde_derive::{Serialize, Deserialize};
 //use bitflags::bitflags;
-use crate::arena::Arena;
+use crate::stable_vec::StableVec;
 
 pub use crate::rust_wgpu_backend::ffi as ffi;
 
@@ -321,11 +321,11 @@ pub struct Program
 	#[serde(default)]
 	pub native_interface : ffi::NativeInterface,
 	#[serde(default)]
-	pub types : Arena<Type>,
+	pub types : StableVec<Type>,
 	#[serde(default)]
-	pub funclets : Arena<Funclet>,
+	pub funclets : StableVec<Funclet>,
 	#[serde(default)]
-	pub value_functions : Arena<ValueFunction>,
+	pub value_functions : StableVec<ValueFunction>,
 	#[serde(default)]
 	pub pipelines : Vec<Pipeline>,
 	#[serde(default)]
