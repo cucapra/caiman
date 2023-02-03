@@ -20,7 +20,7 @@ types [
 
 external_cpu i64 @do_thing_on_cpu(i64);
 // the path is required, and is relative to where you run this thing at the moment (unfortunately)
-external_gpu i64 @do_thing_on_gpu(%x : i64) : "caiman-test/src/programs/example.wgsl"
+external_gpu i64 @do_thing_on_gpu(%x : i64) : "caiman-test/programs/example.wgsl"
 {
     resource {
         group : 0,
