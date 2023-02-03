@@ -133,21 +133,15 @@ impl<T: std::fmt::Debug> std::fmt::Debug for StableVec<T> {
         f.debug_map().entries(self.iter()).finish()
     }
 }
-impl<T> core::ops::Index<&Key> for StableVec<T> {
+impl<T> core::ops::Index<Key> for StableVec<T> {
     type Output = T;
-    fn index(&self, key: &Key) -> &Self::Output {
-        self.storage
-            .get(*key)
-            .and_then(Entry::used)
-            .expect("invalid index")
+    fn index(&self, key: Key) -> &Self::Output {
+        self.get(key).expect("invalid index")
     }
 }
-impl<T> core::ops::IndexMut<&Key> for StableVec<T> {
-    fn index_mut(&mut self, key: &Key) -> &mut Self::Output {
-        self.storage
-            .get_mut(*key)
-            .and_then(Entry::used_mut)
-            .expect("invalid index")
+impl<T> core::ops::IndexMut<Key> for StableVec<T> {
+    fn index_mut(&mut self, key: Key) -> &mut Self::Output {
+        self.get_mut(key).expect("invalid index")
     }
 }
 impl<T: Serialize> Serialize for StableVec<T> {
@@ -192,7 +186,7 @@ where
             if needed_len >= storage.len() {
                 storage.resize(needed_len, Entry::Free { next: INVALID_KEY });
             }
-            if (matches!(storage[key], Entry::Used { .. })) {
+            if matches!(storage[key], Entry::Used { .. }) {
                 return Err(serde::de::Error::duplicate_field("(numeric)"));
             }
             storage[key] = Entry::Used { contents };

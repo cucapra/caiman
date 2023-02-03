@@ -181,42 +181,42 @@ impl SchedulingState
 
 	pub fn get_slot_type_id(&self, slot_id : SlotId) -> ir::ffi::TypeId
 	{
-		self.slots[& slot_id.0].type_id
+		self.slots[slot_id.0].type_id
 	}
 
 	pub fn get_slot_queue_stage(&self, slot_id : SlotId) -> ir::ResourceQueueStage
 	{
-		self.slots[& slot_id.0].queue_stage
+		self.slots[slot_id.0].queue_stage
 	}
 
 	pub fn get_slot_queue_place(&self, slot_id : SlotId) -> ir::Place
 	{
-		self.slots[& slot_id.0].queue_place
+		self.slots[slot_id.0].queue_place
 	}
 
 	pub fn get_slot_queue_timestamp(&self, slot_id : SlotId) -> LogicalTimestamp
 	{
-		self.slots[& slot_id.0].timestamp
+		self.slots[slot_id.0].timestamp
 	}
 
 	pub fn discard_slot(&mut self, slot_id : SlotId)
 	{
-		let slot = &mut self.slots[& slot_id.0];
+		let slot = &mut self.slots[slot_id.0];
 		assert!(slot.queue_stage < ir::ResourceQueueStage::Dead);
 		slot.queue_stage = ir::ResourceQueueStage::Dead;
 	}
 
 	pub fn forward_slot(&mut self, destination_slot_id : SlotId, source_slot_id : SlotId)
 	{
-		assert!(self.slots[& source_slot_id.0].queue_stage < ir::ResourceQueueStage::Dead);
-		assert!(self.slots[& destination_slot_id.0].queue_stage == ir::ResourceQueueStage::Unbound);
-		self.slots[& destination_slot_id.0].queue_stage = ir::ResourceQueueStage::Bound;
-		self.slots[& source_slot_id.0].queue_stage = ir::ResourceQueueStage::Dead;
+		assert!(self.slots[source_slot_id.0].queue_stage < ir::ResourceQueueStage::Dead);
+		assert!(self.slots[destination_slot_id.0].queue_stage == ir::ResourceQueueStage::Unbound);
+		self.slots[destination_slot_id.0].queue_stage = ir::ResourceQueueStage::Bound;
+		self.slots[source_slot_id.0].queue_stage = ir::ResourceQueueStage::Dead;
 	}
 
 	pub fn advance_queue_stage(&mut self, slot_id : SlotId, to : ir::ResourceQueueStage)
 	{
-		let slot = &mut self.slots[& slot_id.0];
+		let slot = &mut self.slots[slot_id.0];
 		assert!(slot.queue_stage <= to);
 		slot.queue_stage = to;
 	}

@@ -273,7 +273,7 @@ impl<'program> CodeGenerator<'program>
 	{
 		let mut output_vars = Vec::<VarId>::new();
 
-		let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 		for (output_index, output_type_id) in external_gpu_function.output_types.iter().enumerate()
 		{
 			let variable_id = self.variable_tracker.create_buffer(* output_type_id);
@@ -324,7 +324,7 @@ impl<'program> CodeGenerator<'program>
 
 		if ! self.shader_modules.contains_key(& shader_module_key)
 		{
-			let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+			let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 	
 			let mut shader_module = match & external_gpu_function.shader_module_content
 			{
@@ -349,7 +349,7 @@ impl<'program> CodeGenerator<'program>
 	fn set_active_bindings(&mut self, argument_vars : &[VarId], output_vars : &[VarId])// -> Box<[usize]>
 	{
 		let external_function_id = self.active_external_gpu_function_id.unwrap();
-		let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 
 		let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
 		let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
@@ -518,7 +518,7 @@ impl<'program> CodeGenerator<'program>
 		
 		self.begin_command_encoding();
 
-		let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 		assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 		//let mut output_variables = Vec::<usize>::new();
 		self.code_writer.write(format!("let ("));
@@ -859,7 +859,7 @@ impl<'program> CodeGenerator<'program>
 			let variable_id = self.variable_tracker.create_local_data(* input_type);
 			argument_variable_ids.push(variable_id);
 			let type_name = self.get_type_name(*input_type);
-			let is_mutable = match & self.native_interface.types[& input_type.0]
+			let is_mutable = match & self.native_interface.types[input_type.0]
 			{
 				ffi::Type::GpuBufferAllocator => true,
 				_ => false
@@ -1357,7 +1357,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.has_been_generated.insert(type_id);
 
-		let typ = & self.native_interface.types[& type_id.0];
+		let typ = & self.native_interface.types[type_id.0];
 		write!(self.type_code_writer, "// Type #{}: {:?}\n", type_id.0, typ);
 		match typ
 		{
@@ -1422,7 +1422,7 @@ impl<'program> CodeGenerator<'program>
 
 	fn get_type_name(& self, type_id : ffi::TypeId) -> String
 	{
-		match & self.native_interface.types[& type_id.0]
+		match & self.native_interface.types[type_id.0]
 		{
 			ffi::Type::F32 => "f32".to_string(),
 			ffi::Type::F64 => "f64".to_string(),
@@ -1702,7 +1702,7 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn build_external_cpu_function_call(&mut self, external_function_id : ir::ExternalCpuFunctionId, argument_vars : &[VarId]) -> Box<[VarId]>
 	{
-		let external_cpu_function = & self.native_interface.external_cpu_functions[& external_function_id];
+		let external_cpu_function = & self.native_interface.external_cpu_functions[external_function_id];
 		let call_result_var = self.variable_tracker.generate();
 		let mut argument_string = String::new();
 		for (index, argument) in argument_vars.iter().enumerate()

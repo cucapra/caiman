@@ -124,7 +124,7 @@ impl NativeInterface
 
 	pub fn calculate_type_binding_info(&self, type_id : TypeId) -> TypeBindingInfo
 	{
-		match & self.types[& type_id.0]
+		match & self.types[type_id.0]
 		{
 			Type::F32 => TypeBindingInfo { size : std::mem::size_of::<f32>(), alignment : std::mem::align_of::<f32>() },
 			Type::F64 => TypeBindingInfo { size : std::mem::size_of::<f64>(), alignment : std::mem::align_of::<f64>() },
