@@ -112,15 +112,18 @@ impl<T> StableVec<T> {
     }
     /// An iterator visiting all key-value pairs from lowest key to highest.
     pub fn iter(&self) -> impl std::iter::Iterator<Item = (usize, &'_ T)> {
-        self.storage.iter().filter_map(Entry::used).enumerate()
+        self.storage
+            .iter()
+            .enumerate()
+            .filter_map(|(a, b)| Some((a, b.used()?)))
     }
     /// An iterator visiting all key-value pairs from lowest key to highest, with mutable references
     /// to the values.
     pub fn iter_mut(&mut self) -> impl std::iter::Iterator<Item = (usize, &'_ mut T)> {
         self.storage
             .iter_mut()
-            .filter_map(Entry::used_mut)
             .enumerate()
+            .filter_map(|(a, b)| Some((a, b.used_mut()?)))
     }
 }
 impl<T> std::default::Default for StableVec<T> {
@@ -220,14 +223,12 @@ impl<T: PartialEq> PartialEq for StableVec<T> {
         for i in 0..len {
             match (self.storage.get(i), other.storage.get(i)) {
                 (Some(Entry::Used { contents: a }), Some(Entry::Used { contents: b }))
-                    if a != b =>
+                    if a == b =>
                 {
-                    return false
+                    continue
                 }
-                (Some(Entry::Used { .. }), None) | (None, Some(Entry::Used { .. })) => {
-                    return false
-                }
-                _ => continue,
+                (Some(Entry::Free { .. }) | None, Some(Entry::Free { .. }) | None) => continue,
+                _ => return false,
             }
         }
         return true;
@@ -342,7 +343,7 @@ mod tests {
         let mut sv5 = StableVec::new();
         let _ = sv5.add(8i32);
         let _ = sv5.add(7i32);
-        let _ = sv4.add(6i32);
+        let _ = sv5.add(6i32);
 
         assert_eq!(sv1, sv2);
         assert_ne!(sv1, sv3);
