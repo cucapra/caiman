@@ -200,7 +200,7 @@ pub enum FuncletKind
 	Value,
 	ScheduleExplicit,
 	Inline, // Adopts the constraints of the calling funclet
-Timeline,
+	Timeline,
 	Spatial
 }
 

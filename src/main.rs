@@ -7,6 +7,7 @@ use caiman::frontend;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use caiman::frontend::{CompileMode, CompileOptions};
 
 struct Arguments
 {
@@ -31,7 +32,7 @@ fn output_result(result : Result<String, caiman::frontend::CompileError>, output
 }
 
 fn compile(input_file : &mut File, output_file : &mut Option<File>,
-		   options_opt : Option<caiman::frontend::CompileOptions>, use_assembly : bool)
+		   options : caiman::frontend::CompileOptions)
 {
 
 	let mut input_string = String::new();
@@ -42,11 +43,11 @@ fn compile(input_file : &mut File, output_file : &mut Option<File>,
 	};
 
 	let result = caiman::frontend::compile_caiman
-		(& input_string, options_opt, use_assembly);
+		(& input_string, options);
 	output_result(result, output_file);
 }
 
-fn explicate(input_file : &mut File, output_file : &mut Option<File>, use_assembly : bool)
+fn explicate(input_file : &mut File, output_file : &mut Option<File>, compile_mode : caiman::frontend::CompileMode)
 {
 
 	let mut input_string = String::new();
@@ -57,7 +58,8 @@ fn explicate(input_file : &mut File, output_file : &mut Option<File>, use_assemb
 	};
 
 	let result : Result<String, caiman::frontend::CompileError> =
-		caiman::frontend::explicate_caiman(& input_string, None, use_assembly);
+		caiman::frontend::explicate_caiman(& input_string,
+										   CompileOptions { print_codegen_debug_info : false, compile_mode });
 	output_result(result, output_file);
 }
 
@@ -117,10 +119,10 @@ fn main()
 		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only, print_codegen_debug_info}
 	};
 
-	let mut assume_assembly = false;
+	let mut compile_mode = CompileMode::RON;
 	let input_path = Path::new(& arguments.input_path);
 	if input_path.ends_with(& arguments.input_path) {
-		assume_assembly = true;
+		compile_mode = CompileMode::Assembly;
 	}
 	let mut output_file = match & arguments.output_path
 	{
@@ -136,11 +138,11 @@ fn main()
 
 	if arguments.explicate_only
 	{
-		explicate(&mut input_file, &mut output_file, assume_assembly);
+		explicate(&mut input_file, &mut output_file, compile_mode);
 	}
 	else
 	{
-		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
-		compile(&mut input_file, &mut output_file, Some(options), assume_assembly);
+		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info, compile_mode};
+		compile(&mut input_file, &mut output_file, options);
 	}
 }

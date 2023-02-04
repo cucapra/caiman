@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use caiman::frontend::CompileMode;
 
 fn compile(input_file : &mut File, output_file : &mut File)
 {
@@ -12,7 +13,8 @@ fn compile(input_file : &mut File, output_file : &mut File)
         Ok(_) => ()
     };
 
-    let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_caiman(& input_string, Some(caiman::frontend::CompileOptions{print_codegen_debug_info : true}), false);
+    let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_caiman(& input_string,
+       caiman::frontend::CompileOptions{print_codegen_debug_info : true, compile_mode : CompileMode::RON});
 
     match result
     {
