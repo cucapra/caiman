@@ -31,7 +31,7 @@ fn output_result(result : Result<String, caiman::frontend::CompileError>, output
 }
 
 fn compile(input_file : &mut File, output_file : &mut Option<File>,
-		   options_opt : Option<caiman::frontend::CompileOptions>)
+		   options_opt : Option<caiman::frontend::CompileOptions>, use_assembly : bool)
 {
 
 	let mut input_string = String::new();
@@ -42,11 +42,11 @@ fn compile(input_file : &mut File, output_file : &mut Option<File>,
 	};
 
 	let result = caiman::frontend::compile_caiman
-		(& input_string, options_opt, true);
+		(& input_string, options_opt, use_assembly);
 	output_result(result, output_file);
 }
 
-fn explicate(input_file : &mut File, output_file : &mut Option<File>)
+fn explicate(input_file : &mut File, output_file : &mut Option<File>, use_assembly : bool)
 {
 
 	let mut input_string = String::new();
@@ -57,7 +57,7 @@ fn explicate(input_file : &mut File, output_file : &mut Option<File>)
 	};
 
 	let result : Result<String, caiman::frontend::CompileError> =
-		caiman::frontend::explicate_caiman(& input_string, None, true);
+		caiman::frontend::explicate_caiman(& input_string, None, use_assembly);
 	output_result(result, output_file);
 }
 
@@ -119,7 +119,7 @@ fn main()
 
 	let mut assume_assembly = false;
 	let input_path = Path::new(& arguments.input_path);
-	if input_path.ends_with(".cair") {
+	if input_path.ends_with(& arguments.input_path) {
 		assume_assembly = true;
 	}
 	let mut output_file = match & arguments.output_path
@@ -136,11 +136,11 @@ fn main()
 
 	if arguments.explicate_only
 	{
-		explicate(&mut input_file, &mut output_file);
+		explicate(&mut input_file, &mut output_file, assume_assembly);
 	}
 	else
 	{
 		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
-		compile(&mut input_file, &mut output_file, Some(options));
+		compile(&mut input_file, &mut output_file, Some(options), assume_assembly);
 	}
 }
