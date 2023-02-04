@@ -117,7 +117,11 @@ fn main()
 		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only, print_codegen_debug_info}
 	};
 
+	let mut assume_assembly = false;
 	let input_path = Path::new(& arguments.input_path);
+	if input_path.ends_with(".cair") {
+		assume_assembly = true;
+	}
 	let mut output_file = match & arguments.output_path
 	{
 		Some(output_path) => Some(File::create(output_path).unwrap()),

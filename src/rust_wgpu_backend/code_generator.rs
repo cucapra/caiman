@@ -662,7 +662,7 @@ impl<'program> CodeGenerator<'program>
 		//self.state_code_writer
 		// todo: chec if removing "use caiman_rt::wgpu;" is going to break things
 		let code_string = "
-		//use caiman_rt::wgpu;
+		use caiman_rt::wgpu;
 		
 		/*pub struct CpuFunctionInvocationState<'parent>
 		{
