@@ -8,7 +8,6 @@ use pest_derive::Parser;
 pub struct IRParser;
 use crate::{ir, frontend};
 use crate::ir::{ffi};
-use crate::arena::Arena;
 use crate::ast;
 use crate::assembly::ast_to_ir;
 use crate::assembly::context::{new_context, Context};

@@ -1,5 +1,5 @@
 use crate::ir;
-use std::{collections::{HashMap, HashSet}, any, hash::Hash};
+use std::{collections::{HashMap}, any, hash::Hash};
 use crate::rust_wgpu_backend::ffi as ffi;
 
 // TODO: for mutual recursion enum BackReferences

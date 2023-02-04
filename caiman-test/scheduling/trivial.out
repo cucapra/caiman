@@ -2,11 +2,11 @@
     version: (0, 0, 1),
     program: (
         native_interface: (
-            types: [
-                (0, I64),
-            ],
-            external_cpu_functions: [
-                (0, (
+            types: {
+                0: I64,
+            },
+            external_cpu_functions: {
+                0: (
                     name: "do_thing_on_cpu",
                     input_types: [
                         (0),
@@ -14,25 +14,25 @@
                     output_types: [
                         (0),
                     ],
-                )),
-            ],
-            external_gpu_functions: [],
+                ),
+            },
+            external_gpu_functions: {},
         ),
-        types: [
-            (0, NativeValue(
+        types: {
+            0: NativeValue(
                 storage_type: (0),
-            )),// [0]
-            (1, Slot(
+            ),
+            1: Slot(
                 storage_type: (0),
                 queue_stage: Ready,
                 queue_place: Local,
-            )),// [1]
-            (2, Event(
+            ),
+            2: Event(
                 place: Local,
-            )),
-        ],
-        funclets: [
-            (0, (
+            ),
+        },
+        funclets: {
+            0: (
                 kind: Value,
                 input_types: [
                     0,
@@ -54,8 +54,8 @@
                         1,
                     ],
                 ),
-            )),// [0]
-            (1, (
+            ),
+            1: (
                 kind: ScheduleExplicit,
                 input_types: [
                     1,
@@ -92,8 +92,8 @@
                         1,
                     ],
                 ),
-            )),// [1]
-            (2, (
+            ),
+            2: (
                 kind: Timeline,
                 input_types: [
                     2,
@@ -111,9 +111,9 @@
                         0,
                     ],
                 ),
-            )),
-        ],
-        value_functions: [],
+            ),
+        },
+        value_functions: {},
         pipelines: [
             (
                 name: "pipeline_trivial",

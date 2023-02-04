@@ -3,7 +3,6 @@ use std::any::Any;
 use std::collections::HashMap;
 use crate::{ast, frontend, ir};
 use crate::ir::{ffi, FuncletKind};
-use crate::arena::Arena;
 use crate::assembly::{context, parser};
 use crate::ast::{DictValue, FFIType};
 use crate::assembly::context::{Context, FuncletLocation};
@@ -12,6 +11,7 @@ use crate::assembly::context::{Context, FuncletLocation};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use crate::stable_vec::StableVec;
 
 // Utility
 
@@ -433,14 +433,14 @@ fn ir_external_gpu(external : &ast::ExternalGpuFunction, context : &mut Context)
 }
 
 fn ir_native_interface(program : &ast::Program, context : &mut Context) -> ffi::NativeInterface {
-    let mut types = Arena::new();
-    let mut external_cpu_functions = Arena::new();
-    let mut external_gpu_functions = Arena::new();
+    let mut types = StableVec::new();
+    let mut external_cpu_functions = StableVec::new();
+    let mut external_gpu_functions = StableVec::new();
 
     for typ in &program.types {
         match typ {
             ast::TypeDecl::FFI(t) => {
-                types.create(ffi_to_ffi(t.clone(), context));
+                types.add(ffi_to_ffi(t.clone(), context));
             }
             _ => {}
         }
@@ -449,10 +449,10 @@ fn ir_native_interface(program : &ast::Program, context : &mut Context) -> ffi::
     for def in &program.funclets {
         match def {
             ast::FuncletDef::ExternalCPU(external) => {
-                external_cpu_functions.create(ir_external_cpu(external, context));
+                external_cpu_functions.add(ir_external_cpu(external, context));
             },
             ast::FuncletDef::ExternalGPU(external) => {
-                external_gpu_functions.create(ir_external_gpu(external, context));
+                external_gpu_functions.add(ir_external_gpu(external, context));
             },
             _ => {}
         }
@@ -465,8 +465,8 @@ fn ir_native_interface(program : &ast::Program, context : &mut Context) -> ffi::
     }
 }
 
-fn ir_types(types : &Vec<ast::TypeDecl>, context : &mut Context) -> Arena<ir::Type> {
-    let mut result = Arena::new();
+fn ir_types(types : &Vec<ast::TypeDecl>, context : &mut Context) -> StableVec<ir::Type> {
+    let mut result = StableVec::new();
     for type_decl in types {
         let new_type = match type_decl {
             ast::TypeDecl::Local(typ) => {
@@ -494,7 +494,7 @@ fn ir_types(types : &Vec<ast::TypeDecl>, context : &mut Context) -> Arena<ir::Ty
                 }
             }
         };
-        result.create(new_type);
+        result.add(new_type);
     }
     result
 }
@@ -700,13 +700,13 @@ fn ir_funclet(funclet : &ast::Funclet, context : &mut Context) -> ir::Funclet {
     }
 }
 
-fn ir_funclets(funclets : &ast::FuncletDefs, context : &mut Context) -> Arena<ir::Funclet> {
-    let mut result = Arena::new();
+fn ir_funclets(funclets : &ast::FuncletDefs, context : &mut Context) -> StableVec<ir::Funclet> {
+    let mut result = StableVec::new();
     for def in funclets {
         match def {
             ast::FuncletDef::Local(f) => {
                 context.update_local_funclet(f.header.name.clone());
-                result.create(ir_funclet(f, context)); },
+                result.add(ir_funclet(f, context)); },
             _ => {}
         }
     }
@@ -742,12 +742,12 @@ fn ir_value_function(function : &ast::ValueFunction, context : &mut Context) -> 
     }
 }
 
-fn ir_value_functions(funclets : &ast::FuncletDefs, context : &mut Context) -> Arena<ir::ValueFunction> {
-    let mut result = Arena::new();
+fn ir_value_functions(funclets : &ast::FuncletDefs, context : &mut Context) -> StableVec<ir::ValueFunction> {
+    let mut result = StableVec::new();
     for def in funclets {
         match def {
             ast::FuncletDef::ValueFunction(f) => {
-                result.create(ir_value_function(f, context)); },
+                result.add(ir_value_function(f, context)); },
             _ => {}
         }
     }

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use crate::ir;
 use crate::rust_wgpu_backend::ffi;
-use crate::arena::Arena;
 use serde_derive::{Serialize, Deserialize};
 
 // Parser "AST"
