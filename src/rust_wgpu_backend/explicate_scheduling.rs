@@ -1,5 +1,5 @@
 use crate::ir;
-use std::{collections::{HashMap, hash_map::Entry, HashSet}, any, hash::Hash};
+use std::{collections::{HashMap, HashSet}, any, hash::Hash};
 use crate::rust_wgpu_backend::ffi as ffi;
 
 // TODO: for mutual recursion enum BackReferences
@@ -163,7 +163,7 @@ fn get_current_blob_mut<'a>(context : &'a mut SchedulingContext)
 
 fn get_funclet<'a>(index : &usize, context : &'a SchedulingContext)
                    -> &'a ir::Funclet {
-    context.program.funclets.get(index).unwrap()
+    context.program.funclets.get(*index).unwrap()
 }
 
 fn get_current_funclet<'a>(context : &'a SchedulingContext)
@@ -175,7 +175,7 @@ fn get_current_funclet<'a>(context : &'a SchedulingContext)
 fn get_external<'a>(external_function_id: &usize,
                     context: &'a SchedulingContext) -> &'a ffi::ExternalCpuFunction {
     context.program.native_interface.external_cpu_functions.
-        get(&external_function_id).unwrap()
+        get(*external_function_id).unwrap()
 }
 
 fn get_current_allocated<'a>(node_id : &usize, argument : &usize,
@@ -259,8 +259,8 @@ fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
                                      ir::FuncletKind::ScheduleExplicit, context);
     let new_timeline = build_funclet(blob.timeline.core,
                                      ir::FuncletKind::Timeline, context);
-    let schedule_id = context.program.funclets.create(new_schedule);
-    let timeline_id = context.program.funclets.create(new_timeline);
+    let schedule_id = context.program.funclets.add(new_schedule);
+    let timeline_id = context.program.funclets.add(new_timeline);
     let extra = build_extra(blob.information,
                             &timeline_id, context);
     context.program.scheduling_funclet_extras.insert(schedule_id, extra);
@@ -507,37 +507,12 @@ fn construct_pipeline(context : &mut SchedulingContext) {
     }
 }
 
-fn debug_funclets(program : &ir::Program) {
-    // cause I'm dumb
-    let mut ordered = Vec::new();
-    for index in 0..(program.funclets.get_next_id()) {
-        ordered.push(None)
-    }
-    for items in program.funclets.iter() {
-        ordered[*items.0] = Some(items.1);
-    }
-    let mut id = 0;
-    println!("Funclets: ");
-    for funclet in ordered {
-        print!("{} : ", id);
-        match funclet {
-            None => {}
-            Some(f) => { println!("{:#?}", f); }
-        }
-        id += 1;
-    }
-    println!("Extras: {:#?}", program.scheduling_funclet_extras);
-    println!("Pipelines: {:#?}", program.pipelines);
-
-    panic!("Explicated"); // to see debug information
-}
-
 fn should_explicate(program : &mut ir::Program) -> bool {
     let mut any_pipelines = false;
     let mut all_value_pipelines = true;
     for pipeline in program.pipelines.iter() {
         any_pipelines = true;
-        match program.funclets.get(&pipeline.entry_funclet) {
+        match program.funclets.get(pipeline.entry_funclet) {
             None => { panic!(format!("Undefined funclet {}",
                                      pipeline.entry_funclet)); }
             Some(funclet) => {
@@ -561,7 +536,6 @@ pub fn explicate_scheduling(program : &mut ir::Program)
     let original = program.funclets.clone();
     let mut initial_location = ir::RemoteNodeId
     { funclet_id : 0, node_id : 0 };
-    let starting_index = program.funclets.get_next_id();
     let mut context =
         SchedulingContext{
             program,
@@ -574,7 +548,7 @@ pub fn explicate_scheduling(program : &mut ir::Program)
     while unresolved {
         unresolved = false;
         for funclet in original.iter() {
-            context.location.funclet_id = *funclet.0;
+            context.location.funclet_id = funclet.0;
             unresolved = explicate_funclet(
                 funclet.1, &mut context) || unresolved;
         }

@@ -3,7 +3,7 @@ extern crate core;
 #[macro_use]
 mod operations;
 mod id_generator;
-mod arena;
+mod stable_vec;
 mod ir;
 mod assembly;
 //mod ir_builders;

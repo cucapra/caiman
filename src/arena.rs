@@ -81,8 +81,7 @@ impl<T> Arena<T>
 }
 
 impl <T> Default for Arena<T>
-{
-	fn default() -> Self
+{	fn default() -> Self
 	{
 		Self::from_hash_map(Default::default())
 	}

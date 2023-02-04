@@ -20,7 +20,7 @@ pub fn check_value_tag_compatibility_enter(program : & ir::Program, call_operati
 		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Input{funclet_id, index}) =>
 		{
 			assert_eq!(call_operation.funclet_id, remote_node_id.funclet_id);
-			let caller_value_funclet = & program.funclets[& call_operation.funclet_id];
+			let caller_value_funclet = & program.funclets[call_operation.funclet_id];
 			if let ir::Node::CallValueFunction{function_id, arguments} = & caller_value_funclet.nodes[call_operation.node_id]
 			{
 				assert_eq!(arguments[index], remote_node_id.node_id);
@@ -45,7 +45,7 @@ pub fn check_value_tag_compatibility_exit(program : & ir::Program, callee_funcle
 			assert_eq!(remote_node_id.funclet_id, continuation_value_operation.funclet_id);
 			assert_eq!(funclet_id, callee_funclet_id);
 
-			let node = & program.funclets[& remote_node_id.funclet_id].nodes[remote_node_id.node_id];
+			let node = & program.funclets[remote_node_id.funclet_id].nodes[remote_node_id.node_id];
 			if let ir::Node::ExtractResult{node_id : call_node_id, index} = node
 			{
 				assert_eq!(* index, output_index);
@@ -63,7 +63,7 @@ pub fn check_value_tag_compatibility_exit(program : & ir::Program, callee_funcle
 pub fn check_value_tag_compatibility_interior_branch(program : & ir::Program, value_operation : ir::RemoteNodeId, condition_value_tag : ir::ValueTag, source_value_tags : &[ir::ValueTag], destination_value_tag : ir::ValueTag)
 {
 	assert_eq!(source_value_tags.len(), 2);
-	let current_value_funclet = & program.funclets[& value_operation.funclet_id];
+	let current_value_funclet = & program.funclets[value_operation.funclet_id];
 	assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
 	let branch_node_ids = if let ir::Node::Select{condition, true_case, false_case} = & current_value_funclet.nodes[value_operation.node_id]
@@ -105,7 +105,7 @@ pub fn check_value_tag_compatibility_interior(program : & ir::Program, source_va
 		{
 			assert_eq!(remote_node_id.funclet_id, funclet_id);
 
-			let destination_value_funclet = & program.funclets[& funclet_id];
+			let destination_value_funclet = & program.funclets[funclet_id];
 			assert_eq!(destination_value_funclet.kind, ir::FuncletKind::Value);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_value_funclet.nodes[remote_node_id.node_id]
@@ -125,7 +125,7 @@ pub fn check_value_tag_compatibility_interior(program : & ir::Program, source_va
 		{
 			assert_eq!(remote_node_id.funclet_id, funclet_id);
 
-			let source_value_funclet = & program.funclets[& funclet_id];
+			let source_value_funclet = & program.funclets[funclet_id];
 			assert_eq!(source_value_funclet.kind, ir::FuncletKind::Value);
 
 			match & source_value_funclet.tail_edge

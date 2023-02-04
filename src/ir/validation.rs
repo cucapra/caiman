@@ -72,7 +72,7 @@ pub fn validate_timeline_funclet(program : & ir::Program, funclet : & ir::Funcle
 
 	for (input_index, input_type) in funclet.input_types.iter().enumerate()
 	{
-		match & program.types[input_type]
+		match & program.types[*input_type]
 		{
 			ir::Type::Event{place} => assert_eq!(* place, ir::Place::Local),
 			_ => panic!("Timeline funclet's input #{} has an unsupported type: #{}", input_index, input_type)
@@ -81,7 +81,7 @@ pub fn validate_timeline_funclet(program : & ir::Program, funclet : & ir::Funcle
 
 	for (output_index, output_type) in funclet.output_types.iter().enumerate()
 	{
-		match & program.types[output_type]
+		match & program.types[*output_type]
 		{
 			ir::Type::Event{place} => assert_eq!(* place, ir::Place::Local),
 			_ => panic!("Timeline funclet's output #{} has an unsupported type: #{}", output_index, output_type)

@@ -1,6 +1,6 @@
 use crate::ir;
 use crate::shadergen;
-use crate::arena::Arena;
+use crate::stable_vec::StableVec;
 use std::default::Default;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
@@ -241,7 +241,7 @@ impl<'program> CodeGenerator<'program>
 		let has_been_generated = HashSet::new();
 		let mut code_generator = Self {original_native_interface : native_interface, native_interface : native_interface.clone(), type_code_writer, state_code_writer, code_writer, /*types,*/ has_been_generated, variable_tracker, /*external_cpu_functions, external_gpu_functions,*/ active_pipeline_name : None, active_funclet_result_type_ids : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0), gpu_function_invocations : Vec::new(), active_closures : HashMap::new(), closure_id_generator : IdGenerator::new(), active_yield_point_ids : HashSet::new(), dispatcher_id_generator : IdGenerator::new(), active_dispatchers : HashMap::new()};
 
-		let type_ids = code_generator.native_interface.types.iter().map(|(type_id, _)| ffi::TypeId(* type_id)).collect::<Box<[ffi::TypeId]>>();
+		let type_ids = code_generator.native_interface.types.iter().map(|(type_id, _)| ffi::TypeId(type_id)).collect::<Box<[ffi::TypeId]>>();
 		for & type_id in type_ids.iter()
 		{
 			code_generator.generate_type_definition(type_id);
@@ -273,7 +273,7 @@ impl<'program> CodeGenerator<'program>
 	{
 		let mut output_vars = Vec::<VarId>::new();
 
-		let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 		for (output_index, output_type_id) in external_gpu_function.output_types.iter().enumerate()
 		{
 			let variable_id = self.variable_tracker.create_buffer(* output_type_id);
@@ -324,7 +324,7 @@ impl<'program> CodeGenerator<'program>
 
 		if ! self.shader_modules.contains_key(& shader_module_key)
 		{
-			let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+			let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 	
 			let mut shader_module = match & external_gpu_function.shader_module_content
 			{
@@ -349,7 +349,7 @@ impl<'program> CodeGenerator<'program>
 	fn set_active_bindings(&mut self, argument_vars : &[VarId], output_vars : &[VarId])// -> Box<[usize]>
 	{
 		let external_function_id = self.active_external_gpu_function_id.unwrap();
-		let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 
 		let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
 		let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
@@ -518,7 +518,7 @@ impl<'program> CodeGenerator<'program>
 		
 		self.begin_command_encoding();
 
-		let external_gpu_function = & self.native_interface.external_gpu_functions[& external_function_id];
+		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
 		assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 		//let mut output_variables = Vec::<usize>::new();
 		self.code_writer.write(format!("let ("));
@@ -693,7 +693,7 @@ impl<'program> CodeGenerator<'program>
 				{
 					tuple_fields.push(*output_type);
 				}
-				//let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+				//let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 				//self.generate_type_definition(ffi::TypeId(type_id));
 				//write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(ffi::TypeId(type_id)));
 				write!(self.code_writer, "pub type {} = {};\n", external_cpu_function.name, self.get_tuple_definition_string(tuple_fields.as_slice()));
@@ -726,7 +726,7 @@ impl<'program> CodeGenerator<'program>
 				tuple_fields.push(output_type);
 				self.generate_type_definition(output_type);
 			}
-			let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
 		}
@@ -770,7 +770,7 @@ impl<'program> CodeGenerator<'program>
 				//self.generate_type_definition(output_type);
 				tuple_fields.push(output_type);
 			}
-			/*let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			/*let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			self.generate_type_definition(ffi::TypeId(type_id));
 			//write!(self.code_writer, "pub type {} = super::super::{};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_type_name(type_id));
 			type_id*/
@@ -860,7 +860,7 @@ impl<'program> CodeGenerator<'program>
 			let variable_id = self.variable_tracker.create_local_data(* input_type);
 			argument_variable_ids.push(variable_id);
 			let type_name = self.get_type_name(*input_type);
-			let is_mutable = match & self.native_interface.types[& input_type.0]
+			let is_mutable = match & self.native_interface.types[input_type.0]
 			{
 				ffi::Type::GpuBufferAllocator => true,
 				_ => false
@@ -893,7 +893,7 @@ impl<'program> CodeGenerator<'program>
 				let output_type = output_types[output_index];
 				tuple_fields.push(output_type);
 			}
-			//let type_id = self.native_interface.types.create(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+			//let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
 			//self.generate_type_definition(type_id);
 			write!(self.code_writer, "pub type {} = {};\n", self.active_pipeline_name.as_ref().unwrap().as_str(), self.get_tuple_definition_string(tuple_fields.as_slice()));
 		}
@@ -1358,7 +1358,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.has_been_generated.insert(type_id);
 
-		let typ = & self.native_interface.types[& type_id.0];
+		let typ = & self.native_interface.types[type_id.0];
 		write!(self.type_code_writer, "// Type #{}: {:?}\n", type_id.0, typ);
 		match typ
 		{
@@ -1423,7 +1423,7 @@ impl<'program> CodeGenerator<'program>
 
 	fn get_type_name(& self, type_id : ffi::TypeId) -> String
 	{
-		match & self.native_interface.types[& type_id.0]
+		match & self.native_interface.types[type_id.0]
 		{
 			ffi::Type::F32 => "f32".to_string(),
 			ffi::Type::F64 => "f64".to_string(),
@@ -1477,7 +1477,7 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn create_ffi_type(&mut self, typ : ffi::Type) -> ffi::TypeId
 	{
-		let type_id = ffi::TypeId(self.native_interface.types.create(typ));
+		let type_id = ffi::TypeId(self.native_interface.types.add(typ));
 		self.generate_type_definition(type_id);
 		type_id
 	}
@@ -1703,7 +1703,7 @@ impl<'program> CodeGenerator<'program>
 
 	pub fn build_external_cpu_function_call(&mut self, external_function_id : ir::ExternalCpuFunctionId, argument_vars : &[VarId]) -> Box<[VarId]>
 	{
-		let external_cpu_function = & self.native_interface.external_cpu_functions[& external_function_id];
+		let external_cpu_function = & self.native_interface.external_cpu_functions[external_function_id];
 		let call_result_var = self.variable_tracker.generate();
 		let mut argument_string = String::new();
 		for (index, argument) in argument_vars.iter().enumerate()

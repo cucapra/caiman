@@ -45,7 +45,7 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 		{
 			assert_eq!(remote_node_id.funclet_id, funclet_id);
 
-			let destination_timeline_funclet = & program.funclets[& funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[remote_node_id.node_id]
@@ -61,7 +61,7 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 		{
 			assert_eq!(remote_node_id.funclet_id, funclet_id);
 
-			let destination_timeline_funclet = & program.funclets[& funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[remote_node_id.node_id]
@@ -81,7 +81,7 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 		{
 			assert_eq!(remote_node_id.funclet_id, funclet_id);
 
-			let source_timeline_funclet = & program.funclets[& funclet_id];
+			let source_timeline_funclet = & program.funclets[funclet_id];
 			assert_eq!(source_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			match & source_timeline_funclet.tail_edge
@@ -104,7 +104,7 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 pub fn check_next_timeline_tag_on_submit(program : & ir::Program, timeline_event : ir::RemoteNodeId, current_timeline_tag : ir::TimelineTag) -> ir::TimelineTag
 {
 	// To do: have timeline tag for both gpu and local
-	let destination_timeline_funclet = & program.funclets[& timeline_event.funclet_id];
+	let destination_timeline_funclet = & program.funclets[timeline_event.funclet_id];
 	assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 	let (here_place, there_place, local_past) = match & destination_timeline_funclet.nodes[timeline_event.node_id]
@@ -122,7 +122,7 @@ pub fn check_next_timeline_tag_on_submit(program : & ir::Program, timeline_event
 		{
 			assert_eq!(timeline_event.funclet_id, funclet_id);
 
-			let destination_timeline_funclet = & program.funclets[& funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[local_past]
@@ -148,7 +148,7 @@ pub fn check_next_timeline_tag_on_submit(program : & ir::Program, timeline_event
 pub fn check_next_timeline_tag_on_sync(program : & ir::Program, timeline_event : ir::RemoteNodeId, current_timeline_tag : ir::TimelineTag) -> ir::TimelineTag
 {
 	// To do: have timeline tag for both gpu and local
-	let destination_timeline_funclet = & program.funclets[& timeline_event.funclet_id];
+	let destination_timeline_funclet = & program.funclets[timeline_event.funclet_id];
 	assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 	let (here_place, there_place, local_past, remote_local_past) = match & destination_timeline_funclet.nodes[timeline_event.node_id]
@@ -166,7 +166,7 @@ pub fn check_next_timeline_tag_on_sync(program : & ir::Program, timeline_event :
 		{
 			assert_eq!(timeline_event.funclet_id, funclet_id);
 
-			let destination_timeline_funclet = & program.funclets[& funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[local_past]
