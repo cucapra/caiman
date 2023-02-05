@@ -1,6 +1,7 @@
 (
 	version : (0, 0, 1),
 	program : (
+		explicate : false,
 		native_interface : (
 			types : {
 				0 : I32,

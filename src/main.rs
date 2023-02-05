@@ -1,10 +1,13 @@
 extern crate clap;
+
+use std::env;
 use clap::{Arg, App, SubCommand};
 
 use caiman::frontend;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use caiman::frontend::{CompileMode, CompileOptions};
 
 struct Arguments
 {
@@ -14,28 +17,22 @@ struct Arguments
 	print_codegen_debug_info : bool
 }
 
-fn compile(input_file : &mut File, output_file : &mut File, options_opt : Option<caiman::frontend::CompileOptions>)
-{
-
-	let mut input_string = String::new();
-	match input_file.read_to_string(&mut input_string)
-	{
-		Err(why) => panic!("Couldn't read file: {}", why),
-		Ok(_) => ()
-	};
-
-	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::compile_ron_definition(& input_string, options_opt);
+fn output_result(result : Result<String, caiman::frontend::CompileError>, output_file : &mut Option<File>) {
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
 		Ok(output_string) =>
-		{
-			write!(output_file, "{}", output_string);
-		}
+			{
+				match output_file {
+					Some(out_file) => { write!(out_file, "{}", output_string); },
+					None => { print!("{}", output_string); }
+				}
+			}
 	}
 }
 
-fn explicate(input_file : &mut File, output_file : &mut File)
+fn compile(input_file : &mut File, output_file : &mut Option<File>,
+		   options : caiman::frontend::CompileOptions)
 {
 
 	let mut input_string = String::new();
@@ -45,15 +42,25 @@ fn explicate(input_file : &mut File, output_file : &mut File)
 		Ok(_) => ()
 	};
 
-	let result : Result<String, caiman::frontend::CompileError> = caiman::frontend::explicate_ron_definition(& input_string, None);
-	match result
+	let result = caiman::frontend::compile_caiman
+		(& input_string, options);
+	output_result(result, output_file);
+}
+
+fn explicate(input_file : &mut File, output_file : &mut Option<File>, compile_mode : caiman::frontend::CompileMode)
+{
+
+	let mut input_string = String::new();
+	match input_file.read_to_string(&mut input_string)
 	{
-		Err(why) => panic!("Parse error: {}", why),
-		Ok(output_string) =>
-		{
-			write!(output_file, "{}", output_string);
-		}
-	}
+		Err(why) => panic!("Couldn't read file: {}", why),
+		Ok(_) => ()
+	};
+
+	let result : Result<String, caiman::frontend::CompileError> =
+		caiman::frontend::explicate_caiman(& input_string,
+										   CompileOptions { print_codegen_debug_info : false, compile_mode });
+	output_result(result, output_file);
 }
 
 fn main()
@@ -68,8 +75,8 @@ fn main()
 				Arg::with_name("input")
 					.short("i")
 					.long("input")
-					.value_name("path.ron")
-					.help("Path to input spec (ron)")
+					.value_name("path.cair")
+					.help("Path to input assembly (caimanir)")
 					.takes_value(true)
 			)
 			.arg
@@ -112,11 +119,15 @@ fn main()
 		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only, print_codegen_debug_info}
 	};
 
+	let mut compile_mode = CompileMode::RON;
 	let input_path = Path::new(& arguments.input_path);
-	let output_path = match & arguments.output_path
+	if input_path.ends_with(& arguments.input_path) {
+		compile_mode = CompileMode::Assembly;
+	}
+	let mut output_file = match & arguments.output_path
 	{
-		Some(output_path) => output_path.clone(),
-		None => String::from("a.out")
+		Some(output_path) => Some(File::create(output_path).unwrap()),
+		None => None
 	};
 	
 	let mut input_file = match File::open(& input_path)
@@ -125,14 +136,13 @@ fn main()
 		Ok(file) => file
 	};
 
-	let mut output_file = File::create(output_path).unwrap();
 	if arguments.explicate_only
 	{
-		explicate(&mut input_file, &mut output_file);
+		explicate(&mut input_file, &mut output_file, compile_mode);
 	}
 	else
 	{
-		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info};
-		compile(&mut input_file, &mut output_file, Some(options));
+		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info, compile_mode};
+		compile(&mut input_file, &mut output_file, options);
 	}
 }
