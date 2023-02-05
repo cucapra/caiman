@@ -9,9 +9,17 @@
 // https://github.com/sampsyo/bril/blob/main/bril-rs/bril2json/src/lib.rs
 
 use crate::error::Info;
+use crate::spec::nodes::FunctionalExprNodeKind;
 use crate::value_language::ast::*;
 use crate::value_language::typing::Type;
-use crate::spec::nodes::FunctionalExprNodeKind;
+
+macro_rules! factory {
+    ($rt:ty, $f:ident ( $($x:ident : $t:ty),* ) => $e:expr) => {
+        pub fn $f (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
+            (self.info(l, r), $e)
+        }
+    }
+}
 
 pub struct ASTFactory
 {
@@ -50,14 +58,10 @@ impl ASTFactory
                 panic!("Byte offset too big: {}", u);
             }
         }
-        self.line_ending_byte_offsets
-            .iter()
-            .enumerate()
-            .map(|(l, c)| (l + 1, c))
-            .fold(
-                (1, u), // Case where offset is on line one
-                |curr, (l, c)| if u > *c { (l + 1, u - c) } else { curr },
-            )
+        self.line_ending_byte_offsets.iter().enumerate().map(|(l, c)| (l + 1, c)).fold(
+            (1, u), // Case where offset is on line one
+            |curr, (l, c)| if u > *c { (l + 1, u - c) } else { curr },
+        )
     }
 
     fn info(&self, l: usize, r: usize) -> Info
@@ -65,181 +69,48 @@ impl ASTFactory
         Info { location: (self.line_and_column(l), self.line_and_column(r)) }
     }
 
-    pub fn binop(
-        &self,
-        l: usize,
-        e1: ParsedExpr,
-        b: Binop,
-        e2: ParsedExpr,
-        r: usize,
-    ) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Binop(b, Box::new(e1), Box::new(e2)))
-    }
+    factory!(ParsedExpr, binop(e1: ParsedExpr, b: Binop, e2: ParsedExpr) 
+        => ExprKind::Binop(b, Box::new(e1), Box::new(e2)));
 
-    pub fn unop(
-        &self,
-        l: usize,
-        u: Unop,
-        e: ParsedExpr,
-        r: usize,
-    ) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Unop(u, Box::new(e)))
-    }
+    factory!(ParsedExpr, unop(u: Unop, e: ParsedExpr) => ExprKind::Unop(u, Box::new(e)));
 
-    pub fn if_expr(
-        &self,
-        l: usize,
-        e1: ParsedExpr,
-        e2: ParsedExpr,
-        e3: ParsedExpr,
-        r: usize,
-    ) -> ParsedExpr
-    {
-        (
-            self.info(l, r),
-            ExprKind::If(Box::new(e1), Box::new(e2), Box::new(e3)),
-        )
-    }
+    factory!(ParsedExpr, if_expr(e1: ParsedExpr, e2: ParsedExpr, e3: ParsedExpr)
+         => ExprKind::If(Box::new(e1), Box::new(e2), Box::new(e3)));
 
-    pub fn ir_node_expr(
-        &self,
-        l: usize,
-        node: FunctionalExprNodeKind,
-        args: Vec<ParsedExpr>,
-        r: usize,
-    ) -> ParsedExpr
-    {
-        (
-            self.info(l, r),
-            ExprKind::IRNode(node, args),
-        )
-    }
+    factory!(ParsedExpr, ir_node_expr(node: FunctionalExprNodeKind, args: Vec<ParsedExpr>)
+        => ExprKind::IRNode(node, args));
 
-    pub fn num(&self, l: usize, n: String, r: usize) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Num(n))
-    }
+    factory!(ParsedExpr, num(n: String) => ExprKind::Num(n));
 
-    pub fn var(&self, l: usize, i: String, r: usize) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Var(i))
-    }
+    factory!(ParsedExpr, var(i: String) => ExprKind::Var(i));
 
-    pub fn bool_expr(&self, l: usize, b: bool, r: usize) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Bool(b))
-    }
+    factory!(ParsedExpr, bool_expr(b: bool) => ExprKind::Bool(b));
 
-    pub fn input(&self, l: usize, r: usize) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Input())
-    }
+    factory!(ParsedExpr, input() => ExprKind::Input());
 
-    pub fn tuple(
-        &self,
-        l: usize,
-        es: Vec<ParsedExpr>,
-        r: usize,
-    ) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Tuple(es))
-    }
+    factory!(ParsedExpr, tuple(es: Vec<ParsedExpr>) => ExprKind::Tuple(es));
 
-    pub fn ecall(
-        &self,
-        l: usize,
-        name: String,
-        es: Vec<ParsedExpr>,
-        r: usize,
-    ) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Call(name, es))
-    }
+    factory!(ParsedExpr, ecall(name: String, es: Vec<ParsedExpr>) => ExprKind::Call(name, es));
 
-    pub fn labeled(
-        &self,
-        l: usize,
-        label: String,
-        e: ParsedExpr,
-        r: usize,
-    ) -> ParsedExpr
-    {
-        (self.info(l, r), ExprKind::Labeled(label, Box::new(e)))
-    }
+    factory!(ParsedExpr, labeled(label: String, e: ParsedExpr) => 
+        ExprKind::Labeled(label, Box::new(e)));
 
-    pub fn if_stmt(
-        &self,
-        l: usize,
-        e: ParsedExpr,
-        v: Vec<ParsedStmt>,
-        r: usize,
-    ) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::If(e, v))
-    }
+    factory!(ParsedStmt, if_stmt(e: ParsedExpr, v: Vec<ParsedStmt>) => StmtKind::If(e, v));
 
-    pub fn while_stmt(
-        &self,
-        l: usize,
-        e: ParsedExpr,
-        v: Vec<ParsedStmt>,
-        r: usize,
-    ) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::While(e, v))
-    }
+    factory!(ParsedStmt, while_stmt(e: ParsedExpr, v: Vec<ParsedStmt>) => StmtKind::While(e, v));
 
-    pub fn print(&self, l: usize, e: ParsedExpr, r: usize) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::Print(e))
-    }
+    factory!(ParsedStmt, print(e: ParsedExpr) => StmtKind::Print(e));
 
-    pub fn let_stmt(
-        &self,
-        l: usize,
-        vwt: VarWithType,
-        e: ParsedExpr,
-        r: usize,
-    ) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::Let(vwt, e))
-    }
+    factory!(ParsedStmt, let_stmt(vwt: VarWithType, e: ParsedExpr) => StmtKind::Let(vwt, e));
 
-    pub fn assign(
-        &self,
-        l: usize,
-        x: String,
-        e: ParsedExpr,
-        r: usize,
-    ) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::Assign(x, e))
-    }
+    factory!(ParsedStmt, assign(x: String, e: ParsedExpr) => StmtKind::Assign(x, e));
 
-    pub fn function(
-        &self,
-        l: usize,
+    factory!(ParsedStmt, function(
         f: String,
         params: Vec<VarWithType>,
         ret: Type,
         v: Vec<ParsedStmt>,
-        ret_value: ParsedExpr,
-        r: usize,
-    ) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::Function(f, params, ret, v, ret_value))
-    }
+        ret_value: ParsedExpr) => StmtKind::Function(f, params, ret, v, ret_value));
 
-    pub fn ccall(
-        &self,
-        l: usize,
-        name: String,
-        es: Vec<ParsedExpr>,
-        r: usize,
-    ) -> ParsedStmt
-    {
-        (self.info(l, r), StmtKind::Call(name, es))
-    }
+    factory!(ParsedStmt, ccall(name: String, es: Vec<ParsedExpr>) => StmtKind::Call(name, es));
 }

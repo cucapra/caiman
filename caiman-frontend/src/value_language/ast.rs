@@ -53,6 +53,7 @@ pub enum StmtKind<S, E>
     Print(Expr<E>),
     Let(VarWithType, Expr<E>),
     Assign(Var, Expr<E>),
+    //MultiAssign(Vec<Var>, Vec<Expr<E>>),
     Function(Var, Vec<VarWithType>, Type, Vec<Stmt<S, E>>, Expr<E>),
     Call(Var, Vec<Expr<E>>),
 }

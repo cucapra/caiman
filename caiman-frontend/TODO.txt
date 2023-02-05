@@ -1,0 +1,9 @@
+1. saxpy example in VL
+https://developer.nvidia.com/blog/n-ways-to-saxpy-demonstrating-the-breadth-of-gpu-programming-options/
+  - write it assuming you can do anything you want!!!
+  - external call for artih ops (for now)
+  - design scheduling version
+2. call external cpu
+3. schedule language with subexprs too!!
+-------------------------------------------------------------------------------
+"ignore the gpu for now"

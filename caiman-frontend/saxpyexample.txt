@@ -1,0 +1,73 @@
+void saxpy_cpu(int n, float a, float *x, float *y)
+{
+	for (int i = 0; i < n; ++i) 
+		y[i] = a * x[i] + y[i];
+}
+...
+// Perform SAXPY on ~33M elements
+saxpy_cpu(n, 2.0, x, y);
+
+ok so
+
+how to do loop ????
+- Array.map
+- Recursion (no. avoid)
+
+-------------------------------------------------------------------------------
+// saxpy.vl
+
+fn saxpy_cpu(a : f32, x : [f32], y : [f32]) -> [f32]
+{
+    Mapi(y, fn(i, y_elt) => a * x[i] * y_elt)
+    // (Mapi y (fn (i y_elt) (* (* a x[i]) y_elt)));
+}
+
+let x : [f32; 4] = [0.1 + 0.2, 1.3, 2.1, 3.9];
+// let x : [f32; 4] = [(+ 0.1 0.2) (1.3) (2.1) (3.9)]; ????
+
+let y : [f32; 4] = [8.9, 9.8, 1.5, 4.0 @ my_great_label];
+
+let saxpy_result : [f32; 4] = saxpy_cpu(1.2, x, y);
+// let saxpy_result : [f32; 4] = (saxpy_cpu 1.2 x y);
+
+x = 1 + 2
+
+-------------------------------------------------------------------------------
+// saxpy.sl
+
+fn saxpy_cpu {
+  // not sure yet
+  // maybe it's specified here to mutate y and make saxpy_result that ???
+}
+
+x.List(1);
+x.List(0).App_Arg(1); //  0.2
+x.List(0).App_Arg(0); //  0.1
+x.List(0).AppComplete(); // adding thme
+x.List(2);
+x.List(3);
+x.ListComplete();
+
+... // same for y
+
+saxpy_result.App_Arg(0); // 1.2
+saxpy_result.App_Arg(2); // y
+saxpy_result.App_Arg(1); // x
+saxpy_result.AppComplete();
+
+OR like
+() is get
+! or something is complete
+e.g.
+
+x.List(1);
+x.List(1);
+x.List(0).App(1);
+x.List(0).App(0);
+x.List(0).App!;
+x.List(2);
+x.List(3);
+x.List!;
+
+-------------------------------------------------------------------------------
+function app: app 
