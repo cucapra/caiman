@@ -124,8 +124,37 @@ funclet_arg = { (var_name ~ ":")? ~ typ }
 funclet_args = {  funclet_arg ~ ("," ~ funclet_arg)* }
 funclet_header = { typ_sep ~ fn_name ~ "(" ~ funclet_args? ~ ")" }
 
-return_command = ${ "return" ~ sep ~ var_name }
-tail_edge = { return_command }
+//   tail edges
+
+tail_nodes = { var_name ~ ("," ~ var_name)* }
+tail_box = { "[" ~ tail_nodes? ~ "]" }
+
+return_sep = ${ "return" ~ sep }
+return_args = { var_name | "[" ~ var_name ~ (", " ~ var_name)* ~ "]" }
+return_command = { return_sep ~ return_args }
+yield_sep = ${ "yield" ~ sep }
+yield_command = { yield_sep ~ n ~ tail_box ~ fn_name ~ var_name ~ tail_box }
+jump_sep = ${ "jump" ~ sep }
+jump_command = { jump_sep ~ var_name ~ tail_box }
+
+schedule_call_sep = ${ "schedule-call" ~ sep }
+schedule_call_command = { schedule_call_sep ~ funclet_loc ~ fn_name ~ tail_box ~ var_name }
+schedule_select_sep = ${ "schedule-select" ~ sep }
+tail_fn_nodes = { fn_name ~ ("," ~ fn_name)* }
+tail_fn_box = { "[" ~ tail_fn_nodes? ~ "]" }
+schedule_select_command = { schedule_select_sep ~ funclet_loc ~ var_name ~ tail_fn_box ~ tail_box ~ var_name }
+
+dynamic_alloc_sep = ${ "dynamic-alloc" ~ sep }
+tail_none = { "none" }
+tail_option_node = { var_name | tail_none }
+tail_option_nodes = { tail_option_node ~ ("," ~ tail_option_node)* }
+tail_option_box = { "[" ~ tail_option_nodes? ~ "]" }
+dynamic_alloc_command = { dynamic_alloc_sep ~ var_name ~ tail_box ~ tail_option_box ~ fn_name ~ fn_name ~ var_name }
+
+tail_edge = { return_command | yield_command | jump_command |
+    schedule_call_command | schedule_select_command | dynamic_alloc_command }
+
+//   command setup
 
 value_assign = { var_name ~ "=" ~ value_command ~ ";" }
 value_funclet = { funclet_header ~ "{" ~ value_assign* ~ tail_edge ~ ";" ~ "}" }

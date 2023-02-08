@@ -145,7 +145,28 @@ pub struct BufferInfo {
 
 #[derive(Debug, Clone)]
 pub enum TailEdge {
-	Return{ var : String }
+	Return{ return_values : Vec<NodeId> },
+	Yield { pipeline_yield_point_id : ir::PipelineYieldPointId,
+		yielded_nodes : Vec<NodeId>,
+		next_funclet : FuncletId,
+		continuation_join : NodeId,
+		arguments : Vec<NodeId> },
+	Jump { join : NodeId, arguments : Vec<NodeId> },
+	ScheduleCall { value_operation : RemoteNodeId,
+		callee_funclet_id : FuncletId,
+		callee_arguments : Vec<NodeId>,
+		continuation_join : NodeId },
+	ScheduleSelect { value_operation : RemoteNodeId,
+		condition : NodeId,
+		callee_funclet_ids : Vec<FuncletId>,
+		callee_arguments : Vec<NodeId>,
+		continuation_join : NodeId },
+	DynamicAllocFromBuffer { buffer : NodeId,
+		arguments : Vec<NodeId>,
+		dynamic_allocation_size_slots : Vec<Option<NodeId>>,
+		success_funclet_id : FuncletId,
+		failure_funclet_id : FuncletId,
+		continuation_join : NodeId }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

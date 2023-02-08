@@ -13,4 +13,4 @@ mod rust_wgpu_backend;
 mod scheduling_state;
 mod type_system;
 #[macro_use]
-mod ast;
+mod assembly_ast;

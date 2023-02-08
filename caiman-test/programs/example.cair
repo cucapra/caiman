@@ -45,6 +45,15 @@ value i32 @foo(%test : i32) {
     return %1; // todo: add more tail edges
 }
 
+value i64 @y(%abc : i64) {
+    // pretty clunky tbh
+    yield 0 [%abc] @foo %abc [%abc, %abc];
+}
+
+value i64 @j(%abc : i64) {
+    jump %abc [%abc, %abc];
+}
+
 schedule $slot0 @bar(%0 : $slot0) {
     %x = alloc-temporary-local-i64 @foo.%1;
     %2 = encode-do-local @foo.%1() -> %x;
@@ -59,6 +68,21 @@ schedule $slot0 @bar(%0 : $slot0) {
     %10 = serialized-join @foo %5;
     %11 = default-join;
     return %x;
+}
+
+schedule i64 @scall(%abc : i64) {
+    // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
+    schedule-call @j.%abc @foo [%abc, %abc] %abc;
+}
+
+schedule i64 @sselect(%abc : i64) {
+    // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
+    schedule-select @y.%abc %abc [@foo, @j] [%abc, %abc] %abc;
+}
+
+schedule i64 @dalloc(%abc : i64) {
+    // pretty clunky tbh -- note that `none` literally means `none`
+    dynamic-alloc %abc [] [%abc, none, %abc] @foo @j %abc;
 }
 
 timeline $event0 @time(%e : $event0) {
