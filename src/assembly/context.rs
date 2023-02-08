@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use crate::ir;
-use crate::ast;
+use crate::assembly_ast;
 
 #[derive(Debug, Clone)]
 struct TypeIndices {
@@ -26,7 +26,7 @@ enum Indices {
 
 #[derive(Debug)]
 pub struct Context {
-    ffi_type_map : HashMap<ast::FFIType, usize>,
+    ffi_type_map : HashMap<assembly_ast::FFIType, usize>,
     local_type_map : HashMap<String, usize>,
     funclet_map : HashMap<String, FuncletLocation>,
     remote_map : HashMap<String, HashMap<String, usize>>,
@@ -103,7 +103,7 @@ impl Context {
         indices
     }
 
-    pub fn add_ffi_type(&mut self, name : ast::FFIType) {
+    pub fn add_ffi_type(&mut self, name : assembly_ast::FFIType) {
         let indices = match &mut self.indices {
             Indices::TypeIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
@@ -204,7 +204,7 @@ impl Context {
         indices.local_index.node_id += 1;
     }
 
-    pub fn ffi_type_id(&mut self, name : &ast::FFIType) -> &usize {
+    pub fn ffi_type_id(&mut self, name : &assembly_ast::FFIType) -> &usize {
         match self.ffi_type_map.get(name) {
             Some(i) => i,
             None => panic!(format!("Un-indexed FFI type {:?}", name))
@@ -218,10 +218,19 @@ impl Context {
         }
     }
 
-    pub fn loc_type_id(&mut self, typ : ast::Type) -> &usize {
+    pub fn loc_type_id(&mut self, typ : assembly_ast::Type) -> &usize {
         match typ {
-            ast::Type::FFI(ft) => self.ffi_type_id(&ft),
-            ast::Type::Local(s) => self.local_type_id(s)
+            assembly_ast::Type::FFI(ft) => self.ffi_type_id(&ft),
+            assembly_ast::Type::Local(s) => self.local_type_id(s)
+        }
+    }
+
+    pub fn funclet_id_unwrap(&mut self, name : String) -> &usize {
+        match self.funclet_id(name) {
+            FuncletLocation::Local(n) => n,
+            FuncletLocation::GpuFun(n) => n,
+            FuncletLocation::CpuFun(n) => n,
+            FuncletLocation::ValueFun(n) => n
         }
     }
 
