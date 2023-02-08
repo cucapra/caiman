@@ -12,11 +12,13 @@ types [
     },
 ]
 
-external_cpu i64 @do_thing_on_cpu(i64);
+external_cpu i64 @op(i64);
 
 value i64 @foo(%0 : i64) {
-    %1 = constant 4i64;
-    return %1;
+    %z = extract %y 0;
+    %y = call @op(%x);
+    %x = constant 2i64;
+    return %z;
 }
 
 extras {}

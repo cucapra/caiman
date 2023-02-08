@@ -1,5 +1,1 @@
-[envs.expected]
-command = "cargo run --manifest-path ../../Cargo.toml --features=build-binary -- --input {base}_baseline.cair --explicate_only"
-
-[envs.explicate]
 command = "cargo run --manifest-path ../../Cargo.toml --features=build-binary -- --input {filename} --explicate_only"

@@ -113,12 +113,8 @@ fn new_information(value_index : &usize)
         input_buffers: HashMap::new(),
         output_buffers: HashMap::new(),
     };
-    // todo: based on number of inputs, which we're lazily taking to be one
+    // todo: extend?
     let mut input_slots_default = empty_slot();
-    input_slots_default.value_tag = ir::ValueTag::Input {
-        funclet_id: *value_index,
-        index: 0
-    };
     information.input_slots.insert(0, input_slots_default);
     information.output_slots.insert(0, empty_slot());
     information
