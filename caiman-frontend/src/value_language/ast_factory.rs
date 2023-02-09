@@ -69,7 +69,7 @@ impl ASTFactory
         Info { location: (self.line_and_column(l), self.line_and_column(r)) }
     }
 
-    factory!(ParsedExpr, binop(e1: ParsedExpr, b: Binop, e2: ParsedExpr) 
+    factory!(ParsedExpr, binop(b: Binop, e1: ParsedExpr, e2: ParsedExpr) 
         => ExprKind::Binop(b, Box::new(e1), Box::new(e2)));
 
     factory!(ParsedExpr, unop(u: Unop, e: ParsedExpr) => ExprKind::Unop(u, Box::new(e)));
@@ -84,33 +84,33 @@ impl ASTFactory
 
     factory!(ParsedExpr, var(i: String) => ExprKind::Var(i));
 
-    factory!(ParsedExpr, bool_expr(b: bool) => ExprKind::Bool(b));
+    factory!(ParsedExpr, unit() => ExprKind::Unit);
 
-    factory!(ParsedExpr, input() => ExprKind::Input());
+    factory!(ParsedExpr, bool_expr(b: bool) => ExprKind::Bool(b));
 
     factory!(ParsedExpr, tuple(es: Vec<ParsedExpr>) => ExprKind::Tuple(es));
 
     factory!(ParsedExpr, ecall(name: String, es: Vec<ParsedExpr>) => ExprKind::Call(name, es));
 
-    factory!(ParsedExpr, labeled(label: String, e: ParsedExpr) => 
+    factory!(ParsedExpr, labeled(e: ParsedExpr, label: String) => 
         ExprKind::Labeled(label, Box::new(e)));
-
-    factory!(ParsedStmt, if_stmt(e: ParsedExpr, v: Vec<ParsedStmt>) => StmtKind::If(e, v));
-
-    factory!(ParsedStmt, while_stmt(e: ParsedExpr, v: Vec<ParsedStmt>) => StmtKind::While(e, v));
-
-    factory!(ParsedStmt, print(e: ParsedExpr) => StmtKind::Print(e));
 
     factory!(ParsedStmt, let_stmt(vwt: VarWithType, e: ParsedExpr) => StmtKind::Let(vwt, e));
 
-    factory!(ParsedStmt, assign(x: String, e: ParsedExpr) => StmtKind::Assign(x, e));
-
-    factory!(ParsedStmt, function(
+    factory!(ParsedStmt, let_function(
         f: String,
         params: Vec<VarWithType>,
         ret: Type,
         v: Vec<ParsedStmt>,
-        ret_value: ParsedExpr) => StmtKind::Function(f, params, ret, v, ret_value));
+        ret_value: ParsedExpr) => StmtKind::LetFunction(f, params, ret, v, ret_value));
 
-    factory!(ParsedStmt, ccall(name: String, es: Vec<ParsedExpr>) => StmtKind::Call(name, es));
+    //factory!(ParsedStmt, if_stmt(e: ParsedExpr, v: Vec<ParsedStmt>) => StmtKind::If(e, v));
+
+    //factory!(ParsedStmt, while_stmt(e: ParsedExpr, v: Vec<ParsedStmt>) => StmtKind::While(e, v));
+
+    //factory!(ParsedStmt, print(e: ParsedExpr) => StmtKind::Print(e));
+
+    //factory!(ParsedStmt, assign(x: String, e: ParsedExpr) => StmtKind::Assign(x, e));
+
+    //factory!(ParsedStmt, ccall(name: String, es: Vec<ParsedExpr>) => StmtKind::Call(name, es));
 }

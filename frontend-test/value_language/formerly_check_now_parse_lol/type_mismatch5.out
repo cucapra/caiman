@@ -1,1 +1,0 @@
-[(Info { location: ((1, 0), (4, 2)) }, Function("foo", [(false, "x", I32)], Bool, [], (Info { location: ((3, 3), (3, 8)) }, Binop(Plus, (Info { location: ((3, 3), (3, 4)) }, Var("x")), (Info { location: ((3, 7), (3, 8)) }, Num("1"))))))]

@@ -1,4 +1,4 @@
 let b1 : bool = true;
 let b2 : bool = false;
-let x : i32 = if b1 { 1 } else { 2 };
+let x : i32 = (if b1 1 2);
 let y : i32 = IR::Select(b2, 3, 4);

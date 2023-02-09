@@ -1,0 +1,24 @@
+let x : i32 = 6;
+let b : bool = false;
+let y : i32 = x;
+let z : i32 = (+ x y);
+let b2 : bool = (|| b false);
+let u : bool = (!b2);
+
+let x : i32 = 1;
+//let foo () -> i32 { 5 }
+let foob (hi : i32) -> i32 {
+  let bar (j : bool) -> i32 { (+ hi 1) }
+  let asdf : i32 = (+ hi x);
+  (+ asdf 1)
+}
+
+let foob_out : i32 = (foob 100);
+
+let bar (a: i32) (b: bool) -> bool {
+  let useless : i32 = a;
+  (&& b false)
+}
+
+//(bar 5 true);
+

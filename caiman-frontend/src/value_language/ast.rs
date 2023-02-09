@@ -31,7 +31,7 @@ pub enum ExprKind<E>
     Var(Var),
     Num(String),
     Bool(bool),
-    Input(),
+    Unit,
     Binop(Binop, Box<Expr<E>>, Box<Expr<E>>),
     Unop(Unop, Box<Expr<E>>),
     If(Box<Expr<E>>, Box<Expr<E>>, Box<Expr<E>>),
@@ -42,20 +42,14 @@ pub enum ExprKind<E>
 }
 pub type Expr<E> = (E, ExprKind<E>);
 
-// bool true <==> var is mutable
-pub type VarWithType = (bool, Var, Type);
+pub type VarWithType = (Var, Type);
 
 #[derive(Debug, Clone)]
 pub enum StmtKind<S, E>
 {
-    If(Expr<E>, Vec<Stmt<S, E>>),
-    While(Expr<E>, Vec<Stmt<S, E>>),
-    Print(Expr<E>),
     Let(VarWithType, Expr<E>),
-    Assign(Var, Expr<E>),
-    //MultiAssign(Vec<Var>, Vec<Expr<E>>),
-    Function(Var, Vec<VarWithType>, Type, Vec<Stmt<S, E>>, Expr<E>),
-    Call(Var, Vec<Expr<E>>),
+    LetFunction(Var, Vec<VarWithType>, Type, Vec<Stmt<S, E>>, Expr<E>),
+    //LetMulti(Vec<VarWithType>, Vec<Expr<E>>),
 }
 pub type Stmt<S, E> = (S, StmtKind<S, E>);
 

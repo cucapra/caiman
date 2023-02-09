@@ -17,6 +17,7 @@ how to do loop ????
 // saxpy.vl
 
 fn saxpy_cpu(a : f32, x : [f32], y : [f32]) -> [f32]
+// fn saxpy_cpu (a : f32) (x : [f32]) (y : [f32]) -> [f32]
 {
     Mapi(y, fn(i, y_elt) => a * x[i] * y_elt)
     // (Mapi y (fn (i y_elt) (* (* a x[i]) y_elt)));

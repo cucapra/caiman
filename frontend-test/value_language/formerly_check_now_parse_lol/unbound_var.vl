@@ -1,2 +1,0 @@
-let x : i32 = 5;
-let z : i32 = x + y;

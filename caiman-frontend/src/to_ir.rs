@@ -229,7 +229,7 @@ fn value_funclets(
         use value_ast::StmtKind::*;
         match kind_s
         {
-            Let((_mut, var, t), exp) =>
+            Let((var, t), exp) =>
             {
                 let expr_index = add_value_expr(exp, t, &mut ctx)?.single()?;
                 if ctx.involved_variables.insert(var.clone(), expr_index).is_some()
@@ -334,7 +334,7 @@ fn types_of_value_stmt(stmt: &value_ast::ParsedStmt) -> Vec<typing::Type>
     use value_ast::StmtKind::*;
     match kind
     {
-        Let((_mut, _var, t), _exp) => vec![*t],
+        Let((_var, t), _exp) => vec![*t],
         _ => panic!("TODO"),
     }
 }
@@ -349,7 +349,7 @@ fn generate_context(
         use value_ast::StmtKind::*;
         match kind
         {
-            Let((_mut, var, t), _exp) =>
+            Let((var, t), _exp) =>
             {
                 if ctx.insert(var.to_string(), *t).is_some()
                 {

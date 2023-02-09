@@ -9,6 +9,7 @@ pub enum Type
     I32,
     //F32,
     Bool,
+    //Unit,
 }
 
 // TODO: Display for expression types
@@ -34,7 +35,7 @@ pub struct Context
 { 
     // Inner bool is true if mutation is allowed on 
     // that variable
-    var_table: HashMap<Var, (Type, bool)>,
+    var_table: HashMap<Var, Type>,
 }
 
 #[derive(Clone)]
@@ -57,36 +58,29 @@ impl Context
         self.var_table.contains_key(&v)
     }
 
-    fn get(&self, v: &Var) -> Result<(Type, bool), SemanticError>
+    fn get(&self, v: &Var) -> Result<Type, SemanticError>
     {
         match self.var_table.get(v)
         {
-            Some(p) => Ok(*p),
+            Some(t) => Ok(*t),
             None => Err(SemanticError::UnboundVariable(v.to_string())),
         }
-    }
-
-    pub fn var_is_mutable(&self, v: &Var) -> Result<bool, SemanticError>
-    {
-        let (_, is_mut) = self.get(v)?;
-        Ok(is_mut)
     }
     
     pub fn add(
         &mut self, 
         v: Var, 
         t: Type, 
-        m: bool,
     ) -> Result<(), SemanticError>
     {
         // Shadowing allowed.
-        self.var_table.insert(v, (t, m));
+        self.var_table.insert(v, t);
         Ok(())
     }
 
     pub fn get_type(&self, v: &Var) -> Result<Type, SemanticError>
     {
-        let (t, _) = self.get(&v)?;
+        let t = self.get(&v)?;
         Ok(t)
     }
 }

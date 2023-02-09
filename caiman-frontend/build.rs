@@ -87,8 +87,8 @@ fn build_lalrpop_parser(src_dir: &Path, spec: &spec::Spec)
     let nodeless_parser = src_dir.join("parser.lalrpop");
     let generated_parser = src_dir.join("generated_parser.lalrpop");
     fs::copy(&nodeless_parser, &generated_parser).unwrap();
-    let mut app_file = fs::OpenOptions::new().append(true).open(generated_parser).unwrap();
-    append_lalrpop_parser(&mut app_file, spec).unwrap();
+    let mut file_to_append = fs::OpenOptions::new().append(true).open(generated_parser).unwrap();
+    append_lalrpop_parser(&mut file_to_append, spec).unwrap();
 }
 
 fn build_rust_parser(src_dir: &Path) -> Result<(), Box<dyn Error>>

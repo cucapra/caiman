@@ -1,0 +1,1 @@
+[(Info { location: ((1, 0), (1, 25)) }, Let(("x", I32), (Info { location: ((1, 14), (1, 24)) }, Binop(Plus, (Info { location: ((1, 17), (1, 18)) }, Num("5")), (Info { location: ((1, 19), (1, 23)) }, Bool(true))))))]

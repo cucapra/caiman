@@ -1,1 +1,0 @@
-[(Info { location: ((1, 0), (1, 16)) }, Let((false, "x", I32), (Info { location: ((1, 14), (1, 15)) }, Num("5")))), (Info { location: ((2, 1), (2, 18)) }, Let((false, "y", Bool), (Info { location: ((2, 16), (2, 17)) }, Var("x"))))]
