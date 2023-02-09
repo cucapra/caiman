@@ -1,0 +1,67 @@
+version 0.0.1
+
+types [
+    i64,
+    slot $slot0 {
+        type : i64,
+        stage : ready,
+        place : local,
+    },
+    event $event0 {
+        place : local
+    },
+]
+
+external_gpu i64 @trivial(i64) : "caiman-test/programs/example.wgsl"
+{
+    resource {
+        group : 0,
+        binding : 0,
+        input : %x,
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : %x,
+    }
+}
+
+value i64 @foo(%0 : i64) {
+    %x = constant 3i64;
+    %ty = call @trivial(%x);
+    %y = extract %ty 0;
+    return %z;
+}
+
+schedule $slot0 @foo1(%blob : $slot0) {
+    %0 = alloc-temporary-local-i64 @foo.%x;
+    %t0 = encode-do-local @foo.%x() -> %0;
+
+    %1 = alloc-temporary-local-i64 @foo.%y;
+    %t1 = encode-do-local @foo.%ty(%0) -> %1;
+    return %blob;
+}
+
+timeline $event0 @time(%e : $event0) {
+    return %e;
+}
+
+extras {
+    @foo1 {
+        value : @foo,
+        input_slots : {
+            %blob : slot_info()
+        },
+        output_slots : {
+            %blob : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+}
+
+pipeline "main" = @foo1;

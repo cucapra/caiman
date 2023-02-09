@@ -1,0 +1,58 @@
+version 0.0.1
+
+types [
+    i64,
+    slot $slot0 {
+        type : i64,
+        stage : ready,
+        place : local,
+    },
+    event $event0 {
+        place : local
+    },
+]
+
+external_cpu i64 @add(i64, i64);
+
+value i64 @foo(%0 : i64) {
+    %x = constant 3i64;
+    %y = constant 2i64;
+    %n1_t = call @add(%x, %y);
+    %n1 = extract %n1_t 0;
+    return %n1;
+}
+
+schedule $slot0 @foo1(%blob : $slot0) {
+    %0 = alloc-temporary-local-i64 @foo.%x;
+    %t0 = encode-do-local @foo.%x() -> %0;
+    %1 = alloc-temporary-local-i64 @foo.%y;
+    %t1 = encode-do-local @foo.%y() -> %1;
+
+    %2 = alloc-temporary-local-i64 @foo.%n1;
+    %t2 = encode-do-local @foo.%n1_t(%0, %1) -> %2;
+    return %blob;
+}
+
+timeline $event0 @time(%e : $event0) {
+    return %e;
+}
+
+extras {
+    @foo1 {
+        value : @foo,
+        input_slots : {
+            %blob : slot_info()
+        },
+        output_slots : {
+            %blob : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+}
+
+pipeline "main" = @foo1;

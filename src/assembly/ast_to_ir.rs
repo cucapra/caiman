@@ -199,7 +199,7 @@ fn timeline_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::T
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
-        assembly_ast::TagCore::Output(r) => ir::TimelineTag::Input {
+        assembly_ast::TagCore::Output(r) => ir::TimelineTag::Output {
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
@@ -545,7 +545,8 @@ fn ir_node(node : &assembly_ast::Node, context : &mut Context) -> ir::Node {
                 FuncletLocation::Local(_) => panic!(format!("Cannot directly call local funclet {}", name)),
                 FuncletLocation::ValueFun(i) => i,
                 FuncletLocation::CpuFun(i) => i,
-                FuncletLocation::GpuFun(i) => i
+                FuncletLocation::GpuFun(i) => panic!(format!(
+                    "Attempting to call GPU function {} without params", name.clone()))
             };
             ir::Node::CallExternalCpu {
                 external_function_id,

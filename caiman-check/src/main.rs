@@ -5,12 +5,12 @@ mod pipelines {
 struct Callbacks;
 
 impl pipelines::main::CpuFunctions for Callbacks {
-    fn op(
+    fn add(
         &self,
-        state: &mut caiman_rt::State,
-        value: i64,
-    ) -> pipelines::main::outputs::op {
-        return (value + 1,);
+        state: &mut dyn caiman_rt::State,
+        value: (i64, i64),
+    ) -> pipelines::main::outputs::add {
+        return (value.0 + value.1,);
     }
 }
 
