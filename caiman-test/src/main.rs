@@ -1,4 +1,6 @@
+#![allow(warnings)]
 mod pipelines {
+    #![allow(warnings)]
     include!(concat!(env!("OUT_DIR"), "/generated/pipelines.txt"));
 }
 

@@ -21,7 +21,7 @@ fn compile(input_file : &mut File, output_file : &mut File)
         Err(why) => panic!("Parse error: {}", why),
         Ok(output_string) =>
             {
-                write!(output_file, "{}", output_string);
+                write!(output_file, "{}", output_string).expect("Invalid file");
             }
     }
 }
