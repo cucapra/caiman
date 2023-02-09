@@ -113,7 +113,6 @@ name = "caiman"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "caiman-check",
  "caiman-ref",
  "caiman-rt",
  "caiman-spec",
@@ -123,19 +122,9 @@ dependencies = [
  "naga",
  "pest",
  "pest_derive",
- "ron 0.7.0",
+ "ron",
  "serde",
  "serde_derive",
-]
-
-[[package]]
-name = "caiman-check"
-version = "0.1.0"
-dependencies = [
- "caiman",
- "caiman-rt",
- "futures",
- "ron 0.8.0",
 ]
 
 [[package]]
@@ -159,7 +148,7 @@ dependencies = [
 name = "caiman-spec"
 version = "0.1.0"
 dependencies = [
- "ron 0.7.0",
+ "ron",
  "serde",
  "serde_derive",
 ]
@@ -171,7 +160,7 @@ dependencies = [
  "caiman",
  "caiman-rt",
  "futures",
- "ron 0.7.0",
+ "ron",
 ]
 
 [[package]]
@@ -846,17 +835,6 @@ name = "ron"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b861ecaade43ac97886a512b360d01d66be9f41f3c61088b42cedf92e03d678"
-dependencies = [
- "base64",
- "bitflags",
- "serde",
-]
-
-[[package]]
-name = "ron"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "300a51053b1cb55c80b7a9fde4120726ddf25ca241a1cbb926626f62fb136bff"
 dependencies = [
  "base64",
  "bitflags",
