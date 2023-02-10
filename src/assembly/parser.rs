@@ -832,22 +832,22 @@ fn read_var_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> String {
     var
 }
 
-fn read_tail_nodes(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
+fn read_node_list(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
     expect_all(rule_var_name(), pairs, context)
 }
 
-fn read_tail_box(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
+fn read_node_box(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<String> {
     match pairs.peek() {
         None => { vec![] }
         Some(_)=> {
-            let rule = rule_pair(Rule::tail_nodes, read_tail_nodes);
+            let rule = rule_pair(Rule::node_list, read_node_list);
             expect(rule, pairs, context)
         }
     }
 }
 
-fn rule_tail_box<'a>() -> RuleApp<'a, Vec<String>> {
-    rule_pair(Rule::tail_box, read_tail_box)
+fn rule_node_box<'a>() -> RuleApp<'a, Vec<String>> {
+    rule_pair(Rule::node_box, read_node_box)
 }
 
 fn read_return_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::TailEdge {
@@ -868,10 +868,10 @@ fn rule_return_command<'a>() -> RuleApp<'a, assembly_ast::TailEdge> {
 fn read_yield_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::TailEdge {
     require_rule(Rule::yield_sep, pairs, context);
     let pipeline_yield_point_id = ir::PipelineYieldPointId(expect(rule_n(), pairs, context));
-    let yielded_nodes = expect(rule_tail_box(), pairs, context);
+    let yielded_nodes = expect(rule_node_box(), pairs, context);
     let next_funclet = expect(rule_fn_name(), pairs, context);
     let continuation_join = expect(rule_var_name(), pairs, context);
-    let arguments = expect(rule_tail_box(), pairs, context);
+    let arguments = expect(rule_node_box(), pairs, context);
     assembly_ast::TailEdge::Yield {
         pipeline_yield_point_id,
         yielded_nodes,
@@ -888,7 +888,7 @@ fn rule_yield_command<'a>() -> RuleApp<'a, assembly_ast::TailEdge> {
 fn read_jump_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::TailEdge {
     require_rule(Rule::jump_sep, pairs, context);
     let join = expect(rule_var_name(), pairs, context);
-    let arguments = expect(rule_tail_box(), pairs, context);
+    let arguments = expect(rule_node_box(), pairs, context);
     assembly_ast::TailEdge::Jump {
         join,
         arguments,
@@ -903,7 +903,7 @@ fn read_schedule_call_command(pairs : &mut Pairs<Rule>, context : &mut Context) 
     require_rule(Rule::schedule_call_sep, pairs, context);
     let value_operation = expect(rule_funclet_loc(), pairs, context);
     let callee_funclet_id = expect(rule_fn_name(), pairs, context);
-    let callee_arguments = expect(rule_tail_box(), pairs, context);
+    let callee_arguments = expect(rule_node_box(), pairs, context);
     let continuation_join = expect(rule_var_name(), pairs, context);
     assembly_ast::TailEdge::ScheduleCall {
         value_operation,
@@ -940,7 +940,7 @@ fn read_schedule_select_command(pairs : &mut Pairs<Rule>, context : &mut Context
     let value_operation = expect(rule_funclet_loc(), pairs, context);
     let condition = expect(rule_var_name(), pairs, context);
     let callee_funclet_ids = expect(rule_tail_fn_box(), pairs, context);
-    let callee_arguments = expect(rule_tail_box(), pairs, context);
+    let callee_arguments = expect(rule_node_box(), pairs, context);
     let continuation_join = expect(rule_var_name(), pairs, context);
     assembly_ast::TailEdge::ScheduleSelect {
         value_operation,
@@ -989,7 +989,7 @@ fn rule_tail_option_box<'a>() -> RuleApp<'a, Vec<Option<String>>> {
 fn read_dynamic_alloc_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::TailEdge {
     require_rule(Rule::dynamic_alloc_sep, pairs, context);
     let buffer = expect(rule_var_name(), pairs, context);
-    let arguments = expect(rule_tail_box(), pairs, context);
+    let arguments = expect(rule_node_box(), pairs, context);
     let dynamic_allocation_size_slots = expect(rule_tail_option_box(), pairs, context);
     let success_funclet_id = expect(rule_fn_name(), pairs, context);
     let failure_funclet_id = expect(rule_fn_name(), pairs, context);
@@ -1269,9 +1269,10 @@ fn rule_sync_fence_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
 fn read_inline_join_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
     require_rule(Rule::inline_join_sep, pairs, context);
     let funclet = expect(rule_fn_name(), pairs, context);
+    let captures = expect(rule_node_box(), pairs, context).into_boxed_slice();
     let continuation = expect(rule_var_name(), pairs, context);
     // empty captures re conversation
-    assembly_ast::Node::InlineJoin { funclet, captures: Box::new([]), continuation }
+    assembly_ast::Node::InlineJoin { funclet, captures, continuation }
 }
 
 fn rule_inline_join_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
@@ -1281,8 +1282,9 @@ fn rule_inline_join_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
 fn read_serialized_join_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
     require_rule(Rule::serialized_join_sep, pairs, context);
     let funclet = expect(rule_fn_name(), pairs, context);
+    let captures = expect(rule_node_box(), pairs, context).into_boxed_slice();
     let continuation = expect(rule_var_name(), pairs, context);
-    assembly_ast::Node::InlineJoin { funclet, captures: Box::new([]), continuation }
+    assembly_ast::Node::InlineJoin { funclet, captures, continuation }
 }
 
 fn rule_serialized_join_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
