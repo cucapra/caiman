@@ -1,7 +1,6 @@
 extern crate clap;
 
-use std::env;
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 
 use caiman::frontend;
 use std::fs::File;
@@ -17,14 +16,14 @@ struct Arguments
 	print_codegen_debug_info : bool
 }
 
-fn output_result(result : Result<String, caiman::frontend::CompileError>, output_file : &mut Option<File>) {
+fn output_result(result : Result<String, frontend::CompileError>, output_file : &mut Option<File>) {
 	match result
 	{
 		Err(why) => panic!("Parse error: {}", why),
 		Ok(output_string) =>
 			{
 				match output_file {
-					Some(out_file) => { write!(out_file, "{}", output_string); },
+					Some(out_file) => { write!(out_file, "{}", output_string).expect("Invalid file"); },
 					None => { print!("{}", output_string); }
 				}
 			}
@@ -32,7 +31,7 @@ fn output_result(result : Result<String, caiman::frontend::CompileError>, output
 }
 
 fn compile(input_file : &mut File, output_file : &mut Option<File>,
-		   options : caiman::frontend::CompileOptions)
+		   options : CompileOptions)
 {
 
 	let mut input_string = String::new();
@@ -42,12 +41,12 @@ fn compile(input_file : &mut File, output_file : &mut Option<File>,
 		Ok(_) => ()
 	};
 
-	let result = caiman::frontend::compile_caiman
+	let result = frontend::compile_caiman
 		(& input_string, options);
 	output_result(result, output_file);
 }
 
-fn explicate(input_file : &mut File, output_file : &mut Option<File>, compile_mode : caiman::frontend::CompileMode)
+fn explicate(input_file : &mut File, output_file : &mut Option<File>, compile_mode : CompileMode)
 {
 
 	let mut input_string = String::new();
@@ -57,8 +56,8 @@ fn explicate(input_file : &mut File, output_file : &mut Option<File>, compile_mo
 		Ok(_) => ()
 	};
 
-	let result : Result<String, caiman::frontend::CompileError> =
-		caiman::frontend::explicate_caiman(& input_string,
+	let result : Result<String, frontend::CompileError> =
+		frontend::explicate_caiman(& input_string,
 										   CompileOptions { print_codegen_debug_info : false, compile_mode });
 	output_result(result, output_file);
 }
@@ -142,7 +141,7 @@ fn main()
 	}
 	else
 	{
-		let options = caiman::frontend::CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info, compile_mode};
+		let options = CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info, compile_mode};
 		compile(&mut input_file, &mut output_file, options);
 	}
 }

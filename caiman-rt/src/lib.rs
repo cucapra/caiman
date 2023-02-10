@@ -1,3 +1,4 @@
+#![allow(warnings)]
 pub extern crate wgpu;
 
 pub trait State
