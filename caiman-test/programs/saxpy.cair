@@ -36,14 +36,14 @@ external_gpu i32 @cmp_lt_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/c
     resource {group : 0, binding : 0, input : %a},
     resource {group : 0, binding : 1, input : %b},
     // Hm... What do I specify for the output here? Does it matter?
-    resource {group : 0, binding : 2, output : %b}
+    resource {group : 0, binding : 2, output : %c}
 }
 external_cpu f32 @array_get_cpu(%a : array<f32,256>, %i : u32);
 external_gpu f32 @array_get_gpu(%a : array<f32,256>, %i : u32) : "caiman-test/programs/saxpy/array_get.wgsl" 
 {
     resource {group : 0, binding : 0, input: %a},
     resource {group : 0, binding : 1, input: %i},
-    resource {group : 0, binding : 2, output: %i} // again, confused about the output
+    resource {group : 0, binding : 2, output: %v} // again, confused about the output
 }
 external_cpu array<f32, 256> @array_put_cpu(%a : array<f32, 256>, %i : u32, %v : f32);
 external_gpu array<f32, 256> @array_put_gpu(%a : array<f32, 256>, %i : u32, %v : f32);
