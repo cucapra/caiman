@@ -465,11 +465,16 @@ impl<'program> FuncletChecker<'program>
 					{
 						assert_eq!(* place, ir::Place::Local);
 						let function = & self.program.native_interface.external_cpu_functions[*external_function_id];
-						// To do: Input checks 
+
+						assert_eq!(inputs.len(), arguments.len());
+						assert_eq!(inputs.len(), function.input_types.len());
+						assert_eq!(outputs.len(), function.output_types.len());
 
 						for (input_index, input_node_id) in arguments.iter().enumerate()
 						{
-							let value_tag = self.scalar_node_value_tags[input_node_id];
+							assert_eq!(self.node_types[& inputs[input_index]].storage_type().unwrap(), function.input_types[input_index]);
+
+							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
 							let funclet_id = self.value_funclet_id;
 							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
 						}
@@ -999,7 +1004,7 @@ impl<'program> FuncletChecker<'program>
 			{
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
 
-				let continuation_join_point = & self.node_join_points[condition_slot_node_id];
+				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
 
 				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
 				{
