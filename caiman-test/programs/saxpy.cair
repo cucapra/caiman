@@ -13,47 +13,6 @@ types [
     },
 ]
 
-external_cpu f32 @mul_cpu(f32, f32);
-external_gpu f32 @mul_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/mul.wgsl"
-{
-    resource {group : 0, binding : 0, input : %a},
-    resource {group : 0, binding : 0, output : %a},
-    resource {group : 0, binding : 1, input : %b}
-}
-external_cpu f32 @add_cpu(f32, f32);
-external_gpu f32 @add_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/add.wgsl"
-{
-    resource {group : 0, binding : 0, input : %a},
-    resource {group : 0, binding : 0, output : %a},
-    resource {group : 0, binding : 1, input : %b}
-}
-external_cpu i32 @cmp_lt_cpu(f32, f32);
-external_gpu i32 @cmp_lt_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/cmp_lt.wgsl"
-{
-    // Would be cool to identify optimizations here.
-    // These could *trivially* be combined into a single binding with two fields,
-    // at least by a human programmer, but will that semantically work with Caiman?
-    resource {group : 0, binding : 0, input : %a},
-    resource {group : 0, binding : 1, input : %b},
-    // Hm... What do I specify for the output here? Does it matter?
-    resource {group : 0, binding : 2, output : %c}
-}
-external_cpu f32 @array_get_cpu(%a : array<f32,256>, %i : u32);
-external_gpu f32 @array_get_gpu(%a : array<f32,256>, %i : u32) : "caiman-test/programs/saxpy/array_get.wgsl" 
-{
-    resource {group : 0, binding : 0, input: %a},
-    resource {group : 0, binding : 1, input: %i},
-    resource {group : 0, binding : 2, output: %v} // again, confused about the output
-}
-external_cpu array<f32, 256> @array_put_cpu(%a : array<f32, 256>, %i : u32, %v : f32);
-external_gpu array<f32, 256> @array_put_gpu(%a : array<f32, 256>, %i : u32, %v : f32);
-{
-    resource {group : 0, binding : 0, input: %a},
-    resource {group : 0, binding : 0, output: %a},
-    resource {group : 0, binding : 1, input: %i},
-    resource {group : 0, binding : 2, input: %v}
-}
-
 // This is pretty non-optimal since it's potentially two seperate kernel dispatches,
 // not to mention that it operates on a scalar...
 // It only exists for learning the syntax
@@ -111,6 +70,48 @@ value array<f32, 256> @saxpy_extreme_rec(
     %final = extract %final 0;
 
     return %final;
+}
+
+
+external_cpu f32 @mul_cpu(f32, f32);
+external_gpu f32 @mul_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/mul.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 0, output : %a},
+    resource {group : 0, binding : 1, input : %b}
+}
+external_cpu f32 @add_cpu(f32, f32);
+external_gpu f32 @add_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/add.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 0, output : %a},
+    resource {group : 0, binding : 1, input : %b}
+}
+external_cpu i32 @cmp_lt_cpu(f32, f32);
+external_gpu i32 @cmp_lt_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/cmp_lt.wgsl"
+{
+    // Would be cool to identify optimizations here.
+    // These could *trivially* be combined into a single binding with two fields,
+    // at least by a human programmer, but will that semantically work with Caiman?
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    // Hm... What do I specify for the output here? Does it matter?
+    resource {group : 0, binding : 2, output : %c}
+}
+external_cpu f32 @array_get_cpu(array<f32,256>, u32);
+external_gpu f32 @array_get_gpu(%a : array<f32,256>, %i : u32) : "caiman-test/programs/saxpy/array_get.wgsl" 
+{
+    resource {group : 0, binding : 0, input: %a},
+    resource {group : 0, binding : 1, input: %i},
+    resource {group : 0, binding : 2, output: %v} // again, confused about the output
+}
+external_cpu array<f32, 256> @array_put_cpu(array<f32, 256>, u32, f32);
+external_gpu array<f32, 256> @array_put_gpu(%a : array<f32, 256>, %i : u32, %v : f32);
+{
+    resource {group : 0, binding : 0, input: %a},
+    resource {group : 0, binding : 0, output: %a},
+    resource {group : 0, binding : 1, input: %i},
+    resource {group : 0, binding : 2, input: %v}
 }
 
 // Surprising: 'Non-local funclet used for value function add_cpu', src\assembly\ast_to_ir.rs:732:18
