@@ -39,7 +39,7 @@ schedule $slot0 @foo1(%blob : $slot0) {
 
     %4 = alloc-temporary-local-i64 @foo.%res;
     %t4 = encode-do-local @foo.%res_t(%2, %3) -> %4;
-    return %blob;
+    return %4;
 }
 
 timeline $event0 @time(%e : $event0) {
