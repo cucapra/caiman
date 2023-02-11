@@ -1,0 +1,128 @@
+version 0.0.1
+
+types [
+    f32,
+    array<f32, 256>,
+    slot $arr {
+        type: f32,
+        stage: ready,
+        place : local,
+    },
+    event $event0 {
+        place : local
+    },
+]
+
+external_cpu f32 @mul_cpu(f32, f32);
+external_gpu f32 @mul_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/mul.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 0, output : %a},
+    resource {group : 0, binding : 1, input : %b}
+}
+external_cpu f32 @add_cpu(f32, f32);
+external_gpu f32 @add_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/add.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 0, output : %a},
+    resource {group : 0, binding : 1, input : %b}
+}
+external_cpu i32 @cmp_lt_cpu(f32, f32);
+external_gpu i32 @cmp_lt_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/cmp_lt.wgsl"
+{
+    // Would be cool to identify optimizations here.
+    // These could *trivially* be combined into a single binding with two fields,
+    // at least by a human programmer, but will that semantically work with Caiman?
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    // Hm... What do I specify for the output here? Does it matter?
+    resource {group : 0, binding : 2, output : %b}
+}
+external_cpu f32 @array_get_cpu(%a : array<f32,256>, %i : u32);
+external_gpu f32 @array_get_gpu(%a : array<f32,256>, %i : u32) : "caiman-test/programs/saxpy/array_get.wgsl" 
+{
+    resource {group : 0, binding : 0, input: %a},
+    resource {group : 0, binding : 1, input: %i},
+    resource {group : 0, binding : 2, output: %i} // again, confused about the output
+}
+external_cpu array<f32, 256> @array_put_cpu(%a : array<f32, 256>, %i : u32, %v : f32);
+external_gpu array<f32, 256> @array_put_gpu(%a : array<f32, 256>, %i : u32, %v : f32);
+{
+    resource {group : 0, binding : 0, input: %a},
+    resource {group : 0, binding : 0, output: %a},
+    resource {group : 0, binding : 1, input: %i},
+    resource {group : 0, binding : 2, input: %v}
+}
+
+// This is pretty non-optimal since it's potentially two seperate kernel dispatches,
+// not to mention that it operates on a scalar...
+// It only exists for learning the syntax
+value f32 @saxpy(%a : f32, %x : f32, %y : f32) {
+    %ax_t = call @mul(%a, %x);
+    %ax = extract %ax_t 0;
+    %z_t = call @add(%ax, %y);
+    %z = extract %z_t 0;
+    return %z;
+}
+
+// An "extreme"-ly unoptimized version of saxpy that does as much as possible in the value funclet.
+// This mostly exists to test optimizations such as kernel fusion.
+// Without optimizations, this is the worst code you could ever write, probably.
+// NOTE REMOVE: The condition for a scheduling select is a slot, not a join. It's bugged rn though
+value array<f32, 256> @saxpy_extreme_rec(
+    %a : array<f32, 256>, 
+    %x : array<f32, 256>, 
+    %y : array<f32, 256>, 
+    %i : u32, 
+    %working : array<f32, 256>
+) {
+    %len = constant 256i32;
+    %stop_t = call @cmp_lt(%i, %len);
+    %stop = extract %stop_t 0;
+    
+    %av_t = call @array_get(%a, %i);
+    %av = extract %av_t 0;
+
+    %xv_t = call @array_get(%x, %i);
+    %xv = extract %xv_t 0;
+
+    %axv_t = call @mul(%av_t, %xv_t);
+    %axv = extract %axv_t 0;
+
+    %yv_t = call @array_get(%y, %i);
+    %yv = extract %yv_t 0;
+
+    %axyv_t = call @add(%axv_t, %yv_t);
+    %axyv = extract %axyv_t 0;
+
+    %workingMut_t = call @array_put(%working, %i);
+    %workingMut = extract %workingMut_t 0;
+
+    %one = constant 1i32;
+    %i2_t = call @add(%i, %one);
+    %i2 = extract %i2_t 0;
+
+    %recursed_t = call @saxpy_extreme_rec(%a, %x, %y, %i2, %workingMut);
+    %recursed = extract %recursed_t 0;
+
+    // In value language infinite recursion is actually fine
+    // You break recursion via scheduling
+    %final_t = select %stop %working %recursed;
+    %final = extract %final 0;
+
+    return %final;
+}
+
+// Surprising: 'Non-local funclet used for value function add_cpu', src\assembly\ast_to_ir.rs:732:18
+// I thought the intended use of value functions was to select between different implementations,
+// and one of the factors was whether they ran on the CPU or the GPU?
+// RESOLVED: This *should* be allowed but it's not implemented yet.
+value_function f32 @add(f32, f32) : [@add_cpu, @add_gpu];
+value_function f32 @mul(f32, f32) : [@mul_cpu, @mul_gpu];
+value_function i32 @cmp_lt(f32, f32) : [@cmp_lt_cpu, @cmp_lt_gpu];
+value_function f32 @array_get(array<f32, 256>, u32) : [@array_get_cpu, @array_get_gpu];
+value_function array<f32, 256> @array_put(array<f32, 256>, u32, f32) : [@array_put_cpu, @array_put_gpu];
+
+extras {}
+
+pipeline "pipeline_saxpy" = @saxpy;
