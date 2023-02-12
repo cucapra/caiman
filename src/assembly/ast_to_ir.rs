@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::{assembly_ast, frontend, ir};
 use crate::ir::ffi;
 use crate::assembly::{context, parser};
-use crate::assembly_ast::FFIType;
+use crate::assembly_ast::{FFIType, TypeKind};
 use crate::assembly::context::{Context, FuncletLocation};
 
 // for reading GPU stuff
@@ -478,22 +478,47 @@ fn ir_types(types : &Vec<assembly_ast::TypeDecl>, context : &mut Context) -> Sta
     for type_decl in types {
         let new_type = match type_decl {
             assembly_ast::TypeDecl::Local(typ) => {
-                match typ.event
+                match typ.type_kind
                 { // only supported custom types atm
-                    true => {
-                    ir::Type::Event {
+                    TypeKind::Slot => {
+                        ir::Type::Slot {
+                            storage_type: ffi::TypeId(value_type(
+                                typ.data.get(&as_key("type")).unwrap(), context).unpack()),
+                            queue_stage: value_stage(typ.data.get(&as_key("stage")).unwrap(), context),
+                            queue_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
+                        }
+                    }
+                    TypeKind::Fence => {
+                        ir::Type::Fence {
+                            queue_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
+                        }
+                    }
+                    TypeKind::Buffer => {
+                        let static_layout_dict = typ.data.get(&as_key("static_layout_opt"));
+                        fn static_layout_map(d : assembly_ast::UncheckedDict, context : &mut Context)
+                        -> ir::StaticBufferLayout {
+                            let alignment_bits = value_num(d.get(
+                                &as_key("alignment_bits")).unwrap(), context);
+                            let byte_size = value_num(d.get(
+                                &as_key("byte_size")).unwrap(), context);
+                            ir::StaticBufferLayout { alignment_bits, byte_size }
+                        }
+                        let static_layout_opt = static_layout_dict.map(|d|
+                            static_layout_map(as_dict(d.clone()), context));
+                        ir::Type::Buffer {
+                            storage_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
+                            static_layout_opt,
+                        }
+                    }
+                    TypeKind::Event => {
+                        ir::Type::Event {
                         place: value_place(
                             typ.data.get(&as_key("place")).unwrap(), context),
+                        }
                     }
-                },
-                    false => {
-                    ir::Type::Slot {
-                        storage_type: ffi::TypeId(value_type(
-                            typ.data.get(&as_key("type")).unwrap(), context).unpack()),
-                        queue_stage: value_stage(typ.data.get(&as_key("stage")).unwrap(), context),
-                        queue_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
+                    TypeKind::BufferSpace => {
+                        ir::Type::BufferSpace
                     }
-                }
                 }
             }
             assembly_ast::TypeDecl::FFI(name) => {

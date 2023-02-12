@@ -81,7 +81,7 @@ version = ${ version_keyword ~ n ~ "." ~ n ~ "." ~ n }
 
 // Types
 types = { "types" ~ "[" ~ type_def? ~ ("," ~ type_def)* ~ ","? ~ "]" }
-ir_type_decl_key = { "slot" | "fence" | "buffer" | "buffer_space" | "event" }
+ir_type_decl_key = { "slot" | "fence" | "buffer" | "event" | "space_buffer" }
 ir_type_decl_key_sep = ${ ir_type_decl_key ~ sep }
 ir_type_decl = { ir_type_decl_key_sep ~ type_name ~ unchecked_dict }
 ffi_type_decl = { ffi_type }
@@ -118,8 +118,9 @@ value_function = { value_function_sep ~ typ_sep ~ fn_name ~ "("
 value_sep = @{ "value" ~ sep }
 schedule_sep = @{ "schedule" ~ sep }
 timeline_sep = @{ "timeline" ~ sep }
+spatial_sep = @{ "spatial" ~ sep }
 funclet = { value_sep ~ value_funclet | schedule_sep ~ schedule_funclet |
-    timeline_sep ~ timeline_funclet }
+    timeline_sep ~ timeline_funclet | spatial_sep ~ spatial_funclet }
 funclet_arg = { (var_name ~ ":")? ~ typ }
 funclet_args = {  funclet_arg ~ ("," ~ funclet_arg)* }
 funclet_header = { typ_sep ~ fn_name ~ "(" ~ funclet_args? ~ ")" }
@@ -165,8 +166,14 @@ schedule_funclet = { funclet_header ~ "{" ~ schedule_assign* ~ tail_edge ~ ";" ~
 timeline_assign = { var_name ~ "=" ~ timeline_command ~ ";" }
 timeline_funclet = { funclet_header ~ "{" ~ timeline_assign* ~ tail_edge ~ ";" ~ "}" }
 
+spatial_assign = { var_name ~ "=" ~ spatial_command ~ ";" }
+spatial_funclet = { funclet_header ~ "{" ~ spatial_assign* ~ tail_edge ~ ";" ~ "}" }
+
 //    commands
+
 phi_command = ${ "phi" ~ sep ~ n }
+
+//     value
 
 constant_command = ${ "constant" ~ sep ~ constant }
 constant_unsigned_command = ${ "constant-unsigned" ~ sep ~ constant }
@@ -180,6 +187,8 @@ select_command = { select_sep ~ var_name ~ var_name ~ var_name }
 
 value_command = { phi_command | constant_command | constant_unsigned_command |
   extract_command | call_command | select_command }
+
+//     scheduling
 
 alloc_temporary_command = ${ "alloc-temporary-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
 do_sep = ${ "encode-do-" ~ place ~ sep }
@@ -205,11 +214,17 @@ schedule_command = { phi_command | alloc_temporary_command | do_command | create
     drop_command | alloc_command | encode_copy_command | submit_command | encode_fence_command  |
     sync_fence_command | inline_join_command | serialized_join_command | default_join_command }
 
+//     timeline
+
 sync_sep = ${ "sync-" ~ place ~ "->" ~ place ~ sep }
 sync_command = { sync_sep ~ var_name ~ var_name }
 submission_command = ${ "submission-" ~ place ~ "->" ~ place ~ sep ~ var_name }
 
 timeline_command = { phi_command | sync_command | submission_command }
+
+//     spatial
+
+spatial_command = { "INVALID" } // empty for now...
 
 // Extras
 extras = { "extras" ~ "{" ~ (extra ~ ",")* ~ "}" }

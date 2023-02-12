@@ -243,8 +243,13 @@ pub struct Funclet {
 }
 
 #[derive(Debug)]
+pub enum TypeKind {
+	Slot, Fence, Buffer, Event, BufferSpace
+}
+
+#[derive(Debug)]
 pub struct LocalType {
-	pub event : bool,
+	pub type_kind : TypeKind,
 	pub name : String,
 	pub data : UncheckedDict
 }
