@@ -7,12 +7,17 @@ types [
         stage : ready,
         place : local,
     },
+    slot $slot_gpu {
+        type : i64,
+        stage : ready,
+        place : gpu,
+    },
     event $event0 {
         place : local
     },
 ]
 
-external_gpu i64 @trivial(i64) : "caiman-test/programs/example.wgsl"
+external_gpu i64 @trivial(%x : i64) : "src/gpu_external.wgsl"
 {
     resource {
         group : 0,
@@ -30,16 +35,16 @@ value i64 @foo(%0 : i64) {
     %x = constant 3i64;
     %ty = call @trivial(%x);
     %y = extract %ty 0;
-    return %z;
+    return %y;
 }
 
-schedule $slot0 @foo1(%blob : $slot0) {
-    %0 = alloc-temporary-local-i64 @foo.%x;
+schedule $slot0 @foo_main(%blob : $slot0, %gpu_blob : $slot_gpu) {
+    %0 = alloc-local-i64 %blob @foo.%x;
     %t0 = encode-do-local @foo.%x() -> %0;
 
-    %1 = alloc-temporary-local-i64 @foo.%y;
-    %t1 = encode-do-local @foo.%ty(%0) -> %1;
-    return %blob;
+    %1 = alloc-gpu-i64 @foo.%gpu_blob %y;
+    %t1 = encode-do-gpu @foo.%ty(%0) -> %1;
+    return %1;
 }
 
 timeline $event0 @time(%e : $event0) {
@@ -47,7 +52,7 @@ timeline $event0 @time(%e : $event0) {
 }
 
 extras {
-    @foo1 {
+    @foo_main {
         value : @foo,
         input_slots : {
             %blob : slot_info()
@@ -64,4 +69,4 @@ extras {
     },
 }
 
-pipeline "main" = @foo1;
+pipeline "main" = @foo_main;
