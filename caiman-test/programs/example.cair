@@ -11,9 +11,21 @@ types [
         stage : ready,
         place : local,
     },
+    fence $fence0 {
+        place : cpu
+    },
+    buffer $buffer0 {
+        place : gpu,
+        static_layout_opt : { // unnamed :hmmmm:
+            alignment_bits : 4,
+            byte_size : 8
+        },
+    },
     event $event0 {
         place : local
     },
+    // naming is dumb, but the parser is sad if I have both buffer and buffer_space as keywords here
+    space_buffer $buffer_space0 {} // note that {} is required, even though it's empty here
 ]
 
 // ---
@@ -64,8 +76,8 @@ schedule $slot0 @bar(%0 : $slot0) {
     %6 = submit-cpu @foo.%1;
     %7 = encode-fence-cpu @foo.%3;
     %8 = sync-fence-cpu %7 @foo.%2;
-    %9 = inline-join @foo %5;
-    %10 = serialized-join @foo %5;
+    %9 = inline-join @foo [] %5;
+    %10 = serialized-join @foo [] %5;
     %11 = default-join;
     return %x;
 }
@@ -89,6 +101,10 @@ timeline $event0 @time(%e : $event0) {
     %1 = submission-cpu->gpu %e;
     %2 = sync-cpu->gpu %e %1;
     return %e;
+}
+
+spatial i64 @space(%b : $buffer_space0) {
+    return %b;
 }
 
 value_function i64 @simple(i64) : [@foo];
