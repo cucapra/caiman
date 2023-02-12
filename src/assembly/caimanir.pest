@@ -174,7 +174,7 @@ extract_sep = @{ "extract" ~ sep }
 extract_command = { extract_sep ~ var_name ~ n }
 call_sep = @{ "call" ~ sep }
 call_args = { var_name ~ ("," ~ var_name)* }
-call_command = { call_sep ~ fn_name ~ ("<" ~ call_args ~ ">")? ~ "(" ~ call_args? ~ ")" }
+call_command = { call_sep ~ fn_name ~ ("<" ~ call_args? ~ ">")? ~ "(" ~ call_args? ~ ")" }
 select_sep = @{ "select" ~ sep }
 select_command = { select_sep ~ var_name ~ var_name ~ var_name }
 
