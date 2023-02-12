@@ -81,9 +81,9 @@ version = ${ version_keyword ~ n ~ "." ~ n ~ "." ~ n }
 
 // Types
 types = { "types" ~ "[" ~ type_def? ~ ("," ~ type_def)* ~ ","? ~ "]" }
-type_decl = { "slot" | "event" }
-type_decl_sep = ${ type_decl ~ sep }
-ir_type_decl = { type_decl_sep ~ type_name ~ unchecked_dict }
+ir_type_decl_key = { "slot" | "fence" | "buffer" | "buffer_space" | "event" }
+ir_type_decl_key_sep = ${ ir_type_decl_key ~ sep }
+ir_type_decl = { ir_type_decl_key_sep ~ type_name ~ unchecked_dict }
 ffi_type_decl = { ffi_type }
 type_def = { ffi_type_decl | ir_type_decl }
 

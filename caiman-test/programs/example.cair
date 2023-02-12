@@ -91,6 +91,11 @@ timeline $event0 @time(%e : $event0) {
     return %e;
 }
 
+spatial i64 @space() {
+    %0 = constant 1i64; // TODO: wrong of course, but temporary for example purposes
+    return %0;
+}
+
 value_function i64 @simple(i64) : [@foo];
 
 // ---
