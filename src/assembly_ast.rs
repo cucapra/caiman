@@ -43,6 +43,8 @@ pub enum FFIType
 	GpuBufferRef ( Box<FFIType> ),
 	GpuBufferSlice ( Box<FFIType> ),
 	GpuBufferAllocator,
+	CpuBufferAllocator,
+	CpuBufferRef ( Box<FFIType> ),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -204,6 +206,7 @@ pub enum Tag {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
+	None,
 	ID(String),
     FunctionLoc(RemoteNodeId),
     VarName(String),
@@ -244,7 +247,7 @@ pub struct Funclet {
 
 #[derive(Debug)]
 pub enum TypeKind {
-	Slot, Fence, Buffer, Event, BufferSpace
+	NativeValue, Slot, Fence, Buffer, Event, BufferSpace
 }
 
 #[derive(Debug)]

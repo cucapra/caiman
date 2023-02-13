@@ -41,6 +41,8 @@ pub enum Type
 	GpuBufferRef { element_type : TypeId },
 	GpuBufferSlice { element_type : TypeId },
 	GpuBufferAllocator,
+	CpuBufferAllocator,
+	CpuBufferRef { element_type : TypeId },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

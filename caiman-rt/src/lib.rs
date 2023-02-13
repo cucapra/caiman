@@ -181,6 +181,25 @@ impl<'buffer> CpuBufferAllocator<'buffer>
 }
 
 #[derive(Debug)]
+// A slot holding a pointer to gpu-resident data of type T
+pub struct CpuBufferRef<'buffer, T : Sized>
+{
+	pub buffer : & 'buffer std::mem::MaybeUninit<T>,
+}
+
+impl<'buffer, T : Sized> CpuBufferRef<'buffer, T>
+{
+	pub fn new(buffer : & 'buffer std::mem::MaybeUninit<T>)
+		-> Self
+	{
+		Self {
+			buffer,
+		}
+	}
+
+}
+
+#[derive(Debug)]
 pub struct JoinStack<'buffer>
 {
 	bytes : & 'buffer mut [u8],

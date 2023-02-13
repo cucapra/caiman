@@ -7,11 +7,14 @@ types [
         stage : ready,
         place : local,
     },
-    slot $slot_gpu {
-        type : i64,
-        stage : ready,
+    slot $buffer_gpu {
+        static_layout_opt : {
+            alignment_bits : 0,
+            byte_size : 4096
+        },
         place : gpu,
     },
+
     event $event0 {
         place : local
     },
@@ -42,7 +45,7 @@ schedule $slot0 @foo_main(%blob : $slot0, %gpu_blob : $slot_gpu) {
     %0 = alloc-local-i64 %blob @foo.%x;
     %t0 = encode-do-local @foo.%x() -> %0;
 
-    %1 = alloc-gpu-i64 @foo.%gpu_blob %y;
+    %1 = alloc-gpu-i64 %gpu_blob @foo.%gpu_blob;
     %t1 = encode-do-gpu @foo.%ty(%0) -> %1;
     return %1;
 }

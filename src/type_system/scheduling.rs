@@ -463,7 +463,7 @@ impl<'program> FuncletChecker<'program>
 					}
 					ir::Node::CallExternalCpu { external_function_id, arguments } =>
 					{
-						assert_eq!(* place, ir::Place::Local);
+						assert_ne!(* place, ir::Place::Gpu);
 						let function = & self.program.native_interface.external_cpu_functions[*external_function_id];
 
 						assert_eq!(inputs.len(), arguments.len());
@@ -724,9 +724,12 @@ impl<'program> FuncletChecker<'program>
 			ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
 			{
 				// Temporary restriction
-				assert_eq!(* place, ir::Place::Gpu);
+				match *place {
+					ir::Place::Local => panic!("Unimplemented allocating locally"),
+					_ => {}
+				}
 				let buffer_spatial_tag = self.scalar_node_spatial_tags[buffer_node_id];
-				assert!(buffer_spatial_tag != ir::SpatialTag::None);
+				assert_ne!(buffer_spatial_tag, ir::SpatialTag::None);
 				
 				if let Some(NodeType::Buffer(Buffer{storage_place, static_layout_opt : Some(static_layout)})) = self.node_types.get_mut(buffer_node_id)
 				{
