@@ -551,5 +551,5 @@ pub fn explicate_scheduling(program : &mut ir::Program)
     }
     cleanup_partials(&mut context);
     construct_pipeline(&mut context);
-    // panic!("Please don't explicate yet!")
+    panic!("Please don't explicate yet!")
 }

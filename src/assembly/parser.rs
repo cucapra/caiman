@@ -681,23 +681,26 @@ fn read_version(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_as
     assembly_ast::Version { major, minor, detailed }
 }
 
-fn is_event(s : String, context : &mut Context) -> bool {
+fn read_ir_type_decl_key(s : String, _ : &mut Context) -> assembly_ast::TypeKind {
     match s.as_str() {
-        "event" => true,
-        "slot" => false,
+        "slot" => assembly_ast::TypeKind::Slot,
+        "fence" => assembly_ast::TypeKind::Fence,
+        "buffer" => assembly_ast::TypeKind::Buffer,
+        "space_buffer" => assembly_ast::TypeKind::BufferSpace,
+        "event" => assembly_ast::TypeKind::Event,
         _ => panic!(format!("Unexpected slot check {}", s))
     }
 }
 
 fn read_ir_type_decl(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::TypeDecl {
     let event_rule = rule_str_unwrap(
-        Rule::type_decl_sep, 1, Box::new(is_event));
-    let event = expect(event_rule, pairs, context);
+        Rule::ir_type_decl_key_sep, 1, Box::new(read_ir_type_decl_key));
+    let type_kind = expect(event_rule, pairs, context);
     let name_rule = rule_str_unwrap(Rule::type_name, 1, Box::new(read_string));
     let name = expect(name_rule, pairs, context);
     let data = expect(rule_unchecked_dict(), pairs, context);
     context.add_local_type(name.clone());
-    let result = assembly_ast::LocalType { event, name, data };
+    let result = assembly_ast::LocalType { type_kind, name, data };
     assembly_ast::TypeDecl::Local(result)
 }
 
@@ -1370,10 +1373,21 @@ fn read_timeline_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> as
     expect_vec(rules, pairs, context)
 }
 
+fn read_spatial_command(_ : &mut Pairs<Rule>, _ : &mut Context) -> assembly_ast::Node {
+    unimplemented!() // currently invalid
+}
+
 fn read_timeline_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
     let name = expect(rule_var_name(), pairs, context);
     context.add_node(name);
     let rule = rule_pair(Rule::timeline_command, read_timeline_command);
+    expect(rule, pairs, context)
+}
+
+fn read_spatial_assign(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
+    let name = expect(rule_var_name(), pairs, context);
+    context.add_node(name);
+    let rule = rule_pair(Rule::spatial_command, read_spatial_command);
     expect(rule, pairs, context)
 }
 
@@ -1420,15 +1434,22 @@ fn read_timeline_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> as
     read_funclet_blob(ir::FuncletKind::Timeline, rule_command, pairs, context)
 }
 
+fn read_spatial_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Funclet {
+    let rule_command = rule_pair(Rule::spatial_assign, read_spatial_assign);
+    read_funclet_blob(ir::FuncletKind::Spatial, rule_command, pairs, context)
+}
+
 fn read_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Funclet {
     let rule = pairs.next().unwrap().as_rule();
     let vrule = rule_pair(Rule::value_funclet, read_value_funclet);
     let srule = rule_pair(Rule::schedule_funclet, read_schedule_funclet);
     let trule = rule_pair(Rule::timeline_funclet, read_timeline_funclet);
+    let sprule = rule_pair(Rule::spatial_funclet, read_spatial_funclet);
     match rule {
         Rule::value_sep => expect(vrule, pairs, context),
         Rule::schedule_sep => expect(srule, pairs, context),
         Rule::timeline_sep => expect(trule, pairs, context),
+        Rule::spatial_sep => expect(sprule, pairs, context),
         _ => panic!(unexpected_rule(&vec![vrule, srule, trule], rule))
     }
 }
