@@ -12,9 +12,9 @@ types [
     },
 ]
 
-external_cpu i64 @add(i64, i64);
+external_cpu @add(i64, i64) -> i64;
 
-value i64 @foo(%0 : i64) {
+value @foo(%0 : i64) -> i64 {
     %res_t = call @add(%n1, %n2);
     %res = extract %res_t 0;
     %n2_t = call @add(%x, %n1);
@@ -26,7 +26,7 @@ value i64 @foo(%0 : i64) {
     return %res;
 }
 
-schedule $slot0 @foo1(%blob : $slot0) {
+schedule @foo1(%blob : $slot0) -> $slot0 {
     %0 = alloc-temporary-local-i64 @foo.%x;
     %t0 = encode-do-local @foo.%x() -> %0;
     %1 = alloc-temporary-local-i64 @foo.%y;
@@ -42,7 +42,7 @@ schedule $slot0 @foo1(%blob : $slot0) {
     return %4;
 }
 
-timeline $event0 @time(%e : $event0) {
+timeline @time(%e : $event0) -> $event0 {
     return %e;
 }
 

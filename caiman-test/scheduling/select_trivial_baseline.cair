@@ -12,7 +12,7 @@ types [
     },
 ]
 
-value i64 @foo(%0 : i64) {
+value @foo(%0 : i64) -> i64 {
     %x = constant 0i64;
     %y = constant 1i64;
     %z = constant 2i64;
@@ -20,7 +20,7 @@ value i64 @foo(%0 : i64) {
     return %r;
 }
 
-schedule $slot0 @foo_main(%blob : $slot0) {
+schedule @foo_main(%blob : $slot0) -> $slot0 {
     %0 = alloc-temporary-local-i64 @foo.%x;
     %t0 = encode-do-local @foo.%x() -> %0;
     %default = default-join;
@@ -28,19 +28,19 @@ schedule $slot0 @foo_main(%blob : $slot0) {
     schedule-select @foo.%x %0 [@foo1, @foo2] [%blob] %0;
 }
 
-schedule $slot0 @foo1(%blob : $slot0) {
+schedule @foo1(%blob : $slot0) -> $slot0 {
     %0 = alloc-temporary-local-i64 @foo.%y;
     %t0 = encode-do-local @foo.%y() -> %0;
     return %0;
 }
 
-schedule $slot0 @foo2(%blob : $slot0) {
+schedule @foo2(%blob : $slot0) -> $slot0 {
     %0 = alloc-temporary-local-i64 @foo.%z;
     %t0 = encode-do-local @foo.%z() -> %0;
     return %0;
 }
 
-timeline $event0 @time(%e : $event0) {
+timeline @time(%e : $event0) -> $event0 {
     return %e;
 }
 

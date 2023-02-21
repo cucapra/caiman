@@ -28,7 +28,7 @@ types [
     space_buffer $buffer_space {},
 ]
 
-external_gpu i32 @trivial(%x : i32) : "src/gpu_external.wgsl"
+external_gpu @trivial(%x : i32) -> [%out : i32] : "src/gpu_external.wgsl"
 {
     resource {
         group : 0,
@@ -38,23 +38,23 @@ external_gpu i32 @trivial(%x : i32) : "src/gpu_external.wgsl"
     resource {
         group : 0,
         binding : 1,
-        output : %x,
+        output : %out,
     }
 }
 
-value i32 @foo(%x : i32) {
+value @foo(%x : i32) -> i32 {
     %y = call @trivial(%x);
     %z = extract %y 0;
     return %z;
 }
 
-timeline $event0 @foo_time(%e : $event0) {
+timeline @foo_time(%e : $event0) -> $event0 {
     %sub1 = submission-local->gpu %e;
     %sync1 = sync-local->gpu %sub1 %sub1;
     return %sync1;
 }
 
-schedule $slot_gpu @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) {
+schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> $slot_gpu {
     %0 = alloc-gpu-i32 %in_buff @foo.%x;
     %1 = encode-copy-gpu %s %0;
     %2 = alloc-gpu-i32 %out_buff @foo.%z;
@@ -65,7 +65,7 @@ schedule $slot_gpu @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff
     return %2;
 }
 
-spatial $buffer_space @foo_space(%bs : $buffer_space) {
+spatial @foo_space(%bs : $buffer_space) -> $buffer_space {
     return %bs;
 }
 
