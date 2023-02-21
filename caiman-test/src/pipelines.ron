@@ -304,28 +304,29 @@
 
 			17 : (
 				kind : ScheduleExplicit,
-				input_types : [1, 6],
+				input_types : [1, 6, 6],
 				output_types : [5],
 
 				nodes : [
 					Phi(index : 0),
 					Phi(index : 1),
+					Phi(index : 2),
 					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 1, node_id : 1)),
-					EncodeDo(place : Local, operation : (funclet_id : 1, node_id : 1), inputs : [], outputs : [2]),
+					EncodeDo(place : Local, operation : (funclet_id : 1, node_id : 1), inputs : [], outputs : [3]),
 					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 0)),
 					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 0)),
-					EncodeCopy(place : Gpu, input : 0, output : 4),
-					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 3)),
+					EncodeCopy(place : Gpu, input : 0, output : 5),
+					StaticAllocFromStaticBuffer(buffer : 2, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 3)),
 					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 3)),
-					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 2), inputs : [2, 2, 2, 4], outputs : [6]),
+					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 2), inputs : [3, 3, 3, 5], outputs : [7]),
 					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 5)),
 					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 5)),
-					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 4), inputs : [2, 2, 2, 6], outputs : [8]),
+					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 4), inputs : [3, 3, 3, 7], outputs : [9]),
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
 					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					SyncFence(place : Local, fence : 11, event : (funclet_id : 15, node_id : 2)),
+					SyncFence(place : Local, fence : 12, event : (funclet_id : 15, node_id : 2)),
 				],
-				tail_edge : Return(return_values : [8])
+				tail_edge : Return(return_values : [9])
 			),
 
 			18 : (
@@ -516,7 +517,7 @@
 				output_slots : {0 : (value_tag : Output(funclet_id : 1, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
 				input_fences : {},
 				output_fences : {},
-				input_buffers : {1 : (spatial_tag : Input(funclet_id : 18, index : 0))},
+				input_buffers : {1 : (spatial_tag : Input(funclet_id : 18, index : 0)), 2 : (spatial_tag : Input(funclet_id : 18, index : 0))},
 				output_buffers : {},
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),

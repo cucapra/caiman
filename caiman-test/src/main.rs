@@ -74,6 +74,16 @@ impl pipelines::pipeline_with_value_function::CpuFunctions for Callbacks {
     }
 }
 
+impl pipelines::allocation_test_pipeline::CpuFunctions for Callbacks {
+    fn do_thing_on_cpu(
+        &self,
+        state: &mut caiman_rt::State,
+        value: i32,
+    ) -> pipelines::pipeline_with_value_function::outputs::do_thing_on_cpu {
+        return (value + 1,);
+    }
+}
+
 impl pipelines::looping_pipeline::CpuFunctions for Callbacks {
     fn do_thing_on_cpu(
         &self,
@@ -247,11 +257,11 @@ mod tests {
                 compatible_surface: None,
                 force_fallback_adapter: false,
             }))
-            .unwrap();
+                .unwrap();
         let (mut device, mut queue) = futures::executor::block_on(
             adapter.request_device(&std::default::Default::default(), None),
         )
-        .unwrap();
+            .unwrap();
 
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -291,6 +301,78 @@ mod tests {
             unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
         let final_value: i32 = i32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);
         assert_eq!(6, final_value);
+    }
+
+    #[test]
+    fn allocation_test_pipeline() {
+        use caiman_rt::wgpu;
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let adapter =
+            futures::executor::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            }))
+                .unwrap();
+        let (mut device, mut queue) = futures::executor::block_on(
+            adapter.request_device(&std::default::Default::default(), None),
+        )
+            .unwrap();
+
+        let input_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 1024u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::MAP_READ
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: true,
+        });
+        input_buffer
+            .slice(0..4)
+            .get_mapped_range_mut()
+            .copy_from_slice(&0i32.to_ne_bytes());
+        input_buffer.unmap();
+
+        let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 1024u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::MAP_READ
+                | wgpu::BufferUsages::MAP_WRITE
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let callbacks = crate::Callbacks;
+        let mut root_state = caiman_rt::RootState::new(&mut device, &mut queue);
+        let mut join_stack_bytes = [0u8; 4096usize];
+        let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
+        let instance =
+            crate::pipelines::allocation_test_pipeline::Instance::new(&mut root_state, &callbacks);
+
+        let mut input_alloc = caiman_rt::GpuBufferAllocator::new(&input_buffer, 1024);
+        let mut output_alloc = caiman_rt::GpuBufferAllocator::new(&output_buffer, 1024);
+        let mut result = instance.start(&mut join_stack, 1, input_alloc, output_alloc);
+
+        device.poll(wgpu::Maintain::Wait);
+        //futures::executor::block_on(queue.on_submitted_work_done());
+        //device.poll(wgpu::Maintain::Poll);
+        use std::convert::TryInto;
+        // note: slicing from the input buffer non-deterministically corrupts memory
+        // also means I can't get `3` like I would want to, not entirely sure how to resolve this
+        // let test_slice = input_buffer.slice(0..512);
+        let buffer_slice = output_buffer.slice(0..);
+        // let future2 = test_slice.map_async(wgpu::MapMode::Read);
+        let future = buffer_slice.map_async(wgpu::MapMode::Read);
+        //futures::executor::block_on(future);
+        device.poll(wgpu::Maintain::Wait);
+        // let quick =
+        //     unsafe { std::slice::from_raw_parts(test_slice.get_mapped_range().as_ptr(), 512) };
+        let slice =
+            unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
+        // dbg!([&quick[0], &quick[256]]);
+        let final_value: i32 = i32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);
+        assert_eq!(2, final_value);
     }
 
     #[test]
