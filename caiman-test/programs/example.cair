@@ -30,9 +30,9 @@ types [
 
 // ---
 
-external_cpu i64 @do_thing_on_cpu(i64);
+external_cpu @do_thing_on_cpu(i64) -> i64;
 // the path is required, and is relative to where you run this thing at the moment (unfortunately)
-external_gpu i64 @do_thing_on_gpu(%x : i64) : "caiman-test/programs/example.wgsl"
+external_gpu @do_thing_on_gpu(%x : i64) -> [%out : i64] : "caiman-test/programs/example.wgsl"
 {
     resource {
         group : 0,
@@ -42,11 +42,11 @@ external_gpu i64 @do_thing_on_gpu(%x : i64) : "caiman-test/programs/example.wgsl
     resource {
         group : 0,
         binding : 1,
-        output : %x,
+        output : %out,
     }
 }
 
-value i32 @foo(%test : i32) {
+value @foo(%test : i32) -> i32 {
     %1 = constant 4i64;
     %3 = constant-unsigned 4u64;
     %2 = extract %1 0;
@@ -57,16 +57,16 @@ value i32 @foo(%test : i32) {
     return %1; // todo: add more tail edges
 }
 
-value i64 @y(%abc : i64) {
+value @y(%abc : i64) -> i64 {
     // pretty clunky tbh
     yield 0 [%abc] @foo %abc [%abc, %abc];
 }
 
-value i64 @j(%abc : i64) {
+value @j(%abc : i64) -> i64 {
     jump %abc [%abc, %abc];
 }
 
-schedule $slot0 @bar(%0 : $slot0) {
+schedule @bar(%0 : $slot0) -> $slot0 {
     %x = alloc-temporary-local-i64 @foo.%1;
     %2 = encode-do-local @foo.%1() -> %x;
     %1 = create-local-i64 @foo.%x; // unbound slot
@@ -82,32 +82,32 @@ schedule $slot0 @bar(%0 : $slot0) {
     return %x;
 }
 
-schedule i64 @scall(%abc : i64) {
+schedule @scall(%abc : i64) -> i64 {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-call @j.%abc @foo [%abc, %abc] %abc;
 }
 
-schedule i64 @sselect(%abc : i64) {
+schedule @sselect(%abc : i64) -> i64 {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-select @y.%abc %abc [@foo, @j] [%abc, %abc] %abc;
 }
 
-schedule i64 @dalloc(%abc : i64) {
+schedule @dalloc(%abc : i64) -> i64 {
     // pretty clunky tbh -- note that `none` literally means `none`
     dynamic-alloc %abc [] [%abc, none, %abc] @foo @j %abc;
 }
 
-timeline $event0 @time(%e : $event0) {
+timeline @time(%e : $event0) -> $event0 {
     %1 = submission-cpu->gpu %e;
     %2 = sync-cpu->gpu %e %1;
     return %e;
 }
 
-spatial i64 @space(%b : $buffer_space0) {
+spatial @space(%b : $buffer_space0) -> i64 {
     return %b;
 }
 
-value_function i64 @simple(i64) : [@foo];
+value_function @simple(i64) -> i64 : [@foo];
 
 // ---
 

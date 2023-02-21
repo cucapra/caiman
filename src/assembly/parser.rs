@@ -729,11 +729,11 @@ fn read_external_cpu_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> V
 fn read_external_cpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::ExternalCpuFunction {
     require_rule(Rule::external_cpu_sep, pairs, context);
 
-    let output_types = vec![expect(rule_ffi_type_sep(), pairs, context)];
     let name = expect(rule_fn_name(), pairs, context);
 
     let rule_extern_args = rule_pair(Rule::external_cpu_args, read_external_cpu_args);
     let input_types = expect(rule_extern_args, pairs, context);
+    let output_types = vec![expect(rule_ffi_type(), pairs, context)];
     context.add_cpu_funclet(name.clone());
     assembly_ast::ExternalCpuFunction {
         name,
@@ -762,12 +762,13 @@ fn read_external_gpu_body(pairs : &mut Pairs<Rule>, context : &mut Context) -> V
 fn read_external_gpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::ExternalGpuFunction {
     require_rule(Rule::external_gpu_sep, pairs, context);
 
-    let output_types = vec![expect(rule_ffi_type_sep(), pairs, context)];
-
     let name = expect(rule_fn_name(), pairs, context);
 
     let rule_extern_args = rule_pair(Rule::external_gpu_args, read_external_gpu_args);
     let input_args = expect(rule_extern_args, pairs, context);
+
+    let rule_extern_args = rule_pair(Rule::external_gpu_args, read_external_gpu_args);
+    let output_types = expect(rule_extern_args, pairs, context);
 
     let shader_module = expect(rule_string_clean(), pairs, context);
 
@@ -816,12 +817,12 @@ fn read_funclet_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<(O
 }
 
 fn read_funclet_header(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::FuncletHeader {
-    let ret = expect(rule_type_sep(), pairs, context);
     let name = expect(rule_fn_name(), pairs, context);
     context.add_local_funclet(name.clone());
 
     let rule_args = rule_pair(Rule::funclet_args, read_funclet_args);
     let args = option_to_vec(optional(rule_args, pairs, context));
+    let ret = expect(rule_type(), pairs, context);
     assembly_ast::FuncletHeader { ret, name, args }
 }
 
@@ -1474,11 +1475,12 @@ fn read_value_function_funclets(pairs : &mut Pairs<Rule>, context : &mut Context
 
 fn read_value_function(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::ValueFunction {
     require_rule(Rule::value_function_sep, pairs, context);
-    let output_types = vec![expect(rule_type_sep(), pairs, context)];
     let name = expect(rule_fn_name(), pairs, context);
 
     let rule = rule_pair(Rule::value_function_args, read_value_function_args);
     let input_types = expect(rule, pairs, context);
+
+    let output_types = vec![expect(rule_type(), pairs, context)];
 
     let rule = rule_pair(Rule::value_function_funclets, read_value_function_funclets);
     let allowed_funclets = expect(rule, pairs, context);
