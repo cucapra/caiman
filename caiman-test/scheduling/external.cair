@@ -12,9 +12,9 @@ types [
     },
 ]
 
-external_cpu i64 @op(i64);
+external_cpu @op(i64) -> i64;
 
-value i64 @foo(%0 : i64) {
+value @foo(%0 : i64) -> i64 {
     %x = constant 2i64;
     %y = call @op(%x);
     %z = extract %y 0;

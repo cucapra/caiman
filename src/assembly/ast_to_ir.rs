@@ -369,14 +369,22 @@ fn ir_external_cpu(external : &assembly_ast::ExternalCpuFunction, context : &mut
     }
 }
 
-fn ir_external_gpu_resource(d : &assembly_ast::UncheckedDict, arg_names : &Vec<String>, context : &mut Context)
+fn ir_external_gpu_resource(d : &assembly_ast::UncheckedDict, input_args : &Vec<String>,
+                            output_args : &Vec<String>, context : &mut Context)
                             -> ffi::ExternalGpuFunctionResourceBinding {
-    fn local_name(d : &assembly_ast::DictValue, arg_names : &Vec<String>) -> usize {
+    fn local_name(d : &assembly_ast::DictValue, input_args : &Vec<String>, output_args : &Vec<String>) -> usize {
         let v = as_value(d.clone());
         match v {
             assembly_ast::Value::VarName(n) => {
                 let mut index = 0;
-                for arg in arg_names {
+                for arg in input_args {
+                    if n == *arg {
+                        return index
+                    }
+                    index += 1;
+                }
+                let mut index = 0;
+                for arg in output_args {
                     if n == *arg {
                         return index
                     }
@@ -391,11 +399,11 @@ fn ir_external_gpu_resource(d : &assembly_ast::UncheckedDict, arg_names : &Vec<S
     let binding = value_num(d.get(&as_key("binding")).unwrap(), context);
     let mut input = None;
     if d.contains_key(&as_key("input")) {
-        input = Some(local_name(d.get(&as_key("input")).unwrap(), arg_names));
+        input = Some(local_name(d.get(&as_key("input")).unwrap(), input_args, output_args));
     }
     let mut output = None;
     if d.contains_key(&as_key("output")) {
-        output = Some(local_name(d.get(&as_key("output")).unwrap(), arg_names));
+        output = Some(local_name(d.get(&as_key("output")).unwrap(), input_args, output_args));
     }
     ffi::ExternalGpuFunctionResourceBinding { group, binding, input, output }
 }
@@ -403,19 +411,28 @@ fn ir_external_gpu_resource(d : &assembly_ast::UncheckedDict, arg_names : &Vec<S
 fn ir_external_gpu(external : &assembly_ast::ExternalGpuFunction, context : &mut Context)
                    -> ffi::ExternalGpuFunction {
     let mut input_types = Vec::new();
-    let mut arg_names = Vec::new();
+    let mut input_args = Vec::new();
+    let mut output_args = Vec::new();
     let mut output_types = Vec::new();
     let mut resource_bindings = Vec::new();
 
-    for name in &external.input_args {
-        input_types.push(ffi::TypeId(*context.ffi_type_id(&name.0)));
-        arg_names.push(name.1.clone());
+    for arg in &external.input_args {
+        input_types.push(ffi::TypeId(*context.ffi_type_id(&arg.0)));
+        input_args.push(arg.1.clone());
     }
-    for name in &external.output_types {
-        output_types.push(ffi::TypeId(*context.ffi_type_id(name)))
+    for arg in &external.output_types {
+        output_types.push(ffi::TypeId(*context.ffi_type_id(&arg.0)));
+        let arg_name = arg.1.clone();
+        for iarg in &input_args {
+            if arg_name == *iarg {
+                panic!("Duplicate input and output name {}", iarg);
+            }
+        }
+        output_args.push(arg_name);
     }
     for resource in &external.resource_bindings {
-        resource_bindings.push(ir_external_gpu_resource(resource, &arg_names, context));
+        resource_bindings.push(ir_external_gpu_resource(
+            resource, &input_args, &output_args, context));
     }
 
     // Very silly

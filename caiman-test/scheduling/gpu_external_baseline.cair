@@ -20,7 +20,7 @@ types [
     },
 ]
 
-external_gpu i64 @trivial(%x : i64) : "src/gpu_external.wgsl"
+external_gpu @trivial(%x : i64) -> [%out : i64] : "src/gpu_external.wgsl"
 {
     resource {
         group : 0,
@@ -30,18 +30,18 @@ external_gpu i64 @trivial(%x : i64) : "src/gpu_external.wgsl"
     resource {
         group : 0,
         binding : 1,
-        output : %x,
+        output : %out,
     }
 }
 
-value i64 @foo(%0 : i64) {
+value @foo(%0 : i64) -> i64 {
     %x = constant 3i64;
     %ty = call @trivial(%x);
     %y = extract %ty 0;
     return %y;
 }
 
-schedule $slot0 @foo_main(%blob : $slot0, %gpu_blob : $slot_gpu) {
+schedule @foo_main(%blob : $slot0, %gpu_blob : $slot_gpu) -> $slot0 {
     %0 = alloc-local-i64 %blob @foo.%x;
     %t0 = encode-do-local @foo.%x() -> %0;
 
@@ -50,7 +50,7 @@ schedule $slot0 @foo_main(%blob : $slot0, %gpu_blob : $slot_gpu) {
     return %1;
 }
 
-timeline $event0 @time(%e : $event0) {
+timeline @time(%e : $event0) -> $event0 {
     return %e;
 }
 
