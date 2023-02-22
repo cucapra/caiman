@@ -1,7 +1,7 @@
 // Definitions
 //   pest
 WHITESPACE = _{ "\t" | " " | NEWLINE }
-COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
+COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* | "/*" ~ ((!"*"  | "*" ~ !"/") ~ ANY)* ~ "*/" }
 sep = _{ WHITESPACE+ }
 
 //   baseline
