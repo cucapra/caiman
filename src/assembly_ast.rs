@@ -280,7 +280,7 @@ pub struct ExternalGpuFunction
 {
 	pub name : String,
 	pub input_args : Vec<(FFIType, String)>,
-	pub output_types : Vec<FFIType>,
+	pub output_types : Vec<(FFIType, String)>,
 	// Contains pipeline and single render pass state
 	pub shader_module : String,
 	pub entry_point : String,

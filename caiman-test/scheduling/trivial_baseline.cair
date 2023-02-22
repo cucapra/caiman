@@ -12,20 +12,20 @@ types [
     },
 ]
 
-external_cpu i64 @do_thing_on_cpu(i64);
+external_cpu @do_thing_on_cpu(i64) -> i64;
 
-value i64 @foo(%0 : i64) {
+value @foo(%0 : i64) -> i64 {
     %1 = constant 4i64;
     return %1;
 }
 
-schedule $slot0 @bar(%0 : $slot0) {
+schedule @bar(%0 : $slot0) -> $slot0 {
     %x = alloc-temporary-local-i64 @foo.%1;
     %1 = encode-do-local @foo.%1() -> %x;
     return %x;
 }
 
-timeline $event0 @time(%e : $event0) {
+timeline @time(%e : $event0) -> $event0 {
     return %e;
 }
 
