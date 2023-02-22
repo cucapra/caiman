@@ -2,6 +2,7 @@ version 0.0.1
 
 types [
     f32,
+    u64,
     array<f32, 256>,
     slot $arr {
         type: f32,
@@ -17,9 +18,9 @@ types [
 // not to mention that it operates on a scalar...
 // It only exists for learning the syntax
 value f32 @saxpy(%a : f32, %x : f32, %y : f32) {
-    %ax_t = call @mul(%a, %x);
+    %ax_t = call @fmul(%a, %x);
     %ax = extract %ax_t 0;
-    %z_t = call @add(%ax, %y);
+    %z_t = call @fadd(%ax, %y);
     %z = extract %z_t 0;
     return %z;
 }
@@ -28,14 +29,18 @@ value f32 @saxpy(%a : f32, %x : f32, %y : f32) {
 // This mostly exists to test optimizations such as kernel fusion.
 // Without optimizations, this is the worst code you could ever write, probably.
 // NOTE REMOVE: The condition for a scheduling select is a slot, not a join. It's bugged rn though
-value array<f32, 256> @saxpy_extreme_rec(
+value array<f32, 256> @saxpy_extreme_rec_val(
     %a : array<f32, 256>, 
     %x : array<f32, 256>, 
     %y : array<f32, 256>, 
-    %i : u32, 
+    %i : u64, 
     %working : array<f32, 256>
 ) {
-    %len = constant 256i32;
+    %len = constant-unsigned 256u64;
+    // TODO: Is it just me, or is it kind of weird to specify the location (via external) in the
+    // value language in the first place? It kind of seems like a leaky abstraction. Obviously you
+    // will want to implement certain things in one place only, but I feel like saying "hey this
+    // is GPU stuff" belongs in the scheduling language
     %stop_t = call @cmp_lt(%i, %len);
     %stop = extract %stop_t 0;
     
@@ -45,20 +50,20 @@ value array<f32, 256> @saxpy_extreme_rec(
     %xv_t = call @array_get(%x, %i);
     %xv = extract %xv_t 0;
 
-    %axv_t = call @mul(%av_t, %xv_t);
+    %axv_t = call @fmul(%av_t, %xv_t);
     %axv = extract %axv_t 0;
 
     %yv_t = call @array_get(%y, %i);
     %yv = extract %yv_t 0;
 
-    %axyv_t = call @add(%axv_t, %yv_t);
+    %axyv_t = call @fadd(%axv_t, %yv_t);
     %axyv = extract %axyv_t 0;
 
     %workingMut_t = call @array_put(%working, %i);
     %workingMut = extract %workingMut_t 0;
 
-    %one = constant 1i32;
-    %i2_t = call @add(%i, %one);
+    %one = constant-unsigned 1u64;
+    %i2_t = call @uadd(%i, %one);
     %i2 = extract %i2_t 0;
 
     %recursed_t = call @saxpy_extreme_rec(%a, %x, %y, %i2, %workingMut);
@@ -72,57 +77,140 @@ value array<f32, 256> @saxpy_extreme_rec(
     return %final;
 }
 
+// TODO: A bit confused about extract value, what's the point again?
+// TODO: Remove the boilerplate.
+external_cpu f32 @fmul_cpu(f32, f32);
+external_gpu f32 @fmul_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/fmul.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 0, output : %a},
+    resource {group : 0, binding : 1, input : %b}
+}
+value f32 @fmul_cpu_val(%a: f32, %b: f32) {
+    %result_t = call @fmul_cpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+value f32 @fmul_gpu_val(%a: f32, %b: f32) {
+    // TODO: What's the deal with the brackets? Which one is the dimensions?
+    %result_t = call @fmul_gpu<%a>(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
 
-external_cpu f32 @mul_cpu(f32, f32);
-external_gpu f32 @mul_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/mul.wgsl"
+external_cpu u64 @uadd_cpu(u64, u64);
+external_gpu u64 @uadd_gpu(%a : u64, %b : u64) : "caiman-test/programs/saxpy/uadd.wgsl"
 {
     resource {group : 0, binding : 0, input : %a},
     resource {group : 0, binding : 0, output : %a},
     resource {group : 0, binding : 1, input : %b}
 }
-external_cpu f32 @add_cpu(f32, f32);
-external_gpu f32 @add_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/add.wgsl"
+value u64 @uadd_cpu_val(%a: u64, %b: u64) {
+    %result_t = call @uadd_cpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+value u64 @uadd_gpu_val(%a: u64, %b: u64) {
+    %result_t = call @uadd_gpu<%a>(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+external_cpu f32 @fadd_cpu(f32, f32);
+external_gpu f32 @fadd_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/fadd.wgsl"
 {
     resource {group : 0, binding : 0, input : %a},
     resource {group : 0, binding : 0, output : %a},
     resource {group : 0, binding : 1, input : %b}
 }
-external_cpu i32 @cmp_lt_cpu(f32, f32);
-external_gpu i32 @cmp_lt_gpu(%a : f32, %b : f32) : "caiman-test/programs/saxpy/cmp_lt.wgsl"
+value f32 @fadd_cpu_val(%a: f32, %b: f32) {
+    %result_t = call @fadd_cpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+value f32 @fadd_gpu_val(%a: f32, %b: f32) {
+    %result_t = call @fadd_gpu<%a>(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+external_cpu u64 @cmp_lt_cpu(u64, u64);
+external_gpu u64 @cmp_lt_gpu(%a : u64, %b : u64) : "caiman-test/programs/saxpy/cmp_lt.wgsl"
 {
     // Would be cool to identify optimizations here.
     // These could *trivially* be combined into a single binding with two fields,
     // at least by a human programmer, but will that semantically work with Caiman?
     resource {group : 0, binding : 0, input : %a},
     resource {group : 0, binding : 1, input : %b},
-    // Hm... What do I specify for the output here? Does it matter?
-    resource {group : 0, binding : 2, output : %c}
+    // TODO: Hm... What do I specify for the output here? Does it matter?
+    // I'm just gonna set it to %a to make it compile...
+    resource {group : 0, binding : 2, output : 0}
 }
-external_cpu f32 @array_get_cpu(array<f32,256>, u32);
-external_gpu f32 @array_get_gpu(%a : array<f32,256>, %i : u32) : "caiman-test/programs/saxpy/array_get.wgsl" 
+value u64 @cmp_lt_cpu_val(%a: u64, %b: u64) {
+    %result_t = call @cmp_lt_cpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+value u64 @cmp_lt_gpu_val(%a: u64, %b: u64) {
+    %result_t = call @cmp_lt_gpu<%a>(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+external_cpu f32 @array_get_cpu(array<f32,256>, u64);
+external_gpu f32 @array_get_gpu(%a : array<f32,256>, %i : u64) : "caiman-test/programs/saxpy/array_get.wgsl" 
 {
     resource {group : 0, binding : 0, input: %a},
     resource {group : 0, binding : 1, input: %i},
-    resource {group : 0, binding : 2, output: %v} // again, confused about the output
+    // again, confused about the output...
+    resource {group : 0, binding : 2, output: %a} 
 }
-external_cpu array<f32, 256> @array_put_cpu(array<f32, 256>, u32, f32);
-external_gpu array<f32, 256> @array_put_gpu(%a : array<f32, 256>, %i : u32, %v : f32);
+value f32 @array_get_cpu_val(%a: array<f32,256>, %i: u64) {
+    %result_t = call @array_get_cpu(%a, %i);
+    %result = extract %result_t 0;
+    return %result;
+}
+value f32 @array_get_gpu_val(%a: array<f32,256>, %i: u64) {
+    %result_t = call @array_get_gpu<%a>(%a, %i);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+external_cpu array<f32, 256> @array_put_cpu(array<f32, 256>, u64, f32);
+external_gpu array<f32, 256> @array_put_gpu(%a : array<f32, 256>, %i : u64, %v : f32) : "caiman-test/programs/saxpy/array_put.wgsl" 
 {
     resource {group : 0, binding : 0, input: %a},
     resource {group : 0, binding : 0, output: %a},
     resource {group : 0, binding : 1, input: %i},
     resource {group : 0, binding : 2, input: %v}
 }
+value array<f32, 256> @array_put_cpu_val(%a: array<f32,256>, %i: u64, %v: f32) {
+    %result_t = call @array_put_cpu(%a, %i, %v);
+    %result = extract %result_t 0;
+    return %result;
+}
+value array<f32, 256> @array_put_gpu_val(%a: array<f32,256>, %i: u64, %v: f32) {
+    %result_t = call @array_put_gpu<%a>(%a, %i, %v);
+    %result = extract %result_t 0;
+    return %result;
+}
 
 // Surprising: 'Non-local funclet used for value function add_cpu', src\assembly\ast_to_ir.rs:732:18
 // I thought the intended use of value functions was to select between different implementations,
 // and one of the factors was whether they ran on the CPU or the GPU?
 // RESOLVED: This *should* be allowed but it's not implemented yet.
-value_function f32 @add(f32, f32) : [@add_cpu, @add_gpu];
-value_function f32 @mul(f32, f32) : [@mul_cpu, @mul_gpu];
-value_function i32 @cmp_lt(f32, f32) : [@cmp_lt_cpu, @cmp_lt_gpu];
-value_function f32 @array_get(array<f32, 256>, u32) : [@array_get_cpu, @array_get_gpu];
-value_function array<f32, 256> @array_put(array<f32, 256>, u32, f32) : [@array_put_cpu, @array_put_gpu];
+value_function u64 @uadd(u64, u64) : [@uadd_cpu_val, @uadd_gpu_val];
+value_function f32 @fadd(f32, f32) : [@fadd_cpu_val, @fadd_gpu_val];
+value_function f32 @fmul(f32, f32) : [@fmul_cpu_val, @fmul_gpu_val];
+value_function u64 @cmp_lt(u64, u64) : [@cmp_lt_cpu_val, @cmp_lt_gpu_val];
+value_function f32 @array_get(array<f32, 256>, u64) : [@array_get_cpu_val, @array_get_gpu_val];
+value_function array<f32, 256> @array_put(array<f32, 256>, u64, f32) : [@array_put_cpu_val, @array_put_gpu_val];
+value_function array<f32, 256> @saxpy_extreme_rec(array<f32, 256>, 
+    array<f32, 256>, 
+    array<f32, 256>, 
+    u64, 
+    array<f32, 256>
+) : [@saxpy_extreme_rec_val];
 
 extras {}
 
