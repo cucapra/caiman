@@ -710,7 +710,7 @@ impl<'program> CodeGen<'program>
 		{
 			while let Some(current_funclet_id) = current_funclet_id_opt
 			{
-				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, default_join_point_id_opt);
+				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, &mut default_join_point_id_opt);
 				//println!("Split point: {:?}", split_point);
 				current_output_node_results = match split_point
 				{
@@ -992,7 +992,7 @@ impl<'program> CodeGen<'program>
 		self.code_generator.end_funclet();
 	}
 
-	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[SlotId]>
+	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, default_join_point_id_opt : &mut Option<JoinPointId>) -> SplitPoint //Box<[SlotId]>
 	{
 		let funclet = & self.program.funclets[funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
@@ -1231,9 +1231,9 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::DefaultJoin =>
 				{
-					if let Some(join_point_id) = default_join_point_id_opt
+					if let Some(join_point_id) = *default_join_point_id_opt
 					{
-						default_join_point_id_opt = None;
+						*default_join_point_id_opt = None;
 						funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 					}
 					else
@@ -1314,7 +1314,7 @@ impl<'program> CodeGen<'program>
 					output_node_results.push(node_result);
 				}
 
-				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
+				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : *default_join_point_id_opt}
 			}
 			ir::TailEdge::Yield{pipeline_yield_point_id, yielded_nodes, next_funclet : next_funclet_id, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
 			{
@@ -1497,7 +1497,6 @@ impl<'program> CodeGen<'program>
 			}
 			_ => panic!("Umimplemented")
 		};
-
 		split_point
 	}
 

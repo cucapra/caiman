@@ -2,6 +2,7 @@ version 0.0.1
 
 types [
     i32,
+    i64,
     native_value $native_i32 {
         type : i32
     },
@@ -28,9 +29,10 @@ types [
     space_buffer $buffer_space {},
 ]
 
-external_cpu @flatten(i64) -> i32;
+    external_cpu @flatten(i64) -> i32;
+external_cpu @cpu_add(i64, i64) -> i64;
 
-external_gpu @trivial(%x : i32) -> [%out : i32] : "src/gpu_external.wgsl"
+external_gpu @gpu_add(%x : i32, %y : i32) -> [%out : i32] : "src/gpu_merge.wgsl"
 {
     resource {
         group : 0,
@@ -40,14 +42,30 @@ external_gpu @trivial(%x : i32) -> [%out : i32] : "src/gpu_external.wgsl"
     resource {
         group : 0,
         binding : 1,
+        input : %y,
+    },
+    resource {
+        group : 0,
+        binding : 2,
         output : %out,
     }
 }
 
-value @foo(%x : i32) -> i32 {
-    %y = call @trivial(%x);
-    %z = extract %y 0;
-    return %z;
+value @foo() -> i32 {
+    %res_t = call @cpu_add(%x, %g);
+    %res = extract %res_t 0;
+    %g_t = call @gpu_add(%x, %y);
+    %g = extract %g_t 0;
+
+    %xc = constant 3i64;
+    %yc = constant 2i64;
+
+    %x_t = call @flatten(%xc);
+    %x = extract %x_t 0;
+    %y_t = call @flatten(%yc);
+    %y = extract %y_t 0;
+
+    return %res;
 }
 
 timeline @foo_time(%e : $event0) -> $event0 {
@@ -57,14 +75,31 @@ timeline @foo_time(%e : $event0) -> $event0 {
 }
 
 schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> $slot_gpu {
-    %0 = alloc-gpu-i32 %in_buff @foo.%x;
-    %1 = encode-copy-gpu %s %0;
-    %2 = alloc-gpu-i32 %out_buff @foo.%z;
-    %3 = encode-do-gpu @foo.%y(%0) -> %2;
-    %4 = submit-gpu @foo_time.%sub1;
-    %5 = encode-fence-gpu @foo_time.%sub1;
-    %6 = sync-fence-local %5 @foo_time.%sync1;
-    return %2;
+    %xc = alloc-temporary-local-i64 @foo.%xc;
+    %_ = encode-do-local @foo.%xc() -> %xc;
+    %yc = alloc-temporary-local-i64 @foo.%yc;
+    %_ = encode-do-local @foo.%yc() -> %yc;
+
+    %x_local = alloc-temporary-local-i32 @foo.%x;
+    %_ = encode-do-local @foo.%x_t(%xc) -> %x_local;
+    %y_local = alloc-temporary-local-i32 @foo.%y;
+    %_ = encode-do-local @foo.%y_t(%yc) -> %y_local;
+
+    %x = alloc-gpu-i32 %in_buff @foo.%x;
+    %_ = encode-copy-gpu %x_local %x;
+
+    %y = alloc-gpu-i32 %in_buff @foo.%y;
+    %_ = encode-copy-gpu %y_local %y;
+
+    %g = alloc-gpu-i32 %out_buff @foo.%g;
+    %_ = encode-do-gpu @foo.%g_t(%x, %y) -> %g;
+    %_ = submit-gpu @foo_time.%sub1;
+    %fg = encode-fence-gpu @foo_time.%sub1;
+    %_ = sync-fence-local %fg @foo_time.%sync1;
+
+    //todo: schedule res once cpu allocation is a thing
+
+    return %g;
 }
 
 spatial @foo_space(%bs : $buffer_space) -> $buffer_space {
@@ -75,10 +110,10 @@ extras {
     @foo_main {
         value : @foo,
         input_slots : {
-            %s : slot_info(value_tag input @foo.%x)
+            %s : slot_info()
         },
         output_slots : {
-            %s : slot_info(value_tag output @foo.%x, spatial_tag output @foo_space.%bs)
+            %s : slot_info(spatial_tag output @foo_space.%bs)
         },
         input_fences : {},
         output_fences : {},

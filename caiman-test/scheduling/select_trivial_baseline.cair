@@ -12,7 +12,7 @@ types [
     },
 ]
 
-value @foo(%0 : i64) -> i64 {
+value @foo() -> i64 {
     %x = constant 0i64;
     %y = constant 1i64;
     %z = constant 2i64;
@@ -20,24 +20,29 @@ value @foo(%0 : i64) -> i64 {
     return %r;
 }
 
-schedule @foo_main(%blob : $slot0) -> $slot0 {
-    %0 = alloc-temporary-local-i64 @foo.%x;
-    %t0 = encode-do-local @foo.%x() -> %0;
+schedule @foo_main(%s : $slot0) -> $slot0 {
+    %x = alloc-temporary-local-i64 @foo.%x;
+    %_ = encode-do-local @foo.%x() -> %x;
+    %r = alloc-temporary-local-i64 @foo.%r;
     %default = default-join;
-    %join = inline-join @foo1 [] %default;
-    schedule-select @foo.%x %0 [@foo1, @foo2] [%blob] %0;
+    %join = inline-join @foo_return [%r] %default;
+    schedule-select @foo.%r %x [@foo1, @foo2] [%r] %join;
 }
 
-schedule @foo1(%blob : $slot0) -> $slot0 {
-    %0 = alloc-temporary-local-i64 @foo.%y;
-    %t0 = encode-do-local @foo.%y() -> %0;
-    return %0;
+schedule @foo1(%s : $slot0) -> $slot0 {
+    %y = alloc-temporary-local-i64 @foo.%y;
+    %_ = encode-do-local @foo.%y() -> %y;
+    return %y;
 }
 
-schedule @foo2(%blob : $slot0) -> $slot0 {
-    %0 = alloc-temporary-local-i64 @foo.%z;
-    %t0 = encode-do-local @foo.%z() -> %0;
-    return %0;
+schedule @foo2(%s : $slot0) -> $slot0 {
+    %z = alloc-temporary-local-i64 @foo.%z;
+    %_ = encode-do-local @foo.%z() -> %z;
+    return %z;
+}
+
+schedule @foo_return(%s : $slot0) -> $slot0 {
+    return %s;
 }
 
 timeline @time(%e : $event0) -> $event0 {
@@ -48,46 +53,61 @@ extras {
     @foo_main {
         value : @foo,
         input_slots : {
-            %blob : slot_info()
+            %s : slot_info()
         },
         output_slots : {
-            %blob : slot_info()
+            %s : slot_info()
         },
         input_fences : {},
         output_fences : {},
         input_buffers : {},
         output_buffers : {},
-        in_timeline_tag : timeline_tag input @time.%e,
+        in_timeline_tag : timeline_tag output @time.%e,
         out_timeline_tag : timeline_tag output @time.%e,
     },
     @foo1 {
         value : @foo,
         input_slots : {
-            %blob : slot_info()
+            %s : slot_info()
         },
         output_slots : {
-            %blob : slot_info()
+            %s : slot_info()
         },
         input_fences : {},
         output_fences : {},
         input_buffers : {},
         output_buffers : {},
-        in_timeline_tag : timeline_tag input @time.%e,
+        in_timeline_tag : timeline_tag output @time.%e,
         out_timeline_tag : timeline_tag output @time.%e,
     },
     @foo2 {
         value : @foo,
         input_slots : {
-            %blob : slot_info()
+            %s : slot_info()
         },
         output_slots : {
-            %blob : slot_info()
+            %s : slot_info()
         },
         input_fences : {},
         output_fences : {},
         input_buffers : {},
         output_buffers : {},
-        in_timeline_tag : timeline_tag input @time.%e,
+        in_timeline_tag : timeline_tag output @time.%e,
+        out_timeline_tag : timeline_tag output @time.%e,
+    },
+    @foo_return {
+        value : @foo,
+        input_slots : {
+            %s : slot_info()
+        },
+        output_slots : {
+            %s : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag output @time.%e,
         out_timeline_tag : timeline_tag output @time.%e,
     },
 }

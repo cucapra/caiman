@@ -1006,7 +1006,6 @@ impl<'program> FuncletChecker<'program>
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
-
 				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
 
 				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)

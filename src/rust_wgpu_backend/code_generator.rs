@@ -1556,21 +1556,36 @@ impl<'program> CodeGenerator<'program>
 		// Temporary fix
 		self.reset_pipeline();
 
-		write!(self.code_writer, "let ( ");
 		let mut var_ids = Vec::<VarId>::new();
-		for (i, type_id) in output_type_ids.iter().enumerate()
-		{
-			//self.generate_type_definition(* type_id);
+		let mut var_names = Vec::<String>::new();
+		let mut var_types = Vec::<String>::new();
+		for (i, type_id) in output_type_ids.iter().enumerate() {
 			let var_id = self.variable_tracker.create_local_data(* type_id);
+			var_names.push(self.variable_tracker.get_var_name(var_id));
+			var_types.push(self.get_type_name(* type_id));
+			var_ids.push(var_id);
+		}
 
-			write!(self.code_writer, "{} : {}", self.variable_tracker.get_var_name(var_id), self.get_type_name(* type_id));
+		write!(self.code_writer, "let ( ");
+
+		for (i, var_name) in var_names.iter().enumerate() {
+			write!(self.code_writer, "{}", var_name);
 			if i < output_type_ids.len() - 1
 			{
 				write!(self.code_writer, ", ");
 			}
-
-			var_ids.push(var_id);
 		}
+
+		write!(self.code_writer, " ) : ( ");
+
+		for (i, var_type) in var_types.iter().enumerate() {
+			write!(self.code_writer, "{}", var_type);
+			if i < output_type_ids.len() - 1
+			{
+				write!(self.code_writer, ", ");
+			}
+		}
+
 		write!(self.code_writer, " ) = if {} !=0 {{ ", self.variable_tracker.get_var_name(condition_var_id));
 
 		var_ids.into_boxed_slice()

@@ -386,8 +386,16 @@ fn rule_type_sep<'a>() -> RuleApp<'a, assembly_ast::Type> {
     rule_pair_unwrap(Rule::typ_sep, 1, Box::new(read_type))
 }
 
+fn read_throwaway(_ : String, context : &mut Context) -> String {
+    "_".to_string()
+}
+
+fn rule_throwaway<'a>() -> RuleApp<'a, String> {
+    rule_str(Rule::throwaway, read_throwaway)
+}
+
 fn read_var_name(pairs : &mut Pairs<Rule>, context : &mut Context) -> String {
-    expect_vec(vec![rule_id_raw(), rule_n_raw()], pairs, context)
+    expect_vec(vec![rule_id_raw(), rule_n_raw(), rule_throwaway()], pairs, context)
 }
 
 fn rule_var_name<'a>() -> RuleApp<'a, String> {

@@ -780,7 +780,7 @@ fn ir_tail_edge(tail : &assembly_ast::TailEdge, context : &mut Context) -> ir::T
             callee_arguments,
             continuation_join } => {
             ir::TailEdge::ScheduleSelect {
-                value_operation: ir::RemoteNodeId { funclet_id: 0, node_id: 0 },
+                value_operation: remote_conversion(value_operation, context),
                 condition: *context.node_id(condition.clone()),
                 callee_funclet_ids: callee_funclet_ids.iter().map(|n|
                     *context.funclet_id_unwrap(n.clone())).collect(),
