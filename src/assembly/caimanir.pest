@@ -178,6 +178,7 @@ phi_command = ${ "phi" ~ sep ~ n }
 //     value
 
 constant_command = ${ "constant" ~ sep ~ constant }
+constant_i32_command = ${ "constant-i32" ~ sep ~ constant }
 constant_unsigned_command = ${ "constant-unsigned" ~ sep ~ constant }
 extract_sep = @{ "extract" ~ sep }
 extract_command = { extract_sep ~ var_name ~ n }
@@ -187,8 +188,9 @@ call_command = { call_sep ~ fn_name ~ ("<" ~ call_args? ~ ">")? ~ "(" ~ call_arg
 select_sep = @{ "select" ~ sep }
 select_command = { select_sep ~ var_name ~ var_name ~ var_name }
 
-value_command = { phi_command | constant_command | constant_unsigned_command |
-  extract_command | call_command | select_command }
+value_command = { phi_command | constant_command |
+    constant_i32_command | constant_unsigned_command |
+    extract_command | call_command | select_command }
 
 //     scheduling
 

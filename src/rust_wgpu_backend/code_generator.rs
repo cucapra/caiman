@@ -1526,6 +1526,15 @@ impl<'program> CodeGenerator<'program>
 		variable_id
 	}
 
+	pub fn build_constant_i32(&mut self, value : i32, type_id : ffi::TypeId) -> VarId
+	{
+		//let variable_id = self.variable_tracker.generate();
+		//self.generate_type_definition(type_id);
+		let variable_id = self.variable_tracker.create_local_data(type_id);
+		write!(self.code_writer, "let {} : {} = {};\n", self.variable_tracker.get_var_name(variable_id), self.get_type_name(type_id), value);
+		variable_id
+	}
+
 	pub fn build_constant_unsigned_integer(&mut self, value : u64, type_id : ffi::TypeId) -> VarId
 	{
 		//let variable_id = self.variable_tracker.generate();

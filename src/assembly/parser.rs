@@ -1076,8 +1076,38 @@ fn rule_constant_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
     rule_pair(Rule::constant_command, read_constant_command)
 }
 
+fn read_constant_i32(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
+    // todo: remove this function
+    let rule_value = rule_str(Rule::n, read_string);
+    let value_string = expect(rule_value, pairs, context);
+    let value = value_string.parse::<i32>().unwrap(); // BAD
+
+    // let ffi_app = compose_pair(read_ffi_typ, ast::Type::FFI);
+    // let rule_ffi = rule_pair_boxed(Rule::ffi_type, ffi_app);
+    // let type_id = expect(rule_ffi, pairs, context);
+
+    let check_id = expect(rule_ffi_type(), pairs, context);
+
+    if check_id != assembly_ast::FFIType::I32 {
+        panic!("Constant-i32 can only be i32 for now");
+    }
+
+    let type_id = assembly_ast::Type::FFI(assembly_ast::FFIType::I32);
+
+    assembly_ast::Node::ConstantI32 { value, type_id }
+}
+
+fn read_constant_i32_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
+    let rule = rule_pair(Rule::constant, read_constant_i32);
+    expect(rule, pairs, context)
+}
+
+fn rule_constant_i32_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
+    rule_pair(Rule::constant_i32_command, read_constant_i32_command)
+}
+
 fn read_constant_unsigned(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
-     // todo: remove this function
+    // todo: remove this function
     let rule_value = rule_str(Rule::n, read_string);
     let value_string = expect(rule_value, pairs, context);
     let value = value_string.parse::<u64>().unwrap(); // BAD
@@ -1155,6 +1185,7 @@ fn read_value_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assem
     let mut rules = Vec::new();
     rules.push(rule_phi_command());
     rules.push(rule_constant_command());
+    rules.push(rule_constant_i32_command());
     rules.push(rule_constant_unsigned_command());
     rules.push(rule_extract_command());
     rules.push(rule_call_command());
