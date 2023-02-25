@@ -6,12 +6,12 @@ mod pipeline {
 
 struct Callbacks;
 
-impl pipeline::pipeline_with_value_function::CpuFunctions for Callbacks {
+impl pipeline::pipeline_1::CpuFunctions for Callbacks {
     fn do_thing_on_cpu(
         &self,
         state: &mut caiman_rt::State,
         value: i32,
-    ) -> pipeline::looping_pipeline::outputs::do_thing_on_cpu {
+    ) -> pipeline::pipeline_1::outputs::do_thing_on_cpu {
         return (value + 1,);
     }
 }
@@ -34,10 +34,9 @@ fn main() {
     let mut root_state = caiman_rt::RootState::new(&mut device, &mut queue);
     let mut join_stack_bytes = [0u8; 4096usize];
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
-    let instance = crate::pipeline::pipeline_with_value_function::Instance::new(
-        &mut root_state,
-        &callbacks,
-    );
+    //let result = crate::pipeline::pipeline_1::run(&mut root_state, & callbacks, 1);
+    let instance = crate::pipeline::pipeline_1::Instance::new(&mut root_state, &callbacks);
     let result = instance.start(&mut join_stack, 1);
+    //let result = crate::pipeline::pipeline_1::funclet11_func(instance, &mut join_stack, 1);
     println!("{}", result.returned().unwrap().0);
 }

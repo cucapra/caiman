@@ -8,4 +8,11 @@ build:
 	turnt */*_baseline.cair -v --save
 
 test:
-	turnt */*_test.cair
+	test_cair
+	test_ron
+
+test_cair:
+	turnt $(dir)/*_test.cair
+
+test_ron:
+	turnt $(dir)/*_test.ron
