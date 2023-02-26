@@ -1,9 +1,3 @@
-#![allow(warnings)]
-mod pipeline {
-    #![allow(warnings)]
-    include!("_generated.rs");
-}
-
 struct Callbacks;
 
 impl pipeline::looping_pipeline::CpuFunctions for Callbacks {

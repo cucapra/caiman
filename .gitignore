@@ -4,4 +4,4 @@ a.out
 
 # testing
 *.log
-*_generated.rs
+caiman-test/src/bin/*
