@@ -7,8 +7,5 @@ clean:
 build:
 	turnt */*_baseline.cair -v --save
 
-test_cair:
-	turnt $(dir)/*_test.cair -j $(print)
-
-test_ron:
-	turnt $(dir)/*_test.ron -j $(print)
+test:
+	turnt $(wildcard $(dir)/*_test.cair) $(wildcard $(dir)/*_test.ron) -j $(print)
