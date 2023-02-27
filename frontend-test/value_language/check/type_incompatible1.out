@@ -1,0 +1,2 @@
+At type_incompatible1.vl:1:14, 
+  Semantic Error: Incompatible types PositiveInteger and Ordinary(Bool)

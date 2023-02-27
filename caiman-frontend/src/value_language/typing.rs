@@ -1,7 +1,7 @@
+use super::ast::{Expr, ExprKind};
+use super::check::{SemanticError, SemanticInfoError};
+use crate::error::HasInfo;
 use std::collections::HashMap;
-use crate::value_language::check::SemanticError;
-
-type Var = String;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Type
@@ -12,14 +12,8 @@ pub enum Type
     //Unit,
 }
 
-// TODO: Display for expression types
-// (and regular type too I guess)
-
-// Differs from Type in that it is inferred (e.g. it is the
-// type of the number 1)
-// Size will be checked later
-#[derive(Clone, Copy, Debug)]
-pub enum ExprType
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InferredType
 {
     Ordinary(Type),
     PositiveInteger,
@@ -28,183 +22,122 @@ pub enum ExprType
     Any,
 }
 
-pub type FuncType = (Vec<Type>, Type);
-
-#[derive(Clone)]
-pub struct Context 
-{ 
-    // Inner bool is true if mutation is allowed on 
-    // that variable
-    var_table: HashMap<Var, Type>,
-}
-
-#[derive(Clone)]
-pub struct FunctionContext 
+type Var = String;
+pub struct Context
 {
-    table: HashMap<Var, FuncType>,
+    var_map: HashMap<Var, Type>,
 }
 
 impl Context
 {
-    pub fn new() -> Self 
-    {
-        Context {
-            var_table: HashMap::new(),
-        }
-    }
+    pub fn new() -> Self { Context { var_map: HashMap::new() } }
 
-    pub fn contains_var(&self, v: Var) -> bool
+    pub fn add(&mut self, x: &str, t: Type) -> Result<(), SemanticError>
     {
-        self.var_table.contains_key(&v)
-    }
-
-    fn get(&self, v: &Var) -> Result<Type, SemanticError>
-    {
-        match self.var_table.get(v)
+        match self.var_map.insert(x.to_string(), t)
         {
-            Some(t) => Ok(*t),
-            None => Err(SemanticError::UnboundVariable(v.to_string())),
+            Some(_) => Err(SemanticError::NameCollision(x.to_string())),
+            None => Ok(()),
         }
     }
-    
-    pub fn add(
-        &mut self, 
-        v: Var, 
-        t: Type, 
-    ) -> Result<(), SemanticError>
-    {
-        // Shadowing allowed.
-        self.var_table.insert(v, t);
-        Ok(())
-    }
 
-    pub fn get_type(&self, v: &Var) -> Result<Type, SemanticError>
+    pub fn get(&self, x: &str) -> Result<Type, SemanticError>
     {
-        let t = self.get(&v)?;
-        Ok(t)
+        match self.var_map.get(x)
+        {
+            Some(t_ref) => Ok(*t_ref),
+            None => Err(SemanticError::UnboundVariable(x.to_string())),
+        }
     }
 }
 
-impl FunctionContext
+pub fn type_of_expr<E: HasInfo>(
+    e: &Expr<E>,
+    ctx: &Context,
+) -> Result<InferredType, SemanticInfoError>
 {
-    pub fn new() -> Self 
+    use ExprKind::*;
+    let (metadata, e_kind) = e;
+    let info = metadata.info();
+    let ord = |t| -> Result<InferredType, SemanticInfoError> { Ok(InferredType::Ordinary(t)) };
+    let add_info = |e: SemanticError| (info, e);
+    match e_kind
     {
-        Self { table: HashMap::new() }
-    }
-
-    pub fn add(
-        &mut self, 
-        v: Var, 
-        param_ts: Vec<Type>, 
-        ret: Type,
-    ) -> Result<(), SemanticError>
-    {
-        match self.table.insert(v.clone(), (param_ts, ret))
+        Num(s) => Ok(infer_num_type(s)),
+        Bool(_) => ord(Type::Bool),
+        Var(x) => ord(ctx.get(x).map_err(add_info)?),
+        If(e_guard, e_true, e_false) =>
         {
-            Some(_) => Err(SemanticError::FunctionNameCollision(v)),
-            None => Ok(())
-        }
-    }
-
-    pub fn get(&self, f: Var) -> Result<(Vec<Type>, Type), SemanticError>
-    {
-        match self.table.get(&f)
-        {
-            Some((v, rt)) => Ok((v.to_vec(), *rt)),
-            None => Err(SemanticError::UnboundFunction(f.to_string())),
-        }
+            let t_guard = type_of_expr(e_guard, ctx)?;
+            let guard_info = e_guard.0.info();
+            expect_type(Type::Bool, t_guard).map_err(|e| (guard_info, e))?;
+            let t_true = type_of_expr(e_true, ctx)?;
+            let t_false = type_of_expr(e_false, ctx)?;
+            merge_inferred_types(t_true, t_false).map_err(add_info)
+        },
+        _ => todo!(),
     }
 }
 
-impl Type
+pub fn expect_type(expected: Type, actual: InferredType) -> Result<(), SemanticError>
 {
-    pub fn is_subtype_of(&self, t: Type) -> bool
+    use InferredType::*;
+    use Type::*;
+    let err = || Err(SemanticError::TypeMismatch(expected, actual));
+    if let Ordinary(t) = actual
     {
-        match self
+        if expected == t
         {
-            Type::I32 => t == Type::I32,
-            Type::Bool => t == Type::Bool,
+            return Ok(());
         }
+        return err();
+    }
+    match (expected, actual)
+    {
+        (I32, PositiveInteger) | (I32, NegativeInteger) | (I32, Any) => Ok(()),
+        _ => err(),
     }
 }
 
-impl ExprType
+fn merge_inferred_types(
+    it1: InferredType,
+    it2: InferredType,
+) -> Result<InferredType, SemanticError>
 {
-    pub fn is_subtype_of(&self, t: Type) -> bool
+    let err = || Err(SemanticError::Incompatible(it1, it2));
+    if it1 == it2
     {
-        use ExprType::*;
-        match self
-        {
-            Ordinary(ord_t) => ord_t.is_subtype_of(t),
-            PositiveInteger => t == Type::I32,
-            NegativeInteger => t == Type::I32,
-            Float => panic!("Float moment"),
-            Any => true,
-        }
+        return Ok(it1);
     }
-
-    // Bleh
-    pub fn compatible(&self, et: ExprType) -> bool
+    use InferredType::*;
+    match (it1, it2)
     {
-        use ExprType::*;
-        match (self, et)
+        (PositiveInteger, NegativeInteger) | (NegativeInteger, PositiveInteger) =>
         {
-            (Ordinary(t1), Ordinary(t2)) => *t1 == t2,
-            (Ordinary(t1), _) => et.is_subtype_of(*t1),
-            (_, Ordinary(t2)) => self.is_subtype_of(t2),
-            (NegativeInteger, NegativeInteger)
-            | (PositiveInteger, PositiveInteger)
-            | (PositiveInteger, NegativeInteger)
-            | (NegativeInteger, PositiveInteger)
-            | (Float, Float) 
-            | (Any, _) 
-            | (_, Any) => true,
-            _ => false,
-        }
-    }
-
-    fn order(&self) -> usize
-    {
-        use ExprType::*;
-        match self
+            Ok(NegativeInteger)
+        },
+        (Any, it) | (it, Any) => Ok(it),
+        (Ordinary(t), it) | (it, Ordinary(t)) =>
         {
-            Ordinary(_) => 0,
-            Float => 1,
-            NegativeInteger => 2,
-            PositiveInteger => 3,
-            Any => 4,
-        }
-    }
-
-    pub fn is_number(&self) -> bool
-    {
-        use ExprType::*;
-        match self
-        {
-            | PositiveInteger 
-            | NegativeInteger 
-            | Any
-            | Float => true,
-            Ordinary(t) => match *t {
-                Type::I32 => true,
-                Type::Bool => false,
-            },
-        }
-    }
-
-    pub fn is_bool(&self) -> bool
-    {
-        self.is_subtype_of(Type::Bool)
+            expect_type(t, it)?;
+            Ok(Ordinary(t))
+        },
+        _ => err(),
     }
 }
 
-pub fn type_equal(t1: Type, t2: Type) -> bool
+fn infer_num_type(num_str: &str) -> InferredType
 {
-    t1 == t2
+    if num_str.contains(".")
+    {
+        InferredType::Float
+    }
+    else if num_str.contains("-")
+    {
+        InferredType::NegativeInteger
+    }
+    else
+    {
+        InferredType::PositiveInteger
+    }
 }
-
-pub fn min_expr_type(t1: ExprType, t2: ExprType) -> ExprType
-{
-    if t1.order() >= t2.order() { t1 } else { t2 }
-}
-

@@ -1,36 +1,18 @@
-use crate::error;
 use crate::scheduling_language::ast as schedule_ast;
+use crate::spec;
 use crate::value_language::ast as value_ast;
 use crate::value_language::typing;
 use caiman::arena::Arena;
 use caiman::ir;
-use crate::spec;
 use std::collections::HashMap;
 
-pub enum ToIRError
-{
-    UnboundScheduleVar(String),
-    IncompatibleArgumentNum(usize, usize),
-}
+mod vil;
 
-fn make_error(e: ToIRError, i: error::Info) -> error::DualLocalError
-{
-    let file_kind = match &e
-    {
-        ToIRError::UnboundScheduleVar(_) => error::FileKind::Scheduling,
-        ToIRError::IncompatibleArgumentNum(_,_) => error::FileKind::Value,
-    };
-    error::DualLocalError {
-        error: error::LocalError {
-            kind: error::ErrorKind::ToIR(e),
-            location: error::ErrorLocation::Double(i.location),
-        },
-        file_kind,
-    }
-}
+mod error;
+pub use error::ToIRError;
+use error::{make_error, ToIRResult};
 
 type Index<T> = HashMap<T, usize>;
-type ToIRResult<T> = Result<T, error::DualLocalError>;
 
 #[derive(Eq, PartialEq, Hash)]
 enum Type
@@ -131,8 +113,10 @@ impl ValueExprOutput
         match self
         {
             ValueExprOutput::Single(u, _) => Ok(u),
-            ValueExprOutput::Multi(v, info) => 
-                Err(make_error(ToIRError::IncompatibleArgumentNum(1, v.len()), info)),
+            ValueExprOutput::Multi(v, info) =>
+            {
+                Err(make_error(ToIRError::IncompatibleArgumentNum(1, v.len()), info))
+            },
         }
     }
 

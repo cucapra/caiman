@@ -1,10 +1,14 @@
 use crate::scheduling_language::ast_factory::ASTFactory;
 use crate::scheduling_language::parser;
 use crate::scheduling_language::ast;
-use crate::stage::Stage;
 use crate::error;
 use std::path::Path;
 use std::fs::File;
+
+pub enum Stage
+{
+    Parse,
+}
 
 fn parse_string(buf: String) -> ast::ParsedProgram
 {
@@ -32,17 +36,16 @@ fn parse_file(filename: &str) -> ast::ParsedProgram
     parse_read(input_file)
 }
 
-pub fn run_output(filename: &str) -> Result<ast::ParsedProgram, error::Error>
+pub fn parse(filename: &str) -> Result<ast::ParsedProgram, error::Error>
 {
     Ok(parse_file(filename))
 }
 
-pub fn run(filename: &str, stage: Stage) 
+pub fn run_until_stage(filename: &str, stage: Stage) 
 {
     let parsed_ast = parse_file(filename);
     match stage
     {
         Stage::Parse => println!("{:?}", parsed_ast),
-        Stage::Check => println!("TODO: checking."),
     }
 }

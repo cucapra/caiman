@@ -5,8 +5,6 @@ use crate::spec;
 
 pub type Var = String;
 
-// Negative numbers are parsed as negative at a later stage
-// because we store all numbers as Strings here
 #[derive(Debug, Clone, Copy)]
 pub enum Unop 
 {
@@ -31,10 +29,10 @@ pub enum ExprKind<E>
     Var(Var),
     Num(String),
     Bool(bool),
+    If(Box<Expr<E>>, Box<Expr<E>>, Box<Expr<E>>),
     Unit,
     Binop(Binop, Box<Expr<E>>, Box<Expr<E>>),
     Unop(Unop, Box<Expr<E>>),
-    If(Box<Expr<E>>, Box<Expr<E>>, Box<Expr<E>>),
     Call(Var, Vec<Expr<E>>),
     Labeled(Var, Box<Expr<E>>),
     Tuple(Vec<Expr<E>>),
@@ -58,6 +56,10 @@ pub type Program<S, E> = Vec<Stmt<S, E>>;
 pub type ParsedExpr = Expr<Info>;
 pub type ParsedStmt = Stmt<Info, Info>;
 pub type ParsedProgram = Program<Info, Info>;
+
+pub type TypedExpr = Expr<(Info, Type)>;
+pub type TypedStmt = Stmt<Info, (Info, Type)>;
+pub type TypedProgram = Program<Info, (Info, Type)>;
 
 impl HasInfo for Info
 {

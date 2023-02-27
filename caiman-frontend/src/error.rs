@@ -109,9 +109,9 @@ impl fmt::Display for SemanticError
     {
         match self
         {
-            SemanticError::FunctionNameCollision(name) =>
+            SemanticError::NameCollision(x) =>
             {
-                write!(f, "Name collision for function named {}", name)
+                write!(f, "Declared variable {} already exists!", x)
             },
             SemanticError::TypeMismatch(t, et) =>
             {
@@ -121,32 +121,9 @@ impl fmt::Display for SemanticError
             {
                 write!(f, "Unbound variable {}", x)
             },
-            SemanticError::UnboundFunction(x) =>
-            {
-                write!(f, "Unbound function {}", x)
-            },
             SemanticError::Incompatible(et1, et2) =>
             {
                 write!(f, "Incompatible types {:?} and {:?}", et1, et2)
-            },
-            SemanticError::WrongBinop(et, bop) => write!(
-                f,
-                "Cannot use binary operator {:?} with data of type {:?}",
-                bop, et,
-            ),
-            SemanticError::WrongUnop(et, uop) => write!(
-                f,
-                "Cannot use unary operator {:?} with data of type {:?}",
-                uop, et,
-            ),
-            SemanticError::ReturnTypeMismatch(t, et) => write!(
-                f,
-                "Return type mismatch: Expected {:?}, found {:?}",
-                t, et
-            ),
-            SemanticError::WrongNumberArgs(exp, act) =>
-            {
-                write!(f, "Expected {} arguments, got {}", exp, act)
             },
         }
     }

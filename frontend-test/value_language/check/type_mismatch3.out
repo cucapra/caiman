@@ -1,0 +1,2 @@
+At type_mismatch3.vl:1:18, 
+  Semantic Error: Type mismatch: Expected Bool, found PositiveInteger

@@ -1,0 +1,24 @@
+if.vl
+
+let x : i32 = (if false 1 (if true 2 3));
+-------------------------------------------------------------------------------
+if.sl
+
+// Here, we may want to choose to have .prim (which means like,
+//  evaluate a "5" or "true" yknow a primitive value here) be implicit
+//  so it would just be x.IfGuard, but I'll keep it this way for now
+//  because it otherwise confuses me a bit
+x.IfGuard.prim;
+
+x.IfFalse.IfTrue.prim;
+x.IfFalse.IfFalse.prim;
+x.IfFalse.IfGuard.prim;
+// IfEval will need to be here for sure
+//  even if .prim is made implicit
+x.IfFalse.IfEval;
+
+x.IfTrue.prim;
+
+// Now x is fully evaluated
+x.IfEval;
+
