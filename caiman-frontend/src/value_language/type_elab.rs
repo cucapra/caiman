@@ -39,20 +39,14 @@ fn elaborate_expr(
         typing::InferredType::Ordinary(t) => t,
         _ => outer_type,
     };
-    // Extremely boilerplate
+    let elab = |e| Box::new(elaborate_expr(e, ctx, outer_type));
     use ast::ExprKind::*;
     let typed_kind = match kind
     {
         Var(x) => Var(x.clone()),
         Num(n) => Num(n.clone()),
         Bool(b) => Bool(*b),
-        If(e1, e2, e3) =>
-        {
-            let e1_typed = Box::new(elaborate_expr(e1, ctx, outer_type));
-            let e2_typed = Box::new(elaborate_expr(e2, ctx, outer_type));
-            let e3_typed = Box::new(elaborate_expr(e3, ctx, outer_type));
-            If(e1_typed, e2_typed, e3_typed)
-        },
+        If(e1, e2, e3) => If(elab(e1), elab(e2), elab(e3)),
         _ => todo!(),
     };
     ((*info, type_annotation), typed_kind)
