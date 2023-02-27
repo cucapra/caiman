@@ -1,7 +1,7 @@
 use super::ast;
-use crate::error::Info;
 use super::typing;
 use super::typing::Context;
+use crate::error::Info;
 use typing::Type;
 
 /// Precondition: parsed_prog has been type-checked already.
@@ -34,25 +34,26 @@ fn elaborate_expr(
 {
     let (info, kind) = parsed_expr;
     let inferred_type = typing::type_of_expr(parsed_expr, ctx).unwrap();
-    let t = match inferred_type
+    let type_annotation = match inferred_type
     {
         typing::InferredType::Ordinary(t) => t,
         _ => outer_type,
     };
-    let annot = |ek: ast::ExprKind<(Info, Type)>| ((*info, t), ek);
     // Extremely boilerplate
     use ast::ExprKind::*;
-    match kind
+    let typed_kind = match kind
     {
-        Var(x) => annot(Var(x.clone())),
-        Num(n) => annot(Num(n.clone())),
-        Bool(b) => annot(Bool(*b)),
-        If(e1, e2, e3) => {
+        Var(x) => Var(x.clone()),
+        Num(n) => Num(n.clone()),
+        Bool(b) => Bool(*b),
+        If(e1, e2, e3) =>
+        {
             let e1_typed = Box::new(elaborate_expr(e1, ctx, outer_type));
             let e2_typed = Box::new(elaborate_expr(e2, ctx, outer_type));
             let e3_typed = Box::new(elaborate_expr(e3, ctx, outer_type));
-            annot(If(e1_typed, e2_typed, e3_typed))
+            If(e1_typed, e2_typed, e3_typed)
         },
         _ => todo!(),
-    }
+    };
+    ((*info, type_annotation), typed_kind)
 }
