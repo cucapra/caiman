@@ -813,8 +813,7 @@ fn ir_funclet(funclet : &assembly_ast::Funclet, context : &mut Context) -> ir::F
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
 
-    let mut index = 0;
-    for input_type in &funclet.header.args {
+    for (index, input_type) in funclet.header.args.iter().enumerate() {
         match input_type.0.clone() { // adding the phi node
             None => {},
             Some(s) => { nodes.push(ir::Node::Phi { index } ) }
