@@ -4,4 +4,6 @@ a.out
 
 # testing
 *.log
+*.debug
+*.result
 caiman-test/src/bin/*
