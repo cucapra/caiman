@@ -33,7 +33,7 @@ extras {
     @bar {
         value : @foo,
         input_slots : {
-            %0 : slot_info(value_tag input @foo.%0)
+            %0 : slot_info()
         },
         output_slots : {
             %0 : slot_info()
@@ -47,4 +47,4 @@ extras {
     },
 }
 
-pipeline "pipeline_trivial" = @bar;
+pipeline "main" = @bar;
