@@ -126,7 +126,13 @@ fn main()
 	};
 	let mut output_file = match & arguments.output_path
 	{
-		Some(output_path) => Some(File::create(output_path).unwrap()),
+		Some(output_path) => {
+			// https://stackoverflow.com/a/59046435/5031773
+			let path = Path::new(output_path);
+			let prefix = path.parent().unwrap();
+			std::fs::create_dir_all(prefix).unwrap();
+			Some(File::create(output_path).unwrap())
+		},
 		None => None
 	};
 	
