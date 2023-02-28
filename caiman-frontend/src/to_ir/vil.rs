@@ -3,10 +3,56 @@
 // individualized, labelable pieces. The intention behind this is to make it very
 // easily compatible with the scheduling language.
 
+use crate::scheduling_language::schedulable;
+use crate::value_language::typing::Type;
+use crate::error;
 
-pub struct Stmt 
+#[derive(Debug, Clone)]
+pub enum Value
 {
-
+    // These are the only two values currently available in
+    // caiman's IR (as of my writing this)
+    I64(i64),
+    U64(u64),
 }
 
-pub type Program = Vec<Stmt>;
+// A bit of a clone of value language expr
+#[derive(Debug, Clone)]
+pub enum Expr<NodeIndex>
+{
+    Value(Value),
+    Var(String),
+    If(NodeIndex, NodeIndex, NodeIndex),
+}
+
+#[derive(Debug, Clone)]
+pub struct Stmt<NodeIndex>
+{
+    pub expr: Expr<NodeIndex>,
+    pub expr_type: Type,
+    pub path_from_root: Vec<schedulable::Intermediate>,
+    pub root_var: String,
+    pub info: error::Info,
+}
+
+pub struct Program
+{
+    pub stmts: Vec<Stmt<usize>>,
+}
+
+impl std::fmt::Debug for Program
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        for (i, stmt) in self.stmts.iter().enumerate()
+        {
+            write!(f, "{}: {}", i, stmt.root_var)?;
+            for node in stmt.path_from_root.iter()
+            {
+                write!(f, ".{:?}", node)?;
+            }
+            write!(f, " = {:?} : {:?}\n", stmt.expr, stmt.expr_type)?;
+        }
+        Ok(())
+    }
+}

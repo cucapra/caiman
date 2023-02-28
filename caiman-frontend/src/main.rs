@@ -21,6 +21,8 @@ struct Arguments
     parse: bool,
     #[clap(long)]
     typeelab: bool,
+    #[clap(long)]
+    vil: bool,
 }
 
 fn value_language_stage(args: &Arguments) -> value_language::compiler::Stage
@@ -74,6 +76,17 @@ fn main()
     else if args.scheduling_language_only
     {
         scheduling_language::compiler::run_until_stage(&args.filename, sl_stage);
+    }
+    else if args.vil
+    {
+        let run = || -> Result<to_ir::vil::Program, error::Error> {
+            let value_ast = value_language::compiler::parse_and_elaborate(&args.filename)?;
+            Ok(to_ir::to_vil::value_ast_to_vil(&value_ast))
+        };
+        match run() {
+            Ok(p) => println!("{:?}", p),
+            Err(e) => println!("Error: {}", e),
+        }
     }
     else
     {

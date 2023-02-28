@@ -62,3 +62,13 @@ pub fn parse(filename: &str) -> Result<ParsedProgram, error::Error>
         _ => panic!("Value language compiler \"parse\" function is bugged"), 
     }
 }
+
+pub fn parse_and_elaborate(filename: &str) -> Result<TypedProgram, error::Error>
+{
+    match run_with_result(filename, Stage::TypeElaborate)
+    {
+        Ok(StageOutput::TypeElaborate(ast)) => Ok(ast),
+        Err(local_e) => Err(globalize_error(filename, local_e)),
+        _ => panic!("Value language compiler \"parse_and_elaborate\" function is bugged"), 
+    }
+}

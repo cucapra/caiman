@@ -1,0 +1,8 @@
+0: x.IfGuard = Value(U64(0)) : Bool
+1: x.IfTrue = Value(I64(1)) : I32
+2: x.IfFalse.IfGuard = Value(U64(1)) : Bool
+3: x.IfFalse.IfTrue = Value(I64(2)) : I32
+4: x.IfFalse.IfFalse = Value(I64(3)) : I32
+5: x.IfFalse = If(2, 3, 4) : I32
+6: x = If(0, 1, 5) : I32
+

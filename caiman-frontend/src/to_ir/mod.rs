@@ -6,7 +6,8 @@ use caiman::arena::Arena;
 use caiman::ir;
 use std::collections::HashMap;
 
-mod vil;
+pub mod vil;
+pub mod to_vil;
 
 mod error;
 pub use error::ToIRError;
