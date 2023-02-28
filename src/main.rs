@@ -118,11 +118,12 @@ fn main()
 		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only, print_codegen_debug_info}
 	};
 
-	let mut compile_mode = CompileMode::RON;
 	let input_path = Path::new(& arguments.input_path);
-	if input_path.ends_with(& arguments.input_path) {
-		compile_mode = CompileMode::Assembly;
-	}
+	let compile_mode = match input_path.extension().and_then(std::ffi::OsStr::to_str).unwrap() {
+		"cair" => CompileMode::Assembly,
+		"ron" => CompileMode::RON,
+		_ => panic!("Unsupported file extension for {:?}", input_path)
+	};
 	let mut output_file = match & arguments.output_path
 	{
 		Some(output_path) => Some(File::create(output_path).unwrap()),
