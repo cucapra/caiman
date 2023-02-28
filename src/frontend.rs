@@ -53,7 +53,7 @@ fn read_definition(input_string : &str, compile_mode : CompileMode) -> Result<De
 pub fn compile_caiman(input_string : &str, options : CompileOptions) -> Result<String, CompileError>
 {
 	let result = read_definition(input_string, options.compile_mode);
-	dbg!(&result);
+	// dbg!(&result);
 	match result
 	{
 		Err(why) => Err(why),

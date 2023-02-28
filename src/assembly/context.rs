@@ -197,6 +197,10 @@ impl Context {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
+        if name == "_" { // ignore throwaway except to update index
+            indices.local_index.node_id += 1;
+            return
+        }
         let index = indices.local_index.node_id;
         let funclet = self.local_funclet_name.as_ref().unwrap();
         let map = self.remote_map

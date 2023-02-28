@@ -438,6 +438,14 @@ impl<'program> FuncletChecker<'program>
 
 						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 					}
+					ir::Node::ConstantI32 { .. } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						assert_eq!(inputs.len(), 0);
+						assert_eq!(outputs.len(), 1);
+
+						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
+					}
 					ir::Node::ConstantUnsignedInteger { .. } =>
 					{
 						assert_eq!(* place, ir::Place::Local);
@@ -556,6 +564,7 @@ impl<'program> FuncletChecker<'program>
 				{
 					// Single return nodes
 					ir::Node::ConstantInteger { .. } => false,
+					ir::Node::ConstantI32 { .. } => false,
 					ir::Node::ConstantUnsignedInteger { .. } => false,
 					ir::Node::Select { .. } => false,
 					// Multiple return nodes
@@ -1006,7 +1015,6 @@ impl<'program> FuncletChecker<'program>
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
-
 				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
 
 				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)

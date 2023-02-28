@@ -583,6 +583,12 @@ fn ir_node(node : &assembly_ast::Node, context : &mut Context) -> ir::Node {
                 type_id: *context.loc_type_id(type_id.clone()),
             }
         },
+        assembly_ast::Node::ConstantI32 { value, type_id } => {
+            ir::Node::ConstantI32 {
+                value: *value,
+                type_id: *context.loc_type_id(type_id.clone()),
+            }
+        },
         assembly_ast::Node::ConstantUnsignedInteger { value, type_id } => {
             ir::Node::ConstantUnsignedInteger {
                 value: *value,
@@ -780,7 +786,7 @@ fn ir_tail_edge(tail : &assembly_ast::TailEdge, context : &mut Context) -> ir::T
             callee_arguments,
             continuation_join } => {
             ir::TailEdge::ScheduleSelect {
-                value_operation: ir::RemoteNodeId { funclet_id: 0, node_id: 0 },
+                value_operation: remote_conversion(value_operation, context),
                 condition: *context.node_id(condition.clone()),
                 callee_funclet_ids: callee_funclet_ids.iter().map(|n|
                     *context.funclet_id_unwrap(n.clone())).collect(),

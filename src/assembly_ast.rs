@@ -71,6 +71,7 @@ macro_rules! lookup_abstract_type_parser {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type_parser!($elem_type)]> };
 	(Type) => { TypeId };
 	(ImmediateI64) => { i64 };
+	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
 	(ExternalCpuFunction) => { ExternalCpuFunctionId };
