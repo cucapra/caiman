@@ -1401,6 +1401,7 @@ impl<'program> CodeGenerator<'program>
 			ffi::Type::GpuBufferRef { element_type } => (),
 			ffi::Type::GpuBufferSlice { element_type } => (),
 			ffi::Type::GpuBufferAllocator => (),
+			ffi::Type::CpuBufferAllocator => (),
 			/*ffi::Type::Slot { value_type, queue_stage, queue_place } =>
 			{
 				write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));

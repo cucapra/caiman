@@ -348,6 +348,11 @@ impl<'program> CodeGen<'program>
 		let typ = & self.program.types[type_id];
 		let ffi_type_id = match typ
 		{
+			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Cpu } =>
+			{
+				// todo DG: this is probably insufficient
+				* storage_type
+			}
 			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Local } =>
 			{
 				// Should eventually be a MutRef
@@ -370,6 +375,10 @@ impl<'program> CodeGen<'program>
 			ir::Type::Buffer{ storage_place : ir::Place::Gpu, .. } =>
 			{
 				self.code_generator.create_ffi_type(ir::ffi::Type::GpuBufferAllocator)
+			},
+			ir::Type::Buffer{ storage_place : ir::Place::Cpu, .. } =>
+			{
+				self.code_generator.create_ffi_type(ir::ffi::Type::CpuBufferAllocator)
 			}
 			_ => panic!("Not a valid type for referencing from the CPU: {:?}", typ)
 		};
@@ -660,7 +669,7 @@ impl<'program> CodeGen<'program>
 			let result = 
 			{
 				use ir::Type;
-				
+
 				match & self.program.types[*input_type_id]
 				{
 					ir::Type::Slot { storage_type, queue_stage, queue_place } =>
@@ -1132,9 +1141,14 @@ impl<'program> CodeGen<'program>
 						{
 							panic!("Not a slot")
 						};
-
 					match (* place, dst_place, src_place)
 					{
+						(ir::Place::Cpu, ir::Place::Cpu, ir::Place::Local) =>
+						{
+							// todo DG: I'm not confident this works
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, src_var_id);
+						}
 						(ir::Place::Local, ir::Place::Local, ir::Place::Local) =>
 						{
 							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
@@ -1168,6 +1182,7 @@ impl<'program> CodeGen<'program>
 					match place
 					{
 						ir::Place::Gpu => { self.code_generator.flush_submission(); }
+						ir::Place::Cpu => { self.code_generator.flush_submission(); }
 						_ => panic!("Unimplemented")
 					}
 				}
@@ -1194,7 +1209,10 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
 				{
-					assert_eq!(* place, ir::Place::Gpu);
+					match *place {
+						ir::Place::Local => panic!("Unimplemented allocating locally"),
+						_ => {}
+					}
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
 					if let Some(NodeResult::Buffer{var_id, storage_place, ..}) = funclet_scoped_state.node_results.get_mut(buffer_node_id)

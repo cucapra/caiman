@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::{assembly_ast, frontend, ir};
 use crate::ir::ffi;
 use crate::assembly::{context, parser};
-use crate::assembly_ast::{FFIType, TypeKind};
+use crate::assembly_ast::FFIType;
 use crate::assembly::context::{Context, FuncletLocation};
 
 // for reading GPU stuff
@@ -58,7 +58,10 @@ fn ffi_to_ffi(value : FFIType, context : &mut Context) -> ffi::Type {
             ffi::Type::GpuBufferRef { element_type: type_id(element_type, context) },
         FFIType::GpuBufferSlice(element_type) =>
             ffi::Type::GpuBufferSlice { element_type: type_id(element_type, context) },
-        FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator
+        FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
+        FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
+        FFIType::CpuBufferRef(element_type) =>
+            ffi::Type::CpuBufferRef { element_type: type_id(element_type, context) },
     }
 }
 
@@ -182,7 +185,7 @@ fn value_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Valu
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
-        assembly_ast::TagCore::Output(r) => ir::ValueTag::Input {
+        assembly_ast::TagCore::Output(r) => ir::ValueTag::Output {
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
@@ -216,7 +219,7 @@ fn spatial_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Sp
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
-        assembly_ast::TagCore::Output(r) => ir::SpatialTag::Input {
+        assembly_ast::TagCore::Output(r) => ir::SpatialTag::Output {
             funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
@@ -495,9 +498,20 @@ fn ir_types(types : &Vec<assembly_ast::TypeDecl>, context : &mut Context) -> Sta
     for type_decl in types {
         let new_type = match type_decl {
             assembly_ast::TypeDecl::Local(typ) => {
-                match typ.type_kind
+                Some(match typ.type_kind
                 { // only supported custom types atm
-                    TypeKind::Slot => {
+                    assembly_ast::TypeKind::NativeValue => {
+                        let type_found = typ.data.get(&as_key("type")).unwrap();
+                        let storage_type = match value_type(type_found, context) {
+                            context::Location::Local(t) => panic!(format!(
+                                "Expected ffi type in native value, got {:?}", type_found)),
+                            context::Location::FFI(i) => ffi::TypeId(i)
+                        };
+                        ir::Type::NativeValue {
+                            storage_type,
+                        }
+                    }
+                    assembly_ast::TypeKind::Slot => {
                         ir::Type::Slot {
                             storage_type: ffi::TypeId(value_type(
                                 typ.data.get(&as_key("type")).unwrap(), context).unpack()),
@@ -505,13 +519,13 @@ fn ir_types(types : &Vec<assembly_ast::TypeDecl>, context : &mut Context) -> Sta
                             queue_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
                         }
                     }
-                    TypeKind::Fence => {
+                    assembly_ast::TypeKind::Fence => {
                         ir::Type::Fence {
                             queue_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
                         }
                     }
-                    TypeKind::Buffer => {
-                        let static_layout_dict = typ.data.get(&as_key("static_layout_opt"));
+                    assembly_ast::TypeKind::Buffer => {
+                        let static_layout_dict = typ.data.get(&as_key("static_layout_opt")).unwrap();
                         fn static_layout_map(d : assembly_ast::UncheckedDict, context : &mut Context)
                         -> ir::StaticBufferLayout {
                             let alignment_bits = value_num(d.get(
@@ -520,31 +534,35 @@ fn ir_types(types : &Vec<assembly_ast::TypeDecl>, context : &mut Context) -> Sta
                                 &as_key("byte_size")).unwrap(), context);
                             ir::StaticBufferLayout { alignment_bits, byte_size }
                         }
-                        let static_layout_opt = static_layout_dict.map(|d|
-                            static_layout_map(as_dict(d.clone()), context));
+                        let static_layout_opt = match static_layout_dict {
+                            assembly_ast::DictValue::Raw(assembly_ast::Value::None) => {None},
+                            assembly_ast::DictValue::Dict(dv) => {
+                                Some(static_layout_map(dv.clone(), context))
+                            },
+                            _ => panic!(format!("Unsupported result for {:?}", static_layout_dict))
+                        };
                         ir::Type::Buffer {
                             storage_place: value_place(typ.data.get(&as_key("place")).unwrap(), context),
                             static_layout_opt,
                         }
                     }
-                    TypeKind::Event => {
+                    assembly_ast::TypeKind::Event => {
                         ir::Type::Event {
                         place: value_place(
                             typ.data.get(&as_key("place")).unwrap(), context),
                         }
                     }
-                    TypeKind::BufferSpace => {
+                    assembly_ast::TypeKind::BufferSpace => {
                         ir::Type::BufferSpace
                     }
-                }
+                })
             }
-            assembly_ast::TypeDecl::FFI(name) => {
-                ir::Type::NativeValue {
-                    storage_type: ffi::TypeId(*context.ffi_type_id(name))
-                }
-            }
+            assembly_ast::TypeDecl::FFI(name) => {None}
         };
-        result.add(new_type);
+        match new_type {
+            Some(t) => {result.add(t);},
+            None => {}
+        }
     }
     result
 }
@@ -800,7 +818,8 @@ fn ir_funclet(funclet : &assembly_ast::Funclet, context : &mut Context) -> ir::F
             None => {},
             Some(s) => { nodes.push(ir::Node::Phi { index } ) }
         };
-        input_types.push(*context.loc_type_id(input_type.1.clone()))
+        input_types.push(*context.loc_type_id(input_type.1.clone()));
+        index += 1;
     }
 
     output_types.push(*context.loc_type_id(funclet.header.ret.clone()));

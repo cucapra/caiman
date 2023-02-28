@@ -274,6 +274,10 @@ fn rule_id<'a>() -> RuleApp<'a, assembly_ast::Value> {
     rule_str(Rule::id, read_id)
 }
 
+fn read_none_value(_ : String, _ : &mut Context) -> assembly_ast::Value {
+    assembly_ast::Value::None
+}
+
 fn read_ffi_type_base(s : String, context : &mut Context) -> assembly_ast::FFIType {
     match s.as_str() {
         "f32" => { assembly_ast::FFIType::F32 },
@@ -288,6 +292,7 @@ fn read_ffi_type_base(s : String, context : &mut Context) -> assembly_ast::FFITy
         "i64" => { assembly_ast::FFIType::I64 },
         "usize" => { assembly_ast::FFIType::USize },
         "gpu_buffer_allocator" => { assembly_ast::FFIType::GpuBufferAllocator },
+        "cpu_buffer_allocator" => { assembly_ast::FFIType::CpuBufferAllocator },
         _ => panic!("Unknown type name {}", s)
     }
 }
@@ -323,6 +328,7 @@ fn read_ffi_parameterized_ref_name(s : String, context : &mut Context)
         "mut_slice" => box_up(&assembly_ast::FFIType::MutSlice),
         "gpu_buffer_ref" => box_up(&assembly_ast::FFIType::GpuBufferRef),
         "gpu_buffer_slice" => box_up(&assembly_ast::FFIType::GpuBufferSlice),
+        "cpu_buffer_ref" => box_up(&assembly_ast::FFIType::CpuBufferRef),
         _ => panic!("Unknown type name {}", s)
     }
 }
@@ -457,9 +463,9 @@ fn read_tag_core(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_a
     let pair = pairs.peek().unwrap();
     let rule = pair.as_rule();
     match rule {
-        Rule::tag_none => assembly_ast::TagCore::None,
+        Rule::none => assembly_ast::TagCore::None,
         Rule::tag_core_op => read_tag_core_op(pairs, context),
-        _ => panic!(unexpected_rule_raw(vec![Rule::tag_none, Rule::tag_core_op], rule))
+        _ => panic!(unexpected_rule_raw(vec![Rule::none, Rule::tag_core_op], rule))
     }
 }
 
@@ -577,9 +583,9 @@ fn read_buffer_info(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembl
 }
 
 fn read_value(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Value {
-    // funclet_loc | var_name | fn_name | typ | place | stage | tag
     let mut rules = Vec::new();
 
+    rules.push(rule_str(Rule::none, read_none_value));
     let rule = compose_str(read_n, assembly_ast::Value::Num);
     rules.push(rule_str_boxed(Rule::n, rule));
     let rule = compose_pair(read_fn_name, assembly_ast::Value::VarName);
@@ -683,6 +689,7 @@ fn read_version(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_as
 
 fn read_ir_type_decl_key(s : String, _ : &mut Context) -> assembly_ast::TypeKind {
     match s.as_str() {
+        "native_value" => assembly_ast::TypeKind::NativeValue,
         "slot" => assembly_ast::TypeKind::Slot,
         "fence" => assembly_ast::TypeKind::Fence,
         "buffer" => assembly_ast::TypeKind::Buffer,
@@ -959,7 +966,7 @@ fn rule_schedule_select_command<'a>() -> RuleApp<'a, assembly_ast::TailEdge> {
     rule_pair(Rule::schedule_select_command, read_schedule_select_command)
 }
 
-fn read_tail_none(s : String, context : &mut Context) -> Option<String> {
+fn read_tail_none(_ : String, _ : &mut Context) -> Option<String> {
     None
 }
 
@@ -967,7 +974,7 @@ fn read_tail_option_node(pairs : &mut Pairs<Rule>, context : &mut Context) -> Op
     let mut rules = Vec::new();
     let apply_some = compose_pair(read_var_name, Some);
     rules.push(rule_pair_boxed(Rule::var_name, apply_some));
-    rules.push(rule_str(Rule::tail_none, read_tail_none));
+    rules.push(rule_str(Rule::none, read_tail_none));
     expect_vec(rules, pairs, context)
 }
 
