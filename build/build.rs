@@ -32,6 +32,7 @@ fn input_type(input: &spec::OperationInput) -> String {
         OK::Type => "Type",
         OK::Place => "Place",
         OK::ImmediateI64 => "ImmediateI64",
+        OK::ImmediateI32 => "ImmediateI32",
         OK::ImmediateU64 => "ImmediateU64",
         OK::Index => "Index",
         OK::Operation => "Operation",

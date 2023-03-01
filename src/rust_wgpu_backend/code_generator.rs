@@ -108,7 +108,7 @@ impl VariableTracker
 	{
 		self.variable_kinds[& variable_id]
 	}
-	
+
 	fn get_var_name(& self, variable_id : VarId) -> String
 	{
 		format!("var_{}", variable_id.0)
@@ -325,12 +325,12 @@ impl<'program> CodeGenerator<'program>
 		if ! self.shader_modules.contains_key(& shader_module_key)
 		{
 			let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
-	
+
 			let mut shader_module = match & external_gpu_function.shader_module_content
 			{
 				ffi::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
 			};
-	
+
 			//self.code_writer.write_str("let module = instance.state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
 			/*match & external_gpu_function.shader_module_content
 			{
@@ -415,12 +415,12 @@ impl<'program> CodeGenerator<'program>
 		let invocation_id = self.gpu_function_invocations.len();
 		self.gpu_function_invocations.push(GpuFunctionInvocation{external_gpu_function_id : external_function_id, bindings, shader_module_key : self.active_shader_module_key.unwrap()});
 		let gpu_function_invocation = & self.gpu_function_invocations[invocation_id];
-		
+
 		self.code_writer.write("let entries = [".to_string());
 		for (binding, (input_opt, output_opt)) in gpu_function_invocation.bindings.iter()
 		{
 			let mut variable_id : Option<VarId> = None;
-			
+
 			if let Some(input) = input_opt
 			{
 				variable_id = Some(input_staging_variables[*input]);
@@ -513,9 +513,9 @@ impl<'program> CodeGenerator<'program>
 		self.require_on_gpu(argument_vars);
 
 		self.set_active_external_gpu_function(external_function_id);
-		//let output_staging_variables = 
+		//let output_staging_variables =
 		self.set_active_bindings(argument_vars, output_vars);
-		
+
 		self.begin_command_encoding();
 
 		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
@@ -533,7 +533,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!(") = "));
 
 		self.code_writer.write("{\n".to_string());
-		
+
 		self.code_writer.write_str("{\n");
 		self.code_writer.write("let mut compute_pass = command_encoder.begin_compute_pass(& wgpu::ComputePassDescriptor {label : None});\n".to_string());
 		self.code_writer.write("compute_pass.set_pipeline(& pipeline);\n".to_string());
@@ -556,11 +556,11 @@ impl<'program> CodeGenerator<'program>
 			let slice_var_id = self.variable_tracker.generate();
 			let future_var_id = self.variable_tracker.generate();
 			//output_temp_variables.push(output_temp_var_id);
-			let type_binding_info = self.get_type_binding_info(type_id); 
+			let type_binding_info = self.get_type_binding_info(type_id);
 			let type_name = self.get_type_name(type_id);
 
 			output_temp_variables.push(staging_var_id);
-			
+
 			/*self.code_writer.write(format!("let var_{} = var_{}.slice(0..);\n", slice_var_id, staging_var_id));
 			self.code_writer.write(format!("let var_{} = var_{}.map_async(wgpu::MapMode::Read);\n", future_var_id, slice_var_id));
 			self.code_writer.write(format!("device.poll(wgpu::Maintain::Wait);\n"));
@@ -662,7 +662,7 @@ impl<'program> CodeGenerator<'program>
 		//self.state_code_writer
 		let code_string = "
 		use caiman_rt::wgpu;
-		
+
 		/*pub struct CpuFunctionInvocationState<'parent>
 		{
 			parent_state : & 'parent mut dyn caiman_rt::State
@@ -995,7 +995,7 @@ impl<'program> CodeGenerator<'program>
 			for (yield_point_id, yield_point) in yield_points.iter()
 			{
 				write!(self.code_writer, "pub fn yielded_at_{}(&self) -> Option<& {}> {{ if let FuncletResultIntermediates::Yield{}{{yielded}} = & self.intermediates {{ Some(yielded) }} else {{ None }} }}\n", yield_point.name, self.get_tuple_definition_string(& yield_point.yielded_types), yield_point_id.0);
-				
+
 				//let dispatcher_id = self.lookup_dispatcher_id(& yield_point.resuming_types);
 				//write!(self.code_writer, "pub fn resume_at_{}(self) -> "
 			}
@@ -1020,7 +1020,7 @@ impl<'program> CodeGenerator<'program>
 			{
 				write!(self.code_writer, "Funclet{}Capturing{}, ", funclet_id, capture_count);
 			}
-			
+
 			write!(self.code_writer, "}}");
 		}*/
 
@@ -1043,12 +1043,12 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "}}\n");
 
 		write!(self.code_writer, "{}", "
-		impl<'state, 'cpu_functions, F : CpuFunctions> Instance<'state, 'cpu_functions, F> 
+		impl<'state, 'cpu_functions, F : CpuFunctions> Instance<'state, 'cpu_functions, F>
 		{
 			pub fn new(state : & 'state mut dyn caiman_rt::State, cpu_functions : & 'cpu_functions F) -> Self
 			{
 				");
-		
+
 		for (shader_module_key, shader_module) in self.shader_modules.iter_mut()
 		{
 			write!(self.code_writer, "let {} = state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor {{ label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"{}\"))}});\n", shader_module_key.instance_field_name(), shader_module.compile_wgsl_text().as_str());
@@ -1115,7 +1115,7 @@ impl<'program> CodeGenerator<'program>
 			for (yield_point_id, yield_point) in yield_points.iter()
 			{
 				//write!(self.code_writer, "pub fn yielded_at_{}(&self) -> Option<& {}> {{ if let FuncletResultIntermediates::Yield{}{{yielded}} = & self.intermediates {{ Some(yielded) }} else {{ None }} }}\n", yield_point.name, self.get_tuple_definition_string(& yield_point.yielded_types), yield_point_id.0);
-				
+
 				let dispatcher_id = self.lookup_dispatcher_id(& yield_point.resuming_types);
 				write!(self.code_writer, "pub fn resume_at_{}<'callee>(self, join_stack : &mut caiman_rt::JoinStack<'callee>", yield_point.name);
 				for (resuming_argument_index, resuming_type) in yield_point.resuming_types.iter().enumerate()
@@ -1129,7 +1129,7 @@ impl<'program> CodeGenerator<'program>
 				}
 				write!(self.code_writer, ") }}\n");
 
-				
+
 			}
 		}
 		write!(self.code_writer, "}}\n");
@@ -1181,7 +1181,7 @@ impl<'program> CodeGenerator<'program>
 				}
 				write!(self.code_writer, ") }}\n");
 			}
-			
+
 			write!(self.code_writer, "_ => panic!(\"Dispatcher cannot dispatch given closure {{:?}}\", closure_header), }} }}", );
 		}
 	}
@@ -1401,6 +1401,7 @@ impl<'program> CodeGenerator<'program>
 			ffi::Type::GpuBufferRef { element_type } => (),
 			ffi::Type::GpuBufferSlice { element_type } => (),
 			ffi::Type::GpuBufferAllocator => (),
+			ffi::Type::CpuBufferAllocator => (),
 			/*ffi::Type::Slot { value_type, queue_stage, queue_place } =>
 			{
 				write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));
@@ -1525,6 +1526,15 @@ impl<'program> CodeGenerator<'program>
 		variable_id
 	}
 
+	pub fn build_constant_i32(&mut self, value : i32, type_id : ffi::TypeId) -> VarId
+	{
+		//let variable_id = self.variable_tracker.generate();
+		//self.generate_type_definition(type_id);
+		let variable_id = self.variable_tracker.create_local_data(type_id);
+		write!(self.code_writer, "let {} : {} = {};\n", self.variable_tracker.get_var_name(variable_id), self.get_type_name(type_id), value);
+		variable_id
+	}
+
 	pub fn build_constant_unsigned_integer(&mut self, value : u64, type_id : ffi::TypeId) -> VarId
 	{
 		//let variable_id = self.variable_tracker.generate();
@@ -1555,21 +1565,36 @@ impl<'program> CodeGenerator<'program>
 		// Temporary fix
 		self.reset_pipeline();
 
-		write!(self.code_writer, "let ( ");
 		let mut var_ids = Vec::<VarId>::new();
-		for (i, type_id) in output_type_ids.iter().enumerate()
-		{
-			//self.generate_type_definition(* type_id);
+		let mut var_names = Vec::<String>::new();
+		let mut var_types = Vec::<String>::new();
+		for (i, type_id) in output_type_ids.iter().enumerate() {
 			let var_id = self.variable_tracker.create_local_data(* type_id);
+			var_names.push(self.variable_tracker.get_var_name(var_id));
+			var_types.push(self.get_type_name(* type_id));
+			var_ids.push(var_id);
+		}
 
-			write!(self.code_writer, "{} : {}", self.variable_tracker.get_var_name(var_id), self.get_type_name(* type_id));
+		write!(self.code_writer, "let ( ");
+
+		for (i, var_name) in var_names.iter().enumerate() {
+			write!(self.code_writer, "{}", var_name);
 			if i < output_type_ids.len() - 1
 			{
 				write!(self.code_writer, ", ");
 			}
-
-			var_ids.push(var_id);
 		}
+
+		write!(self.code_writer, " ) : ( ");
+
+		for (i, var_type) in var_types.iter().enumerate() {
+			write!(self.code_writer, "{}", var_type);
+			if i < output_type_ids.len() - 1
+			{
+				write!(self.code_writer, ", ");
+			}
+		}
+
 		write!(self.code_writer, " ) = if {} !=0 {{ ", self.variable_tracker.get_var_name(condition_var_id));
 
 		var_ids.into_boxed_slice()
@@ -1579,7 +1604,7 @@ impl<'program> CodeGenerator<'program>
 	{
 		// Temporary fix
 		self.reset_pipeline();
-		
+
 		write!(self.code_writer, " ( ");
 		for (i, var_id) in output_var_ids.iter().enumerate()
 		{
@@ -1733,7 +1758,7 @@ impl<'program> CodeGenerator<'program>
 	pub fn build_create_buffer(&mut self, type_id : ffi::TypeId) -> VarId
 	{
 		let variable_id = self.variable_tracker.create_buffer(type_id);
-		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
 		self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
 		variable_id
@@ -1787,7 +1812,7 @@ impl<'program> CodeGenerator<'program>
 
 		let success_var_id = self.variable_tracker.generate();
 		write!(self.code_writer, "let {} = {}.test_suballocate_many(&[{}], &[{}]);\n", self.variable_tracker.get_var_name(success_var_id), self.variable_tracker.get_var_name(buffer_allocator_var_id), layouts_string, element_counts_string);
-		
+
 		success_var_id
 	}
 
@@ -1830,11 +1855,11 @@ impl<'program> CodeGenerator<'program>
 		let output_temp_var_id = self.variable_tracker.generate();
 		let slice_var_id = self.variable_tracker.generate();
 		let future_var_id = self.variable_tracker.generate();
-		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
 
 		let output_var_id = self.variable_tracker.create_local_data(type_id);
-		
+
 		self.code_writer.write(format!("let {} = {}.slice();\n", self.variable_tracker.get_var_name(slice_var_id), self.variable_tracker.get_var_name(source_var)));
 		self.code_writer.write(format!("let {} = {}.map_async(wgpu::MapMode::Read);\n", self.variable_tracker.get_var_name(future_var_id), self.variable_tracker.get_var_name(slice_var_id)));
 		self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
@@ -1854,7 +1879,7 @@ impl<'program> CodeGenerator<'program>
 	{
 		let type_id = self.variable_tracker.get_type_id(source_var);
 		assert_eq!(type_id, self.variable_tracker.get_type_id(destination_var));
-		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_binding_info = self.get_type_binding_info(type_id);
 		self.begin_command_encoding();
 		write!(self.code_writer, "command_encoder.copy_buffer_to_buffer(& {}, 0, & {}, 0, {});\n", self.variable_tracker.get_var_name(destination_var), self.variable_tracker.get_var_name(source_var), type_binding_info.size);
 		let command_buffer_id = self.end_command_encoding();
@@ -1864,7 +1889,7 @@ impl<'program> CodeGenerator<'program>
 	fn build_create_buffer_with_data(&mut self, data_var : VarId, type_id : ffi::TypeId) -> VarId
 	{
 		let variable_id = self.variable_tracker.generate();
-		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
 		let buffer_view_var_name = self.variable_tracker.get_var_name(variable_id);
 		self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
@@ -1875,7 +1900,7 @@ impl<'program> CodeGenerator<'program>
 	fn build_create_buffer_with_buffer_data(&mut self, data_var : VarId, type_id : ffi::TypeId) -> VarId
 	{
 		let variable_id = self.variable_tracker.generate();
-		let type_binding_info = self.get_type_binding_info(type_id); 
+		let type_binding_info = self.get_type_binding_info(type_id);
 		let type_name = self.get_type_name(type_id);
 		self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
 		write!(self.code_writer, "{{\n");

@@ -103,13 +103,13 @@ impl AbstractAllocator
 
 		self.size -= start_address - self.base_address + byte_size;
 		self.base_address = start_address + byte_size;
-
 		Some(start_address)
 	}
 
 	fn suballocate_erased_ref(&mut self, type_layout : & TypeLayout) -> Option<usize>
 	{
-		self.suballocate(type_layout.byte_size, type_layout.alignment)
+		// todo: magic number 64 is overkill and should be fixed with the limit thing
+		self.suballocate(type_layout.byte_size, type_layout.alignment * 64)
 	}
 
 	fn suballocate_erased_slice(&mut self, element_type_layout : & TypeLayout, count : usize) -> Option<(usize, usize)>
@@ -178,6 +178,25 @@ impl<'buffer> CpuBufferAllocator<'buffer>
 
 		return None;
 	}
+}
+
+#[derive(Debug)]
+// A slot holding a pointer to gpu-resident data of type T
+pub struct CpuBufferRef<'buffer, T : Sized>
+{
+	pub buffer : & 'buffer std::mem::MaybeUninit<T>,
+}
+
+impl<'buffer, T : Sized> CpuBufferRef<'buffer, T>
+{
+	pub fn new(buffer : & 'buffer std::mem::MaybeUninit<T>)
+		-> Self
+	{
+		Self {
+			buffer,
+		}
+	}
+
 }
 
 #[derive(Debug)]
@@ -294,6 +313,13 @@ pub struct GpuBufferAllocator<'buffer>
 
 impl<'buffer> GpuBufferAllocator<'buffer>
 {
+	pub fn new(buffer : & 'buffer wgpu::Buffer, size : usize) -> Self {
+		Self {
+			buffer,
+			abstract_allocator: AbstractAllocator::new(size),
+		}
+	}
+
 	pub fn suballocate_ref<T : Sized>(&mut self) -> Option<GpuBufferRef<'buffer, T>>
 	{
 		if let Some(starting_address) = self.abstract_allocator.suballocate_ref::<T>()
@@ -364,7 +390,8 @@ impl<'buffer, T : Sized> GpuBufferRef<'buffer, T>
 
 	pub fn as_binding_resource(&self) -> wgpu::BindingResource<'buffer>
 	{
-		wgpu::BindingResource::Buffer(wgpu::BufferBinding{buffer : self.buffer, offset : self.base_address, size : std::num::NonZeroU64::new(std::mem::size_of::<T>().try_into().unwrap())})
+		let size_n : u64 = std::mem::size_of::<T>().try_into().unwrap();
+		wgpu::BindingResource::Buffer(wgpu::BufferBinding{buffer : self.buffer, offset : self.base_address, size : std::num::NonZeroU64::new(size_n)})
 	}
 
 	pub fn slice(&self) -> wgpu::BufferSlice<'buffer>

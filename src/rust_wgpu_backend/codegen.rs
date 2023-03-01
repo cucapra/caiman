@@ -348,6 +348,11 @@ impl<'program> CodeGen<'program>
 		let typ = & self.program.types[type_id];
 		let ffi_type_id = match typ
 		{
+			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Cpu } =>
+			{
+				// todo DG: this is probably insufficient
+				* storage_type
+			}
 			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Local } =>
 			{
 				// Should eventually be a MutRef
@@ -370,6 +375,10 @@ impl<'program> CodeGen<'program>
 			ir::Type::Buffer{ storage_place : ir::Place::Gpu, .. } =>
 			{
 				self.code_generator.create_ffi_type(ir::ffi::Type::GpuBufferAllocator)
+			},
+			ir::Type::Buffer{ storage_place : ir::Place::Cpu, .. } =>
+			{
+				self.code_generator.create_ffi_type(ir::ffi::Type::CpuBufferAllocator)
 			}
 			_ => panic!("Not a valid type for referencing from the CPU: {:?}", typ)
 		};
@@ -501,6 +510,24 @@ impl<'program> CodeGen<'program>
 					};
 				//let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
 				let variable_id = self.code_generator.build_constant_integer(* value, storage_type_id);
+				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
+
+				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
+			}
+			ir::Node::ConstantI32{value, type_id} =>
+			{
+				let slot_id = output_slot_ids[0];
+				let storage_type_id =
+					if let Some(NodeResult::Slot{storage_type, ..}) = funclet_scoped_state.get_node_result(output_slot_node_ids[0])
+					{
+						* storage_type
+					}
+					else
+					{
+						panic!("Not a slot");
+					};
+				//let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
+				let variable_id = self.code_generator.build_constant_i32(* value, storage_type_id);
 				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
@@ -660,7 +687,7 @@ impl<'program> CodeGen<'program>
 			let result = 
 			{
 				use ir::Type;
-				
+
 				match & self.program.types[*input_type_id]
 				{
 					ir::Type::Slot { storage_type, queue_stage, queue_place } =>
@@ -701,7 +728,7 @@ impl<'program> CodeGen<'program>
 		{
 			while let Some(current_funclet_id) = current_funclet_id_opt
 			{
-				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, default_join_point_id_opt);
+				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, &mut default_join_point_id_opt);
 				//println!("Split point: {:?}", split_point);
 				current_output_node_results = match split_point
 				{
@@ -983,7 +1010,7 @@ impl<'program> CodeGen<'program>
 		self.code_generator.end_funclet();
 	}
 
-	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[SlotId]>
+	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, default_join_point_id_opt : &mut Option<JoinPointId>) -> SplitPoint //Box<[SlotId]>
 	{
 		let funclet = & self.program.funclets[funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
@@ -1132,9 +1159,14 @@ impl<'program> CodeGen<'program>
 						{
 							panic!("Not a slot")
 						};
-
 					match (* place, dst_place, src_place)
 					{
+						(ir::Place::Cpu, ir::Place::Cpu, ir::Place::Local) =>
+						{
+							// todo DG: I'm not confident this works
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, src_var_id);
+						}
 						(ir::Place::Local, ir::Place::Local, ir::Place::Local) =>
 						{
 							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
@@ -1168,6 +1200,7 @@ impl<'program> CodeGen<'program>
 					match place
 					{
 						ir::Place::Gpu => { self.code_generator.flush_submission(); }
+						ir::Place::Cpu => { self.code_generator.flush_submission(); }
 						_ => panic!("Unimplemented")
 					}
 				}
@@ -1194,7 +1227,10 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
 				{
-					assert_eq!(* place, ir::Place::Gpu);
+					match *place {
+						ir::Place::Local => panic!("Unimplemented allocating locally"),
+						_ => {}
+					}
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
 					if let Some(NodeResult::Buffer{var_id, storage_place, ..}) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
@@ -1213,9 +1249,9 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::DefaultJoin =>
 				{
-					if let Some(join_point_id) = default_join_point_id_opt
+					if let Some(join_point_id) = *default_join_point_id_opt
 					{
-						default_join_point_id_opt = None;
+						*default_join_point_id_opt = None;
 						funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 					}
 					else
@@ -1296,7 +1332,7 @@ impl<'program> CodeGen<'program>
 					output_node_results.push(node_result);
 				}
 
-				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
+				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : *default_join_point_id_opt}
 			}
 			ir::TailEdge::Yield{pipeline_yield_point_id, yielded_nodes, next_funclet : next_funclet_id, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
 			{
@@ -1479,7 +1515,6 @@ impl<'program> CodeGen<'program>
 			}
 			_ => panic!("Umimplemented")
 		};
-
 		split_point
 	}
 

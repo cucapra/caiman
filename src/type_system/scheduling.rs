@@ -438,6 +438,14 @@ impl<'program> FuncletChecker<'program>
 
 						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 					}
+					ir::Node::ConstantI32 { .. } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						assert_eq!(inputs.len(), 0);
+						assert_eq!(outputs.len(), 1);
+
+						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
+					}
 					ir::Node::ConstantUnsignedInteger { .. } =>
 					{
 						assert_eq!(* place, ir::Place::Local);
@@ -463,7 +471,7 @@ impl<'program> FuncletChecker<'program>
 					}
 					ir::Node::CallExternalCpu { external_function_id, arguments } =>
 					{
-						assert_eq!(* place, ir::Place::Local);
+						assert_ne!(* place, ir::Place::Gpu);
 						let function = & self.program.native_interface.external_cpu_functions[*external_function_id];
 
 						assert_eq!(inputs.len(), arguments.len());
@@ -556,6 +564,7 @@ impl<'program> FuncletChecker<'program>
 				{
 					// Single return nodes
 					ir::Node::ConstantInteger { .. } => false,
+					ir::Node::ConstantI32 { .. } => false,
 					ir::Node::ConstantUnsignedInteger { .. } => false,
 					ir::Node::Select { .. } => false,
 					// Multiple return nodes
@@ -724,9 +733,12 @@ impl<'program> FuncletChecker<'program>
 			ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
 			{
 				// Temporary restriction
-				assert_eq!(* place, ir::Place::Gpu);
+				match *place {
+					ir::Place::Local => panic!("Unimplemented allocating locally"),
+					_ => {}
+				}
 				let buffer_spatial_tag = self.scalar_node_spatial_tags[buffer_node_id];
-				assert!(buffer_spatial_tag != ir::SpatialTag::None);
+				assert_ne!(buffer_spatial_tag, ir::SpatialTag::None);
 				
 				if let Some(NodeType::Buffer(Buffer{storage_place, static_layout_opt : Some(static_layout)})) = self.node_types.get_mut(buffer_node_id)
 				{
@@ -1003,7 +1015,6 @@ impl<'program> FuncletChecker<'program>
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
-
 				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
 
 				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)

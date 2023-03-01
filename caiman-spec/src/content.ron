@@ -53,6 +53,18 @@
 			has_local_side_effect : false
 		),
 		(
+			// Represents a constant signed integer
+			// For EncodeDo: Is a value operation with no inputs and one output
+			name : "ConstantI32",
+			inputs : [
+				(name : "value", kind : ImmediateI32),
+				(name : "type_id", kind : Type),
+			],
+			output : Single,
+			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : false
+		),
+		(
 			// Represents a constant unsigned integer
 			// For EncodeDo: Is a value operation with no inputs and one output
 			name : "ConstantUnsignedInteger",

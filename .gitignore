@@ -3,5 +3,7 @@
 a.out
 
 # testing
-*.out
 *.log
+*.debug
+*.result
+caiman-test/src/bin/*

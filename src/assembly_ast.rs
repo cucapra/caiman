@@ -43,6 +43,8 @@ pub enum FFIType
 	GpuBufferRef ( Box<FFIType> ),
 	GpuBufferSlice ( Box<FFIType> ),
 	GpuBufferAllocator,
+	CpuBufferAllocator,
+	CpuBufferRef ( Box<FFIType> ),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -69,6 +71,7 @@ macro_rules! lookup_abstract_type_parser {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type_parser!($elem_type)]> };
 	(Type) => { TypeId };
 	(ImmediateI64) => { i64 };
+	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
 	(ExternalCpuFunction) => { ExternalCpuFunctionId };
@@ -204,6 +207,7 @@ pub enum Tag {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
+	None,
 	ID(String),
     FunctionLoc(RemoteNodeId),
     VarName(String),
@@ -244,7 +248,7 @@ pub struct Funclet {
 
 #[derive(Debug)]
 pub enum TypeKind {
-	Slot, Fence, Buffer, Event, BufferSpace
+	NativeValue, Slot, Fence, Buffer, Event, BufferSpace
 }
 
 #[derive(Debug)]

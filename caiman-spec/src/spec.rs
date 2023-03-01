@@ -34,6 +34,7 @@ pub enum OperationInputKind
 	Type,
 	Place,
 	ImmediateI64,
+	ImmediateI32,
 	ImmediateU64,
 	Index,
 	Operation,

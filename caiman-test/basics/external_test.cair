@@ -12,17 +12,21 @@ types [
     },
 ]
 
-external_cpu @do_thing_on_cpu(i64) -> i64;
+external_cpu @op(i64) -> i64;
 
 value @foo(%0 : i64) -> i64 {
-    %1 = constant 4i64;
-    return %1;
+    %x = constant 2i64;
+    %y = call @op(%x);
+    %z = extract %y 0;
+    return %z;
 }
 
-schedule @bar(%0 : $slot0) -> $slot0 {
-    %x = alloc-temporary-local-i64 @foo.%1;
-    %1 = encode-do-local @foo.%1() -> %x;
-    return %x;
+schedule @bar(%blob : $slot0) -> $slot0 {
+    %0 = alloc-temporary-local-i64 @foo.%x;
+    %1 = encode-do-local @foo.%x() -> %0;
+    %2 = alloc-temporary-local-i64 @foo.%z;
+    %3 = encode-do-local @foo.%y(%0) -> %2;
+    return %2;
 }
 
 timeline @time(%e : $event0) -> $event0 {
@@ -33,10 +37,10 @@ extras {
     @bar {
         value : @foo,
         input_slots : {
-            %0 : slot_info(value_tag input @foo.%0)
+            %blob : slot_info()
         },
         output_slots : {
-            %0 : slot_info()
+            %blob : slot_info()
         },
         input_fences : {},
         output_fences : {},
@@ -47,4 +51,4 @@ extras {
     },
 }
 
-pipeline "pipeline_trivial" = @bar;
+pipeline "main" = @bar;

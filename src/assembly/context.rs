@@ -6,7 +6,8 @@ use crate::assembly_ast;
 
 #[derive(Debug, Clone)]
 struct TypeIndices {
-    type_index : usize
+    ffi_type_index : usize,
+    local_type_index : usize
 }
 
 #[derive(Debug, Clone)]
@@ -74,7 +75,8 @@ impl Context {
 
     pub fn initiate_type_indices(&mut self) {
         self.indices = Indices::TypeIndices(TypeIndices {
-            type_index : 0
+            ffi_type_index : 0,
+            local_type_index : 0,
         })
     }
 
@@ -108,9 +110,9 @@ impl Context {
             Indices::TypeIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        let index = indices.type_index;
+        let index = indices.ffi_type_index;
         self.ffi_type_map.insert(name, index);
-        indices.type_index += 1;
+        indices.ffi_type_index += 1;
     }
 
     pub fn add_local_type(&mut self, name : String) {
@@ -118,9 +120,9 @@ impl Context {
             Indices::TypeIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        let index = indices.type_index;
+        let index = indices.local_type_index;
         self.local_type_map.insert(name, index);
-        indices.type_index += 1;
+        indices.local_type_index += 1;
     }
 
     pub fn add_cpu_funclet(&mut self, name : String) {
@@ -195,6 +197,10 @@ impl Context {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
+        if name == "_" { // ignore throwaway except to update index
+            indices.local_index.node_id += 1;
+            return
+        }
         let index = indices.local_index.node_id;
         let funclet = self.local_funclet_name.as_ref().unwrap();
         let map = self.remote_map
