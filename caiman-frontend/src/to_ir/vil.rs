@@ -10,10 +10,11 @@ use crate::error;
 #[derive(Debug, Clone)]
 pub enum Value
 {
-    // These are the only two values currently available in
+    // These are the only values currently available in
     // caiman's IR (as of my writing this)
     I64(i64),
     U64(u64),
+    I32(i32),
 }
 
 // A bit of a clone of value language expr

@@ -37,7 +37,7 @@ fn add_expr_stmt(
         {
             let value = match expr_type
             {
-                Type::I32 => vil::Value::I64(n.parse::<i64>().unwrap()),
+                Type::I32 => vil::Value::I32(n.parse::<i32>().unwrap()),
                 _ => panic!("Invalid number type bypassed typechecking at {:?}", info),
             };
             vil::Expr::Value(value)
