@@ -1,0 +1,137 @@
+version 0.0.1
+
+// ---
+
+types [
+    f32,f64,u8,u16,u32,u64,usize,i8,i16,i32,i64,array<i32, 2>,erased_length_array<u32>,
+    tuple<f32, u8>,const_ref<u64>,mut_ref<const_ref<u64>>,const_slice<array<i32, 2>>,mut_slice<i32>,
+    gpu_buffer_ref<i32>,gpu_buffer_slice<i32>,gpu_buffer_allocator,cpu_buffer_allocator,cpu_buffer_ref<i64>,
+    native_value $native_i64 {
+        type : i64,
+    },
+    slot $slot0 {
+        type : i64,
+        stage : ready,
+        place : local,
+    },
+    fence $fence0 {
+        place : cpu
+    },
+    buffer $buffer0 {
+        place : gpu,
+        static_layout_opt : {
+            alignment_bits : 4,
+            byte_size : 8
+        },
+    },
+    event $event0 {
+        place : local
+    },
+    // naming is dumb, but the parser is sad if I have both buffer and buffer_space as keywords here
+    space_buffer $buffer_space0 {} // note that {} is required, even though it's empty here
+]
+
+// ---
+
+external_cpu @do_thing_on_cpu(i64) -> i64;
+// the path is required, and is relative to where you run this thing at the moment (unfortunately)
+external_gpu @do_thing_on_gpu(%x : i64) -> [%out : i64] : "caiman-test/programs/example.wgsl"
+{
+    resource {
+        group : 0,
+        binding : 0,
+        input : %x,
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : %out,
+    }
+}
+
+value @foo(%test : i32) -> i32 {
+    %1 = constant 4i64;
+    %3 = constant-unsigned 4u64;
+    %2 = extract %1 0;
+    %4 = call @simple(%1);
+    %5 = select %1 %2 %3;
+    %6 = call @do_thing_on_cpu(%1);
+    %x = call @do_thing_on_gpu<%1>(%1);
+    return %1; // todo: add more tail edges
+}
+
+value @y(%abc : i64) -> i64 {
+    // pretty clunky tbh
+    yield 0 [%abc] @foo %abc [%abc, %abc];
+}
+
+value @j(%abc : i64) -> i64 {
+    jump %abc [%abc, %abc];
+}
+
+schedule @bar(%0 : $slot0) -> $slot0 {
+    %x = alloc-temporary-local-i64 @foo.%1;
+    %2 = encode-do-local @foo.%1() -> %x;
+    %1 = create-local-i64 @foo.%x; // unbound slot
+    %3 = drop %0;
+    %4 = alloc-local-i64 %0 @foo.%1;
+    %5 = encode-copy-cpu %2 %4;
+    %6 = submit-cpu @foo.%1;
+    %7 = encode-fence-cpu @foo.%3;
+    %8 = sync-fence-cpu %7 @foo.%2;
+    %9 = inline-join @foo [] %5;
+    %10 = serialized-join @foo [] %5;
+    %11 = default-join;
+    return %x;
+}
+
+schedule @scall(%abc : i64) -> i64 {
+    // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
+    schedule-call @j.%abc @foo [%abc, %abc] %abc;
+}
+
+schedule @sselect(%abc : i64) -> i64 {
+    // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
+    schedule-select @y.%abc %abc [@foo, @j] [%abc, %abc] %abc;
+}
+
+schedule @dalloc(%abc : i64) -> i64 {
+    // pretty clunky tbh -- note that `none` literally means `none`
+    dynamic-alloc %abc [] [%abc, none, %abc] @foo @j %abc;
+}
+
+timeline @time(%e : $event0) -> $event0 {
+    %1 = submission-cpu->gpu %e;
+    %2 = sync-cpu->gpu %e %1;
+    return %e;
+}
+
+spatial @space(%b : $buffer_space0) -> i64 {
+    return %b;
+}
+
+value_function @simple(i64) -> i64 : [@foo];
+
+// ---
+
+extras {
+    @bar {
+        value : @foo,
+        input_slots : {
+            %0 : slot_info(value_tag input @foo.%test)
+        },
+        output_slots : {
+            %0 : slot_info()
+        },
+        input_fences : {%0:fence_info(timeline_tag none)},
+        output_fences : {},
+        input_buffers : {%0:buffer_info(spatial_tag output @foo.%test)},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+}
+
+// ---
+
+pipeline "pipeline_trivial" = @bar;

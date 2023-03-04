@@ -46,6 +46,7 @@ fn write_spec_nodes_module(spec: &spec::Spec) -> Result<(), std::io::Error>
                 {
                     OIK::ImmediateI64 => "i64",
                     OIK::ImmediateU64 => "u64",
+                    OIK::ImmediateI32 => "i32",
                     _ => "usize",
                 };
                 let type_extn = if input.is_array { "_slice" } else { "" };

@@ -1,0 +1,11 @@
+command = """
+"mkdir" -p debug && \
+\
+"echo" '#![allow(warnings)]' > ../src/bin/{base}.rs && \
+"echo" 'mod pipeline {{ include!("{base}_generated.rs"); }}' >> ../src/bin/{base}.rs && \
+cat {base}.rs >> ../src/bin/{base}.rs && \
+\
+cargo run --manifest-path ../../Cargo.toml --features=build-binary -- --input {filename} --output ../src/bin/{base}_generated.rs > {base}.log && \
+\
+cargo run --manifest-path ../Cargo.toml --bin {base} 2> debug/{base}.debug
+"""

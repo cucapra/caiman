@@ -1,6 +1,6 @@
 use crate::ir;
 use crate::shadergen;
-use crate::arena::Arena;
+use crate::stable_vec::StableVec;
 use std::default::Default;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -273,8 +273,8 @@ impl FuncletScopedState
 
 fn check_storage_type_implements_value_type(program : & ir::Program, storage_type_id : ir::ffi::TypeId, value_type_id : ir::TypeId)
 {
-	let storage_type = & program.native_interface.types[& storage_type_id.0];
-	let value_type = & program.types[& value_type_id];
+	let storage_type = & program.native_interface.types[storage_type_id.0];
+	let value_type = & program.types[value_type_id];
 	/*match value_type
 	{
 		ir::Type::Integer{signed, width} =>
@@ -345,9 +345,14 @@ impl<'program> CodeGen<'program>
 			return * ffi_type_id;
 		}
 
-		let typ = & self.program.types[& type_id];
+		let typ = & self.program.types[type_id];
 		let ffi_type_id = match typ
 		{
+			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Cpu } =>
+			{
+				// todo DG: this is probably insufficient
+				* storage_type
+			}
 			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Local } =>
 			{
 				// Should eventually be a MutRef
@@ -355,7 +360,7 @@ impl<'program> CodeGen<'program>
 			}
 			ir::Type::Slot { storage_type, queue_stage : _, queue_place : ir::Place::Gpu} =>
 			{
-				match & self.program.native_interface.types[& storage_type.0]
+				match & self.program.native_interface.types[storage_type.0]
 				{
 					ir::ffi::Type::ErasedLengthArray{element_type} =>
 					{
@@ -370,6 +375,10 @@ impl<'program> CodeGen<'program>
 			ir::Type::Buffer{ storage_place : ir::Place::Gpu, .. } =>
 			{
 				self.code_generator.create_ffi_type(ir::ffi::Type::GpuBufferAllocator)
+			},
+			ir::Type::Buffer{ storage_place : ir::Place::Cpu, .. } =>
+			{
+				self.code_generator.create_ffi_type(ir::ffi::Type::CpuBufferAllocator)
 			}
 			_ => panic!("Not a valid type for referencing from the CPU: {:?}", typ)
 		};
@@ -385,7 +394,7 @@ impl<'program> CodeGen<'program>
 		{
 			ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} =>
 			{
-				let function = & self.program.native_interface.external_gpu_functions[external_function_id];
+				let function = & self.program.native_interface.external_gpu_functions[*external_function_id];
 
 				assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
 				assert_eq!(output_slot_ids.len(), function.output_types.len());
@@ -505,6 +514,24 @@ impl<'program> CodeGen<'program>
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
 			}
+			ir::Node::ConstantI32{value, type_id} =>
+			{
+				let slot_id = output_slot_ids[0];
+				let storage_type_id =
+					if let Some(NodeResult::Slot{storage_type, ..}) = funclet_scoped_state.get_node_result(output_slot_node_ids[0])
+					{
+						* storage_type
+					}
+					else
+					{
+						panic!("Not a slot");
+					};
+				//let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
+				let variable_id = self.code_generator.build_constant_i32(* value, storage_type_id);
+				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
+
+				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
+			}
 			ir::Node::ConstantUnsignedInteger{value, type_id} =>
 			{
 				let slot_id = output_slot_ids[0];
@@ -534,11 +561,13 @@ impl<'program> CodeGen<'program>
 			}
 			ir::Node::CallExternalCpu { external_function_id, arguments } =>
 			{
-				let function = & self.program.native_interface.external_cpu_functions[external_function_id];
+				let function = & self.program.native_interface.external_cpu_functions[*external_function_id];
 
 				use std::iter::FromIterator;
 
-				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| { let slot_id = input_slot_ids[index]; placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
+				let argument_var_ids = Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| 
+					{ let slot_id = input_slot_ids[index]; 
+						placement_state.slot_variable_ids[& slot_id] })).into_boxed_slice();
 				let raw_outputs = self.code_generator.build_external_cpu_function_call(* external_function_id, & argument_var_ids);
 
 				for (index, output_type_id) in function.output_types.iter().enumerate()
@@ -612,7 +641,7 @@ impl<'program> CodeGen<'program>
 		let mut input_storage_types = Vec::<ir::ffi::TypeId>::new();
 		let mut output_storage_types = Vec::<ir::ffi::TypeId>::new();
 		let mut capture_var_ids = Vec::<VarId>::new();
-		let join_point_scheduling_funclet = & self.program.funclets[& funclet_id];
+		let join_point_scheduling_funclet = & self.program.funclets[funclet_id];
 		for (capture_index, captured_node_result) in captures.iter().enumerate()
 		{
 			let var_id = placement_state.get_node_result_var_id(& captured_node_result).unwrap();
@@ -642,7 +671,7 @@ impl<'program> CodeGen<'program>
 
 	fn compile_externally_visible_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, pipeline_context : &mut PipelineContext)
 	{
-		let funclet = & self.program.funclets[& funclet_id];
+		let funclet = & self.program.funclets[funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 		let funclet_extra = & self.program.scheduling_funclet_extras[& funclet_id];
 
@@ -658,8 +687,8 @@ impl<'program> CodeGen<'program>
 			let result = 
 			{
 				use ir::Type;
-				
-				match & self.program.types[input_type_id]
+
+				match & self.program.types[*input_type_id]
 				{
 					ir::Type::Slot { storage_type, queue_stage, queue_place } =>
 					{
@@ -699,7 +728,7 @@ impl<'program> CodeGen<'program>
 		{
 			while let Some(current_funclet_id) = current_funclet_id_opt
 			{
-				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, default_join_point_id_opt);
+				let split_point = self.compile_scheduling_funclet(current_funclet_id, & current_output_node_results, pipeline_context, &mut placement_state, &mut default_join_point_id_opt);
 				//println!("Split point: {:?}", split_point);
 				current_output_node_results = match split_point
 				{
@@ -806,7 +835,7 @@ impl<'program> CodeGen<'program>
 							TraversalState::SelectIf { branch_input_node_results, condition_slot_id, true_funclet_id, false_funclet_id, continuation_join_point_id_opt } =>
 							{
 								let condition_var_id = placement_state.get_slot_var_id(condition_slot_id).unwrap();
-								let true_funclet = & self.program.funclets[& true_funclet_id];
+								let true_funclet = & self.program.funclets[true_funclet_id];
 								let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
 								//true_funclet_extra.input_slots[& output_index].value_tag
 								let output_types = true_funclet.output_types.iter().map(|type_id| self.get_cpu_useable_type(* type_id)).collect::<Box<[ir::ffi::TypeId]>>();
@@ -815,7 +844,7 @@ impl<'program> CodeGen<'program>
 								for (output_index, output_type) in true_funclet.output_types.iter().enumerate()
 								{
 									// Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
-									let (storage_type, queue_stage, queue_place) = if let ir::Type::Slot{storage_type, queue_stage, queue_place} = & self.program.types[output_type]
+									let (storage_type, queue_stage, queue_place) = if let ir::Type::Slot{storage_type, queue_stage, queue_place} = & self.program.types[*output_type]
 									{
 										(* storage_type, * queue_stage, * queue_place)
 									}
@@ -846,7 +875,7 @@ impl<'program> CodeGen<'program>
 							}
 							TraversalState::DynAllocIf { buffer_node_result, success_funclet_id, failure_funclet_id, argument_node_results, dynamic_allocation_size_slot_ids, continuation_join_point_id_opt} =>
 							{
-								let success_funclet = & self.program.funclets[& success_funclet_id];
+								let success_funclet = & self.program.funclets[success_funclet_id];
 								let success_funclet_extra = & self.program.scheduling_funclet_extras[& success_funclet_id];
 
 								let (buffer_var_id, condition_var_id) = 
@@ -866,7 +895,7 @@ impl<'program> CodeGen<'program>
 								success_argument_node_results.extend_from_slice(& argument_node_results);
 								for (index, slot_id_opt) in dynamic_allocation_size_slot_ids.iter().enumerate()
 								{
-									let node_result = match & self.program.types[& success_funclet.input_types[argument_node_results.len() + index]]
+									let node_result = match & self.program.types[success_funclet.input_types[argument_node_results.len() + index]]
 									{
 										ir::Type::Slot{queue_stage, queue_place, storage_type} =>
 										{
@@ -874,7 +903,7 @@ impl<'program> CodeGen<'program>
 											let var_id =
 												if let Some(slot_id) = slot_id_opt
 												{
-													match & self.program.native_interface.types[& storage_type.0]
+													match & self.program.native_interface.types[storage_type.0]
 													{
 														ir::ffi::Type::ErasedLengthArray{element_type} =>
 														{
@@ -905,7 +934,7 @@ impl<'program> CodeGen<'program>
 								let mut output_node_results = Vec::<NodeResult>::new();
 								for (output_index, output_type) in success_funclet.output_types.iter().enumerate()
 								{
-									match & self.program.types[output_type]
+									match & self.program.types[*output_type]
 									{
 										ir::Type::Slot{storage_type, queue_stage, queue_place} => 
 										{
@@ -981,9 +1010,9 @@ impl<'program> CodeGen<'program>
 		self.code_generator.end_funclet();
 	}
 
-	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, mut default_join_point_id_opt : Option<JoinPointId>) -> SplitPoint //Box<[SlotId]>
+	fn compile_scheduling_funclet(&mut self, funclet_id : ir::FuncletId, argument_node_results : &[NodeResult], /*argument_slot_ids : &[SlotId],*/ pipeline_context : &mut PipelineContext, placement_state : &mut PlacementState, default_join_point_id_opt : &mut Option<JoinPointId>) -> SplitPoint //Box<[SlotId]>
 	{
-		let funclet = & self.program.funclets[& funclet_id];
+		let funclet = & self.program.funclets[funclet_id];
 		assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 		let funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& funclet_id];
 		//let scheduled_value_funclet = & self.program.value_funclets[& scheduling_funclet.value_funclet_id];
@@ -1066,7 +1095,7 @@ impl<'program> CodeGen<'program>
 					let mut input_slot_ids = Vec::<SlotId>::new();
 					let mut output_slot_ids = Vec::<SlotId>::new();
 
-					let encoded_funclet = & self.program.funclets[& operation.funclet_id];
+					let encoded_funclet = & self.program.funclets[operation.funclet_id];
 					let encoded_node = & encoded_funclet.nodes[operation.node_id];
 
 					for & input_node_id in inputs.iter()
@@ -1130,9 +1159,14 @@ impl<'program> CodeGen<'program>
 						{
 							panic!("Not a slot")
 						};
-
 					match (* place, dst_place, src_place)
 					{
+						(ir::Place::Cpu, ir::Place::Cpu, ir::Place::Local) =>
+						{
+							// todo DG: I'm not confident this works
+							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+							placement_state.update_slot_state(dst_slot_id, ir::ResourceQueueStage::Ready, src_var_id);
+						}
 						(ir::Place::Local, ir::Place::Local, ir::Place::Local) =>
 						{
 							let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
@@ -1166,6 +1200,7 @@ impl<'program> CodeGen<'program>
 					match place
 					{
 						ir::Place::Gpu => { self.code_generator.flush_submission(); }
+						ir::Place::Cpu => { self.code_generator.flush_submission(); }
 						_ => panic!("Unimplemented")
 					}
 				}
@@ -1192,7 +1227,10 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
 				{
-					assert_eq!(* place, ir::Place::Gpu);
+					match *place {
+						ir::Place::Local => panic!("Unimplemented allocating locally"),
+						_ => {}
+					}
 					assert_eq!(funclet_scheduling_extra.value_funclet_id, operation.funclet_id);
 
 					if let Some(NodeResult::Buffer{var_id, storage_place, ..}) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
@@ -1211,9 +1249,9 @@ impl<'program> CodeGen<'program>
 				}
 				ir::Node::DefaultJoin =>
 				{
-					if let Some(join_point_id) = default_join_point_id_opt
+					if let Some(join_point_id) = *default_join_point_id_opt
 					{
-						default_join_point_id_opt = None;
+						*default_join_point_id_opt = None;
 						funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Join{ join_point_id });
 					}
 					else
@@ -1224,7 +1262,7 @@ impl<'program> CodeGen<'program>
 				ir::Node::InlineJoin { funclet : funclet_id, captures, continuation : continuation_join_node_id } => 
 				{
 					let mut captured_node_results = Vec::<NodeResult>::new();
-					let join_funclet = & self.program.funclets[funclet_id];
+					let join_funclet = & self.program.funclets[*funclet_id];
 					let extra = & self.program.scheduling_funclet_extras[funclet_id];
 
 					// Join points can only be constructed for the value funclet they are created in
@@ -1245,7 +1283,7 @@ impl<'program> CodeGen<'program>
 				ir::Node::SerializedJoin { funclet : funclet_id, captures, continuation : continuation_join_node_id } => 
 				{
 					let mut captured_node_results = Vec::<NodeResult>::new();
-					let join_funclet = & self.program.funclets[funclet_id];
+					let join_funclet = & self.program.funclets[*funclet_id];
 					let extra = & self.program.scheduling_funclet_extras[funclet_id];
 
 					// Join points can only be constructed for the value funclet they are created in
@@ -1284,7 +1322,7 @@ impl<'program> CodeGen<'program>
 			ir::TailEdge::Return { return_values } =>
 			{
 				let encoded_value_funclet_id = funclet_scheduling_extra.value_funclet_id;
-				let encoded_value_funclet = & self.program.funclets[& encoded_value_funclet_id];
+				let encoded_value_funclet = & self.program.funclets[encoded_value_funclet_id];
 
 				let mut output_node_results = Vec::<NodeResult>::new();
 
@@ -1294,7 +1332,7 @@ impl<'program> CodeGen<'program>
 					output_node_results.push(node_result);
 				}
 
-				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : default_join_point_id_opt}
+				SplitPoint::Next{return_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : *default_join_point_id_opt}
 			}
 			ir::TailEdge::Yield{pipeline_yield_point_id, yielded_nodes, next_funclet : next_funclet_id, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
 			{
@@ -1316,7 +1354,7 @@ impl<'program> CodeGen<'program>
 					argument_node_results.push(node_result);
 				}
 
-				let join_funclet = & self.program.funclets[next_funclet_id];
+				let join_funclet = & self.program.funclets[*next_funclet_id];
 				let join_extra = & self.program.scheduling_funclet_extras[next_funclet_id];
 				let join_point_id = placement_state.join_graph.create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint{value_funclet_id : join_extra.value_funclet_id, scheduling_funclet_id : * next_funclet_id, captures : argument_node_results.into_boxed_slice(), continuation_join_point_id}));
 				SplitPoint::Yield{pipeline_yield_point_id : * pipeline_yield_point_id, yielded_node_results : output_node_results.into_boxed_slice(), continuation_join_point_id_opt : Some(join_point_id)}
@@ -1368,11 +1406,11 @@ impl<'program> CodeGen<'program>
 				assert_eq!(value_operation.funclet_id, funclet_scoped_state.value_funclet_id);
 				//assert_eq!(continuation_join_point.get_value_funclet_id(), funclet_scoped_state.value_funclet_id);
 
-				let callee_funclet = & self.program.funclets[& callee_scheduling_funclet_id];
+				let callee_funclet = & self.program.funclets[callee_scheduling_funclet_id];
 				assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
 				let callee_funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& callee_scheduling_funclet_id];
 				let callee_value_funclet_id = callee_funclet_scheduling_extra.value_funclet_id;
-				let callee_value_funclet = & self.program.funclets[& callee_value_funclet_id];
+				let callee_value_funclet = & self.program.funclets[callee_value_funclet_id];
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
 				let mut argument_node_results = Vec::<NodeResult>::new();
@@ -1398,12 +1436,12 @@ impl<'program> CodeGen<'program>
 				assert_eq!(callee_funclet_ids.len(), 2);
 				let true_funclet_id = callee_funclet_ids[0];
 				let false_funclet_id = callee_funclet_ids[1];
-				let true_funclet = & self.program.funclets[& true_funclet_id];
-				let false_funclet = & self.program.funclets[& false_funclet_id];
+				let true_funclet = & self.program.funclets[true_funclet_id];
+				let false_funclet = & self.program.funclets[false_funclet_id];
 				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
 				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
 
-				let current_value_funclet = & self.program.funclets[& value_operation.funclet_id];
+				let current_value_funclet = & self.program.funclets[value_operation.funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
 				assert_eq!(value_operation.funclet_id, true_funclet_extra.value_funclet_id);
@@ -1431,8 +1469,8 @@ impl<'program> CodeGen<'program>
 
 				let true_funclet_id = success_funclet_id;
 				let false_funclet_id = failure_funclet_id;
-				let true_funclet = & self.program.funclets[& true_funclet_id];
-				let false_funclet = & self.program.funclets[& false_funclet_id];
+				let true_funclet = & self.program.funclets[*true_funclet_id];
+				let false_funclet = & self.program.funclets[*false_funclet_id];
 				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
 				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
 
@@ -1477,7 +1515,6 @@ impl<'program> CodeGen<'program>
 			}
 			_ => panic!("Umimplemented")
 		};
-
 		split_point
 	}
 
@@ -1486,7 +1523,7 @@ impl<'program> CodeGen<'program>
 		let entry_funclet_id : ir::FuncletId = pipeline.entry_funclet;
 		let pipeline_name : &str = pipeline.name.as_str();
 
-		let entry_funclet = & self.program.funclets[& entry_funclet_id];
+		let entry_funclet = & self.program.funclets[entry_funclet_id];
 		assert_eq!(entry_funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
 		let mut pipeline_context = PipelineContext::new();

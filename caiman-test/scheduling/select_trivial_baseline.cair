@@ -1,0 +1,115 @@
+version 0.0.1
+
+types [
+    i64,
+    slot $slot0 {
+        type : i64,
+        stage : ready,
+        place : local,
+    },
+    event $event0 {
+        place : local
+    },
+]
+
+value @foo() -> i64 {
+    %x = constant 0i64;
+    %y = constant 1i64;
+    %z = constant 2i64;
+    %r = select %x %y %z;
+    return %r;
+}
+
+schedule @foo_main(%s : $slot0) -> $slot0 {
+    %x = alloc-temporary-local-i64 @foo.%x;
+    %_ = encode-do-local @foo.%x() -> %x;
+    %r = alloc-temporary-local-i64 @foo.%r;
+    %default = default-join;
+    %join = inline-join @foo_return [%r] %default;
+    schedule-select @foo.%r %x [@foo1, @foo2] [%r] %join;
+}
+
+schedule @foo1(%s : $slot0) -> $slot0 {
+    %y = alloc-temporary-local-i64 @foo.%y;
+    %_ = encode-do-local @foo.%y() -> %y;
+    return %y;
+}
+
+schedule @foo2(%s : $slot0) -> $slot0 {
+    %z = alloc-temporary-local-i64 @foo.%z;
+    %_ = encode-do-local @foo.%z() -> %z;
+    return %z;
+}
+
+schedule @foo_return(%s : $slot0) -> $slot0 {
+    return %s;
+}
+
+timeline @time(%e : $event0) -> $event0 {
+    return %e;
+}
+
+extras {
+    @foo_main {
+        value : @foo,
+        input_slots : {
+            %s : slot_info()
+        },
+        output_slots : {
+            %s : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag output @time.%e,
+        out_timeline_tag : timeline_tag output @time.%e,
+    },
+    @foo1 {
+        value : @foo,
+        input_slots : {
+            %s : slot_info()
+        },
+        output_slots : {
+            %s : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag output @time.%e,
+        out_timeline_tag : timeline_tag output @time.%e,
+    },
+    @foo2 {
+        value : @foo,
+        input_slots : {
+            %s : slot_info()
+        },
+        output_slots : {
+            %s : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag output @time.%e,
+        out_timeline_tag : timeline_tag output @time.%e,
+    },
+    @foo_return {
+        value : @foo,
+        input_slots : {
+            %s : slot_info()
+        },
+        output_slots : {
+            %s : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag output @time.%e,
+        out_timeline_tag : timeline_tag output @time.%e,
+    },
+}
+
+pipeline "main" = @foo_main;

@@ -3,6 +3,7 @@ pub enum SpecNodeInput
     Usize(usize),
     I64(i64),
     U64(u64),
+    I32(i32),
     UsizeSlice(Box<[usize]>),
 }
 
@@ -13,41 +14,25 @@ impl Default for SpecNodeInput
     }
 }
 
+macro_rules! unwrapper 
+{
+    ($f:ident, $rt:ty, $p:pat, $p_extract:expr, $strname:expr) => {
+        pub fn $f (self) -> $rt
+        {
+            match self
+            {
+                $p => $p_extract,
+                _ => panic!("Expected {} as input to spec node", $strname),
+            }
+        }
+    }
+}
+
 impl SpecNodeInput
 {
-    pub fn unwrap_u64(self) -> u64
-    {
-        match self
-        {
-            SpecNodeInput::U64(u) => u,
-            _ => panic!("Expected u64 as input to spec node"),
-        }
-    }
-
-    pub fn unwrap_usize_slice(self) -> Box<[usize]>
-    {
-        match self
-        {
-            SpecNodeInput::UsizeSlice(u) => u,
-            _ => panic!("Expected Box<[usize]> as input to spec node"),
-        }
-    }
-
-    pub fn unwrap_i64(self) -> i64
-    {
-        match self
-        {
-            SpecNodeInput::I64(i) => i,
-            _ => panic!("Expected i64 as input to spec node"),
-        }
-    }
-
-    pub fn unwrap_usize(self) -> usize
-    {
-        match self
-        {
-            SpecNodeInput::Usize(u) => u,
-            _ => panic!("Expected usize as input to spec node"),
-        }
-    }
+    unwrapper!(unwrap_u64, u64, SpecNodeInput::U64(u), u, "u64");
+    unwrapper!(unwrap_usize_slice, Box<[usize]>, SpecNodeInput::UsizeSlice(u), u, "Box<[usize]>");
+    unwrapper!(unwrap_i64, i64, SpecNodeInput::I64(i), i, "i64");
+    unwrapper!(unwrap_i32, i32, SpecNodeInput::I32(i), i, "i32");
+    unwrapper!(unwrap_usize, usize, SpecNodeInput::Usize(u), u, "usize");
 }

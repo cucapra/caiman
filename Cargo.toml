@@ -8,6 +8,9 @@ build = "build/build.rs"
 [workspace]
 
 [dependencies]
+itertools = "0.10.5"
+pest = "2.5.3"
+pest_derive = "2.5.3"
 serde = "1.0.130"
 serde_derive = "1.0.130"
 bitflags = "1.3"

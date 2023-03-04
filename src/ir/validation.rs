@@ -72,7 +72,7 @@ pub fn validate_timeline_funclet(program : & ir::Program, funclet : & ir::Funcle
 
 	for (input_index, input_type) in funclet.input_types.iter().enumerate()
 	{
-		match & program.types[input_type]
+		match & program.types[*input_type]
 		{
 			ir::Type::Event{place} => assert_eq!(* place, ir::Place::Local),
 			_ => panic!("Timeline funclet's input #{} has an unsupported type: #{}", input_index, input_type)
@@ -81,7 +81,7 @@ pub fn validate_timeline_funclet(program : & ir::Program, funclet : & ir::Funcle
 
 	for (output_index, output_type) in funclet.output_types.iter().enumerate()
 	{
-		match & program.types[output_type]
+		match & program.types[*output_type]
 		{
 			ir::Type::Event{place} => assert_eq!(* place, ir::Place::Local),
 			_ => panic!("Timeline funclet's output #{} has an unsupported type: #{}", output_index, output_type)
@@ -108,7 +108,7 @@ pub fn validate_timeline_funclet(program : & ir::Program, funclet : & ir::Funcle
 			{
 				assert!(* local_past < current_node_id);
 				assert_eq!(* here_place, ir::Place::Local);
-				assert_eq!(* there_place, ir::Place::Gpu);
+				assert_ne!(* there_place, ir::Place::Local);
 				most_recently_synchronized_submissions[* local_past]
 			}
 			ir::Node::SynchronizationEvent{here_place, there_place, local_past, remote_local_past} =>
@@ -118,7 +118,7 @@ pub fn validate_timeline_funclet(program : & ir::Program, funclet : & ir::Funcle
 				// Local is always up to date with respect to itself (everything else is in the past) 
 				assert!(* remote_local_past <= * local_past);
 				assert_eq!(* here_place, ir::Place::Local);
-				assert_eq!(* there_place, ir::Place::Gpu);
+				assert_ne!(* there_place, ir::Place::Local);
 
 				let most_recently_sychronized_submission_opt = most_recently_synchronized_submissions[* local_past];
 				if let Some(most_recently_sychronized_submission) = most_recently_sychronized_submission_opt

@@ -70,7 +70,7 @@ impl NodeType
 
 fn check_slot_type(program : & ir::Program, type_id : ir::TypeId, node_type : & NodeType)
 {
-	match & program.types[& type_id]
+	match & program.types[type_id]
 	{
 		ir::Type::Slot { storage_type : storage_type_2, queue_stage : queue_stage_2, queue_place : queue_place_2 } =>
 		{
@@ -124,7 +124,7 @@ impl<'program> FuncletChecker<'program>
 	pub fn new(program : & 'program ir::Program, scheduling_funclet : & 'program ir::Funclet, scheduling_funclet_extra : & 'program ir::SchedulingFuncletExtra) -> Self
 	{
 		assert_eq!(scheduling_funclet.kind, ir::FuncletKind::ScheduleExplicit);
-		let value_funclet = & program.funclets[& scheduling_funclet_extra.value_funclet_id];
+		let value_funclet = & program.funclets[scheduling_funclet_extra.value_funclet_id];
 		assert_eq!(value_funclet.kind, ir::FuncletKind::Value);
 		let mut state = Self
 		{
@@ -161,7 +161,7 @@ impl<'program> FuncletChecker<'program>
 			};
 			assert!(is_valid);
 
-			let node_type = match & self.program.types[input_type_id]
+			let node_type = match & self.program.types[*input_type_id]
 			{
 				ir::Type::Slot { storage_type, queue_stage, queue_place } =>
 				{
@@ -206,7 +206,7 @@ impl<'program> FuncletChecker<'program>
 		{
 			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, output_index);
 
-			match & self.program.types[output_type]
+			match & self.program.types[*output_type]
 			{
 				ir::Type::Slot{queue_place, ..} =>
 				{
@@ -236,7 +236,7 @@ impl<'program> FuncletChecker<'program>
 	fn get_funclet_input_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra, input_index : usize) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag)
 	{
 		let type_id = funclet.input_types[input_index];
-		match & self.program.types[& type_id]
+		match & self.program.types[type_id]
 		{
 			ir::Type::Slot{..} =>
 			{
@@ -261,7 +261,7 @@ impl<'program> FuncletChecker<'program>
 	{
 		let type_id = funclet.output_types[output_index];
 		// Doesn't work with joins as arguments
-		match & self.program.types[& type_id]
+		match & self.program.types[type_id]
 		{
 			ir::Type::Slot{..} =>
 			{
@@ -425,12 +425,20 @@ impl<'program> FuncletChecker<'program>
 			{
 				assert_eq!(self.scheduling_funclet_extra.value_funclet_id, operation.funclet_id);
 
-				let encoded_funclet = & self.program.funclets[& operation.funclet_id];
+				let encoded_funclet = & self.program.funclets[operation.funclet_id];
 				let encoded_node = & encoded_funclet.nodes[operation.node_id];
 
 				match encoded_node
 				{
 					ir::Node::ConstantInteger { .. } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						assert_eq!(inputs.len(), 0);
+						assert_eq!(outputs.len(), 1);
+
+						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
+					}
+					ir::Node::ConstantI32 { .. } =>
 					{
 						assert_eq!(* place, ir::Place::Local);
 						assert_eq!(inputs.len(), 0);
@@ -463,13 +471,18 @@ impl<'program> FuncletChecker<'program>
 					}
 					ir::Node::CallExternalCpu { external_function_id, arguments } =>
 					{
-						assert_eq!(* place, ir::Place::Local);
-						let function = & self.program.native_interface.external_cpu_functions[external_function_id];
-						// To do: Input checks 
+						assert_ne!(* place, ir::Place::Gpu);
+						let function = & self.program.native_interface.external_cpu_functions[*external_function_id];
+
+						assert_eq!(inputs.len(), arguments.len());
+						assert_eq!(inputs.len(), function.input_types.len());
+						assert_eq!(outputs.len(), function.output_types.len());
 
 						for (input_index, input_node_id) in arguments.iter().enumerate()
 						{
-							let value_tag = self.scalar_node_value_tags[input_node_id];
+							assert_eq!(self.node_types[& inputs[input_index]].storage_type().unwrap(), function.input_types[input_index]);
+
+							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
 							let funclet_id = self.value_funclet_id;
 							check_value_tag_compatibility_interior(& self.program, value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
 						}
@@ -482,7 +495,7 @@ impl<'program> FuncletChecker<'program>
 					ir::Node::CallExternalGpuCompute { external_function_id, arguments, dimensions } =>
 					{
 						assert_eq!(* place, ir::Place::Gpu);
-						let function = & self.program.native_interface.external_gpu_functions[external_function_id];
+						let function = & self.program.native_interface.external_gpu_functions[*external_function_id];
 		
 						assert_eq!(inputs.len(), dimensions.len() + arguments.len());
 						assert_eq!(outputs.len(), function.output_types.len());
@@ -551,6 +564,7 @@ impl<'program> FuncletChecker<'program>
 				{
 					// Single return nodes
 					ir::Node::ConstantInteger { .. } => false,
+					ir::Node::ConstantI32 { .. } => false,
 					ir::Node::ConstantUnsignedInteger { .. } => false,
 					ir::Node::Select { .. } => false,
 					// Multiple return nodes
@@ -719,9 +733,12 @@ impl<'program> FuncletChecker<'program>
 			ir::Node::StaticAllocFromStaticBuffer{buffer : buffer_node_id, place, storage_type, operation} =>
 			{
 				// Temporary restriction
-				assert_eq!(* place, ir::Place::Gpu);
+				match *place {
+					ir::Place::Local => panic!("Unimplemented allocating locally"),
+					_ => {}
+				}
 				let buffer_spatial_tag = self.scalar_node_spatial_tags[buffer_node_id];
-				assert!(buffer_spatial_tag != ir::SpatialTag::None);
+				assert_ne!(buffer_spatial_tag, ir::SpatialTag::None);
 				
 				if let Some(NodeType::Buffer(Buffer{storage_place, static_layout_opt : Some(static_layout)})) = self.node_types.get_mut(buffer_node_id)
 				{
@@ -786,7 +803,7 @@ impl<'program> FuncletChecker<'program>
 
 	fn handle_join(&mut self, join_funclet_id : ir::FuncletId, captures : &[ir::NodeId], continuation_join_node_id : ir::NodeId, join_kind : JoinKind)
 	{
-		let join_funclet = & self.program.funclets[& join_funclet_id];
+		let join_funclet = & self.program.funclets[join_funclet_id];
 		let join_funclet_extra = & self.program.scheduling_funclet_extras[& join_funclet_id];
 		let continuation_join_point = & self.node_join_points[& continuation_join_node_id];
 		
@@ -951,11 +968,11 @@ impl<'program> FuncletChecker<'program>
 
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
 
-				let callee_funclet = & self.program.funclets[& callee_scheduling_funclet_id];
+				let callee_funclet = & self.program.funclets[callee_scheduling_funclet_id];
 				assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
 				let callee_funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& callee_scheduling_funclet_id];
 				let callee_value_funclet_id = callee_funclet_scheduling_extra.value_funclet_id;
-				let callee_value_funclet = & self.program.funclets[& callee_value_funclet_id];
+				let callee_value_funclet = & self.program.funclets[callee_value_funclet_id];
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
 				check_timeline_tag_compatibility_interior(& self.program, self.current_timeline_tag, callee_funclet_scheduling_extra.in_timeline_tag);
@@ -998,8 +1015,7 @@ impl<'program> FuncletChecker<'program>
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
 			{
 				assert_eq!(value_operation.funclet_id, self.value_funclet_id);
-
-				let continuation_join_point = & self.node_join_points[condition_slot_node_id];
+				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
 
 				if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
 				{
@@ -1013,12 +1029,12 @@ impl<'program> FuncletChecker<'program>
 				assert_eq!(callee_funclet_ids.len(), 2);
 				let true_funclet_id = callee_funclet_ids[0];
 				let false_funclet_id = callee_funclet_ids[1];
-				let true_funclet = & self.program.funclets[& true_funclet_id];
-				let false_funclet = & self.program.funclets[& false_funclet_id];
+				let true_funclet = & self.program.funclets[true_funclet_id];
+				let false_funclet = & self.program.funclets[false_funclet_id];
 				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
 				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
 
-				let current_value_funclet = & self.program.funclets[& value_operation.funclet_id];
+				let current_value_funclet = & self.program.funclets[value_operation.funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
 				let condition_value_tag = self.scalar_node_value_tags[condition_slot_node_id];
@@ -1089,12 +1105,12 @@ impl<'program> FuncletChecker<'program>
 
 				let true_funclet_id = success_funclet_id;
 				let false_funclet_id = failure_funclet_id;
-				let true_funclet = & self.program.funclets[& true_funclet_id];
-				let false_funclet = & self.program.funclets[& false_funclet_id];
+				let true_funclet = & self.program.funclets[*true_funclet_id];
+				let false_funclet = & self.program.funclets[*false_funclet_id];
 				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
 				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
 
-				let current_value_funclet = & self.program.funclets[& self.value_funclet_id];
+				let current_value_funclet = & self.program.funclets[self.value_funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
 				let buffer_spatial_tag = self.scalar_node_spatial_tags[buffer_node_id];
@@ -1145,7 +1161,7 @@ impl<'program> FuncletChecker<'program>
 					}
 
 					let destination_type_id = true_funclet.input_types[input_index];
-					match & self.program.types[& destination_type_id]
+					match & self.program.types[destination_type_id]
 					{
 						ir::Type::Slot{queue_stage, queue_place, storage_type, ..} =>
 						{
@@ -1153,7 +1169,7 @@ impl<'program> FuncletChecker<'program>
 							assert_eq!(* queue_stage, ir::ResourceQueueStage::Bound);
 							if allocation_size_node_id_opt.is_some()
 							{
-								match & self.program.native_interface.types[& storage_type.0]
+								match & self.program.native_interface.types[storage_type.0]
 								{
 									ir::ffi::Type::ErasedLengthArray{element_type} => (),
 									_ => panic!("Invalid storage type for dynamic allocation (native interface type {})", storage_type.0)
@@ -1161,7 +1177,7 @@ impl<'program> FuncletChecker<'program>
 							}
 							else
 							{
-								match & self.program.native_interface.types[& storage_type.0]
+								match & self.program.native_interface.types[storage_type.0]
 								{
 									ir::ffi::Type::ErasedLengthArray{element_type} => panic!("Invalid storage type for dynamic allocation (native interface type {})", storage_type.0),
 									_ => ()

@@ -1,0 +1,2 @@
+command = "cargo run --manifest-path ../../Cargo.toml --features=build-binary -- --input {filename} --explicate_only"
+output.debug = "-"

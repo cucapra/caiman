@@ -2,7 +2,7 @@ use crate::scheduling_language::ast as schedule_ast;
 use crate::spec;
 use crate::value_language::ast as value_ast;
 use crate::value_language::typing;
-use caiman::arena::Arena;
+//use caiman::arena::Arena;
 use caiman::ir;
 use std::collections::HashMap;
 
@@ -13,6 +13,15 @@ mod error;
 pub use error::ToIRError;
 use error::{make_error, ToIRResult};
 
+    
+pub fn go(
+    value_ast: &value_ast::ParsedProgram,
+    schedule_ast: &schedule_ast::ParsedProgram,
+) -> ToIRResult<ir::Program>
+{
+    todo!()
+}
+/*
 type Index<T> = HashMap<T, usize>;
 
 #[derive(Eq, PartialEq, Hash)]
@@ -137,7 +146,8 @@ struct ValueFuncletContext<'a>
     pub involved_variables: Index<String>,
     pub types_index: &'a Index<Type>,
 }
-
+*/
+/*
 fn add_value_expr(
     exp: &value_ast::ParsedExpr,
     t: &typing::Type,
@@ -290,7 +300,8 @@ fn schedule_explicit_funclets(
         },
     }])
 }
-
+*/
+/*
 fn ffi_types_index(value_ast: &value_ast::ParsedProgram) -> Index<typing::Type>
 {
     let mut map: HashMap<typing::Type, usize> = HashMap::new();
@@ -454,4 +465,4 @@ fn map_index_to_arena<T, U>(index: Index<T>, f: &dyn Fn(T) -> U) -> Arena<U>
         map.insert(i, f(t));
     }
     Arena::from_hash_map(map)
-}
+}*/

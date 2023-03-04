@@ -1,14 +1,12 @@
 # Caiman IR Design
 
-Note: The following document describes things that might not yet be implemented in caimanc
-
 ## Motivation
 
 Caiman is a programming language IR and compiler for rapidly exploring the design space of programs using both a CPU and GPU.  Portably programming for mixed GPU/CPU programs generally entails the use of DirectX, Vulkan, or Metal.  These API designs feature a common point of friction: CPU functions cannot directly invoke GPU functions.  Instead, the user must, manually, load a portable bytecode encoding the GPU function, construct a pipeline object that encodes all state necessary to complete the compilation, create buffers for staging data transfers between CPU and GPU, create binding objects (descriptors) to specify resources to be used by a pipeline, and create an encoding object to bind all elements together for submission to a queue.  These APIs also tend to expect manual programmer management and tracking of concurrent access hazards and lifetimes for resources in use by the CPU and GPU.  Metal and WebGPU provide stronger safety guarantees, but do so by heavily restricting the API's capability and inferring the optimal resource management at runtime using heuristics that the user has no control over.
 
 In a GPGPU compute context, languages like CUDA or SYCL provide a single-source unified programming language that allows convenient code movement across the CPU and GPU boundary.  In these systems, functions on both the CPU and GPU can be analyzed by the same compiler to infer most of the boilerplate in a function call from CPU to GPU and code existing within a common subset of the language can migrate unchanged across the boundary.  This facilitates rapid development and exploration, but has a critical limitation: the similarities between the two sides of the boundary are syntactic but not semantic.  That is, a GPU function must access memory that is marked as accessible from the GPU and a CPU function must access memory that is marked as accessible from the CPU.  This, in general, reflects an underlying physical reality of the memory subsystem.  For data to be efficiently accessible on one, it must be physically copied a significant distance from the other.  This means the programmer must be aware of resource placement at all times.  In DirectX, Vulkan or Metal, the programmer must manually copy data between buffers.  CUDA's unified virtual memory and SYCL's unified sparse memory provide a convenient mechanism for passing pointers between CPU and GPU with minimal code changes, but at the cost of unpredictable latency as the underlying memory subsystem fetches the data.  This capability is non-portable and is generally undesirable for a low-latency environment.
 
-The IR of Caiman is an attempt at a middle ground between the two approaches that borrows the philosophy of separation of scheduling concerns from the Halide image processing language.  By factoring out scheduling as a language, the IR facilitates the exploration of traditional compiler optimizations across the CPU/GPU boundary without silently violating the complicated rules of CPU/GPU boilerplate or hiding the underlying costs.
+The IR of Caiman is an attempt at a middle ground between the two approaches that borrows the philosophy of separation of functional and scheduling concerns from the Halide image processing language.  By factoring out resource management and movement as a separate (scheduling) language, the IR facilitates exploration of the design space of CPU/GPU interaction without hiding the underlying costs.
 
 ## Base Design
 
@@ -20,30 +18,56 @@ In Caiman's IR, programs are split into two parts: a functional part, which spec
 
 This minimizes the false coupling of the underlying algorithms to a particular resource.  Functional nodes, when appearing to a scheduling function, may have particular requirements on the resource placement of their inputs or outputs.  For example, a compute kernel dispatch (which is necessarily scheduled on the GPU) can only receive data arguments that are resident on the GPU and can only output data that is resident on the GPU, but its dimension arguments must be resident on the CPU.  Meanwhile, a call to a CPU function (which is necessarily scheduled for execution on the CPU) can (currently) only input and output CPU resident data.  Using the output of one as the input of the other requires an explicit or implicit resource transition in the scheduling part, making visible and checkable a design trade-off of importance to performance-minded users.
 
-At minimum, Caiman provides a guarantee that it will not accept an invalid schedule.  Scheduling functions can be statically verified to implement the provided functional nodes.  However given a partial specification of constraints, under most circumstances, at least one valid schedule will be practically computable in a schedule inference process called "explication".  This permits initial implementation of the functional part without implementation of the scheduling part and also reduces the boilerplate needed to .  Caiman defaults to a naïve, predictable schedule inference in cases of partial schedules so that a schedule with partial annotations is both sound and complete with respect to the language with full annotations.
+At minimum, Caiman provides a guarantee that it will not accept an invalid schedule.  Scheduling functions can be statically verified to implement the provided functional nodes.  (*The following won't be true again until the explicator is reimplemented*) However given a partial specification of constraints, under most circumstances, at least one valid schedule will be practically computable in a schedule inference process called "explication".  This permits initial implementation of the functional part without implementation of the scheduling part and also reduces the boilerplate needed in the average manually written schedule.  Caiman defaults to a naïve, predictable schedule inference in cases of partial schedules so that a schedule with partial annotations is both sound and complete with respect to the language with full annotations.
 
-## Pipelines and Memory Management
-
-Caiman is primarily designed around two kinds of pipelines: oneshot pipelines, which execute and return control to the host application when done, and multi-stage (and potentially coinductive) pipelines, which return an opaque object with several possible re-entry points which may be invoked by the host application to decide control flow.  Oneshot pipelines are best thought of as standalone functions.  Multi-stage pipelines may be thought of as objects or coroutines.
-
-The scheduling language is designed assuming that functions cannot allocate or deallocate resources such as buffers unless the maximum capacity is statically known.  This means that all pipelines are finite state machines.  For multi-stage pipelines, re-entry points represent state transitions invoked explicitly by the hosting environment.  Each method consumes the previous pipeline object and produces a new pipeline object.  Methods may receive borrowed references to external resources as input or output arguments.  These may be accessed through special variables known as "slots" (discussed below and in the IR section).
+Caiman is currently designed around the expectation that the functional part will be written first and then the scheduling part will be written much later when the functional part has solidified.  As such, schedules are generally expected to be brittle.  A slight change in the functional part may invalidate the schedule, requiring a rewrite of the schedule to recover performance.  A future extension may explore schedules robust to larger classes of change in the functional part.  As a further goal, similar to Halide's autoscheduler, it's hoped that most schedules will eventually be automatically generated, but human-readable.
 
 ## Caiman IR design
 
-Caiman's IR organizes programs into pipelines (functions and object constructors) that connect funclets (basic blocks).  The operations and nodes in a funclet are encoded as an array where each entry is a node or operation that can only depend on nodes with an index less than its own.  The tail edge (terminator node) for the funclet is encoded separately from the array and captures control flow (if control flow is supported for the relevant language).  Currently, the scheduling part of each basic block (a funclet) can be encoded inline with this array, but inline functional nodes cannot depend on scheduling nodes.  Functional nodes that appear in this array in a mixed language context unambiguously map to a CPU computation on the coordinator that schedules or computes the node on the appropriate queue (via `encode_do` or `encode_copy`).  The implicit ordering and scheduling associated with this array makes it easy to unambiguously imply a specific naive schedule by only specifying functional nodes.  There is strong intent to at least allow separation of the scheduling part from the value part and possibly require a full separation.  This will likely come in a later refactoring.  The scheduling language as described below reflects the intended scheduling language after this split.
+Caiman's IR organizes programs into pipelines (procedures and coroutines) that connect funclets (basic blocks).  The operations and nodes in a funclet are encoded as an array where each entry is a node or operation that can only depend on nodes with an index less than its own.  The tail edge (terminator node) for the funclet is encoded separately from the array and captures control flow (if control flow is supported for the relevant sublanguage).
+
+There are a small number of structural nodes that appear in most sublanguages:
+- `Phi(index)`
+- `ExtractResult(tuple, index)`
+
+"Phi" nodes represent explicit funclet arguments (they are not true phi nodes) and a funclet with `n` inputs must have exactly `n` phi nodes and they must appear as the first `n` nodes in the funclet.  Some nodes may have multiple returns.  A node (the `tuple` field) with `n` returns must have exactly `n` `ExtractResult` nodes appear as the `n` nodes following the node with multiple returns.  `ExtractResult` may not appear elswhere.  These restrictions facilitate quick lookup of the relevant structural nodes throughout the compiler.
 
 The name "funclet" is shamelessly taken from https://github.com/WebAssembly/funclets/blob/main/proposals/funclets/Overview.md
 The structure of funclets is loosely similar to cranelift (https://github.com/bytecodealliance/wasmtime/blob/main/cranelift/docs/ir.md)
 
-### Defining pipelines
-
-To do
-
 ## The (Value) Functional Language
 
-To do
+The functional part of a caiman program is specified via an acyclic dataflow graph for each value funclet where no evaluation order is assumed.
 
-## The Schedule Execution Model
+A "value function" is an equivalence class of value funclets, defined by the user.  When scheduled, any value funclet may be subsituted for any other value funclet within the equivalence class.  Caiman does not attempt to prove funclet equivalence.  The intent is that the user implements equivalent implementations of leaf functions and then glues them together in caiman.  Future versions of caiman may support directly generating leaf functions from caiman code.
+
+Besides `Phi` and `ExtractResult`, the remaining value-language nodes are:
+- `constant(v, t)`
+	- Represents the raw constant value `v` of type `t`
+	- This is currently encoded as two nodes `ConstantInteger` and `ConstantUnsignedInteger` but should be merged
+- `call_f(q_0, q_1, q_2, ...)` where `f` is a value function and `q_0, q_1, q_2, ...` are nodes
+	- Represents the (pseudo-tuple-valued) result of invoking any funclet implementing the value function `f` with the arguments `q_0, q_1, q_2, ...`
+	- This operator may result in unbounded recursion
+- `select(q_c, q_t, q_f)` where `q_c, q_t, q_f` are nodes.
+	- Represents the value of `q_t` if `q_c` is nonzero, otherwise it represents the value of `q_f`
+- `callextgpu_{f,k}(q_0, q_1, q_2, ...)` where `f` is an external gpu functionm, k is the number of dimensions, and `q_0, q_1, q_2, ...` are nodes
+	- An internal intrinsic operator for implementing leaf value functions via FFI
+	- Represents the (pseudo-tuple-valued) result of invoking the external gpu kernel `f` with `k` (up to 3) dimensions, where the first `k` nodes of `q_0, q_1, q_2, ...` are the number of threads in each dimension, and the remaining `q_k, ...` are the arguments to the kernel itself (the exact mapping of arguments and results to bindings is defined in the FFI data structures)
+- `callextcpu_f(q_0, q_1, q_2, ...)` where `f` is an external gpu function and `q_0, q_1, q_2, ...` are nodes
+	- An internal intrinsic operator for implementing leaf value functions via FFI
+	- Represents the (pseudo-tuple-valued) result of invoking the external cpu callback `f`, where `q_0, q_1, q_2, ...` are arguments to the function.  For now, all arguments are immutable (this will likely change) and all results must be by-value.
+
+## Pipelines and Memory Management
+
+A pipeline in caiman is an object that may have several stages of execution invocable from the host language (rust), where each stage leaves the pipeline in a known state suitable for the next.  A pipeline that only has one stage of execution is effectively a function, while a pipeline with multiple (potentially infinitely many) is a coroutine.  An earlier version of caiman had host-selectable resumption points making those pipelines effectively objects (in the OOP sense), but this capability has been removed (for now).
+
+The scheduling language is designed assuming that functions cannot allocate or deallocate resources such as buffers unless the maximum capacity is statically known.  There are (currently) exceptions to this for testing/debugging reasons, but it's not expected that these will be supported for long.  This means that all pipelines are finite state machines and must be given their resources by the host code.  For multi-stage pipelines, re-entry points represent state transitions invoked explicitly by the hosting environment.  Each entry point consumes the previous pipeline object and produces a new pipeline object.  Methods may receive borrowed references to external resources as input or output arguments.  These may be accessed through special variables known as "slots" (discussed below and in the IR section).  Slots containing outputs must be allocated from a host-provided resource that must be in-scope at the time of returning to the host. This is enforced through a mechanism called a "spatial tag".
+
+### Defining pipelines
+
+Pipelines must be defined in the caiman IR by providing, minimally, an identifier for the host code to use and a scheduling funclet to initialize the pipeline (the entry funclet).  The output type of the entry funclet determines the output type of the whole pipeline.  For coroutines (and only coroutines), a set of yield points must be defined, which specify a set of identifiers and known program states for the host to interact with the yielded pipeline.  The entry funclet is compiled into a `start()` method on the pipeline instance, while the yield points are compiled into `resume_at_*` methods on the pipeline instance (where the `*` is the identifier provided in the definition of the yield point).  Each funclet invocation returns a FuncletResult type which can be queried to determine the state of the pipeline and readied for the next stage of the pipeline with the `prepare_next()` method.
+
+## The Schedule Execution/Static Analysis Model
 
 A scheduling function can only distiguish nodes by their dependencies and placement requirements, so, for example, any binary operation requiring all resources to be on the CPU will behave identically as far as the schedule is concerned.
 
@@ -53,125 +77,102 @@ Much like the GPU APIs it is built on, Caiman adopts the in-order queue as an or
 
 Caiman programs are executed from the perspective of a (usually) single, centralized Coordinator responsible for encoding and issuing commands to other queues.  The Coordinator logically executes in the "Local" queue, which (in the current implementation) corresponds to the calling thread of execution of the host program.  As such, the Coordinator may (currently) be reasoned about in terms of performance as executing on the CPU.  However, this model will likely need to change to support indirect work dispatch on the GPU and parallel command encoding.
 
-### Time and Operations
+### Timeline Funclets
 
-All operations in schedules are associated with a monotonically increasing logical timestamp for the local queue.  Additionally, all operations are functions of the whole local state and may therefore modify type information of values not directly output as a return value.
+Operations that result in communication between places have an associated "timeline tag" that specifies where, in a special funclet encoding the synchronization graph (a "timeline" funclet), the current operation is occuring.  Submissions occur on a `SubmissionEvent` node and synchronizations occur on a `SynchronizationEvent` node.  Currently, all such operations must occur on the local coordinator (the "Local" place).  However, this graph is enough to encode the last known state of the gpu according to the coordinator (the round trip of local -> gpu -> local).
+
+When an operation that advances the timeline is performed, the type and tags of slots and resources currently in scope may change.  A submission moves `Encoded` nodes to the `Submitted` state and sets the timeline tag to the current timeline, and a synchronization moves `Submitted` nodes into the `Ready` state based on which nodes have the same timeline tag as the fence used to synchronize.
 
 ### Slots
 
-Slots are the key piece of state in schedules.  They do not hold values themselves.  Instead, they are references that associate a subexpression of an invocation of a value function to the corresponding subregion of a resource expected to hold that value at some point in the future.
+Slots are the key piece of state in schedules.  They do not hold values themselves.  Instead, they are references that associate a subexpression of an invocation of a value funclet (defined via a "value tag") to the corresponding subregion of a resource expected to hold that value at some point in the future.  At runtime, they are just pointers.
 
-The associated value subexpression may be seen as one part of the type of the slot.  Additionally, slots have type information that tracks the state of the value as known to the coordinator which change as a result of operations that modify the Coordinator's timeline.  This includes a logical time stamp for when the coordinator last observed a state transition for that slot, a tag for the queue that is expected to produce the value, and a tag encoding what are (currently) 4 mutually exclusive states:
+Each slot has, minimally, a type containing three pieces of information: a storage type defining which native type to use for holding the value, a place defining which queue will compute the value, and a stage marker that says what the status of the resource is known to be.  The stage state machine contains the following states:
 
+- `Unbound`
+	- There is no resource bound to this slot, but a later computation may give it one (by transfering ownership or suballocation)
 - `Bound`
 	- The resource binding exists and the value may be written to by a queue, but no action has been taken to populate the bound region with a value.
 - `Encoded`
-	- The Coordinator has prepared work that will populate the bound region with a value, but has not yet sent it to a queue.
+	- The coordinator has prepared work that will populate the bound region with a value, but has not yet sent it to a queue.
 - `Submitted`
-	- The Coordinator has sent work to a queue which will populate the bound region with a value, but it is not known on the Local timeline whether that work has completed.
+	- The coordinator has sent work to a queue which will populate the bound region with a value, but it is not known on the local timeline whether that work has completed.
 - `Ready`
 	- The work has completed and there is now a value in the bound region.
+- `Dead
+	- There is no longer any resource associated to this slot and no computation may give it one
 
-## The Core Scheduling Language
+Notably, the `Submitted` and `Ready` states are the only states where the place the slot is associated with has any interaction with the computation.
 
-The scheduling language provides the following operations in almost all contexts.
+### Buffer Allocators
 
-- `alloc_temporary (value_tag : (InstanceId, SubexpressionId), offset : usize, size : usize) -> SlotId`
-	- immediately creates a slot with future value `value_tag` in the `Bound` state that is bound to the region of the local temporary buffer at `offset` and ending at `offset + size` (exclusive)
-	- This range cannot overlap the range of another slot
-- `bind_buffer (value_tag : (InstanceId, SubexpressionId), buffer_id : BufferId, offset : usize, size : usize) -> SlotId`
-	- immediately creates a slot with future value `value_tag` in the `Bound` state that is bound to the region of `buffer_id` starting at `offset` and ending at `offset + size` (exclusive)
-	- This range cannot overlap the range of another slot
-- `encode_copy (place : Place, from_slot_id : SlotId, to_slot_id : SlotId)`
-	- schedules to `place` the copy of the memory from `from_slot_id` to `to_slot_id`
-	- `from_slot_id` must at least be in the `Encoded` state and have a resource binding
-	- `to_slot_id` must be in the `Bound` state and have a resource binding with equal size to that of `from_slot_id`
-	- The value part of both slots must match
-- `encode_do (place : Place, value_tag : (InstanceId, SubexpressionId),  input_slots : [SlotId], output_slots : [SlotId])`
-	- schedules to `place` the execution of the subexpression specified by `value_tag` with inputs bound to `input_slots` and outputs bound to `output_slots`
-	- For most value nodes, `value_tag` will also be the type of the (usually one) slot in `output_slots` and could theoretically be implied by the value part of the type of the output slot.  The reason this parameter is necessary at all is for nodes with multiple returns, which are modeled as returning a fake tuple of outputs (and is therefore not a real node with resource needs).  Each component of the return value in such a case is then a separate node in the value graph.
-	- Since output memory is usually allocated ahead of time and passed by reference into the called function, the various outputs of function calls are not stored adjacently in memory as its pseudo-tuple type might suggest.  Therefore `encode_do` needs all inputs and outputs specified upfront so codegen can emit code correctly without implicitly allocating and copying or predicting the future.
-- `encode_map_read_only (place : Place, mapped_slot : SlotId) -> SlotId`
-	- schedules to `place` the creation of a slot containing a read-only reference to a bound buffer region referenced by `mapped_slot`
-	- the created slot will have the same value as `mapped_slot`
-	- `mapped_slot` must be in the `Ready` state
-	- No writeable mapping may be allowed at the same time as a readable mapping
-- `encode_map_write_only (place : Place, mapped_slot : SlotId) -> SlotId`
-	- schedules to `place` the creation of a slot containing a write-only reference to a bound buffer region referenced by `mapped_slot`
-	- the created slot will have the same value as `mapped_slot`
-	- No other mapping (read only or writeable) may be allowed at any given time and `mapped_slot` must be in the `Bound` state
-	- Upon encoding a value to this slot, `mapped_slot` will also be in the `Encoded` state and the created slot will be immediately `discard`ed
-- `encode_forward (value_tag : (InstanceId, SubexpressionId), forwarded_slot_id : SlotId) -> SlotId`
-	- schedules to `place` the creation of a slot with value specified as `value_tag` which will have its resource bindings transfered from `forwarded_slot_id` simultaneously with the next read of `forwarded_slot_id`
-	- This is useful for specifying in-place mutation
-	- This slot does not technically exist, and so may not be used, until the next read of `forwarded_slot_id`, whereupon `forwarded_slot_id` will be `discard`ed
-- `submit (place : Place)`
-	- submits the pending buffer of encoded commands scheduled for `place` and increments the logical timestamp
-- `encode_fence (place : Place) -> FenceId`
-	- encodes a fence to be signaled when the specified place reaches this point in its execution
-- `encode_sync_fence (place : Place, fence_id : FenceId)`
-	- encodes a synchronization of `place` on the fence specified by `fence_id`.  No work will be executed on place until the queue for which the fence was encoded has progressed past the fence
-	- This fence cannot be a fence created in the future
-	- This operation increments the logical timestamp and updates the queue type state of all relevant slots
-- `discard (slots : [SlotId])`
-	- erases the given slots and unmaps any associated resources, if applicable
+Buffer allocators (sometimes abrieviated to just "buffers" in caiman) track the dynamic state of the bounds of unallocated regions of memory.  Allocation from them causes them to shrink.  A buffer may have a statically defined size, which caiman will track if the allocations are all statically sized.  Caiman also supports dynamic allocations, which may fail.  The resulting buffer cannot have a statically defined size, but may be used for further dynamic allocation (at the cost of needing to check for allocation failure).
 
-Leaf (input) nodes of a value function behave in a special way when read.  Rather than requiring the value part of the type (`(InstanceId, SubexpressionId)`) to be the same, which would prevent instantiation of multiple functions that read the same values from the same bindings, the value check for leaf nodes is satisfied if the type of the value of the slot matches the type of the leaf node.
+A buffer carries a "spatial tag" that tracks which abstract resource it is associated with.  Allocated slots must also be marked with this same spatial tag.
 
-Offsets provided for some hardware may be illegal for others based on alignment.
+There is currently no way to free memory.  It is intended that a future extension will use spatial tags to enforce safe suballocation, deallocation, and merging of buffers.
 
-Under webgpu, reads or writes (`encode_map_*`) from or to slots bound to a buffer may force an implicit synchronization if any slot bound to that buffer may be in use by the GPU.  This is an unfortunate possibility handed down from webgpu that would be unnecessary on most other APIs since caiman statically enforces the constraint at a finer granularity.
+### Tags
 
-Encoding to the local queue immediately evaluates the relevant node and transitions slots directly to `Ready` instead of `Encoded` since the Coordinator is always synchronized with the local queue.
+Key to enforcing the invariant that a schedule cannot change the meaning of a value program (modulo termination) are three "tags" that track the (local) state of a slot, buffer, or fence in relation to an associated value funclet, timeline funclet, or spatial funclet.
 
-### Terminators and Control Flow
+A "value tag" associates a slot to a node or result of a value funclet.  The slot can only contain the result of that specific value node.
+
+A "timeline tag" associates a slot or fence to a node in a timeline funclet when that slot or fence was last in a known state.  Each scheduling funclet also tracks a timeline tag for the state of the local queue itself.  This advances forward on a coordination event.
+
+A "spatial tag" associates a slot or buffer to an abstract resource (a space).  These abstract resources carry no size or state, but constraints on the spatial funclet language should enforce that abstract operations (like splitting or merging) on associated spaces are safe. Caiman should (but doesn't always because of an incomplete implementation) enforce that all slots of the same space are discarded before the space is reused.
+
+These correspond to the "what", "when", and "where" of computation, respectively.  Caiman enforces that the scheduling language respects the constraints inherited from the associated value, timeline, and spatial funclets.  Thus, analysis can be done on these funclets separately.
+
+Abstractly, each of these (non-scheduling) funclets encodes a finite-state machine (a tree automaton in the case of the value language), slots are a subset of the product states of all three machines, and the scheduling funclet is choosing a linear path through a subset of the states where all three machines have a valid transition.  Thus, while most languages start with a subgraph of the product automaton and use static analysis to identify alternative paths (via optimizations), caiman is starting with all parts factored such that all paths are easily visible and is just checking the validity of the user-chosen path through the product automaton.
+
+## The Scheduling Language
 
 To do
 
+See `caiman-spec/src/content.ron` for now.
+
+### Control Flow
+
+All scheduling funclets are associated with exactly one value funclet, exactly one timeline funclet, and exactly one spatial funclet.  Scheduling funclets are basic blocks where (most) control flow operations are pushed to the terminating "tail edge".  The exceptions (for now) are commands that synchronously occur on the local queue and contain no invocation of other funclets, where while control flow might technically appear in the target language, it isn't expressed in the language of funclets.  `Submit` and `SyncFence` are instructions that should probably be tail edges and not nodes since they could, conceptually, invoke other funclets (and potentially result in a whole-funclet type transition).
+
+Because the scheduling language is sensitive to execution order, the scheduling language part will, in general, contain more than one funclet per value language funclet.
+
+Caiman tracks the call stack via second class continuations called "join points".  These may be passed down the stack, but may never escape (except when explicitly serialized to survive a `Yield`).  There are two kinds of join points: inlined and serialized.  Inlined join points are directly emitted as code in the target language and carry their state through local variables.  Serialized join points have their state immediately written into a "join stack" provided by the host, and will be invoked via an indirect table dispatch.  A future extension may provide a nicer middle ground.
+
+Each funclet invocation tracks an implicit call stack in the form of a single linear continuation called the "default join".  The simplest control flow tail edge is `Return` which returns control to the default join.  A `Jump` edge transfers control to the provided continuation.
+
+A scheduling funclet may invoke a `call_f(q_0, q_1, q_2, ...)` node with a `ScheduleCall` tail edge by providing the value language node for the call, a callee scheduling funclet implementing that value function, and an array of slots that correspond to the type of the scheduling funclet's inputs.  Upon the call, for all `i` the `Operation` tag of `q_i` in the caller value funclet unifies with an `Input` tag with index `i` in the callee's value funclet.  The continuation scheduling funclet must have the same value funclet as the caller, and for the continuation, `Output` tags in the callee value funclet will unify with the corresponding `ExtractResult` nodes in the caller value funclet.
+
+A `ScheduleSelect` tail edge works in a similar way for `select(q_c, q_t, q_f)` nodes.  It will check if the slot for `q_c` is nonzero, and if so, will invoke the funclet intended to produce `q_t`.  If not, it will invoke the funclet intended to produce `q_f`.  `q_t` and `q_f` will unify with the `select` node in the output of each funclet respectively.  The continuation will receive a slot containining the result of the `select`.
+
+`DynamicAllocFromBuffer` will check if there is enough memory to allocate from a buffer and will run a success funclet if there is, otherwise it will invoke a failure funclet.
+
+Each run of the pipeline is provided a fixed size "join stack" by the compiler to encode the dynamic state of the call stack and preserve it across pipeline yields.  Upon completion of a scheduling funclet, caiman will automatically invoke the top of the join stack if there is something there.
+
+A `Yield` tail edge returns control to the calling host code.  The host code should not attempt to modify the join stack, the size of buffers, or attempt to synchronize, except to grow the join stack.  This a restriction that will need to be loosened in the future.
+
+## The Timeline Language
+
+To do
+
+See `caiman-spec/src/content.ron` for now.
+
+## The Spatial Language
+
+To do
+
+See `caiman-spec/src/content.ron` for now.
+
 ## Explication
-
-The above scheduling language is (partly) designed to permit partial schedules, where some parameters may be left unspecified (written in this document as the expression `?`) and (most) scheduling operations may be omitted (with holes explicitly written in this document as the pseudo-operation `???`).  The intended goal for this capability is to permit more compact partial schedules that unambiguously imply a full schedule, but it also allows expansion of the expressivity of the scheduling language while (generally) maintaining compatibility and (mostly) allowing schedule equivalence with full or partial schedules written for a less expressive scheduling language.
-
-The process of inferring a schedule from a partially given one is called "schedule explication" as it makes the schedule explicit for the purposes of the codegen.  The part of the compiler that does "schedule explication" is called the "explicator".
-
-A couple points of the scheduling language facilitate explication:
-- The queue states form a total ordering that unambiguously implies a path for the explicator to generate when the schedule is left implicit.
-	- The canonical path is `Bound` -> `Encoded` via `encode_copy` (if the data already exists) or `encode_do` scheduled immediately (necessary to preserve ordering), `Encoded` -> `Submitted` via `submit` as late as legally possible, `Submitted` -> `Ready` via synchronization as late as possible on a fence inserted as late as possible.  Each of the inserted operations is performed as late as possible to be  manually written operations to make them unnecessary.
-- `discard` is never inserted
-- `alloc_temporary` and `bind_buffer` always bump allocate and never fill holes, even if memory in lower regions has been made available via discard
-	- Additionally, `bind_buffer` will always allocate from a buffer that is visible only to the explicator (one for each place)
-- slots arguments may be left unspecified if there is only one slot (in the full set of slots visible to the coordinator) for the needed queue and value
-
-Additional scheduling operations that are meaningful only to the explicator can act as hints:
-- `hide(slots : [SlotId])` / `show(slots : [SlotId])`
-	- removes/adds a slot from/to consideration by the explicator to avoid ambiguity, but will still be considered when checking for errors
-- `pin (slots : [SlotId]) -> Pin` / `unpin (pin : Pin, slots : [SlotId])`
-	- requires that all queue state transitions for these nodes be done before the pin or after the corresponding unpin
-- `???`
-	- Allows the explicator to insert operations here
-	- This is probably more predictable and preferable over a more permissive always-explicate model in the event that the scheduling language stops being strictly schedule equivalent with language subsets
-
-## Interfacing with the host
 
 To do
 
 ## Possibly related work
 
-- [](https://github.com/Checkmate50/wgpu)
+- [A cool webgpu binding thing that sparked work on caiman](https://github.com/Checkmate50/wgpu)
 - [GRAMPS](https://graphics.stanford.edu/papers/gramps-tog/gramps-tog08.pdf)
 - [Sequoia](https://graphics.stanford.edu/papers/sequoia/)
 - [Legion](https://legion.stanford.edu)
 - [@use-gpu/shader](https://acko.net/blog/frickin-shaders-with-frickin-laser-beams/) (A bit more of a stretch)
 - [FrameGraph](https://www.gdcvault.com/play/1024612/FrameGraph-Extensible-Rendering-Architecture-in) (A bit less out there)
-- Your favorite reimplementation of DX11 colloquially known as a HAL goes here
-
-
-To do: Describe the scheduler state more formally and what a variable is in the scheduling language
-
-To do: More on why state machines are (probably) the right model and how control flow works in Caiman
-
-To do: More on where expanded control flow would make sense
-
-To do: Actual comparison
-
-To do: Comment (rant) on problems in opengl, vulkan/dx12, and webgpu motivating parts of caiman's design.  Also, more on why just copying the CUDA model cannot fix it.

@@ -1,0 +1,26 @@
+version 0.0.1
+
+types [
+    i64,
+    slot $slot0 {
+        type : i64,
+        stage : ready,
+        place : local,
+    },
+    event $event0 {
+        place : local
+    },
+]
+
+external_cpu i64 @op(i64);
+
+value i64 @foo(%0 : i64) {
+    %z = extract %y 0;
+    %y = call @op(%x);
+    %x = constant 2i64;
+    return %z;
+}
+
+extras {}
+
+pipeline "main" = @foo;
