@@ -6,14 +6,14 @@ use crate::value_language::typing::Type;
 #[derive(Clone)]
 struct ExprPath
 {
-    pub path: Vec<schedulable::Intermediate>,
+    pub path: Vec<schedulable::SubExpr>,
 }
 
 impl ExprPath
 {
     fn new() -> Self { ExprPath { path: Vec::new() } }
 
-    fn add(&self, new_elt: schedulable::Intermediate) -> Self
+    fn add(&self, new_elt: schedulable::SubExpr) -> Self
     {
         let mut copy = self.clone();
         copy.path.push(new_elt);
@@ -28,7 +28,7 @@ fn add_expr_stmt(
     root_var: &str,
 ) -> usize
 {
-    use schedulable::Intermediate::*;
+    use schedulable::SubExpr::*;
     let ((info, expr_type), expr_kind) = expr;
     let vil_expr = match expr_kind
     {

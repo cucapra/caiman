@@ -3,7 +3,7 @@
 // language.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Intermediate
+pub enum SubExpr
 {
     // If
     IfGuard,
@@ -13,7 +13,7 @@ pub enum Intermediate
 }
 
 #[derive(Debug, Clone)]
-pub enum Final
+pub enum FullExpr
 {
     Primitive,
     Var,

@@ -106,4 +106,10 @@ fn main()
     build_lalrpop_parser(&src_dir, &spec);
     build_rust_parser(&src_dir).unwrap();
     fs::rename(src_dir.join("generated_parser.rs"), src_dir.join("parser.rs")).unwrap();
+
+    // Just make scheduling language parser normally
+    let sched_parser_config = lalrpop::Configuration::new();
+    sched_parser_config
+        .process_file(Path::new("./src/scheduling_language/parser.lalrpop"))
+        .unwrap();
 }

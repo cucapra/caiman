@@ -31,7 +31,7 @@ pub struct Stmt<NodeIndex>
 {
     pub expr: Expr<NodeIndex>,
     pub expr_type: Type,
-    pub path_from_root: Vec<schedulable::Intermediate>,
+    pub path_from_root: Vec<schedulable::SubExpr>,
     pub root_var: String,
     pub info: error::Info,
 }

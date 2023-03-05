@@ -1,12 +1,15 @@
 use crate::scheduling_language::ast::*;
 use crate::scheduling_language::ast_factory::ASTFactory;
+use super::schedulable::{SubExpr, FullExpr};
 
 grammar(astf: &ASTFactory);
 
 match {
   r"[a-zA-Z][a-zA-Z0-9_]*", // Id
 
-  ";",
+  ";", ".",
+  "IfGuard", "IfTrue", "IfFalse",
+  "IfComplete", "Var", "Prim",
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
@@ -15,7 +18,20 @@ match {
 pub Program: ParsedProgram = { Stmt* => <> }
 
 pub Stmt: ParsedStmt = {
-  <@L> <Id> ";" <@R> => astf.var(<>),
+  <@L> <Id> <("." <SubExpr>)*> "." <FullExpr> ";" <@R> => astf.expr(<>),
 }
+
+SubExpr: SubExpr = {
+  "IfGuard" => SubExpr::IfGuard,
+  "IfTrue" => SubExpr::IfTrue,
+  "IfFalse" => SubExpr::IfFalse,
+}
+
+FullExpr: FullExpr = {
+  "IfComplete" => FullExpr::IfComplete,
+  "Var" => FullExpr::Var,
+  "Prim" => FullExpr::Primitive,
+}
+
 
 Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
