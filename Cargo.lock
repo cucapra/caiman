@@ -113,6 +113,7 @@ name = "caiman"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "caiman-check",
  "caiman-ref",
  "caiman-rt",
  "caiman-spec",
@@ -125,6 +126,16 @@ dependencies = [
  "ron",
  "serde",
  "serde_derive",
+]
+
+[[package]]
+name = "caiman-check"
+version = "0.1.0"
+dependencies = [
+ "caiman",
+ "caiman-rt",
+ "futures",
+ "ron",
 ]
 
 [[package]]

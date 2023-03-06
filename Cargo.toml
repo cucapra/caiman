@@ -25,6 +25,7 @@ caiman-spec = { path = "caiman-spec" }
 caiman-ref = { path = "caiman-ref" }
 caiman-rt = { path = "caiman-rt" }
 caiman-test = { path = "caiman-test" }
+caiman-check = { path = "caiman-check" }
 
 [features]
 build-binary = [ "clap" ]

@@ -1,7 +1,7 @@
 version 0.0.1
 types [
     f32,
-    slot $f32slot {
+    slot $local_f32 {
         type: f32,
         stage: ready,
         place : local,
@@ -15,53 +15,48 @@ types [
 // CPU and the addition on the GPU. Doing this so I don't have to immediately
 // learn about join points and value function calls...
 value @saxpy_basic(%a : f32, %x : f32, %y : f32) -> f32 {
-    return %a;
+    %ax_t = call @fmul_gpu(%a, %x);
+    %ax = extract %ax_t 0;
+    //%axy_t = call @fadd_gpu(%ax, %y);
+    //%axy = extract %axy_t 0;
+    return %ax;
 }
 
 
-// Questions:
-// - for AllocTemporary, why does it need to know the corresponding value funclet operation?
-//   like... it already knows the storage type? Is this just a weird rough edge b/c AllocTemporary
-// - (follow up) I noticed that there are two allocs for the external GPU compute.
-//   One is Local, one is Gpu, the Gpu one directly receives the output from the kernel dispatch
-//   and the Gpu alloc then gets copied into the Local alloc.
-// - output storage should always be Local, right?
-// - Local and Cpu are distinct places, so how come in pipelines.ron scheduling funclet 11
-//   (schedules value funclet 0) a local allocation is made to store the result from a
-//   CallExternalCpu? does this mean storage is automatically coerced/copied if necessary?
-//   I assume not since that would kind of defeat the point of the explicit schedule.
-//   But if not... is that just a bug the type system doesn't catch right now?
-//   I assumed that Local place was supposed to be either Cpu OR Gpu depending on how it's
-//   being called
-// - so, for EncodeCopy... content.ron says "Currently, the queue must match the place of the output"
-//   why not schedule the copy on the input's queue? Seems like potentially less syncing
-// - and also... why do we have to sync on Local queue for GPU -> Local but not sync on the 
-//   GPU queue after the Local -> GPU copy?
-// - so, slots are what we eventually aim to allocate from, right?
-//   but currently we can't (or haven't bothered to?)
-// - is there a difference between selecting the output timeline tag using an Operation tag that
-//   references the last event, or using an Output tag referencing output #0 (if its the first
-//   returned -- I assume you can't have multiple returns from a timeline funclet)
-// - is it even possible to do the normal @saxpy example right now? I remember there being issues
-//   with preserving data across value function calls, but I may be misremembering...
 // Notes:
 // - you allocate space to hold a function's output before calling it
 // - the output storage in the scheduling language corresponds to a scheduling allocation, 
 //   not a "variable"/node in the value language
 // - submit and sync in the schedule reference a timeline funclet
-// - SyncFence needs a fence from a previous call to EncodeFence
-// - docs are fairly self explanatory for SubmissionEvent/SynchronizationEvent
 // - you can use the Operation part of a tag to refer to a specific node in the extras section
 //   useful for fences, slots, etc
-schedule @saxpy_basic_sched(%a : $f32slot, %x : $f32slot, %y : $f32slot) -> $f32slot {
-    // FAILS:
-    // Phis must appear at the start of a scheduling funclet (so that node order reflects scheduling order)
-	// assert_eq!(current_node_id, * index as usize);
-    return %a;
+// - you can't submit? or sync on local queue, it's always up to date
+// - you can't sync on CPU queue right now
+schedule @saxpy_basic_sched(%a_local : $local_f32, %x_local : $local_f32, %y_local : $local_f32) -> $local_f32 {
+    %a_gpu = alloc-temporary-gpu-f32 @saxpy_basic.%a;
+    %_ = encode-copy-gpu %a_local %a_gpu;
+    %x_gpu = alloc-temporary-gpu-f32 @saxpy_basic.%x;
+    %_ = encode-copy-gpu %x_local %x_gpu;
+
+    %ax_gpu = alloc-temporary-gpu-f32 @saxpy_basic.%ax;
+    %_ = encode-do-gpu @saxpy_basic.%ax_t(%a_gpu, %x_gpu) -> %ax_gpu;
+
+    %_ = submit-gpu @saxpy_basic_time.%gpu_work_submit;
+    %gpu_fence = encode-fence-gpu @saxpy_basic_time.%gpu_work_sync;
+    %_ = sync-fence-local %gpu_fence @saxpy_basic_time.%gpu_work_sync;
+
+    %ax_local = alloc-temporary-local-f32 @saxpy_basic.%ax;
+    %_ = encode-copy-local %ax_gpu %ax_local;
+
+    return %ax_local;
 } 
 
-timeline @nothing(%initial: $local_event) -> $local_event {
-    return %initial;
+timeline @saxpy_basic_time(%initial: $local_event) -> $local_event {
+    %gpu_work_submit = submission-local->gpu %initial;
+    %gpu_work_sync = sync-local->gpu %gpu_work_submit %gpu_work_submit;
+    // in general, what's the deal with updating the here and there state?
+    // when is it useful to only update one?
+    return %gpu_work_sync;
 }
 
 /*
@@ -84,7 +79,7 @@ timeline @saxpy_basic_time(%initial : $local_event) -> $local_event {
 }*/
 
 external_cpu @fmul_cpu(f32, f32) -> f32;
-external_gpu @fmul_gpu(%a : f32, %b : f32) -> [%c : f32] : "caiman-test/programs/saxpy/fmul.wgsl"
+external_gpu @fmul_gpu(%a : f32, %b : f32) -> [%c : f32] : "caiman-test/basics/saxpy/fmul.wgsl"
 {
     resource {group : 0, binding : 0, input : %a},
     resource {group : 0, binding : 1, input : %b},
@@ -103,7 +98,7 @@ value @fmul_gpu_val(%a: f32, %b: f32) -> f32 {
 }
 */
 external_cpu @fadd_cpu(f32, f32) -> f32;
-external_gpu @fadd_gpu(%a : f32, %b : f32) -> [%c: f32]: "caiman-test/programs/saxpy/fadd.wgsl"
+external_gpu @fadd_gpu(%a : f32, %b : f32) -> [%c: f32]: "caiman-test/basics/saxpy/fadd.wgsl"
 {
     resource {group : 0, binding : 0, input : %a},
     resource {group : 0, binding : 1, input : %b},
@@ -130,24 +125,26 @@ extras {
     @saxpy_basic_sched {
         value : @saxpy_basic,
         input_slots : {
-            %a : slot_info(value_tag input @saxpy_basic.%a),
-            %x : slot_info(value_tag input @saxpy_basic.%x),
-            %y : slot_info(value_tag input @saxpy_basic.%y)
+            %a_local : slot_info(value_tag input @saxpy_basic.%a),
+            %x_local : slot_info(value_tag input @saxpy_basic.%x),
+            %y_local : slot_info(value_tag input @saxpy_basic.%y)
         },
         output_slots : {
-            %a : slot_info() // TODO: Fix this
+            // This is NOT actually a reference to %a_local. It's actually 
+            // a reference to output slot #0. It just so happens that there's not
+            // a syntax for this yet in CAIR, but %a_local is INPUT slot #0, thus
+            // the numbers match and this works.
+            // The exact same logic is at play for the value tag.
+            %a_local : slot_info(value_tag output @saxpy_basic.%a)
         },
         input_fences : {},
         output_fences : {},
         input_buffers : {}, // uhhh. ???
         output_buffers : {},
-        in_timeline_tag : timeline_tag input @nothing.%initial,
-        // how do I specify an output? 
-        // I think, ideally, I SHOULD be able to do `timeline_tag output @nothing.0`
-        // OR: Annotate value funclet outputs just like external GPU outputs and let me
-        // reference them by name. That seems cleaner.
-        // This also applies to output slots, by the way!
-        out_timeline_tag : timeline_tag input @nothing.%initial,
+        in_timeline_tag : timeline_tag input @saxpy_basic_time.%initial,
+        // See the above comment about output slots. This is really just
+        // saying "output #0".
+        out_timeline_tag : timeline_tag output @saxpy_basic_time.%initial,
     },
 }
 
@@ -207,7 +204,7 @@ value @saxpy_extreme_rec_val(
 }
 
 external_cpu @uadd_cpu(u64, u64) -> u64;
-external_gpu @uadd_gpu(%a : u64, %b : u64) -> [%c: u64]: "caiman-test/programs/saxpy/uadd.wgsl"
+external_gpu @uadd_gpu(%a : u64, %b : u64) -> [%c: u64]: "caiman-test/basics/saxpy/uadd.wgsl"
 {
     resource {group : 0, binding : 0, input : %a},
     resource {group : 0, binding : 1, input : %b},
@@ -226,7 +223,7 @@ value @uadd_gpu_val(%a: u64, %b: u64) -> u64 {
 }
 
 external_cpu @cmp_lt_cpu(u64, u64) -> u64;
-external_gpu @cmp_lt_gpu(%a : u64, %b : u64) -> [%c: u64]: "caiman-test/programs/saxpy/cmp_lt.wgsl"
+external_gpu @cmp_lt_gpu(%a : u64, %b : u64) -> [%c: u64]: "caiman-test/basics/saxpy/cmp_lt.wgsl"
 {
     // Would be cool to identify optimizations here.
     // These could *trivially* be combined into a single binding with two fields,
@@ -247,7 +244,7 @@ value @cmp_lt_gpu_val(%a: u64, %b: u64) -> u64 {
 }
 
 external_cpu @array_get_cpu(array<f32,256>, u64) -> f32;
-external_gpu @array_get_gpu(%a : array<f32,256>, %i : u64) -> [%v: f32] : "caiman-test/programs/saxpy/array_get.wgsl" 
+external_gpu @array_get_gpu(%a : array<f32,256>, %i : u64) -> [%v: f32] : "caiman-test/basics/saxpy/array_get.wgsl" 
 {
     resource {group : 0, binding : 0, input: %a},
     resource {group : 0, binding : 1, input: %i},
@@ -265,7 +262,7 @@ value @array_get_gpu_val(%a: array<f32,256>, %i: u64) -> f32 {
 }
 
 external_cpu @array_put_cpu(array<f32, 256>, u64, f32) -> array<f32, 256>;
-external_gpu @array_put_gpu(%a : array<f32, 256>, %i : u64, %v : f32) -> [%mutated: array<f32, 256>] : "caiman-test/programs/saxpy/array_put.wgsl" 
+external_gpu @array_put_gpu(%a : array<f32, 256>, %i : u64, %v : f32) -> [%mutated: array<f32, 256>] : "caiman-test/basics/saxpy/array_put.wgsl" 
 {
     resource {group : 0, binding : 0, input: %a},
     resource {group : 0, binding : 1, input: %i},
