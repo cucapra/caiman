@@ -104,7 +104,9 @@ fn main() {
             let prefix = path.parent().unwrap();
             std::fs::create_dir_all(prefix).unwrap();
             std::fs::write(path, output_string).unwrap();
-            format(path);
+            if !args.explicate_only {
+                format(path);
+            }
         }
         None => {
             print!("{output_string}");
