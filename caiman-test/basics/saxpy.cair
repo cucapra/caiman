@@ -17,9 +17,9 @@ types [
 value @saxpy_basic(%a : f32, %x : f32, %y : f32) -> f32 {
     %ax_t = call @fmul_gpu(%a, %x);
     %ax = extract %ax_t 0;
-    //%axy_t = call @fadd_gpu(%ax, %y);
-    //%axy = extract %axy_t 0;
-    return %ax;
+    %axy_t = call @fadd_gpu(%ax, %y);
+    %axy = extract %axy_t 0;
+    return %axy;
 }
 
 
@@ -37,18 +37,23 @@ schedule @saxpy_basic_sched(%a_local : $local_f32, %x_local : $local_f32, %y_loc
     %_ = encode-copy-gpu %a_local %a_gpu;
     %x_gpu = alloc-temporary-gpu-f32 @saxpy_basic.%x;
     %_ = encode-copy-gpu %x_local %x_gpu;
+    %y_gpu = alloc-temporary-gpu-f32 @saxpy_basic.%y;
+    %_ = encode-copy-gpu %y_local %y_gpu;
 
     %ax_gpu = alloc-temporary-gpu-f32 @saxpy_basic.%ax;
     %_ = encode-do-gpu @saxpy_basic.%ax_t(%a_gpu, %x_gpu) -> %ax_gpu;
+
+    %axy_gpu = alloc-temporary-gpu-f32 @saxpy_basic.%axy;
+    %_ = encode-do-gpu @saxpy_basic.%axy_t(%ax_gpu, %y_gpu) -> %axy_gpu;
 
     %_ = submit-gpu @saxpy_basic_time.%gpu_work_submit;
     %gpu_fence = encode-fence-gpu @saxpy_basic_time.%gpu_work_sync;
     %_ = sync-fence-local %gpu_fence @saxpy_basic_time.%gpu_work_sync;
 
-    %ax_local = alloc-temporary-local-f32 @saxpy_basic.%ax;
-    %_ = encode-copy-local %ax_gpu %ax_local;
+    %axy_local = alloc-temporary-local-f32 @saxpy_basic.%axy;
+    %_ = encode-copy-local %axy_gpu %axy_local;
 
-    return %ax_local;
+    return %axy_local;
 } 
 
 timeline @saxpy_basic_time(%initial: $local_event) -> $local_event {
