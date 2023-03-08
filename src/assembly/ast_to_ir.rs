@@ -825,10 +825,11 @@ fn ir_funclet(funclet : &assembly_ast::Funclet, context : &mut Context) -> ir::F
             Some(s) => { nodes.push(ir::Node::Phi { index } ) }
         };
         input_types.push(*context.loc_type_id(input_type.1.clone()));
-        index += 1;
     }
 
-    output_types.push(*context.loc_type_id(funclet.header.ret.clone()));
+    for output_type in funclet.header.ret.iter() {
+        output_types.push(*context.loc_type_id(output_type.1.clone()));
+    }
 
     for node in &funclet.commands {
         nodes.push(ir_node(node, context));

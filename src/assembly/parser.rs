@@ -741,6 +741,13 @@ fn read_external_cpu_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> V
     expect_all(rule_ffi_type(), pairs, context)
 }
 
+fn read_external_cpu_return_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<assembly_ast::FFIType> {
+    let mut rules = Vec::new();
+    rules.push(rule_pair(Rule::external_cpu_args, read_external_cpu_args));
+    rules.push(rule_pair_boxed(Rule::ffi_type, compose_pair(read_ffi_type, |t| vec![t])));
+    expect_vec(rules, pairs, context)
+}
+
 fn read_external_cpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::ExternalCpuFunction {
     require_rule(Rule::external_cpu_sep, pairs, context);
 
@@ -748,7 +755,9 @@ fn read_external_cpu_funclet(pairs : &mut Pairs<Rule>, context : &mut Context) -
 
     let rule_extern_args = rule_pair(Rule::external_cpu_args, read_external_cpu_args);
     let input_types = expect(rule_extern_args, pairs, context);
-    let output_types = vec![expect(rule_ffi_type(), pairs, context)];
+
+    let rule_extern_return_args = rule_pair(Rule::external_cpu_return_args, read_external_cpu_return_args);
+    let output_types = expect(rule_extern_return_args, pairs, context);;
     context.add_cpu_funclet(name.clone());
     assembly_ast::ExternalCpuFunction {
         name,
@@ -831,13 +840,43 @@ fn read_funclet_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<(O
     expect_all(rule, pairs, context)
 }
 
+fn read_funclet_return_arg(pairs : &mut Pairs<Rule>, context : &mut Context) -> (Option<String>, assembly_ast::Type) {
+    let pair = pairs.next().unwrap();
+    let rule = pair.as_rule();
+    match rule {
+        Rule::var_name => {
+            // You gotta add the phi node when translating IRs when you do this!
+            let var = read_var_name(&mut pair.into_inner(), context);
+            context.add_return_node(var.clone());
+            let typ = expect(rule_type(), pairs, context);
+            (Some(var), typ)
+        },
+        Rule::typ => (None, read_type(&mut pair.into_inner(), context)),
+        _ => panic!(unexpected_rule_raw(vec![Rule::var_name, Rule::typ], rule))
+    }
+}
+
+fn read_funclet_return_args(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<(Option<String>, assembly_ast::Type)> {
+    let rule = rule_pair(Rule::funclet_arg, read_funclet_return_arg);
+    expect_all(rule, pairs, context)
+}
+
+fn read_funclet_return(pairs : &mut Pairs<Rule>, context : &mut Context) -> Vec<(Option<String>, assembly_ast::Type)> {
+    let mut rules = Vec::new();
+    rules.push(rule_pair(Rule::funclet_args, read_funclet_return_args));
+    rules.push(rule_pair_boxed(Rule::typ, compose_pair(read_type, |t| vec![(None, t)])));
+    expect_vec(rules, pairs, context)
+}
+
 fn read_funclet_header(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::FuncletHeader {
     let name = expect(rule_fn_name(), pairs, context);
     context.add_local_funclet(name.clone());
 
     let rule_args = rule_pair(Rule::funclet_args, read_funclet_args);
     let args = option_to_vec(optional(rule_args, pairs, context));
-    let ret = expect(rule_type(), pairs, context);
+
+    let rule_return = rule_pair(Rule::funclet_return, read_funclet_return);
+    let ret = expect(rule_return, pairs, context);
     assembly_ast::FuncletHeader { ret, name, args }
 }
 
@@ -1596,7 +1635,6 @@ fn read_program(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_as
 fn read_definition(pairs : &mut Pairs<Rule>, context : &mut Context) -> frontend::Definition {
     let program = expect(
         rule_pair(Rule::program, read_program), pairs, context);
-
     ast_to_ir::transform(program, context)
     // dbg!(ast_to_ir::transform(program, context));
     // todo!()

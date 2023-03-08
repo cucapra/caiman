@@ -15,6 +15,7 @@ struct FuncletIndices {
     cpu_index: usize,
     gpu_index: usize,
     local_index: ir::RemoteNodeId,
+    return_index: usize,
     value_function_index: usize,
 }
 
@@ -85,6 +86,7 @@ impl Context {
             cpu_index: 0,
             gpu_index: 0,
             local_index: ir::RemoteNodeId { funclet_id: 0, node_id: 0 },
+            return_index: 0,
             value_function_index: 0,
         });
     }
@@ -165,6 +167,7 @@ impl Context {
         let index = indices.local_index.funclet_id;
         self.funclet_map.insert(name.clone(), FuncletLocation::Local(index));
         indices.local_index.node_id = 0;
+        indices.return_index = 0;
         indices.local_index.funclet_id += 1;
         self.update_local_funclet(name);
     }
@@ -208,6 +211,24 @@ impl Context {
             .or_insert(HashMap::new());
         map.insert(name, index);
         indices.local_index.node_id += 1;
+    }
+
+    pub fn add_return_node(&mut self, name : String) {
+        let indices = match &mut self.indices {
+            Indices::FuncletIndices(t) => t,
+            _ => panic!(format!("Invalid access attempt {:?}", name))
+        };
+        if name == "_" { // ignore throwaway except to update index
+            indices.return_index += 1;
+            return
+        }
+        let index = indices.return_index;
+        let funclet = self.local_funclet_name.as_ref().unwrap();
+        let map = self.remote_map
+            .entry(funclet.clone())
+            .or_insert(HashMap::new());
+        map.insert(name, index);
+        indices.return_index += 1;
     }
 
     pub fn ffi_type_id(&mut self, name : &assembly_ast::FFIType) -> &usize {
