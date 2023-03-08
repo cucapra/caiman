@@ -98,15 +98,16 @@ funclet_def = { external_funclet | funclet | value_function }
 //   external
 external_cpu_sep = @{ "external_cpu" ~ sep }
 external_cpu_args = { ffi_type ~ ("," ~ ffi_type)* }
-external_cpu = { external_cpu_sep ~ fn_name ~ "(" ~ external_cpu_args? ~ ")" ~ "->" ~ ffi_type ~ ";" }
+external_cpu_return_args = { "[" ~ external_cpu_args ~ "]" | ffi_type }
+external_cpu = { external_cpu_sep ~ fn_name ~ "(" ~ external_cpu_args? ~ ")" ~ "->" ~ external_cpu_return_args ~ ";" }
 
 external_gpu_sep = @{ "external_gpu" ~ sep }
 external_gpu_resource = { "resource" ~ unchecked_dict }
 external_gpu_body = { external_gpu_resource ~ ("," ~ external_gpu_resource)* }
-external_gpu_arg = { var_name ~ ":" ~ ffi_type }
+external_gpu_arg = { (var_name ~ ":")? ~ ffi_type }
 external_gpu_args = { external_gpu_arg ~ ("," ~ external_gpu_arg)* }
 external_gpu = { external_gpu_sep ~ fn_name ~ "(" ~ external_gpu_args? ~ ")" ~ "->" ~
-    "[" ~ external_gpu_args? ~ "]" ~ ":" ~ str ~ "{" ~ external_gpu_body ~ "}" }
+     "[" ~ external_gpu_args ~ "]" ~ ":" ~ str ~ "{" ~ external_gpu_body ~ "}" }
 
 external_funclet = { external_cpu | external_gpu }
 
@@ -125,8 +126,9 @@ spatial_sep = @{ "spatial" ~ sep }
 funclet = { value_sep ~ value_funclet | schedule_sep ~ schedule_funclet |
     timeline_sep ~ timeline_funclet | spatial_sep ~ spatial_funclet }
 funclet_arg = { (var_name ~ ":")? ~ typ }
-funclet_args = {  funclet_arg ~ ("," ~ funclet_arg)* }
-funclet_header = { fn_name ~ "(" ~ funclet_args? ~ ")" ~ "->" ~ typ }
+funclet_args = { funclet_arg ~ ("," ~ funclet_arg)* }
+funclet_return = { "[" ~ funclet_args ~ "]" | typ }
+funclet_header = { fn_name ~ "(" ~ funclet_args? ~ ")" ~ "->" ~ funclet_return }
 
 //   tail edges
 
