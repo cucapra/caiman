@@ -16,7 +16,7 @@ impl ShaderModule
 	{
 		match naga::front::wgsl::parse_str(text)
 		{
-			Err(why) => panic!("Error while parsing WGSL: {}", why),
+			Err(why) => panic!("Error while parsing WGSL: {}", why.emit_to_string(text)),
 			Ok(module) => Self::new_with_naga_module(module)
 		}
 	}
@@ -45,7 +45,7 @@ mod tests
 	use crate::ir;
 
 	const sample_text_1 : &str = "
-	struct Output {field_0 : i32;};
+	struct Output { field_0 : i32 }
 	fn do_thing_on_gpu(a : i32) -> Output 
 	{
 		var output : Output;
@@ -53,11 +53,11 @@ mod tests
 		return output;
 	}
 	
-	struct Input_0 { field_0 : i32; };
-	[[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
-	struct Output_0 { field_0 : i32; };
-	[[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
-	[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
+	struct Input_0 { field_0 : i32 }
+	@group(0)  @binding(0) var<storage, read> input_0 : Input_0;
+	struct Output_0 { field_0 : i32 }
+	@group(0) @binding(1) var<storage, read_write> output_0 : Output_0;
+	@compute @workgroup_size(1) fn main()
 	{
 		let output = do_thing_on_gpu(input_0.field_0);
 		output_0.field_0 = output.field_0;
