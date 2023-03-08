@@ -52,40 +52,24 @@ fn read_definition(input_string : &str, compile_mode : CompileMode) -> Result<De
 
 pub fn compile_caiman(input_string : &str, options : CompileOptions) -> Result<String, CompileError>
 {
-	let result = read_definition(input_string, options.compile_mode);
-	// dbg!(&result);
-	match result
-	{
-		Err(why) => Err(why),
-		Ok(mut definition) =>
-		{
-			assert_eq!(definition.version, (0, 0, 1));
-			crate::rust_wgpu_backend::explicate_scheduling::
-				explicate_scheduling(&mut definition.program);
-			ir::validation::validate_program(& definition.program);
-			let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
-			codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
-			let output_string = codegen.generate();
-			Ok(output_string)
-		}
-	}
+	let mut definition = read_definition(input_string, options.compile_mode)?;
+	assert_eq!(definition.version, (0, 0, 1));
+	crate::rust_wgpu_backend::explicate_scheduling::
+		explicate_scheduling(&mut definition.program);
+	ir::validation::validate_program(& definition.program);
+	let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
+	codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
+	let output_string = codegen.generate();
+	Ok(output_string)
 }
 
 pub fn explicate_caiman(input_string : &str, options : CompileOptions) -> Result<String, CompileError>
 {
 	let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
-
-	let mut result = read_definition(input_string, options.compile_mode);
-	match result
-	{
-		Err(why) => Err(CompileError{ message: format!("Parse error: {}", why)}),
-		Ok(mut definition) =>
-		{
-			assert_eq!(definition.version, (0, 0, 1));
-			crate::rust_wgpu_backend::explicate_scheduling::
-				explicate_scheduling(&mut definition.program);
-			let output_string_result = ron::ser::to_string_pretty(& definition, pretty);
-			Ok(output_string_result.unwrap())
-		}
-	}
+	let mut definition = read_definition(input_string, options.compile_mode)?;
+	assert_eq!(definition.version, (0, 0, 1));
+	crate::rust_wgpu_backend::explicate_scheduling::
+		explicate_scheduling(&mut definition.program);
+	let output_string_result = ron::ser::to_string_pretty(& definition, pretty);
+	Ok(output_string_result.unwrap())
 }
