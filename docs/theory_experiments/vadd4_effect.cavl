@@ -1,0 +1,26 @@
+// kinda funky in a way
+
+let vadd_4(v1 : array<i32, 4>, v2 : array<i32, 4>) -> array<i32, 4> {
+    let backing = [0, 0, 0, 0];
+    let dummy = vadd_4_rec(v1, v2, backing, 0);
+    let result = @use(backing, dummy); // take the first value, but "use" dummy
+    return result;
+}
+
+let vadd_4(v1 : array<i32, 4>, v2 : array<i32, 4>) -> array<i32, 4> {
+    let backing = [0, 0, 0, 0];
+    vadd_4_rec(v1, v2, backing, 0);
+    return backing;
+}
+
+// ok, so we actually only return that 
+let vadd_4_rec(v1 : array<i32, 4>, v2 : array<i32, 4>, 
+backing : array<i32, 4>, index : i32) -> array<i32, 4> {
+    let rec_used = vadd_4_rec(v1, v2, index + 1);
+    let add_res = v1[index] + v2[index];
+    let set_used = set(baseline, index, add_res);
+    let used = @use(set_used, rec_used); // take the first value, but "use" rec_used
+    let result = if index < 4 then used else (); // now require that "used" is done
+
+    return result;
+}

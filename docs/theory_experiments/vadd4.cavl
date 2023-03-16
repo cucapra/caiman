@@ -1,0 +1,15 @@
+let vadd_4(v1 : array<i32, 4>, v2 : array<i32, 4>) -> array<i32, 4> {
+    let baseline = [0, 0, 0, 0];
+    let result = vadd_4_rec(v1, v2, baseline, 0);
+    return result;
+}
+
+let vadd_4_rec(v1 : array<i32, 4>, v2 : array<i32, 4>, 
+baseline : array<i32, 4>, index : i32) -> array<i32, 4> {
+    let rec_res = vadd_4_rec(v1, v2, index + 1);
+    let add_res = v1[index] + v2[index];
+    let new_arr = set(rec_res, index, add_res);
+    let result = if index < 4 then new_arr else baseline;
+
+    return result;
+}

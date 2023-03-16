@@ -1,0 +1,12 @@
+let main (x : int) -> int {
+    let result = sum(x);
+    return result;
+}
+
+let sum(x : int) -> int {
+    let left = sum(x-1);
+    let left_res = x + left;
+    let zero = 0;
+    let result = if x == zero then left_res else zero;
+    return result;
+}
