@@ -3,7 +3,7 @@ version 0.0.1
 // ---
 
 types [
-f32,f64,u8,u16,u32,u64,usize,i8,i16,i32,i64,array<i32, 2>,erased_length_array<u32>,
+    f32,f64,u8,u16,u32,u64,usize,i8,i16,i32,i64,array<i32, 2>,erased_length_array<u32>,
     tuple<f32, u8>,const_ref<u64>,mut_ref<const_ref<u64>>,const_slice<array<i32, 2>>,mut_slice<i32>,
     gpu_buffer_ref<i32>,gpu_buffer_slice<i32>,gpu_buffer_allocator,cpu_buffer_allocator,cpu_buffer_ref<i64>,
     native_value $native_i64 {
