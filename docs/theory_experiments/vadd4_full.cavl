@@ -1,0 +1,35 @@
+let vadd_4(v1 : array<i32, 4>, v2 : array<i32, 4>) -> array<i32, 4> {
+    baseline := [0, 0, 0, 0].
+    result := (vadd_4_def v1 v2 baseline 0).
+    return result.
+}
+
+value vadd_4_def = {vadd_4_1, vadd_2_2, vadd_1_4}
+
+let vadd_4_1(v1 : array<i32, 4>, v2 : array<i32, 4>, 
+baseline : array<i32, 4>, index : i32) -> array<i32, 4> {
+    rec_res = (vadd_4_rec v1 v2 (+ index 1)).
+    add_res = (+ v1[index] v2[index]).
+    new_arr = (set rec_res[index] add_res).
+    result = (if (index < 4) new_arr baseline).
+
+    return result.
+}
+
+let vadd_2_2(v1 : array<i32, 4>, v2 : array<i32, 4>, 
+baseline : array<i32, 4>, index : i32) -> array<i32, 4> {
+    rec_res = (vadd_4_rec v1 v2 (+ index 2)).
+    add_res = (+ v1[index:2] v2[index:2]).
+    new_arr = (set rec_res[index:2] add_res).
+    result = (if (index < 4) new_arr baseline).
+
+    return result.
+}
+
+let vadd_1_4(v1 : array<i32, 4>, v2 : array<i32, 4>, 
+baseline : array<i32, 4>, index : i32) -> array<i32, 4> {
+    add_res = (+ v1[:] v2[:]).
+    new_arr = (set rec_res[:] add_res).
+
+    return new_arr.
+}
