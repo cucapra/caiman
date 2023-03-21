@@ -1,12 +1,10 @@
-let main (x : int) -> int {
-    let result = sum(x);
-    return result;
+let main (x : i32) -> i32 {
+    return (sum x);
 }
 
-let sum(x : int) -> int {
-    let left = sum(x-1);
-    let left_res = x + left;
-    let zero = 0;
-    let result = if x == zero then left_res else zero;
-    return result;
+let sum(x : i32) -> i32 {
+    left := (sum (- x 1)).
+    left_res := (+ x left).
+    result := (if (= x zero) left_res 0).
+    returns result.
 }

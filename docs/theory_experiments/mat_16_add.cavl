@@ -1,0 +1,28 @@
+value mat_16_add(m1 : array<array<i32, 16>, 16>, m2 : array<array<i32, 16>, 16>) {
+    let baseline = [[0 * 16] * 16];
+    let result = mat_16_add_rec(m1, m2, baseline, 0);
+    return result;
+}
+
+value mat_16_add_rec(m1 : array<array<i32, 16>, 16>, m2 : array<array<i32, 16>, 16>,
+baseline = array<array<i32, 16>, 16>, index : int) -> array<array<i32, 16>, 16> {
+    let rec_result = mat_16_add_rec(m1, m2, baseline, index + 1);
+    // careful to use rec_result here, even though it's the same pointer?
+    // annoyingly, this implies an order...
+    let updated = mat_16_add_row(m1, m2, rec_result, index, 0);
+
+    let result = if index < 16 then updated else baseline;
+
+    return result;
+}
+
+value mat_16_add_row(m1 : array<array<i32, 16>, 16>, m2 : array<array<i32, 16>, 16>,
+baseline : array<array<i32, 16>, 16>, row : int, col : int) -> array<array<i32, 16>, 16> {
+    let rec_result = mat_16_add_row(m1, m2, baseline, index + 1);
+    let sum_result = m1[row][col] + m2[row][col];
+    let updated = set(baseline[row][col], sum_result);
+
+    let result = if col < 16 then updated else baseline;
+
+    return result;
+}

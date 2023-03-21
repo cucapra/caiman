@@ -1,20 +1,14 @@
-let main_start(x : slot) : main -> slot {
-    return $result.call(x);
+let main(x : slot) : main -> slot {
+    return $result.sum_sch(_);
 }
 
-let sum_start(x : slot) : sum -> slot {
-    local_result = allocate $result;
-    local_result = 
+let sum_sch(x : slot) : sum -> slot {
     $result.if(_) {
-        allocate $left;
         allocate $left_res;
         
-        $left.call(_);
-        left_res = $left_res.call(_);
-        left_res
+        $left._;
+        $left_res._
     }
-    else {
-        _
-    };
-    return local_result;
+    else { _ }
+    return _;
 }
