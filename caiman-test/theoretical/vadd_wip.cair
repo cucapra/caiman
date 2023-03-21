@@ -1,0 +1,197 @@
+version 0.0.1
+
+types [
+    i32, erased_length_array<i32>
+    slot $slot_i32 {
+        type : i32,
+        stage : ready,
+        place : local,
+    },
+    slot $slot_arr_i32 {
+        type : erased_length_array<i32>,
+        stage : ready,
+        place : local,
+    }
+    event $event_local {
+        place : local
+    },
+    buffer $buffer_local {
+        place : local
+        static_layout_opt : {
+            alignment_bits : 0,
+            byte_size : 1024
+        },
+    }
+]
+
+external_cpu @add(i32, i32) -> i32;
+external_cpu @get(erased_length_array<i32>, i32) -> i32;
+external_cpu @set(erased_length_array<i32>, i32, i32) -> erased_length_array<i32>;
+value_function @get() -> i32 : [@rec_sum];
+
+value @setup() -> i64 {
+    %x = constant 3i64;
+    %result_t = call @sum(%x);
+    %result = extract %result_t 0;
+    return %result
+}
+
+value @rec_sum(%x : i64) -> [i64] {
+    %m1 = constant -1i64; // need to add negatives
+    %xm1_t = call @add(%x, %m1);
+    %xm1 = extract %xm1_t 0;
+
+    %rec_res_t = call @sum(%xm1);
+    %rec_res = extract %rec_t 0;
+
+    %add_res_t = call @add(%rec_res_t, %x);
+    %add_res = extract %add_res_t 0;
+
+    %zero = constant 0i64;
+
+    %ret = select %x %add_res %zero;
+
+    return %ret
+}
+
+schedule @setup_main(%buff : $buffer_local) -> [%out : $slot_local] {
+    %x_loc = alloc-local-i64 @foo.%x_loc;
+    %_ = encode-do-local @foo.%x() -> %x_loc;
+    %default = default-join;
+    %join = inline-join @setup_ret [] %default;
+    schedule-call @setup.%result_t @rec_sum_main [%buff, %x_loc] %join;
+}
+
+schedule @setup_ret(%xslot : $slot_local) -> [%out : $slot_local] {
+    %retloc = alloc-local-i64 @foo.%ret;
+    %_ = encode-copy-local %xslot %retloc; // not strictly necessary?  But nice for aesthetics
+    return %resultloc;
+}
+
+schedule @rec_sum_main(%buff : $buffer_local, %xslot : $slot_local) -> [%out : $slot_local] {
+    %default = default-join;
+    %join = inline-join @rec_sum_ret [] %default;
+    schedule-select @rec_sum.%x %xslot [@rec_sum_left, @rec_sum_right] %join;
+}
+
+schedule @rec_sum_left(%buff : $buffer_local, %xslot : $slot_local) -> [%out : $slot_local] {
+    %m1_loc = alloc-local-i64 @rec_sum.%m1 %buff;
+    %_ = encode-do-local @rec_sum.%m1_t() -> %m1_loc;
+    %xm1_loc = alloc-local-i64 @rec_sum.%xm1 %buff;
+    %_ = encode-do-local @rec_sum.%xm1_t(%xslot, %xm1_loc);
+
+    %default = default-join;
+    %join = inline-join @rec_sum_left_rec [] %default;
+
+    schedule-call @setup.%add_res_t @rec_sum_main [%buff, %xm1_loc] %join;
+}
+
+schedule @rec_sum_left_rec(%buff : $buffer_local, %xslot : $slot_local, %rec_data : $slot_local) -> [%out : $slot_local] {
+    %rec_res_loc = alloc-local-i64 @rec_sum.%rec_res %buff;
+    %_ = encode-copy %rec_data %rec_res_loc;
+    %add_res_loc = alloc-local-i64 @rec_sum.%add_res %buff;
+    %_ = encode-do-local @rec_sum.%add_res_t(%xslot, %xm1_loc);
+
+    return %add_res_loc
+}
+
+schedule @rec_sum_right(%buff : $buffer_local, %xslot : $slot_local) -> [%out : $slot_local] {
+    %zero_loc = alloc-local-i64 @rec_sum.%zero %buff;
+    %_ = encode-do-local @rec_sum.%zero() -> %zero_loc;
+    return %zeroloc;
+}
+
+schedule @rec_sum_ret(%xslot : $slot_local) -> [%out : $slot_local] {
+    return %xslot
+}
+
+timeline @time(%e : $event_local) -> $event_local {
+    return %e;
+}
+
+spatial @setup_spatial(%bs : $buffer_space) -> $buffer_space {
+    return %bs;
+}
+
+extras {
+    @setup_main {
+        value : @setup,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {%buff : buffer_info(spatial_tag input @setup_spatial.%bs)},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+    @setup_ret {
+        value : @setup,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+    @rec_sum_main {
+        value : @rec_sum,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {%buff : buffer_info(spatial_tag input @setup_spatial.%test)},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+    @rec_sum_left {
+        value : @rec_sum,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {%buff : buffer_info(spatial_tag input @setup_spatial.%test)},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+    @rec_sum_right {
+        value : @rec_sum,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {%buff : buffer_info(spatial_tag input @setup_spatial.%test)},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+    @rec_sum_ret {
+        value : @rec_sum,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {%buff : buffer_info(spatial_tag input @setup_spatial.%test)},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+}
+
+pipeline "main" = @setup_main;
