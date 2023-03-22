@@ -1,4 +1,5 @@
 use crate::error;
+use crate::scheduling_language::schedulable;
 
 pub use crate::error::{Info, DualLocalError};
 
@@ -6,16 +7,16 @@ pub type ToIRResult<T> = Result<T, error::DualLocalError>;
 
 pub enum ToIRError
 {
-    UnboundScheduleVar(String),
-    IncompatibleArgumentNum(usize, usize),
+    ForgottenExpr(String, Vec<schedulable::SubExpr>, schedulable::FullExpr),
+    UnknownScheduling(String, Vec<schedulable::SubExpr>, schedulable::FullExpr),
 }
 
 pub fn make_error(e: ToIRError, i: error::Info) -> error::DualLocalError
 {
     let file_kind = match &e
     {
-        ToIRError::UnboundScheduleVar(_) => error::FileKind::Scheduling,
-        ToIRError::IncompatibleArgumentNum(_,_) => error::FileKind::Value,
+        ToIRError::ForgottenExpr(_,_,_) => error::FileKind::Value,
+        ToIRError::UnknownScheduling(_,_,_) => error::FileKind::Scheduling,
     };
     error::DualLocalError {
         error: error::LocalError {

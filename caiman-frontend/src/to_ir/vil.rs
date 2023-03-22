@@ -22,7 +22,7 @@ pub enum Value
 pub enum Expr<NodeIndex>
 {
     Value(Value),
-    Var(String),
+    //Var(String),
     If(NodeIndex, NodeIndex, NodeIndex),
 }
 
@@ -57,3 +57,13 @@ impl std::fmt::Debug for Program
         Ok(())
     }
 }
+
+pub fn schedulable_of_vil_expr<T>(e: &Expr<T>) -> schedulable::FullExpr
+{
+    match e 
+    {
+        Expr::Value(_) => schedulable::FullExpr::Primitive,
+        Expr::If(_, _, _) => schedulable::FullExpr::IfComplete,
+    }
+}
+

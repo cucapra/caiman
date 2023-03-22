@@ -12,10 +12,9 @@ pub enum SubExpr
     // TODO: others
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FullExpr
 {
     Primitive,
-    Var,
     IfComplete,
 }

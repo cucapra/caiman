@@ -29,7 +29,6 @@ SubExpr: SubExpr = {
 
 FullExpr: FullExpr = {
   "IfComplete" => FullExpr::IfComplete,
-  "Var" => FullExpr::Var,
   "Prim" => FullExpr::Primitive,
 }
 

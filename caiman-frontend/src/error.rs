@@ -88,11 +88,10 @@ impl fmt::Display for ParsingError
         match self
         {
             ParsingError::InvalidToken => write!(f, "Invalid token"),
-            ParsingError::UnrecognizedToken(tok, expected) => write!(
-                f,
-                "Unrecognized token {}, expected one of {}",
-                tok, expected,
-            ),
+            ParsingError::UnrecognizedToken(tok, expected) =>
+            {
+                write!(f, "Unrecognized token {}, expected one of {}", tok, expected,)
+            },
             ParsingError::ExtraToken(tok) => write!(f, "Extra token {}", tok),
             ParsingError::EOF(expected) =>
             {
@@ -135,13 +134,18 @@ impl fmt::Display for ToIRError
     {
         match self
         {
-            ToIRError::UnboundScheduleVar(v) =>
+            ToIRError::UnknownScheduling(x, subs, full) =>
             {
-                write!(f, "Variable {} is unbound in the scheduling language", v)
+                write!(
+                    f,
+                    "Found a scheduled expression {}.{:?}.{:?}, but it's not found in the value \
+                     language",
+                    x, subs, full
+                )
             },
-            ToIRError::IncompatibleArgumentNum(exp, act) => 
+            ToIRError::ForgottenExpr(x, subs, full) =>
             {
-                write!(f, "Expected {} arguments but got {}", exp, act)
+                write!(f, "Expression {}.{:?}.{:?} was never scheduled", x, subs, full)
             },
         }
     }

@@ -1,5 +1,6 @@
 extern crate clap;
 
+use caiman::assembly_ast as asm;
 use caiman_frontend::error;
 use caiman_frontend::scheduling_language;
 use caiman_frontend::to_ir;
@@ -90,9 +91,9 @@ fn main()
     }
     else
     {
-        let run = || -> Result<caiman::ir::Program, error::Error> {
+        let run = || -> Result<asm::Program, error::Error> {
             let (value_file, scheduling_file) = filenames(&args.filename);
-            let value_ast = value_language::compiler::parse(&value_file)?;
+            let value_ast = value_language::compiler::parse_and_elaborate(&value_file)?;
             let schedule_ast = scheduling_language::compiler::parse(&scheduling_file)?;
             let ir = to_ir::go(&value_ast, &schedule_ast).map_err(|e| error::Error {
                 kind: e.error.kind,

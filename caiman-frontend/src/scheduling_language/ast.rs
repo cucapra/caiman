@@ -5,7 +5,7 @@ use super::schedulable;
 
 pub type Var = String;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum StmtKind//<S> 
 {
     Expr(Var, Vec<schedulable::SubExpr>, schedulable::FullExpr),

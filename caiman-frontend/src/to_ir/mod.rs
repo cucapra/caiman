@@ -1,25 +1,59 @@
 use crate::scheduling_language::ast as schedule_ast;
-use crate::spec;
+//use crate::spec;
 use crate::value_language::ast as value_ast;
-use crate::value_language::typing;
+//use crate::value_language::typing;
 //use caiman::arena::Arena;
-use caiman::ir;
-use std::collections::HashMap;
+use caiman::assembly_ast as asm;
+//use std::collections::HashMap;
 
-pub mod vil;
+mod label;
+
+mod dual_compatibility;
+mod index;
+
+mod ir_typing;
+
+mod ir_funclets;
+
+mod to_value_funclets;
+
+mod to_se_funclets;
+
 pub mod to_vil;
+pub mod vil;
 
 mod error;
 pub use error::ToIRError;
 use error::{make_error, ToIRResult};
 
-    
 pub fn go(
-    value_ast: &value_ast::ParsedProgram,
+    value_ast: &value_ast::TypedProgram,
     schedule_ast: &schedule_ast::ParsedProgram,
-) -> ToIRResult<ir::Program>
+) -> ToIRResult<asm::Program>
 {
-    todo!()
+    let vil_program = to_vil::value_ast_to_vil(value_ast);
+    let matched_schedule_stmts =
+        dual_compatibility::match_vil_to_scheduling(&vil_program, schedule_ast)?;
+
+    let value_funclets = to_value_funclets::vil_to_value_funclets(&vil_program);
+    let schedule_explicit_funclets =
+        to_se_funclets::schedule_ast_to_schedule_explicit_funclets(&matched_schedule_stmts);
+
+    let funclets = 
+        value_funclets
+            .into_iter()
+            .map(ir_funclets::make_asm_funclet)
+            .chain(schedule_explicit_funclets.into_iter().map(ir_funclets::make_asm_funclet))
+            .collect();
+    // TODO what do i do with this haha
+    let version = asm::Version { major: 0, minor: 0, detailed: 0 };
+    Ok(asm::Program {
+        version,
+        funclets,
+        types: vec![],
+        pipelines: vec![],
+        extras: vec![],
+    })
 }
 /*
 type Index<T> = HashMap<T, usize>;
@@ -29,31 +63,6 @@ enum Type
 {
     Native(typing::Type),
     Slot(typing::Type, ir::ResourceQueueStage, ir::Place),
-}
-
-struct InnerFunclet
-{
-    pub input_types: Box<[ir::TypeId]>,
-    pub output_types: Box<[ir::TypeId]>,
-    pub nodes: Box<[ir::Node]>,
-    pub tail_edge: ir::TailEdge,
-}
-
-trait Funclet
-{
-    fn inner(self) -> InnerFunclet;
-    fn kind(&self) -> ir::FuncletKind;
-}
-
-struct ValueFunclet
-{
-    pub involved_variables: Index<String>,
-    pub inner_funclet: InnerFunclet,
-}
-
-struct ScheduleExplicitFunclet
-{
-    pub inner_funclet: InnerFunclet,
 }
 
 pub fn go(
@@ -395,17 +404,6 @@ fn types_index(
         }
     }
     Ok(types_index)
-}
-
-impl Funclet for ValueFunclet
-{
-    fn inner(self) -> InnerFunclet { self.inner_funclet }
-    fn kind(&self) -> ir::FuncletKind { ir::FuncletKind::Value }
-}
-impl Funclet for ScheduleExplicitFunclet
-{
-    fn inner(self) -> InnerFunclet { self.inner_funclet }
-    fn kind(&self) -> ir::FuncletKind { ir::FuncletKind::ScheduleExplicit }
 }
 
 fn make_ir_funclet<T: Funclet>(f: T) -> ir::Funclet
