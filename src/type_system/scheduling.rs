@@ -438,30 +438,6 @@ impl<'program> FuncletChecker<'program>
 
 						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 					}
-					/*ir::Node::ConstantInteger { .. } =>
-					{
-						assert_eq!(* place, ir::Place::Local);
-						assert_eq!(inputs.len(), 0);
-						assert_eq!(outputs.len(), 1);
-
-						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
-					}
-					ir::Node::ConstantI32 { .. } =>
-					{
-						assert_eq!(* place, ir::Place::Local);
-						assert_eq!(inputs.len(), 0);
-						assert_eq!(outputs.len(), 1);
-
-						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
-					}
-					ir::Node::ConstantUnsignedInteger { .. } =>
-					{
-						assert_eq!(* place, ir::Place::Local);
-						assert_eq!(inputs.len(), 0);
-						assert_eq!(outputs.len(), 1);
-
-						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
-					}*/
 					ir::Node::Select { condition, true_case, false_case } =>
 					{
 						assert_eq!(* place, ir::Place::Local);
