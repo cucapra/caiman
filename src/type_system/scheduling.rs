@@ -572,9 +572,6 @@ impl<'program> FuncletChecker<'program>
 				{
 					// Single return nodes
 					ir::Node::Constant { .. } => false,
-					/*ir::Node::ConstantInteger { .. } => false,
-					ir::Node::ConstantI32 { .. } => false,
-					ir::Node::ConstantUnsignedInteger { .. } => false,*/
 					ir::Node::Select { .. } => false,
 					// Multiple return nodes
 					ir::Node::CallExternalCpu { .. } => true,

@@ -423,10 +423,6 @@ fn explicate_node(node : &ir::Node,
             context),
         ir::Node::Constant { value,
                 type_id } => explicate_constant(type_id, context),
-        /*ir::Node::ConstantInteger { value,
-            type_id } => explicate_constant(type_id, context),
-        ir::Node::ConstantUnsignedInteger { value,
-            type_id } => explicate_constant(type_id, context),*/
         ir::Node::CallValueFunction { function_id,
             arguments } =>
             explicate_value_function(function_id, arguments, context),
