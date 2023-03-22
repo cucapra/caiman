@@ -18,9 +18,9 @@ value @foo() -> i64 {
 }
 
 schedule @bar() -> [%out : $slot0] {
-    _;
-    %_ = encode-do-local @foo.%x() -> _;
-    return _;
+    ???;
+    %_ = encode-do-local @foo.%x() -> ?;
+    return ?;
 }
 
 timeline @time(%e : $event0) -> $event0 {

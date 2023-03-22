@@ -18,7 +18,7 @@ value @foo() -> i64 {
 }
 
 schedule @bar() -> [%out : $slot0] {
-    _;
+    ???;
 }
 
 timeline @time(%e : $event0) -> $event0 {

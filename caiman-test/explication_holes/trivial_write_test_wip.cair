@@ -19,7 +19,7 @@ value @foo() -> i64 {
 
 schedule @bar() -> [%out : $slot0] {
     %x_loc = alloc-temporary-local-i64 @foo.%x;
-    %_ = encode-do-local @foo.%x() -> _;
+    %_ = encode-do-local @foo.%x() -> ?;
     return %x_loc;
 }
 

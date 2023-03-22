@@ -24,7 +24,7 @@ schedule @bar() -> [%out : $slot0] {
 }
 
 timeline @time(%e : $event0) -> $event0 {
-    return _;
+    ???;
 }
 
 extras {
