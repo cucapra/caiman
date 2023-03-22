@@ -70,6 +70,7 @@ pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
 macro_rules! lookup_abstract_type_parser {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type_parser!($elem_type)]> };
 	(Type) => { TypeId };
+	(Immediate) => { String };
 	(ImmediateI64) => { i64 };
 	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };

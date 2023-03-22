@@ -64,7 +64,7 @@
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
+					Constant(value: I64(1), type_id : 0),
 					CallExternalCpu(external_function_id : 0, arguments : [0]),
 					ExtractResult(node_id : 2, index : 0),
 					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
@@ -78,7 +78,7 @@
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
+					Constant(value: I64(1), type_id : 0),
 					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 2, index : 0),
 					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
@@ -177,7 +177,7 @@
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
+					Constant(value: I64(1), type_id : 0),
 					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 2, index : 0),
 				],

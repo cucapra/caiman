@@ -577,7 +577,17 @@ fn ir_node(node : &assembly_ast::Node, context : &mut Context) -> ir::Node {
                 index: *index,
             }
         },
-        assembly_ast::Node::ConstantInteger { value, type_id } => {
+        assembly_ast::Node::Constant { value, type_id } => {
+            let parsed_value = match ron::from_str(value.as_str()) {
+                Err(why) => panic!(format!("Cannot parse constant node immediate {}", why)),
+                Ok(v) => v
+            };
+            ir::Node::Constant {
+                value: parsed_value,
+                type_id: *context.loc_type_id(type_id.clone()),
+            }
+        },
+        /*assembly_ast::Node::ConstantInteger { value, type_id } => {
             ir::Node::ConstantInteger {
                 value: *value,
                 type_id: *context.loc_type_id(type_id.clone()),
@@ -594,7 +604,7 @@ fn ir_node(node : &assembly_ast::Node, context : &mut Context) -> ir::Node {
                 value: *value,
                 type_id: *context.loc_type_id(type_id.clone()),
             }
-        },
+        },*/
         assembly_ast::Node::CallValueFunction { function_id, arguments } => {
             unimplemented!() // arbitrary trick for unification of calls
         },

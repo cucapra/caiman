@@ -30,6 +30,14 @@ pub enum ResourceQueueStage
 	Dead
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Constant
+{
+	I32(i32),
+	I64(i64),
+	U64(u64),
+}
+
 pub type ExternalCpuFunctionId = usize;
 pub type ExternalGpuFunctionId = usize;
 pub type FuncletId = usize;
@@ -49,6 +57,7 @@ pub struct PipelineYieldPointId(pub usize);
 macro_rules! lookup_abstract_type {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
 	(Type) => { TypeId };
+	(Immediate) => { Constant };
 	(ImmediateI64) => { i64 };
 	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };
@@ -230,7 +239,7 @@ pub struct SlotInfo
 {
 	pub value_tag : ValueTag,
 	pub timeline_tag : TimelineTag, // marks the event that put the slot into its current state
-pub spatial_tag : SpatialTag,
+	pub spatial_tag : SpatialTag,
 }
 
 // Funclet-relative join info goes here
@@ -257,6 +266,7 @@ pub struct SchedulingFuncletExtra
 {
 	pub value_funclet_id : FuncletId,
 	//pub spatial_funclet_id : FuncletId,
+	//pub temporal_funclet_id : FuncletId,
 	pub input_slots : HashMap<usize, SlotInfo>,
 	pub output_slots : HashMap<usize, SlotInfo>,
 	pub input_fences : HashMap<usize, FenceInfo>,
@@ -306,14 +316,13 @@ impl serde::Serialize for SchedulingFuncletExtra {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct CompatibleValueFunctionKey
 {
-	pub value_function_id : ValueFunctionId,
-	pub capture_count : usize
+	pub value_function_id : ValueFunctionId
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValueFuncletExtra
 {
-	// Value functions this funclet implements and the number of captures
+	// Value functions this funclet implements
 	#[serde(default)]
 	pub compatible_value_functions : BTreeSet<CompatibleValueFunctionKey>
 }
@@ -326,7 +335,7 @@ pub struct ValueFunction
 	pub name : String,
 	pub input_types : Box<[TypeId]>,
 	pub output_types : Box<[TypeId]>,
-	pub default_funclet_id : Option<FuncletId>
+	pub default_funclet_id : Option<FuncletId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -368,7 +377,6 @@ pub struct Program
 	pub value_funclet_extras : HashMap<FuncletId, ValueFuncletExtra>,
 	#[serde(default)]
 	pub scheduling_funclet_extras : HashMap<FuncletId, SchedulingFuncletExtra>,
-	//pub shader_modules : HashMap<usize, ShaderModule>
 }
 
 impl serde::Serialize for Program {

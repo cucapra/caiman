@@ -430,7 +430,15 @@ impl<'program> FuncletChecker<'program>
 
 				match encoded_node
 				{
-					ir::Node::ConstantInteger { .. } =>
+					ir::Node::Constant { .. } =>
+					{
+						assert_eq!(* place, ir::Place::Local);
+						assert_eq!(inputs.len(), 0);
+						assert_eq!(outputs.len(), 1);
+
+						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
+					}
+					/*ir::Node::ConstantInteger { .. } =>
 					{
 						assert_eq!(* place, ir::Place::Local);
 						assert_eq!(inputs.len(), 0);
@@ -453,7 +461,7 @@ impl<'program> FuncletChecker<'program>
 						assert_eq!(outputs.len(), 1);
 
 						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
-					}
+					}*/
 					ir::Node::Select { condition, true_case, false_case } =>
 					{
 						assert_eq!(* place, ir::Place::Local);
@@ -563,9 +571,10 @@ impl<'program> FuncletChecker<'program>
 				let output_is_tuple = match encoded_node
 				{
 					// Single return nodes
-					ir::Node::ConstantInteger { .. } => false,
+					ir::Node::Constant { .. } => false,
+					/*ir::Node::ConstantInteger { .. } => false,
 					ir::Node::ConstantI32 { .. } => false,
-					ir::Node::ConstantUnsignedInteger { .. } => false,
+					ir::Node::ConstantUnsignedInteger { .. } => false,*/
 					ir::Node::Select { .. } => false,
 					// Multiple return nodes
 					ir::Node::CallExternalCpu { .. } => true,
