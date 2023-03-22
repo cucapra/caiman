@@ -225,17 +225,17 @@ fn build_extra(info : PartialInformation, timeline_id : &usize,
                context : &mut SchedulingContext) -> ir::SchedulingFuncletExtra {
     // todo: lazy location information
     let in_timeline = ir::TimelineTag::Input {
-        funclet_id: *timeline_id,
+        //funclet_id: *timeline_id,
         index: 0,
     };
     let out_timeline = ir::TimelineTag::Input {
-        funclet_id: *timeline_id,
+        //funclet_id: *timeline_id,
         index: 0,
     };
     ir::SchedulingFuncletExtra {
         value_funclet_id_opt: Some(info.value_funclet_id),
         spatial_funclet_id_opt: None,
-        temporal_funclet_id_opt: None,
+        temporal_funclet_id_opt: Some(*timeline_id),
         input_tag_sets: info.input_tag_sets.into_boxed_slice(),
         output_tag_sets: info.output_tag_sets.into_boxed_slice(),
         /*input_slots: info.input_slots,

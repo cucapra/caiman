@@ -1,19 +1,19 @@
 use crate::ir;
 
-pub fn concretize_input_to_internal_timeline_tag(program : & ir::Program, timeline_tag : ir::TimelineTag) -> ir::TimelineTag
+pub fn concretize_input_to_internal_timeline_tag(program : & ir::Program, funclet_id_opt : Option<ir::FuncletId>, timeline_tag : ir::TimelineTag) -> ir::TimelineTag
 {
 	match timeline_tag
 	{
 		ir::TimelineTag::None => ir::TimelineTag::None,
-		ir::TimelineTag::Input{funclet_id, index} => ir::TimelineTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : index}},
+		ir::TimelineTag::Input{/*funclet_id,*/ index} => ir::TimelineTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id: funclet_id_opt.unwrap(), node_id : index}},
 		ir::TimelineTag::Operation{remote_node_id} => ir::TimelineTag::Operation{remote_node_id},
-		ir::TimelineTag::Output{funclet_id, index} => ir::TimelineTag::Output{funclet_id, index},
+		ir::TimelineTag::Output{/*funclet_id,*/ index} => ir::TimelineTag::Output{/*funclet_id,*/ index},
 		_ => panic!("Unimplemented")
 	}
 }
 
 // Are these timeline tags equivalent?
-pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source_timeline_tag : ir::TimelineTag, destination_timeline_tag : ir::TimelineTag)
+pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, funclet_id_opt : Option<ir::FuncletId>, source_timeline_tag : ir::TimelineTag, destination_timeline_tag : ir::TimelineTag)
 {
 	match (source_timeline_tag, destination_timeline_tag)
 	{
@@ -41,11 +41,11 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 				panic!("Not a phi");
 			}
 		}*/
-		(ir::TimelineTag::Input{funclet_id, index}, ir::TimelineTag::Operation{remote_node_id}) =>
+		(ir::TimelineTag::Input{/*funclet_id,*/ index}, ir::TimelineTag::Operation{remote_node_id}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id);
+			assert_eq!(remote_node_id.funclet_id, funclet_id_opt.unwrap());
 
-			let destination_timeline_funclet = & program.funclets[funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[remote_node_id.node_id]
@@ -57,11 +57,11 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 				panic!("Not a phi");
 			}
 		}
-		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Input{funclet_id, index}) =>
+		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Input{/*funclet_id,*/ index}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id);
+			assert_eq!(remote_node_id.funclet_id, funclet_id_opt.unwrap());
 
-			let destination_timeline_funclet = & program.funclets[funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[remote_node_id.node_id]
@@ -77,11 +77,11 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 		{
 			assert_eq!(remote_node_id, remote_node_id_2);
 		}
-		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Output{funclet_id, index}) =>
+		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Output{/*funclet_id,*/ index}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id);
+			assert_eq!(remote_node_id.funclet_id, funclet_id_opt.unwrap());
 
-			let source_timeline_funclet = & program.funclets[funclet_id];
+			let source_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(source_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			match & source_timeline_funclet.tail_edge
@@ -90,9 +90,9 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 				_ => panic!("Not a unit")
 			}
 		}
-		(ir::TimelineTag::Output{funclet_id, index}, ir::TimelineTag::Output{funclet_id : funclet_id_2, index : index_2}) =>
+		(ir::TimelineTag::Output{/*funclet_id,*/ index}, ir::TimelineTag::Output{/*funclet_id : funclet_id_2,*/ index : index_2}) =>
 		{
-			assert_eq!(funclet_id, funclet_id_2);
+			//assert_eq!(funclet_id, funclet_id_2);
 			assert_eq!(index, index_2);
 		}
 		_ => panic!("Ill-formed: {:?} to {:?}", source_timeline_tag, destination_timeline_tag)
@@ -101,7 +101,7 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, source
 
 // check control flow legality
 
-pub fn check_next_timeline_tag_on_submit(program : & ir::Program, timeline_event : ir::RemoteNodeId, current_timeline_tag : ir::TimelineTag) -> ir::TimelineTag
+pub fn check_next_timeline_tag_on_submit(program : & ir::Program, funclet_id_opt : Option<ir::FuncletId>, timeline_event : ir::RemoteNodeId, current_timeline_tag : ir::TimelineTag) -> ir::TimelineTag
 {
 	// To do: have timeline tag for both gpu and local
 	let destination_timeline_funclet = & program.funclets[timeline_event.funclet_id];
@@ -118,11 +118,11 @@ pub fn check_next_timeline_tag_on_submit(program : & ir::Program, timeline_event
 
 	match current_timeline_tag
 	{
-		ir::TimelineTag::Input{funclet_id, index} =>
+		ir::TimelineTag::Input{/*funclet_id,*/ index} =>
 		{
-			assert_eq!(timeline_event.funclet_id, funclet_id);
+			assert_eq!(timeline_event.funclet_id, funclet_id_opt.unwrap());
 
-			let destination_timeline_funclet = & program.funclets[funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[local_past]
@@ -145,7 +145,7 @@ pub fn check_next_timeline_tag_on_submit(program : & ir::Program, timeline_event
 	ir::TimelineTag::Operation { remote_node_id : timeline_event }
 }
 
-pub fn check_next_timeline_tag_on_sync(program : & ir::Program, timeline_event : ir::RemoteNodeId, current_timeline_tag : ir::TimelineTag) -> ir::TimelineTag
+pub fn check_next_timeline_tag_on_sync(program : & ir::Program, funclet_id_opt : Option<ir::FuncletId>, timeline_event : ir::RemoteNodeId, current_timeline_tag : ir::TimelineTag) -> ir::TimelineTag
 {
 	// To do: have timeline tag for both gpu and local
 	let destination_timeline_funclet = & program.funclets[timeline_event.funclet_id];
@@ -162,11 +162,11 @@ pub fn check_next_timeline_tag_on_sync(program : & ir::Program, timeline_event :
 
 	match current_timeline_tag
 	{
-		ir::TimelineTag::Input{funclet_id, index} =>
+		ir::TimelineTag::Input{/*funclet_id,*/ index} =>
 		{
-			assert_eq!(timeline_event.funclet_id, funclet_id);
+			assert_eq!(timeline_event.funclet_id, funclet_id_opt.unwrap());
 
-			let destination_timeline_funclet = & program.funclets[funclet_id];
+			let destination_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[local_past]

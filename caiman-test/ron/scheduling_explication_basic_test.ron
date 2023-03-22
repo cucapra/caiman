@@ -207,6 +207,8 @@
 		scheduling_funclet_extras : {
 			11 : (
 				value_funclet_id_opt : Some(0),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [ (value_tag : Input(funclet_id : 0, index : 0), timeline_tag : None, spatial_tag : None)],
 				output_tag_sets : [ (value_tag : None, timeline_tag : None, spatial_tag : None)],
 				/*input_slots : {0 :},
@@ -233,6 +235,8 @@
 			),*/
 			12 : (
 				value_funclet_id_opt : Some(9),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [ (value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
 				output_tag_sets : [ (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
 				/*input_slots : {0 :},
@@ -246,6 +250,8 @@
 			),
 			13 : (
 				value_funclet_id_opt : Some(10),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [ (value_tag : Input(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)],
 				output_tag_sets : [ (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None )],
 				/*input_slots : {0 :},
@@ -259,6 +265,8 @@
 			),
 			14 : (
 				value_funclet_id_opt : Some(10),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [ (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), timeline_tag : None, spatial_tag : None )],
 				output_tag_sets : [ (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)],
 				/*input_slots : {0 :}, //Operation(remote_node_id : (funclet_id : 15, node_id : 1))
@@ -272,6 +280,8 @@
 			),
 			16 : (
 				value_funclet_id_opt : Some(9),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [
 					(value_tag : Operation(remote_node_id : (funclet_id : 9, node_id : 3)), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)), spatial_tag : None ),
 					(timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1))),

@@ -118,6 +118,29 @@ macro_rules! make_nodes {
 with_operations!(make_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Tag
+{
+	None,
+	Operation{ remote_node_id : RemoteNodeId },
+	Input{index : usize},
+	Output{index : usize},
+	Halt{index : usize}
+}
+
+
+impl Tag
+{
+	fn default() -> Self
+	{
+		Self::None
+	}
+}
+
+pub type ValueTag = Tag;
+pub type TimelineTag = Tag;
+pub type SpatialTag = Tag;
+
+/*#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueTag
 {
 	// Intended for scheduling purposes
@@ -172,7 +195,7 @@ impl SpatialTag
 	{
 		Self::None
 	}
-}
+}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct StaticBufferLayout

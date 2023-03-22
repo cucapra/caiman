@@ -199,11 +199,11 @@ fn timeline_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::T
             remote_node_id:  remote_conversion(&r, context)
         },
         assembly_ast::TagCore::Input(r) => ir::TimelineTag::Input {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::TimelineTag::Output {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
@@ -216,11 +216,11 @@ fn spatial_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Sp
             remote_node_id:  remote_conversion(&r, context)
         },
         assembly_ast::TagCore::Input(r) => ir::SpatialTag::Input {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::SpatialTag::Output {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
@@ -969,11 +969,13 @@ fn ir_scheduling_extra(d: &assembly_ast::UncheckedDict, context : &mut Context, 
     let input_buffers = value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context);
     let output_buffers = value_index_var_dict(d.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context);
 
-    let value_funclet_id = value_funclet_raw_id(d.get(&as_key("value")).unwrap(), context);
+    let value_funclet_id_opt = d.get(&as_key("value")).map(|x| value_funclet_raw_id(x, context));
+    let spatial_funclet_id_opt = d.get(&as_key("space")).map(|x| value_funclet_raw_id(x, context));
+    let temporal_funclet_id_opt = d.get(&as_key("time")).map(|x| value_funclet_raw_id(x, context));
     ir::SchedulingFuncletExtra {
-        value_funclet_id_opt: Some(value_funclet_id),
-        spatial_funclet_id_opt: None,
-        temporal_funclet_id_opt: None,
+        value_funclet_id_opt,
+        spatial_funclet_id_opt,
+        temporal_funclet_id_opt,
         input_tag_sets: merge_tag_sets(input_count, & input_slots, & input_fences, & input_buffers),
         output_tag_sets: merge_tag_sets(output_count, & output_slots, & output_fences, & output_buffers),
         in_timeline_tag: value_dict_timeline_tag(d.get(&as_key("in_timeline_tag")).unwrap(), context),
