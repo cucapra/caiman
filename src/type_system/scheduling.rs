@@ -165,7 +165,7 @@ impl<'program> FuncletChecker<'program>
 			{
 				ir::Type::Slot { storage_type, queue_stage, queue_place } =>
 				{
-					let slot_info = & self.scheduling_funclet_extra.input_slots[& index];
+					let slot_info = & self.scheduling_funclet_extra.input_tag_sets[index];
 					let value_tag = concretize_input_to_internal_value_tag(& self.program, slot_info.value_tag);
 					let timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, slot_info.timeline_tag);
 					let spatial_tag = concretize_input_to_internal_spatial_tag(& self.program, slot_info.spatial_tag);
@@ -180,7 +180,7 @@ impl<'program> FuncletChecker<'program>
 				}
 				ir::Type::Fence { queue_place } =>
 				{
-					let fence_info = & self.scheduling_funclet_extra.input_fences[& index];
+					let fence_info = & self.scheduling_funclet_extra.input_tag_sets[index];
 					let timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, fence_info.timeline_tag);
 					self.scalar_node_timeline_tags.insert(index, timeline_tag);
 					self.scalar_node_value_tags.insert(index, ir::ValueTag::None);
@@ -189,7 +189,7 @@ impl<'program> FuncletChecker<'program>
 				}
 				ir::Type::Buffer { storage_place, static_layout_opt } =>
 				{
-					let buffer_info = & self.scheduling_funclet_extra.input_buffers[& index];
+					let buffer_info = & self.scheduling_funclet_extra.input_tag_sets[index];
 					self.scalar_node_timeline_tags.insert(index, ir::TimelineTag::None);
 					self.scalar_node_value_tags.insert(index, ir::ValueTag::None);
 					let spatial_tag = concretize_input_to_internal_spatial_tag(& self.program, buffer_info.spatial_tag);
@@ -240,17 +240,17 @@ impl<'program> FuncletChecker<'program>
 		{
 			ir::Type::Slot{..} =>
 			{
-				let slot_info = & funclet_extra.input_slots[& input_index];
+				let slot_info = & funclet_extra.input_tag_sets[input_index];
 				(slot_info.value_tag, slot_info.timeline_tag, slot_info.spatial_tag)
 			}
 			ir::Type::Fence{..} =>
 			{
-				let fence_info = & funclet_extra.input_fences[& input_index];
+				let fence_info = & funclet_extra.input_tag_sets[input_index];
 				(ir::ValueTag::None, fence_info.timeline_tag, ir::SpatialTag::None)
 			}
 			ir::Type::Buffer{..} =>
 			{
-				let buffer_info = & funclet_extra.input_buffers[& input_index];
+				let buffer_info = & funclet_extra.input_tag_sets[input_index];
 				(ir::ValueTag::None, ir::TimelineTag::None, buffer_info.spatial_tag)
 			}
 			_ => panic!("Unimplemented")
@@ -265,17 +265,17 @@ impl<'program> FuncletChecker<'program>
 		{
 			ir::Type::Slot{..} =>
 			{
-				let slot_info = & funclet_extra.output_slots[& output_index];
+				let slot_info = & funclet_extra.output_tag_sets[output_index];
 				(slot_info.value_tag, slot_info.timeline_tag, slot_info.spatial_tag)
 			}
 			ir::Type::Fence{..} =>
 			{
-				let fence_info = & funclet_extra.output_fences[& output_index];
+				let fence_info = & funclet_extra.output_tag_sets[output_index];
 				(ir::ValueTag::None, fence_info.timeline_tag, ir::SpatialTag::None)
 			}
 			ir::Type::Buffer{..} =>
 			{
-				let buffer_info = & funclet_extra.output_buffers[& output_index];
+				let buffer_info = & funclet_extra.output_tag_sets[output_index];
 				(ir::ValueTag::None, ir::TimelineTag::None, buffer_info.spatial_tag)
 			}
 			_ => panic!("Unimplemented")

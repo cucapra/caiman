@@ -22,7 +22,7 @@ struct ResolvedScheduleNode {}
 
 #[derive(Debug)]
 struct PartialData { // a dumb distinction with the rework, but whatever
-input_types : Vec<ir::TypeId>,
+    input_types : Vec<ir::TypeId>,
     output_types : Vec<ir::TypeId>,
     nodes : Vec<ir::Node>,
     tail_edge : Option<ir::TailEdge>
@@ -36,12 +36,8 @@ struct PartialTimeline {
 #[derive(Debug)]
 struct PartialInformation {
     pub value_funclet_id : ir::FuncletId,
-    pub input_slots : HashMap<usize, ir::SlotInfo>,
-    pub output_slots : HashMap<usize, ir::SlotInfo>,
-    pub input_fences : HashMap<usize, ir::FenceInfo>,
-    pub output_fences : HashMap<usize, ir::FenceInfo>,
-    pub input_buffers : HashMap<usize, ir::BufferInfo>,
-    pub output_buffers : HashMap<usize, ir::BufferInfo>,
+    pub input_tag_sets : Vec<ir::TagSet>,
+    pub output_tag_sets : Vec<ir::TagSet>,
 }
 
 #[derive(Debug)]
@@ -94,8 +90,8 @@ fn new_partial_timeline() -> PartialTimeline {
     }
 }
 
-fn empty_slot() -> ir::SlotInfo {
-    ir::SlotInfo {
+fn empty_tag_set() -> ir::TagSet {
+    ir::TagSet {
         value_tag : ir::ValueTag::None,
         timeline_tag: ir::TimelineTag::None,
         spatial_tag: ir::SpatialTag::None,
@@ -106,17 +102,16 @@ fn new_information(value_index : &usize)
                    -> PartialInformation {
     let mut information = PartialInformation {
         value_funclet_id: *value_index,
-        input_slots: HashMap::new(),
-        output_slots: HashMap::new(),
-        input_fences: HashMap::new(),
+        input_tag_sets: Vec::new(),
+        output_tag_sets: Vec::new(),
+        /*input_fences: HashMap::new(),
         output_fences: HashMap::new(),
         input_buffers: HashMap::new(),
-        output_buffers: HashMap::new(),
+        output_buffers: HashMap::new(),*/
     };
     // todo: extend?
-    let mut input_slots_default = empty_slot();
-    information.input_slots.insert(0, input_slots_default);
-    information.output_slots.insert(0, empty_slot());
+    information.input_tag_sets.push(empty_tag_set());
+    information.output_tag_sets.push(empty_tag_set());
     information
 }
 
@@ -239,12 +234,14 @@ fn build_extra(info : PartialInformation, timeline_id : &usize,
     };
     ir::SchedulingFuncletExtra {
         value_funclet_id: info.value_funclet_id,
-        input_slots: info.input_slots,
+        input_tag_sets: info.input_tag_sets.into_boxed_slice(),
+        output_tag_sets: info.output_tag_sets.into_boxed_slice(),
+        /*input_slots: info.input_slots,
         output_slots: info.output_slots,
         input_fences: info.input_fences,
         output_fences: info.output_fences,
         input_buffers: info.input_buffers,
-        output_buffers: info.output_buffers,
+        output_buffers: info.output_buffers,*/
         in_timeline_tag: in_timeline,
         out_timeline_tag: out_timeline,
     }
@@ -471,13 +468,11 @@ fn explicate_funclet(funclet : &ir::Funclet,
     // Calculates the new funclets to work with (if any)
     context.location.node_id = 0; // reset node_id to new funclet
     let unresolved = match funclet.kind {
-        ir::FuncletKind::MixedImplicit => false,
-        ir::FuncletKind::MixedExplicit => false,
         ir::FuncletKind::Value => explicate_nodes(&funclet.nodes, context),
         ir::FuncletKind::ScheduleExplicit => false,
-        ir::FuncletKind::Inline => false,
         ir::FuncletKind::Timeline => false,
         ir::FuncletKind::Spatial => false,
+        ir::FuncletKind::Unknown => false,
     };
     unresolved
 }

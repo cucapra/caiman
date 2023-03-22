@@ -938,16 +938,40 @@ fn ir_value_extras(funclets : &assembly_ast::FuncletDefs, extras : &assembly_ast
     result
 }
 
-fn ir_scheduling_extra(d: &assembly_ast::UncheckedDict, context : &mut Context) -> ir::SchedulingFuncletExtra {
+fn merge_tag_sets(size : usize, slots : & HashMap<usize, ir::SlotInfo>, fences : & HashMap<usize, ir::FenceInfo>, buffers : & HashMap<usize, ir::BufferInfo>) -> Box<[ir::TagSet]> {
+    let mut sets = Vec::new();
+    for index in 0 .. size {
+        let set = 
+            if let Some(slot) = slots.get(& index) {
+                ir::TagSet{ value_tag : slot.value_tag, timeline_tag : slot.timeline_tag, spatial_tag : slot.spatial_tag }
+            }
+            else if let Some(fence) = fences.get(& index) {
+                ir::TagSet{ value_tag : ir::ValueTag::None, timeline_tag : fence.timeline_tag, spatial_tag : ir::SpatialTag::None }
+            }
+            else if let Some(buffer) = buffers.get(& index) {
+                ir::TagSet{ value_tag : ir::ValueTag::None, timeline_tag : ir::TimelineTag::None, spatial_tag : buffer.spatial_tag }
+            }
+            else {
+                ir::TagSet{ value_tag : ir::ValueTag::None, timeline_tag : ir::TimelineTag::None, spatial_tag : ir::SpatialTag::None }
+            };
+        sets.push(set)
+    }
+    sets.into_boxed_slice()
+}
+
+fn ir_scheduling_extra(d: &assembly_ast::UncheckedDict, context : &mut Context, input_count : usize, output_count : usize) -> ir::SchedulingFuncletExtra {
+    let input_slots = value_index_var_dict(d.get(&as_key("input_slots")).unwrap(), value_slot_info, context);
+    let output_slots = value_index_var_dict(d.get(&as_key("output_slots")).unwrap(), value_slot_info, context);
+    let input_fences = value_index_var_dict(d.get(&as_key("input_fences")).unwrap(), value_fence_info, context);
+    let output_fences = value_index_var_dict(d.get(&as_key("output_fences")).unwrap(), value_fence_info, context);
+    let input_buffers = value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context);
+    let output_buffers = value_index_var_dict(d.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context);
+
     let index = value_funclet_raw_id(d.get(&as_key("value")).unwrap(), context);
     ir::SchedulingFuncletExtra {
         value_funclet_id: index,
-        input_slots: value_index_var_dict(d.get(&as_key("input_slots")).unwrap(), value_slot_info, context),
-        output_slots: value_index_var_dict(d.get(&as_key("output_slots")).unwrap(), value_slot_info, context),
-        input_fences: value_index_var_dict(d.get(&as_key("input_fences")).unwrap(), value_fence_info, context),
-        output_fences: value_index_var_dict(d.get(&as_key("output_fences")).unwrap(), value_fence_info, context),
-        input_buffers: value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context),
-        output_buffers: value_index_var_dict(d.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context),
+        input_tag_sets: merge_tag_sets(input_count, & input_slots, & input_fences, & input_buffers),
+        output_tag_sets: merge_tag_sets(output_count, & output_slots, & output_fences, & output_buffers),
         in_timeline_tag: value_dict_timeline_tag(d.get(&as_key("in_timeline_tag")).unwrap(), context),
         out_timeline_tag: value_dict_timeline_tag(d.get(&as_key("out_timeline_tag")).unwrap(), context),
     }
@@ -972,7 +996,7 @@ fn ir_scheduling_extras(funclets : &assembly_ast::FuncletDefs, extras : &assembl
                                 }
                                 result.insert(
                                     *index,
-                                    ir_scheduling_extra(&extra.data, context)
+                                    ir_scheduling_extra(&extra.data, context, f.header.args.len(), f.header.ret.len())
                                 );
                             }
                         }

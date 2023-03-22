@@ -132,6 +132,14 @@ pub enum ValueTag
 	Halt{index : usize}
 }
 
+impl ValueTag
+{
+	fn default() -> Self
+	{
+		Self::None
+	}
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TimelineTag
 {
@@ -141,6 +149,14 @@ pub enum TimelineTag
 	Output{ funclet_id : FuncletId, index : usize },
 }
 
+impl TimelineTag
+{
+	fn default() -> Self
+	{
+		Self::None
+	}
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SpatialTag
 {
@@ -148,6 +164,14 @@ pub enum SpatialTag
 	Operation{ remote_node_id : RemoteNodeId },
 	Input{ funclet_id : FuncletId, index : usize },
 	Output{ funclet_id : FuncletId, index : usize },
+}
+
+impl SpatialTag
+{
+	fn default() -> Self
+	{
+		Self::None
+	}
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -205,11 +229,9 @@ pub enum TailEdge
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind
 {
-	MixedImplicit,
-	MixedExplicit,
+	Unknown,
 	Value,
 	ScheduleExplicit,
-	Inline, // Adopts the constraints of the calling funclet
 	Timeline,
 	Spatial
 }
@@ -218,7 +240,7 @@ impl FuncletKind
 {
 	fn easy_default() -> Self
 	{
-		FuncletKind::MixedImplicit
+		FuncletKind::Unknown
 	}
 }
 
@@ -231,6 +253,17 @@ pub struct Funclet
 	pub output_types : Box<[TypeId]>,
 	pub nodes : Box<[Node]>,
 	pub tail_edge : TailEdge,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TagSet
+{
+	#[serde(default = "ValueTag::default")]
+	pub value_tag : ValueTag,
+	#[serde(default = "TimelineTag::default")]
+	pub timeline_tag : TimelineTag,
+	#[serde(default = "SpatialTag::default")]
+	pub spatial_tag : SpatialTag,
 }
 
 // Funclet-relative slot info goes here
@@ -261,19 +294,22 @@ pub struct BufferInfo
 	pub spatial_tag : SpatialTag,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SchedulingFuncletExtra
 {
 	pub value_funclet_id : FuncletId,
 	//pub spatial_funclet_id : FuncletId,
 	//pub temporal_funclet_id : FuncletId,
-	pub input_slots : HashMap<usize, SlotInfo>,
+	pub input_tag_sets : Box<[TagSet]>,
+	pub output_tag_sets : Box<[TagSet]>,
+
+	/*pub input_slots : HashMap<usize, SlotInfo>,
 	pub output_slots : HashMap<usize, SlotInfo>,
 	pub input_fences : HashMap<usize, FenceInfo>,
 	pub output_fences : HashMap<usize, FenceInfo>,
 	pub input_buffers : HashMap<usize, BufferInfo>,
 	pub output_buffers : HashMap<usize, BufferInfo>,
-	//pub input_joins : HashMap<usize, JoinInfo>,
+	//pub input_joins : HashMap<usize, JoinInfo>,*/
 
 	// Applies to the computation itself
 	pub in_timeline_tag : TimelineTag,
@@ -289,7 +325,7 @@ fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	elements
 }
 
-impl serde::Serialize for SchedulingFuncletExtra {
+/*impl serde::Serialize for SchedulingFuncletExtra {
 	fn serialize<S>(& self, serializer : S) -> std::result::Result<<S as serde::Serializer>::Ok, <S as Serializer>::Error>
 		where S : Serializer {
 		let input_slots = ordered_map(&self.input_slots);
@@ -311,7 +347,7 @@ impl serde::Serialize for SchedulingFuncletExtra {
 		state.serialize_field("out_timeline_tag", &self.out_timeline_tag);
 		state.end()
 	}
-}
+}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct CompatibleValueFunctionKey
