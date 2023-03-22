@@ -1103,7 +1103,7 @@ fn read_constant(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_a
 
     let type_id = assembly_ast::Type::FFI(assembly_ast::FFIType::I64);
 
-    assembly_ast::Node::ConstantInteger { value, type_id }
+    assembly_ast::Node::Constant { value: format!("I64({})", value), type_id }
 }
 
 fn read_constant_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
@@ -1133,7 +1133,7 @@ fn read_constant_i32(pairs : &mut Pairs<Rule>, context : &mut Context) -> assemb
 
     let type_id = assembly_ast::Type::FFI(assembly_ast::FFIType::I32);
 
-    assembly_ast::Node::ConstantI32 { value, type_id }
+    assembly_ast::Node::Constant { value: format!("I32({})", value), type_id }
 }
 
 fn read_constant_i32_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {
@@ -1159,7 +1159,7 @@ fn read_constant_unsigned(pairs : &mut Pairs<Rule>, context : &mut Context) -> a
 
     let type_id = assembly_ast::Type::FFI(assembly_ast::FFIType::U64);
 
-    assembly_ast::Node::ConstantUnsignedInteger { value, type_id }
+    assembly_ast::Node::Constant { value: format!("U64({})", value), type_id }
 }
 
 fn read_constant_unsigned_command(pairs : &mut Pairs<Rule>, context : &mut Context) -> assembly_ast::Node {

@@ -41,35 +41,11 @@
 
 		// Functional-only nodes
 		(
-			// Represents a constant signed integer
+			// Represents a constant
 			// For EncodeDo: Is a value operation with no inputs and one output
-			name : "ConstantInteger",
+			name : "Constant",
 			inputs : [
-				(name : "value", kind : ImmediateI64),
-				(name : "type_id", kind : Type),
-			],
-			output : Single,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : false
-		),
-		(
-			// Represents a constant signed integer
-			// For EncodeDo: Is a value operation with no inputs and one output
-			name : "ConstantI32",
-			inputs : [
-				(name : "value", kind : ImmediateI32),
-				(name : "type_id", kind : Type),
-			],
-			output : Single,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : false
-		),
-		(
-			// Represents a constant unsigned integer
-			// For EncodeDo: Is a value operation with no inputs and one output
-			name : "ConstantUnsignedInteger",
-			inputs : [
-				(name : "value", kind : ImmediateU64),
+				(name : "value", kind : Immediate),
 				(name : "type_id", kind : Type),
 			],
 			output : Single,
@@ -199,6 +175,19 @@
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : true
 		),
+
+		/*(
+			// Executes a pure function and returns the result
+			name : "LocalDoSimple",
+			inputs : [
+				(name : "place", kind : Place),
+				(name : "operation", kind : RemoteOperation),
+				(name : "inputs", kind : Operation, is_array : true)
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),*/
 
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(
