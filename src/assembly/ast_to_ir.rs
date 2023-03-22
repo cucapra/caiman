@@ -182,11 +182,11 @@ fn value_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Valu
             remote_node_id:  remote_conversion(&r, context)
         },
         assembly_ast::TagCore::Input(r) => ir::ValueTag::Input {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::ValueTag::Output {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
@@ -229,14 +229,16 @@ fn spatial_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Sp
 fn value_value_tag(t : &assembly_ast::ValueTag, context : &mut Context) -> ir::ValueTag {
     match t {
         assembly_ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
-        assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
+        assembly_ast::ValueTag::FunctionInput(r) => unimplemented!(),
+        assembly_ast::ValueTag::FunctionOutput(r) => unimplemented!(),
+       /* assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
             function_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
             function_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
-        },
+        },*/
         assembly_ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
             index: *context.node_id(n.clone())
         }
@@ -967,9 +969,11 @@ fn ir_scheduling_extra(d: &assembly_ast::UncheckedDict, context : &mut Context, 
     let input_buffers = value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context);
     let output_buffers = value_index_var_dict(d.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context);
 
-    let index = value_funclet_raw_id(d.get(&as_key("value")).unwrap(), context);
+    let value_funclet_id = value_funclet_raw_id(d.get(&as_key("value")).unwrap(), context);
     ir::SchedulingFuncletExtra {
-        value_funclet_id: index,
+        value_funclet_id_opt: Some(value_funclet_id),
+        spatial_funclet_id_opt: None,
+        temporal_funclet_id_opt: None,
         input_tag_sets: merge_tag_sets(input_count, & input_slots, & input_fences, & input_buffers),
         output_tag_sets: merge_tag_sets(output_count, & output_slots, & output_fences, & output_buffers),
         in_timeline_tag: value_dict_timeline_tag(d.get(&as_key("in_timeline_tag")).unwrap(), context),

@@ -233,7 +233,9 @@ fn build_extra(info : PartialInformation, timeline_id : &usize,
         index: 0,
     };
     ir::SchedulingFuncletExtra {
-        value_funclet_id: info.value_funclet_id,
+        value_funclet_id_opt: Some(info.value_funclet_id),
+        spatial_funclet_id_opt: None,
+        temporal_funclet_id_opt: None,
         input_tag_sets: info.input_tag_sets.into_boxed_slice(),
         output_tag_sets: info.output_tag_sets.into_boxed_slice(),
         /*input_slots: info.input_slots,

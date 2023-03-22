@@ -144,14 +144,14 @@
 		},
 		scheduling_funclet_extras : {
 			20 : (
-				value_funclet_id : 19,
+				value_funclet_id_opt : Some(19),
 				input_tag_sets : [ (value_tag : Input(funclet_id : 19, index : 0), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Input(funclet_id : 18, index : 0))],
 				output_tag_sets : [ (value_tag : Output(funclet_id : 19, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0)) ],
 				in_timeline_tag : Input(funclet_id : 22, index : 0),
 				out_timeline_tag : Output(funclet_id : 22, index : 0),
 			),
 			21 : (
-				value_funclet_id : 19,
+				value_funclet_id_opt : Some(19),
 				input_tag_sets : [(value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 2)), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Operation(remote_node_id : (funclet_id : 18, node_id : 0)))],
 				output_tag_sets : [(value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 4)), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))],
 				in_timeline_tag : Input(funclet_id : 22, index : 0), //Operation(remote_node_id : (funclet_id : 22, node_id : 1))

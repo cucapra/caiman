@@ -123,12 +123,12 @@ pub enum ValueTag
 	// Intended for scheduling purposes
 	None,
 	// These two are implementation-agnostic and are only allowed in external interfaces
-	FunctionInput{function_id : ValueFunctionId, index : usize},
-	FunctionOutput{function_id : ValueFunctionId, index : usize},
+	//FunctionInput{function_id : ValueFunctionId, index : usize},
+	//FunctionOutput{function_id : ValueFunctionId, index : usize},
 	// These are not, and are intended for funclets
 	Operation{ remote_node_id : RemoteNodeId },
-	Input{funclet_id : FuncletId, index : usize},
-	Output{funclet_id : FuncletId, index : usize},
+	Input{/*funclet_id : FuncletId,*/ index : usize},
+	Output{/*funclet_id : FuncletId,*/ index : usize},
 	Halt{index : usize}
 }
 
@@ -297,9 +297,9 @@ pub struct BufferInfo
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SchedulingFuncletExtra
 {
-	pub value_funclet_id : FuncletId,
-	//pub spatial_funclet_id : FuncletId,
-	//pub temporal_funclet_id : FuncletId,
+	pub value_funclet_id_opt : Option<FuncletId>,
+	pub spatial_funclet_id_opt : Option<FuncletId>,
+	pub temporal_funclet_id_opt : Option<FuncletId>,
 	pub input_tag_sets : Box<[TagSet]>,
 	pub output_tag_sets : Box<[TagSet]>,
 
