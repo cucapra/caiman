@@ -661,8 +661,6 @@ impl<'program> CodeGenerator<'program>
 	{
 		//self.state_code_writer
 		let code_string = "
-		use caiman_rt::wgpu;
-
 		/*pub struct CpuFunctionInvocationState<'parent>
 		{
 			parent_state : & 'parent mut dyn caiman_rt::State
@@ -681,7 +679,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.active_pipeline_name = Some(String::from(pipeline_name));
 		self.code_writer.begin_module(pipeline_name);
-		write!(self.code_writer, "use super::*;\n");
+		write!(self.code_writer, "use caiman_rt::wgpu;\n");
 
 		self.code_writer.begin_module("outputs");
 		{
