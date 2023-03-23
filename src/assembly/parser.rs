@@ -27,17 +27,17 @@ use crate::{frontend, ir};
 // }
 
 fn compose_pair<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> U + 'a>
-where
-    F: Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a,
-    G: Fn(T) -> U + 'a,
+    where
+        F: Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a,
+        G: Fn(T) -> U + 'a,
 {
     Box::new(move |p, c| g(f(p, c)))
 }
 
 fn compose_str<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(String, &mut Context) -> U + 'a>
-where
-    F: Fn(String, &mut Context) -> T + 'a,
-    G: Fn(T) -> U + 'a,
+    where
+        F: Fn(String, &mut Context) -> T + 'a,
+        G: Fn(T) -> U + 'a,
 {
     Box::new(move |s, c| g(f(s, c)))
 }
@@ -60,17 +60,17 @@ fn compose_pair_reject<'a, T, U, G, F>(
     f: F,
     g: G,
 ) -> Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> U + 'a>
-where
-    F: Fn(&mut Pairs<Rule>, &mut Context) -> Hole<T> + 'a,
-    G: Fn(T) -> U + 'a,
+    where
+        F: Fn(&mut Pairs<Rule>, &mut Context) -> Hole<T> + 'a,
+        G: Fn(T) -> U + 'a,
 {
     Box::new(move |p, c| g(reject_hole(f(p, c))))
 }
 
 fn compose_str_reject<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(String, &mut Context) -> U + 'a>
-where
-    F: Fn(String, &mut Context) -> Hole<T> + 'a,
-    G: Fn(T) -> U + 'a,
+    where
+        F: Fn(String, &mut Context) -> Hole<T> + 'a,
+        G: Fn(T) -> U + 'a,
 {
     Box::new(move |s, c| g(reject_hole(f(s, c))))
 }
@@ -273,6 +273,34 @@ fn expect<T>(potential: RuleApp<T>, pairs: &mut Pairs<Rule>, context: &mut Conte
     expect_vec(vec![potential], pairs, context)
 }
 
+fn expect_hole<T>(
+    potential: RuleApp<T>,
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> Hole<T> {
+    let mut rules = Vec::new();
+    let some_rule = match potential.application {
+        Application::P(f) => rules.push(rule_pair_unwrap(potential.rule, potential.unwrap, compose_pair(f, Some))),
+        Application::S(f) => rules.push(rule_str_unwrap(potential.rule, potential.unwrap, compose_str(f, Some))),
+    };
+    rules.push(rule_hole());
+    expect_vec(rules, pairs, context)
+}
+
+fn expect_node_hole<T>(
+    potential: RuleApp<T>,
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> Hole<T> {
+    let mut rules = Vec::new();
+    let some_rule = match potential.application {
+        Application::P(f) => rules.push(rule_pair_unwrap(potential.rule, potential.unwrap, compose_pair(f, Some))),
+        Application::S(f) => rules.push(rule_str_unwrap(potential.rule, potential.unwrap, compose_str(f, Some))),
+    };
+    rules.push(rule_node_hole());
+    expect_vec(rules, pairs, context)
+}
+
 fn expect_all_vec<T>(
     potentials: Vec<RuleApp<T>>,
     pairs: &mut Pairs<Rule>,
@@ -400,8 +428,8 @@ fn read_ffi_parameterized_ref_name(
     context: &mut Context,
 ) -> Box<dyn Fn(assembly_ast::FFIType) -> assembly_ast::FFIType> {
     fn box_up<F>(f: &'static F) -> Box<dyn Fn(assembly_ast::FFIType) -> assembly_ast::FFIType>
-    where
-        F: Fn(Box<assembly_ast::FFIType>) -> assembly_ast::FFIType,
+        where
+            F: Fn(Box<assembly_ast::FFIType>) -> assembly_ast::FFIType,
     {
         Box::new(move |x| f(Box::new(x)))
     }
@@ -1093,7 +1121,7 @@ fn read_funclet_return(
     rules.push(rule_pair(Rule::funclet_args, read_funclet_return_args));
     rules.push(rule_pair_boxed(
         Rule::typ,
-        compose_pair(read_type, |t| vec![(None, t)]),
+        compose_pair_reject(read_type, |t| vec![(None, t)]),
     ));
     expect_vec(rules, pairs, context)
 }
@@ -1102,7 +1130,7 @@ fn read_funclet_header(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
 ) -> assembly_ast::FuncletHeader {
-    let name = expect(rule_fn_name(), pairs, context);
+    let name = reject_hole(expect(rule_fn_name(), pairs, context));
     context.add_local_funclet(name.clone());
 
     let rule_args = rule_pair(Rule::funclet_args, read_funclet_args);
@@ -1118,16 +1146,16 @@ fn rule_funclet_header<'a>() -> RuleApp<'a, assembly_ast::FuncletHeader> {
 }
 
 fn read_var_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> String {
-    let var = expect(rule_var_name(), pairs, context);
+    let var = reject_hole(expect(rule_var_name(), pairs, context));
     context.add_node(var.clone());
     var
 }
 
-fn read_node_list(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> {
+fn read_node_list(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     expect_all(rule_var_name(), pairs, context)
 }
 
-fn read_node_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> {
+fn read_node_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     match pairs.peek() {
         None => {
             vec![]
@@ -1139,19 +1167,19 @@ fn read_node_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> 
     }
 }
 
-fn rule_node_box<'a>() -> RuleApp<'a, Vec<String>> {
+fn rule_node_box<'a>() -> RuleApp<'a, Vec<Hole<String>>> {
     rule_pair(Rule::node_box, read_node_box)
 }
 
-fn read_return_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::TailEdge {
-    let return_values = expect_all(rule_var_name(), pairs, context);
-    assembly_ast::TailEdge::Return { return_values }
+fn read_return_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
+    expect_all(rule_var_name(), pairs, context)
 }
 
 fn read_return_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::TailEdge {
     require_rule(Rule::return_sep, pairs, context);
-    let rule = rule_pair(Rule::return_args, read_return_args);
-    expect(rule, pairs, context)
+    let rule = rule_pair(Rule::return_command, read_return_args);
+    let return_values = expect_node_hole(rule, pairs, context);
+    assembly_ast::TailEdge::Return { return_values }
 }
 
 fn rule_return_command<'a>() -> RuleApp<'a, assembly_ast::TailEdge> {
@@ -1160,7 +1188,8 @@ fn rule_return_command<'a>() -> RuleApp<'a, assembly_ast::TailEdge> {
 
 fn read_yield_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::TailEdge {
     require_rule(Rule::yield_sep, pairs, context);
-    let pipeline_yield_point_id = ir::PipelineYieldPointId(expect(rule_n(), pairs, context));
+    let point_id_hole = expect_hole(rule_n(), pairs, context);
+    let pipeline_yield_point_id = point_id_hole.map(ir::PipelineYieldPointId);
     let yielded_nodes = expect(rule_node_box(), pairs, context);
     let next_funclet = expect(rule_fn_name(), pairs, context);
     let continuation_join = expect(rule_var_name(), pairs, context);

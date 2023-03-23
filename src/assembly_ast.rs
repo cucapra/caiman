@@ -164,14 +164,14 @@ pub struct BufferInfo {
 #[derive(Debug, Clone)]
 pub enum TailEdge {
     Return {
-        return_values: Hole<Vec<NodeId>>,
+        return_values: Hole<Vec<Hole<NodeId>>>,
     },
     Yield {
         pipeline_yield_point_id: Hole<ir::PipelineYieldPointId>,
-        yielded_nodes: Hole<Vec<NodeId>>,
+        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         next_funclet: Hole<FuncletId>,
         continuation_join: Hole<NodeId>,
-        arguments: Hole<Vec<NodeId>>,
+        arguments: Hole<Vec<Hole<NodeId>>>,
     },
     Jump {
         join: NodeId,
@@ -180,20 +180,20 @@ pub enum TailEdge {
     ScheduleCall {
         value_operation: Hole<RemoteNodeId>,
         callee_funclet_id: Hole<FuncletId>,
-        callee_arguments: Hole<Vec<NodeId>>,
+        callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
         value_operation: Hole<RemoteNodeId>,
         condition: Hole<NodeId>,
-        callee_funclet_ids: Hole<Vec<FuncletId>>,
-        callee_arguments: Hole<Vec<NodeId>>,
+        callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
+        callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     DynamicAllocFromBuffer {
         buffer: Hole<NodeId>,
-        arguments: Hole<Vec<NodeId>>,
-        dynamic_allocation_size_slots: Hole<Vec<Option<NodeId>>>,
+        arguments: Hole<Vec<Hole<NodeId>>>,
+        dynamic_allocation_size_slots: Hole<Vec<Hole<Option<NodeId>>>>,
         success_funclet_id: Hole<FuncletId>,
         failure_funclet_id: Hole<FuncletId>,
         continuation_join: Hole<NodeId>,
