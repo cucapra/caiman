@@ -5,8 +5,8 @@ pub fn concretize_input_to_internal_value_tag(program : & ir::Program, value_fun
 	match value_tag
 	{
 		ir::ValueTag::None => ir::ValueTag::None,
-		ir::ValueTag::Operation{remote_node_id} => ir::ValueTag::Operation{remote_node_id},
-		ir::ValueTag::Input{/*funclet_id,*/ index} => ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_funclet_id_opt.unwrap(), node_id : index}},
+		ir::ValueTag::Node{node_id} => ir::ValueTag::Node{node_id},
+		ir::ValueTag::Input{/*funclet_id,*/ index} => ir::ValueTag::Node{node_id : index},
 		ir::ValueTag::Output{/*funclet_id,*/ index} => ir::ValueTag::Output{/*funclet_id,*/ index},
 		_ => panic!("Unimplemented")
 	}
@@ -17,13 +17,12 @@ pub fn check_value_tag_compatibility_enter(program : & ir::Program, value_funcle
 	match (caller_value_tag, callee_value_tag)
 	{
 		(_, ir::ValueTag::None) => (),
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Input{/*funclet_id,*/ index}) =>
+		(ir::ValueTag::Node{node_id}, ir::ValueTag::Input{/*funclet_id,*/ index}) =>
 		{
-			assert_eq!(call_operation.funclet_id, remote_node_id.funclet_id);
 			let caller_value_funclet = & program.funclets[call_operation.funclet_id];
 			if let ir::Node::CallValueFunction{function_id, arguments} = & caller_value_funclet.nodes[call_operation.node_id]
 			{
-				assert_eq!(arguments[index], remote_node_id.node_id);
+				assert_eq!(arguments[index], node_id);
 			}
 			else
 			{
@@ -40,12 +39,12 @@ pub fn check_value_tag_compatibility_exit(program : & ir::Program, callee_funcle
 	match (source_value_tag, destination_value_tag)
 	{
 		(_, ir::ValueTag::None) => (),
-		(ir::ValueTag::Output{/*funclet_id,*/ index : output_index}, ir::ValueTag::Operation{remote_node_id}) =>
+		(ir::ValueTag::Output{/*funclet_id,*/ index : output_index}, ir::ValueTag::Node{node_id}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, continuation_value_operation.funclet_id);
+			//assert_eq!(remote_node_id.funclet_id, continuation_value_operation.funclet_id);
 			//assert_eq!(funclet_id, callee_funclet_id);
 
-			let node = & program.funclets[remote_node_id.funclet_id].nodes[remote_node_id.node_id];
+			let node = & program.funclets[continuation_value_operation.funclet_id].nodes[node_id];
 			if let ir::Node::ExtractResult{node_id : call_node_id, index} = node
 			{
 				assert_eq!(* index, output_index);
@@ -53,7 +52,7 @@ pub fn check_value_tag_compatibility_exit(program : & ir::Program, callee_funcle
 			}
 			else
 			{
-				panic!("Target operation is not a result extraction: #{:?} {:?}", remote_node_id, node);
+				panic!("Target operation is not a result extraction: #{:?} {:?}", node_id, node);
 			}
 		}
 		_ => panic!("Ill-formed: {:?} to {:?}", source_value_tag, destination_value_tag)
@@ -68,7 +67,7 @@ pub fn check_value_tag_compatibility_interior_branch(program : & ir::Program, va
 
 	let branch_node_ids = if let ir::Node::Select{condition, true_case, false_case} = & current_value_funclet.nodes[value_operation.node_id]
 	{
-		check_value_tag_compatibility_interior(& program, value_funclet_id_opt, condition_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : * condition}});
+		check_value_tag_compatibility_interior(& program, value_funclet_id_opt, condition_value_tag, ir::ValueTag::Node{node_id : * condition});
 		[* true_case, * false_case]
 	}
 	else
@@ -81,9 +80,9 @@ pub fn check_value_tag_compatibility_interior_branch(program : & ir::Program, va
 		let source_value_tag = source_value_tags[branch_index];
 		match source_value_tag
 		{
-			ir::ValueTag::Operation {remote_node_id} if remote_node_id == value_operation =>
+			ir::ValueTag::Node {node_id} if node_id == value_operation.node_id =>
 			{
-				check_value_tag_compatibility_interior(& program, value_funclet_id_opt, source_value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : * branch_node_id}});
+				check_value_tag_compatibility_interior(& program, value_funclet_id_opt, source_value_tag, ir::ValueTag::Node{node_id : * branch_node_id});
 			}
 			_ =>
 			{
@@ -101,14 +100,12 @@ pub fn check_value_tag_compatibility_interior(program : & ir::Program, value_fun
 		(ir::ValueTag::Halt{index}, ir::ValueTag::Halt{index : index_2}) => assert_eq!(index, index_2),
 		(ir::ValueTag::Halt{..}, _) => panic!("Halt can only match halt"),
 		(_, ir::ValueTag::None) => (),
-		(ir::ValueTag::Input{/*funclet_id,*/ index}, ir::ValueTag::Operation{remote_node_id}) =>
+		(ir::ValueTag::Input{/*funclet_id,*/ index}, ir::ValueTag::Node{node_id : remote_node_id}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, value_funclet_id_opt.unwrap());
-
 			let destination_value_funclet = & program.funclets[value_funclet_id_opt.unwrap()];
 			assert_eq!(destination_value_funclet.kind, ir::FuncletKind::Value);
 
-			if let ir::Node::Phi{index : phi_index} = & destination_value_funclet.nodes[remote_node_id.node_id]
+			if let ir::Node::Phi{index : phi_index} = & destination_value_funclet.nodes[remote_node_id]
 			{
 				assert_eq!(* phi_index, index);
 			}
@@ -117,20 +114,20 @@ pub fn check_value_tag_compatibility_interior(program : & ir::Program, value_fun
 				panic!("Not a phi");
 			}
 		}
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Operation{remote_node_id : remote_node_id_2}) =>
+		(ir::ValueTag::Node{node_id}, ir::ValueTag::Node{node_id : node_id_2}) =>
 		{
-			assert_eq!(remote_node_id, remote_node_id_2);
+			assert_eq!(node_id, node_id_2);
 		}
-		(ir::ValueTag::Operation{remote_node_id}, ir::ValueTag::Output{/*funclet_id,*/ index}) =>
+		(ir::ValueTag::Node{node_id}, ir::ValueTag::Output{/*funclet_id,*/ index}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, value_funclet_id_opt.unwrap());
+			//assert_eq!(remote_node_id.funclet_id, value_funclet_id_opt.unwrap());
 
 			let source_value_funclet = & program.funclets[value_funclet_id_opt.unwrap()];
 			assert_eq!(source_value_funclet.kind, ir::FuncletKind::Value);
 
 			match & source_value_funclet.tail_edge
 			{
-				ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], remote_node_id.node_id),
+				ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], node_id),
 				_ => panic!("Not a unit")
 			}
 		}

@@ -5,8 +5,8 @@ pub fn concretize_input_to_internal_timeline_tag(program : & ir::Program, funcle
 	match timeline_tag
 	{
 		ir::TimelineTag::None => ir::TimelineTag::None,
-		ir::TimelineTag::Input{/*funclet_id,*/ index} => ir::TimelineTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id: funclet_id_opt.unwrap(), node_id : index}},
-		ir::TimelineTag::Operation{remote_node_id} => ir::TimelineTag::Operation{remote_node_id},
+		ir::TimelineTag::Input{/*funclet_id,*/ index} => ir::TimelineTag::Node{node_id : index},
+		ir::TimelineTag::Node{node_id} => ir::TimelineTag::Node{node_id},
 		ir::TimelineTag::Output{/*funclet_id,*/ index} => ir::TimelineTag::Output{/*funclet_id,*/ index},
 		_ => panic!("Unimplemented")
 	}
@@ -41,14 +41,12 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, funcle
 				panic!("Not a phi");
 			}
 		}*/
-		(ir::TimelineTag::Input{/*funclet_id,*/ index}, ir::TimelineTag::Operation{remote_node_id}) =>
+		(ir::TimelineTag::Input{/*funclet_id,*/ index}, ir::TimelineTag::Node{node_id}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id_opt.unwrap());
-
 			let destination_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
-			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[remote_node_id.node_id]
+			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[node_id]
 			{
 				assert_eq!(* phi_index, index);
 			}
@@ -57,14 +55,12 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, funcle
 				panic!("Not a phi");
 			}
 		}
-		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Input{/*funclet_id,*/ index}) =>
+		(ir::TimelineTag::Node{node_id}, ir::TimelineTag::Input{/*funclet_id,*/ index}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id_opt.unwrap());
-
 			let destination_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(destination_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
-			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[remote_node_id.node_id]
+			if let ir::Node::Phi{index : phi_index} = & destination_timeline_funclet.nodes[node_id]
 			{
 				assert_eq!(* phi_index, index);
 			}
@@ -73,20 +69,18 @@ pub fn check_timeline_tag_compatibility_interior(program : & ir::Program, funcle
 				panic!("Not a phi");
 			}
 		}
-		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Operation{remote_node_id : remote_node_id_2}) =>
+		(ir::TimelineTag::Node{node_id}, ir::TimelineTag::Node{node_id : node_id_2}) =>
 		{
-			assert_eq!(remote_node_id, remote_node_id_2);
+			assert_eq!(node_id, node_id_2);
 		}
-		(ir::TimelineTag::Operation{remote_node_id}, ir::TimelineTag::Output{/*funclet_id,*/ index}) =>
+		(ir::TimelineTag::Node{node_id}, ir::TimelineTag::Output{/*funclet_id,*/ index}) =>
 		{
-			assert_eq!(remote_node_id.funclet_id, funclet_id_opt.unwrap());
-
 			let source_timeline_funclet = & program.funclets[funclet_id_opt.unwrap()];
 			assert_eq!(source_timeline_funclet.kind, ir::FuncletKind::Timeline);
 
 			match & source_timeline_funclet.tail_edge
 			{
-				ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], remote_node_id.node_id),
+				ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], node_id),
 				_ => panic!("Not a unit")
 			}
 		}
@@ -134,15 +128,15 @@ pub fn check_next_timeline_tag_on_submit(program : & ir::Program, funclet_id_opt
 				panic!("Not a phi");
 			}
 		}
-		ir::TimelineTag::Operation{remote_node_id} =>
+		ir::TimelineTag::Node{node_id} =>
 		{
-			assert_eq!(remote_node_id.funclet_id, timeline_event.funclet_id);
-			assert_eq!(local_past, remote_node_id.node_id);
+			//assert_eq!(remote_node_id.funclet_id, timeline_event.funclet_id);
+			assert_eq!(local_past, node_id);
 		}
 		_ => panic!("Timeline tag must be operation or input")
 	}
 
-	ir::TimelineTag::Operation { remote_node_id : timeline_event }
+	ir::TimelineTag::Node { node_id : timeline_event.node_id }
 }
 
 pub fn check_next_timeline_tag_on_sync(program : & ir::Program, funclet_id_opt : Option<ir::FuncletId>, timeline_event : ir::RemoteNodeId, current_timeline_tag : ir::TimelineTag) -> ir::TimelineTag
@@ -178,15 +172,15 @@ pub fn check_next_timeline_tag_on_sync(program : & ir::Program, funclet_id_opt :
 				panic!("Not a phi");
 			}
 		}
-		ir::TimelineTag::Operation{remote_node_id} =>
+		ir::TimelineTag::Node{node_id} =>
 		{
-			assert_eq!(remote_node_id.funclet_id, timeline_event.funclet_id);
-			assert_eq!(local_past, remote_node_id.node_id);
+			//assert_eq!(remote_node_id.funclet_id, timeline_event.funclet_id);
+			assert_eq!(local_past, node_id);
 		}
 		_ => panic!("Timeline tag must be operation or input")
 	}
 
-	ir::TimelineTag::Operation { remote_node_id : timeline_event }
+	ir::TimelineTag::Node { node_id : timeline_event.node_id }
 }
 
 /*pub fn check_timeline_tag_compatibility_on_submit(program : & ir::Program, timeline_event : ir::RemoteNodeId, source_timeline_tag : ir::TimelineTag, destination_timeline_tag : ir::TimelineTag)

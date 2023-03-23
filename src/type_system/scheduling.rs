@@ -384,14 +384,14 @@ impl<'program> FuncletChecker<'program>
 			//ir::Node::ExtractResult { node_id, index } => (),
 			ir::Node::AllocTemporary{ place, storage_type, operation } =>
 			{
-				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Operation{remote_node_id : * operation});
+				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Node{node_id : operation.node_id});
 				self.scalar_node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
 				self.scalar_node_spatial_tags.insert(current_node_id, ir::SpatialTag::None);
 				self.node_types.insert(current_node_id, NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : ir::ResourceQueueStage::Bound, queue_place : * place}));
 			}
 			ir::Node::UnboundSlot { place, storage_type, operation } =>
 			{
-				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Operation{remote_node_id : * operation});
+				self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Node{node_id : operation.node_id});
 				self.scalar_node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
 				self.scalar_node_spatial_tags.insert(current_node_id, ir::SpatialTag::None);
 				self.node_types.insert(current_node_id, NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : ir::ResourceQueueStage::Unbound, queue_place : * place}));
@@ -448,7 +448,7 @@ impl<'program> FuncletChecker<'program>
 						{
 							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
 							let funclet_id = self.value_funclet_id;
-							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_value_node_id}});
+							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Node{node_id : * input_value_node_id});
 						}
 
 						self.transition_slot(outputs[0], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
@@ -468,7 +468,7 @@ impl<'program> FuncletChecker<'program>
 
 							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
 							let funclet_id = self.value_funclet_id;
-							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
+							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Node{node_id : * input_node_id});
 						}
 
 						for (index, output_type_id) in function.output_types.iter().enumerate()
@@ -488,7 +488,7 @@ impl<'program> FuncletChecker<'program>
 						{
 							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
 							let funclet_id = self.value_funclet_id;
-							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id, node_id : * input_node_id}});
+							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Node{node_id : * input_node_id});
 						}
 
 						ir::validation::validate_external_gpu_function_bindings(function, & inputs[dimensions.len() .. ], outputs);
@@ -565,13 +565,21 @@ impl<'program> FuncletChecker<'program>
 							ir::ValueTag::None => (),
 							//ir::ValueTag::FunctionInput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
 							//ir::ValueTag::FunctionOutput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-							ir::ValueTag::Operation{remote_node_id} =>
+							/*ir::ValueTag::Operation{remote_node_id} =>
 							{
 								assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
 								if let ir::Node::ExtractResult { node_id, index } = & encoded_funclet.nodes[remote_node_id.node_id]
 								{
 									assert_eq!(output_index, * index);
 									assert_eq!(operation.node_id, * node_id);
+								}
+							}*/
+							ir::ValueTag::Node{node_id} =>
+							{
+								if let ir::Node::ExtractResult { node_id : node_id_2, index } = & encoded_funclet.nodes[node_id]
+								{
+									assert_eq!(output_index, * index);
+									assert_eq!(operation.node_id, * node_id_2);
 								}
 							}
 							ir::ValueTag::Input{/*funclet_id,*/ index} => panic!("{:?} can only appear in interface of funclet", value_tag),
@@ -587,12 +595,9 @@ impl<'program> FuncletChecker<'program>
 					match value_tag
 					{
 						ir::ValueTag::None => (),
-						//ir::ValueTag::FunctionInput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-						//ir::ValueTag::FunctionOutput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-						ir::ValueTag::Operation{remote_node_id} =>
+						ir::ValueTag::Node{node_id} =>
 						{
-							assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
-							assert_eq!(operation.node_id, remote_node_id.node_id);
+							assert_eq!(operation.node_id, node_id);
 						}
 						ir::ValueTag::Input{/*funclet_id,*/ index} => panic!("{:?} can only appear in interface of funclet", value_tag),
 						ir::ValueTag::Output{/*funclet_id,*/ index} => panic!("{:?} can only appear in interface of funclet", value_tag),
@@ -673,9 +678,9 @@ impl<'program> FuncletChecker<'program>
 					};
 
 				let fence_encoding_timeline_event =
-					if let Some(ir::TimelineTag::Operation{remote_node_id}) = self.scalar_node_timeline_tags.get(fence)
+					if let Some(ir::TimelineTag::Node{node_id}) = self.scalar_node_timeline_tags.get(fence)
 					{
-						* remote_node_id
+						ir::RemoteNodeId{funclet_id : self.scheduling_funclet_extra.temporal_funclet_id_opt.unwrap(), node_id : * node_id}
 					}
 					else
 					{
@@ -694,10 +699,9 @@ impl<'program> FuncletChecker<'program>
 								match old_timeline_tag
 								{
 									ir::TimelineTag::None => (),
-									ir::TimelineTag::Operation{remote_node_id} =>
+									ir::TimelineTag::Node{node_id : old_timeline_node_id} =>
 									{
-										assert_eq!(remote_node_id.funclet_id, fence_encoding_timeline_event.funclet_id);
-										if remote_node_id.node_id == fence_encoding_timeline_event.node_id
+										if old_timeline_node_id == fence_encoding_timeline_event.node_id
 										{
 											//self.scalar_node_timeline_tags.remove(node_id);
 											self.scalar_node_timeline_tags.insert(* node_id, ir::TimelineTag::None);
@@ -746,7 +750,7 @@ impl<'program> FuncletChecker<'program>
 					static_layout.byte_size -= total_byte_size;
 					static_layout.alignment_bits = (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;
 
-					self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Operation{remote_node_id : * operation});
+					self.scalar_node_value_tags.insert(current_node_id, ir::ValueTag::Node{node_id : operation.node_id});
 					self.scalar_node_timeline_tags.insert(current_node_id, ir::TimelineTag::None);
 					self.scalar_node_spatial_tags.insert(current_node_id, buffer_spatial_tag);
 					self.node_types.insert(current_node_id, NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : ir::ResourceQueueStage::Bound, queue_place : * place}));

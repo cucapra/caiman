@@ -121,7 +121,8 @@ with_operations!(make_nodes);
 pub enum Tag
 {
 	None,
-	Operation{ remote_node_id : RemoteNodeId },
+	//Operation{ remote_node_id : RemoteNodeId },
+	Node{node_id : usize},
 	Input{index : usize},
 	Output{index : usize},
 	Halt{index : usize}

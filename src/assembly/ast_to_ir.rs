@@ -178,8 +178,8 @@ fn value_stage(d : &assembly_ast::DictValue, _ : &mut Context) -> ir::ResourceQu
 fn value_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::ValueTag {
     match v {
         assembly_ast::TagCore::None => ir::ValueTag::None,
-        assembly_ast::TagCore::Operation(r) => ir::ValueTag::Operation {
-            remote_node_id:  remote_conversion(&r, context)
+        assembly_ast::TagCore::Operation(r) => ir::ValueTag::Node {
+            node_id:  remote_conversion(&r, context).node_id
         },
         assembly_ast::TagCore::Input(r) => ir::ValueTag::Input {
             //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
@@ -195,8 +195,8 @@ fn value_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Valu
 fn timeline_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::TimelineTag {
     match v {
         assembly_ast::TagCore::None => ir::TimelineTag::None,
-        assembly_ast::TagCore::Operation(r) => ir::TimelineTag::Operation {
-            remote_node_id:  remote_conversion(&r, context)
+        assembly_ast::TagCore::Operation(r) => ir::TimelineTag::Node {
+            node_id:  remote_conversion(&r, context).node_id
         },
         assembly_ast::TagCore::Input(r) => ir::TimelineTag::Input {
             //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
@@ -212,8 +212,8 @@ fn timeline_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::T
 fn spatial_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::SpatialTag {
     match v {
         assembly_ast::TagCore::None => ir::SpatialTag::None,
-        assembly_ast::TagCore::Operation(r) => ir::SpatialTag::Operation {
-            remote_node_id:  remote_conversion(&r, context)
+        assembly_ast::TagCore::Operation(r) => ir::SpatialTag::Node {
+            node_id:  remote_conversion(&r, context).node_id
         },
         assembly_ast::TagCore::Input(r) => ir::SpatialTag::Input {
             //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
