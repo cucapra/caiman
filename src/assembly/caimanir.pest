@@ -8,19 +8,21 @@ sep = _{ WHITESPACE+ }
 id = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 n = @{ ASCII_DIGIT+ }
 none = { "none" }
-hole = { "?" }
-node_hole = { "???" }
 str_single = @{ "'" ~ (!"'" ~ !NEWLINE ~ ANY)* ~ "'" }
 str_double = @{ "\"" ~ (!"\"" ~ !NEWLINE ~ ANY)* ~ "\"" }
 str = @{ str_single | str_double }
-type_name = ${ "$" ~ id }
+hole = { "?" }
+node_hole = { "???" }
+
+type_name = ${ "$" ~ id | hole }
 type_name_sep = ${ type_name ~ sep }
 throwaway = { "_" }
-var_name = ${ "%" ~ (id | n | throwaway) }
+var_name = ${ "%" ~ (id | n | throwaway) | hole }
 var_name_sep = ${ var_name ~ sep }
-fn_name = ${ "@" ~ id }
+fn_name = ${ "@" ~ id | hole }
 fn_name_sep = ${ fn_name ~ sep }
-funclet_loc = ${ fn_name ~ "." ~ var_name }
+funclet_loc_filled = ${ fn_name ~ "." ~ var_name }
+funclet_loc = { funclet_loc_filled | hole }
 funclet_loc_sep = ${ funclet_loc ~ sep }
 
 //    ffi_types
@@ -41,12 +43,14 @@ ffi_parameterized_type = !{ ffi_parameterized_array | ffi_parameterized_ref | ff
 ffi_type = { ffi_type_base | ffi_parameterized_type }
 ffi_type_sep = ${ ffi_type ~ sep }
 
-//   names
-typ = { ffi_type | type_name }
+// extra names
+
+typ = { ffi_type | type_name | hole }
 typ_sep = ${ typ ~ sep }
-place = { "local" | "cpu" | "gpu" }
-stage = { "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" }
-constant = ${ n ~ ffi_type } // maybe needs reworking eventually :thinking:
+place = { "local" | "cpu" | "gpu" | "?" }
+stage = { "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" | "?" }
+constant_raw = { n ~ ffi_type }
+constant = ${ constant_raw | hole }
 
 //   tags
 tag_core_op = { "operation" | "input" | "output" }
@@ -158,7 +162,7 @@ tail_option_nodes = { tail_option_node ~ ("," ~ tail_option_node)* }
 tail_option_box = { "[" ~ tail_option_nodes? ~ "]" }
 dynamic_alloc_command = { dynamic_alloc_sep ~ var_name ~ node_box ~ tail_option_box ~ fn_name ~ fn_name ~ var_name }
 
-tail_edge = { return_command | yield_command | jump_command |
+tail_edge = { node_hole | return_command | yield_command | jump_command |
     schedule_call_command | schedule_select_command | dynamic_alloc_command }
 
 //   command setup
@@ -167,13 +171,16 @@ value_assign = { var_name ~ "=" ~ value_command ~ ";" }
 value_funclet = { funclet_header ~ "{" ~ value_assign* ~ tail_edge ~ ";" ~ "}" }
 
 schedule_assign = { var_name ~ "=" ~ schedule_command ~ ";" }
-schedule_funclet = { funclet_header ~ "{" ~ schedule_assign* ~ tail_edge ~ ";" ~ "}" }
+schedule_instruction = { schedule_assign | node_hole }
+schedule_funclet = { funclet_header ~ "{" ~ schedule_instruction* ~ tail_edge ~ ";" ~ "}" }
 
 timeline_assign = { var_name ~ "=" ~ timeline_command ~ ";" }
-timeline_funclet = { funclet_header ~ "{" ~ timeline_assign* ~ tail_edge ~ ";" ~ "}" }
+timeline_instruction = { timeline_assign | node_hole }
+timeline_funclet = { funclet_header ~ "{" ~ timeline_instruction* ~ tail_edge ~ ";" ~ "}" }
 
 spatial_assign = { var_name ~ "=" ~ spatial_command ~ ";" }
-spatial_funclet = { funclet_header ~ "{" ~ spatial_assign* ~ tail_edge ~ ";" ~ "}" }
+spatial_instruction = { spatial_assign | node_hole }
+spatial_funclet = { funclet_header ~ "{" ~ spatial_instruction* ~ tail_edge ~ ";" ~ "}" }
 
 //    commands
 
