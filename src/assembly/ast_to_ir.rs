@@ -1,6 +1,7 @@
 use crate::assembly::context::{Context, FuncletLocation};
 use crate::assembly::{context, parser};
 use crate::assembly_ast::FFIType;
+use crate::assembly_ast::Hole;
 use crate::ir::ffi;
 use crate::{assembly_ast, frontend, ir};
 use std::any::Any;
@@ -13,6 +14,20 @@ use std::io::Read;
 use std::path::Path;
 
 // Utility
+
+fn reject_hole<T>(h: Hole<T>) -> T {
+    match h {
+        Some(v) => v,
+        None => panic!("Holes not yet supported for explication"),
+    }
+}
+
+fn reject_hole_ref<T>(h: &Hole<T>) -> &T {
+    match h {
+        Some(v) => v,
+        None => panic!("Holes not yet supported for explication"),
+    }
+}
 
 fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
     fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
@@ -623,19 +638,20 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
 fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
     match node {
         assembly_ast::Node::None => ir::Node::None,
-        assembly_ast::Node::Phi { index } => ir::Node::Phi { index: *index },
+        assembly_ast::Node::Phi { index } => ir::Node::Phi { index: reject_hole(*index) },
         assembly_ast::Node::ExtractResult { node_id, index } => ir::Node::ExtractResult {
-            node_id: *context.node_id(node_id.clone()),
-            index: *index,
+            node_id: *context.node_id(reject_hole(node_id.clone())),
+            index: reject_hole(*index),
         },
         assembly_ast::Node::Constant { value, type_id } => {
-            let parsed_value = match ron::from_str(value.as_str()) {
+            let unwrapped = reject_hole(value.clone());
+            let parsed_value = match ron::from_str(unwrapped.as_str()) { // TODO: fix
                 Err(why) => panic!(format!("Cannot parse constant node immediate {}", why)),
                 Ok(v) => v,
             };
             ir::Node::Constant {
                 value: parsed_value,
-                type_id: *context.loc_type_id(type_id.clone()),
+                type_id: *context.loc_type_id(reject_hole(type_id.clone())),
             }
         }
         assembly_ast::Node::CallValueFunction {
@@ -649,22 +665,22 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             true_case,
             false_case,
         } => ir::Node::Select {
-            condition: *context.node_id(condition.clone()),
-            true_case: *context.node_id(true_case.clone()),
-            false_case: *context.node_id(false_case.clone()),
+            condition: *context.node_id(reject_hole(condition.clone())),
+            true_case: *context.node_id(reject_hole(true_case.clone())),
+            false_case: *context.node_id(reject_hole(false_case.clone())),
         },
         assembly_ast::Node::CallExternalCpu {
             external_function_id,
             arguments,
         } => {
             let name = external_function_id.clone();
-            let mapped_arguments = arguments
+            let mapped_arguments = reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole_ref(n).clone()))
                 .collect();
-            match context.funclet_id(name.clone()) {
+            match context.funclet_id(reject_hole(name.clone())) {
                 FuncletLocation::Local(_) => {
-                    panic!(format!("Cannot directly call local funclet {}", name))
+                    panic!(format!("Cannot directly call local funclet {}", reject_hole(name)))
                 }
                 FuncletLocation::ValueFun(id) => ir::Node::CallValueFunction {
                     function_id: *id,
@@ -686,14 +702,14 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             dimensions,
             arguments,
         } => ir::Node::CallExternalGpuCompute {
-            external_function_id: *context.gpu_funclet_id(external_function_id.clone()),
-            dimensions: dimensions
+            external_function_id: *context.gpu_funclet_id(reject_hole(external_function_id.clone())),
+            dimensions: reject_hole_ref(dimensions)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
-            arguments: arguments
+            arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
         },
         assembly_ast::Node::AllocTemporary {
@@ -701,21 +717,21 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             storage_type,
             operation,
         } => ir::Node::AllocTemporary {
-            place: place.clone(),
-            storage_type: ffi::TypeId(*context.loc_type_id(storage_type.clone())),
-            operation: remote_conversion(operation, context),
+            place: reject_hole(place.clone()),
+            storage_type: ffi::TypeId(*context.loc_type_id(reject_hole(storage_type.clone()))),
+            operation: remote_conversion(reject_hole_ref(operation), context),
         },
         assembly_ast::Node::UnboundSlot {
             place,
             storage_type,
             operation,
         } => ir::Node::UnboundSlot {
-            place: place.clone(),
-            storage_type: ffi::TypeId(*context.loc_type_id(storage_type.clone())),
-            operation: remote_conversion(operation, context),
+            place: reject_hole(place.clone()),
+            storage_type: ffi::TypeId(*context.loc_type_id(reject_hole(storage_type.clone()))),
+            operation: remote_conversion(reject_hole_ref(operation), context),
         },
         assembly_ast::Node::Drop { node } => ir::Node::Drop {
-            node: *context.node_id(node.clone()),
+            node: *context.node_id(reject_hole(node.clone())),
         },
         assembly_ast::Node::StaticAllocFromStaticBuffer {
             buffer,
@@ -723,10 +739,10 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             storage_type,
             operation,
         } => ir::Node::StaticAllocFromStaticBuffer {
-            buffer: *context.node_id(buffer.clone()),
-            place: place.clone(),
-            storage_type: ffi::TypeId(*context.loc_type_id(storage_type.clone())),
-            operation: remote_conversion(operation, context),
+            buffer: *context.node_id(reject_hole(buffer.clone())),
+            place: reject_hole(place.clone()),
+            storage_type: ffi::TypeId(*context.loc_type_id(reject_hole(storage_type.clone()))),
+            operation: remote_conversion(reject_hole_ref(operation), context),
         },
         assembly_ast::Node::EncodeDo {
             place,
@@ -734,12 +750,12 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             inputs,
             outputs,
         } => ir::Node::EncodeDo {
-            place: place.clone(),
-            operation: remote_conversion(operation, context),
-            inputs: inputs.iter().map(|n| *context.node_id(n.clone())).collect(),
-            outputs: outputs
+            place: reject_hole(place.clone()),
+            operation: remote_conversion(reject_hole_ref(operation), context),
+            inputs: reject_hole_ref(inputs).iter().map(|n| *context.node_id(reject_hole(n.clone()))).collect(),
+            outputs: reject_hole_ref(outputs)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
         },
         assembly_ast::Node::EncodeCopy {
@@ -747,50 +763,50 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             input,
             output,
         } => ir::Node::EncodeCopy {
-            place: place.clone(),
-            input: *context.node_id(input.clone()),
-            output: *context.node_id(output.clone()),
+            place: reject_hole(place.clone()),
+            input: *context.node_id(reject_hole(input.clone())),
+            output: *context.node_id(reject_hole(output.clone())),
         },
         assembly_ast::Node::Submit { place, event } => ir::Node::Submit {
-            place: place.clone(),
-            event: remote_conversion(event, context),
+            place: reject_hole(place.clone()),
+            event: remote_conversion(reject_hole_ref(event), context),
         },
         assembly_ast::Node::EncodeFence { place, event } => ir::Node::EncodeFence {
-            place: place.clone(),
-            event: remote_conversion(event, context),
+            place: reject_hole(place.clone()),
+            event: remote_conversion(reject_hole_ref(event), context),
         },
         assembly_ast::Node::SyncFence {
             place,
             fence,
             event,
         } => ir::Node::SyncFence {
-            place: place.clone(),
-            fence: *context.node_id(fence.clone()),
-            event: remote_conversion(event, context),
+            place: reject_hole(place.clone()),
+            fence: *context.node_id(reject_hole(fence.clone())),
+            event: remote_conversion(reject_hole_ref(event), context),
         },
         assembly_ast::Node::InlineJoin {
             funclet,
             captures,
             continuation,
         } => ir::Node::InlineJoin {
-            funclet: *context.local_funclet_id(funclet.clone()),
-            captures: captures
+            funclet: *context.local_funclet_id(reject_hole(funclet.clone())),
+            captures: reject_hole_ref(captures)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation: *context.node_id(continuation.clone()),
+            continuation: *context.node_id(reject_hole(continuation.clone())),
         },
         assembly_ast::Node::SerializedJoin {
             funclet,
             captures,
             continuation,
         } => ir::Node::SerializedJoin {
-            funclet: *context.local_funclet_id(funclet.clone()),
-            captures: captures
+            funclet: *context.local_funclet_id(reject_hole(funclet.clone())),
+            captures: reject_hole_ref(captures)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation: *context.node_id(continuation.clone()),
+            continuation: *context.node_id(reject_hole(continuation.clone())),
         },
         assembly_ast::Node::DefaultJoin => ir::Node::DefaultJoin,
         assembly_ast::Node::SubmissionEvent {
@@ -798,9 +814,9 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             there_place,
             local_past,
         } => ir::Node::SubmissionEvent {
-            here_place: here_place.clone(),
-            there_place: there_place.clone(),
-            local_past: *context.node_id(local_past.clone()),
+            here_place: reject_hole(here_place.clone()),
+            there_place: reject_hole(there_place.clone()),
+            local_past: *context.node_id(reject_hole(local_past.clone())),
         },
         assembly_ast::Node::SynchronizationEvent {
             here_place,
@@ -808,20 +824,20 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             local_past,
             remote_local_past,
         } => ir::Node::SynchronizationEvent {
-            here_place: here_place.clone(),
-            there_place: there_place.clone(),
-            local_past: *context.node_id(local_past.clone()),
-            remote_local_past: *context.node_id(remote_local_past.clone()),
+            here_place: reject_hole(here_place.clone()),
+            there_place: reject_hole(there_place.clone()),
+            local_past: *context.node_id(reject_hole(local_past.clone())),
+            remote_local_past: *context.node_id(reject_hole(remote_local_past.clone())),
         },
         assembly_ast::Node::SeparatedLinearSpace { place, space } => {
             ir::Node::SeparatedLinearSpace {
-                place: place.clone(),
-                space: *context.node_id(space.clone()),
+                place: reject_hole(place.clone()),
+                space: *context.node_id(reject_hole(space.clone())),
             }
         }
         assembly_ast::Node::MergedLinearSpace { place, spaces } => ir::Node::MergedLinearSpace {
-            place: place.clone(),
-            spaces: spaces.iter().map(|n| *context.node_id(n.clone())).collect(),
+            place: reject_hole(place.clone()),
+            spaces: reject_hole_ref(spaces).iter().map(|n| *context.node_id(reject_hole(n.clone()))).collect(),
         },
     }
 }
@@ -829,9 +845,9 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
 fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> ir::TailEdge {
     match tail {
         assembly_ast::TailEdge::Return { return_values } => ir::TailEdge::Return {
-            return_values: return_values
+            return_values: reject_hole_ref(return_values)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
         },
         assembly_ast::TailEdge::Yield {
@@ -841,23 +857,23 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> ir::Tai
             continuation_join,
             arguments,
         } => ir::TailEdge::Yield {
-            pipeline_yield_point_id: pipeline_yield_point_id.clone(),
-            yielded_nodes: yielded_nodes
+            pipeline_yield_point_id: reject_hole(pipeline_yield_point_id.clone()),
+            yielded_nodes: reject_hole_ref(yielded_nodes)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
-            next_funclet: *context.funclet_id_unwrap(next_funclet.clone()),
-            continuation_join: *context.node_id(continuation_join.clone()),
-            arguments: arguments
+            next_funclet: *context.funclet_id_unwrap(reject_hole(next_funclet.clone())),
+            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
+            arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
         },
         assembly_ast::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-            join: *context.node_id(join.clone()),
-            arguments: arguments
+            join: *context.node_id(reject_hole(join.clone())),
+            arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
         },
         assembly_ast::TailEdge::ScheduleCall {
@@ -866,13 +882,13 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> ir::Tai
             callee_arguments,
             continuation_join,
         } => ir::TailEdge::ScheduleCall {
-            value_operation: remote_conversion(value_operation, context),
-            callee_funclet_id: *context.funclet_id_unwrap(callee_funclet_id.clone()),
-            callee_arguments: callee_arguments
+            value_operation: remote_conversion(reject_hole_ref(value_operation), context),
+            callee_funclet_id: *context.funclet_id_unwrap(reject_hole(callee_funclet_id.clone())),
+            callee_arguments: reject_hole_ref(callee_arguments)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation_join: *context.node_id(continuation_join.clone()),
+            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
         },
         assembly_ast::TailEdge::ScheduleSelect {
             value_operation,
@@ -881,17 +897,17 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> ir::Tai
             callee_arguments,
             continuation_join,
         } => ir::TailEdge::ScheduleSelect {
-            value_operation: remote_conversion(value_operation, context),
-            condition: *context.node_id(condition.clone()),
-            callee_funclet_ids: callee_funclet_ids
+            value_operation: remote_conversion(reject_hole_ref(value_operation), context),
+            condition: *context.node_id(reject_hole(condition.clone())),
+            callee_funclet_ids: reject_hole_ref(callee_funclet_ids)
                 .iter()
-                .map(|n| *context.funclet_id_unwrap(n.clone()))
+                .map(|n| *context.funclet_id_unwrap(reject_hole(n.clone())))
                 .collect(),
-            callee_arguments: callee_arguments
+            callee_arguments: reject_hole_ref(callee_arguments)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation_join: *context.node_id(continuation_join.clone()),
+            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
         },
         assembly_ast::TailEdge::DynamicAllocFromBuffer {
             buffer,
@@ -901,18 +917,18 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> ir::Tai
             failure_funclet_id,
             continuation_join,
         } => ir::TailEdge::DynamicAllocFromBuffer {
-            buffer: *context.node_id(buffer.clone()),
-            arguments: arguments
+            buffer: *context.node_id(reject_hole(buffer.clone())),
+            arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(n.clone()))
+                .map(|n| *context.node_id(reject_hole(n.clone())))
                 .collect(),
-            dynamic_allocation_size_slots: dynamic_allocation_size_slots
+            dynamic_allocation_size_slots: reject_hole_ref(dynamic_allocation_size_slots)
                 .iter()
-                .map(|o| o.clone().map(|n| *context.node_id(n)))
+                .map(|o| reject_hole(o.clone()).map(|n| *context.node_id(n)))
                 .collect(),
-            success_funclet_id: *context.funclet_id_unwrap(success_funclet_id.clone()),
-            failure_funclet_id: *context.funclet_id_unwrap(failure_funclet_id.clone()),
-            continuation_join: *context.node_id(continuation_join.clone()),
+            success_funclet_id: *context.funclet_id_unwrap(reject_hole(success_funclet_id.clone())),
+            failure_funclet_id: *context.funclet_id_unwrap(reject_hole(failure_funclet_id.clone())),
+            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
         },
     }
 }
@@ -936,10 +952,10 @@ fn ir_funclet(funclet: &assembly_ast::Funclet, context: &mut Context) -> ir::Fun
     }
 
     for node in &funclet.commands {
-        nodes.push(ir_node(node, context));
+        nodes.push(ir_node(reject_hole_ref(node), context));
     }
 
-    let tail_edge = ir_tail_edge(&funclet.tail_edge, context);
+    let tail_edge = ir_tail_edge(reject_hole_ref(&funclet.tail_edge), context);
 
     ir::Funclet {
         kind: funclet.kind.clone(),

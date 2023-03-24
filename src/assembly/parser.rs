@@ -49,7 +49,7 @@ fn option_to_vec<T>(o: Option<Vec<T>>) -> Vec<T> {
     }
 }
 
-fn reject_hole<T>(h: assembly_ast::Hole<T>) -> T {
+fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
         Some(v) => v,
         None => panic!("Invalid hole"),
@@ -366,11 +366,11 @@ fn read_hole<T>(s: String, context: &mut Context) -> Option<T> {
     None
 }
 
-fn rule_hole<'a, T>() -> RuleApp<'a, Option<T>> {
+fn rule_hole<'a, T : 'a>() -> RuleApp<'a, Option<T>> {
     rule_str(Rule::hole, read_hole)
 }
 
-fn rule_node_hole<'a, T>() -> RuleApp<'a, Option<T>> {
+fn rule_node_hole<'a, T : 'a>() -> RuleApp<'a, Option<T>> {
     rule_str(Rule::node_hole, read_hole)
 }
 
@@ -574,10 +574,7 @@ fn read_funclet_loc(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
 ) -> Hole<assembly_ast::RemoteNodeId> {
-    let mut rules = Vec::new();
-    let rule = compose_pair(read_funclet_loc_filled, Some);
-    rules.push(rule_pair_boxed(Rule::funclet_loc_filled, rule));
-    expect_vec(rules, pairs, context)
+    expect_hole(rule_pair(Rule::funclet_loc_filled, read_funclet_loc_filled), pairs, context)
 }
 
 fn rule_funclet_loc<'a>() -> RuleApp<'a, Hole<assembly_ast::RemoteNodeId>> {
@@ -1155,7 +1152,7 @@ fn read_node_list(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<St
     expect_all(rule_var_name(), pairs, context)
 }
 
-fn read_node_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
+fn read_node_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     match pairs.peek() {
         None => {
             vec![]
@@ -1167,7 +1164,11 @@ fn read_node_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<Str
     }
 }
 
-fn rule_node_box<'a>() -> RuleApp<'a, Vec<Hole<String>>> {
+fn read_node_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<Vec<Hole<String>>> {
+    expect_hole(rule_pair(Rule::node_box_raw, read_node_box_raw), pairs, context)
+}
+
+fn rule_node_box<'a>() -> RuleApp<'a, Hole<Vec<Hole<String>>>> {
     rule_pair(Rule::node_box, read_node_box)
 }
 
@@ -1177,7 +1178,7 @@ fn read_return_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<
 
 fn read_return_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::TailEdge {
     require_rule(Rule::return_sep, pairs, context);
-    let rule = rule_pair(Rule::return_command, read_return_args);
+    let rule = rule_pair(Rule::return_args, read_return_args);
     let return_values = expect_node_hole(rule, pairs, context);
     assembly_ast::TailEdge::Return { return_values }
 }
@@ -1239,11 +1240,11 @@ fn rule_schedule_call_command<'a>() -> RuleApp<'a, assembly_ast::TailEdge> {
     rule_pair(Rule::schedule_call_command, read_schedule_call_command)
 }
 
-fn read_tail_fn_nodes(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> {
+fn read_tail_fn_nodes(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     expect_all(rule_fn_name(), pairs, context)
 }
 
-fn read_tail_fn_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> {
+fn read_tail_fn_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     match pairs.peek() {
         None => {
             vec![]
@@ -1255,7 +1256,11 @@ fn read_tail_fn_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Strin
     }
 }
 
-fn rule_tail_fn_box<'a>() -> RuleApp<'a, Vec<String>> {
+fn read_tail_fn_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<Vec<Hole<String>>> {
+    expect_hole(rule_pair(Rule::tail_fn_box_raw, read_tail_fn_box_raw), pairs, context)
+}
+
+fn rule_tail_fn_box<'a>() -> RuleApp<'a, Hole<Vec<Hole<String>>>> {
     rule_pair(Rule::tail_fn_box, read_tail_fn_box)
 }
 
@@ -1282,11 +1287,11 @@ fn rule_schedule_select_command<'a>() -> RuleApp<'a, assembly_ast::TailEdge> {
     rule_pair(Rule::schedule_select_command, read_schedule_select_command)
 }
 
-fn read_tail_none(_: String, _: &mut Context) -> Option<String> {
+fn read_tail_none(_: String, _: &mut Context) -> Option<Hole<String>> {
     None
 }
 
-fn read_tail_option_node(pairs: &mut Pairs<Rule>, context: &mut Context) -> Option<String> {
+fn read_tail_option_node(pairs: &mut Pairs<Rule>, context: &mut Context) -> Option<Hole<String>> {
     let mut rules = Vec::new();
     let apply_some = compose_pair(read_var_name, Some);
     rules.push(rule_pair_boxed(Rule::var_name, apply_some));
@@ -1294,12 +1299,12 @@ fn read_tail_option_node(pairs: &mut Pairs<Rule>, context: &mut Context) -> Opti
     expect_vec(rules, pairs, context)
 }
 
-fn read_tail_option_nodes(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Option<String>> {
+fn read_tail_option_nodes(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Option<Hole<String>>> {
     let rule = rule_pair(Rule::tail_option_node, read_tail_option_node);
     expect_all(rule, pairs, context)
 }
 
-fn read_tail_option_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Option<String>> {
+fn read_tail_option_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Option<Hole<String>>> {
     match pairs.peek() {
         None => {
             vec![]
@@ -1311,7 +1316,11 @@ fn read_tail_option_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<O
     }
 }
 
-fn rule_tail_option_box<'a>() -> RuleApp<'a, Vec<Option<String>>> {
+fn read_tail_option_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<Vec<Option<Hole<String>>>> {
+    expect_hole(rule_pair(Rule::tail_option_box_raw, read_tail_option_box_raw), pairs, context)
+}
+
+fn rule_tail_option_box<'a>() -> RuleApp<'a, Hole<Vec<Option<Hole<String>>>>> {
     rule_pair(Rule::tail_option_box, read_tail_option_box)
 }
 
@@ -1352,7 +1361,7 @@ fn read_tail_edge(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_as
 }
 
 fn read_phi_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let index = expect(rule_n(), pairs, context);
+    let index = expect_hole(rule_n(), pairs, context);
     assembly_ast::Node::Phi { index }
 }
 
@@ -1360,27 +1369,25 @@ fn rule_phi_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
     rule_pair(Rule::phi_command, read_phi_command)
 }
 
-fn read_constant(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let rule_value = rule_str(Rule::n, read_string);
-    let value_string = expect(rule_value, pairs, context);
-    let value = value_string.parse::<i64>().unwrap(); // BAD
-
-    // let ffi_app = compose_pair(read_ffi_typ, ast::Type::FFI);
-    // let rule_ffi = rule_pair_boxed(Rule::ffi_type, ffi_app);
-    // let type_id = expect(rule_ffi, pairs, context);
-
-    let check_id = expect(rule_ffi_type(), pairs, context);
-
-    if check_id != assembly_ast::FFIType::I64 {
-        panic!("Constant can only be i64 for now");
-    }
-
-    let type_id = assembly_ast::Type::FFI(assembly_ast::FFIType::I64);
+fn read_constant_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+    let value = Some(expect(rule_n_raw(), pairs, context));
+    let type_id = Some(assembly_ast::Type::FFI(expect(rule_ffi_type(), pairs, context)));
 
     assembly_ast::Node::Constant {
-        value: format!("I64({})", value),
+        value,
         type_id,
     }
+}
+
+fn read_constant_hole(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+    assembly_ast::Node::Constant { value : None, type_id : None }
+}
+
+fn read_constant(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+    let mut rules = Vec::new();
+    rules.push(rule_pair(Rule::constant_raw, read_constant_raw));
+    rules.push(rule_pair(Rule::hole, read_constant_hole));
+    expect_vec(rules, pairs, context)
 }
 
 fn read_constant_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
@@ -1392,78 +1399,10 @@ fn rule_constant_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
     rule_pair(Rule::constant_command, read_constant_command)
 }
 
-fn read_constant_i32(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    // todo: remove this function
-    let rule_value = rule_str(Rule::n, read_string);
-    let value_string = expect(rule_value, pairs, context);
-    let value = value_string.parse::<i32>().unwrap(); // BAD
-
-    // let ffi_app = compose_pair(read_ffi_typ, ast::Type::FFI);
-    // let rule_ffi = rule_pair_boxed(Rule::ffi_type, ffi_app);
-    // let type_id = expect(rule_ffi, pairs, context);
-
-    let check_id = expect(rule_ffi_type(), pairs, context);
-
-    if check_id != assembly_ast::FFIType::I32 {
-        panic!("Constant-i32 can only be i32 for now");
-    }
-
-    let type_id = assembly_ast::Type::FFI(assembly_ast::FFIType::I32);
-
-    assembly_ast::Node::Constant {
-        value: format!("I32({})", value),
-        type_id,
-    }
-}
-
-fn read_constant_i32_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let rule = rule_pair(Rule::constant, read_constant_i32);
-    expect(rule, pairs, context)
-}
-
-fn rule_constant_i32_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
-    rule_pair(Rule::constant_i32_command, read_constant_i32_command)
-}
-
-fn read_constant_unsigned(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    // todo: remove this function
-    let rule_value = rule_str(Rule::n, read_string);
-    let value_string = expect(rule_value, pairs, context);
-    let value = value_string.parse::<u64>().unwrap(); // BAD
-
-    let check_id = expect(rule_ffi_type(), pairs, context);
-
-    if check_id != assembly_ast::FFIType::U64 {
-        panic!("Unsigned constant can only be u64 for now");
-    }
-
-    let type_id = assembly_ast::Type::FFI(assembly_ast::FFIType::U64);
-
-    assembly_ast::Node::Constant {
-        value: format!("U64({})", value),
-        type_id,
-    }
-}
-
-fn read_constant_unsigned_command(
-    pairs: &mut Pairs<Rule>,
-    context: &mut Context,
-) -> assembly_ast::Node {
-    let rule = rule_pair(Rule::constant, read_constant_unsigned);
-    expect(rule, pairs, context)
-}
-
-fn rule_constant_unsigned_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
-    rule_pair(
-        Rule::constant_unsigned_command,
-        read_constant_unsigned_command,
-    )
-}
-
 fn read_extract_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
     require_rule(Rule::extract_sep, pairs, context);
     let node_id = expect(rule_var_name(), pairs, context);
-    let index = expect(rule_n(), pairs, context);
+    let index = Some(expect(rule_n(), pairs, context));
     assembly_ast::Node::ExtractResult { node_id, index }
 }
 
@@ -1471,7 +1410,7 @@ fn rule_extract_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
     rule_pair(Rule::extract_command, read_extract_command)
 }
 
-fn read_call_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> {
+fn read_call_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     expect_all(rule_var_name(), pairs, context)
 }
 
@@ -1479,7 +1418,7 @@ fn read_call_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly
     require_rule(Rule::call_sep, pairs, context);
     let external_function_id = expect(rule_fn_name(), pairs, context);
     let rule = rule_pair(Rule::call_args, read_call_args);
-    let args = expect(rule, pairs, context).into_boxed_slice();
+    let args = expect_hole(rule, pairs, context).map(|x| x.into_boxed_slice());
     match pairs.peek() {
         None => {
             // NOTE: semi-arbitrary choice for unification
@@ -1490,7 +1429,7 @@ fn read_call_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly
         }
         Some(_) => {
             let rule = rule_pair(Rule::call_args, read_call_args);
-            let arguments = expect(rule, pairs, context).into_boxed_slice();
+            let arguments = expect_hole(rule, pairs, context).map(|x| x.into_boxed_slice());
             assembly_ast::Node::CallExternalGpuCompute {
                 external_function_id,
                 arguments,
@@ -1524,8 +1463,6 @@ fn read_value_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembl
     let mut rules = Vec::new();
     rules.push(rule_phi_command());
     rules.push(rule_constant_command());
-    rules.push(rule_constant_i32_command());
-    rules.push(rule_constant_unsigned_command());
     rules.push(rule_extract_command());
     rules.push(rule_call_command());
     rules.push(rule_select_command());
@@ -1533,7 +1470,7 @@ fn read_value_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembl
 }
 
 fn read_value_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let name = expect(rule_var_name(), pairs, context);
+    let name = reject_hole(expect(rule_var_name(), pairs, context));
     context.add_node(name);
     let rule = rule_pair(Rule::value_command, read_value_command);
     expect(rule, pairs, context)
@@ -1557,7 +1494,7 @@ fn rule_alloc_temporary_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
     rule_pair(Rule::alloc_temporary_command, read_alloc_temporary_command)
 }
 
-fn read_do_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> {
+fn read_do_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     expect_all(rule_var_name(), pairs, context)
 }
 
@@ -1565,14 +1502,17 @@ fn read_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_a
     let rule_place = rule_str_unwrap(Rule::do_sep, 1, Box::new(read_place));
     let place = expect(rule_place, pairs, context);
     let operation = expect(rule_funclet_loc(), pairs, context);
-    let rule_args = rule_pair(Rule::do_args, read_do_args);
-    let inputs = option_to_vec(optional(rule_args, pairs, context));
+    let mut rules_args = Vec::new();
+    let rule = compose_pair(read_do_args, Some);
+    rules_args.push(rule_pair_boxed(Rule::do_args, rule));
+    rules_args.push(rule_hole());
+    let inputs = optional_vec(rules_args, pairs, context).map(option_to_vec);
     let output = expect(rule_var_name(), pairs, context);
     assembly_ast::Node::EncodeDo {
         place,
         operation,
-        inputs: inputs.into_boxed_slice(),
-        outputs: Box::new([output]),
+        inputs: inputs.map(|v| v.into_boxed_slice()),
+        outputs: Some(Box::new([output])),
     }
 }
 
@@ -1607,7 +1547,7 @@ fn rule_drop_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
 fn read_alloc_sep(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> (ir::Place, assembly_ast::Type) {
+) -> (Hole<ir::Place>, Hole<assembly_ast::Type>) {
     let place = expect(rule_place(), pairs, context);
     let storage_type = expect(rule_type(), pairs, context);
     (place, storage_type)
@@ -1685,7 +1625,7 @@ fn rule_sync_fence_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
 fn read_inline_join_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
     require_rule(Rule::inline_join_sep, pairs, context);
     let funclet = expect(rule_fn_name(), pairs, context);
-    let captures = expect(rule_node_box(), pairs, context).into_boxed_slice();
+    let captures = expect(rule_node_box(), pairs, context).map(|v| v.into_boxed_slice());
     let continuation = expect(rule_var_name(), pairs, context);
     // empty captures re conversation
     assembly_ast::Node::InlineJoin {
@@ -1705,7 +1645,7 @@ fn read_serialized_join_command(
 ) -> assembly_ast::Node {
     require_rule(Rule::serialized_join_sep, pairs, context);
     let funclet = expect(rule_fn_name(), pairs, context);
-    let captures = expect(rule_node_box(), pairs, context).into_boxed_slice();
+    let captures = expect(rule_node_box(), pairs, context).map(|v| v.into_boxed_slice());
     let continuation = expect(rule_var_name(), pairs, context);
     assembly_ast::Node::InlineJoin {
         funclet,
@@ -1745,13 +1685,13 @@ fn read_schedule_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> asse
 }
 
 fn read_schedule_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let name = expect(rule_var_name(), pairs, context);
+    let name = reject_hole(expect(rule_var_name(), pairs, context));
     context.add_node(name);
     let rule = rule_pair(Rule::schedule_command, read_schedule_command);
     expect(rule, pairs, context)
 }
 
-fn read_sync_sep(pairs: &mut Pairs<Rule>, context: &mut Context) -> (ir::Place, ir::Place) {
+fn read_sync_sep(pairs: &mut Pairs<Rule>, context: &mut Context) -> (Hole<ir::Place>, Hole<ir::Place>) {
     let place1 = expect(rule_place(), pairs, context);
     let place2 = expect(rule_place(), pairs, context);
     (place1, place2)
@@ -1802,14 +1742,14 @@ fn read_spatial_command(_: &mut Pairs<Rule>, _: &mut Context) -> assembly_ast::N
 }
 
 fn read_timeline_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let name = expect(rule_var_name(), pairs, context);
+    let name = reject_hole(expect(rule_var_name(), pairs, context));
     context.add_node(name);
     let rule = rule_pair(Rule::timeline_command, read_timeline_command);
     expect(rule, pairs, context)
 }
 
 fn read_spatial_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let name = expect(rule_var_name(), pairs, context);
+    let name = reject_hole(expect(rule_var_name(), pairs, context));
     context.add_node(name);
     let rule = rule_pair(Rule::spatial_command, read_spatial_command);
     expect(rule, pairs, context)
@@ -1823,29 +1763,53 @@ fn read_funclet_blob(
 ) -> assembly_ast::Funclet {
     let header = expect(rule_funclet_header(), pairs, context);
     let mut commands = Vec::new();
+    // this gets very silly for checking reasons
+    // we both want to check for if we have a tail edge,
+    //   _and_ if the last node hole could be a tail edge
+    let mut tail : Option<Option<assembly_ast::TailEdge>> = None;
     for pair in pairs {
         let rule = pair.as_rule();
         if rule == Rule::tail_edge {
-            let tail_edge = read_tail_edge(&mut pair.into_inner(), context);
-            return assembly_ast::Funclet {
-                kind,
-                header,
-                commands,
-                tail_edge,
-            };
-        } else if rule == rule_command.rule {
+            tail = match tail {
+                None | Some(None) => {
+                    commands.push(None); // push the "tail edge hole" into the commands list
+                    Some(Some(read_tail_edge(&mut pair.into_inner(), context)))
+                },
+                _ => panic!("Multiple tail edges found for funclet {}", context.funclet_name())
+            }
+        }
+        else if rule == Rule::node_hole {
+            tail = Some(None) // currently the hole
+        }
+        else if rule == rule_command.rule {
+            match tail {
+                None => {} ,
+                // push the "tail edge hole" into the commands list
+                Some(None) => { commands.push(None); },
+                _ => panic!("Command after tail edge found for funclet {}", context.funclet_name())
+            }
             commands.push(match &rule_command.application {
-                Application::P(f) => f(&mut pair.into_inner(), context),
+                Application::P(f) => Some(f(&mut pair.into_inner(), context)),
                 _ => panic!("Internal error with rules"),
             });
         } else {
             panic!(unexpected_rule(&vec![rule_command], rule));
         }
     }
-    panic!(format!(
-        "No tail edge found for funclet {}",
-        context.funclet_name()
-    ))
+    match tail {
+        Some(tail_edge) => { // note that tail_edge can be None, confusingly!
+            assembly_ast::Funclet {
+                kind,
+                header,
+                commands,
+                tail_edge,
+            }
+        }
+        None => panic!(format!(
+            "No tail edge found for funclet {}",
+            context.funclet_name()
+        ))
+    }
 }
 
 fn read_value_funclet(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Funclet {
@@ -1902,11 +1866,13 @@ fn read_value_function_args(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
 ) -> Vec<assembly_ast::Type> {
-    expect_all(rule_type(), pairs, context)
+    let rule = compose_pair(read_type, reject_hole);
+    expect_all(rule_pair_boxed(Rule::typ, rule), pairs, context)
 }
 
 fn read_value_function_funclets(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<String> {
-    expect_all(rule_fn_name(), pairs, context)
+    let rule = compose_pair(read_fn_name, reject_hole);
+    expect_all(rule_pair_boxed(Rule::fn_name, rule), pairs, context)
 }
 
 fn read_value_function(
@@ -1914,12 +1880,12 @@ fn read_value_function(
     context: &mut Context,
 ) -> assembly_ast::ValueFunction {
     require_rule(Rule::value_function_sep, pairs, context);
-    let name = expect(rule_fn_name(), pairs, context);
+    let name = reject_hole(expect(rule_fn_name(), pairs, context));
 
     let rule = rule_pair(Rule::value_function_args, read_value_function_args);
     let input_types = expect(rule, pairs, context);
 
-    let output_types = vec![expect(rule_type(), pairs, context)];
+    let output_types = vec![reject_hole(expect(rule_type(), pairs, context))];
 
     let rule = rule_pair(Rule::value_function_funclets, read_value_function_funclets);
     let allowed_funclets = expect(rule, pairs, context);
@@ -1940,7 +1906,7 @@ fn read_funclets(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast
 }
 
 fn read_extra(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Extra {
-    let name = expect(rule_fn_name_sep(), pairs, context);
+    let name = reject_hole(expect(rule_fn_name_sep(), pairs, context));
     let data = expect(rule_unchecked_dict(), pairs, context);
     assembly_ast::Extra { name, data }
 }
@@ -1952,7 +1918,7 @@ fn read_extras(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::
 fn read_pipeline(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Pipeline {
     require_rule(Rule::pipeline_sep, pairs, context);
     let name = expect(rule_string_clean(), pairs, context);
-    let funclet = expect(rule_fn_name(), pairs, context);
+    let funclet = reject_hole(expect(rule_fn_name(), pairs, context));
     assembly_ast::Pipeline { name, funclet }
 }
 
@@ -1985,6 +1951,8 @@ fn read_program(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast:
 
 fn read_definition(pairs: &mut Pairs<Rule>, context: &mut Context) -> frontend::Definition {
     let program = expect(rule_pair(Rule::program, read_program), pairs, context);
+    // dbg!(program);
+    // std::process::exit(0);
     ast_to_ir::transform(program, context)
     // dbg!(ast_to_ir::transform(program, context));
     // todo!()
@@ -1993,12 +1961,11 @@ fn read_definition(pairs: &mut Pairs<Rule>, context: &mut Context) -> frontend::
 pub fn parse(code: &str) -> Result<frontend::Definition, frontend::CompileError> {
     // std::env::set_var("RUST_BACKTRACE", "1"); // help with debugging I guess
     let parsed = IRParser::parse(Rule::program, code);
-    dbg!(&parsed);
     let mut context = new_context();
     let result = match parsed {
         Err(why) => Err(crate::frontend::CompileError {
-            message: (format!("{}", why)),
-        }),
+                message: format!("{:?}", why),
+            }),
         Ok(mut parse_result) => Ok(read_definition(&mut parse_result, &mut context)),
     };
     // std::env::set_var("RUST_BACKTRACE", "0"); // help with debugging I guess

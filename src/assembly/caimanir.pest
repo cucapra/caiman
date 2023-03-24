@@ -139,11 +139,12 @@ funclet_header = { fn_name ~ "(" ~ funclet_args? ~ ")" ~ "->" ~ funclet_return }
 //   tail edges
 
 node_list = { var_name ~ ("," ~ var_name)* }
-node_box = { "[" ~ node_list? ~ "]" }
+node_box_raw = { "[" ~ node_list? ~ "]" }
+node_box = { node_box_raw | hole }
 
 return_sep = ${ "return" ~ sep }
 return_args = { var_name | "[" ~ var_name ~ (", " ~ var_name)* ~ "]" }
-return_command = { return_sep ~ (return_args | hole) }
+return_command = { return_sep ~ return_args }
 yield_sep = ${ "yield" ~ sep }
 yield_command = { yield_sep ~ (n | hole) ~ node_box ~ fn_name ~ var_name ~ node_box }
 jump_sep = ${ "jump" ~ sep }
@@ -153,34 +154,33 @@ schedule_call_sep = ${ "schedule-call" ~ sep }
 schedule_call_command = { schedule_call_sep ~ funclet_loc ~ fn_name ~ node_box ~ var_name }
 schedule_select_sep = ${ "schedule-select" ~ sep }
 tail_fn_nodes = { fn_name ~ ("," ~ fn_name)* }
-tail_fn_box = { "[" ~ tail_fn_nodes? ~ "]" }
+tail_fn_box_raw = { "[" ~ tail_fn_nodes? ~ "]" }
+tail_fn_box = { tail_fn_box_raw | hole }
 schedule_select_command = { schedule_select_sep ~ funclet_loc ~ var_name ~ tail_fn_box ~ node_box ~ var_name }
 
 dynamic_alloc_sep = ${ "dynamic-alloc" ~ sep }
 tail_option_node = { var_name | none }
 tail_option_nodes = { tail_option_node ~ ("," ~ tail_option_node)* }
-tail_option_box = { "[" ~ tail_option_nodes? ~ "]" }
+tail_option_box_raw = { "[" ~ tail_option_nodes? ~ "]" }
+tail_option_box = { tail_option_box_raw | hole }
 dynamic_alloc_command = { dynamic_alloc_sep ~ var_name ~ node_box ~ tail_option_box ~ fn_name ~ fn_name ~ var_name }
 
-tail_edge = { node_hole | return_command | yield_command | jump_command |
+tail_edge = { return_command | yield_command | jump_command |
     schedule_call_command | schedule_select_command | dynamic_alloc_command }
 
 //   command setup
 
-value_assign = { var_name ~ "=" ~ value_command ~ ";" }
-value_funclet = { funclet_header ~ "{" ~ value_assign* ~ tail_edge ~ ";" ~ "}" }
+value_assign = { var_name ~ "=" ~ value_command }
+value_funclet = { funclet_header ~ "{" ~ (value_assign ~ ";")* ~ tail_edge ~ ";" ~ "}" }
 
-schedule_assign = { var_name ~ "=" ~ schedule_command ~ ";" }
-schedule_instruction = { schedule_assign | node_hole }
-schedule_funclet = { funclet_header ~ "{" ~ schedule_instruction* ~ tail_edge ~ ";" ~ "}" }
+schedule_assign = { var_name ~ "=" ~ schedule_command }
+schedule_funclet = { funclet_header ~ "{" ~ ((schedule_assign | tail_edge | node_hole) ~ ";")* ~ "}" }
 
-timeline_assign = { var_name ~ "=" ~ timeline_command ~ ";" }
-timeline_instruction = { timeline_assign | node_hole }
-timeline_funclet = { funclet_header ~ "{" ~ timeline_instruction* ~ tail_edge ~ ";" ~ "}" }
+timeline_assign = { var_name ~ "=" ~ timeline_command }
+timeline_funclet = { funclet_header ~ "{" ~ ((timeline_assign | tail_edge | node_hole) ~ ";")* ~ "}" }
 
-spatial_assign = { var_name ~ "=" ~ spatial_command ~ ";" }
-spatial_instruction = { spatial_assign | node_hole }
-spatial_funclet = { funclet_header ~ "{" ~ spatial_instruction* ~ tail_edge ~ ";" ~ "}" }
+spatial_assign = { var_name ~ "=" ~ spatial_command }
+spatial_funclet = { funclet_header ~ "{" ~ ((spatial_assign | tail_edge | node_hole) ~ ";")* ~ "}" }
 
 //    commands
 
@@ -189,18 +189,15 @@ phi_command = ${ "phi" ~ sep ~ n }
 //     value
 
 constant_command = ${ "constant" ~ sep ~ constant }
-constant_i32_command = ${ "constant-i32" ~ sep ~ constant }
-constant_unsigned_command = ${ "constant-unsigned" ~ sep ~ constant }
 extract_sep = @{ "extract" ~ sep }
 extract_command = { extract_sep ~ var_name ~ n }
 call_sep = @{ "call" ~ sep }
 call_args = { var_name ~ ("," ~ var_name)* }
-call_command = { call_sep ~ fn_name ~ ("<" ~ call_args? ~ ">")? ~ "(" ~ call_args? ~ ")" }
+call_command = { call_sep ~ fn_name ~ ("<" ~ call_args? ~ ">" | hole )? ~ ("(" ~ call_args? ~ ")" | hole ) }
 select_sep = @{ "select" ~ sep }
 select_command = { select_sep ~ var_name ~ var_name ~ var_name }
 
 value_command = { phi_command | constant_command |
-    constant_i32_command | constant_unsigned_command |
     extract_command | call_command | select_command }
 
 //     scheduling
@@ -208,7 +205,7 @@ value_command = { phi_command | constant_command |
 alloc_temporary_command = ${ "alloc-temporary-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
 do_sep = ${ "encode-do-" ~ place ~ sep }
 do_args = { var_name ~ ("," ~ var_name)* }
-do_command = { do_sep ~ funclet_loc ~ "(" ~ do_args? ~ ")" ~ "->" ~ var_name }
+do_command = { do_sep ~ funclet_loc ~ ( "(" ~ do_args? ~ ")" | hole ) ~ "->" ~ var_name }
 create_command = ${ "create-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
 drop_command = ${ "drop" ~ sep ~ var_name }
 alloc_sep = ${"alloc-" ~ place ~ "-" ~ typ ~ sep}

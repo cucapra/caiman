@@ -78,7 +78,7 @@ pub struct RemoteNodeId {
 // Super Jank, but whatever
 
 macro_rules! lookup_abstract_type_parser {
-	([$elem_type:ident]) => { Box<[lookup_abstract_type_parser!($elem_type)]> };
+	([$elem_type:ident]) => { Box<[Hole<lookup_abstract_type_parser!($elem_type)>]> };
 	(Type) => { TypeId };
 	(Immediate) => { String };
 	(ImmediateI64) => { i64 };
@@ -99,10 +99,10 @@ macro_rules! map_parser_refs {
     // When mapping referenced nodes, we only care about mapping the Operation types,
     // since those are the actual references.
     ($map:ident, $arg:ident : Operation) => {
-        $arg.map(|x| $map((*x.clone()).to_string()))
+        $arg.clone().map(|x| $map((*x.clone()).to_string()))
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.map(|x| x.iter().map(|op| $map((*op).clone().to_string())).collect())
+        $arg.clone().map(|x| x.iter().map(|y| y.clone().map(|op| $map((*op.clone()).to_string()))).collect())
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()
@@ -174,8 +174,8 @@ pub enum TailEdge {
         arguments: Hole<Vec<Hole<NodeId>>>,
     },
     Jump {
-        join: NodeId,
-        arguments: Hole<Vec<NodeId>>,
+        join: Hole<NodeId>,
+        arguments: Hole<Vec<Hole<NodeId>>>,
     },
     ScheduleCall {
         value_operation: Hole<RemoteNodeId>,
@@ -270,8 +270,8 @@ pub struct FuncletHeader {
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
-    pub commands: Vec<Node>,
-    pub tail_edge: TailEdge,
+    pub commands: Vec<Hole<Node>>,
+    pub tail_edge: Hole<TailEdge>,
 }
 
 #[derive(Debug)]
