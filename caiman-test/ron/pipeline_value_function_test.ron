@@ -111,7 +111,25 @@
 				input_types : [1],
 				//output_types : [3, 4, 3],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(9),
+						input_tags : [Input(index : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 0),
+						implicit_out_tag : Node(node_id : 2)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 1)),
@@ -137,7 +155,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(10),
+						input_tags : [Input(index : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Input(index : 0),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					DefaultJoin,
@@ -153,7 +189,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(10),
+						input_tags : [Node(node_id : 2)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 2),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 				],
@@ -177,7 +231,25 @@
 				kind : ScheduleExplicit,
 				input_types : [3, 4, 3],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(9),
+						input_tags : [Node(node_id : 3), None, Node(node_id : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None, None, None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [Node(node_id : 1), Node(node_id : 1), Node(node_id : 1)],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 1),
+						implicit_out_tag : Node(node_id : 2)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					Phi(index : 1),
@@ -231,7 +303,7 @@
 			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9)),
 			//1 : (name : "looping_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(19))
 		},
-		scheduling_funclet_extras : {
+		/*scheduling_funclet_extras : {
 			12 : (
 				value_funclet_id_opt : Some(9),
 				spatial_funclet_id_opt : Some(18),
@@ -272,7 +344,7 @@
 				in_timeline_tag : Node(node_id : 1),
 				out_timeline_tag : Node(node_id : 2),
 			),
-		},
+		},*/
 		pipelines : [
 			(name : "pipeline_with_value_function", entry_funclet : 13),
 		]

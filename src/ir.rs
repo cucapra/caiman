@@ -38,6 +38,7 @@ pub enum Constant
 	U64(u64),
 }
 
+pub type SpecId = usize;
 pub type ExternalCpuFunctionId = usize;
 pub type ExternalGpuFunctionId = usize;
 pub type FuncletId = usize;
@@ -262,17 +263,83 @@ pub enum FuncletKind
 
 impl FuncletKind
 {
-	fn easy_default() -> Self
+	fn default() -> Self
 	{
 		FuncletKind::Unknown
 	}
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FuncletSpec
+{
+	pub funclet_id_opt : Option<FuncletId>,
+	pub input_tags : Box<[Tag]>,
+	pub output_tags : Box<[Tag]>,
+	#[serde(default = "Tag::default")]
+	pub implicit_in_tag : Tag,
+	#[serde(default = "Tag::default")]
+	pub implicit_out_tag : Tag,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum FuncletSpecBinding
+{
+	None,
+	Value{value_function_id_opt : Option<ValueFunctionId>},
+	ScheduleExplicit{value : FuncletSpec, spatial : FuncletSpec, timeline : FuncletSpec},
+}
+
+impl FuncletSpecBinding
+{
+	fn default() -> Self
+	{
+		FuncletSpecBinding::None
+	}
+
+	pub fn get_value_spec<'binding>(& 'binding self) -> & 'binding FuncletSpec
+	{
+		if let FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = self
+		{
+			value
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+
+	pub fn get_timeline_spec<'binding>(& 'binding self) -> & 'binding FuncletSpec
+	{
+		if let FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = self
+		{
+			timeline
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+
+	pub fn get_spatial_spec<'binding>(& 'binding self) -> & 'binding FuncletSpec
+	{
+		if let FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = self
+		{
+			spatial
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet
 {
-	#[serde(default = "FuncletKind::easy_default")]
+	#[serde(default = "FuncletKind::default")]
 	pub kind : FuncletKind,
+	#[serde(default = "FuncletSpecBinding::default")]
+	pub spec_binding : FuncletSpecBinding,
 	pub input_types : Box<[TypeId]>,
 	pub output_types : Box<[TypeId]>,
 	pub nodes : Box<[Node]>,
@@ -280,7 +347,7 @@ pub struct Funclet
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TagSet
+pub struct SchedulingTagSet
 {
 	#[serde(default = "ValueTag::default")]
 	pub value_tag : ValueTag,
@@ -291,7 +358,7 @@ pub struct TagSet
 }
 
 // Funclet-relative slot info goes here
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/*#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SlotInfo
 {
 	pub value_tag : ValueTag,
@@ -327,18 +394,10 @@ pub struct SchedulingFuncletExtra
 	pub input_tag_sets : Box<[TagSet]>,
 	pub output_tag_sets : Box<[TagSet]>,
 
-	/*pub input_slots : HashMap<usize, SlotInfo>,
-	pub output_slots : HashMap<usize, SlotInfo>,
-	pub input_fences : HashMap<usize, FenceInfo>,
-	pub output_fences : HashMap<usize, FenceInfo>,
-	pub input_buffers : HashMap<usize, BufferInfo>,
-	pub output_buffers : HashMap<usize, BufferInfo>,
-	//pub input_joins : HashMap<usize, JoinInfo>,*/
-
 	// Applies to the computation itself
 	pub in_timeline_tag : TimelineTag,
 	pub out_timeline_tag : TimelineTag,
-}
+}*/
 
 fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	let mut elements = Vec::new();
@@ -373,7 +432,7 @@ fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	}
 }*/
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+/*#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct CompatibleValueFunctionKey
 {
 	pub value_function_id : ValueFunctionId
@@ -385,7 +444,7 @@ pub struct ValueFuncletExtra
 	// Value functions this funclet implements
 	#[serde(default)]
 	pub compatible_value_functions : BTreeSet<CompatibleValueFunctionKey>
-}
+}*/
 
 // A value function is just an equivalence class over functions that behave identically at the value level
 // A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
@@ -420,7 +479,7 @@ pub struct PipelineYieldPoint
 	pub spatial_funclet_id : FuncletId,
 }
 
-#[derive(Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Program
 {
 	#[serde(default)]
@@ -433,29 +492,29 @@ pub struct Program
 	pub value_functions : StableVec<ValueFunction>,
 	#[serde(default)]
 	pub pipelines : Vec<Pipeline>,
-	#[serde(default)]
-	pub value_funclet_extras : HashMap<FuncletId, ValueFuncletExtra>,
-	#[serde(default)]
-	pub scheduling_funclet_extras : HashMap<FuncletId, SchedulingFuncletExtra>,
+	//#[serde(default)]
+	//pub value_funclet_extras : HashMap<FuncletId, ValueFuncletExtra>,
+	//#[serde(default)]
+	//pub scheduling_funclet_extras : HashMap<FuncletId, SchedulingFuncletExtra>,
 }
 
-impl serde::Serialize for Program {
+/*impl serde::Serialize for Program {
 	fn serialize<S>(&self, serializer: S) -> std::result::Result<<S as serde::Serializer>::Ok, <S as Serializer>::Error>
 		where S: Serializer {
-		let value_funclet_extras = ordered_map(&self.value_funclet_extras);
-		let scheduling_funclet_extras = ordered_map(&self.scheduling_funclet_extras);
+		//let value_funclet_extras = ordered_map(&self.value_funclet_extras);
+		//let scheduling_funclet_extras = ordered_map(&self.scheduling_funclet_extras);
 
-		let mut state = serializer.serialize_struct("SchedulingFucletExtra", 9)?;
+		let mut state = serializer.serialize_struct("SchedulingFucletExtra", 9)?; // bug?
 		state.serialize_field("native_interface", &self.native_interface);
 		state.serialize_field("types", &self.types);
 		state.serialize_field("funclets", &self.funclets);
 		state.serialize_field("value_functions", &self.value_functions);
 		state.serialize_field("pipelines", &self.pipelines);
-		state.serialize_field("value_funclet_extras", &value_funclet_extras);
-		state.serialize_field("scheduling_funclet_extras", &scheduling_funclet_extras);
+		//state.serialize_field("value_funclet_extras", &value_funclet_extras);
+		//state.serialize_field("scheduling_funclet_extras", &scheduling_funclet_extras);
 		state.end()
 	}
-}
+}*/
 
 impl Program
 {

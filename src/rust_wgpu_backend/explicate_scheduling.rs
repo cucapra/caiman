@@ -36,8 +36,8 @@ struct PartialTimeline {
 #[derive(Debug)]
 struct PartialInformation {
     pub value_funclet_id : ir::FuncletId,
-    pub input_tag_sets : Vec<ir::TagSet>,
-    pub output_tag_sets : Vec<ir::TagSet>,
+    pub input_tag_sets : Vec<ir::SchedulingTagSet>,
+    pub output_tag_sets : Vec<ir::SchedulingTagSet>,
 }
 
 #[derive(Debug)]
@@ -90,8 +90,8 @@ fn new_partial_timeline() -> PartialTimeline {
     }
 }
 
-fn empty_tag_set() -> ir::TagSet {
-    ir::TagSet {
+fn empty_tag_set() -> ir::SchedulingTagSet {
+    ir::SchedulingTagSet {
         value_tag : ir::ValueTag::None,
         timeline_tag: ir::TimelineTag::None,
         spatial_tag: ir::SpatialTag::None,
@@ -211,6 +211,7 @@ fn build_funclet(core : PartialData, kind : ir::FuncletKind,
     let default = default_tail(&core, context);
     ir::Funclet {
         kind,
+        spec_binding: ir::FuncletSpecBinding::None,
         input_types : core.input_types.into_boxed_slice(),
         output_types : core.output_types.into_boxed_slice(),
         nodes : core.nodes.into_boxed_slice(),
@@ -221,7 +222,7 @@ fn build_funclet(core : PartialData, kind : ir::FuncletKind,
     }
 }
 
-fn build_extra(info : PartialInformation, timeline_id : &usize,
+/*fn build_extra(info : PartialInformation, timeline_id : &usize,
                context : &mut SchedulingContext) -> ir::SchedulingFuncletExtra {
     // todo: lazy location information
     let in_timeline = ir::TimelineTag::Input {
@@ -238,16 +239,10 @@ fn build_extra(info : PartialInformation, timeline_id : &usize,
         temporal_funclet_id_opt: Some(*timeline_id),
         input_tag_sets: info.input_tag_sets.into_boxed_slice(),
         output_tag_sets: info.output_tag_sets.into_boxed_slice(),
-        /*input_slots: info.input_slots,
-        output_slots: info.output_slots,
-        input_fences: info.input_fences,
-        output_fences: info.output_fences,
-        input_buffers: info.input_buffers,
-        output_buffers: info.output_buffers,*/
         in_timeline_tag: in_timeline,
         out_timeline_tag: out_timeline,
     }
-}
+}*/
 
 fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
     let new_schedule = build_funclet(blob.schedule.core,
@@ -256,9 +251,9 @@ fn add_blob(mut blob : ScheduleBlob, context : &mut SchedulingContext) {
                                      ir::FuncletKind::Timeline, context);
     let schedule_id = context.program.funclets.add(new_schedule);
     let timeline_id = context.program.funclets.add(new_timeline);
-    let extra = build_extra(blob.information,
-                            &timeline_id, context);
-    context.program.scheduling_funclet_extras.insert(schedule_id, extra);
+    //let extra = build_extra(blob.information,
+    //                        &timeline_id, context);
+    //context.program.scheduling_funclet_extras.insert(schedule_id, extra);
     for location in blob.remote_update.drain(..) {
         let resolved = ResolvedValueNode {
             schedule_id,

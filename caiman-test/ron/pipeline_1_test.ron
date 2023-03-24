@@ -199,7 +199,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(0),
+						input_tags : [Input(index : 0)],
+						output_tags : [None]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Input(index : 0),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 0, node_id : 1)),
@@ -224,7 +242,25 @@
 				input_types : [1],
 				//output_types : [3, 4, 3],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(9),
+						input_tags : [Input(index : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 0),
+						implicit_out_tag : Node(node_id : 2)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 1)),
@@ -250,7 +286,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(10),
+						input_tags : [Input(index : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Input(index : 0),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					DefaultJoin,
@@ -266,7 +320,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(10),
+						input_tags : [Node(node_id : 2)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 2),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 				],
@@ -290,7 +362,25 @@
 				kind : ScheduleExplicit,
 				input_types : [3, 4, 3],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(9),
+						input_tags : [Node(node_id : 3), None, Node(node_id : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None, None, None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [Node(node_id : 1), Node(node_id : 1), Node(node_id : 1)],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 1),
+						implicit_out_tag : Node(node_id : 2)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					Phi(index : 1),
@@ -306,7 +396,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1, 6, 6],
 				output_types : [5],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(1),
+						input_tags : [Input(funclet_id : 1, index : 0), None, None],
+						output_tags : [Output(funclet_id : 1, index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None, Input(funclet_id : 18, index : 0), Input(funclet_id : 18, index : 0)],
+						output_tags : [Output(funclet_id : 18, index : 0)]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None, None, None],
+						output_tags : [None],
+						implicit_in_tag : Input(funclet_id : 15, index : 0),
+						implicit_out_tag : Output(funclet_id : 15, index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					Phi(index : 1),
@@ -358,7 +466,25 @@
 				kind : ScheduleExplicit,
 				input_types : [3],
 				output_types : [3],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(19),
+						input_tags : [Input(funclet_id : 19, index : 0)],
+						output_tags : [Output(funclet_id : 19, index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [Input(funclet_id : 18, index : 0)],
+						output_tags : [Output(funclet_id : 18, index : 0)]
+					),
+					timeline : (
+						funclet_id_opt : Some(22),
+						input_tags : [Input(funclet_id : 22, index : 0)],
+						output_tags : [None],
+						implicit_in_tag : Input(funclet_id : 22, index : 0),
+						implicit_out_tag : Output(funclet_id : 22, index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					UnboundSlot(place : Gpu, storage_type : (0), operation : (funclet_id : 19, node_id : 2)),
@@ -374,7 +500,25 @@
 				kind : ScheduleExplicit,
 				input_types : [3],
 				output_types : [3],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(19),
+						input_tags : [Node(node_id : 2)],
+						output_tags : [Node(node_id : 4)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [Node(node_id : 0)],
+						output_tags : [Output(funclet_id : 18, index : 0)]
+					),
+					timeline : (
+						funclet_id_opt : Some(22),
+						input_tags : [Input(funclet_id : 22, index : 0)],
+						output_tags : [None],
+						implicit_in_tag : Input(funclet_id : 22, index : 0),
+						implicit_out_tag : Output(funclet_id : 22, index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					DefaultJoin,
@@ -442,47 +586,22 @@
 			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9)),
 			1 : (name : "looping_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(19))
 		},
-		scheduling_funclet_extras : {
+		/*scheduling_funclet_extras : {
 			11 : (
 				value_funclet_id_opt : Some(0),
 				spatial_funclet_id_opt : Some(18),
 				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [(value_tag : Input(funclet_id : 0, index : 0), timeline_tag : None, spatial_tag : None)],
 				output_tag_sets : [(value_tag : None, timeline_tag : None, spatial_tag : None)],
-				/*input_slots : {0 : (value_tag : Input(funclet_id : 0, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : None, timeline_tag : None, spatial_tag : None)},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				external_timestamps : [],
-				external_spaces : [],*/
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
-			/*12 : (
-				value_funclet_id : 9,
-				input_slots : {0 : (value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1))), 2 : (value_tag : Operation(remote_node_id : (funclet_id : 9, node_id : 3)), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
-				input_fences : {},
-				output_fences : {1 : (external_timestamp_id : 0, timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
-				external_timestamps : [],
-				external_spaces : [],
-				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 0)),
-				out_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
-			),*/
 			12 : (
 				value_funclet_id_opt : Some(9),
 				spatial_funclet_id_opt : Some(18),
 				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [(value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
 				output_tag_sets : [(value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
-				/*input_slots : {0 : (value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)},//Operation(remote_node_id : (funclet_id : 15, node_id : 1))
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},*/
 				in_timeline_tag : Node(node_id : 0),
 				out_timeline_tag : Node(node_id : 2),
 			),
@@ -492,12 +611,6 @@
 				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [(value_tag : Input(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)],
 				output_tag_sets : [(value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None )],
-				/*input_slots : {0 : (value_tag : Input(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None )},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},*/
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
@@ -507,12 +620,6 @@
 				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [(value_tag : Node(node_id : 2), timeline_tag : None, spatial_tag : None )],
 				output_tag_sets : [(value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)],
-				/*input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), timeline_tag : None, spatial_tag : None )}, //Operation(remote_node_id : (funclet_id : 15, node_id : 1))
-				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},*/
 				in_timeline_tag : Node(node_id : 2),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
@@ -526,12 +633,6 @@
 					(value_tag : Node(node_id : 0), timeline_tag : Node(node_id : 1), spatial_tag : None )
 				],
 				output_tag_sets : [(value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
-				/*input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 9, node_id : 3)), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)), spatial_tag : None ), 2 : (value_tag : Operation(remote_node_id : (funclet_id : 9, node_id : 0)), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)), spatial_tag : None )},
-				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)},
-				input_fences : {1 : (external_timestamp_id : 0, timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},*/
 				in_timeline_tag : Node(node_id : 1),
 				out_timeline_tag : Node(node_id : 2),
 			),
@@ -541,12 +642,6 @@
 				temporal_funclet_id_opt : Some(15),
 				input_tag_sets : [(value_tag : Input(funclet_id : 1, index : 0), timeline_tag : None, spatial_tag : None), (spatial_tag : Input(funclet_id : 18, index : 0)), (spatial_tag : Input(funclet_id : 18, index : 0))],
 				output_tag_sets : [(value_tag : Output(funclet_id : 1, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))],
-				/*input_slots : {0 : (value_tag : Input(funclet_id : 1, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 1, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {1 : (spatial_tag : Input(funclet_id : 18, index : 0)), 2 : (spatial_tag : Input(funclet_id : 18, index : 0))},
-				output_buffers : {},*/
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
@@ -556,14 +651,6 @@
 				temporal_funclet_id_opt : Some(22),
 				input_tag_sets : [(value_tag : Input(funclet_id : 19, index : 0), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Input(funclet_id : 18, index : 0))],
 				output_tag_sets : [(value_tag : Output(funclet_id : 19, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))],
-				/*input_slots : {0 : (value_tag : Input(funclet_id : 19, index : 0), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Input(funclet_id : 18, index : 0))},
-				output_slots : {0 : (value_tag : Output(funclet_id : 19, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				external_timestamps : [],
-				external_spaces : [],*/
 				in_timeline_tag : Input(funclet_id : 22, index : 0),
 				out_timeline_tag : Output(funclet_id : 22, index : 0),
 			),
@@ -573,18 +660,10 @@
 				temporal_funclet_id_opt : Some(22),
 				input_tag_sets : [(value_tag : Node(node_id : 2), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Node(node_id : 0))],
 				output_tag_sets : [(value_tag : Node(node_id : 4), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))],
-				/*input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 2)), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Operation(remote_node_id : (funclet_id : 18, node_id : 0)))},
-				output_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 4)), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				external_timestamps : [],
-				external_spaces : [],*/
 				in_timeline_tag : Input(funclet_id : 22, index : 0), //Operation(remote_node_id : (funclet_id : 22, node_id : 1))
 				out_timeline_tag : Output(funclet_id : 22, index : 0),
 			),
-		},
+		},*/
 		pipelines : [
 			(name : "pipeline_1", entry_funclet : 11), 
 			/*(name : "pipeline_with_gpu_gpu_communication", entry_funclet : 1),

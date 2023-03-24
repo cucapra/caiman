@@ -107,7 +107,10 @@ pub struct FuncletChecker<'program>
 	value_funclet_id : ir::FuncletId,
 	value_funclet : & 'program ir::Funclet,
 	scheduling_funclet : & 'program ir::Funclet,
-	scheduling_funclet_extra : & 'program ir::SchedulingFuncletExtra,
+	//scheduling_funclet_extra : & 'program ir::SchedulingFuncletExtra,
+	value_spec : & 'program ir::FuncletSpec,
+	spatial_spec : & 'program ir::FuncletSpec,
+	timeline_spec : & 'program ir::FuncletSpec,
 	scalar_node_value_tags : HashMap<ir::NodeId, ir::ValueTag>,
 	scalar_node_timeline_tags : HashMap<ir::NodeId, ir::TimelineTag>,
 	scalar_node_spatial_tags : HashMap<ir::NodeId, ir::SpatialTag>,
@@ -121,18 +124,23 @@ pub struct FuncletChecker<'program>
 
 impl<'program> FuncletChecker<'program>
 {
-	pub fn new(program : & 'program ir::Program, scheduling_funclet : & 'program ir::Funclet, scheduling_funclet_extra : & 'program ir::SchedulingFuncletExtra) -> Self
+	pub fn new(program : & 'program ir::Program, scheduling_funclet : & 'program ir::Funclet) -> Self
 	{
 		assert_eq!(scheduling_funclet.kind, ir::FuncletKind::ScheduleExplicit);
-		let value_funclet = & program.funclets[scheduling_funclet_extra.value_funclet_id_opt.unwrap()];
+		let value_spec = scheduling_funclet.spec_binding.get_value_spec();
+		let spatial_spec = scheduling_funclet.spec_binding.get_spatial_spec();
+		let timeline_spec = scheduling_funclet.spec_binding.get_timeline_spec();
+		let value_funclet = & program.funclets[value_spec.funclet_id_opt.unwrap()];
 		assert_eq!(value_funclet.kind, ir::FuncletKind::Value);
 		let mut state = Self
 		{
 			program,
-			value_funclet_id : scheduling_funclet_extra.value_funclet_id_opt.unwrap(),
+			value_funclet_id : value_spec.funclet_id_opt.unwrap(),
 			value_funclet,
 			scheduling_funclet,
-			scheduling_funclet_extra,
+			value_spec,
+			spatial_spec,
+			timeline_spec,
 			scalar_node_value_tags : HashMap::new(),
 			scalar_node_timeline_tags : HashMap::new(),
 			scalar_node_spatial_tags : HashMap::new(),
@@ -141,7 +149,7 @@ impl<'program> FuncletChecker<'program>
 			node_join_points : HashMap::new(),
 			node_types : HashMap::new(),
 			current_node_id : 0,
-			current_timeline_tag : scheduling_funclet_extra.in_timeline_tag
+			current_timeline_tag : timeline_spec.implicit_in_tag
 		};
 		state.initialize();
 		state
@@ -149,7 +157,7 @@ impl<'program> FuncletChecker<'program>
 
 	fn initialize(&mut self)
 	{
-		self.current_timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag);
+		self.current_timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag);
 
 		for (index, input_type_id) in self.scheduling_funclet.input_types.iter().enumerate()
 		{
@@ -161,17 +169,18 @@ impl<'program> FuncletChecker<'program>
 			};
 			assert!(is_valid);
 
+
+			let value_tag = concretize_input_to_internal_value_tag(& self.program, self.value_spec.funclet_id_opt, self.value_spec.input_tags[index]);
+			let timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, self.timeline_spec.funclet_id_opt, self.timeline_spec.input_tags[index]);
+			let spatial_tag = concretize_input_to_internal_spatial_tag(& self.program, self.spatial_spec.funclet_id_opt, self.spatial_spec.input_tags[index]);
+			self.scalar_node_value_tags.insert(index, value_tag);
+			self.scalar_node_timeline_tags.insert(index, timeline_tag);
+			self.scalar_node_spatial_tags.insert(index, spatial_tag);
+
 			let node_type = match & self.program.types[*input_type_id]
 			{
 				ir::Type::Slot { storage_type, queue_stage, queue_place } =>
 				{
-					let slot_info = & self.scheduling_funclet_extra.input_tag_sets[index];
-					let value_tag = concretize_input_to_internal_value_tag(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, slot_info.value_tag);
-					let timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, slot_info.timeline_tag);
-					let spatial_tag = concretize_input_to_internal_spatial_tag(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, slot_info.spatial_tag);
-					self.scalar_node_value_tags.insert(index, value_tag);
-					self.scalar_node_timeline_tags.insert(index, timeline_tag);
-					self.scalar_node_spatial_tags.insert(index, spatial_tag);
 					NodeType::Slot(Slot{storage_type : * storage_type, queue_stage : * queue_stage, queue_place : * queue_place})
 				}
 				ir::Type::SchedulingJoin{ .. } =>
@@ -180,20 +189,10 @@ impl<'program> FuncletChecker<'program>
 				}
 				ir::Type::Fence { queue_place } =>
 				{
-					let fence_info = & self.scheduling_funclet_extra.input_tag_sets[index];
-					let timeline_tag = concretize_input_to_internal_timeline_tag(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, fence_info.timeline_tag);
-					self.scalar_node_timeline_tags.insert(index, timeline_tag);
-					self.scalar_node_value_tags.insert(index, ir::ValueTag::None);
-					self.scalar_node_spatial_tags.insert(index, ir::SpatialTag::None);
 					NodeType::Fence(Fence{queue_place : * queue_place})
 				}
 				ir::Type::Buffer { storage_place, static_layout_opt } =>
 				{
-					let buffer_info = & self.scheduling_funclet_extra.input_tag_sets[index];
-					self.scalar_node_timeline_tags.insert(index, ir::TimelineTag::None);
-					self.scalar_node_value_tags.insert(index, ir::ValueTag::None);
-					let spatial_tag = concretize_input_to_internal_spatial_tag(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, buffer_info.spatial_tag);
-					self.scalar_node_spatial_tags.insert(index, spatial_tag);
 					NodeType::Buffer(Buffer{storage_place : * storage_place, static_layout_opt : * static_layout_opt})
 				}
 				_ => panic!("Not a legal argument type for a scheduling funclet")
@@ -204,7 +203,7 @@ impl<'program> FuncletChecker<'program>
 
 		for (output_index, output_type) in self.scheduling_funclet.output_types.iter().enumerate()
 		{
-			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, output_index);
+			let (value_tag, timeline_tag, spatial_tag) = (self.value_spec.output_tags[output_index], self.timeline_spec.output_tags[output_index], self.spatial_spec.output_tags[output_index]);
 
 			match & self.program.types[*output_type]
 			{
@@ -233,52 +232,63 @@ impl<'program> FuncletChecker<'program>
 		}
 	}
 
-	fn get_funclet_input_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra, input_index : usize) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag)
+	fn get_funclet_value_spec<'funclet>(&self, funclet : & 'funclet ir::Funclet) -> & 'funclet ir::FuncletSpec
 	{
-		let type_id = funclet.input_types[input_index];
-		match & self.program.types[type_id]
+		if let ir::FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = & funclet.spec_binding
 		{
-			ir::Type::Slot{..} =>
-			{
-				let slot_info = & funclet_extra.input_tag_sets[input_index];
-				(slot_info.value_tag, slot_info.timeline_tag, slot_info.spatial_tag)
-			}
-			ir::Type::Fence{..} =>
-			{
-				let fence_info = & funclet_extra.input_tag_sets[input_index];
-				(ir::ValueTag::None, fence_info.timeline_tag, ir::SpatialTag::None)
-			}
-			ir::Type::Buffer{..} =>
-			{
-				let buffer_info = & funclet_extra.input_tag_sets[input_index];
-				(ir::ValueTag::None, ir::TimelineTag::None, buffer_info.spatial_tag)
-			}
-			_ => panic!("Unimplemented")
+			value
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
 		}
 	}
 
-	fn get_funclet_output_tags(&self, funclet : & ir::Funclet, funclet_extra : & ir::SchedulingFuncletExtra, output_index : usize) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag)
+	fn get_funclet_timeline_spec<'funclet>(&self, funclet : & 'funclet ir::Funclet) -> & 'funclet ir::FuncletSpec
 	{
-		let type_id = funclet.output_types[output_index];
-		// Doesn't work with joins as arguments
-		match & self.program.types[type_id]
+		if let ir::FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = & funclet.spec_binding
 		{
-			ir::Type::Slot{..} =>
-			{
-				let slot_info = & funclet_extra.output_tag_sets[output_index];
-				(slot_info.value_tag, slot_info.timeline_tag, slot_info.spatial_tag)
-			}
-			ir::Type::Fence{..} =>
-			{
-				let fence_info = & funclet_extra.output_tag_sets[output_index];
-				(ir::ValueTag::None, fence_info.timeline_tag, ir::SpatialTag::None)
-			}
-			ir::Type::Buffer{..} =>
-			{
-				let buffer_info = & funclet_extra.output_tag_sets[output_index];
-				(ir::ValueTag::None, ir::TimelineTag::None, buffer_info.spatial_tag)
-			}
-			_ => panic!("Unimplemented")
+			timeline
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+
+	fn get_funclet_spatial_spec<'funclet>(&self, funclet : & 'funclet ir::Funclet) -> & 'funclet ir::FuncletSpec
+	{
+		if let ir::FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = & funclet.spec_binding
+		{
+			spatial
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+
+	fn get_funclet_input_tags(&self, funclet : & ir::Funclet, input_index : usize) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag)
+	{
+		if let ir::FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = & funclet.spec_binding
+		{
+			(value.input_tags[input_index], timeline.input_tags[input_index], spatial.input_tags[input_index])
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+
+	fn get_funclet_output_tags(&self, funclet : & ir::Funclet, output_index : usize) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag)
+	{
+		if let ir::FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = & funclet.spec_binding
+		{
+			(value.output_tags[output_index], timeline.output_tags[output_index], spatial.output_tags[output_index])
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
 		}
 	}
 
@@ -423,7 +433,7 @@ impl<'program> FuncletChecker<'program>
 			}
 			ir::Node::EncodeDo { place, operation, inputs, outputs } =>
 			{
-				assert_eq!(self.scheduling_funclet_extra.value_funclet_id_opt.unwrap(), operation.funclet_id);
+				assert_eq!(self.value_spec.funclet_id_opt.unwrap(), operation.funclet_id);
 
 				let encoded_funclet = & self.program.funclets[operation.funclet_id];
 				let encoded_node = & encoded_funclet.nodes[operation.node_id];
@@ -609,7 +619,7 @@ impl<'program> FuncletChecker<'program>
 			{
 				let source_value_tag = self.scalar_node_value_tags[input];
 				let destination_value_tag = self.scalar_node_value_tags[output];
-				check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, source_value_tag, destination_value_tag);
+				check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, source_value_tag, destination_value_tag);
 				
 				match place
 				{
@@ -632,7 +642,7 @@ impl<'program> FuncletChecker<'program>
 			}
 			ir::Node::Submit { place, event } =>
 			{
-				self.current_timeline_tag = check_next_timeline_tag_on_submit(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, * event, self.current_timeline_tag);
+				self.current_timeline_tag = check_next_timeline_tag_on_submit(& self.program, self.timeline_spec.funclet_id_opt, * event, self.current_timeline_tag);
 
 				for (node_id, node_type) in self.node_types.iter_mut()
 				{
@@ -662,7 +672,7 @@ impl<'program> FuncletChecker<'program>
 			}
 			ir::Node::SyncFence { place : synced_place, fence, event } =>
 			{
-				self.current_timeline_tag = check_next_timeline_tag_on_sync(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, * event, self.current_timeline_tag);
+				self.current_timeline_tag = check_next_timeline_tag_on_sync(& self.program, self.timeline_spec.funclet_id_opt, * event, self.current_timeline_tag);
 
 				// Only implemented for the local queue for now
 				assert_eq!(* synced_place, ir::Place::Local);
@@ -680,7 +690,7 @@ impl<'program> FuncletChecker<'program>
 				let fence_encoding_timeline_event =
 					if let Some(ir::TimelineTag::Node{node_id}) = self.scalar_node_timeline_tags.get(fence)
 					{
-						ir::RemoteNodeId{funclet_id : self.scheduling_funclet_extra.temporal_funclet_id_opt.unwrap(), node_id : * node_id}
+						ir::RemoteNodeId{funclet_id : self.timeline_spec.funclet_id_opt.unwrap(), node_id : * node_id}
 					}
 					else
 					{
@@ -768,14 +778,14 @@ impl<'program> FuncletChecker<'program>
 				let mut input_types = Vec::<ir::TypeId>::new();
 				for (index, type_id) in self.scheduling_funclet.output_types.iter().enumerate()
 				{
-					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, index);
+					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(self.scheduling_funclet, index);
 					value_tags.push(value_tag);
 					timeline_tags.push(timeline_tag);
 					spatial_tags.push(spatial_tag);
 					input_types.push(* type_id);
 				}
 				//self.join_node_value_tags.insert(current_node_id, value_tags.into_boxed_slice());
-				let join_point = JoinPoint { join_kind : JoinKind::Default, in_timeline_tag : self.scheduling_funclet_extra.out_timeline_tag, input_timeline_tags : timeline_tags.into_boxed_slice(), input_value_tags : value_tags.into_boxed_slice(), input_spatial_tags : spatial_tags.into_boxed_slice(), input_types : input_types.into_boxed_slice() };
+				let join_point = JoinPoint { join_kind : JoinKind::Default, in_timeline_tag : self.timeline_spec.implicit_out_tag, input_timeline_tags : timeline_tags.into_boxed_slice(), input_value_tags : value_tags.into_boxed_slice(), input_spatial_tags : spatial_tags.into_boxed_slice(), input_types : input_types.into_boxed_slice() };
 				self.node_join_points.insert(current_node_id, join_point);
 				self.node_types.insert(current_node_id, NodeType::JoinPoint);
 			}
@@ -790,7 +800,9 @@ impl<'program> FuncletChecker<'program>
 	fn handle_join(&mut self, join_funclet_id : ir::FuncletId, captures : &[ir::NodeId], continuation_join_node_id : ir::NodeId, join_kind : JoinKind)
 	{
 		let join_funclet = & self.program.funclets[join_funclet_id];
-		let join_funclet_extra = & self.program.scheduling_funclet_extras[& join_funclet_id];
+		let join_funclet_value_spec = & self.get_funclet_value_spec(join_funclet);
+		let join_funclet_timeline_spec = & self.get_funclet_timeline_spec(join_funclet);
+		let join_funclet_spatial_spec = & self.get_funclet_spatial_spec(join_funclet);
 		let continuation_join_point = & self.node_join_points[& continuation_join_node_id];
 		
 		if let Some(NodeType::JoinPoint) = self.node_types.remove(& continuation_join_node_id)
@@ -802,22 +814,22 @@ impl<'program> FuncletChecker<'program>
 			panic!("Node at #{} is not a join point", continuation_join_node_id)
 		}
 
-		check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, join_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+		check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, join_funclet_timeline_spec.implicit_out_tag, continuation_join_point.in_timeline_tag);
 
 		for (capture_index, capture_node_id) in captures.iter().enumerate()
 		{
 			let node_type = self.node_types.remove(capture_node_id).unwrap();
 			check_slot_type(& self.program, join_funclet.input_types[capture_index], & node_type);
 			
-			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, capture_index);
+			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, capture_index);
 			let node_value_tag = self.scalar_node_value_tags[capture_node_id];
 			let node_timeline_tag = self.scalar_node_timeline_tags[capture_node_id];
 			let node_spatial_tag = self.scalar_node_spatial_tags[capture_node_id];
 			assert_eq!(node_timeline_tag, ir::TimelineTag::None);
 			panic!("To do: Require that all values with the same spatial tag are also captured");
-			check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, node_value_tag, value_tag);
-			check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, node_timeline_tag, timeline_tag);
-			check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, node_spatial_tag, spatial_tag);
+			check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, node_value_tag, value_tag);
+			check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, node_timeline_tag, timeline_tag);
+			check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, node_spatial_tag, spatial_tag);
 		}
 	
 		let mut remaining_input_value_tags = Vec::<ir::ValueTag>::new();
@@ -826,7 +838,7 @@ impl<'program> FuncletChecker<'program>
 		let mut remaining_input_types = Vec::<ir::TypeId>::new();
 		for input_index in captures.len() .. join_funclet.input_types.len()
 		{
-			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, join_funclet_extra, input_index);
+			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(join_funclet, input_index);
 			remaining_input_value_tags.push(value_tag);
 			remaining_input_timeline_tags.push(timeline_tag);
 			remaining_input_spatial_tags.push(spatial_tag);
@@ -841,13 +853,13 @@ impl<'program> FuncletChecker<'program>
 		for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate()
 		{
 			assert_eq!(* join_output_type, continuation_join_input_types[join_output_index]);
-			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(join_funclet, join_funclet_extra, join_output_index);
-			check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, value_tag, continuation_join_value_tags[join_output_index]);
-			check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, timeline_tag, continuation_join_timeline_tags[join_output_index]);
-			check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, spatial_tag, continuation_join_spatial_tags[join_output_index]);
+			let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(join_funclet, join_output_index);
+			check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, value_tag, continuation_join_value_tags[join_output_index]);
+			check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, timeline_tag, continuation_join_timeline_tags[join_output_index]);
+			check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, spatial_tag, continuation_join_spatial_tags[join_output_index]);
 		}
 
-		let join_point = JoinPoint { join_kind, in_timeline_tag : join_funclet_extra.in_timeline_tag, input_timeline_tags : remaining_input_timeline_tags.into_boxed_slice(), input_value_tags : remaining_input_value_tags.into_boxed_slice(), input_spatial_tags : remaining_input_spatial_tags.into_boxed_slice(), input_types : remaining_input_types.into_boxed_slice() };
+		let join_point = JoinPoint { join_kind, in_timeline_tag : join_funclet_timeline_spec.implicit_in_tag, input_timeline_tags : remaining_input_timeline_tags.into_boxed_slice(), input_value_tags : remaining_input_value_tags.into_boxed_slice(), input_spatial_tags : remaining_input_spatial_tags.into_boxed_slice(), input_types : remaining_input_types.into_boxed_slice() };
 		self.node_join_points.insert(self.current_node_id, join_point);
 		self.node_types.insert(self.current_node_id, NodeType::JoinPoint);
 	}
@@ -859,7 +871,7 @@ impl<'program> FuncletChecker<'program>
 		{
 			ir::TailEdge::Return { return_values } =>
 			{
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag, self.scheduling_funclet_extra.out_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag, self.timeline_spec.implicit_out_tag);
 
 				for (return_index, return_node_id) in return_values.iter().enumerate()
 				{
@@ -869,10 +881,10 @@ impl<'program> FuncletChecker<'program>
 					let node_timeline_tag = self.scalar_node_timeline_tags[return_node_id];
 					let node_value_tag = self.scalar_node_value_tags[return_node_id];
 					let node_spatial_tag = self.scalar_node_spatial_tags[return_node_id];
-					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(self.scheduling_funclet, self.scheduling_funclet_extra, return_index);
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, node_value_tag, value_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, node_timeline_tag, timeline_tag);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, node_spatial_tag, spatial_tag);
+					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(self.scheduling_funclet, return_index);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, node_value_tag, value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, node_timeline_tag, timeline_tag);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, node_spatial_tag, spatial_tag);
 				}
 			}
 			ir::TailEdge::Yield{pipeline_yield_point_id, yielded_nodes : yielded_node_ids, next_funclet, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
@@ -922,7 +934,7 @@ impl<'program> FuncletChecker<'program>
 					panic!("Node at #{} is not a join point", join)
 				}
 
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag, join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag, join_point.in_timeline_tag);
 
 				for (argument_index, argument_node_id) in arguments.iter().enumerate()
 				{
@@ -932,9 +944,9 @@ impl<'program> FuncletChecker<'program>
 					let node_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let node_value_tag = self.scalar_node_value_tags[argument_node_id];
 					let node_spatial_tag = self.scalar_node_spatial_tags[argument_node_id];
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, node_value_tag, join_value_tags[argument_index]);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, node_timeline_tag, join_timeline_tags[argument_index]);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, node_spatial_tag, join_spatial_tags[argument_index]);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, node_value_tag, join_value_tags[argument_index]);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, node_timeline_tag, join_timeline_tags[argument_index]);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, node_spatial_tag, join_spatial_tags[argument_index]);
 				}
 			}
 			ir::TailEdge::ScheduleCall { value_operation : value_operation_ref, callee_funclet_id : callee_scheduling_funclet_id_ref, callee_arguments, continuation_join : continuation_join_node_id } =>
@@ -956,13 +968,14 @@ impl<'program> FuncletChecker<'program>
 
 				let callee_funclet = & self.program.funclets[callee_scheduling_funclet_id];
 				assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
-				let callee_funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& callee_scheduling_funclet_id];
-				let callee_value_funclet_id = callee_funclet_scheduling_extra.value_funclet_id_opt.unwrap();
+				let callee_funclet_value_spec = & self.get_funclet_value_spec(callee_funclet);
+				let callee_funclet_timeline_spec = & self.get_funclet_timeline_spec(callee_funclet);
+				let callee_value_funclet_id = callee_funclet_value_spec.funclet_id_opt.unwrap();
 				let callee_value_funclet = & self.program.funclets[callee_value_funclet_id];
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
 
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag, callee_funclet_scheduling_extra.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, callee_funclet_scheduling_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag, callee_funclet_timeline_spec.implicit_in_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, callee_funclet_timeline_spec.implicit_out_tag, continuation_join_point.in_timeline_tag);
 
 				// Step 1: Check current -> callee edge
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
@@ -973,10 +986,10 @@ impl<'program> FuncletChecker<'program>
 					let node_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let node_value_tag = self.scalar_node_value_tags[argument_node_id];
 					let node_spatial_tag = self.scalar_node_spatial_tags[argument_node_id];
-					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(callee_funclet, callee_funclet_scheduling_extra, argument_index);
-					check_value_tag_compatibility_enter(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, value_operation, node_value_tag, value_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, node_timeline_tag, timeline_tag);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, node_spatial_tag, spatial_tag);
+					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_input_tags(callee_funclet, argument_index);
+					check_value_tag_compatibility_enter(& self.program, self.value_spec.funclet_id_opt, value_operation, node_value_tag, value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, node_timeline_tag, timeline_tag);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, node_spatial_tag, spatial_tag);
 				}
 
 				// Step 2: Check callee -> continuation edge
@@ -987,15 +1000,15 @@ impl<'program> FuncletChecker<'program>
 				{
 					assert_eq!(* callee_output_type, continuation_join_point.input_types[callee_output_index]);
 
-					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(callee_funclet, callee_funclet_scheduling_extra, callee_output_index);
+					let (value_tag, timeline_tag, spatial_tag) = self.get_funclet_output_tags(callee_funclet, callee_output_index);
 
 					//let intermediate_value_tag = ir::ValueTag::Operation{remote_node_id : ir::RemoteNodeId{funclet_id : value_operation.funclet_id, node_id : value_operation.node_id + 1 +  continuation_input_index}};
 					//let value_tag_2 = continuation_join_value_tags[callee_output_index];
 
 					check_value_tag_compatibility_exit(& self.program, callee_value_funclet_id, value_tag, value_operation, continuation_join_value_tags[callee_output_index]);
 					//check_value_tag_compatibility_interior(& self.program, intermediate_value_tag, continuation_join_value_tags[callee_output_index]);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, timeline_tag, continuation_join_timeline_tags[callee_output_index]);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, spatial_tag, continuation_join_spatial_tags[callee_output_index]);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, timeline_tag, continuation_join_timeline_tags[callee_output_index]);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, spatial_tag, continuation_join_spatial_tags[callee_output_index]);
 				}
 			}
 			ir::TailEdge::ScheduleSelect { value_operation, condition : condition_slot_node_id, callee_funclet_ids, callee_arguments, continuation_join : continuation_join_node_id } =>
@@ -1017,24 +1030,26 @@ impl<'program> FuncletChecker<'program>
 				let false_funclet_id = callee_funclet_ids[1];
 				let true_funclet = & self.program.funclets[true_funclet_id];
 				let false_funclet = & self.program.funclets[false_funclet_id];
-				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
-				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
+				let true_funclet_value_spec = & self.get_funclet_value_spec(true_funclet);
+				let true_funclet_timeline_spec = & self.get_funclet_timeline_spec(true_funclet);
+				let false_funclet_value_spec = & self.get_funclet_value_spec(false_funclet);
+				let false_funclet_timeline_spec = & self.get_funclet_timeline_spec(false_funclet);
 
 				let current_value_funclet = & self.program.funclets[value_operation.funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
 				let condition_value_tag = self.scalar_node_value_tags[condition_slot_node_id];
 
-				assert_eq!(value_operation.funclet_id, true_funclet_extra.value_funclet_id_opt.unwrap());
-				assert_eq!(value_operation.funclet_id, false_funclet_extra.value_funclet_id_opt.unwrap());
+				assert_eq!(value_operation.funclet_id, true_funclet_value_spec.funclet_id_opt.unwrap());
+				assert_eq!(value_operation.funclet_id, true_funclet_value_spec.funclet_id_opt.unwrap());
 
 				assert_eq!(callee_arguments.len(), true_funclet.input_types.len());
 				assert_eq!(callee_arguments.len(), false_funclet.input_types.len());
 
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag, true_funclet_extra.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag, false_funclet_extra.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, true_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, false_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag, true_funclet_timeline_spec.implicit_in_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag, false_funclet_timeline_spec.implicit_in_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, true_funclet_timeline_spec.implicit_out_tag, continuation_join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, false_funclet_timeline_spec.implicit_out_tag, continuation_join_point.in_timeline_tag);
 
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
@@ -1045,15 +1060,15 @@ impl<'program> FuncletChecker<'program>
 					let argument_slot_value_tag = self.scalar_node_value_tags[argument_node_id];
 					let argument_slot_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let argument_slot_spatial_tag = self.scalar_node_spatial_tags[argument_node_id];
-					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, argument_index);
-					let (false_input_value_tag, false_input_timeline_tag, false_input_spatial_tag) = self.get_funclet_input_tags(false_funclet, false_funclet_extra, argument_index);
+					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, argument_index);
+					let (false_input_value_tag, false_input_timeline_tag, false_input_spatial_tag) = self.get_funclet_input_tags(false_funclet, argument_index);
 
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, argument_slot_value_tag, true_input_value_tag);
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, argument_slot_value_tag, false_input_value_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, argument_slot_timeline_tag, true_input_timeline_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, argument_slot_timeline_tag, false_input_timeline_tag);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, argument_slot_spatial_tag, true_input_spatial_tag);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, argument_slot_spatial_tag, false_input_spatial_tag);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, argument_slot_value_tag, true_input_value_tag);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, argument_slot_value_tag, false_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, argument_slot_timeline_tag, true_input_timeline_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, argument_slot_timeline_tag, false_input_timeline_tag);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, argument_slot_spatial_tag, true_input_spatial_tag);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, argument_slot_spatial_tag, false_input_spatial_tag);
 				}
 
 				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
@@ -1067,13 +1082,13 @@ impl<'program> FuncletChecker<'program>
 					assert_eq!(false_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
 
 					let continuation_input_value_tag = continuation_join_value_tags[output_index];
-					let (true_output_value_tag, true_output_timeline_tag, true_output_spatial_tag) = self.get_funclet_output_tags(true_funclet, true_funclet_extra, output_index);
-					let (false_output_value_tag, false_output_timeline_tag, false_output_spatial_tag) = self.get_funclet_output_tags(false_funclet, false_funclet_extra, output_index);
-					check_value_tag_compatibility_interior_branch(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, * value_operation, condition_value_tag, &[true_output_value_tag, false_output_value_tag], continuation_input_value_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, true_output_timeline_tag, continuation_join_timeline_tags[output_index]);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, false_output_timeline_tag, continuation_join_timeline_tags[output_index]);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, true_output_spatial_tag, continuation_join_spatial_tags[output_index]);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, false_output_spatial_tag, continuation_join_spatial_tags[output_index]);
+					let (true_output_value_tag, true_output_timeline_tag, true_output_spatial_tag) = self.get_funclet_output_tags(true_funclet, output_index);
+					let (false_output_value_tag, false_output_timeline_tag, false_output_spatial_tag) = self.get_funclet_output_tags(false_funclet, output_index);
+					check_value_tag_compatibility_interior_branch(& self.program, self.value_spec.funclet_id_opt, * value_operation, condition_value_tag, &[true_output_value_tag, false_output_value_tag], continuation_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, true_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, false_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, true_output_spatial_tag, continuation_join_spatial_tags[output_index]);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, false_output_spatial_tag, continuation_join_spatial_tags[output_index]);
 				}
 			}
 			ir::TailEdge::DynamicAllocFromBuffer {buffer : buffer_node_id, dynamic_allocation_size_slots : dynamic_allocation_size_node_ids, success_funclet_id, failure_funclet_id, arguments, continuation_join : continuation_join_node_id} =>
@@ -1093,8 +1108,10 @@ impl<'program> FuncletChecker<'program>
 				let false_funclet_id = failure_funclet_id;
 				let true_funclet = & self.program.funclets[*true_funclet_id];
 				let false_funclet = & self.program.funclets[*false_funclet_id];
-				let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
-				let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
+				let true_funclet_value_spec = & self.get_funclet_value_spec(true_funclet);
+				let true_funclet_timeline_spec = & self.get_funclet_timeline_spec(true_funclet);
+				let false_funclet_value_spec = & self.get_funclet_value_spec(false_funclet);
+				let false_funclet_timeline_spec = & self.get_funclet_timeline_spec(false_funclet);
 
 				let current_value_funclet = & self.program.funclets[self.value_funclet_id];
 				assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
@@ -1114,23 +1131,23 @@ impl<'program> FuncletChecker<'program>
 				// Temporary restriction
 				assert_eq!(buffer_storage_place, ir::Place::Gpu);
 
-				assert_eq!(self.value_funclet_id, true_funclet_extra.value_funclet_id_opt.unwrap());
-				assert_eq!(self.value_funclet_id, false_funclet_extra.value_funclet_id_opt.unwrap());
+				assert_eq!(self.value_funclet_id, true_funclet_value_spec.funclet_id_opt.unwrap());
+				assert_eq!(self.value_funclet_id, false_funclet_value_spec.funclet_id_opt.unwrap());
 
 				assert_eq!(arguments.len() + dynamic_allocation_size_node_ids.len(), true_funclet.input_types.len());
 				assert_eq!(arguments.len(), false_funclet.input_types.len());
 
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag, true_funclet_extra.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, self.current_timeline_tag, false_funclet_extra.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, true_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
-				check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, false_funclet_extra.out_timeline_tag, continuation_join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag, true_funclet_timeline_spec.implicit_in_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, self.current_timeline_tag, false_funclet_timeline_spec.implicit_in_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, true_funclet_timeline_spec.implicit_out_tag, continuation_join_point.in_timeline_tag);
+				check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, false_funclet_timeline_spec.implicit_out_tag, continuation_join_point.in_timeline_tag);
 
 				// Check these first because they don't take ownership
 				for (allocation_size_slot_index, allocation_size_node_id_opt) in dynamic_allocation_size_node_ids.iter().enumerate()
 				{
 					let input_index = allocation_size_slot_index + arguments.len();
-					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, input_index);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, buffer_spatial_tag, true_input_spatial_tag);
+					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, input_index);
+					check_spatial_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, buffer_spatial_tag, true_input_spatial_tag);
 
 					if let Some(allocation_size_node_id) = allocation_size_node_id_opt
 					{
@@ -1183,15 +1200,15 @@ impl<'program> FuncletChecker<'program>
 					let argument_slot_value_tag = self.scalar_node_value_tags[argument_node_id];
 					let argument_slot_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let argument_slot_spatial_tag = self.scalar_node_spatial_tags[argument_node_id];
-					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, true_funclet_extra, argument_index);
-					let (false_input_value_tag, false_input_timeline_tag, false_input_spatial_tag) = self.get_funclet_input_tags(false_funclet, false_funclet_extra, argument_index);
+					let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) = self.get_funclet_input_tags(true_funclet, argument_index);
+					let (false_input_value_tag, false_input_timeline_tag, false_input_spatial_tag) = self.get_funclet_input_tags(false_funclet, argument_index);
 
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, argument_slot_value_tag, true_input_value_tag);
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, argument_slot_value_tag, false_input_value_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, argument_slot_timeline_tag, true_input_timeline_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, argument_slot_timeline_tag, false_input_timeline_tag);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, argument_slot_spatial_tag, true_input_spatial_tag);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, argument_slot_spatial_tag, false_input_spatial_tag);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, argument_slot_value_tag, true_input_value_tag);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, argument_slot_value_tag, false_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, argument_slot_timeline_tag, true_input_timeline_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, argument_slot_timeline_tag, false_input_timeline_tag);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, argument_slot_spatial_tag, true_input_spatial_tag);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, argument_slot_spatial_tag, false_input_spatial_tag);
 				}
 
 				let continuation_join_value_tags = & continuation_join_point.input_value_tags;
@@ -1205,14 +1222,14 @@ impl<'program> FuncletChecker<'program>
 					assert_eq!(false_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
 
 					let continuation_input_value_tag = continuation_join_value_tags[output_index];
-					let (true_output_value_tag, true_output_timeline_tag, true_output_spatial_tag) = self.get_funclet_output_tags(true_funclet, true_funclet_extra, output_index);
-					let (false_output_value_tag, false_output_timeline_tag, false_output_spatial_tag) = self.get_funclet_output_tags(false_funclet, false_funclet_extra, output_index);
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, true_output_value_tag, continuation_input_value_tag);
-					check_value_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.value_funclet_id_opt, false_output_value_tag, continuation_input_value_tag);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, true_output_timeline_tag, continuation_join_timeline_tags[output_index]);
-					check_timeline_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.temporal_funclet_id_opt, false_output_timeline_tag, continuation_join_timeline_tags[output_index]);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, true_output_spatial_tag, continuation_join_spatial_tags[output_index]);
-					check_spatial_tag_compatibility_interior(& self.program, self.scheduling_funclet_extra.spatial_funclet_id_opt, false_output_spatial_tag, continuation_join_spatial_tags[output_index]);
+					let (true_output_value_tag, true_output_timeline_tag, true_output_spatial_tag) = self.get_funclet_output_tags(true_funclet, output_index);
+					let (false_output_value_tag, false_output_timeline_tag, false_output_spatial_tag) = self.get_funclet_output_tags(false_funclet, output_index);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, true_output_value_tag, continuation_input_value_tag);
+					check_value_tag_compatibility_interior(& self.program, self.value_spec.funclet_id_opt, false_output_value_tag, continuation_input_value_tag);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, true_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+					check_timeline_tag_compatibility_interior(& self.program, self.timeline_spec.funclet_id_opt, false_output_timeline_tag, continuation_join_timeline_tags[output_index]);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, true_output_spatial_tag, continuation_join_spatial_tags[output_index]);
+					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, false_output_spatial_tag, continuation_join_spatial_tags[output_index]);
 				}
 			}
 			_ => panic!("Unimplemented")

@@ -87,7 +87,25 @@
 				kind : ScheduleExplicit,
 				input_types : [3],
 				output_types : [3],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(19),
+						input_tags : [Input(funclet_id : 19, index : 0)],
+						output_tags : [Output(funclet_id : 19, index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [Input(funclet_id : 18, index : 0)],
+						output_tags : [Output(funclet_id : 18, index : 0)]
+					),
+					timeline : (
+						funclet_id_opt : Some(22),
+						input_tags : [Input(funclet_id : 22, index : 0)],
+						output_tags : [None],
+						implicit_in_tag : Input(funclet_id : 22, index : 0),
+						implicit_out_tag : Output(funclet_id : 22, index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					UnboundSlot(place : Gpu, storage_type : (0), operation : (funclet_id : 19, node_id : 2)),
@@ -103,7 +121,25 @@
 				kind : ScheduleExplicit,
 				input_types : [3],
 				output_types : [3],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(19),
+						input_tags : [Node(node_id : 2)],
+						output_tags : [Node(node_id : 4)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [Node(node_id : 0)],
+						output_tags : [Output(funclet_id : 18, index : 0)]
+					),
+					timeline : (
+						funclet_id_opt : Some(22),
+						input_tags : [Input(funclet_id : 22, index : 0)],
+						output_tags : [None],
+						implicit_in_tag : Input(funclet_id : 22, index : 0),
+						implicit_out_tag : Output(funclet_id : 22, index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					DefaultJoin,
@@ -142,7 +178,7 @@
 		value_functions : {
 			1 : (name : "looping_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(19))
 		},
-		scheduling_funclet_extras : {
+		/*scheduling_funclet_extras : {
 			20 : (
 				value_funclet_id_opt : Some(19),
 				spatial_funclet_id_opt : Some(18),
@@ -161,7 +197,7 @@
 				in_timeline_tag : Input(funclet_id : 22, index : 0), //Operation(remote_node_id : (funclet_id : 22, node_id : 1))
 				out_timeline_tag : Output(funclet_id : 22, index : 0),
 			),
-		},
+		},*/
 		pipelines : [
 			(
 				name : "looping_pipeline",
