@@ -122,7 +122,6 @@ with_operations!(make_nodes);
 pub enum Tag
 {
 	None,
-	//Operation{ remote_node_id : RemoteNodeId },
 	Node{node_id : usize},
 	Input{index : usize},
 	Output{index : usize},
@@ -141,63 +140,6 @@ impl Tag
 pub type ValueTag = Tag;
 pub type TimelineTag = Tag;
 pub type SpatialTag = Tag;
-
-/*#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ValueTag
-{
-	// Intended for scheduling purposes
-	None,
-	// These two are implementation-agnostic and are only allowed in external interfaces
-	//FunctionInput{function_id : ValueFunctionId, index : usize},
-	//FunctionOutput{function_id : ValueFunctionId, index : usize},
-	// These are not, and are intended for funclets
-	Operation{ remote_node_id : RemoteNodeId },
-	Input{/*funclet_id : FuncletId,*/ index : usize},
-	Output{/*funclet_id : FuncletId,*/ index : usize},
-	Halt{index : usize}
-}
-
-impl ValueTag
-{
-	fn default() -> Self
-	{
-		Self::None
-	}
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TimelineTag
-{
-	None,
-	Operation{ remote_node_id : RemoteNodeId },
-	Input{ funclet_id : FuncletId, index : usize },
-	Output{ funclet_id : FuncletId, index : usize },
-}
-
-impl TimelineTag
-{
-	fn default() -> Self
-	{
-		Self::None
-	}
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum SpatialTag
-{
-	None,
-	Operation{ remote_node_id : RemoteNodeId },
-	Input{ funclet_id : FuncletId, index : usize },
-	Output{ funclet_id : FuncletId, index : usize },
-}
-
-impl SpatialTag
-{
-	fn default() -> Self
-	{
-		Self::None
-	}
-}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct StaticBufferLayout
@@ -357,48 +299,6 @@ pub struct SchedulingTagSet
 	pub spatial_tag : SpatialTag,
 }
 
-// Funclet-relative slot info goes here
-/*#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SlotInfo
-{
-	pub value_tag : ValueTag,
-	pub timeline_tag : TimelineTag, // marks the event that put the slot into its current state
-	pub spatial_tag : SpatialTag,
-}
-
-// Funclet-relative join info goes here
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JoinInfo
-{
-	// To do: Which subregions of resources are reserved by this join
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FenceInfo
-{
-	pub timeline_tag : TimelineTag,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BufferInfo
-{
-	pub spatial_tag : SpatialTag,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SchedulingFuncletExtra
-{
-	pub value_funclet_id_opt : Option<FuncletId>,
-	pub spatial_funclet_id_opt : Option<FuncletId>,
-	pub temporal_funclet_id_opt : Option<FuncletId>,
-	pub input_tag_sets : Box<[TagSet]>,
-	pub output_tag_sets : Box<[TagSet]>,
-
-	// Applies to the computation itself
-	pub in_timeline_tag : TimelineTag,
-	pub out_timeline_tag : TimelineTag,
-}*/
-
 fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	let mut elements = Vec::new();
 	for key in map.keys().sorted() {
@@ -407,44 +307,6 @@ fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	}
 	elements
 }
-
-/*impl serde::Serialize for SchedulingFuncletExtra {
-	fn serialize<S>(& self, serializer : S) -> std::result::Result<<S as serde::Serializer>::Ok, <S as Serializer>::Error>
-		where S : Serializer {
-		let input_slots = ordered_map(&self.input_slots);
-		let output_slots = ordered_map(&self.output_slots);
-		let input_fences = ordered_map(&self.input_fences);
-		let output_fences = ordered_map(&self.output_fences);
-		let input_buffers = ordered_map(&self.input_buffers);
-		let output_buffers = ordered_map(&self.output_buffers);
-
-		let mut state = serializer.serialize_struct("SchedulingFucletExtra", 9)?;
-		state.serialize_field("value_funclet_id", &self.value_funclet_id);
-		state.serialize_field("input_states", &input_slots);
-		state.serialize_field("output_states", &output_slots);
-		state.serialize_field("input_fences", &input_fences);
-		state.serialize_field("output_fences", &output_fences);
-		state.serialize_field("input_buffers", &input_buffers);
-		state.serialize_field("output_buffers", &output_buffers);
-		state.serialize_field("in_timeline_tag", &self.in_timeline_tag);
-		state.serialize_field("out_timeline_tag", &self.out_timeline_tag);
-		state.end()
-	}
-}*/
-
-/*#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub struct CompatibleValueFunctionKey
-{
-	pub value_function_id : ValueFunctionId
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ValueFuncletExtra
-{
-	// Value functions this funclet implements
-	#[serde(default)]
-	pub compatible_value_functions : BTreeSet<CompatibleValueFunctionKey>
-}*/
 
 // A value function is just an equivalence class over functions that behave identically at the value level
 // A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
@@ -492,29 +354,7 @@ pub struct Program
 	pub value_functions : StableVec<ValueFunction>,
 	#[serde(default)]
 	pub pipelines : Vec<Pipeline>,
-	//#[serde(default)]
-	//pub value_funclet_extras : HashMap<FuncletId, ValueFuncletExtra>,
-	//#[serde(default)]
-	//pub scheduling_funclet_extras : HashMap<FuncletId, SchedulingFuncletExtra>,
 }
-
-/*impl serde::Serialize for Program {
-	fn serialize<S>(&self, serializer: S) -> std::result::Result<<S as serde::Serializer>::Ok, <S as Serializer>::Error>
-		where S: Serializer {
-		//let value_funclet_extras = ordered_map(&self.value_funclet_extras);
-		//let scheduling_funclet_extras = ordered_map(&self.scheduling_funclet_extras);
-
-		let mut state = serializer.serialize_struct("SchedulingFucletExtra", 9)?; // bug?
-		state.serialize_field("native_interface", &self.native_interface);
-		state.serialize_field("types", &self.types);
-		state.serialize_field("funclets", &self.funclets);
-		state.serialize_field("value_functions", &self.value_functions);
-		state.serialize_field("pipelines", &self.pipelines);
-		//state.serialize_field("value_funclet_extras", &value_funclet_extras);
-		//state.serialize_field("scheduling_funclet_extras", &scheduling_funclet_extras);
-		state.end()
-	}
-}*/
 
 impl Program
 {

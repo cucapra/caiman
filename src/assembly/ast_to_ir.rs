@@ -842,8 +842,6 @@ fn ir_funclet(funclet : &assembly_ast::Funclet, extras : &assembly_ast::Extras, 
             for extra in extras {
                 if extra.name == name {
                     context.update_local_funclet(extra.name.clone());
-                    //let index = context.local_funclet_id(extra.name.clone());
-                    //ir_scheduling_extra(&extra.data, context, f.header.args.len(), f.header.ret.len(), ir_program)
 
                     let input_slots = value_index_var_dict(extra.data.get(&as_key("input_slots")).unwrap(), value_slot_info, context);
                     let output_slots = value_index_var_dict(extra.data.get(&as_key("output_slots")).unwrap(), value_slot_info, context);
@@ -966,55 +964,6 @@ fn ir_pipelines(pipelines : &assembly_ast::Pipelines, context : &mut Context) ->
     result
 }
 
-/*fn ir_value_extra(_: &assembly_ast::UncheckedDict, _ : &mut Context) -> ir::ValueFuncletExtra {
-    todo!()
-}*/
-
-/*fn ir_value_extras(funclets : &assembly_ast::FuncletDefs, extras : &assembly_ast::Extras, context : &mut Context)
-                   -> HashMap<ir::FuncletId, ir::ValueFuncletExtra> {
-    let mut result = HashMap::new();
-    for funclet in funclets {
-        match funclet {
-            assembly_ast::FuncletDef::Local(f) => {
-                match f.kind {
-                    ir::FuncletKind::Value => {
-                        let name = f.header.name.clone();
-                        for extra in extras {
-                            if extra.name == name {
-                                context.update_local_funclet(extra.name.clone());
-                                let index = context.local_funclet_id(extra.name.clone());
-                                if result.contains_key(index) {
-                                    panic!(format!("Duplicate extras for {:?}", name));
-                                }
-                                result.insert(*index, ir_value_extra(&extra.data, context));
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-    }
-    result
-}*/
-
-
-/*fn extract_tag_slice<F : Fn(& ir::SchedulingTagSet) -> ir::Tag>(size : usize, sets : & HashMap<usize, ir::SchedulingTagSet>, f : F) -> Box<[ir::Tag]> {
-    let mut tags = Vec::new();
-    for index in 0 .. size {
-        let tag = 
-            if let Some(set) = sets.get(& index) {
-                f(set)
-            }
-            else {
-                ir::ValueTag::None
-            };
-        tags.push(tag)
-    }
-    tags.into_boxed_slice()
-}*/
-
 fn merge_tag_sets(size : usize, slots : & HashMap<usize, ir::SchedulingTagSet>, fences : & HashMap<usize, ir::SchedulingTagSet>, buffers : & HashMap<usize, ir::SchedulingTagSet>) -> Box<[ir::SchedulingTagSet]> {
     let mut sets = Vec::new();
     for index in 0 .. size {
@@ -1036,60 +985,6 @@ fn merge_tag_sets(size : usize, slots : & HashMap<usize, ir::SchedulingTagSet>, 
     sets.into_boxed_slice()
 }
 
-/*fn ir_scheduling_extra(d: &assembly_ast::UncheckedDict, context : &mut Context, input_count : usize, output_count : usize) -> ir::SchedulingFuncletExtra {
-    let input_slots = value_index_var_dict(d.get(&as_key("input_slots")).unwrap(), value_slot_info, context);
-    let output_slots = value_index_var_dict(d.get(&as_key("output_slots")).unwrap(), value_slot_info, context);
-    let input_fences = value_index_var_dict(d.get(&as_key("input_fences")).unwrap(), value_fence_info, context);
-    let output_fences = value_index_var_dict(d.get(&as_key("output_fences")).unwrap(), value_fence_info, context);
-    let input_buffers = value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context);
-    let output_buffers = value_index_var_dict(d.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context);
-
-    let value_funclet_id_opt = d.get(&as_key("value")).map(|x| value_funclet_raw_id(x, context));
-    let spatial_funclet_id_opt = d.get(&as_key("space")).map(|x| value_funclet_raw_id(x, context));
-    let temporal_funclet_id_opt = d.get(&as_key("time")).map(|x| value_funclet_raw_id(x, context));
-    ir::SchedulingFuncletExtra {
-        value_funclet_id_opt,
-        spatial_funclet_id_opt,
-        temporal_funclet_id_opt,
-        input_tag_sets: merge_tag_sets(input_count, & input_slots, & input_fences, & input_buffers),
-        output_tag_sets: merge_tag_sets(output_count, & output_slots, & output_fences, & output_buffers),
-        in_timeline_tag: value_dict_timeline_tag(d.get(&as_key("in_timeline_tag")).unwrap(), context),
-        out_timeline_tag: value_dict_timeline_tag(d.get(&as_key("out_timeline_tag")).unwrap(), context),
-    }
-}*/
-
-/*
-fn ir_scheduling_extras(funclets : &assembly_ast::FuncletDefs, extras : &assembly_ast::Extras, context : &mut Context, ir_program : &mut ir::Program) {
-    // duplicating some code...but it's annoying to fix and I'm lazy
-    for funclet in funclets {
-        match funclet {
-            assembly_ast::FuncletDef::Local(f) => {
-                match f.kind {
-                    ir::FuncletKind::ScheduleExplicit => {
-                        let name = f.header.name.clone();
-                        for extra in extras {
-                            if extra.name == name {
-                                context.update_local_funclet(extra.name.clone());
-                                let index = context.local_funclet_id(extra.name.clone());
-                                if result.contains_key(index) {
-                                    panic!(format!("Duplicate extras for {:?}", name));
-                                }
-                                result.insert(
-                                    *index,
-                                    
-                                );
-                                ir_scheduling_extra(&extra.data, context, f.header.args.len(), f.header.ret.len(), ir_program)
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-    }
-}*/
-
 fn ir_program(program : assembly_ast::Program, context : &mut Context) -> ir::Program {
     ir::Program {
         native_interface: ir_native_interface(&program, context),
@@ -1097,8 +992,6 @@ fn ir_program(program : assembly_ast::Program, context : &mut Context) -> ir::Pr
         funclets: ir_funclets(&program.funclets, &program.extras, context),
         value_functions: ir_value_functions(&program.funclets, context),
         pipelines: ir_pipelines(&program.pipelines, context),
-        //value_funclet_extras: ir_value_extras(&program.funclets, &program.extras, context),
-        //scheduling_funclet_extras: ir_scheduling_extras(&program.funclets, &program.extras, context),
     }
 }
 
