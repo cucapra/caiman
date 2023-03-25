@@ -27,17 +27,17 @@ use crate::{frontend, ir};
 // }
 
 fn compose_pair<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> U + 'a>
-    where
-        F: Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a,
-        G: Fn(T) -> U + 'a,
+where
+    F: Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a,
+    G: Fn(T) -> U + 'a,
 {
     Box::new(move |p, c| g(f(p, c)))
 }
 
 fn compose_str<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(String, &mut Context) -> U + 'a>
-    where
-        F: Fn(String, &mut Context) -> T + 'a,
-        G: Fn(T) -> U + 'a,
+where
+    F: Fn(String, &mut Context) -> T + 'a,
+    G: Fn(T) -> U + 'a,
 {
     Box::new(move |s, c| g(f(s, c)))
 }
@@ -60,17 +60,17 @@ fn compose_pair_reject<'a, T, U, G, F>(
     f: F,
     g: G,
 ) -> Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> U + 'a>
-    where
-        F: Fn(&mut Pairs<Rule>, &mut Context) -> Hole<T> + 'a,
-        G: Fn(T) -> U + 'a,
+where
+    F: Fn(&mut Pairs<Rule>, &mut Context) -> Hole<T> + 'a,
+    G: Fn(T) -> U + 'a,
 {
     Box::new(move |p, c| g(reject_hole(f(p, c))))
 }
 
 fn compose_str_reject<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(String, &mut Context) -> U + 'a>
-    where
-        F: Fn(String, &mut Context) -> Hole<T> + 'a,
-        G: Fn(T) -> U + 'a,
+where
+    F: Fn(String, &mut Context) -> Hole<T> + 'a,
+    G: Fn(T) -> U + 'a,
 {
     Box::new(move |s, c| g(reject_hole(f(s, c))))
 }
@@ -280,8 +280,16 @@ fn expect_hole<T>(
 ) -> Hole<T> {
     let mut rules = Vec::new();
     let some_rule = match potential.application {
-        Application::P(f) => rules.push(rule_pair_unwrap(potential.rule, potential.unwrap, compose_pair(f, Some))),
-        Application::S(f) => rules.push(rule_str_unwrap(potential.rule, potential.unwrap, compose_str(f, Some))),
+        Application::P(f) => rules.push(rule_pair_unwrap(
+            potential.rule,
+            potential.unwrap,
+            compose_pair(f, Some),
+        )),
+        Application::S(f) => rules.push(rule_str_unwrap(
+            potential.rule,
+            potential.unwrap,
+            compose_str(f, Some),
+        )),
     };
     rules.push(rule_hole());
     expect_vec(rules, pairs, context)
@@ -294,8 +302,16 @@ fn expect_node_hole<T>(
 ) -> Hole<T> {
     let mut rules = Vec::new();
     let some_rule = match potential.application {
-        Application::P(f) => rules.push(rule_pair_unwrap(potential.rule, potential.unwrap, compose_pair(f, Some))),
-        Application::S(f) => rules.push(rule_str_unwrap(potential.rule, potential.unwrap, compose_str(f, Some))),
+        Application::P(f) => rules.push(rule_pair_unwrap(
+            potential.rule,
+            potential.unwrap,
+            compose_pair(f, Some),
+        )),
+        Application::S(f) => rules.push(rule_str_unwrap(
+            potential.rule,
+            potential.unwrap,
+            compose_str(f, Some),
+        )),
     };
     rules.push(rule_node_hole());
     expect_vec(rules, pairs, context)
@@ -366,11 +382,11 @@ fn read_hole<T>(s: String, context: &mut Context) -> Option<T> {
     None
 }
 
-fn rule_hole<'a, T : 'a>() -> RuleApp<'a, Option<T>> {
+fn rule_hole<'a, T: 'a>() -> RuleApp<'a, Option<T>> {
     rule_str(Rule::hole, read_hole)
 }
 
-fn rule_node_hole<'a, T : 'a>() -> RuleApp<'a, Option<T>> {
+fn rule_node_hole<'a, T: 'a>() -> RuleApp<'a, Option<T>> {
     rule_str(Rule::node_hole, read_hole)
 }
 
@@ -428,8 +444,8 @@ fn read_ffi_parameterized_ref_name(
     context: &mut Context,
 ) -> Box<dyn Fn(assembly_ast::FFIType) -> assembly_ast::FFIType> {
     fn box_up<F>(f: &'static F) -> Box<dyn Fn(assembly_ast::FFIType) -> assembly_ast::FFIType>
-        where
-            F: Fn(Box<assembly_ast::FFIType>) -> assembly_ast::FFIType,
+    where
+        F: Fn(Box<assembly_ast::FFIType>) -> assembly_ast::FFIType,
     {
         Box::new(move |x| f(Box::new(x)))
     }
@@ -574,7 +590,11 @@ fn read_funclet_loc(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
 ) -> Hole<assembly_ast::RemoteNodeId> {
-    expect_hole(rule_pair(Rule::funclet_loc_filled, read_funclet_loc_filled), pairs, context)
+    expect_hole(
+        rule_pair(Rule::funclet_loc_filled, read_funclet_loc_filled),
+        pairs,
+        context,
+    )
 }
 
 fn rule_funclet_loc<'a>() -> RuleApp<'a, Hole<assembly_ast::RemoteNodeId>> {
@@ -1165,7 +1185,11 @@ fn read_node_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole
 }
 
 fn read_node_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<Vec<Hole<String>>> {
-    expect_hole(rule_pair(Rule::node_box_raw, read_node_box_raw), pairs, context)
+    expect_hole(
+        rule_pair(Rule::node_box_raw, read_node_box_raw),
+        pairs,
+        context,
+    )
 }
 
 fn rule_node_box<'a>() -> RuleApp<'a, Hole<Vec<Hole<String>>>> {
@@ -1257,7 +1281,11 @@ fn read_tail_fn_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<H
 }
 
 fn read_tail_fn_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<Vec<Hole<String>>> {
-    expect_hole(rule_pair(Rule::tail_fn_box_raw, read_tail_fn_box_raw), pairs, context)
+    expect_hole(
+        rule_pair(Rule::tail_fn_box_raw, read_tail_fn_box_raw),
+        pairs,
+        context,
+    )
 }
 
 fn rule_tail_fn_box<'a>() -> RuleApp<'a, Hole<Vec<Hole<String>>>> {
@@ -1299,12 +1327,18 @@ fn read_tail_option_node(pairs: &mut Pairs<Rule>, context: &mut Context) -> Opti
     expect_vec(rules, pairs, context)
 }
 
-fn read_tail_option_nodes(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Option<Hole<String>>> {
+fn read_tail_option_nodes(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> Vec<Option<Hole<String>>> {
     let rule = rule_pair(Rule::tail_option_node, read_tail_option_node);
     expect_all(rule, pairs, context)
 }
 
-fn read_tail_option_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Option<Hole<String>>> {
+fn read_tail_option_box_raw(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> Vec<Option<Hole<String>>> {
     match pairs.peek() {
         None => {
             vec![]
@@ -1316,8 +1350,15 @@ fn read_tail_option_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> V
     }
 }
 
-fn read_tail_option_box(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<Vec<Option<Hole<String>>>> {
-    expect_hole(rule_pair(Rule::tail_option_box_raw, read_tail_option_box_raw), pairs, context)
+fn read_tail_option_box(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> Hole<Vec<Option<Hole<String>>>> {
+    expect_hole(
+        rule_pair(Rule::tail_option_box_raw, read_tail_option_box_raw),
+        pairs,
+        context,
+    )
 }
 
 fn rule_tail_option_box<'a>() -> RuleApp<'a, Hole<Vec<Option<Hole<String>>>>> {
@@ -1371,16 +1412,20 @@ fn rule_phi_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
 
 fn read_constant_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
     let value = Some(expect(rule_n_raw(), pairs, context));
-    let type_id = Some(assembly_ast::Type::FFI(expect(rule_ffi_type(), pairs, context)));
+    let type_id = Some(assembly_ast::Type::FFI(expect(
+        rule_ffi_type(),
+        pairs,
+        context,
+    )));
 
-    assembly_ast::Node::Constant {
-        value,
-        type_id,
-    }
+    assembly_ast::Node::Constant { value, type_id }
 }
 
 fn read_constant_hole(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    assembly_ast::Node::Constant { value : None, type_id : None }
+    assembly_ast::Node::Constant {
+        value: None,
+        type_id: None,
+    }
 }
 
 fn read_constant(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
@@ -1691,7 +1736,10 @@ fn read_schedule_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assem
     expect(rule, pairs, context)
 }
 
-fn read_sync_sep(pairs: &mut Pairs<Rule>, context: &mut Context) -> (Hole<ir::Place>, Hole<ir::Place>) {
+fn read_sync_sep(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> (Hole<ir::Place>, Hole<ir::Place>) {
     let place1 = expect(rule_place(), pairs, context);
     let place2 = expect(rule_place(), pairs, context);
     (place1, place2)
@@ -1766,7 +1814,7 @@ fn read_funclet_blob(
     // this gets very silly for checking reasons
     // we both want to check for if we have a tail edge,
     //   _and_ if the last node hole could be a tail edge
-    let mut tail : Option<Option<assembly_ast::TailEdge>> = None;
+    let mut tail: Option<Option<assembly_ast::TailEdge>> = None;
     for pair in pairs {
         let rule = pair.as_rule();
         if rule == Rule::tail_edge {
@@ -1774,19 +1822,25 @@ fn read_funclet_blob(
                 None | Some(None) => {
                     commands.push(None); // push the "tail edge hole" into the commands list
                     Some(Some(read_tail_edge(&mut pair.into_inner(), context)))
-                },
-                _ => panic!("Multiple tail edges found for funclet {}", context.funclet_name())
+                }
+                _ => panic!(
+                    "Multiple tail edges found for funclet {}",
+                    context.funclet_name()
+                ),
             }
-        }
-        else if rule == Rule::node_hole {
+        } else if rule == Rule::node_hole {
             tail = Some(None) // currently the hole
-        }
-        else if rule == rule_command.rule {
+        } else if rule == rule_command.rule {
             match tail {
-                None => {} ,
+                None => {}
                 // push the "tail edge hole" into the commands list
-                Some(None) => { commands.push(None); },
-                _ => panic!("Command after tail edge found for funclet {}", context.funclet_name())
+                Some(None) => {
+                    commands.push(None);
+                }
+                _ => panic!(
+                    "Command after tail edge found for funclet {}",
+                    context.funclet_name()
+                ),
             }
             commands.push(match &rule_command.application {
                 Application::P(f) => Some(f(&mut pair.into_inner(), context)),
@@ -1797,7 +1851,8 @@ fn read_funclet_blob(
         }
     }
     match tail {
-        Some(tail_edge) => { // note that tail_edge can be None, confusingly!
+        Some(tail_edge) => {
+            // note that tail_edge can be None, confusingly!
             assembly_ast::Funclet {
                 kind,
                 header,
@@ -1808,7 +1863,7 @@ fn read_funclet_blob(
         None => panic!(format!(
             "No tail edge found for funclet {}",
             context.funclet_name()
-        ))
+        )),
     }
 }
 
@@ -1964,8 +2019,8 @@ pub fn parse(code: &str) -> Result<frontend::Definition, frontend::CompileError>
     let mut context = new_context();
     let result = match parsed {
         Err(why) => Err(crate::frontend::CompileError {
-                message: format!("{:?}", why),
-            }),
+            message: format!("{:?}", why),
+        }),
         Ok(mut parse_result) => Ok(read_definition(&mut parse_result, &mut context)),
     };
     // std::env::set_var("RUST_BACKTRACE", "0"); // help with debugging I guess

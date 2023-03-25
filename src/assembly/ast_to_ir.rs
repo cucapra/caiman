@@ -638,14 +638,17 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
 fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
     match node {
         assembly_ast::Node::None => ir::Node::None,
-        assembly_ast::Node::Phi { index } => ir::Node::Phi { index: reject_hole(*index) },
+        assembly_ast::Node::Phi { index } => ir::Node::Phi {
+            index: reject_hole(*index),
+        },
         assembly_ast::Node::ExtractResult { node_id, index } => ir::Node::ExtractResult {
             node_id: *context.node_id(reject_hole(node_id.clone())),
             index: reject_hole(*index),
         },
         assembly_ast::Node::Constant { value, type_id } => {
             let unwrapped = reject_hole(value.clone());
-            let parsed_value = match ron::from_str(unwrapped.as_str()) { // TODO: fix
+            let parsed_value = match ron::from_str(unwrapped.as_str()) {
+                // TODO: fix
                 Err(why) => panic!(format!("Cannot parse constant node immediate {}", why)),
                 Ok(v) => v,
             };
@@ -680,7 +683,10 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
                 .collect();
             match context.funclet_id(reject_hole(name.clone())) {
                 FuncletLocation::Local(_) => {
-                    panic!(format!("Cannot directly call local funclet {}", reject_hole(name)))
+                    panic!(format!(
+                        "Cannot directly call local funclet {}",
+                        reject_hole(name)
+                    ))
                 }
                 FuncletLocation::ValueFun(id) => ir::Node::CallValueFunction {
                     function_id: *id,
@@ -702,7 +708,8 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             dimensions,
             arguments,
         } => ir::Node::CallExternalGpuCompute {
-            external_function_id: *context.gpu_funclet_id(reject_hole(external_function_id.clone())),
+            external_function_id: *context
+                .gpu_funclet_id(reject_hole(external_function_id.clone())),
             dimensions: reject_hole_ref(dimensions)
                 .iter()
                 .map(|n| *context.node_id(reject_hole(n.clone())))
@@ -752,7 +759,10 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
         } => ir::Node::EncodeDo {
             place: reject_hole(place.clone()),
             operation: remote_conversion(reject_hole_ref(operation), context),
-            inputs: reject_hole_ref(inputs).iter().map(|n| *context.node_id(reject_hole(n.clone()))).collect(),
+            inputs: reject_hole_ref(inputs)
+                .iter()
+                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .collect(),
             outputs: reject_hole_ref(outputs)
                 .iter()
                 .map(|n| *context.node_id(reject_hole(n.clone())))
@@ -837,7 +847,10 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
         }
         assembly_ast::Node::MergedLinearSpace { place, spaces } => ir::Node::MergedLinearSpace {
             place: reject_hole(place.clone()),
-            spaces: reject_hole_ref(spaces).iter().map(|n| *context.node_id(reject_hole(n.clone()))).collect(),
+            spaces: reject_hole_ref(spaces)
+                .iter()
+                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .collect(),
         },
     }
 }

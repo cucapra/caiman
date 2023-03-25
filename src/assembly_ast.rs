@@ -102,7 +102,11 @@ macro_rules! map_parser_refs {
         $arg.clone().map(|x| $map((*x.clone()).to_string()))
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.clone().map(|x| x.iter().map(|y| y.clone().map(|op| $map((*op.clone()).to_string()))).collect())
+        $arg.clone().map(|x| {
+            x.iter()
+                .map(|y| y.clone().map(|op| $map((*op.clone()).to_string())))
+                .collect()
+        })
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()
