@@ -1951,7 +1951,7 @@ fn read_program(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast:
 
 fn read_definition(pairs: &mut Pairs<Rule>, context: &mut Context) -> frontend::Definition {
     let program = expect(rule_pair(Rule::program, read_program), pairs, context);
-    // dbg!(program);
+    dbg!(&program);
     // std::process::exit(0);
     ast_to_ir::transform(program, context)
     // dbg!(ast_to_ir::transform(program, context));
