@@ -1,5 +1,6 @@
-use crate::assembly::context::{Context, FuncletLocation};
-use crate::assembly::{context, parser};
+use crate::assembly_context::{Context, FuncletLocation};
+use crate::assembly_context;
+use crate::assembly::parser;
 use crate::assembly_ast::FFIType;
 use crate::assembly_ast::Hole;
 use crate::ir::ffi;
@@ -177,13 +178,13 @@ fn value_funclet_raw_id(d: &assembly_ast::DictValue, context: &mut Context) -> u
     }
 }
 
-fn value_type(d: &assembly_ast::DictValue, context: &mut Context) -> context::Location {
+fn value_type(d: &assembly_ast::DictValue, context: &mut Context) -> assembly_context::Location {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Type(t) => match t {
-            assembly_ast::Type::FFI(typ) => context::Location::FFI(*context.ffi_type_id(&typ)),
+            assembly_ast::Type::FFI(typ) => assembly_context::Location::FFI(*context.ffi_type_id(&typ)),
             assembly_ast::Type::Local(name) => {
-                context::Location::Local(*context.local_type_id(name.clone()))
+                assembly_context::Location::Local(*context.local_type_id(name.clone()))
             }
         },
         _ => panic!(format!("Expected type got {:?}", v)),
@@ -568,11 +569,11 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
                     assembly_ast::TypeKind::NativeValue => {
                         let type_found = typ.data.get(&as_key("type")).unwrap();
                         let storage_type = match value_type(type_found, context) {
-                            context::Location::Local(t) => panic!(format!(
+                            assembly_context::Location::Local(t) => panic!(format!(
                                 "Expected ffi type in native value, got {:?}",
                                 type_found
                             )),
-                            context::Location::FFI(i) => ffi::TypeId(i),
+                            assembly_context::Location::FFI(i) => ffi::TypeId(i),
                         };
                         ir::Type::NativeValue { storage_type }
                     }
@@ -1194,9 +1195,11 @@ fn ir_program(program: assembly_ast::Program, context: &mut Context) -> ir::Prog
     }
 }
 
-pub fn transform(program: assembly_ast::Program, context: &mut Context) -> frontend::Definition {
+pub fn explicate(mut program: assembly_ast::Program) -> frontend::Definition {
+    let mut context = &mut crate::assembly_context::new_context();
+    std::mem::swap(context, &mut program.context);
     frontend::Definition {
-        version: ir_version(&program.version, context),
-        program: ir_program(program, context),
+        version: ir_version(&program.version, &mut context),
+        program: ir_program(program, &mut context),
     }
 }

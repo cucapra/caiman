@@ -7,8 +7,8 @@ use std::collections::HashMap;
 #[grammar = "src/assembly/caimanir.pest"]
 pub struct IRParser;
 
-use crate::assembly::ast_to_ir;
-use crate::assembly::context::{new_context, Context};
+use crate::assembly::explication;
+use crate::assembly_context::{new_context, Context};
 use crate::assembly_ast;
 use crate::assembly_ast::Hole;
 use crate::assembly_ast::UncheckedDict;
@@ -1983,19 +1983,27 @@ fn read_pipelines(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_as
     expect_all(rule_pair(Rule::pipeline, read_pipeline), pairs, context)
 }
 
-fn read_program(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Program {
-    let version = expect(rule_pair(Rule::version, read_version), pairs, context);
+fn read_program(parsed: &mut Pairs<Rule>) -> assembly_ast::Program {
+    let head = parsed.next().unwrap();
+    let mut pairs = match head.as_rule() {
+        Rule::program => head.into_inner() ,
+        _ => panic!("CAIR must start with a program"),
+    };
+
+    let mut context = new_context();
+
+    let version = expect(rule_pair(Rule::version, read_version), &mut pairs, &mut context);
 
     context.initiate_type_indices();
-    let types = expect(rule_pair(Rule::types, read_types), pairs, context);
+    let types = expect(rule_pair(Rule::types, read_types), &mut pairs, &mut context);
 
     context.initiate_funclet_indices();
-    let funclets = expect(rule_pair(Rule::funclets, read_funclets), pairs, context);
+    let funclets = expect(rule_pair(Rule::funclets, read_funclets), &mut pairs, &mut context);
 
     context.clear_indices();
-    let extras = expect(rule_pair(Rule::extras, read_extras), pairs, context);
+    let extras = expect(rule_pair(Rule::extras, read_extras), &mut pairs, &mut context);
 
-    let pipelines = expect(rule_pair(Rule::pipelines, read_pipelines), pairs, context);
+    let pipelines = expect(rule_pair(Rule::pipelines, read_pipelines), &mut pairs, &mut context);
 
     assembly_ast::Program {
         version,
@@ -2003,27 +2011,14 @@ fn read_program(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast:
         funclets,
         extras,
         pipelines,
+        context
     }
 }
 
-fn read_definition(pairs: &mut Pairs<Rule>, context: &mut Context) -> frontend::Definition {
-    let program = expect(rule_pair(Rule::program, read_program), pairs, context);
-    // dbg!(&program);
-    // std::process::exit(0);
-    ast_to_ir::transform(program, context)
-    // dbg!(ast_to_ir::transform(program, context));
-}
-
-pub fn parse(code: &str) -> Result<frontend::Definition, frontend::CompileError> {
-    // std::env::set_var("RUST_BACKTRACE", "1"); // help with debugging I guess
+pub fn parse(code: &str) -> assembly_ast::Program {
     let parsed = IRParser::parse(Rule::program, code);
-    let mut context = new_context();
-    let result = match parsed {
-        Err(why) => Err(crate::frontend::CompileError {
-            message: format!("{:?}", why),
-        }),
-        Ok(mut parse_result) => Ok(read_definition(&mut parse_result, &mut context)),
-    };
-    // std::env::set_var("RUST_BACKTRACE", "0"); // help with debugging I guess
-    result
+    match parsed {
+        Err(why) => panic!("{:?}", why),
+        Ok(mut parse_result) => read_program(&mut parse_result),
+    }
 }

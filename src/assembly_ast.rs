@@ -3,6 +3,7 @@ use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use crate::assembly_context;
 
 // Explication and frontend AST
 
@@ -374,4 +375,5 @@ pub struct Program {
     pub funclets: FuncletDefs,
     pub extras: Extras,
     pub pipelines: Pipelines,
+    pub context: assembly_context::Context
 }
