@@ -1,14 +1,6 @@
 struct Callbacks;
 
-impl pipeline::main::CpuFunctions for Callbacks {
-    fn do_thing_on_cpu(
-        &self,
-        state: &mut caiman_rt::State,
-        value: i64,
-    ) -> pipeline::main::outputs::do_thing_on_cpu {
-        return (value + 1,);
-    }
-}
+impl pipeline::main::CpuFunctions for Callbacks {}
 
 fn main() {
     use caiman_rt::wgpu;
@@ -29,6 +21,6 @@ fn main() {
     let mut join_stack_bytes = [0u8; 4096usize];
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
     let instance = crate::pipeline::main::Instance::new(&mut root_state, &callbacks);
-    let result = instance.start(&mut join_stack, 1);
+    let result = instance.start(&mut join_stack);
     println!("{}", result.returned().unwrap().0);
 }

@@ -646,15 +646,20 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
             index: reject_hole(*index),
         },
         assembly_ast::Node::Constant { value, type_id } => {
-            let unwrapped = reject_hole(value.clone());
-            let parsed_value = match ron::from_str(unwrapped.as_str()) {
-                // TODO: fix
-                Err(why) => panic!(format!("Cannot parse constant node immediate {}", why)),
-                Ok(v) => v,
+            let unwrapped_value = reject_hole(value.clone());
+            let unwrapped_type = reject_hole(type_id.clone());
+            let parsed_value = match &unwrapped_type {
+                assembly_ast::Type::Local(_) => panic!("Cannot have a custom type constant {:?}", type_id),
+                assembly_ast::Type::FFI(t) => match t {
+                    FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
+                    FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
+                    FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
+                    _ => panic!("Unsupported constant type {:?}", type_id)
+                }
             };
             ir::Node::Constant {
                 value: parsed_value,
-                type_id: *context.loc_type_id(reject_hole(type_id.clone())),
+                type_id: *context.loc_type_id(unwrapped_type),
             }
         }
         assembly_ast::Node::CallValueFunction {

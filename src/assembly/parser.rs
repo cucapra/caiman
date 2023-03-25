@@ -1543,20 +1543,20 @@ fn read_do_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<Stri
     expect_all(rule_var_name(), pairs, context)
 }
 
+fn read_do_params(pairs: &mut Pairs<Rule>, context: &mut Context) -> Box<[Hole<String>]> {
+    option_to_vec(optional(rule_pair(Rule::do_args, read_do_args), pairs, context)).into_boxed_slice()
+}
+
 fn read_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
     let rule_place = rule_str_unwrap(Rule::do_sep, 1, Box::new(read_place));
     let place = expect(rule_place, pairs, context);
     let operation = expect(rule_funclet_loc(), pairs, context);
-    let mut rules_args = Vec::new();
-    let rule = compose_pair(read_do_args, Some);
-    rules_args.push(rule_pair_boxed(Rule::do_args, rule));
-    rules_args.push(rule_hole());
-    let inputs = optional_vec(rules_args, pairs, context).map(option_to_vec);
+    let inputs = expect_hole(rule_pair(Rule::do_params, read_do_params), pairs, context);
     let output = expect(rule_var_name(), pairs, context);
     assembly_ast::Node::EncodeDo {
         place,
         operation,
-        inputs: inputs.map(|v| v.into_boxed_slice()),
+        inputs,
         outputs: Some(Box::new([output])),
     }
 }
@@ -1814,12 +1814,13 @@ fn read_funclet_blob(
     // this gets very silly for checking reasons
     // we both want to check for if we have a tail edge,
     //   _and_ if the last node hole could be a tail edge
-    let mut tail: Option<Option<assembly_ast::TailEdge>> = None;
+    let mut tail: Option<Hole<assembly_ast::TailEdge>> = None;
     for pair in pairs {
         let rule = pair.as_rule();
         if rule == Rule::tail_edge {
             tail = match tail {
-                None | Some(None) => {
+                None => Some(Some(read_tail_edge(&mut pair.into_inner(), context))),
+                Some(None) => {
                     commands.push(None); // push the "tail edge hole" into the commands list
                     Some(Some(read_tail_edge(&mut pair.into_inner(), context)))
                 }
@@ -1831,17 +1832,18 @@ fn read_funclet_blob(
         } else if rule == Rule::node_hole {
             tail = Some(None) // currently the hole
         } else if rule == rule_command.rule {
-            match tail {
-                None => {}
+            tail = match tail {
+                None => None,
                 // push the "tail edge hole" into the commands list
                 Some(None) => {
                     commands.push(None);
+                    None
                 }
                 _ => panic!(
                     "Command after tail edge found for funclet {}",
                     context.funclet_name()
                 ),
-            }
+            };
             commands.push(match &rule_command.application {
                 Application::P(f) => Some(f(&mut pair.into_inner(), context)),
                 _ => panic!("Internal error with rules"),
@@ -1852,7 +1854,7 @@ fn read_funclet_blob(
     }
     match tail {
         Some(tail_edge) => {
-            // note that tail_edge can be None, confusingly!
+            // note that tail_edge can be None (as a hole)
             assembly_ast::Funclet {
                 kind,
                 header,
@@ -2006,11 +2008,10 @@ fn read_program(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast:
 
 fn read_definition(pairs: &mut Pairs<Rule>, context: &mut Context) -> frontend::Definition {
     let program = expect(rule_pair(Rule::program, read_program), pairs, context);
-    dbg!(&program);
+    // dbg!(&program);
     // std::process::exit(0);
     ast_to_ir::transform(program, context)
     // dbg!(ast_to_ir::transform(program, context));
-    // todo!()
 }
 
 pub fn parse(code: &str) -> Result<frontend::Definition, frontend::CompileError> {
