@@ -101,10 +101,10 @@ impl Context {
     fn setup_add(&mut self, name: String) -> &mut FuncletIndices {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         if self.funclet_map.contains_key(name.as_str()) {
-            panic!(format!("Duplicate funclet name {} ", name));
+            panic!("Duplicate funclet name {} ", name);
         };
         indices
     }
@@ -112,7 +112,7 @@ impl Context {
     pub fn add_ffi_type(&mut self, name: assembly_ast::FFIType) {
         let indices = match &mut self.indices {
             Indices::TypeIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         let index = indices.ffi_type_index;
         self.ffi_type_map.insert(name, index);
@@ -122,7 +122,7 @@ impl Context {
     pub fn add_local_type(&mut self, name: String) {
         let indices = match &mut self.indices {
             Indices::TypeIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         let index = indices.local_type_index;
         self.local_type_map.insert(name, index);
@@ -133,10 +133,10 @@ impl Context {
         // stupid borrow check, can't easily make a helper
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         if self.funclet_map.contains_key(name.as_str()) {
-            panic!(format!("Duplicate funclet name {} ", name));
+            panic!("Duplicate funclet name {} ", name);
         };
         // let indices = self.setup_add(name.clone());
         let index = indices.cpu_index;
@@ -149,10 +149,10 @@ impl Context {
     pub fn add_gpu_funclet(&mut self, name: String) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         if self.funclet_map.contains_key(name.as_str()) {
-            panic!(format!("Duplicate funclet name {} ", name));
+            panic!("Duplicate funclet name {} ", name);
         };
         let index = indices.gpu_index;
         self.funclet_map
@@ -163,10 +163,10 @@ impl Context {
     pub fn add_local_funclet(&mut self, name: String) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         if self.funclet_map.contains_key(name.as_str()) {
-            panic!(format!("Duplicate funclet name {} ", name));
+            panic!("Duplicate funclet name {} ", name);
         };
         let index = indices.local_index.funclet_id;
         self.funclet_map
@@ -180,10 +180,10 @@ impl Context {
     pub fn add_value_function(&mut self, name: String) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         if self.funclet_map.contains_key(name.as_str()) {
-            panic!(format!("Duplicate funclet name {} ", name));
+            panic!("Duplicate funclet name {} ", name);
         };
         let index = indices.value_function_index;
         self.funclet_map
@@ -206,7 +206,7 @@ impl Context {
     pub fn add_node(&mut self, name: String) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         if name == "_" {
             // ignore throwaway except to update index
@@ -226,7 +226,7 @@ impl Context {
     pub fn add_return_node(&mut self, name: String) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
-            _ => panic!(format!("Invalid access attempt {:?}", name)),
+            _ => panic!("Invalid access attempt {:?}", name),
         };
         if name == "_" {
             // ignore throwaway except to update index
@@ -246,14 +246,14 @@ impl Context {
     pub fn ffi_type_id(&mut self, name: &assembly_ast::FFIType) -> &usize {
         match self.ffi_type_map.get(name) {
             Some(i) => i,
-            None => panic!(format!("Un-indexed FFI type {:?}", name)),
+            None => panic!("Un-indexed FFI type {:?}", name),
         }
     }
 
     pub fn local_type_id(&mut self, name: String) -> &usize {
         match self.local_type_map.get(name.as_str()) {
             Some(t) => t,
-            None => panic!(format!("Unknown local type {:?}", name)),
+            None => panic!("Unknown local type {:?}", name),
         }
     }
 
@@ -276,32 +276,32 @@ impl Context {
     pub fn funclet_id(&mut self, name: String) -> &FuncletLocation {
         match self.funclet_map.get(name.as_str()) {
             Some(f) => f,
-            None => panic!(format!("Unknown funclet name {:?}", name)),
+            None => panic!("Unknown funclet name {:?}", name),
         }
     }
 
     pub fn local_funclet_id(&mut self, name: String) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::Local(u) => u,
-            _ => panic!(format!("Not a local funclet {}", name)),
+            _ => panic!("Not a local funclet {}", name),
         }
     }
     pub fn cpu_funclet_id(&mut self, name: String) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::CpuFun(u) => u,
-            _ => panic!(format!("Not a cpu funclet {}", name)),
+            _ => panic!("Not a cpu funclet {}", name),
         }
     }
     pub fn gpu_funclet_id(&mut self, name: String) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::GpuFun(u) => u,
-            _ => panic!(format!("Not a gpu funclet {}", name)),
+            _ => panic!("Not a gpu funclet {}", name),
         }
     }
     pub fn value_function_id(&mut self, name: String) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::ValueFun(u) => u,
-            _ => panic!(format!("Not a value function {}", name)),
+            _ => panic!("Not a value function {}", name),
         }
     }
 
@@ -309,9 +309,9 @@ impl Context {
         match self.remote_map.get(funclet.as_str()) {
             Some(f) => match f.get(var.as_str()) {
                 Some(v) => v,
-                None => panic!(format!("Unknown var name {} in funclet {}", var, funclet)),
+                None => panic!("Unknown var name {} in funclet {}", var, funclet),
             },
-            None => panic!(format!("Unknown funclet name {}", funclet)),
+            None => panic!("Unknown funclet name {}", funclet),
         }
     }
 
@@ -323,11 +323,11 @@ impl Context {
             .get(var.as_str())
         {
             Some(v) => v,
-            None => panic!(format!(
+            None => panic!(
                 "Unknown variable name {:?} in funclet {:?}",
                 var,
                 self.funclet_name()
-            )),
+            ),
         }
     }
 

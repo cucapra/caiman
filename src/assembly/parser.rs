@@ -186,7 +186,7 @@ fn is_rule(potentials: Vec<Rule>, pairs: &mut Pairs<Rule>, context: &mut Context
 fn require_rules(potentials: Vec<Rule>, pairs: &mut Pairs<Rule>, context: &mut Context) {
     let rule = pairs.next().unwrap().as_rule();
     if !check_rule(potentials, rule, context) {
-        panic!(format!("Unexpected parse rule {:?}", rule))
+        panic!("Unexpected parse rule {:?}", rule)
     }
 }
 
@@ -911,7 +911,7 @@ fn read_ir_type_decl_key(s: String, _: &mut Context) -> assembly_ast::TypeKind {
         "buffer" => assembly_ast::TypeKind::Buffer,
         "space_buffer" => assembly_ast::TypeKind::BufferSpace,
         "event" => assembly_ast::TypeKind::Event,
-        _ => panic!(format!("Unexpected slot check {}", s)),
+        _ => panic!("Unexpected slot check {:?}", s),
     }
 }
 
