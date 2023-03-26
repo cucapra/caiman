@@ -107,6 +107,15 @@ impl Context {
         self.current_funclet_name = None;
     }
 
+    // for use by the explicator
+    pub fn add_ffi_type(&mut self, t : assembly_ast::FFIType) {
+        self.ffi_type_table.push(t);
+    }
+
+    pub fn add_local_type(&mut self, name : String) {
+        self.local_type_table.push(name);
+    }
+
     pub fn add_funclet(&mut self) -> String {
         let name = self.funclet_table.len().to_string() + "$Gen"; // free name
         self.funclet_table.push(name.clone());
@@ -157,8 +166,15 @@ impl Context {
         }
     }
 
-    pub fn funclet_id(&mut self, name: String) -> usize {
-        match self.funclet_table.get(&name) {
+    pub fn funclet_location(&mut self, name: &String) -> &FuncletLocation {
+        match self.funclet_location_map.get(name) {
+            Some(f) => f,
+            None => panic!("Unknown funclet name {:?}", name),
+        }
+    }
+
+    pub fn funclet_id(&mut self, name: &String) -> usize {
+        match self.funclet_table.get(name) {
             Some(f) => f,
             None => panic!("Unknown funclet name {:?}", name),
         }
@@ -221,4 +237,36 @@ impl Context {
             node_id: self.remote_node_id(funclet, var),
         }
     }
+
+    fn build_from_assembly(&mut self, context : &assembly_context::Context) {
+        for ffi_type in context.ffi_type_map_dump() {
+            self.ffi_type_table.push(ffi_type.clone());
+        }
+        for local_type in context.local_type_map_dump() {
+            self.local_type_table.push(local_type.clone());
+        }
+        for funclet in context.funclet_map_dump() {
+            self.funclet_table.push(funclet.clone());
+            let location = match context.funclet_id(funclet.clone()) {
+                assembly_context::FuncletLocation::Local(_) => FuncletLocation::Local,
+                assembly_context::FuncletLocation::ValueFun(_) => FuncletLocation::ValueFun,
+                assembly_context::FuncletLocation::CpuFun(_) => FuncletLocation::CpuFun,
+                assembly_context::FuncletLocation::GpuFun(_) => FuncletLocation::GpuFun
+            };
+            self.funclet_location_map.insert(funclet.clone(), location);
+        }
+        for remote in context.remote_map_dump() {
+            let mut table = new_table();
+            for node in context.remote_map_inner_dump(remote) {
+                table.push(node.clone());
+            }
+            self.remote_map.insert(remote.clone(), table);
+        }
+    }
+}
+
+pub fn assembly_to_explication(context : &assembly_context::Context) -> Context {
+    let mut result = new_context();
+    result.build_from_assembly(context);
+    result
 }

@@ -3,6 +3,7 @@
 use crate::assembly_ast;
 use crate::ir;
 use std::collections::HashMap;
+use itertools::Itertools;
 
 #[derive(Debug, Clone)]
 struct TypeIndices {
@@ -264,7 +265,7 @@ impl Context {
         }
     }
 
-    pub fn funclet_id_unwrap(&mut self, name: String) -> &usize {
+    pub fn funclet_id_unwrap(&self, name: String) -> &usize {
         match self.funclet_id(name) {
             FuncletLocation::Local(n) => n,
             FuncletLocation::GpuFun(n) => n,
@@ -273,7 +274,7 @@ impl Context {
         }
     }
 
-    pub fn funclet_id(&mut self, name: String) -> &FuncletLocation {
+    pub fn funclet_id(&self, name: String) -> &FuncletLocation {
         match self.funclet_map.get(name.as_str()) {
             Some(f) => f,
             None => panic!("Unknown funclet name {:?}", name),
@@ -336,5 +337,30 @@ impl Context {
             funclet_id: *self.local_funclet_id(funclet.clone()),
             node_id: *self.remote_node_id(funclet, var),
         }
+    }
+
+    // ffi_type_map: HashMap<assembly_ast::FFIType, usize>,
+    // local_type_map: HashMap<String, usize>,
+    // funclet_map: HashMap<String, FuncletLocation>,
+    // remote_map: HashMap<String, HashMap<String, usize>>,
+
+    pub fn ffi_type_map_dump(&self) -> Vec<&assembly_ast::FFIType> {
+        self.ffi_type_map.keys().collect_vec()
+    }
+
+    pub fn local_type_map_dump(&self) -> Vec<&String> {
+        self.local_type_map.keys().collect_vec()
+    }
+
+    pub fn funclet_map_dump(&self) -> Vec<&String> {
+        self.funclet_map.keys().collect_vec()
+    }
+
+    pub fn remote_map_dump(&self) -> Vec<&String> {
+        self.remote_map.keys().collect_vec()
+    }
+
+    pub fn remote_map_inner_dump(&self, name : &String) -> Vec<&String> {
+        self.remote_map.get(name).unwrap().keys().collect_vec()
     }
 }
