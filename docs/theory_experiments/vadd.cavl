@@ -1,0 +1,20 @@
+let vadd(v1 : unsized<i32>, v2 : unsized<i32>) -> unsized<i32> {
+    let result = vadd_rec(v1, v2, 0);
+    return result;
+}
+
+let vadd_rec(v1 : unsized<i32>, v2 : unsized<i32>, index : i32) -> unsized<i32>
+{
+    let rec_res = vadd_rec(v1, v2, index + 1);
+    let add_res = v1[index] + v2[index];
+    let new_arr = append(rec_res, add_res);
+
+    let empty_arr = [];
+
+    // in theory you might want an exception here
+    // but that's _hard_
+    let check = if index < length(v1) then new_arr else empty_arr;
+    let result = if index < length(v2) then check else empty_arr;
+
+    return result;
+}

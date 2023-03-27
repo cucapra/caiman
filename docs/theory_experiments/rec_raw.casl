@@ -1,0 +1,28 @@
+let main_start(x : slot) : main -> slot {
+    return $result.call(_);
+}
+
+/* Equivalent schedule
+
+schedule main_start_head(%x : slot) : main -> slot {
+    %default = default-join;
+    %join = inline-join main_start_tail [] %default;
+    schedule-call %x sum_start %join;
+}
+
+schedule main_start_tail(%result : slot) : main -> slot {
+    return %result;
+}
+
+*/
+
+let sum_start(x : slot) : sum -> slot {
+    $result.if(_) {
+        allocate $left_res;
+        
+        $left.call(_);
+        $left_res.call(_)
+    }
+    else { _ }
+    return _;
+}

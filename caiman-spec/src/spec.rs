@@ -33,6 +33,7 @@ pub enum OperationInputKind
 {
 	Type,
 	Place,
+	Immediate,
 	ImmediateI64,
 	ImmediateI32,
 	ImmediateU64,
