@@ -5,9 +5,8 @@ use crate::ir::ffi;
 use crate::{assembly_ast, frontend, ir, assembly_context};
 use std::any::Any;
 use std::collections::HashMap;
-use crate::assembly::explication_context;
-use crate::assembly::explication_context::Context;
-use crate::assembly::explication_context::FuncletLocation;
+use crate::assembly_context::Context;
+use crate::assembly_context::FuncletLocation;
 
 // for reading GPU stuff
 use crate::stable_vec::StableVec;
@@ -570,10 +569,10 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
                     assembly_ast::TypeKind::NativeValue => {
                         let type_found = typ.data.get(&as_key("type")).unwrap();
                         let storage_type = match value_type(type_found, context) {
-                            assembly_context::Location::Local(t) => panic!(format!(
+                            assembly_context::Location::Local(i) => panic!(
                                 "Expected ffi type in native value, got {:?}",
                                 type_found
-                            )),
+                            ),
                             assembly_context::Location::FFI(i) => ffi::TypeId(i),
                         };
                         ir::Type::NativeValue { storage_type }
@@ -1195,8 +1194,9 @@ fn ir_program(program: assembly_ast::Program, context: &mut Context) -> ir::Prog
     }
 }
 
-pub fn explicate(program: assembly_ast::Program) -> frontend::Definition {
-    let mut context = explication_context::assembly_to_explication(&program.context);
+pub fn explicate(mut program: assembly_ast::Program) -> frontend::Definition {
+    let mut context = assembly_context::new_context();
+    std::mem::swap(&mut context, &mut program.context);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
         program: ir_program(program, &mut context),

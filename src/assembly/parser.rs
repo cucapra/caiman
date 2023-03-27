@@ -1110,7 +1110,7 @@ fn read_funclet_return_arg(
         Rule::var_name => {
             // You gotta add the phi node when translating IRs when you do this!
             let var = reject_hole(read_var_name(&mut pair.into_inner(), context));
-            context.add_return_node(var.clone());
+            context.add_node(var.clone());
             let typ = reject_hole(expect(rule_type(), pairs, context));
             (Some(var), typ)
         }
@@ -1993,16 +1993,9 @@ fn read_program(parsed: &mut Pairs<Rule>) -> assembly_ast::Program {
     let mut context = new_context();
 
     let version = expect(rule_pair(Rule::version, read_version), &mut pairs, &mut context);
-
-    context.initiate_type_indices();
     let types = expect(rule_pair(Rule::types, read_types), &mut pairs, &mut context);
-
-    context.initiate_funclet_indices();
     let funclets = expect(rule_pair(Rule::funclets, read_funclets), &mut pairs, &mut context);
-
-    context.clear_indices();
     let extras = expect(rule_pair(Rule::extras, read_extras), &mut pairs, &mut context);
-
     let pipelines = expect(rule_pair(Rule::pipelines, read_pipelines), &mut pairs, &mut context);
 
     assembly_ast::Program {
