@@ -46,7 +46,7 @@ class Compiler:
         args = [ self._compiler_path(), 
             "--input", input, 
             "--output", output ]
-        return subprocess.run(args, capture_output=True, encoding="utf8")
+        return subprocess.run(args, capture_output=True, encoding="utf8", cwd=input.parent)
 
 @dataclass
 class ProcessStatistics:
