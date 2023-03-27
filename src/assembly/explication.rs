@@ -1171,7 +1171,7 @@ fn ir_scheduling_extras(
                         }
                     }
                 }
-                _ => {}
+                _ => {} 
             },
             _ => {}
         }
