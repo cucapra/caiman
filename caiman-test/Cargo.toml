@@ -4,10 +4,7 @@ version = "0.1.0"
 edition = "2018"
 resolver = "2"
 
-[build-dependencies]
-caiman = { path = "../", features = ["build-binary"] }
-ron = "0.7"
-
 [dependencies]
 futures = "0.3"
 caiman-rt = { path = "../caiman-rt" }
+once_cell = "1.17.1"
