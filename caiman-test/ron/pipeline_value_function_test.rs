@@ -50,9 +50,5 @@ fn looping_pipeline() -> Result<(), String> {
     wgpu_instance.device().poll(wgpu::Maintain::Wait);
     let slice = unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
     let final_value: i32 = i32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);
-    if final_value == 6 {
-        Ok(())
-    } else {
-        Err(format!("expected 6, got {}", final_value))
-    }
+    crate::expect_returned!(6, Some(final_value));
 }
