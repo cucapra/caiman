@@ -21,5 +21,5 @@ fn pipeline_1() -> Result<(), String> {
     let instance = pipeline_1::Instance::new(&mut root_state, &callbacks);
     let result = instance.start(&mut join_stack, 1);
     //let result = pipeline_1::funclet11_func(instance, &mut join_stack, 1);
-    crate::expect_returned!(3, result)
+    crate::expect_returned!(3, result.returned().map(|x| x.0))
 }

@@ -36,11 +36,10 @@ pub static INSTANCE: Lazy<Mutex<Instance>> = Lazy::new(|| Mutex::new(Instance::n
 /// Convienence macro for asserting test outputs without poisoning the global instance on failure.
 #[macro_export]
 macro_rules! expect_returned {
-    ($expected:literal, $result:ident) => {{
-        let returned = $result.returned().map(|x| x.0);
-        if (Some($expected) == returned) {
+    ($expected:literal, $result:expr) => {{
+        if (Some($expected) == $result) {
             return Ok(());
-        } else if let Some(rv) = returned {
+        } else if let Some(rv) = $result {
             return Err(format!("expected {}, got {}", $expected, rv));
         } else {
             return Err("couldn't unwrap result".to_string());
