@@ -322,23 +322,18 @@ impl<'program> CodeGenerator<'program>
 
 		write!(self.code_writer, "let module = & instance.{};\n", shader_module_key.instance_field_name());
 
-		if ! self.shader_modules.contains_key(& shader_module_key)
+		if !self.shader_modules.contains_key(&shader_module_key)
 		{
-			let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
-
-			let mut shader_module = match & external_gpu_function.shader_module_content
+			let func = &self.native_interface.external_gpu_functions[external_function_id];
+			let mut shader_module = match &func.shader_module_content
 			{
-				ffi::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
+				ffi::ShaderModuleContent::Wgsl(text) => {
+					shadergen::ShaderModule::from_wgsl(text.as_str()).unwrap()
+				}
+				ffi::ShaderModuleContent::Glsl(text) => {
+					shadergen::ShaderModule::from_glsl(text.as_str()).unwrap()
+				}
 			};
-
-			//self.code_writer.write_str("let module = instance.state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
-			/*match & external_gpu_function.shader_module_content
-			{
-				ir::ShaderModuleContent::Wgsl(text) => self.code_writer.write_str(text.as_str())
-			}*/
-			//self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
-			//self.code_writer.write_str("\"))});\n");
-
 			self.shader_modules.insert(shader_module_key, shader_module);
 		}
 
@@ -1053,7 +1048,7 @@ impl<'program> CodeGenerator<'program>
 
 		for (shader_module_key, shader_module) in self.shader_modules.iter_mut()
 		{
-			write!(self.code_writer, "let {} = state.get_device_mut().create_shader_module(wgpu::ShaderModuleDescriptor {{ label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"{}\"))}});\n", shader_module_key.instance_field_name(), shader_module.compile_wgsl_text().as_str());
+			write!(self.code_writer, "let {} = state.get_device_mut().create_shader_module(wgpu::ShaderModuleDescriptor {{ label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"{}\"))}});\n", shader_module_key.instance_field_name(), shader_module.emit_wgsl().as_str());
 		}
 
 		for (gpu_function_invocation_id, gpu_function_invocation) in self.gpu_function_invocations.iter().enumerate()
