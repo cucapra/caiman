@@ -721,7 +721,9 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             dimensions,
             arguments,
         } => Some(ir::Node::CallExternalGpuCompute {
-            external_function_id: context.gpu_funclet_id(reject_hole(external_function_id.clone())).clone(),
+            external_function_id: context
+                .gpu_funclet_id(reject_hole(external_function_id.clone()))
+                .clone(),
             dimensions: reject_hole_ref(dimensions)
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.clone())))
@@ -811,7 +813,9 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             captures,
             continuation,
         } => Some(ir::Node::InlineJoin {
-            funclet: context.local_funclet_id(reject_hole(funclet.clone())).clone(),
+            funclet: context
+                .local_funclet_id(reject_hole(funclet.clone()))
+                .clone(),
             captures: reject_hole_ref(captures)
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.clone())))
@@ -823,7 +827,9 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             captures,
             continuation,
         } => Some(ir::Node::SerializedJoin {
-            funclet: context.local_funclet_id(reject_hole(funclet.clone())).clone(),
+            funclet: context
+                .local_funclet_id(reject_hole(funclet.clone()))
+                .clone(),
             captures: reject_hole_ref(captures)
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.clone())))
@@ -910,7 +916,9 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
             continuation_join,
         } => Some(ir::TailEdge::ScheduleCall {
             value_operation: remote_conversion(reject_hole_ref(value_operation), context),
-            callee_funclet_id: context.funclet_id(reject_hole_ref(callee_funclet_id)).clone(),
+            callee_funclet_id: context
+                .funclet_id(reject_hole_ref(callee_funclet_id))
+                .clone(),
             callee_arguments: reject_hole_ref(callee_arguments)
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.clone())))
@@ -953,8 +961,12 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
                 .iter()
                 .map(|o| reject_hole(o.clone()).map(|n| context.node_id(n)))
                 .collect(),
-            success_funclet_id: context.funclet_id(reject_hole_ref(success_funclet_id)).clone(),
-            failure_funclet_id: context.funclet_id(reject_hole_ref(failure_funclet_id)).clone(),
+            success_funclet_id: context
+                .funclet_id(reject_hole_ref(success_funclet_id))
+                .clone(),
+            failure_funclet_id: context
+                .funclet_id(reject_hole_ref(failure_funclet_id))
+                .clone(),
             continuation_join: context.node_id(reject_hole(continuation_join.clone())),
         }),
     }

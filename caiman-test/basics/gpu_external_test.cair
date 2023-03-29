@@ -54,7 +54,7 @@ timeline @foo_time(%e : $event0) -> $event0 {
     return %sync1;
 }
 
-schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> $slot_gpu {
+schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> [%out : $slot_gpu] {
     %0 = alloc-gpu-i32 %in_buff @foo.%x;
     %1 = encode-copy-gpu %s %0;
     %2 = alloc-gpu-i32 %out_buff @foo.%z;
@@ -76,7 +76,7 @@ extras {
             %s : slot_info(value_tag input @foo.%x)
         },
         output_slots : {
-            %s : slot_info(value_tag output @foo.%x, spatial_tag output @foo_space.%bs)
+            %out : slot_info(value_tag output @foo.%x, spatial_tag output @foo_space.%bs)
         },
         input_fences : {},
         output_fences : {},

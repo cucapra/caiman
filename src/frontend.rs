@@ -40,7 +40,7 @@ fn read_definition(
     match compile_mode {
         CompileMode::Assembly => {
             let program = crate::assembly::parser::parse(input_string);
-            dbg!(&program.context);
+            // dbg!(&program.context);
             let result = crate::assembly::explication::explicate(program);
             // dbg!(&result);
             Ok(result) // errors are a future problem

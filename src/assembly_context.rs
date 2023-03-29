@@ -30,9 +30,10 @@ struct NodeTable {
 
 #[derive(Debug)]
 struct FuncletIndices {
+    // keep track of the different kinds of indices for now
     local: usize,
     external: usize,
-    value: usize
+    value: usize,
 }
 
 #[derive(Debug)]
@@ -101,6 +102,11 @@ where
         self.values.contains(val)
     }
 
+    pub fn dummy_push(&mut self, val: T) {
+        // Add unnamed element for indexing
+        self.indices.push(val);
+    }
+
     pub fn push(&mut self, val: T) {
         if self.values.contains(&val) {
             panic!("Duplicate add of {:?}", val)
@@ -165,18 +171,23 @@ impl Context {
     }
 
     pub fn add_cpu_funclet(&mut self, name: String) {
-        self.funclet_table.insert(name, FuncletLocation::CpuFun(self.funclet_indices.external));
+        self.funclet_table
+            .insert(name, FuncletLocation::CpuFun(self.funclet_indices.external));
         self.funclet_indices.external += 1;
     }
 
     pub fn add_gpu_funclet(&mut self, name: String) {
-        self.funclet_table.insert(name, FuncletLocation::GpuFun(self.funclet_indices.external));
+        self.funclet_table
+            .insert(name, FuncletLocation::GpuFun(self.funclet_indices.external));
         self.funclet_indices.external += 1;
     }
 
     pub fn add_local_funclet(&mut self, name: String) {
         self.current_funclet_name = Some(name.clone());
-        self.funclet_table.insert(name.clone(), FuncletLocation::Local(self.funclet_indices.local));
+        self.funclet_table.insert(
+            name.clone(),
+            FuncletLocation::Local(self.funclet_indices.local),
+        );
         self.funclet_indices.local += 1;
         self.remote_map.insert(
             name,
@@ -188,7 +199,8 @@ impl Context {
     }
 
     pub fn add_value_function(&mut self, name: String) {
-        self.funclet_table.insert(name, FuncletLocation::ValueFun(self.funclet_indices.value));
+        self.funclet_table
+            .insert(name, FuncletLocation::ValueFun(self.funclet_indices.value));
         self.funclet_indices.value += 1;
     }
 
@@ -215,20 +227,22 @@ impl Context {
     }
 
     pub fn add_node(&mut self, name: String) {
-        if name != "_" {
-            match self.remote_map.get_mut(&self.funclet_name()) {
-                None => panic!("Invalid funclet name {:?}", name),
-                Some(table) => table.local.push(name),
+        match self.remote_map.get_mut(&self.funclet_name()) {
+            None => panic!("Invalid funclet name {:?}", name),
+            Some(table) => {
+                if name == "_" {
+                    table.local.dummy_push(name)
+                } else {
+                    table.local.push(name)
+                }
             }
         }
     }
 
     pub fn add_return(&mut self, name: String) {
-        if name != "_" {
-            match self.remote_map.get_mut(&self.funclet_name()) {
-                None => panic!("Invalid funclet name {:?}", name),
-                Some(table) => table.returns.push(name),
-            }
+        match self.remote_map.get_mut(&self.funclet_name()) {
+            None => panic!("Invalid funclet name {:?}", name),
+            Some(table) => table.returns.push(name),
         }
     }
 
