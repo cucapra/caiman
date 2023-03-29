@@ -8,10 +8,10 @@ use std::collections::HashMap;
 pub struct IRParser;
 
 use crate::assembly::explication;
-use crate::assembly_context::{new_context, Context};
 use crate::assembly_ast;
 use crate::assembly_ast::Hole;
 use crate::assembly_ast::UncheckedDict;
+use crate::assembly_context::{new_context, Context};
 use crate::ir::ffi;
 use crate::{frontend, ir};
 
@@ -1110,7 +1110,7 @@ fn read_funclet_return_arg(
         Rule::var_name => {
             // You gotta add the phi node when translating IRs when you do this!
             let var = reject_hole(read_var_name(&mut pair.into_inner(), context));
-            context.add_node(var.clone());
+            context.add_return(var.clone());
             let typ = reject_hole(expect(rule_type(), pairs, context));
             (Some(var), typ)
         }
@@ -1544,7 +1544,12 @@ fn read_do_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<Stri
 }
 
 fn read_do_params(pairs: &mut Pairs<Rule>, context: &mut Context) -> Box<[Hole<String>]> {
-    option_to_vec(optional(rule_pair(Rule::do_args, read_do_args), pairs, context)).into_boxed_slice()
+    option_to_vec(optional(
+        rule_pair(Rule::do_args, read_do_args),
+        pairs,
+        context,
+    ))
+    .into_boxed_slice()
 }
 
 fn read_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
@@ -1986,17 +1991,33 @@ fn read_pipelines(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_as
 fn read_program(parsed: &mut Pairs<Rule>) -> assembly_ast::Program {
     let head = parsed.next().unwrap();
     let mut pairs = match head.as_rule() {
-        Rule::program => head.into_inner() ,
+        Rule::program => head.into_inner(),
         _ => panic!("CAIR must start with a program"),
     };
 
     let mut context = new_context();
 
-    let version = expect(rule_pair(Rule::version, read_version), &mut pairs, &mut context);
+    let version = expect(
+        rule_pair(Rule::version, read_version),
+        &mut pairs,
+        &mut context,
+    );
     let types = expect(rule_pair(Rule::types, read_types), &mut pairs, &mut context);
-    let funclets = expect(rule_pair(Rule::funclets, read_funclets), &mut pairs, &mut context);
-    let extras = expect(rule_pair(Rule::extras, read_extras), &mut pairs, &mut context);
-    let pipelines = expect(rule_pair(Rule::pipelines, read_pipelines), &mut pairs, &mut context);
+    let funclets = expect(
+        rule_pair(Rule::funclets, read_funclets),
+        &mut pairs,
+        &mut context,
+    );
+    let extras = expect(
+        rule_pair(Rule::extras, read_extras),
+        &mut pairs,
+        &mut context,
+    );
+    let pipelines = expect(
+        rule_pair(Rule::pipelines, read_pipelines),
+        &mut pairs,
+        &mut context,
+    );
 
     assembly_ast::Program {
         version,
@@ -2004,7 +2025,7 @@ fn read_program(parsed: &mut Pairs<Rule>) -> assembly_ast::Program {
         funclets,
         extras,
         pipelines,
-        context
+        context,
     }
 }
 
