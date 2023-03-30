@@ -83,21 +83,18 @@ pub struct FuncletInformation {
     index: usize,
 }
 
-fn new_table<T>() -> Table<T>
-where
-    T: Eq + Hash + Debug + Clone,
-{
-    Table {
-        values: HashSet::new(),
-        indices: Vec::new(),
-    }
-}
-
 // a Table is basically a vector with no dupes
 impl<T> Table<T>
 where
     T: Eq + Hash + Debug + Clone,
 {
+    pub fn new() -> Table<T> {
+        Table {
+            values: HashSet::new(),
+            indices: Vec::new(),
+        }
+    }
+
     pub fn contains(&mut self, val: &T) -> bool {
         self.values.contains(val)
     }
@@ -138,24 +135,24 @@ where
     }
 }
 
-pub fn new_context() -> Context {
-    Context {
-        ffi_type_table: new_table(),
-        local_type_table: new_table(),
-        funclet_table: HashMap::new(),
-        funclet_indices: FuncletIndices {
-            local: 0,
-            external: 0,
-            value: 0,
-        },
-        remote_map: HashMap::new(),
-        current_funclet_name: None,
-        command_var_name: None,
-        location: None,
-    }
-}
-
 impl Context {
+    pub fn new() -> Context {
+        Context {
+            ffi_type_table: Table::new(),
+            local_type_table: Table::new(),
+            funclet_table: HashMap::new(),
+            funclet_indices: FuncletIndices {
+                local: 0,
+                external: 0,
+                value: 0,
+            },
+            remote_map: HashMap::new(),
+            current_funclet_name: None,
+            command_var_name: None,
+            location: None,
+        }
+    }
+
     pub fn reset_location(&mut self) {
         self.location = None;
         self.current_funclet_name = None;
@@ -192,8 +189,8 @@ impl Context {
         self.remote_map.insert(
             name,
             NodeTable {
-                local: new_table(),
-                returns: new_table(),
+                local: Table::new(),
+                returns: Table::new(),
             },
         );
     }
@@ -254,35 +251,35 @@ impl Context {
     //     self.location.unwrap().node_id += 1;
     // }
 
-    pub fn ffi_type_id(&mut self, name: &assembly_ast::FFIType) -> usize {
+    pub fn ffi_type_id(&self, name: &assembly_ast::FFIType) -> usize {
         match self.ffi_type_table.get(name) {
             Some(i) => i,
             None => panic!("Un-indexed FFI type {:?}", name),
         }
     }
 
-    pub fn local_type_id(&mut self, name: &String) -> usize {
+    pub fn local_type_id(&self, name: &String) -> usize {
         match self.local_type_table.get(name) {
             Some(t) => t,
             None => panic!("Unknown local type {:?}", name),
         }
     }
 
-    pub fn loc_type_id(&mut self, typ: assembly_ast::Type) -> usize {
+    pub fn loc_type_id(&self, typ: assembly_ast::Type) -> usize {
         match typ {
             assembly_ast::Type::FFI(ft) => self.ffi_type_id(&ft),
             assembly_ast::Type::Local(s) => self.local_type_id(&s),
         }
     }
 
-    pub fn funclet_location(&mut self, name: &String) -> &FuncletLocation {
+    pub fn funclet_location(&self, name: &String) -> &FuncletLocation {
         match self.funclet_table.get(name) {
             Some(f) => f,
             None => panic!("Unknown funclet name {:?}", name),
         }
     }
 
-    pub fn funclet_id(&mut self, name: &String) -> &usize {
+    pub fn funclet_id(&self, name: &String) -> &usize {
         match self.funclet_location(name) {
             FuncletLocation::Local(n) => n,
             FuncletLocation::ValueFun(n) => n,
@@ -291,32 +288,32 @@ impl Context {
         }
     }
 
-    pub fn local_funclet_id(&mut self, name: String) -> &usize {
+    pub fn local_funclet_id(&self, name: String) -> &usize {
         match self.funclet_location(&name) {
             FuncletLocation::Local(n) => n,
             _ => panic!("Not a local funclet {}", name),
         }
     }
-    pub fn cpu_funclet_id(&mut self, name: String) -> &usize {
+    pub fn cpu_funclet_id(&self, name: String) -> &usize {
         match self.funclet_location(&name) {
             FuncletLocation::CpuFun(n) => n,
             _ => panic!("Not a cpu funclet {}", name),
         }
     }
-    pub fn gpu_funclet_id(&mut self, name: String) -> &usize {
+    pub fn gpu_funclet_id(&self, name: String) -> &usize {
         match self.funclet_location(&name) {
             FuncletLocation::GpuFun(n) => n,
             _ => panic!("Not a gpu funclet {}", name),
         }
     }
-    pub fn value_function_id(&mut self, name: String) -> &usize {
+    pub fn value_function_id(&self, name: String) -> &usize {
         match self.funclet_location(&name) {
             FuncletLocation::ValueFun(n) => n,
             _ => panic!("Not a value funclet {}", name),
         }
     }
 
-    pub fn remote_node_id(&mut self, funclet: String, var: String) -> usize {
+    pub fn remote_node_id(&self, funclet: String, var: String) -> usize {
         match self.remote_map.get(funclet.as_str()) {
             Some(f) => match f.local.get(&var) {
                 Some(v) => v,
@@ -326,7 +323,7 @@ impl Context {
         }
     }
 
-    pub fn remote_return_id(&mut self, funclet: String, var: String) -> usize {
+    pub fn remote_return_id(&self, funclet: String, var: String) -> usize {
         match self.remote_map.get(funclet.as_str()) {
             Some(f) => match f.returns.get(&var) {
                 Some(v) => v,
@@ -336,7 +333,7 @@ impl Context {
         }
     }
 
-    pub fn node_id(&mut self, var: String) -> usize {
+    pub fn node_id(&self, var: String) -> usize {
         match self
             .remote_map
             .get(self.funclet_name().as_str())
@@ -353,7 +350,7 @@ impl Context {
         }
     }
 
-    pub fn return_id(&mut self, var: String) -> usize {
+    pub fn return_id(&self, var: String) -> usize {
         match self
             .remote_map
             .get(self.funclet_name().as_str())
@@ -370,7 +367,7 @@ impl Context {
         }
     }
 
-    pub fn remote_id(&mut self, funclet: String, var: String) -> ir::RemoteNodeId {
+    pub fn remote_id(&self, funclet: String, var: String) -> ir::RemoteNodeId {
         ir::RemoteNodeId {
             funclet_id: self.local_funclet_id(funclet.clone()).clone(),
             node_id: self.remote_node_id(funclet, var),

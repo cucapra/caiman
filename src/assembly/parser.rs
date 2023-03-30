@@ -11,7 +11,7 @@ use crate::assembly::explication;
 use crate::assembly_ast;
 use crate::assembly_ast::Hole;
 use crate::assembly_ast::UncheckedDict;
-use crate::assembly_context::{new_context, Context};
+use crate::assembly_context::Context;
 use crate::ir::ffi;
 use crate::{frontend, ir};
 
@@ -1995,7 +1995,7 @@ fn read_program(parsed: &mut Pairs<Rule>) -> assembly_ast::Program {
         _ => panic!("CAIR must start with a program"),
     };
 
-    let mut context = new_context();
+    let mut context = Context::new();
 
     let version = expect(
         rule_pair(Rule::version, read_version),
