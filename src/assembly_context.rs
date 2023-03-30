@@ -13,7 +13,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 #[derive(Debug)]
-struct Table<T>
+pub struct Table<T>
 where
     T: Eq + Hash + Debug + Clone,
 {

@@ -1,10 +1,10 @@
+use crate::assembly::explication_context::Context;
+use crate::assembly::explication_explicator;
 use crate::assembly::parser;
 use crate::assembly_ast::FFIType;
 use crate::assembly_ast::Hole;
-use crate::assembly::explication_context::Context;
 use crate::assembly_context::FuncletLocation;
 use crate::ir::ffi;
-use crate::assembly::explication_filler;
 use crate::{assembly_ast, assembly_context, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
@@ -125,7 +125,9 @@ fn remote_conversion(
     remote: &assembly_ast::RemoteNodeId,
     context: &mut Context,
 ) -> ir::RemoteNodeId {
-    context.inner().remote_id(remote.funclet_id.clone(), remote.node_id.clone())
+    context
+        .inner()
+        .remote_id(remote.funclet_id.clone(), remote.node_id.clone())
 }
 
 fn value_string(d: &assembly_ast::DictValue, _: &mut Context) -> String {
@@ -148,8 +150,14 @@ fn value_function_loc(d: &assembly_ast::DictValue, context: &mut Context) -> ir:
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
-            funclet_id: context.inner().local_funclet_id(remote.funclet_id.clone()).clone(),
-            node_id: context.inner().local_funclet_id(remote.node_id.clone()).clone(),
+            funclet_id: context
+                .inner()
+                .local_funclet_id(remote.funclet_id.clone())
+                .clone(),
+            node_id: context
+                .inner()
+                .local_funclet_id(remote.node_id.clone())
+                .clone(),
         },
         _ => panic!("Expected function location got {:?}", v),
     }
@@ -224,12 +232,22 @@ fn value_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::ValueT
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::ValueTag::Input {
-            funclet_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::ValueTag::Output {
-            funclet_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
 }
@@ -241,12 +259,22 @@ fn timeline_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::Tim
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::TimelineTag::Input {
-            funclet_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::TimelineTag::Output {
-            funclet_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
 }
@@ -258,12 +286,22 @@ fn spatial_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::Spat
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::SpatialTag::Input {
-            funclet_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::SpatialTag::Output {
-            funclet_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
 }
@@ -272,12 +310,22 @@ fn value_value_tag(t: &assembly_ast::ValueTag, context: &mut Context) -> ir::Val
     match t {
         assembly_ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
         assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
-            function_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            function_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
-            function_id: context.inner().local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context.inner().remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            function_id: context
+                .inner()
+                .local_funclet_id(r.funclet_id.clone())
+                .clone(),
+            index: context
+                .inner()
+                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
             index: context.inner().node_id(n.clone()),
@@ -722,7 +770,8 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             dimensions,
             arguments,
         } => Some(ir::Node::CallExternalGpuCompute {
-            external_function_id: context.inner()
+            external_function_id: context
+                .inner()
                 .gpu_funclet_id(reject_hole(external_function_id.clone()))
                 .clone(),
             dimensions: reject_hole_ref(dimensions)
@@ -740,7 +789,11 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             operation,
         } => Some(ir::Node::AllocTemporary {
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(context.inner().loc_type_id(reject_hole(storage_type.clone()))),
+            storage_type: ffi::TypeId(
+                context
+                    .inner()
+                    .loc_type_id(reject_hole(storage_type.clone())),
+            ),
             operation: remote_conversion(reject_hole_ref(operation), context),
         }),
         assembly_ast::Node::UnboundSlot {
@@ -749,7 +802,11 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             operation,
         } => Some(ir::Node::UnboundSlot {
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(context.inner().loc_type_id(reject_hole(storage_type.clone()))),
+            storage_type: ffi::TypeId(
+                context
+                    .inner()
+                    .loc_type_id(reject_hole(storage_type.clone())),
+            ),
             operation: remote_conversion(reject_hole_ref(operation), context),
         }),
         assembly_ast::Node::Drop { node } => Some(ir::Node::Drop {
@@ -763,7 +820,11 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
         } => Some(ir::Node::StaticAllocFromStaticBuffer {
             buffer: context.inner().node_id(reject_hole(buffer.clone())),
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(context.inner().loc_type_id(reject_hole(storage_type.clone()))),
+            storage_type: ffi::TypeId(
+                context
+                    .inner()
+                    .loc_type_id(reject_hole(storage_type.clone())),
+            ),
             operation: remote_conversion(reject_hole_ref(operation), context),
         }),
         assembly_ast::Node::EncodeDo {
@@ -814,7 +875,8 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             captures,
             continuation,
         } => Some(ir::Node::InlineJoin {
-            funclet: context.inner()
+            funclet: context
+                .inner()
                 .local_funclet_id(reject_hole(funclet.clone()))
                 .clone(),
             captures: reject_hole_ref(captures)
@@ -828,7 +890,8 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             captures,
             continuation,
         } => Some(ir::Node::SerializedJoin {
-            funclet: context.inner()
+            funclet: context
+                .inner()
                 .local_funclet_id(reject_hole(funclet.clone()))
                 .clone(),
             captures: reject_hole_ref(captures)
@@ -856,7 +919,9 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             here_place: reject_hole(here_place.clone()),
             there_place: reject_hole(there_place.clone()),
             local_past: context.inner().node_id(reject_hole(local_past.clone())),
-            remote_local_past: context.inner().node_id(reject_hole(remote_local_past.clone())),
+            remote_local_past: context
+                .inner()
+                .node_id(reject_hole(remote_local_past.clone())),
         }),
         assembly_ast::Node::SeparatedLinearSpace { place, space } => {
             Some(ir::Node::SeparatedLinearSpace {
@@ -896,8 +961,13 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
                 .iter()
                 .map(|n| context.inner().node_id(reject_hole(n.clone())))
                 .collect(),
-            next_funclet: context.inner().funclet_id(reject_hole_ref(next_funclet)).clone(),
-            continuation_join: context.inner().node_id(reject_hole(continuation_join.clone())),
+            next_funclet: context
+                .inner()
+                .funclet_id(reject_hole_ref(next_funclet))
+                .clone(),
+            continuation_join: context
+                .inner()
+                .node_id(reject_hole(continuation_join.clone())),
             arguments: reject_hole_ref(arguments)
                 .iter()
                 .map(|n| context.inner().node_id(reject_hole(n.clone())))
@@ -917,14 +987,17 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
             continuation_join,
         } => Some(ir::TailEdge::ScheduleCall {
             value_operation: remote_conversion(reject_hole_ref(value_operation), context),
-            callee_funclet_id: context.inner()
+            callee_funclet_id: context
+                .inner()
                 .funclet_id(reject_hole_ref(callee_funclet_id))
                 .clone(),
             callee_arguments: reject_hole_ref(callee_arguments)
                 .iter()
                 .map(|n| context.inner().node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation_join: context.inner().node_id(reject_hole(continuation_join.clone())),
+            continuation_join: context
+                .inner()
+                .node_id(reject_hole(continuation_join.clone())),
         }),
         assembly_ast::TailEdge::ScheduleSelect {
             value_operation,
@@ -943,7 +1016,9 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
                 .iter()
                 .map(|n| context.inner().node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation_join: context.inner().node_id(reject_hole(continuation_join.clone())),
+            continuation_join: context
+                .inner()
+                .node_id(reject_hole(continuation_join.clone())),
         }),
         assembly_ast::TailEdge::DynamicAllocFromBuffer {
             buffer,
@@ -962,13 +1037,17 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
                 .iter()
                 .map(|o| reject_hole(o.clone()).map(|n| context.inner().node_id(n)))
                 .collect(),
-            success_funclet_id: context.inner()
+            success_funclet_id: context
+                .inner()
                 .funclet_id(reject_hole_ref(success_funclet_id))
                 .clone(),
-            failure_funclet_id: context.inner()
+            failure_funclet_id: context
+                .inner()
                 .funclet_id(reject_hole_ref(failure_funclet_id))
                 .clone(),
-            continuation_join: context.inner().node_id(reject_hole(continuation_join.clone())),
+            continuation_join: context
+                .inner()
+                .node_id(reject_hole(continuation_join.clone())),
         }),
     }
 }
@@ -1077,7 +1156,10 @@ fn ir_pipelines(pipelines: &assembly_ast::Pipelines, context: &mut Context) -> V
     for pipeline in pipelines.iter() {
         let new_pipeline = ir::Pipeline {
             name: pipeline.name.clone(),
-            entry_funclet: context.inner().local_funclet_id(pipeline.funclet.clone()).clone(),
+            entry_funclet: context
+                .inner()
+                .local_funclet_id(pipeline.funclet.clone())
+                .clone(),
             yield_points: Default::default(),
         };
         result.push(new_pipeline);
@@ -1103,7 +1185,8 @@ fn ir_value_extras(
                     for extra in extras {
                         if extra.name == name {
                             context.inner().advance_local_funclet(extra.name.clone());
-                            let index = context.inner().local_funclet_id(extra.name.clone()).clone();
+                            let index =
+                                context.inner().local_funclet_id(extra.name.clone()).clone();
                             if result.contains_key(&index) {
                                 panic!("Duplicate extras for {:?}", name);
                             }
@@ -1188,7 +1271,8 @@ fn ir_scheduling_extras(
                     for extra in extras {
                         if extra.name == name {
                             context.inner().advance_local_funclet(extra.name.clone());
-                            let index = context.inner().local_funclet_id(extra.name.clone()).clone();
+                            let index =
+                                context.inner().local_funclet_id(extra.name.clone()).clone();
                             if result.contains_key(&index) {
                                 panic!("Duplicate extras for {:?}", name);
                             }
@@ -1204,7 +1288,7 @@ fn ir_scheduling_extras(
     result
 }
 
-fn ir_program(program: assembly_ast::Program, context: &mut Context) -> ir::Program {
+fn ir_program(program: &assembly_ast::Program, context: &mut Context) -> ir::Program {
     ir::Program {
         native_interface: ir_native_interface(&program, context),
         types: ir_types(&program.types, context),
@@ -1221,11 +1305,11 @@ fn ir_program(program: assembly_ast::Program, context: &mut Context) -> ir::Prog
 }
 
 pub fn explicate(mut program: assembly_ast::Program) -> frontend::Definition {
-    let mut program_context = assembly_context::Context::new();
-    std::mem::swap(&mut program_context, &mut program.context);
-    let mut context = Context::new(program_context);
+    let mut assembly_context = assembly_context::Context::new();
+    std::mem::swap(&mut assembly_context, &mut program.context);
+    let mut context = Context::new(assembly_context, &program);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
-        program: ir_program(program, &mut context),
+        program: ir_program(&program, &mut context),
     }
 }
