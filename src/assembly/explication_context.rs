@@ -7,13 +7,12 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 // just putting this wrapper in up-front to make getting information easy later
-pub struct Explication {
-    index: usize,
-    pending: bool, // if true, this explication has been checked, but is pending a loop
+pub struct Allocation {
+    index: Option<usize>, // is None exactly when the variable has been checked, but result pending
 }
 
 pub struct FuncletData {
-    explicated_allocations: HashMap<String, Explication>, // information about allocated value elements
+    explicated_allocations: HashMap<String, Allocation>, // information about allocated value elements
 }
 
 pub struct Context<'a> {
@@ -28,10 +27,10 @@ impl FuncletData {
             explicated_allocations: HashMap::new(),
         }
     }
-    pub fn allocate(&mut self, name : String, explication : Explication) {
-        self.explicated_allocations.insert(name, explication);
+    pub fn allocate(&mut self, name : String, allocation : Allocation) {
+        self.explicated_allocations.insert(name, allocation);
     }
-    pub fn get_allocation(&self, name : String) -> Option<&Explication> {
+    pub fn get_allocation(&self, name : String) -> Option<&Allocation> {
         self.explicated_allocations.get(name.as_str())
     }
 }
@@ -66,11 +65,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn explicate_allocation(&mut self, target: String, name: String, pending: bool) {
-        self.explicated_funclets.get(target.as_str()).unwrap();
+    pub fn explicate_allocation(&mut self, target: String, name: String, allocation: Allocation) {
+        self.explicated_funclets.get_mut(target.as_str()).unwrap().allocate(name, allocation);
     }
 
-    pub fn get_allocation(&mut self, target: String, name: String) -> Option<&Explication> {
+    pub fn get_allocation(&mut self, target: String, name: String) -> Option<&Allocation> {
         self.explicated_funclets
             .get(target.as_str())
             .and_then(|x| x.get_allocation(name))
