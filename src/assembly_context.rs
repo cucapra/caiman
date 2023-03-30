@@ -13,35 +13,26 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 #[derive(Debug)]
-pub struct Table<T>
+pub struct Table<T, U>
 where
     T: Eq + Hash + Debug + Clone,
 {
-    values: HashSet<T>,
+    values: HashMap<T, U>,
     indices: Vec<T>,
 }
 
 #[derive(Debug)]
 struct NodeTable {
     // local names and return names such as [%out : i64] or whatever
-    local: Table<String>,
-    returns: Table<String>,
-}
-
-#[derive(Debug)]
-struct FuncletIndices {
-    // keep track of the different kinds of indices for now
-    local: usize,
-    external: usize,
-    value: usize,
+    local: Table<String, ()>,
+    returns: Table<String, ()>,
 }
 
 #[derive(Debug)]
 pub struct Context {
-    ffi_type_table: Table<assembly_ast::FFIType>,
-    local_type_table: Table<String>,
-    funclet_table: HashMap<String, FuncletLocation>,
-    funclet_indices: FuncletIndices,
+    ffi_type_table: Table<assembly_ast::FFIType, ()>,
+    local_type_table: Table<String, ()>,
+    funclet_table: Table<String, FuncletLocation>,
     remote_map: HashMap<String, NodeTable>,
     current_funclet_name: Option<String>,
     command_var_name: Option<String>,
@@ -50,10 +41,10 @@ pub struct Context {
 
 #[derive(Debug, Clone)]
 pub enum FuncletLocation {
-    Local(usize),
-    ValueFun(usize),
-    CpuFun(usize),
-    GpuFun(usize),
+    Local,
+    ValueFun,
+    CpuFun,
+    GpuFun,
 }
 
 #[derive(Debug, Clone)]
@@ -84,19 +75,19 @@ pub struct FuncletInformation {
 }
 
 // a Table is basically a vector with no dupes
-impl<T> Table<T>
+impl<T, U> Table<T, U>
 where
     T: Eq + Hash + Debug + Clone,
 {
-    pub fn new() -> Table<T> {
+    pub fn new() -> Table<T, U> {
         Table {
-            values: HashSet::new(),
+            values: HashMap::new(),
             indices: Vec::new(),
         }
     }
 
     pub fn contains(&mut self, val: &T) -> bool {
-        self.values.contains(val)
+        self.values.contains_key(val)
     }
 
     pub fn dummy_push(&mut self, val: T) {
@@ -104,30 +95,34 @@ where
         self.indices.push(val);
     }
 
-    pub fn push(&mut self, val: T) {
-        if self.values.contains(&val) {
+    pub fn push(&mut self, val: T, data: U) {
+        if self.values.contains_key(&val) {
             panic!("Duplicate add of {:?}", val)
         }
-        self.values.insert(val.clone()); // laaaazy
+        self.values.insert(val.clone(), data);
         self.indices.push(val);
     }
 
-    pub fn insert(&mut self, index: usize, val: T) {
-        if self.values.contains(&val) {
+    pub fn insert(&mut self, index: usize, val: T, data: U) {
+        if self.values.contains_key(&val) {
             panic!("Duplicate add of {:?}", val)
         }
-        self.values.insert(val.clone());
+        self.values.insert(val.clone(), data);
         self.indices.insert(index, val);
     }
 
-    pub fn get(&self, val: &T) -> Option<usize> {
+    pub fn get(&self, val: &T) -> Option<(&U, usize)> {
         // no need to actually check the Hashset, that's just to avoid dupes
         for item in itertools::enumerate(&self.indices) {
             if item.1 == val {
-                return Some(item.0);
+                return Some((self.values.get(val).unwrap(), item.0));
             }
         }
         return None;
+    }
+
+    pub fn get_index(&self, val: &T) -> Option<usize> {
+        self.get(val).map(|x| x.1)
     }
 
     pub fn len(&mut self) -> usize {
@@ -140,12 +135,7 @@ impl Context {
         Context {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
-            funclet_table: HashMap::new(),
-            funclet_indices: FuncletIndices {
-                local: 0,
-                external: 0,
-                value: 0,
-            },
+            funclet_table: Table::new(),
             remote_map: HashMap::new(),
             current_funclet_name: None,
             command_var_name: None,
@@ -160,32 +150,25 @@ impl Context {
 
     // for use by the explicator
     pub fn add_ffi_type(&mut self, t: assembly_ast::FFIType) {
-        self.ffi_type_table.push(t);
+        self.ffi_type_table.push(t, ());
     }
 
     pub fn add_local_type(&mut self, name: String) {
-        self.local_type_table.push(name);
+        self.local_type_table.push(name, ());
     }
 
     pub fn add_cpu_funclet(&mut self, name: String) {
-        self.funclet_table
-            .insert(name, FuncletLocation::CpuFun(self.funclet_indices.external));
-        self.funclet_indices.external += 1;
+        self.funclet_table.push(name, FuncletLocation::CpuFun);
     }
 
     pub fn add_gpu_funclet(&mut self, name: String) {
-        self.funclet_table
-            .insert(name, FuncletLocation::GpuFun(self.funclet_indices.external));
-        self.funclet_indices.external += 1;
+        self.funclet_table.push(name, FuncletLocation::GpuFun);
     }
 
     pub fn add_local_funclet(&mut self, name: String) {
         self.current_funclet_name = Some(name.clone());
-        self.funclet_table.insert(
-            name.clone(),
-            FuncletLocation::Local(self.funclet_indices.local),
-        );
-        self.funclet_indices.local += 1;
+        self.funclet_table
+            .push(name.clone(), FuncletLocation::Local);
         self.remote_map.insert(
             name,
             NodeTable {
@@ -196,9 +179,7 @@ impl Context {
     }
 
     pub fn add_value_function(&mut self, name: String) {
-        self.funclet_table
-            .insert(name, FuncletLocation::ValueFun(self.funclet_indices.value));
-        self.funclet_indices.value += 1;
+        self.funclet_table.push(name, FuncletLocation::ValueFun);
     }
 
     pub fn advance_local_funclet(&mut self, name: String) {
@@ -230,7 +211,7 @@ impl Context {
                 if name == "_" {
                     table.local.dummy_push(name)
                 } else {
-                    table.local.push(name)
+                    table.local.push(name, ())
                 }
             }
         }
@@ -239,7 +220,7 @@ impl Context {
     pub fn add_return(&mut self, name: String) {
         match self.remote_map.get_mut(&self.funclet_name()) {
             None => panic!("Invalid funclet name {:?}", name),
-            Some(table) => table.returns.push(name),
+            Some(table) => table.returns.push(name, ()),
         }
     }
 
@@ -252,14 +233,14 @@ impl Context {
     // }
 
     pub fn ffi_type_id(&self, name: &assembly_ast::FFIType) -> usize {
-        match self.ffi_type_table.get(name) {
+        match self.ffi_type_table.get_index(name) {
             Some(i) => i,
             None => panic!("Un-indexed FFI type {:?}", name),
         }
     }
 
     pub fn local_type_id(&self, name: &String) -> usize {
-        match self.local_type_table.get(name) {
+        match self.local_type_table.get_index(name) {
             Some(t) => t,
             None => panic!("Unknown local type {:?}", name),
         }
@@ -272,51 +253,50 @@ impl Context {
         }
     }
 
-    pub fn funclet_location(&self, name: &String) -> &FuncletLocation {
+    pub fn funclet_location(&self, name: &String) -> (&FuncletLocation, usize) {
         match self.funclet_table.get(name) {
             Some(f) => f,
             None => panic!("Unknown funclet name {:?}", name),
         }
     }
 
-    pub fn funclet_id(&self, name: &String) -> &usize {
-        match self.funclet_location(name) {
-            FuncletLocation::Local(n) => n,
-            FuncletLocation::ValueFun(n) => n,
-            FuncletLocation::CpuFun(n) => n,
-            FuncletLocation::GpuFun(n) => n,
-        }
+    pub fn funclet_id(&self, name: &String) -> usize {
+        self.funclet_location(name).1
     }
 
-    pub fn local_funclet_id(&self, name: String) -> &usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::Local(n) => n,
+    pub fn local_funclet_id(&self, name: String) -> usize {
+        let result = self.funclet_location(&name);
+        match result.0 {
+            FuncletLocation::Local => result.1,
             _ => panic!("Not a local funclet {}", name),
         }
     }
-    pub fn cpu_funclet_id(&self, name: String) -> &usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::CpuFun(n) => n,
+    pub fn cpu_funclet_id(&self, name: String) -> usize {
+        let result = self.funclet_location(&name);
+        match result.0 {
+            FuncletLocation::CpuFun => result.1,
             _ => panic!("Not a cpu funclet {}", name),
         }
     }
-    pub fn gpu_funclet_id(&self, name: String) -> &usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::GpuFun(n) => n,
+    pub fn gpu_funclet_id(&self, name: String) -> usize {
+        let result = self.funclet_location(&name);
+        match result.0 {
+            FuncletLocation::GpuFun => result.1,
             _ => panic!("Not a gpu funclet {}", name),
         }
     }
-    pub fn value_function_id(&self, name: String) -> &usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::ValueFun(n) => n,
-            _ => panic!("Not a value funclet {}", name),
+    pub fn value_function_id(&self, name: String) -> usize {
+        let result = self.funclet_location(&name);
+        match result.0 {
+            FuncletLocation::ValueFun => result.1,
+            _ => panic!("Not a value function {}", name),
         }
     }
 
     pub fn remote_node_id(&self, funclet: String, var: String) -> usize {
         match self.remote_map.get(funclet.as_str()) {
             Some(f) => match f.local.get(&var) {
-                Some(v) => v,
+                Some(v) => v.1,
                 None => panic!("Unknown local name {} in funclet {}", var, funclet),
             },
             None => panic!("Unknown funclet name {}", funclet),
@@ -325,7 +305,7 @@ impl Context {
 
     pub fn remote_return_id(&self, funclet: String, var: String) -> usize {
         match self.remote_map.get(funclet.as_str()) {
-            Some(f) => match f.returns.get(&var) {
+            Some(f) => match f.returns.get_index(&var) {
                 Some(v) => v,
                 None => panic!("Unknown return name {} in funclet {}", var, funclet),
             },
@@ -339,7 +319,7 @@ impl Context {
             .get(self.funclet_name().as_str())
             .unwrap()
             .local
-            .get(&var)
+            .get_index(&var)
         {
             Some(v) => v,
             None => panic!(
@@ -356,7 +336,7 @@ impl Context {
             .get(self.funclet_name().as_str())
             .unwrap()
             .returns
-            .get(&var)
+            .get_index(&var)
         {
             Some(v) => v,
             None => panic!(
