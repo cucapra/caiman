@@ -8,17 +8,22 @@ use std::hash::Hash;
 
 // just putting this wrapper in up-front to make getting information easy later
 pub struct Allocation {
-    index: Option<usize>, // is None exactly when the variable has been checked, but result pending
+    name: Option<String>, // is None exactly when the variable has been checked, but result pending
 }
 
 pub struct FuncletData {
     explicated_allocations: HashMap<String, Allocation>, // information about allocated value elements
 }
 
+struct Indices {
+    allocation_index : usize
+}
+
 pub struct Context<'a> {
     program: &'a assembly_ast::Program, // reference to the whole program for lookups
     assembly_context: assembly_context::Context, // owned for mutability
     explicated_funclets: HashMap<String, FuncletData>, // table of explicated funclets
+    indices : Indices
 }
 
 impl FuncletData {
@@ -27,10 +32,10 @@ impl FuncletData {
             explicated_allocations: HashMap::new(),
         }
     }
-    pub fn allocate(&mut self, name : String, allocation : Allocation) {
+    pub fn allocate(&mut self, name: String, allocation: Allocation) {
         self.explicated_allocations.insert(name, allocation);
     }
-    pub fn get_allocation(&self, name : String) -> Option<&Allocation> {
+    pub fn get_allocation(&self, name: String) -> Option<&Allocation> {
         self.explicated_allocations.get(name.as_str())
     }
 }
@@ -44,6 +49,7 @@ impl<'a> Context<'a> {
             program,
             assembly_context,
             explicated_funclets: HashMap::new(),
+            indices: Indices { allocation_index: 0 }
         }
     }
     pub fn inner(&mut self) -> &mut assembly_context::Context {
@@ -53,7 +59,13 @@ impl<'a> Context<'a> {
         self.program
     }
 
+    fn allocation_name(&mut self) -> String {
+        self.indices.allocation_index += 1;
+        format!("${}", self.indices.allocation_index)
+    }
+
     pub fn clear_allocations(&mut self) {
+        self.indices.allocation_index = 0;
         let mut keys = Vec::new();
         // todo: fix
         for key in self.explicated_funclets.keys() {
@@ -65,8 +77,17 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn explicate_allocation(&mut self, target: String, name: String, allocation: Allocation) {
-        self.explicated_funclets.get_mut(target.as_str()).unwrap().allocate(name, allocation);
+    pub fn explicate_allocation(
+        &mut self,
+        remote: &assembly_ast::RemoteNodeId,
+        valid: bool
+    ) -> Option<String> {
+        let name = if valid { Some(self.allocation_name()) } else { None };
+        self.explicated_funclets
+            .get_mut(remote.funclet_id.as_str())
+            .unwrap()
+            .allocate(remote.node_id.clone(), Allocation { name : name.clone() });
+        name
     }
 
     pub fn get_allocation(&mut self, target: String, name: String) -> Option<&Allocation> {
@@ -75,7 +96,7 @@ impl<'a> Context<'a> {
             .and_then(|x| x.get_allocation(name))
     }
 
-    pub fn resolve_funclet(&mut self, name: String) {
+    pub fn explicate_funclet(&mut self, name: String) {
         self.explicated_funclets.insert(name, FuncletData::new()); // dupes are whatever here
     }
 

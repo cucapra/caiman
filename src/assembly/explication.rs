@@ -1,5 +1,6 @@
 use crate::assembly::explication_context::Context;
 use crate::assembly::explication_explicator;
+use crate::assembly::explication_util::*;
 use crate::assembly::parser;
 use crate::assembly_ast::FFIType;
 use crate::assembly_ast::Hole;
@@ -8,7 +9,6 @@ use crate::ir::ffi;
 use crate::{assembly_ast, assembly_context, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
-use crate::assembly::explication_util::*;
 
 // for reading GPU stuff
 use crate::stable_vec::StableVec;
@@ -658,8 +658,10 @@ fn ir_funclets(
     for def in funclets {
         match def {
             assembly_ast::FuncletDef::Local(f) => {
-                context.inner().advance_local_funclet(f.header.name.clone());
+                let name = f.header.name.clone();
+                context.inner().advance_local_funclet(name.clone());
                 result.add(ir_funclet(f, context).unwrap());
+                context.explicate_funclet(name.clone()); // separate operation cause order
             }
             _ => {}
         }

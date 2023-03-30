@@ -178,7 +178,10 @@ pub fn value_funclet_raw_id(d: &assembly_ast::DictValue, context: &mut Context) 
     }
 }
 
-pub fn value_type(d: &assembly_ast::DictValue, context: &mut Context) -> assembly_context::Location {
+pub fn value_type(
+    d: &assembly_ast::DictValue,
+    context: &mut Context,
+) -> assembly_context::Location {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Type(t) => match t {
@@ -335,7 +338,10 @@ pub fn value_timeline_tag(t: &assembly_ast::TimelineTag, context: &mut Context) 
     }
 }
 
-pub fn value_dict_timeline_tag(d: &assembly_ast::DictValue, context: &mut Context) -> ir::TimelineTag {
+pub fn value_dict_timeline_tag(
+    d: &assembly_ast::DictValue,
+    context: &mut Context,
+) -> ir::TimelineTag {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Tag(t) => match t {
@@ -352,7 +358,10 @@ pub fn value_spatial_tag(t: &assembly_ast::SpatialTag, context: &mut Context) ->
     }
 }
 
-pub fn value_dict_spatial_tag(d: &assembly_ast::DictValue, context: &mut Context) -> ir::SpatialTag {
+pub fn value_dict_spatial_tag(
+    d: &assembly_ast::DictValue,
+    context: &mut Context,
+) -> ir::SpatialTag {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Tag(t) => match t {

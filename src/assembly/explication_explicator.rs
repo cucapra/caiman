@@ -1,4 +1,5 @@
 use crate::assembly::explication_context::Context;
+use crate::assembly::explication_util::*;
 use crate::assembly::parser;
 use crate::assembly_ast::FFIType;
 use crate::assembly_ast::Hole;
@@ -7,7 +8,6 @@ use crate::ir::ffi;
 use crate::{assembly_ast, assembly_context, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
-use crate::assembly::explication_util::*;
 
 fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
@@ -17,19 +17,19 @@ fn reject_hole<T>(h: Hole<T>) -> T {
 }
 
 pub fn explicate_allocate_temporary(
-    place: &Hole<ir::Place>,
-    storage_type: &Hole<assembly_ast::StorageTypeId>,
-    operation: &Hole<assembly_ast::RemoteNodeId>,
+    place_hole: &Hole<ir::Place>,
+    storage_type_hole: &Hole<assembly_ast::StorageTypeId>,
+    operation_hole: &Hole<assembly_ast::RemoteNodeId>,
     context: &mut Context,
 ) -> Option<ir::Node> {
+    let place = reject_hole(place_hole.as_ref());
+    let storage_type = reject_hole(storage_type_hole.as_ref());
+    let operation = reject_hole(operation_hole.as_ref());
+    context.explicate_allocation(operation, true);
     Some(ir::Node::AllocTemporary {
-        place: reject_hole(place.as_ref()).clone(),
-        storage_type: ffi::TypeId(
-            context
-            .inner()
-            .loc_type_id(reject_hole(storage_type.clone())),
-        ),
-        operation: remote_conversion(reject_hole(operation.as_ref()), context),
+        place: place.clone(),
+        storage_type: ffi::TypeId(context.inner().loc_type_id(storage_type.clone())),
+        operation: remote_conversion(operation, context),
     })
 }
 
