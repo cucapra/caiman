@@ -32,7 +32,10 @@ struct NodeTable {
 pub struct Context {
     ffi_type_table: Table<assembly_ast::FFIType, ()>,
     local_type_table: Table<String, ()>,
-    funclet_table: Table<String, FuncletLocation>,
+    funclet_kind_map: HashMap<String, FuncletLocation>,
+    external_funclet_table: Table<String, ()>,
+    local_funclet_table: Table<String, ()>,
+    value_function_table: Table<String, ()>,
     remote_map: HashMap<String, NodeTable>,
     current_funclet_name: Option<String>,
     command_var_name: Option<String>,
@@ -42,9 +45,9 @@ pub struct Context {
 #[derive(Debug, Clone)]
 pub enum FuncletLocation {
     Local,
-    ValueFun,
-    CpuFun,
-    GpuFun,
+    Value,
+    Cpu,
+    Gpu,
 }
 
 #[derive(Debug, Clone)]
@@ -135,7 +138,10 @@ impl Context {
         Context {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
-            funclet_table: Table::new(),
+            funclet_kind_map: HashMap::new(),
+            local_funclet_table: Table::new(),
+            external_funclet_table: Table::new(),
+            value_function_table: Table::new(),
             remote_map: HashMap::new(),
             current_funclet_name: None,
             command_var_name: None,
@@ -158,17 +164,22 @@ impl Context {
     }
 
     pub fn add_cpu_funclet(&mut self, name: String) {
-        self.funclet_table.push(name, FuncletLocation::CpuFun);
+        self.funclet_kind_map
+            .insert(name.clone(), FuncletLocation::Cpu);
+        self.external_funclet_table.push(name, ());
     }
 
     pub fn add_gpu_funclet(&mut self, name: String) {
-        self.funclet_table.push(name, FuncletLocation::GpuFun);
+        self.funclet_kind_map
+            .insert(name.clone(), FuncletLocation::Gpu);
+        self.external_funclet_table.push(name, ());
     }
 
     pub fn add_local_funclet(&mut self, name: String) {
         self.current_funclet_name = Some(name.clone());
-        self.funclet_table
-            .push(name.clone(), FuncletLocation::Local);
+        self.funclet_kind_map
+            .insert(name.clone(), FuncletLocation::Local);
+        self.local_funclet_table.push(name.clone(), ());
         self.remote_map.insert(
             name,
             NodeTable {
@@ -179,7 +190,9 @@ impl Context {
     }
 
     pub fn add_value_function(&mut self, name: String) {
-        self.funclet_table.push(name, FuncletLocation::ValueFun);
+        self.funclet_kind_map
+            .insert(name.clone(), FuncletLocation::Value);
+        self.value_function_table.push(name, ());
     }
 
     pub fn advance_local_funclet(&mut self, name: String) {
@@ -253,42 +266,42 @@ impl Context {
         }
     }
 
-    pub fn funclet_location(&self, name: &String) -> (&FuncletLocation, usize) {
-        match self.funclet_table.get(name) {
+    pub fn funclet_location(&self, name: &String) -> &FuncletLocation {
+        match self.funclet_kind_map.get(name) {
             Some(f) => f,
             None => panic!("Unknown funclet name {:?}", name),
         }
     }
 
     pub fn funclet_id(&self, name: &String) -> usize {
-        self.funclet_location(name).1
+        match self.funclet_location(name) {
+            FuncletLocation::Local => self.local_funclet_table.get(name).unwrap().1,
+            FuncletLocation::Value => self.value_function_table.get(name).unwrap().1,
+            _ => self.external_funclet_table.get(name).unwrap().1,
+        }
     }
 
     pub fn local_funclet_id(&self, name: String) -> usize {
-        let result = self.funclet_location(&name);
-        match result.0 {
-            FuncletLocation::Local => result.1,
+        match self.funclet_location(&name) {
+            FuncletLocation::Local => self.local_funclet_table.get(&name).unwrap().1,
             _ => panic!("Not a local funclet {}", name),
         }
     }
     pub fn cpu_funclet_id(&self, name: String) -> usize {
-        let result = self.funclet_location(&name);
-        match result.0 {
-            FuncletLocation::CpuFun => result.1,
+        match self.funclet_location(&name) {
+            FuncletLocation::Cpu => self.external_funclet_table.get(&name).unwrap().1,
             _ => panic!("Not a cpu funclet {}", name),
         }
     }
     pub fn gpu_funclet_id(&self, name: String) -> usize {
-        let result = self.funclet_location(&name);
-        match result.0 {
-            FuncletLocation::GpuFun => result.1,
+        match self.funclet_location(&name) {
+            FuncletLocation::Gpu => self.external_funclet_table.get(&name).unwrap().1,
             _ => panic!("Not a gpu funclet {}", name),
         }
     }
     pub fn value_function_id(&self, name: String) -> usize {
-        let result = self.funclet_location(&name);
-        match result.0 {
-            FuncletLocation::ValueFun => result.1,
+        match self.funclet_location(&name) {
+            FuncletLocation::Value => self.value_function_table.get(&name).unwrap().1,
             _ => panic!("Not a value function {}", name),
         }
     }

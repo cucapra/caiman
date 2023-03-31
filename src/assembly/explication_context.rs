@@ -16,14 +16,14 @@ pub struct FuncletData {
 }
 
 struct Indices {
-    allocation_index : usize
+    allocation_index: usize,
 }
 
 pub struct Context<'a> {
     program: &'a assembly_ast::Program, // reference to the whole program for lookups
     assembly_context: assembly_context::Context, // owned for mutability
     explicated_funclets: HashMap<String, FuncletData>, // table of explicated funclets
-    indices : Indices
+    indices: Indices,
 }
 
 impl FuncletData {
@@ -49,7 +49,9 @@ impl<'a> Context<'a> {
             program,
             assembly_context,
             explicated_funclets: HashMap::new(),
-            indices: Indices { allocation_index: 0 }
+            indices: Indices {
+                allocation_index: 0,
+            },
         }
     }
     pub fn inner(&mut self) -> &mut assembly_context::Context {
@@ -80,13 +82,17 @@ impl<'a> Context<'a> {
     pub fn explicate_allocation(
         &mut self,
         remote: &assembly_ast::RemoteNodeId,
-        valid: bool
+        valid: bool,
     ) -> Option<String> {
-        let name = if valid { Some(self.allocation_name()) } else { None };
+        let name = if valid {
+            Some(self.allocation_name())
+        } else {
+            None
+        };
         self.explicated_funclets
             .get_mut(remote.funclet_id.as_str())
             .unwrap()
-            .allocate(remote.node_id.clone(), Allocation { name : name.clone() });
+            .allocate(remote.node_id.clone(), Allocation { name: name.clone() });
         name
     }
 

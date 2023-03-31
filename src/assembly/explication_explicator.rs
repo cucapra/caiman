@@ -40,17 +40,17 @@ pub fn explicate_encode_do(
     outputs_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
     context: &mut Context,
 ) -> Option<ir::Node> {
-    let place = place_hole.unwrap_or(todo!());
-    // Some(ir::Node::EncodeDo {
-    //     place: reject_hole(place.clone()),
-    //     operation: remote_conversion(reject_hole_ref(operation), context),
-    //     inputs: reject_hole_ref(inputs)
-    //         .iter()
-    //         .map(|n| context.inner().node_id(reject_hole(n.clone())))
-    //         .collect(),
-    //     outputs: reject_hole_ref(outputs)
-    //         .iter()
-    //         .map(|n| context.inner().node_id(reject_hole(n.clone())))
-    //         .collect(),
-    // })
+    // let place = place_hole.unwrap_or(todo!());
+    Some(ir::Node::EncodeDo {
+        place: reject_hole(place_hole.clone()),
+        operation: remote_conversion(reject_hole(operation_hole.as_ref()), context),
+        inputs: reject_hole(inputs_hole.as_ref())
+            .iter()
+            .map(|n| context.inner().node_id(reject_hole(n.clone())))
+            .collect(),
+        outputs: reject_hole(outputs_hole.as_ref())
+            .iter()
+            .map(|n| context.inner().node_id(reject_hole(n.clone())))
+            .collect(),
+    })
 }

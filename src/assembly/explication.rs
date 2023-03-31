@@ -323,19 +323,20 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
                 .iter()
                 .map(|n| context.inner().node_id(reject_hole(n.as_ref()).clone()))
                 .collect();
+            let id = context.inner().funclet_id(&name);
             Some(match context.inner().funclet_location(&name) {
-                (FuncletLocation::Local, _) => {
+                FuncletLocation::Local => {
                     panic!("Cannot directly call local funclet {}", name)
                 }
-                (FuncletLocation::ValueFun, id) => ir::Node::CallValueFunction {
+                FuncletLocation::Value => ir::Node::CallValueFunction {
                     function_id: id.clone(),
                     arguments: mapped_arguments,
                 },
-                (FuncletLocation::CpuFun, id) => ir::Node::CallExternalCpu {
+                FuncletLocation::Cpu => ir::Node::CallExternalCpu {
                     external_function_id: id.clone(),
                     arguments: mapped_arguments,
                 },
-                (FuncletLocation::GpuFun, id) => ir::Node::CallExternalGpuCompute {
+                FuncletLocation::Gpu => ir::Node::CallExternalGpuCompute {
                     external_function_id: id.clone(),
                     dimensions: Box::new([]), // explicitly empty
                     arguments: mapped_arguments,
@@ -688,7 +689,7 @@ fn ir_value_function(
         let name = function.allowed_funclets.get(0).unwrap();
         let id = context.inner().funclet_id(name);
         let index = match context.inner().funclet_location(name) {
-            (FuncletLocation::Local, id) => id.clone(),
+            FuncletLocation::Local => id.clone(),
             _ => panic!("Non-local funclet used for value function {}", name),
         };
         default_funclet_id = Some(index);
