@@ -1,10 +1,10 @@
-use crate::assembly_context::{Context, FuncletLocation};
-use crate::assembly_context;
 use crate::assembly::parser;
 use crate::assembly_ast::FFIType;
 use crate::assembly_ast::Hole;
+use crate::assembly_context::Context;
+use crate::assembly_context::FuncletLocation;
 use crate::ir::ffi;
-use crate::{assembly_ast, frontend, ir};
+use crate::{assembly_ast, assembly_context, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
@@ -19,25 +19,25 @@ use std::path::Path;
 fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
         Some(v) => v,
-        None => panic!("Holes not yet supported for explication"),
+        None => panic!("Unimplemented Hole"),
     }
 }
 
 fn reject_hole_ref<T>(h: &Hole<T>) -> &T {
     match h {
         Some(v) => v,
-        None => panic!("Holes not yet supported for explication"),
+        None => panic!("Unimplemented Hole"),
     }
 }
 
 fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
     fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
         b.iter()
-            .map(|x| ffi::TypeId(*context.ffi_type_id(x)))
+            .map(|x| ffi::TypeId(context.ffi_type_id(x)))
             .collect()
     }
     fn type_id(element_type: Box<FFIType>, context: &mut Context) -> ffi::TypeId {
-        ffi::TypeId(*context.ffi_type_id(element_type.as_ref()))
+        ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
     }
     match value {
         FFIType::F32 => ffi::Type::F32,
@@ -102,21 +102,21 @@ fn as_key(k: &str) -> assembly_ast::Value {
 fn as_value(value: assembly_ast::DictValue) -> assembly_ast::Value {
     match value {
         assembly_ast::DictValue::Raw(v) => v,
-        _ => panic!(format!("Expected raw value got {:?}", value)),
+        _ => panic!("Expected raw value got {:?}", value),
     }
 }
 
 fn as_list(value: assembly_ast::DictValue) -> Vec<assembly_ast::DictValue> {
     match value {
         assembly_ast::DictValue::List(v) => v,
-        _ => panic!(format!("Expected list got {:?}", value)),
+        _ => panic!("Expected list got {:?}", value),
     }
 }
 
 fn as_dict(value: assembly_ast::DictValue) -> assembly_ast::UncheckedDict {
     match value {
         assembly_ast::DictValue::Dict(d) => d,
-        _ => panic!(format!("Expected dict got {:?}", value)),
+        _ => panic!("Expected dict got {:?}", value),
     }
 }
 
@@ -131,7 +131,7 @@ fn value_string(d: &assembly_ast::DictValue, _: &mut Context) -> String {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::ID(s) => s.clone(),
-        _ => panic!(format!("Expected id got {:?}", v)),
+        _ => panic!("Expected id got {:?}", v),
     }
 }
 
@@ -139,7 +139,7 @@ fn value_num(d: &assembly_ast::DictValue, _: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Num(n) => n.clone(),
-        _ => panic!(format!("Expected num got {:?}", v)),
+        _ => panic!("Expected num got {:?}", v),
     }
 }
 
@@ -147,34 +147,40 @@ fn value_function_loc(d: &assembly_ast::DictValue, context: &mut Context) -> ir:
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
-            funclet_id: *context.local_funclet_id(remote.funclet_id.clone()),
-            node_id: *context.local_funclet_id(remote.node_id.clone()),
+            funclet_id: context.local_funclet_id(remote.funclet_id.clone()).clone(),
+            node_id: context.local_funclet_id(remote.node_id.clone()).clone(),
         },
-        _ => panic!(format!("Expected function location got {:?}", v)),
+        _ => panic!("Expected function location got {:?}", v),
     }
 }
 
-fn value_var_name(d: &assembly_ast::DictValue, context: &mut Context) -> usize {
+fn value_var_name(d: &assembly_ast::DictValue, ret: bool, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::VarName(s) => *context.node_id(s.clone()),
-        _ => panic!(format!("Expected variable name got {:?}", v)),
+        assembly_ast::Value::VarName(s) => {
+            if ret {
+                context.return_id(s.clone())
+            } else {
+                context.node_id(s.clone())
+            }
+        }
+        _ => panic!("Expected variable name got {:?}", v),
     }
 }
 
-fn value_funclet_name(d: &assembly_ast::DictValue, context: &mut Context) -> FuncletLocation {
+fn value_funclet_name(d: &assembly_ast::DictValue, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::FnName(s) => context.funclet_id(s.clone()).clone(),
-        _ => panic!(format!("Expected funclet name got {:?}", v)),
+        assembly_ast::Value::FnName(s) => context.funclet_id(&s).clone(),
+        _ => panic!("Expected funclet name got {:?}", v),
     }
 }
 
 fn value_funclet_raw_id(d: &assembly_ast::DictValue, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::FnName(s) => context.funclet_id_unwrap(s.clone()).clone(),
-        _ => panic!(format!("Expected funclet name got {:?}", v)),
+        assembly_ast::Value::FnName(s) => context.funclet_id(&s).clone(),
+        _ => panic!("Expected funclet name got {:?}", v),
     }
 }
 
@@ -182,12 +188,14 @@ fn value_type(d: &assembly_ast::DictValue, context: &mut Context) -> assembly_co
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Type(t) => match t {
-            assembly_ast::Type::FFI(typ) => assembly_context::Location::FFI(*context.ffi_type_id(&typ)),
+            assembly_ast::Type::FFI(typ) => {
+                assembly_context::Location::FFI(context.ffi_type_id(&typ))
+            }
             assembly_ast::Type::Local(name) => {
-                assembly_context::Location::Local(*context.local_type_id(name.clone()))
+                assembly_context::Location::Local(context.local_type_id(&name))
             }
         },
-        _ => panic!(format!("Expected type got {:?}", v)),
+        _ => panic!("Expected type got {:?}", v),
     }
 }
 
@@ -195,7 +203,7 @@ fn value_place(d: &assembly_ast::DictValue, _: &mut Context) -> ir::Place {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Place(p) => p.clone(),
-        _ => panic!(format!("Expected place got {:?}", v)),
+        _ => panic!("Expected place got {:?}", v),
     }
 }
 
@@ -203,7 +211,7 @@ fn value_stage(d: &assembly_ast::DictValue, _: &mut Context) -> ir::ResourceQueu
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Stage(s) => s.clone(),
-        _ => panic!(format!("Expected stage got {:?}", v)),
+        _ => panic!("Expected stage got {:?}", v),
     }
 }
 
@@ -215,12 +223,12 @@ fn value_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::ValueT
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::ValueTag::Input {
-            funclet_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::ValueTag::Output {
-            funclet_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
 }
@@ -232,12 +240,12 @@ fn timeline_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::Tim
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::TimelineTag::Input {
-            funclet_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::TimelineTag::Output {
-            funclet_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
 }
@@ -249,12 +257,12 @@ fn spatial_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::Spat
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::SpatialTag::Input {
-            funclet_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::SpatialTag::Output {
-            funclet_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
 }
@@ -263,15 +271,15 @@ fn value_value_tag(t: &assembly_ast::ValueTag, context: &mut Context) -> ir::Val
     match t {
         assembly_ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
         assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
-            function_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            function_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
-            function_id: *context.local_funclet_id(r.funclet_id.clone()),
-            index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            function_id: context.local_funclet_id(r.funclet_id.clone()).clone(),
+            index: context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
-            index: *context.node_id(n.clone()),
+            index: context.node_id(n.clone()),
         },
     }
 }
@@ -281,9 +289,9 @@ fn value_dict_value_tag(d: &assembly_ast::DictValue, context: &mut Context) -> i
     match v {
         assembly_ast::Value::Tag(t) => match t {
             assembly_ast::Tag::ValueTag(v) => value_value_tag(&v, context),
-            _ => panic!(format!("Expected value tag got {:?}", d)),
+            _ => panic!("Expected value tag got {:?}", d),
         },
-        _ => panic!(format!("Expected tag got {:?}", d)),
+        _ => panic!("Expected tag got {:?}", d),
     }
 }
 
@@ -298,9 +306,9 @@ fn value_dict_timeline_tag(d: &assembly_ast::DictValue, context: &mut Context) -
     match v {
         assembly_ast::Value::Tag(t) => match t {
             assembly_ast::Tag::TimelineTag(t) => value_timeline_tag(&t, context),
-            _ => panic!(format!("Expected timeline tag got {:?}", d)),
+            _ => panic!("Expected timeline tag got {:?}", d),
         },
-        _ => panic!(format!("Expected tag got {:?}", d)),
+        _ => panic!("Expected tag got {:?}", d),
     }
 }
 
@@ -315,9 +323,9 @@ fn value_dict_spatial_tag(d: &assembly_ast::DictValue, context: &mut Context) ->
     match v {
         assembly_ast::Value::Tag(t) => match t {
             assembly_ast::Tag::SpatialTag(t) => value_spatial_tag(&t, context),
-            _ => panic!(format!("Expected spatial tag got {:?}", d)),
+            _ => panic!("Expected spatial tag got {:?}", d),
         },
-        _ => panic!(format!("Expected tag got {:?}", d)),
+        _ => panic!("Expected tag got {:?}", d),
     }
 }
 
@@ -329,7 +337,7 @@ fn value_slot_info(d: &assembly_ast::DictValue, context: &mut Context) -> ir::Sl
             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
         },
-        _ => panic!(format!("Expected tag got {:?}", v)),
+        _ => panic!("Expected tag got {:?}", v),
     }
 }
 
@@ -339,7 +347,7 @@ fn value_fence_info(d: &assembly_ast::DictValue, context: &mut Context) -> ir::F
         assembly_ast::Value::FenceInfo(s) => ir::FenceInfo {
             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
         },
-        _ => panic!(format!("Expected tag got {:?}", v)),
+        _ => panic!("Expected tag got {:?}", v),
     }
 }
 
@@ -349,7 +357,7 @@ fn value_buffer_info(d: &assembly_ast::DictValue, context: &mut Context) -> ir::
         assembly_ast::Value::BufferInfo(s) => ir::BufferInfo {
             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
         },
-        _ => panic!(format!("Expected tag got {:?}", v)),
+        _ => panic!("Expected tag got {:?}", v),
     }
 }
 
@@ -370,12 +378,13 @@ fn value_list<T>(
 fn value_index_var_dict<T>(
     v: &assembly_ast::DictValue,
     f: fn(&assembly_ast::DictValue, &mut Context) -> T,
+    ret: bool, // read remote or not
     context: &mut Context,
 ) -> HashMap<usize, T> {
     let d = as_dict(v.clone());
     let mut result = HashMap::new();
     for pair in d.iter() {
-        let index = value_var_name(&assembly_ast::DictValue::Raw(pair.0.clone()), context);
+        let index = value_var_name(&assembly_ast::DictValue::Raw(pair.0.clone()), ret, context);
         result.insert(index, f(&pair.1.clone(), context));
     }
     result
@@ -395,10 +404,10 @@ fn ir_external_cpu(
     let mut output_types = Vec::new();
 
     for name in &external.input_types {
-        input_types.push(ffi::TypeId(*context.ffi_type_id(name)))
+        input_types.push(ffi::TypeId(context.ffi_type_id(name)))
     }
     for name in &external.output_types {
-        output_types.push(ffi::TypeId(*context.ffi_type_id(name)))
+        output_types.push(ffi::TypeId(context.ffi_type_id(name)))
     }
 
     ffi::ExternalCpuFunction {
@@ -436,9 +445,9 @@ fn ir_external_gpu_resource(
                     }
                     index += 1;
                 }
-                panic!(format!("Unknown GPU variable {:?}", n))
+                panic!("Unknown GPU variable {:?}", n)
             }
-            _ => panic!(format!("Invalid argument {:?}", d)),
+            _ => panic!("Invalid argument {:?}", d),
         }
     }
     let group = value_num(d.get(&as_key("group")).unwrap(), context);
@@ -478,11 +487,11 @@ fn ir_external_gpu(
     let mut resource_bindings = Vec::new();
 
     for arg in &external.input_args {
-        input_types.push(ffi::TypeId(*context.ffi_type_id(&arg.0)));
+        input_types.push(ffi::TypeId(context.ffi_type_id(&arg.0)));
         input_args.push(arg.1.clone());
     }
     for arg in &external.output_types {
-        output_types.push(ffi::TypeId(*context.ffi_type_id(&arg.0)));
+        output_types.push(ffi::TypeId(context.ffi_type_id(&arg.0)));
         let arg_name = arg.1.clone();
         for iarg in &input_args {
             if arg_name == *iarg {
@@ -569,10 +578,9 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
                     assembly_ast::TypeKind::NativeValue => {
                         let type_found = typ.data.get(&as_key("type")).unwrap();
                         let storage_type = match value_type(type_found, context) {
-                            assembly_context::Location::Local(t) => panic!(format!(
-                                "Expected ffi type in native value, got {:?}",
-                                type_found
-                            )),
+                            assembly_context::Location::Local(i) => {
+                                panic!("Expected ffi type in native value, got {:?}", type_found)
+                            }
                             assembly_context::Location::FFI(i) => ffi::TypeId(i),
                         };
                         ir::Type::NativeValue { storage_type }
@@ -608,7 +616,7 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
                             assembly_ast::DictValue::Dict(dv) => {
                                 Some(static_layout_map(dv.clone(), context))
                             }
-                            _ => panic!(format!("Unsupported result for {:?}", static_layout_dict)),
+                            _ => panic!("Unsupported result for {:?}", static_layout_dict),
                         };
                         ir::Type::Buffer {
                             storage_place: value_place(
@@ -636,298 +644,306 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
     result
 }
 
-fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> ir::Node {
+fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node> {
     match node {
-        assembly_ast::Node::None => ir::Node::None,
-        assembly_ast::Node::Phi { index } => ir::Node::Phi {
-            index: reject_hole(*index),
-        },
-        assembly_ast::Node::ExtractResult { node_id, index } => ir::Node::ExtractResult {
-            node_id: *context.node_id(reject_hole(node_id.clone())),
-            index: reject_hole(*index),
-        },
+        assembly_ast::Node::None => Some(ir::Node::None),
+        assembly_ast::Node::Phi { index } => Some(ir::Node::Phi {
+            index: *reject_hole_ref(index),
+        }),
+        assembly_ast::Node::ExtractResult { node_id, index } => Some(ir::Node::ExtractResult {
+            node_id: context.node_id(reject_hole(node_id.clone())),
+            index: *reject_hole_ref(index),
+        }),
         assembly_ast::Node::Constant { value, type_id } => {
             let unwrapped_value = reject_hole(value.clone());
             let unwrapped_type = reject_hole(type_id.clone());
             let parsed_value = match &unwrapped_type {
-                assembly_ast::Type::Local(_) => panic!("Cannot have a custom type constant {:?}", type_id),
+                assembly_ast::Type::Local(_) => {
+                    panic!("Cannot have a custom type constant {:?}", type_id)
+                }
                 assembly_ast::Type::FFI(t) => match t {
                     FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
                     FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
                     FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
-                    _ => panic!("Unsupported constant type {:?}", type_id)
-                }
+                    _ => panic!("Unsupported constant type {:?}", type_id),
+                },
             };
-            ir::Node::Constant {
+            Some(ir::Node::Constant {
                 value: parsed_value,
-                type_id: *context.loc_type_id(unwrapped_type),
-            }
+                type_id: context.loc_type_id(unwrapped_type),
+            })
         }
         assembly_ast::Node::CallValueFunction {
             function_id,
             arguments,
         } => {
-            unimplemented!() // arbitrary trick for unification of calls
+            unimplemented!() // arbitrary unification of calls
         }
         assembly_ast::Node::Select {
             condition,
             true_case,
             false_case,
-        } => ir::Node::Select {
-            condition: *context.node_id(reject_hole(condition.clone())),
-            true_case: *context.node_id(reject_hole(true_case.clone())),
-            false_case: *context.node_id(reject_hole(false_case.clone())),
-        },
+        } => Some(ir::Node::Select {
+            condition: context.node_id(reject_hole(condition.clone())),
+            true_case: context.node_id(reject_hole(true_case.clone())),
+            false_case: context.node_id(reject_hole(false_case.clone())),
+        }),
         assembly_ast::Node::CallExternalCpu {
             external_function_id,
             arguments,
         } => {
-            let name = external_function_id.clone();
+            let name = reject_hole(external_function_id.clone());
             let mapped_arguments = reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(reject_hole_ref(n).clone()))
+                .map(|n| context.node_id(reject_hole_ref(n).clone()))
                 .collect();
-            match context.funclet_id(reject_hole(name.clone())) {
+            Some(match context.funclet_location(&name) {
                 FuncletLocation::Local(_) => {
-                    panic!(format!(
-                        "Cannot directly call local funclet {}",
-                        reject_hole(name)
-                    ))
+                    panic!("Cannot directly call local funclet {}", name)
                 }
                 FuncletLocation::ValueFun(id) => ir::Node::CallValueFunction {
-                    function_id: *id,
+                    function_id: id.clone(),
                     arguments: mapped_arguments,
                 },
                 FuncletLocation::CpuFun(id) => ir::Node::CallExternalCpu {
-                    external_function_id: *id,
+                    external_function_id: id.clone(),
                     arguments: mapped_arguments,
                 },
                 FuncletLocation::GpuFun(id) => ir::Node::CallExternalGpuCompute {
-                    external_function_id: *id,
+                    external_function_id: id.clone(),
                     dimensions: Box::new([]), // explicitly empty
                     arguments: mapped_arguments,
                 },
-            }
+            })
         }
         assembly_ast::Node::CallExternalGpuCompute {
             external_function_id,
             dimensions,
             arguments,
-        } => ir::Node::CallExternalGpuCompute {
-            external_function_id: *context
-                .gpu_funclet_id(reject_hole(external_function_id.clone())),
+        } => Some(ir::Node::CallExternalGpuCompute {
+            external_function_id: context
+                .gpu_funclet_id(reject_hole(external_function_id.clone()))
+                .clone(),
             dimensions: reject_hole_ref(dimensions)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
             arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-        },
+        }),
         assembly_ast::Node::AllocTemporary {
             place,
             storage_type,
             operation,
-        } => ir::Node::AllocTemporary {
+        } => Some(ir::Node::AllocTemporary {
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(*context.loc_type_id(reject_hole(storage_type.clone()))),
+            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.clone()))),
             operation: remote_conversion(reject_hole_ref(operation), context),
-        },
+        }),
         assembly_ast::Node::UnboundSlot {
             place,
             storage_type,
             operation,
-        } => ir::Node::UnboundSlot {
+        } => Some(ir::Node::UnboundSlot {
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(*context.loc_type_id(reject_hole(storage_type.clone()))),
+            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.clone()))),
             operation: remote_conversion(reject_hole_ref(operation), context),
-        },
-        assembly_ast::Node::Drop { node } => ir::Node::Drop {
-            node: *context.node_id(reject_hole(node.clone())),
-        },
+        }),
+        assembly_ast::Node::Drop { node } => Some(ir::Node::Drop {
+            node: context.node_id(reject_hole(node.clone())),
+        }),
         assembly_ast::Node::StaticAllocFromStaticBuffer {
             buffer,
             place,
             storage_type,
             operation,
-        } => ir::Node::StaticAllocFromStaticBuffer {
-            buffer: *context.node_id(reject_hole(buffer.clone())),
+        } => Some(ir::Node::StaticAllocFromStaticBuffer {
+            buffer: context.node_id(reject_hole(buffer.clone())),
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(*context.loc_type_id(reject_hole(storage_type.clone()))),
+            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.clone()))),
             operation: remote_conversion(reject_hole_ref(operation), context),
-        },
+        }),
         assembly_ast::Node::EncodeDo {
             place,
             operation,
             inputs,
             outputs,
-        } => ir::Node::EncodeDo {
+        } => Some(ir::Node::EncodeDo {
             place: reject_hole(place.clone()),
             operation: remote_conversion(reject_hole_ref(operation), context),
             inputs: reject_hole_ref(inputs)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
             outputs: reject_hole_ref(outputs)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-        },
+        }),
         assembly_ast::Node::EncodeCopy {
             place,
             input,
             output,
-        } => ir::Node::EncodeCopy {
+        } => Some(ir::Node::EncodeCopy {
             place: reject_hole(place.clone()),
-            input: *context.node_id(reject_hole(input.clone())),
-            output: *context.node_id(reject_hole(output.clone())),
-        },
-        assembly_ast::Node::Submit { place, event } => ir::Node::Submit {
-            place: reject_hole(place.clone()),
-            event: remote_conversion(reject_hole_ref(event), context),
-        },
-        assembly_ast::Node::EncodeFence { place, event } => ir::Node::EncodeFence {
+            input: context.node_id(reject_hole(input.clone())),
+            output: context.node_id(reject_hole(output.clone())),
+        }),
+        assembly_ast::Node::Submit { place, event } => Some(ir::Node::Submit {
             place: reject_hole(place.clone()),
             event: remote_conversion(reject_hole_ref(event), context),
-        },
+        }),
+        assembly_ast::Node::EncodeFence { place, event } => Some(ir::Node::EncodeFence {
+            place: reject_hole(place.clone()),
+            event: remote_conversion(reject_hole_ref(event), context),
+        }),
         assembly_ast::Node::SyncFence {
             place,
             fence,
             event,
-        } => ir::Node::SyncFence {
+        } => Some(ir::Node::SyncFence {
             place: reject_hole(place.clone()),
-            fence: *context.node_id(reject_hole(fence.clone())),
+            fence: context.node_id(reject_hole(fence.clone())),
             event: remote_conversion(reject_hole_ref(event), context),
-        },
+        }),
         assembly_ast::Node::InlineJoin {
             funclet,
             captures,
             continuation,
-        } => ir::Node::InlineJoin {
-            funclet: *context.local_funclet_id(reject_hole(funclet.clone())),
+        } => Some(ir::Node::InlineJoin {
+            funclet: context
+                .local_funclet_id(reject_hole(funclet.clone()))
+                .clone(),
             captures: reject_hole_ref(captures)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation: *context.node_id(reject_hole(continuation.clone())),
-        },
+            continuation: context.node_id(reject_hole(continuation.clone())),
+        }),
         assembly_ast::Node::SerializedJoin {
             funclet,
             captures,
             continuation,
-        } => ir::Node::SerializedJoin {
-            funclet: *context.local_funclet_id(reject_hole(funclet.clone())),
+        } => Some(ir::Node::SerializedJoin {
+            funclet: context
+                .local_funclet_id(reject_hole(funclet.clone()))
+                .clone(),
             captures: reject_hole_ref(captures)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation: *context.node_id(reject_hole(continuation.clone())),
-        },
-        assembly_ast::Node::DefaultJoin => ir::Node::DefaultJoin,
+            continuation: context.node_id(reject_hole(continuation.clone())),
+        }),
+        assembly_ast::Node::DefaultJoin => Some(ir::Node::DefaultJoin),
         assembly_ast::Node::SubmissionEvent {
             here_place,
             there_place,
             local_past,
-        } => ir::Node::SubmissionEvent {
+        } => Some(ir::Node::SubmissionEvent {
             here_place: reject_hole(here_place.clone()),
             there_place: reject_hole(there_place.clone()),
-            local_past: *context.node_id(reject_hole(local_past.clone())),
-        },
+            local_past: context.node_id(reject_hole(local_past.clone())),
+        }),
         assembly_ast::Node::SynchronizationEvent {
             here_place,
             there_place,
             local_past,
             remote_local_past,
-        } => ir::Node::SynchronizationEvent {
+        } => Some(ir::Node::SynchronizationEvent {
             here_place: reject_hole(here_place.clone()),
             there_place: reject_hole(there_place.clone()),
-            local_past: *context.node_id(reject_hole(local_past.clone())),
-            remote_local_past: *context.node_id(reject_hole(remote_local_past.clone())),
-        },
+            local_past: context.node_id(reject_hole(local_past.clone())),
+            remote_local_past: context.node_id(reject_hole(remote_local_past.clone())),
+        }),
         assembly_ast::Node::SeparatedLinearSpace { place, space } => {
-            ir::Node::SeparatedLinearSpace {
+            Some(ir::Node::SeparatedLinearSpace {
                 place: reject_hole(place.clone()),
-                space: *context.node_id(reject_hole(space.clone())),
-            }
+                space: context.node_id(reject_hole(space.clone())),
+            })
         }
-        assembly_ast::Node::MergedLinearSpace { place, spaces } => ir::Node::MergedLinearSpace {
-            place: reject_hole(place.clone()),
-            spaces: reject_hole_ref(spaces)
-                .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
-                .collect(),
-        },
+        assembly_ast::Node::MergedLinearSpace { place, spaces } => {
+            Some(ir::Node::MergedLinearSpace {
+                place: reject_hole(place.clone()),
+                spaces: reject_hole_ref(spaces)
+                    .iter()
+                    .map(|n| context.node_id(reject_hole(n.clone())))
+                    .collect(),
+            })
+        }
     }
 }
 
-fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> ir::TailEdge {
+fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<ir::TailEdge> {
     match tail {
-        assembly_ast::TailEdge::Return { return_values } => ir::TailEdge::Return {
+        assembly_ast::TailEdge::Return { return_values } => Some(ir::TailEdge::Return {
             return_values: reject_hole_ref(return_values)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-        },
+        }),
         assembly_ast::TailEdge::Yield {
             pipeline_yield_point_id,
             yielded_nodes,
             next_funclet,
             continuation_join,
             arguments,
-        } => ir::TailEdge::Yield {
+        } => Some(ir::TailEdge::Yield {
             pipeline_yield_point_id: reject_hole(pipeline_yield_point_id.clone()),
             yielded_nodes: reject_hole_ref(yielded_nodes)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-            next_funclet: *context.funclet_id_unwrap(reject_hole(next_funclet.clone())),
-            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
+            next_funclet: context.funclet_id(reject_hole_ref(next_funclet)).clone(),
+            continuation_join: context.node_id(reject_hole(continuation_join.clone())),
             arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-        },
-        assembly_ast::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-            join: *context.node_id(reject_hole(join.clone())),
+        }),
+        assembly_ast::TailEdge::Jump { join, arguments } => Some(ir::TailEdge::Jump {
+            join: context.node_id(reject_hole(join.clone())),
             arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-        },
+        }),
         assembly_ast::TailEdge::ScheduleCall {
             value_operation,
             callee_funclet_id,
             callee_arguments,
             continuation_join,
-        } => ir::TailEdge::ScheduleCall {
+        } => Some(ir::TailEdge::ScheduleCall {
             value_operation: remote_conversion(reject_hole_ref(value_operation), context),
-            callee_funclet_id: *context.funclet_id_unwrap(reject_hole(callee_funclet_id.clone())),
+            callee_funclet_id: context
+                .funclet_id(reject_hole_ref(callee_funclet_id))
+                .clone(),
             callee_arguments: reject_hole_ref(callee_arguments)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
-        },
+            continuation_join: context.node_id(reject_hole(continuation_join.clone())),
+        }),
         assembly_ast::TailEdge::ScheduleSelect {
             value_operation,
             condition,
             callee_funclet_ids,
             callee_arguments,
             continuation_join,
-        } => ir::TailEdge::ScheduleSelect {
+        } => Some(ir::TailEdge::ScheduleSelect {
             value_operation: remote_conversion(reject_hole_ref(value_operation), context),
-            condition: *context.node_id(reject_hole(condition.clone())),
+            condition: context.node_id(reject_hole(condition.clone())),
             callee_funclet_ids: reject_hole_ref(callee_funclet_ids)
                 .iter()
-                .map(|n| *context.funclet_id_unwrap(reject_hole(n.clone())))
+                .map(|n| context.funclet_id(reject_hole_ref(n)).clone())
                 .collect(),
             callee_arguments: reject_hole_ref(callee_arguments)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
-            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
-        },
+            continuation_join: context.node_id(reject_hole(continuation_join.clone())),
+        }),
         assembly_ast::TailEdge::DynamicAllocFromBuffer {
             buffer,
             arguments,
@@ -935,24 +951,28 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> ir::Tai
             success_funclet_id,
             failure_funclet_id,
             continuation_join,
-        } => ir::TailEdge::DynamicAllocFromBuffer {
-            buffer: *context.node_id(reject_hole(buffer.clone())),
+        } => Some(ir::TailEdge::DynamicAllocFromBuffer {
+            buffer: context.node_id(reject_hole(buffer.clone())),
             arguments: reject_hole_ref(arguments)
                 .iter()
-                .map(|n| *context.node_id(reject_hole(n.clone())))
+                .map(|n| context.node_id(reject_hole(n.clone())))
                 .collect(),
             dynamic_allocation_size_slots: reject_hole_ref(dynamic_allocation_size_slots)
                 .iter()
-                .map(|o| reject_hole(o.clone()).map(|n| *context.node_id(n)))
+                .map(|o| reject_hole(o.clone()).map(|n| context.node_id(n)))
                 .collect(),
-            success_funclet_id: *context.funclet_id_unwrap(reject_hole(success_funclet_id.clone())),
-            failure_funclet_id: *context.funclet_id_unwrap(reject_hole(failure_funclet_id.clone())),
-            continuation_join: *context.node_id(reject_hole(continuation_join.clone())),
-        },
+            success_funclet_id: context
+                .funclet_id(reject_hole_ref(success_funclet_id))
+                .clone(),
+            failure_funclet_id: context
+                .funclet_id(reject_hole_ref(failure_funclet_id))
+                .clone(),
+            continuation_join: context.node_id(reject_hole(continuation_join.clone())),
+        }),
     }
 }
 
-fn ir_funclet(funclet: &assembly_ast::Funclet, context: &mut Context) -> ir::Funclet {
+fn ir_funclet(funclet: &assembly_ast::Funclet, context: &mut Context) -> Option<ir::Funclet> {
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
@@ -963,26 +983,26 @@ fn ir_funclet(funclet: &assembly_ast::Funclet, context: &mut Context) -> ir::Fun
             None => {}
             Some(s) => nodes.push(ir::Node::Phi { index }),
         };
-        input_types.push(*context.loc_type_id(input_type.1.clone()));
+        input_types.push(context.loc_type_id(input_type.1.clone()));
     }
 
     for output_type in funclet.header.ret.iter() {
-        output_types.push(*context.loc_type_id(output_type.1.clone()));
+        output_types.push(context.loc_type_id(output_type.1.clone()));
     }
 
     for node in &funclet.commands {
-        nodes.push(ir_node(reject_hole_ref(node), context));
+        nodes.push(ir_node(reject_hole_ref(node), context).unwrap());
     }
 
-    let tail_edge = ir_tail_edge(reject_hole_ref(&funclet.tail_edge), context);
+    let tail_edge = ir_tail_edge(reject_hole_ref(&funclet.tail_edge), context).unwrap();
 
-    ir::Funclet {
+    Some(ir::Funclet {
         kind: funclet.kind.clone(),
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         nodes: nodes.into_boxed_slice(),
         tail_edge, // actually safe, oddly enough
-    }
+    })
 }
 
 fn ir_funclets(
@@ -993,8 +1013,8 @@ fn ir_funclets(
     for def in funclets {
         match def {
             assembly_ast::FuncletDef::Local(f) => {
-                context.update_local_funclet(f.header.name.clone());
-                result.add(ir_funclet(f, context));
+                context.advance_local_funclet(f.header.name.clone());
+                result.add(ir_funclet(f, context).unwrap());
             }
             _ => {}
         }
@@ -1012,21 +1032,19 @@ fn ir_value_function(
     let mut default_funclet_id = None;
 
     for typ in &function.input_types {
-        input_types.push(*context.loc_type_id(typ.clone()));
+        input_types.push(context.loc_type_id(typ.clone()));
     }
     for typ in &function.output_types {
-        output_types.push(*context.loc_type_id(typ.clone()));
+        output_types.push(context.loc_type_id(typ.clone()));
     }
     if function.allowed_funclets.len() > 0 {
         let name = function.allowed_funclets.get(0).unwrap();
-        let index = match context.funclet_id(name.clone()) {
-            FuncletLocation::Local(i) => i,
-            _ => panic!(format!(
-                "Non-local funclet used for value function {}",
-                name
-            )),
+        let id = context.funclet_id(name);
+        let index = match context.funclet_location(name) {
+            FuncletLocation::Local(id) => id.clone(),
+            _ => panic!("Non-local funclet used for value function {}", name),
         };
-        default_funclet_id = Some(*index);
+        default_funclet_id = Some(index);
     }
 
     ir::ValueFunction {
@@ -1058,7 +1076,7 @@ fn ir_pipelines(pipelines: &assembly_ast::Pipelines, context: &mut Context) -> V
     for pipeline in pipelines.iter() {
         let new_pipeline = ir::Pipeline {
             name: pipeline.name.clone(),
-            entry_funclet: *context.local_funclet_id(pipeline.funclet.clone()),
+            entry_funclet: context.local_funclet_id(pipeline.funclet.clone()).clone(),
             yield_points: Default::default(),
         };
         result.push(new_pipeline);
@@ -1083,12 +1101,12 @@ fn ir_value_extras(
                     let name = f.header.name.clone();
                     for extra in extras {
                         if extra.name == name {
-                            context.update_local_funclet(extra.name.clone());
-                            let index = context.local_funclet_id(extra.name.clone());
-                            if result.contains_key(index) {
-                                panic!(format!("Duplicate extras for {:?}", name));
+                            context.advance_local_funclet(extra.name.clone());
+                            let index = context.local_funclet_id(extra.name.clone()).clone();
+                            if result.contains_key(&index) {
+                                panic!("Duplicate extras for {:?}", name);
                             }
-                            result.insert(*index, ir_value_extra(&extra.data, context));
+                            result.insert(index, ir_value_extra(&extra.data, context));
                         }
                     }
                 }
@@ -1110,31 +1128,37 @@ fn ir_scheduling_extra(
         input_slots: value_index_var_dict(
             d.get(&as_key("input_slots")).unwrap(),
             value_slot_info,
+            false,
             context,
         ),
         output_slots: value_index_var_dict(
             d.get(&as_key("output_slots")).unwrap(),
             value_slot_info,
+            true,
             context,
         ),
         input_fences: value_index_var_dict(
             d.get(&as_key("input_fences")).unwrap(),
             value_fence_info,
+            false,
             context,
         ),
         output_fences: value_index_var_dict(
             d.get(&as_key("output_fences")).unwrap(),
             value_fence_info,
+            true,
             context,
         ),
         input_buffers: value_index_var_dict(
             d.get(&as_key("input_buffers")).unwrap(),
             value_buffer_info,
+            false,
             context,
         ),
         output_buffers: value_index_var_dict(
             d.get(&as_key("output_buffers")).unwrap(),
             value_buffer_info,
+            true,
             context,
         ),
         in_timeline_tag: value_dict_timeline_tag(
@@ -1162,12 +1186,12 @@ fn ir_scheduling_extras(
                     let name = f.header.name.clone();
                     for extra in extras {
                         if extra.name == name {
-                            context.update_local_funclet(extra.name.clone());
-                            let index = context.local_funclet_id(extra.name.clone());
-                            if result.contains_key(index) {
-                                panic!(format!("Duplicate extras for {:?}", name));
+                            context.advance_local_funclet(extra.name.clone());
+                            let index = context.local_funclet_id(extra.name.clone()).clone();
+                            if result.contains_key(&index) {
+                                panic!("Duplicate extras for {:?}", name);
                             }
-                            result.insert(*index, ir_scheduling_extra(&extra.data, context));
+                            result.insert(index, ir_scheduling_extra(&extra.data, context));
                         }
                     }
                 }
@@ -1196,8 +1220,8 @@ fn ir_program(program: assembly_ast::Program, context: &mut Context) -> ir::Prog
 }
 
 pub fn explicate(mut program: assembly_ast::Program) -> frontend::Definition {
-    let mut context = &mut crate::assembly_context::new_context();
-    std::mem::swap(context, &mut program.context);
+    let mut context = assembly_context::new_context();
+    std::mem::swap(&mut context, &mut program.context);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
         program: ir_program(program, &mut context),

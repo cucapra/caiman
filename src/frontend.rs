@@ -40,8 +40,11 @@ fn read_definition(
     match compile_mode {
         CompileMode::Assembly => {
             let program = crate::assembly::parser::parse(input_string);
-            Ok(crate::assembly::explication::explicate(program)) // errors are a future problem
-        },
+            // dbg!(&program.context);
+            let result = crate::assembly::explication::explicate(program);
+            // dbg!(&result);
+            Ok(result) // errors are a future problem
+        }
         CompileMode::RON => match ron::from_str(&input_string) {
             Err(why) => Err(CompileError {
                 message: format!("Parse error: {}", why),

@@ -537,7 +537,7 @@ fn should_explicate(program: &mut ir::Program) -> bool {
         any_pipelines = true;
         match program.funclets.get(pipeline.entry_funclet) {
             None => {
-                panic!(format!("Undefined funclet {}", pipeline.entry_funclet));
+                panic!("Undefined funclet {}", pipeline.entry_funclet);
             }
             Some(funclet) => {
                 match funclet.kind {
