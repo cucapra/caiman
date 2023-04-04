@@ -133,12 +133,16 @@ def main():
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress extra info.")
     args = parser.parse_args()
     if args.command == "run":
+        clean(test_dir)
         build(test_dir, args.quiet)
         run(test_dir)
     elif args.command == "build":
-        build(test_dir, args.quiet)
-    else:
         clean(test_dir)
+        build(test_dir, args.quiet)
+    elif args.command == "clean":
+        clean(test_dir)
+    else:
+        eprint("Unknown subcommand. Accepted: run, build, clean")
         
 if __name__ == "__main__":
     main()
