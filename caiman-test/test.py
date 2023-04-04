@@ -4,8 +4,8 @@ import subprocess
 from pathlib import Path
 from itertools import chain
 from sys import stderr
-from typing import List
 from dataclasses import dataclass
+from shutil import rmtree
 
 def eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
@@ -119,7 +119,9 @@ def clean(test_dir: Path):
         dbg.unlink()
     gen_dir = test_dir / "src"
     for f in gen_dir.iterdir():
-        if f.name != "util.rs":
+        if f.is_dir():
+            rmtree(f, ignore_errors=True)
+        elif f.name != "util.rs":
             f.unlink()
     lf = (gen_dir / "lib.rs").open(mode='w')
     lf.write("pub mod util;\n")
