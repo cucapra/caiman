@@ -66,7 +66,7 @@ def process_inputs(compiler: Compiler, test_dir: Path, quiet: bool) -> ProcessSt
     lf = (test_dir / "src" / "lib.rs").open(mode='w')
     lf.write("pub mod util;\n")
     ps = ProcessStatistics(0,0,0)
-    for input in chain(test_dir.rglob("*.cair"), test_dir.rglob("*.ron")):
+    for input in chain(test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron")):
         relativized = input.relative_to(test_dir)
         output =  test_dir / "src" / (input.stem + ".rs")
 
