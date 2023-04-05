@@ -4,8 +4,8 @@ import subprocess
 from pathlib import Path
 from itertools import chain
 from sys import stderr
-from typing import List
 from dataclasses import dataclass
+from shutil import rmtree
 
 def eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
@@ -66,7 +66,7 @@ def process_inputs(compiler: Compiler, test_dir: Path, quiet: bool) -> ProcessSt
     lf = (test_dir / "src" / "lib.rs").open(mode='w')
     lf.write("pub mod util;\n")
     ps = ProcessStatistics(0,0,0)
-    for input in chain(test_dir.rglob("*.cair"), test_dir.rglob("*.ron")):
+    for input in chain(test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron")):
         relativized = input.relative_to(test_dir)
         output =  test_dir / "src" / (input.stem + ".rs")
 
@@ -119,7 +119,9 @@ def clean(test_dir: Path):
         dbg.unlink()
     gen_dir = test_dir / "src"
     for f in gen_dir.iterdir():
-        if f.name != "util.rs":
+        if f.is_dir():
+            rmtree(f, ignore_errors=True)
+        elif f.name != "util.rs":
             f.unlink()
     lf = (gen_dir / "lib.rs").open(mode='w')
     lf.write("pub mod util;\n")
@@ -131,12 +133,16 @@ def main():
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress extra info.")
     args = parser.parse_args()
     if args.command == "run":
+        clean(test_dir)
         build(test_dir, args.quiet)
         run(test_dir)
     elif args.command == "build":
-        build(test_dir, args.quiet)
-    else:
         clean(test_dir)
+        build(test_dir, args.quiet)
+    elif args.command == "clean":
+        clean(test_dir)
+    else:
+        eprint("Unknown subcommand. Accepted: run, build, clean")
         
 if __name__ == "__main__":
     main()
