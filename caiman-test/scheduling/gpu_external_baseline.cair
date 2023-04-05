@@ -30,7 +30,7 @@ types [
 
 external_cpu @flatten(i64) -> i32;
 
-external_gpu @trivial(%x : i32) -> [%out : i32] : "src/gpu_external.wgsl"
+external_gpu @trivial(%x : i32) -> [%out : i32] : "src/gpu_external.comp"
 {
     resource {
         group : 0,
