@@ -1,0 +1,9 @@
+0: b1 = Value(U64(1)) : Bool
+1: b2 = Value(U64(0)) : Bool
+2: x.IfTrue = Value(I32(1)) : I32
+3: x.IfFalse = Value(I32(2)) : I32
+4: x = If(0, 2, 3) : I32
+5: y.IfTrue = Value(I32(3)) : I32
+6: y.IfFalse = Value(I32(4)) : I32
+7: y = If(1, 5, 6) : I32
+

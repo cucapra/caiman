@@ -5,9 +5,8 @@ extern crate core;
 #[macro_use]
 mod operations;
 mod id_generator;
-//pub mod arena;
 pub mod ir;
-mod stable_vec;
+pub mod stable_vec;
 mod assembly;
 //mod ir_builders;
 mod shadergen;
@@ -16,4 +15,4 @@ mod rust_wgpu_backend;
 mod scheduling_state;
 mod type_system;
 #[macro_use]
-mod assembly_ast;
+pub mod assembly_ast;

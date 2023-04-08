@@ -46,7 +46,7 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
     // TODO make real header & tail
     let dummy_header = asm::FuncletHeader {
         ret: asm::Type::FFI(asm::FFIType::I32),
-        name: "my_great_valuefunclet".to_string(),
+        name: "my_great_scheduleexplicitfunclet".to_string(),
         args: vec![],
     };
     let dummy_tail_edge = asm::TailEdge::Return { return_values: vec![] };
