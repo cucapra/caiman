@@ -8,25 +8,22 @@ pub fn vil_to_value_funclets(
     vil_program: &vil::Program,
 ) -> Vec<ValueFunclet>
 {
-    let mut commands: Vec<asm::Node> = vil_program
+    let mut commands: Vec<Option<asm::Node>> = vil_program
         .stmts
         .iter()
         .map(|stmt| match &stmt.expr
         {
-            Expr::Value(val) => match val
-            {
-                Value::I32(i) => asm::Node::ConstantI32 {
-                    value: *i,
-                    type_id: asm::Type::FFI(asm::FFIType::I32),
-                },
-                Value::I64(i) => asm::Node::ConstantInteger {
-                    value: *i,
-                    type_id: asm::Type::FFI(asm::FFIType::I64),
-                },
-                Value::U64(u) => asm::Node::ConstantUnsignedInteger {
-                    value: *u,
-                    type_id: asm::Type::FFI(asm::FFIType::U64),
-                },
+            Expr::Value(val) => { 
+                let (value_str, t) = match val
+                {
+                Value::I32(i) => (i.to_string(), asm::FFIType::I32),
+                Value::I64(i) => (i.to_string(), asm::FFIType::I64),
+                Value::U64(u) => (u.to_string(), asm::FFIType::U64),
+                };
+                Some(asm::Node::Constant {
+                    value: Some(value_str),
+                    type_id: Some(asm::Type::FFI(t)),
+                })
             },
             Expr::If(guard, e1, e2) =>
             {
@@ -34,14 +31,14 @@ pub fn vil_to_value_funclets(
             },
         })
         .collect();
-    commands.insert(0, asm::Node::Phi { index: 0 });
+    commands.insert(0, Some(asm::Node::Phi { index: Some(0) }));
     // TODO actually calculate the header and tail edge
     let dummy_header = asm::FuncletHeader {
-        ret: asm::Type::FFI(asm::FFIType::I32),
+        ret: vec![], 
         name: "my_great_valuefunclet".to_string(),
         args: vec![],
     };
-    let dummy_tail_edge = asm::TailEdge::Return { return_values: vec![] };
+    let dummy_tail_edge = None;
     vec![ValueFunclet {
         inner_funclet: InnerFunclet { header: dummy_header, commands, tail_edge: dummy_tail_edge },
     }]

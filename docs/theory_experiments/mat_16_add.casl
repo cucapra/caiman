@@ -1,0 +1,31 @@
+schedule mat_16_add(m1 : mat_slot_16_16, m2 : mat_s(_)lot_16_16) -> mat_slot_16_16 {
+    allocate $baseline;
+    $result.call(?);
+    return result;
+}
+
+schedule mat_16_add_rec(m1 : mat_slot_16_16, m2 : mat_slot_16_16,
+baseline : mat_slot_16_16, index : int_slot) -> mat_slot_16_16 {
+    $result.if(?) {
+        $rec_result.call(?);
+        $updated.call(?);
+        updated
+    } else {
+        baseline
+    }
+    return result;
+}
+
+schedule mat_16_add_row(m1 : mat_slot_16_16, m2 : mat_slot_16_16,
+baseline : mat_slot_16_16, row : int_slot, col : int_slot) -> mat_slot_16_16 {
+    $result.if(?) {
+        $rec_result.call(?);
+        $sum_result.call(?);
+        $updated.call(?);
+
+        updated
+    } else {
+        baseline
+    }
+    return result;
+}

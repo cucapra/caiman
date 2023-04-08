@@ -35,7 +35,7 @@ types [
 
 external_cpu @do_thing_on_cpu(i64) -> i64;
 // the path is required, and is relative to where you run this thing at the moment (unfortunately)
-external_gpu @do_thing_on_gpu(%x : i64) -> [%out : i64] : "caiman-test/programs/example.wgsl"
+external_gpu @do_thing_on_gpu(%x : i64) -> [%out : i64] : "caiman-test/reference_untested/example.wgsl"
 {
     resource {
         group : 0,
@@ -49,7 +49,7 @@ external_gpu @do_thing_on_gpu(%x : i64) -> [%out : i64] : "caiman-test/programs/
     }
 }
 
-value @foo(%test : i32) -> i32 {
+value @foo(%test : i32) -> [%out : i32] {
     %1 = constant 4i64;
     %3 = constant-unsigned 4u64;
     %2 = extract %1 0;
@@ -57,19 +57,19 @@ value @foo(%test : i32) -> i32 {
     %5 = select %1 %2 %3;
     %6 = call @do_thing_on_cpu(%1);
     %x = call @do_thing_on_gpu<%1>(%1);
-    return %1; // todo: add more tail edges
+    return %1;
 }
 
-value @y(%abc : i64) -> i64 {
+value @y(%abc : i64) -> [%out : i64] {
     // pretty clunky tbh
     yield 0 [%abc] @foo %abc [%abc, %abc];
 }
 
-value @j(%abc : i64) -> i64 {
+value @j(%abc : i64) -> [i64] {
     jump %abc [%abc, %abc];
 }
 
-schedule @bar(%0 : $slot0) -> $slot0 {
+schedule @bar(%0 : $slot0) -> [%out : $slot0] {
     %x = alloc-temporary-local-i64 @foo.%1;
     %2 = encode-do-local @foo.%1() -> %x;
     %1 = create-local-i64 @foo.%x; // unbound slot
@@ -85,7 +85,7 @@ schedule @bar(%0 : $slot0) -> $slot0 {
     return %x;
 }
 
-schedule @scall(%abc : i64) -> i64 {
+schedule @scall(%abc : i64) -> [%out : i64] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-call @j.%abc @foo [%abc, %abc] %abc;
 }
@@ -95,18 +95,18 @@ schedule @sselect(%abc : i64) -> i64 {
     schedule-select @y.%abc %abc [@foo, @j] [%abc, %abc] %abc;
 }
 
-schedule @dalloc(%abc : i64) -> i64 {
+schedule @dalloc(%abc : i64) -> [%out : i64] {
     // pretty clunky tbh -- note that `none` literally means `none`
     dynamic-alloc %abc [] [%abc, none, %abc] @foo @j %abc;
 }
 
-timeline @time(%e : $event0) -> $event0 {
+timeline @time(%e : $event0) -> [%event_out : $event0] {
     %1 = submission-cpu->gpu %e;
     %2 = sync-cpu->gpu %e %1;
     return %e;
 }
 
-spatial @space(%b : $buffer_space0) -> i64 {
+spatial @space(%b : $buffer_space0) -> [%iout : i64] {
     return %b;
 }
 
@@ -121,7 +121,7 @@ extras {
             %0 : slot_info(value_tag input @foo.%test)
         },
         output_slots : {
-            %0 : slot_info()
+            %out : slot_info()
         },
         input_fences : {%0:fence_info(timeline_tag none)},
         output_fences : {},

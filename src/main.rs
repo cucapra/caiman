@@ -1,154 +1,115 @@
 extern crate clap;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 use caiman::frontend;
-use std::fs::File;
-use std::io::prelude::*;
-use std::path::Path;
 use caiman::frontend::{CompileMode, CompileOptions};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-struct Arguments
-{
-	input_path : String,
-	output_path : Option<String>,
-	explicate_only : bool,
-	print_codegen_debug_info : bool
+/// Tries to run `rustfmt` on the given path.
+fn format(p: &Path) {
+    let _ = Command::new("rustfmt")
+        .arg("-q")
+        .arg("--")
+        .arg(p.as_os_str())
+        .status();
 }
 
-fn output_result(result : Result<String, frontend::CompileError>, output_file : &mut Option<File>) {
-	match result
-	{
-		Err(why) => panic!("Parse error: {}", why),
-		Ok(output_string) =>
-			{
-				match output_file {
-					Some(out_file) => { write!(out_file, "{}", output_string).expect("Invalid file"); },
-					None => { print!("{}", output_string); }
-				}
-			}
-	}
+struct Arguments {
+    input: PathBuf,
+    output: Option<PathBuf>,
+    explicate_only: bool,
+    print_codegen_debug_info: bool,
+}
+impl Arguments {
+    fn from_cmdline() -> Self {
+        let matches = App::new("Caiman Compiler")
+            .version("0.0.1")
+            .arg(
+                Arg::with_name("input")
+                    .short("i")
+                    .long("input")
+                    .value_name("path.cair")
+                    .help("Path to input assembly (caimanir)")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("output")
+                    .short("o")
+                    .long("output")
+                    .value_name("path.rs")
+                    .help("Path to output code (rust)")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("explicate_only")
+                    .short("x")
+                    .long("explicate_only")
+                    .help("Only run schedule explication")
+                    .takes_value(false),
+            )
+            .arg(
+                Arg::with_name("print_codegen_debug_info")
+                    .long("print_codegen_debug_info")
+                    .help("Print Codegen Debug Info")
+                    .takes_value(false),
+            )
+            .get_matches();
+        let input = matches
+            .value_of("input")
+            .expect("Must have input path")
+            .into();
+        let output = matches.value_of("output").map(PathBuf::from);
+        let explicate_only = matches.is_present("explicate_only");
+        let print_codegen_debug_info = matches.is_present("print_codegen_debug_info");
+        Arguments {
+            input,
+            output,
+            explicate_only,
+            print_codegen_debug_info,
+        }
+    }
 }
 
-fn compile(input_file : &mut File, output_file : &mut Option<File>,
-		   options : CompileOptions)
-{
+fn main() {
+    let args = Arguments::from_cmdline();
+    let compile_mode = match args
+        .input
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap()
+    {
+        "cair" => CompileMode::Assembly,
+        "ron" => CompileMode::RON,
+        _ => panic!("Unsupported file extension for {:?}", args.input),
+    };
 
-	let mut input_string = String::new();
-	match input_file.read_to_string(&mut input_string)
-	{
-		Err(why) => panic!("Couldn't read file: {}", why),
-		Ok(_) => ()
-	};
+    let input_string = std::fs::read_to_string(&args.input).expect("couldn't read input");
+    let options = CompileOptions {
+        print_codegen_debug_info: args.print_codegen_debug_info,
+        compile_mode,
+    };
 
-	let result = frontend::compile_caiman
-		(& input_string, options);
-	output_result(result, output_file);
-}
+    let result = if args.explicate_only {
+        frontend::explicate_caiman(&input_string, options)
+    } else {
+        frontend::compile_caiman(&input_string, options)
+    };
 
-fn explicate(input_file : &mut File, output_file : &mut Option<File>, compile_mode : CompileMode)
-{
-
-	let mut input_string = String::new();
-	match input_file.read_to_string(&mut input_string)
-	{
-		Err(why) => panic!("Couldn't read file: {}", why),
-		Ok(_) => ()
-	};
-
-	let result : Result<String, frontend::CompileError> =
-		frontend::explicate_caiman(& input_string,
-										   CompileOptions { print_codegen_debug_info : false, compile_mode });
-	output_result(result, output_file);
-}
-
-fn main()
-{
-	let arguments =
-	{
-		let matches =
-			App::new("Caiman Compiler")
-			.version("0.0.1")
-			.arg
-			(
-				Arg::with_name("input")
-					.short("i")
-					.long("input")
-					.value_name("path.cair")
-					.help("Path to input assembly (caimanir)")
-					.takes_value(true)
-			)
-			.arg
-			(
-				Arg::with_name("output")
-					.short("o")
-					.long("output")
-					.value_name("path.rs")
-					.help("Path to output code (rust)")
-					.takes_value(true)
-			)
-			.arg
-			(
-				Arg::with_name("explicate_only")
-					.short("x")
-					.long("explicate_only")
-					.help("Only run schedule explication")
-					.takes_value(false)
-			)
-			.arg
-			(
-				Arg::with_name("print_codegen_debug_info")
-					.long("print_codegen_debug_info")
-					.help("Print Codegen Debug Info")
-					.takes_value(false)
-			)
-			.get_matches();
-		let input_match = matches.value_of("input");
-		if input_match.is_none()
-		{
-			panic!("Must have input path");
-		}
-		let output_path = match matches.value_of("output")
-		{
-			Some(path) => Some(path.to_string()),
-			None => None
-		};
-		let explicate_only = matches.is_present("explicate_only");
-		let print_codegen_debug_info = matches.is_present("print_codegen_debug_info");
-		Arguments {input_path : input_match.unwrap().to_string(), output_path, explicate_only, print_codegen_debug_info}
-	};
-
-	let input_path = Path::new(& arguments.input_path);
-	let compile_mode = match input_path.extension().and_then(std::ffi::OsStr::to_str).unwrap() {
-		"cair" => CompileMode::Assembly,
-		"ron" => CompileMode::RON,
-		_ => panic!("Unsupported file extension for {:?}", input_path)
-	};
-	let mut output_file = match & arguments.output_path
-	{
-		Some(output_path) => {
-			// https://stackoverflow.com/a/59046435/5031773
-			let path = Path::new(output_path);
-			let prefix = path.parent().unwrap();
-			std::fs::create_dir_all(prefix).unwrap();
-			Some(File::create(output_path).unwrap())
-		},
-		None => None
-	};
-	
-	let mut input_file = match File::open(& input_path)
-	{
-		Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
-		Ok(file) => file
-	};
-
-	if arguments.explicate_only
-	{
-		explicate(&mut input_file, &mut output_file, compile_mode);
-	}
-	else
-	{
-		let options = CompileOptions{print_codegen_debug_info : arguments.print_codegen_debug_info, compile_mode};
-		compile(&mut input_file, &mut output_file, options);
-	}
+    let output_string = result.expect("compiler error");
+    match args.output.as_ref() {
+        Some(path) => {
+            // https://stackoverflow.com/a/59046435/5031773
+            let prefix = path.parent().unwrap();
+            std::fs::create_dir_all(prefix).unwrap();
+            std::fs::write(path, output_string).unwrap();
+            if !args.explicate_only {
+                format(path);
+            }
+        }
+        None => {
+            print!("{output_string}");
+        }
+    }
 }

@@ -4,6 +4,7 @@ use crate::value_language::ast as value_ast;
 //use crate::value_language::typing;
 //use caiman::arena::Arena;
 use caiman::assembly_ast as asm;
+use caiman::assembly_context as asm_ctx;
 //use std::collections::HashMap;
 
 mod label;
@@ -48,6 +49,7 @@ pub fn go(
     // TODO what do i do with this haha
     let version = asm::Version { major: 0, minor: 0, detailed: 0 };
     Ok(asm::Program {
+        context: asm_ctx::Context::new(),
         version,
         funclets,
         types: vec![],
@@ -55,6 +57,7 @@ pub fn go(
         extras: vec![],
     })
 }
+
 /*
 type Index<T> = HashMap<T, usize>;
 

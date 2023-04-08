@@ -44,9 +44,13 @@ fn write_spec_nodes_module(spec: &spec::Spec) -> Result<(), std::io::Error>
                 use spec::OperationInputKind as OIK;
                 let type_base = match &input.kind
                 {
-                    OIK::ImmediateI64 => "i64",
+                    /*OIK::ImmediateI64 => "i64",
                     OIK::ImmediateU64 => "u64",
-                    OIK::ImmediateI32 => "i32",
+                    OIK::ImmediateI32 => "i32",*/
+                    OIK::ImmediateI64 |
+                    OIK::ImmediateU64 |
+                    OIK::Immediate |
+                    OIK::ImmediateI32 => "irconstant",
                     _ => "usize",
                 };
                 let type_extn = if input.is_array { "_slice" } else { "" };

@@ -4,8 +4,8 @@ use caiman::ir;
 pub struct InnerFunclet
 {
     pub header : asm::FuncletHeader,
-    pub commands : Vec<asm::Node>,
-    pub tail_edge : asm::TailEdge
+    pub commands : Vec<Option<asm::Node>>,
+    pub tail_edge : Option<asm::TailEdge>,
 }
 
 pub trait Funclet

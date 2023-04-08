@@ -7,9 +7,7 @@ use super::input;
 pub enum FunctionalExprNodeKind {
     Phi,
     ExtractResult,
-    ConstantInteger,
-    ConstantI32,
-    ConstantUnsignedInteger,
+    Constant,
     CallValueFunction,
     Select,
     CallExternalCpu,
@@ -21,9 +19,7 @@ impl FunctionalExprNodeKind {
         use FunctionalExprNodeKind::*;        match self {
             Phi => ir::Node::Phi {index: std::mem::take(&mut v[0]).unwrap_usize(), },
             ExtractResult => ir::Node::ExtractResult {node_id: std::mem::take(&mut v[0]).unwrap_usize(), index: std::mem::take(&mut v[1]).unwrap_usize(), },
-            ConstantInteger => ir::Node::ConstantInteger {value: std::mem::take(&mut v[0]).unwrap_i64(), type_id: std::mem::take(&mut v[1]).unwrap_usize(), },
-            ConstantI32 => ir::Node::ConstantI32 {value: std::mem::take(&mut v[0]).unwrap_i32(), type_id: std::mem::take(&mut v[1]).unwrap_usize(), },
-            ConstantUnsignedInteger => ir::Node::ConstantUnsignedInteger {value: std::mem::take(&mut v[0]).unwrap_u64(), type_id: std::mem::take(&mut v[1]).unwrap_usize(), },
+            Constant => ir::Node::Constant {value: std::mem::take(&mut v[0]).unwrap_irconstant(), type_id: std::mem::take(&mut v[1]).unwrap_usize(), },
             CallValueFunction => ir::Node::CallValueFunction {function_id: std::mem::take(&mut v[0]).unwrap_usize(), arguments: std::mem::take(&mut v[1]).unwrap_usize_slice(), },
             Select => ir::Node::Select {condition: std::mem::take(&mut v[0]).unwrap_usize(), true_case: std::mem::take(&mut v[1]).unwrap_usize(), false_case: std::mem::take(&mut v[2]).unwrap_usize(), },
             CallExternalCpu => ir::Node::CallExternalCpu {external_function_id: std::mem::take(&mut v[0]).unwrap_usize(), arguments: std::mem::take(&mut v[1]).unwrap_usize_slice(), },

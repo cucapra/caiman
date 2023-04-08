@@ -1,3 +1,5 @@
+use caiman::ir;
+
 pub enum SpecNodeInput
 {
     Usize(usize),
@@ -35,4 +37,15 @@ impl SpecNodeInput
     unwrapper!(unwrap_i64, i64, SpecNodeInput::I64(i), i, "i64");
     unwrapper!(unwrap_i32, i32, SpecNodeInput::I32(i), i, "i32");
     unwrapper!(unwrap_usize, usize, SpecNodeInput::Usize(u), u, "usize");
+
+    pub fn unwrap_irconstant(self) -> ir::Constant
+    {
+        match self
+        {
+            SpecNodeInput::I64(i) => ir::Constant::I64(i),
+            SpecNodeInput::U64(u) => ir::Constant::U64(u),
+            SpecNodeInput::I32(i) => ir::Constant::I32(i),
+            _ => panic!("Expected IR constant as input to spec node"),
+        }
+    }
 }

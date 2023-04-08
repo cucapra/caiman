@@ -1,0 +1,29 @@
+let vadd_start(v1 : arr_slot, v2 : arr_slot) : vadd_4 -> slot {
+    allocate $result;
+    result = $result.call(v1, v2, CONSTANT_VALUE);
+    return result;
+}
+
+let vadd_rec_start(v1 : arr_slot, v2 : arr_slot, index : slot) : vadd_4_rec -> slot {
+    allocate $result;
+    result = $result.if(index) {
+        check = $check.if(index) {
+            allocate $add_res;
+            allocate $new_arr;
+
+            rec_res = $rec_res.call(v1, v2, index);
+            add_res = $add_res.call(v1, v2);
+            new_arr = $new_arr.call(rec_res, add_res);
+
+            new_arr
+        } else {
+            allocate $empty_arr;
+            empty_arr
+        }
+        check
+    } else {
+        allocate $empty_arr;
+        empty_arr
+    }
+    return result;
+}

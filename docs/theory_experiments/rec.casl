@@ -1,0 +1,16 @@
+let main(x : slot) : main -> slot {
+    return $result.sum_sch(?);
+}
+
+let sum_sch(x : slot) : sum -> slot {
+    allocate check;
+    return { 
+        $result.if(?) {
+            allocate $left_res;
+            
+            $left.?;
+            $left_res.?
+        }
+        else { ? }
+    }
+}
