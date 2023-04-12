@@ -1,0 +1,108 @@
+$initialize = { initialize_cpu, initialize_gpu };
+// equivalents for rest of the kernels?
+
+// consts or whatever
+???
+
+schedule main_sch() : main {
+    ???;
+    $v1.mm2_cpu(?);
+    $v2.mm2_gpu(?);
+    ???;
+}
+
+schedule mm2_cpu : mm2 (
+    ni : i32,
+    nj : i32,
+    nk : i32,
+    nl : i32,
+    alpha : f32,
+    beta : f32,
+    dep : unit) -> array<array<i32, NJ + nj>, NI + ni>
+{
+    $A.initialize_cpu(?);
+    $B.initialize_cpu(?);
+    $C.initialize_cpu(?);
+    $D.initialize_cpu(?);
+    $tmp.initialize_cpu(?);
+    $dummy.mm2_kernel1_cpu(?);
+    $result.mm2_kernel2_cpu(?);
+}
+
+schedule mm2_gpu : mm2 (
+    ni : i32,
+    nj : i32,
+    nk : i32,
+    nl : i32,
+    alpha : f32,
+    beta : f32,
+    dep : unit) -> array<array<i32, NJ + nj>, NI + ni>
+{
+    $A_cpu = $A.initialize_cpu(?);
+    $B_cpu = $B.initialize_cpu(?);
+    $C_cpu = $C.initialize_cpu(?);
+    $D_cpu = $D.initialize_cpu(?);
+    $tmp_cpu = $tmp.initialize_cpu(?);
+    
+    $A.gpu_memcpy(?);
+    ??? // rest of copies
+
+    $dummy.mm2_kernel1_gpu(?);
+    $result.mm2_kernel2_gpu(?);
+
+    ??? // copy back
+}
+
+schedule mm2_cpu_first : mm2 (
+    ni : i32,
+    nj : i32,
+    nk : i32,
+    nl : i32,
+    alpha : f32,
+    beta : f32,
+    dep : unit) -> array<array<i32, NJ + nj>, NI + ni>
+{
+    $A_cpu = $A.initialize_cpu(?);
+    $B_cpu = $B.initialize_cpu(?);
+    $C_cpu = $C.initialize_cpu(?);
+    $D_cpu = $D.initialize_cpu(?);
+    $tmp_cpu = $tmp.initialize_cpu(?);
+
+    $dummy.mm2_kernel1_cpu(?);
+
+    $A.gpu_memcpy(?);
+    ??? // rest of copies
+
+    $result.mm2_kernel2_gpu(?);
+
+    ??? // copy back
+}
+
+schedule mm2_gpu_first : mm2 (
+    ni : i32,
+    nj : i32,
+    nk : i32,
+    nl : i32,
+    alpha : f32,
+    beta : f32,
+    dep : unit) -> array<array<i32, NJ + nj>, NI + ni>
+{
+    // you probably don't want to do this
+    $A_cpu = $A.initialize_cpu(?);
+    $B_cpu = $B.initialize_cpu(?);
+    $C_cpu = $C.initialize_cpu(?);
+    $D_cpu = $D.initialize_cpu(?);
+    $tmp_cpu = $tmp.initialize_cpu(?);
+
+    $A.gpu_memcpy(?);
+    ??? // rest of copies
+
+    $dummy.mm2_kernel1_gpu(?);
+
+    $A.gpu_to_cpu(?); // this is why
+    ??? // rest of copies
+
+    $result.mm2_kernel2_cpu(?);
+
+    
+}

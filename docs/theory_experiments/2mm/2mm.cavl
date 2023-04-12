@@ -1,0 +1,41 @@
+external mm2_kernel1(...).
+external mm2_kernel2(...).
+external mm2_compare(...).
+external initialize(i32,i32,i32,i32).
+
+// consts or whatever
+NI := 1024i32.
+NJ := 1024i32.
+NK := 1024i32.
+NL := 1024i32.
+
+value main() {
+    ni := NI.
+    nj := NJ.
+    nk := NK.
+    nl := NL.
+    alpha := 0f32.
+    beta  := 0f32.
+    v1 := mm2(ni, nj, nk, nl, alpha, beta, ()).
+    v2 := mm2(ni, nj, nk, nl, alpha, beta, ()).
+    mm2_compare(v1, v2).
+}
+
+value mm2(
+    ni : i32,
+    nj : i32,
+    nk : i32,
+    nl : i32,
+    alpha : f32,
+    beta : f32,
+    dep : unit) -> array<array<i32, NJ + nj>, NI + ni>
+{
+    A   := initialize(NI, NJ, ni, nj).
+    B   := initialize(NI, NK, ni, nk).
+    C   := initialize(NK, NJ, nk, nj).
+    D   := initialize(NL, NJ, nl, nj).
+    tmp := initialize(NI, NJ, ni, nj).
+    dummy := (mm2_kernel1 ni nj nk nl alpha beta tmp A B ()).
+    result := (mm2_kernel2 ni nj nk nl alpha beta tmp C D dummy).
+    returns result.
+}
