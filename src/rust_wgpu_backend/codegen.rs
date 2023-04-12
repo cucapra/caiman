@@ -496,7 +496,7 @@ impl<'program> CodeGen<'program>
 		// To do: Do something about the value
 		match node
 		{
-			ir::Node::ConstantInteger{value, type_id} =>
+			ir::Node::Constant{value, type_id} =>
 			{
 				let slot_id = output_slot_ids[0];
 				let storage_type_id =
@@ -509,43 +509,13 @@ impl<'program> CodeGen<'program>
 						panic!("Not a slot");
 					};
 				//let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
-				let variable_id = self.code_generator.build_constant_integer(* value, storage_type_id);
-				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
-
-				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
-			}
-			ir::Node::ConstantI32{value, type_id} =>
-			{
-				let slot_id = output_slot_ids[0];
-				let storage_type_id =
-					if let Some(NodeResult::Slot{storage_type, ..}) = funclet_scoped_state.get_node_result(output_slot_node_ids[0])
+				let variable_id = 
+					match value
 					{
-						* storage_type
-					}
-					else
-					{
-						panic!("Not a slot");
+						ir::Constant::I64(value) => self.code_generator.build_constant_integer(* value, storage_type_id),
+						ir::Constant::U64(value) => self.code_generator.build_constant_unsigned_integer(* value, storage_type_id),
+						ir::Constant::I32(value) => self.code_generator.build_constant_i32(* value, storage_type_id),
 					};
-				//let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
-				let variable_id = self.code_generator.build_constant_i32(* value, storage_type_id);
-				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
-
-				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
-			}
-			ir::Node::ConstantUnsignedInteger{value, type_id} =>
-			{
-				let slot_id = output_slot_ids[0];
-				let storage_type_id =
-					if let Some(NodeResult::Slot{storage_type, ..}) = funclet_scoped_state.get_node_result(output_slot_node_ids[0])
-					{
-						* storage_type
-					}
-					else
-					{
-						panic!("Not a slot");
-					};
-				//let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
-				let variable_id = self.code_generator.build_constant_unsigned_integer(* value, storage_type_id);
 				check_storage_type_implements_value_type(& self.program, storage_type_id, * type_id);
 
 				placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Ready, variable_id);
