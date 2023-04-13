@@ -62,15 +62,22 @@ class ProcessStatistics:
         return self.compiled + self.failures
 
 # returns num failed, num succeeded
-def process_inputs(compiler: Compiler, test_dir: Path, quiet: bool) -> ProcessStatistics:
+def process_inputs(
+    compiler: Compiler, 
+    test_dir: Path,
+    inputs,
+    quiet: bool
+) -> ProcessStatistics:
     lf = (test_dir / "src" / "lib.rs").open(mode='w')
     lf.write("pub mod util;\n")
     ps = ProcessStatistics(0,0,0)
-    for input in chain(test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron")):
-        relativized = input.relative_to(test_dir)
+    if not inputs:
+        inputs = chain(test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron"))
+    for input in inputs:
+        relativized = input.absolute().relative_to(test_dir)
         output =  test_dir / "src" / (input.stem + ".rs")
 
-        rv = compiler.compile(input, output)
+        rv = compiler.compile(input.absolute(), output)
         if (rv.returncode != 0):
             eprint(f"    {Colorizer.red('fail:')} {relativized}")
             if not quiet:
@@ -97,19 +104,20 @@ def process_inputs(compiler: Compiler, test_dir: Path, quiet: bool) -> ProcessSt
     lf.close()
     return ps
 
-def build(test_dir: Path, quiet: bool):
+def build(test_dir: Path, inputs, quiet: bool):
     eprint(f"{COLOR_INFO} building caimanc")
     c = Compiler(test_dir)
 
     eprint(f"{COLOR_INFO} compiling Caiman source files")
-    ps = process_inputs(c, test_dir, quiet)
+    ps = process_inputs(c, test_dir, inputs, quiet)
     if (ps.failures > 0):
         eprint(f"{COLOR_WARN} {ps.failures}/{ps.total()} files failed to compile")
 
-def run(test_dir: Path):
+def run(test_dir: Path, inputs):
     eprint(f"{COLOR_INFO} running Cargo tests")
     manifest_path = test_dir / "Cargo.toml"
-    args = [ "cargo", "test", "--manifest-path", manifest_path, ]
+    args = ["cargo", "test", "--manifest-path", manifest_path, "--"]
+    args += [Path(input).stem for input in inputs]
     _ = subprocess.run(args)
 
 def clean(test_dir: Path):
@@ -131,14 +139,14 @@ def main():
     parser = argparse.ArgumentParser(description="Caiman Test Suite", fromfile_prefix_chars="@")
     parser.add_argument("command", choices=["run", "build", "clean"])
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress extra info.")
+    parser.add_argument("files", nargs='*', help="If specified, only build/test these file(s).")
     args = parser.parse_args()
+    inputs = [Path(file) for file in args.files]
     if args.command == "run":
-        clean(test_dir)
-        build(test_dir, args.quiet)
-        run(test_dir)
+        build(test_dir, inputs, args.quiet)
+        run(test_dir, args.files)
     elif args.command == "build":
-        clean(test_dir)
-        build(test_dir, args.quiet)
+        build(test_dir, inputs, args.quiet)
     elif args.command == "clean":
         clean(test_dir)
     else:
