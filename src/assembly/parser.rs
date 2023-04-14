@@ -1831,7 +1831,7 @@ fn read_funclet_blob(
                 }
                 _ => panic!(
                     "Multiple tail edges found for funclet {}",
-                    context.funclet_name()
+                    context.current_funclet_name()
                 ),
             }
         } else if rule == Rule::node_hole {
@@ -1846,7 +1846,7 @@ fn read_funclet_blob(
                 }
                 _ => panic!(
                     "Command after tail edge found for funclet {}",
-                    context.funclet_name()
+                    context.current_funclet_name()
                 ),
             };
             commands.push(match &rule_command.application {
@@ -1869,7 +1869,7 @@ fn read_funclet_blob(
         }
         None => panic!(format!(
             "No tail edge found for funclet {}",
-            context.funclet_name()
+            context.current_funclet_name()
         )),
     }
 }

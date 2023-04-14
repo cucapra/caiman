@@ -51,10 +51,9 @@ impl CodeWriter {
         section_id
     }
 
-	pub fn begin_module(&mut self, name : &str)
-	{
-		write!(self, "#[allow(warnings)] pub mod {} {{\n", name);
-	}
+    pub fn begin_module(&mut self, name: &str) {
+        write!(self, "#[allow(warnings)] pub mod {} {{\n", name);
+    }
 
     pub fn end_module(&mut self) {
         write!(self, "}}\n");

@@ -37,7 +37,6 @@ pub struct Context {
     local_funclet_table: Table<String, ()>,
     value_function_table: Table<String, ()>,
     remote_map: HashMap<String, NodeTable>,
-    current_funclet_name: Option<String>,
     command_var_name: Option<String>,
     location: Option<ir::RemoteNodeId>,
 }
@@ -128,6 +127,14 @@ where
         self.get(val).map(|x| x.1)
     }
 
+    pub fn get_at_index(&self, index: usize) -> Option<&T> {
+        if index >= self.values.len() {
+            None
+        } else {
+            Some(&self.indices[index])
+        }
+    }
+
     pub fn len(&mut self) -> usize {
         return self.indices.len();
     }
@@ -143,7 +150,6 @@ impl Context {
             external_funclet_table: Table::new(),
             value_function_table: Table::new(),
             remote_map: HashMap::new(),
-            current_funclet_name: None,
             command_var_name: None,
             location: None,
         }
@@ -151,7 +157,17 @@ impl Context {
 
     pub fn reset_location(&mut self) {
         self.location = None;
-        self.current_funclet_name = None;
+    }
+
+    pub fn current_funclet_name(&self) -> String {
+        self.local_funclet_table
+            .get_at_index(self.location.unwrap().funclet_id)
+            .unwrap()
+            .clone()
+    }
+
+    pub fn current_node_name(&self) -> String {
+        self.node_from_id(self.location.unwrap().node_id)
     }
 
     // for use by the explicator
@@ -176,7 +192,6 @@ impl Context {
     }
 
     pub fn add_local_funclet(&mut self, name: String) {
-        self.current_funclet_name = Some(name.clone());
         self.funclet_kind_map
             .insert(name.clone(), FuncletLocation::Local);
         self.local_funclet_table.push(name.clone(), ());
@@ -195,30 +210,42 @@ impl Context {
         self.value_function_table.push(name, ());
     }
 
-    pub fn advance_local_funclet(&mut self, name: String) {
-        self.location = match self.location {
-            None => Some(ir::RemoteNodeId {
-                funclet_id: 0,
-                node_id: 0,
-            }),
-            Some(v) => Some(ir::RemoteNodeId {
-                funclet_id: v.funclet_id + 1,
-                node_id: 0,
-            }),
-        };
-        self.current_funclet_name = Some(name);
-    }
-
     pub fn clear_local_funclet(&mut self) {
-        self.current_funclet_name = None;
+        self.location = None;
     }
 
-    pub fn funclet_name(&self) -> String {
-        self.current_funclet_name.as_ref().unwrap().clone()
+    pub fn set_local_funclet(&mut self, index: usize) {
+        self.location = Some(ir::RemoteNodeId {
+            funclet_id: index,
+            node_id: 0,
+        });
+    }
+
+    pub fn set_local_node(&mut self, funclet: usize, index: usize) {
+        self.location = Some(ir::RemoteNodeId {
+            funclet_id: funclet,
+            node_id: index,
+        });
+    }
+
+    pub fn advance_local_funclet(&mut self) {
+        let index = match self.location {
+            None => 0,
+            Some(v) => v.funclet_id + 1,
+        };
+        self.set_local_funclet(index)
+    }
+
+    pub fn advance_local_node(&mut self) {
+        let (funclet, node) = match self.location {
+            None => panic!("Cannot advance empty local node"),
+            Some(v) => (v.funclet_id, v.node_id + 1),
+        };
+        self.set_local_node(funclet, node)
     }
 
     pub fn add_node(&mut self, name: String) {
-        match self.remote_map.get_mut(&self.funclet_name()) {
+        match self.remote_map.get_mut(&self.current_funclet_name()) {
             None => panic!("Invalid funclet name {:?}", name),
             Some(table) => {
                 if name == "_" {
@@ -231,7 +258,7 @@ impl Context {
     }
 
     pub fn add_return(&mut self, name: String) {
-        match self.remote_map.get_mut(&self.funclet_name()) {
+        match self.remote_map.get_mut(&self.current_funclet_name()) {
             None => panic!("Invalid funclet name {:?}", name),
             Some(table) => table.returns.push(name, ()),
         }
@@ -326,37 +353,35 @@ impl Context {
         }
     }
 
-    pub fn node_id(&self, var: String) -> usize {
-        match self
-            .remote_map
-            .get(self.funclet_name().as_str())
+    pub fn node_from_id(&self, index: usize) -> String {
+        self.remote_map
+            .get(self.current_funclet_name().as_str())
             .unwrap()
             .local
-            .get_index(&var)
-        {
+            .get_at_index(index)
+            .unwrap()
+            .clone()
+    }
+
+    pub fn node_id(&self, var: String) -> usize {
+        let funclet = self.current_funclet_name();
+        match self.remote_map.get(&funclet).unwrap().local.get_index(&var) {
             Some(v) => v,
-            None => panic!(
-                "Unknown variable name {:?} in funclet {:?}",
-                var,
-                self.funclet_name()
-            ),
+            None => panic!("Unknown variable name {:?} in funclet {:?}", var, &funclet),
         }
     }
 
     pub fn return_id(&self, var: String) -> usize {
+        let funclet = self.current_funclet_name();
         match self
             .remote_map
-            .get(self.funclet_name().as_str())
+            .get(&funclet)
             .unwrap()
             .returns
             .get_index(&var)
         {
             Some(v) => v,
-            None => panic!(
-                "Unknown return name {:?} in funclet {:?}",
-                var,
-                self.funclet_name()
-            ),
+            None => panic!("Unknown return name {:?} in funclet {:?}", var, &funclet),
         }
     }
 
