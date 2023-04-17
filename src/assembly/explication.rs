@@ -867,6 +867,7 @@ fn ir_program(program: &assembly_ast::Program, context: &mut Context) -> ir::Pro
 }
 
 pub fn explicate(mut program: assembly_ast::Program) -> frontend::Definition {
+    dbg!(&program);
     let mut assembly_context = assembly_context::Context::new();
     std::mem::swap(&mut assembly_context, &mut program.context);
     let mut context = Context::new(assembly_context, &program);

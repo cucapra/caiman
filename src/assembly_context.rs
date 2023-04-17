@@ -202,6 +202,7 @@ impl Context {
                 returns: Table::new(),
             },
         );
+        self.advance_local_funclet();
     }
 
     pub fn add_value_function(&mut self, name: String) {
@@ -245,15 +246,20 @@ impl Context {
     }
 
     pub fn add_node(&mut self, name: String) {
+        let mut advance = false;
         match self.remote_map.get_mut(&self.current_funclet_name()) {
             None => panic!("Invalid funclet name {:?}", name),
             Some(table) => {
+                advance = table.local.len() > 0;
                 if name == "_" {
                     table.local.dummy_push(name)
                 } else {
                     table.local.push(name, ())
                 }
             }
+        }
+        if advance {
+            self.advance_local_node();
         }
     }
 

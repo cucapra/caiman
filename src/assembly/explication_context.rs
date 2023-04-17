@@ -27,6 +27,7 @@ pub struct Context<'a> {
     pub schedule_extras: HashMap<String, ir::SchedulingFuncletExtra>,
     // map from schedule to value
     value_map: HashMap<assembly_ast::FuncletId, assembly_ast::FuncletId>,
+    location: assembly_ast::RemoteNodeId
 }
 
 impl FuncletData {
@@ -59,8 +60,27 @@ impl<'a> Context<'a> {
             },
             schedule_extras: HashMap::new(),
             value_map: HashMap::new(),
+            location: assembly_ast::RemoteNodeId {
+                funclet_id : "".to_string(),
+                node_id : "".to_string()
+            }
         }
     }
+
+    pub fn reset_location(&mut self) {
+        self.location.funclet_id = "".to_string();
+        self.location.node_id = "".to_string();
+    }
+
+    pub fn set_current_funclet(&mut self, name : &String) {
+        self.location.funclet_id = name.clone();
+        self.location.node_id = "".to_string();
+    }
+
+    pub fn set_current_node(&mut self, name : &String) {
+        self.location.node_id = name.clone();
+    }
+
     pub fn program(&mut self) -> &assembly_ast::Program {
         self.program
     }
