@@ -35,7 +35,7 @@ pub fn explicate_allocate_temporary(
 
 fn explicate_known_operation(
     operation: assembly_ast::RemoteNodeId,
-    input_vec: &Box<[Hole<assembly_ast::OperationId>]>,
+    input_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
     output_vec: &Box<[Hole<assembly_ast::OperationId>]>,
     context: &mut Context,
 ) -> Option<(
@@ -46,16 +46,19 @@ fn explicate_known_operation(
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
 
-    for (index, input) in input_vec.iter().enumerate() {
-        match input {
-            Some(n) => inputs.push(context.inner.node_id(n.clone())),
-            None => {
-                let node = context.node_lookup(&operation);
-                match node {
-                    assembly_ast::Node::Constant { .. } => {
-                        // nothing to fill
+    match input_hole {
+        None => todo!(),
+        Some(input_vec) => for (index, input) in input_vec.iter().enumerate() {
+            match input {
+                Some(n) => inputs.push(context.inner.node_id(n.clone())),
+                None => {
+                    let node = context.node_lookup(&operation);
+                    match node {
+                        assembly_ast::Node::Constant { .. } => {
+                            // nothing to fill
+                        }
+                        _ => todo!("Unsupported node {:?}", node),
                     }
-                    _ => todo!("Unsupported node {:?}", node),
                 }
             }
         }
@@ -100,10 +103,12 @@ pub fn explicate_encode_do(
     context: &mut Context,
 ) -> Option<ir::Node> {
     let place = reject_hole(place_hole.clone());
-    let mut input_vec = reject_hole(inputs_hole.as_ref());
+    dbg!(&inputs_hole);
+    dbg!(&outputs_hole);
+    dbg!(&operation_hole);
     let mut output_vec = reject_hole(outputs_hole.as_ref());
     let result = match operation_hole.as_ref() {
-        Some(op) => explicate_known_operation(op.clone(), input_vec, output_vec, context),
+        Some(op) => explicate_known_operation(op.clone(), inputs_hole, output_vec, context),
         None => todo!(),
     };
     // a bit sloppy, but oh well
