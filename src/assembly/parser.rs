@@ -1539,24 +1539,37 @@ fn rule_alloc_temporary_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
     rule_pair(Rule::alloc_temporary_command, read_alloc_temporary_command)
 }
 
-fn read_do_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
+fn read_encode_do_args(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole<String>> {
     expect_all(rule_var_name(), pairs, context)
 }
 
-fn read_do_params(pairs: &mut Pairs<Rule>, context: &mut Context) -> Box<[Hole<String>]> {
+fn read_encode_do_params(pairs: &mut Pairs<Rule>, context: &mut Context) -> Box<[Hole<String>]> {
     option_to_vec(optional(
-        rule_pair(Rule::do_args, read_do_args),
+        rule_pair(Rule::encode_do_args, read_encode_do_args),
         pairs,
         context,
     ))
     .into_boxed_slice()
 }
 
-fn read_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
-    let rule_place = rule_str_unwrap(Rule::do_sep, 1, Box::new(read_place));
-    let place = expect(rule_place, pairs, context);
+fn read_encode_do_call(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> (Hole<assembly_ast::RemoteNodeId>, Hole<Box<[Hole<String>]>>) {
     let operation = expect(rule_funclet_loc(), pairs, context);
-    let inputs = expect_hole(rule_pair(Rule::do_params, read_do_params), pairs, context);
+    let inputs = expect_hole(
+        rule_pair(Rule::encode_do_params, read_encode_do_params),
+        pairs,
+        context,
+    );
+    (operation, inputs)
+}
+
+fn read_encode_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+    let rule_place = rule_str_unwrap(Rule::encode_do_sep, 1, Box::new(read_place));
+    let place = expect(rule_place, pairs, context);
+    let rule_call = rule_pair(Rule::encode_do_call, read_encode_do_call);
+    let (operation, inputs) = expect(rule_call, pairs, context);
     let output = expect(rule_var_name(), pairs, context);
     assembly_ast::Node::EncodeDo {
         place,
@@ -1566,8 +1579,8 @@ fn read_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_a
     }
 }
 
-fn rule_do_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
-    rule_pair(Rule::do_command, read_do_command)
+fn rule_encode_do_command<'a>() -> RuleApp<'a, assembly_ast::Node> {
+    rule_pair(Rule::encode_do_command, read_encode_do_command)
 }
 
 fn read_create_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
@@ -1720,7 +1733,7 @@ fn read_schedule_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> asse
     let mut rules = Vec::new();
     rules.push(rule_phi_command());
     rules.push(rule_alloc_command());
-    rules.push(rule_do_command());
+    rules.push(rule_encode_do_command());
     rules.push(rule_create_command());
     rules.push(rule_drop_command());
     rules.push(rule_alloc_temporary_command());

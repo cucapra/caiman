@@ -220,19 +220,13 @@ pub fn value_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::Va
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::ValueTag::Input {
-            funclet_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::ValueTag::Output {
-            funclet_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
@@ -247,19 +241,13 @@ pub fn timeline_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir:
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::TimelineTag::Input {
-            funclet_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::TimelineTag::Output {
-            funclet_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
@@ -274,19 +262,13 @@ pub fn spatial_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::SpatialTag::Input {
-            funclet_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::SpatialTag::Output {
-            funclet_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
@@ -298,19 +280,13 @@ pub fn value_value_tag(t: &assembly_ast::ValueTag, context: &mut Context) -> ir:
     match t {
         assembly_ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
         assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
-            function_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            function_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
-            function_id: context
-                .inner
-                .local_funclet_id(r.funclet_id.clone())
-                .clone(),
+            function_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
             index: context
                 .inner
                 .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),

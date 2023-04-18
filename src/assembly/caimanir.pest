@@ -203,10 +203,11 @@ value_command = { phi_command | constant_command |
 //     scheduling
 
 alloc_temporary_command = ${ "alloc-temporary-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
-do_sep = ${ "encode-do-" ~ place ~ sep }
-do_args = { var_name ~ ("," ~ var_name)* }
-do_params = { "(" ~ do_args? ~ ")" }
-do_command = { do_sep ~ funclet_loc ~ ( do_params | hole ) ~ "->" ~ var_name }
+encode_do_sep = ${ "encode-do-" ~ place ~ sep }
+encode_do_args = { var_name ~ ("," ~ var_name)* }
+encode_do_params = { "(" ~ encode_do_args? ~ ")" }
+encode_do_call = { funclet_loc ~ ( encode_do_params | hole ) }
+encode_do_command = { encode_do_sep ~ ( encode_do_call | hole ) ~ "->" ~ var_name }
 create_command = ${ "create-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
 drop_command = ${ "drop" ~ sep ~ var_name }
 alloc_sep = ${"alloc-" ~ place ~ "-" ~ typ ~ sep}
@@ -223,7 +224,7 @@ serialized_join_sep = @{ "serialized-join" ~ sep }
 serialized_join_command = { serialized_join_sep ~ fn_name ~ node_box ~ var_name }
 default_join_command = { "default-join" }
 
-schedule_command = { phi_command | alloc_temporary_command | do_command | create_command |
+schedule_command = { phi_command | alloc_temporary_command | encode_do_command | create_command |
     drop_command | alloc_command | encode_copy_command | submit_command | encode_fence_command  |
     sync_fence_command | inline_join_command | serialized_join_command | default_join_command }
 

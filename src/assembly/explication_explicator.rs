@@ -38,7 +38,11 @@ fn explicate_known_operation(
     input_vec: &Box<[Hole<assembly_ast::OperationId>]>,
     output_vec: &Box<[Hole<assembly_ast::OperationId>]>,
     context: &mut Context,
-) -> Option<(ir::RemoteNodeId, Box<[ir::OperationId]>, Box<[ir::OperationId]>)> {
+) -> Option<(
+    ir::RemoteNodeId,
+    Box<[ir::OperationId]>,
+    Box<[ir::OperationId]>,
+)> {
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
 
@@ -81,7 +85,11 @@ fn explicate_known_operation(
         }
     }
 
-    Some((remote_conversion(&operation, context), inputs.into_boxed_slice(), outputs.into_boxed_slice()))
+    Some((
+        remote_conversion(&operation, context),
+        inputs.into_boxed_slice(),
+        outputs.into_boxed_slice(),
+    ))
 }
 
 pub fn explicate_encode_do(
@@ -96,12 +104,12 @@ pub fn explicate_encode_do(
     let mut output_vec = reject_hole(outputs_hole.as_ref());
     let result = match operation_hole.as_ref() {
         Some(op) => explicate_known_operation(op.clone(), input_vec, output_vec, context),
-        None => todo!()
+        None => todo!(),
     };
     // a bit sloppy, but oh well
     let (operation, inputs, outputs) = match result {
-        None => { return None },
-        Some(t) => t
+        None => return None,
+        Some(t) => t,
     };
     Some(ir::Node::EncodeDo {
         place,

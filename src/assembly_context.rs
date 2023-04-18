@@ -214,7 +214,7 @@ impl Context {
     pub fn initialize_current_funclet(&mut self) {
         self.location = Some(ir::RemoteNodeId {
             funclet_id: 0,
-            node_id: 0
+            node_id: 0,
         });
     }
 

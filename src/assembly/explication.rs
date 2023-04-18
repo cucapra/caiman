@@ -377,11 +377,7 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
             operation,
         } => Some(ir::Node::UnboundSlot {
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(
-                context
-                    .inner
-                    .loc_type_id(reject_hole(storage_type.clone())),
-            ),
+            storage_type: ffi::TypeId(context.inner.loc_type_id(reject_hole(storage_type.clone()))),
             operation: remote_conversion(reject_hole(operation.as_ref()), context),
         }),
         assembly_ast::Node::Drop { node } => Some(ir::Node::Drop {
@@ -395,11 +391,7 @@ fn ir_node(node: &assembly_ast::Node, context: &mut Context) -> Option<ir::Node>
         } => Some(ir::Node::StaticAllocFromStaticBuffer {
             buffer: context.inner.node_id(reject_hole(buffer.clone())),
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(
-                context
-                    .inner
-                    .loc_type_id(reject_hole(storage_type.clone())),
-            ),
+            storage_type: ffi::TypeId(context.inner.loc_type_id(reject_hole(storage_type.clone()))),
             operation: remote_conversion(reject_hole(operation.as_ref()), context),
         }),
         assembly_ast::Node::EncodeDo {
@@ -755,8 +747,7 @@ fn ir_value_extras(
                     for extra in extras {
                         if extra.name == name {
                             context.inner.advance_current_funclet();
-                            let index =
-                                context.inner.local_funclet_id(extra.name.clone()).clone();
+                            let index = context.inner.local_funclet_id(extra.name.clone()).clone();
                             if result.contains_key(&index) {
                                 panic!("Duplicate extras for {:?}", name);
                             }

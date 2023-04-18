@@ -54,9 +54,7 @@ impl<'a> Context<'a> {
             program,
             inner: assembly_context,
             explicated_funclets: HashMap::new(),
-            meta_data: MetaData {
-                variable_index: 0,
-            },
+            meta_data: MetaData { variable_index: 0 },
             schedule_extras: HashMap::new(),
             value_map: HashMap::new(),
         }
