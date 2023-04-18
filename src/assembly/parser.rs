@@ -1569,8 +1569,10 @@ fn read_encode_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> ass
     let rule_place = rule_str_unwrap(Rule::encode_do_sep, 1, Box::new(read_place));
     let place = expect(rule_place, pairs, context);
     let rule_call = rule_pair(Rule::encode_do_call, read_encode_do_call);
-    let (operation, inputs) = expect(rule_call, pairs, context);
+    let call = expect_hole(rule_call, pairs, context);
     let output = expect(rule_var_name(), pairs, context);
+    let operation = call.clone().map(|x| x.0.unwrap()); // this unwrap is safe by parser definition
+    let inputs = call.map(|x| x.1.unwrap()); // also safe since no empty input vec for now
     assembly_ast::Node::EncodeDo {
         place,
         operation,
