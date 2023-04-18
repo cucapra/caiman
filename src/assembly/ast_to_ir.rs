@@ -178,15 +178,15 @@ fn value_stage(d : &assembly_ast::DictValue, _ : &mut Context) -> ir::ResourceQu
 fn value_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::ValueTag {
     match v {
         assembly_ast::TagCore::None => ir::ValueTag::None,
-        assembly_ast::TagCore::Operation(r) => ir::ValueTag::Operation {
-            remote_node_id:  remote_conversion(&r, context)
+        assembly_ast::TagCore::Operation(r) => ir::ValueTag::Node {
+            node_id:  remote_conversion(&r, context).node_id
         },
         assembly_ast::TagCore::Input(r) => ir::ValueTag::Input {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::ValueTag::Output {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
@@ -195,15 +195,15 @@ fn value_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Valu
 fn timeline_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::TimelineTag {
     match v {
         assembly_ast::TagCore::None => ir::TimelineTag::None,
-        assembly_ast::TagCore::Operation(r) => ir::TimelineTag::Operation {
-            remote_node_id:  remote_conversion(&r, context)
+        assembly_ast::TagCore::Operation(r) => ir::TimelineTag::Node {
+            node_id:  remote_conversion(&r, context).node_id
         },
         assembly_ast::TagCore::Input(r) => ir::TimelineTag::Input {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::TimelineTag::Output {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
@@ -212,15 +212,15 @@ fn timeline_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::T
 fn spatial_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::SpatialTag {
     match v {
         assembly_ast::TagCore::None => ir::SpatialTag::None,
-        assembly_ast::TagCore::Operation(r) => ir::SpatialTag::Operation {
-            remote_node_id:  remote_conversion(&r, context)
+        assembly_ast::TagCore::Operation(r) => ir::SpatialTag::Node {
+            node_id:  remote_conversion(&r, context).node_id
         },
         assembly_ast::TagCore::Input(r) => ir::SpatialTag::Input {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::TagCore::Output(r) => ir::SpatialTag::Output {
-            funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
+            //funclet_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
     }
@@ -229,14 +229,16 @@ fn spatial_core_tag(v : assembly_ast::TagCore, context : &mut Context) -> ir::Sp
 fn value_value_tag(t : &assembly_ast::ValueTag, context : &mut Context) -> ir::ValueTag {
     match t {
         assembly_ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
-        assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
+        assembly_ast::ValueTag::FunctionInput(r) => unimplemented!(),
+        assembly_ast::ValueTag::FunctionOutput(r) => unimplemented!(),
+       /* assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
             function_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
         },
         assembly_ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
             function_id : *context.local_funclet_id(r.funclet_id.clone()),
             index: *context.remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
-        },
+        },*/
         assembly_ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
             index: *context.node_id(n.clone())
         }
@@ -290,10 +292,10 @@ fn value_dict_spatial_tag(d : &assembly_ast::DictValue, context : &mut Context) 
     }
 }
 
-fn value_slot_info(d : &assembly_ast::DictValue, context : &mut Context) -> ir::SlotInfo {
+fn value_slot_info(d : &assembly_ast::DictValue, context : &mut Context) -> ir::SchedulingTagSet {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::SlotInfo(s) => ir::SlotInfo {
+        assembly_ast::Value::SlotInfo(s) => ir::SchedulingTagSet {
             value_tag: value_value_tag(&s.value_tag, context),
             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
@@ -302,20 +304,24 @@ fn value_slot_info(d : &assembly_ast::DictValue, context : &mut Context) -> ir::
     }
 }
 
-fn value_fence_info(d : &assembly_ast::DictValue, context : &mut Context) -> ir::FenceInfo {
+fn value_fence_info(d : &assembly_ast::DictValue, context : &mut Context) -> ir::SchedulingTagSet {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::FenceInfo(s) => ir::FenceInfo {
+        assembly_ast::Value::FenceInfo(s) => ir::SchedulingTagSet {
+            value_tag: ir::ValueTag::None,
             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
+            spatial_tag: ir::SpatialTag::None,
         },
         _ => panic!(format!("Expected tag got {:?}", v))
     }
 }
 
-fn value_buffer_info(d : &assembly_ast::DictValue, context : &mut Context) -> ir::BufferInfo {
+fn value_buffer_info(d : &assembly_ast::DictValue, context : &mut Context) -> ir::SchedulingTagSet {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::BufferInfo(s) => ir::BufferInfo {
+        assembly_ast::Value::BufferInfo(s) => ir::SchedulingTagSet {
+            value_tag: ir::ValueTag::None,
+            timeline_tag: ir::TimelineTag::None,
             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
         },
         _ => panic!(format!("Expected tag got {:?}", v))
@@ -806,7 +812,7 @@ fn ir_tail_edge(tail : &assembly_ast::TailEdge, context : &mut Context) -> ir::T
     }
 }
 
-fn ir_funclet(funclet : &assembly_ast::Funclet, context : &mut Context) -> ir::Funclet {
+fn ir_funclet(funclet : &assembly_ast::Funclet, extras : &assembly_ast::Extras, context : &mut Context) -> ir::Funclet {
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
@@ -829,8 +835,61 @@ fn ir_funclet(funclet : &assembly_ast::Funclet, context : &mut Context) -> ir::F
 
     let tail_edge = ir_tail_edge(&funclet.tail_edge, context);
 
+    let mut spec_binding = ir::FuncletSpecBinding::None;
+    match funclet.kind {
+        ir::FuncletKind::ScheduleExplicit => {
+            let name = funclet.header.name.clone();
+            for extra in extras {
+                if extra.name == name {
+                    context.update_local_funclet(extra.name.clone());
+
+                    let input_slots = value_index_var_dict(extra.data.get(&as_key("input_slots")).unwrap(), value_slot_info, context);
+                    let output_slots = value_index_var_dict(extra.data.get(&as_key("output_slots")).unwrap(), value_slot_info, context);
+                    let input_fences = value_index_var_dict(extra.data.get(&as_key("input_fences")).unwrap(), value_fence_info, context);
+                    let output_fences = value_index_var_dict(extra.data.get(&as_key("output_fences")).unwrap(), value_fence_info, context);
+                    let input_buffers = value_index_var_dict(extra.data.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context);
+                    let output_buffers = value_index_var_dict(extra.data.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context);
+        
+                    let value_funclet_id_opt = extra.data.get(&as_key("value")).map(|x| value_funclet_raw_id(x, context));
+                    let spatial_funclet_id_opt = extra.data.get(&as_key("space")).map(|x| value_funclet_raw_id(x, context));
+                    let temporal_funclet_id_opt = extra.data.get(&as_key("time")).map(|x| value_funclet_raw_id(x, context));
+        
+                    let input_tag_sets = merge_tag_sets(funclet.header.args.len(), & input_slots, & input_fences, & input_buffers);
+                    let output_tag_sets = merge_tag_sets(funclet.header.ret.len(), & output_slots, & output_fences, & output_buffers);
+
+                    spec_binding = ir::FuncletSpecBinding::ScheduleExplicit {
+                        value: ir::FuncletSpec {
+                            funclet_id_opt: value_funclet_id_opt,
+                            input_tags: input_tag_sets.iter().map(|set| set.value_tag).collect::<Box<[ir::Tag]>>(),
+                            output_tags: output_tag_sets.iter().map(|set| set.value_tag).collect::<Box<[ir::Tag]>>(),
+                            implicit_in_tag: ir::Tag::None,
+                            implicit_out_tag: ir::Tag::None,
+                        },
+                        spatial: ir::FuncletSpec {
+                            funclet_id_opt: spatial_funclet_id_opt,
+                            input_tags: input_tag_sets.iter().map(|set| set.spatial_tag).collect::<Box<[ir::Tag]>>(),
+                            output_tags: output_tag_sets.iter().map(|set| set.spatial_tag).collect::<Box<[ir::Tag]>>(),
+                            implicit_in_tag: ir::Tag::None,
+                            implicit_out_tag: ir::Tag::None,
+                        },
+                        timeline: ir::FuncletSpec {
+                            funclet_id_opt: temporal_funclet_id_opt,
+                            input_tags: input_tag_sets.iter().map(|set| set.timeline_tag).collect::<Box<[ir::Tag]>>(),
+                            output_tags: output_tag_sets.iter().map(|set| set.timeline_tag).collect::<Box<[ir::Tag]>>(),
+                            implicit_in_tag: value_dict_timeline_tag(extra.data.get(&as_key("in_timeline_tag")).unwrap(), context),
+                            implicit_out_tag: value_dict_timeline_tag(extra.data.get(&as_key("out_timeline_tag")).unwrap(), context)
+                        }
+                    };
+                    break
+                }
+            }
+        }
+        _ => {}
+    };
+
     ir::Funclet {
         kind: funclet.kind.clone(),
+        spec_binding,
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         nodes: nodes.into_boxed_slice(),
@@ -838,13 +897,13 @@ fn ir_funclet(funclet : &assembly_ast::Funclet, context : &mut Context) -> ir::F
     }
 }
 
-fn ir_funclets(funclets : &assembly_ast::FuncletDefs, context : &mut Context) -> StableVec<ir::Funclet> {
+fn ir_funclets(funclets : &assembly_ast::FuncletDefs, extras : &assembly_ast::Extras, context : &mut Context) -> StableVec<ir::Funclet> {
     let mut result = StableVec::new();
     for def in funclets {
         match def {
             assembly_ast::FuncletDef::Local(f) => {
                 context.update_local_funclet(f.header.name.clone());
-                result.add(ir_funclet(f, context)); },
+                result.add(ir_funclet(f, extras, context)); },
             _ => {}
         }
     }
@@ -905,96 +964,34 @@ fn ir_pipelines(pipelines : &assembly_ast::Pipelines, context : &mut Context) ->
     result
 }
 
-fn ir_value_extra(_: &assembly_ast::UncheckedDict, _ : &mut Context) -> ir::ValueFuncletExtra {
-    todo!()
-}
-
-fn ir_value_extras(funclets : &assembly_ast::FuncletDefs, extras : &assembly_ast::Extras, context : &mut Context)
-                   -> HashMap<ir::FuncletId, ir::ValueFuncletExtra> {
-    let mut result = HashMap::new();
-    for funclet in funclets {
-        match funclet {
-            assembly_ast::FuncletDef::Local(f) => {
-                match f.kind {
-                    ir::FuncletKind::Value => {
-                        let name = f.header.name.clone();
-                        for extra in extras {
-                            if extra.name == name {
-                                context.update_local_funclet(extra.name.clone());
-                                let index = context.local_funclet_id(extra.name.clone());
-                                if result.contains_key(index) {
-                                    panic!(format!("Duplicate extras for {:?}", name));
-                                }
-                                result.insert(*index, ir_value_extra(&extra.data, context));
-                            }
-                        }
-                    }
-                    _ => {}
-                }
+fn merge_tag_sets(size : usize, slots : & HashMap<usize, ir::SchedulingTagSet>, fences : & HashMap<usize, ir::SchedulingTagSet>, buffers : & HashMap<usize, ir::SchedulingTagSet>) -> Box<[ir::SchedulingTagSet]> {
+    let mut sets = Vec::new();
+    for index in 0 .. size {
+        let set = 
+            if let Some(slot) = slots.get(& index) {
+                ir::SchedulingTagSet{ value_tag : slot.value_tag, timeline_tag : slot.timeline_tag, spatial_tag : slot.spatial_tag }
             }
-            _ => {}
-        }
-    }
-    result
-}
-
-fn ir_scheduling_extra(d: &assembly_ast::UncheckedDict, context : &mut Context) -> ir::SchedulingFuncletExtra {
-    let index = value_funclet_raw_id(d.get(&as_key("value")).unwrap(), context);
-    ir::SchedulingFuncletExtra {
-        value_funclet_id: index,
-        input_slots: value_index_var_dict(d.get(&as_key("input_slots")).unwrap(), value_slot_info, context),
-        output_slots: value_index_var_dict(d.get(&as_key("output_slots")).unwrap(), value_slot_info, context),
-        input_fences: value_index_var_dict(d.get(&as_key("input_fences")).unwrap(), value_fence_info, context),
-        output_fences: value_index_var_dict(d.get(&as_key("output_fences")).unwrap(), value_fence_info, context),
-        input_buffers: value_index_var_dict(d.get(&as_key("input_buffers")).unwrap(), value_buffer_info, context),
-        output_buffers: value_index_var_dict(d.get(&as_key("output_buffers")).unwrap(), value_buffer_info, context),
-        in_timeline_tag: value_dict_timeline_tag(d.get(&as_key("in_timeline_tag")).unwrap(), context),
-        out_timeline_tag: value_dict_timeline_tag(d.get(&as_key("out_timeline_tag")).unwrap(), context),
-    }
-}
-
-fn ir_scheduling_extras(funclets : &assembly_ast::FuncletDefs, extras : &assembly_ast::Extras, context : &mut Context)
-                        -> HashMap<ir::FuncletId, ir::SchedulingFuncletExtra> {
-    // duplicating some code...but it's annoying to fix and I'm lazy
-    let mut result = HashMap::new();
-    for funclet in funclets {
-        match funclet {
-            assembly_ast::FuncletDef::Local(f) => {
-                match f.kind {
-                    ir::FuncletKind::ScheduleExplicit => {
-                        let name = f.header.name.clone();
-                        for extra in extras {
-                            if extra.name == name {
-                                context.update_local_funclet(extra.name.clone());
-                                let index = context.local_funclet_id(extra.name.clone());
-                                if result.contains_key(index) {
-                                    panic!(format!("Duplicate extras for {:?}", name));
-                                }
-                                result.insert(
-                                    *index,
-                                    ir_scheduling_extra(&extra.data, context)
-                                );
-                            }
-                        }
-                    }
-                    _ => {}
-                }
+            else if let Some(fence) = fences.get(& index) {
+                ir::SchedulingTagSet{ value_tag : ir::ValueTag::None, timeline_tag : fence.timeline_tag, spatial_tag : ir::SpatialTag::None }
             }
-            _ => {}
-        }
+            else if let Some(buffer) = buffers.get(& index) {
+                ir::SchedulingTagSet{ value_tag : ir::ValueTag::None, timeline_tag : ir::TimelineTag::None, spatial_tag : buffer.spatial_tag }
+            }
+            else {
+                ir::SchedulingTagSet{ value_tag : ir::ValueTag::None, timeline_tag : ir::TimelineTag::None, spatial_tag : ir::SpatialTag::None }
+            };
+        sets.push(set)
     }
-    result
+    sets.into_boxed_slice()
 }
 
 fn ir_program(program : assembly_ast::Program, context : &mut Context) -> ir::Program {
     ir::Program {
         native_interface: ir_native_interface(&program, context),
         types: ir_types(&program.types, context),
-        funclets: ir_funclets(&program.funclets, context),
+        funclets: ir_funclets(&program.funclets, &program.extras, context),
         value_functions: ir_value_functions(&program.funclets, context),
         pipelines: ir_pipelines(&program.pipelines, context),
-        value_funclet_extras: ir_value_extras(&program.funclets, &program.extras, context),
-        scheduling_funclet_extras: ir_scheduling_extras(&program.funclets, &program.extras, context),
     }
 }
 

@@ -36,6 +36,7 @@ timeline @time(%e : $event0) -> $event0 {
 extras {
     @bar {
         value : @foo,
+        time : @time,
         input_slots : {
             %s : slot_info()
         },

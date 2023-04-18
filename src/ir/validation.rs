@@ -16,12 +16,12 @@ pub fn validate_program(program : & ir::Program)
 	}
 }
 
-pub fn validate_external_gpu_function_bindings(function : & ir::ffi::ExternalGpuFunction, input_slot_node_ids : &[ir::NodeId], output_slot_node_ids : &[ir::NodeId])
+pub fn validate_gpu_kernel_bindings(kernel : & ir::ffi::GpuKernel, input_slot_node_ids : &[ir::NodeId], output_slot_node_ids : &[ir::NodeId])
 {
 	use std::iter::FromIterator;
 	let mut input_slot_counts = HashMap::<ir::NodeId, usize>::from_iter(input_slot_node_ids.iter().chain(output_slot_node_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
 	let mut output_slot_bindings = HashMap::<ir::NodeId, Option<usize>>::from_iter(output_slot_node_ids.iter().map(|slot_id| (* slot_id, None)));
-	for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
+	for (binding_index, resource_binding) in kernel.resource_bindings.iter().enumerate()
 	{
 		if let Some(index) = resource_binding.input
 		{
@@ -34,7 +34,7 @@ pub fn validate_external_gpu_function_bindings(function : & ir::ffi::ExternalGpu
 		}
 	}
 
-	for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
+	for (binding_index, resource_binding) in kernel.resource_bindings.iter().enumerate()
 	{
 		if let Some(output_index) = resource_binding.output
 		{
