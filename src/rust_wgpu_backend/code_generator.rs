@@ -140,7 +140,7 @@ struct ActiveFuncletState
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 struct ShaderModuleKey
 {
-	external_gpu_function_id : ir::ExternalGpuFunctionId
+	external_gpu_function_id : ir::ExternalFunctionId
 }
 
 impl ShaderModuleKey
@@ -181,7 +181,7 @@ impl PipelineLayoutKey
 
 struct GpuFunctionInvocation
 {
-	external_gpu_function_id : ir::ExternalGpuFunctionId,
+	external_gpu_function_id : ir::ExternalFunctionId,
 	bindings : BTreeMap<usize, (Option<usize>, Option<usize>)>,
 	shader_module_key : ShaderModuleKey,
 }
@@ -215,7 +215,7 @@ pub struct CodeGenerator<'program>
 	active_funclet_state : Option<ActiveFuncletState>,
 	use_recording : bool,
 	active_submission_encoding_state : Option<SubmissionEncodingState>,
-	active_external_gpu_function_id : Option<ir::ExternalGpuFunctionId>,
+	active_external_gpu_function_id : Option<ir::ExternalFunctionId>,
 	active_shader_module_key : Option<ShaderModuleKey>,
 	shader_modules : BTreeMap<ShaderModuleKey, shadergen::ShaderModule>,
 	submission_queue : SubmissionQueue,
@@ -225,7 +225,7 @@ pub struct CodeGenerator<'program>
 	native_interface : ffi::NativeInterface,
 	active_closures : HashMap<(ir::FuncletId, usize), Closure>,
 	closure_id_generator : IdGenerator,
-	active_yield_point_ids : HashSet<ir::PipelineYieldPointId>,
+	active_yield_point_ids : HashSet<ffi::ExternalFunctionId>,
 	dispatcher_id_generator : IdGenerator,
 	active_dispatchers : HashMap<Box<[ffi::TypeId]>, Dispatcher>,
 }
@@ -269,11 +269,11 @@ impl<'program> CodeGenerator<'program>
 		output_string
 	}
 
-	fn generate_compute_dispatch_outputs(&mut self, external_function_id : ir::ExternalCpuFunctionId) -> Box<[VarId]>
+	fn generate_compute_dispatch_outputs(&mut self, external_function_id : ir::ExternalFunctionId) -> Box<[VarId]>
 	{
 		let mut output_vars = Vec::<VarId>::new();
 
-		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
+		let external_gpu_function = self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
 		for (output_index, output_type_id) in external_gpu_function.output_types.iter().enumerate()
 		{
 			let variable_id = self.variable_tracker.create_buffer(* output_type_id);
@@ -305,7 +305,7 @@ impl<'program> CodeGenerator<'program>
 		self.active_shader_module = Some(shader_module);
 	}*/
 
-	fn set_active_external_gpu_function(&mut self, external_function_id : ir::ExternalGpuFunctionId)
+	fn set_active_external_gpu_function(&mut self, external_function_id : ir::ExternalFunctionId)
 	{
 		// Will need to be more careful with this check once modules no longer correspond to external gpu functions one to one
 		if let Some(previous_id) = self.active_external_gpu_function_id.as_ref()
@@ -324,7 +324,7 @@ impl<'program> CodeGenerator<'program>
 
 		if ! self.shader_modules.contains_key(& shader_module_key)
 		{
-			let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
+			let external_gpu_function = & self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
 
 			let mut shader_module = match & external_gpu_function.shader_module_content
 			{
@@ -349,7 +349,7 @@ impl<'program> CodeGenerator<'program>
 	fn set_active_bindings(&mut self, argument_vars : &[VarId], output_vars : &[VarId])// -> Box<[usize]>
 	{
 		let external_function_id = self.active_external_gpu_function_id.unwrap();
-		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
+		let external_gpu_function = & self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
 
 		let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
 		let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
@@ -507,7 +507,7 @@ impl<'program> CodeGenerator<'program>
 		}*/
 	}
 
-	fn generate_compute_dispatch(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
+	fn generate_compute_dispatch(&mut self, external_function_id : ir::ExternalFunctionId, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
 	{
 		self.require_local(dimension_vars);
 		self.require_on_gpu(argument_vars);
@@ -518,7 +518,7 @@ impl<'program> CodeGenerator<'program>
 
 		self.begin_command_encoding();
 
-		let external_gpu_function = & self.native_interface.external_gpu_functions[external_function_id];
+		let external_gpu_function = & self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
 		assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
 		//let mut output_variables = Vec::<usize>::new();
 		self.code_writer.write(format!("let ("));
@@ -683,31 +683,37 @@ impl<'program> CodeGenerator<'program>
 
 		self.code_writer.begin_module("outputs");
 		{
-			for (_, external_cpu_function) in self.native_interface.external_cpu_functions.iter()
+			for (_, external_cpu_function) in self.native_interface.external_functions.iter()
 			{
 				let mut tuple_fields = Vec::<ffi::TypeId>::new();
-				for (output_index, output_type) in external_cpu_function.output_types.iter().enumerate()
+				if let Some(cpu_operation) = external_cpu_function.get_cpu_pure_operation()
 				{
-					tuple_fields.push(*output_type);
+					for (output_index, output_type) in cpu_operation.output_types.iter().enumerate()
+					{
+						tuple_fields.push(*output_type);
+					}
+					//let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
+					//self.generate_type_definition(ffi::TypeId(type_id));
+					//write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(ffi::TypeId(type_id)));
+					write!(self.code_writer, "pub type {} = {};\n", cpu_operation.name, self.get_tuple_definition_string(tuple_fields.as_slice()));
 				}
-				//let type_id = self.native_interface.types.add(ffi::Type::Tuple{fields : tuple_fields.into_boxed_slice()});
-				//self.generate_type_definition(ffi::TypeId(type_id));
-				//write!(self.code_writer, "pub type {} = super::super::{};\n", external_cpu_function.name, self.get_type_name(ffi::TypeId(type_id)));
-				write!(self.code_writer, "pub type {} = {};\n", external_cpu_function.name, self.get_tuple_definition_string(tuple_fields.as_slice()));
 			}
 		}
 		self.code_writer.end_module();
 
 		self.code_writer.write(format!("pub trait CpuFunctions\n{{\n"));
-		for (_, external_cpu_function) in self.native_interface.external_cpu_functions.iter()
+		for (_, external_cpu_function) in self.native_interface.external_functions.iter()
 		{
-			self.code_writer.write(format!("\tfn {}(&self, state : &mut caiman_rt::State", external_cpu_function.name));
-			for (input_index, input_type) in external_cpu_function.input_types.iter().enumerate()
+			if let Some(cpu_operation) = external_cpu_function.get_cpu_pure_operation()
 			{
-				//self.generate_type_definition(* input_type);
-				self.code_writer.write(format!(", _ : {}", self.get_type_name(*input_type)));
+				self.code_writer.write(format!("\tfn {}(&self, state : &mut caiman_rt::State", cpu_operation.name));
+				for (input_index, input_type) in cpu_operation.input_types.iter().enumerate()
+				{
+					//self.generate_type_definition(* input_type);
+					self.code_writer.write(format!(", _ : {}", self.get_type_name(*input_type)));
+				}
+				self.code_writer.write(format!(") -> outputs::{};\n", cpu_operation.name));
 			}
-			self.code_writer.write(format!(") -> outputs::{};\n", external_cpu_function.name));
 		}
 		self.code_writer.write(format!("}}\n"));
 	}
@@ -936,7 +942,7 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "}};\n}}\n");
 	}*/
 
-	fn emit_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId], yield_points_opt : Option<& [(ir::PipelineYieldPointId, YieldPoint)]>)
+	fn emit_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId], yield_points_opt : Option<& [(ffi::ExternalFunctionId, YieldPoint)]>)
 	{
 		//Option<(ir::PipelineYieldPointId, Box<[ffi::TypeId])>>
 		let pipeline_name = self.active_pipeline_name.as_ref().unwrap();
@@ -975,7 +981,7 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "type PipelineOutputTuple<'callee> = {};\n", pipeline_output_tuple_string);
 
 		write!(self.code_writer, "enum FuncletResultIntermediates<Intermediates>\n{{ Return(Intermediates), ");
-		let mut yield_point_ref_map = HashMap::<ir::PipelineYieldPointId, & YieldPoint>::new();
+		let mut yield_point_ref_map = HashMap::<ffi::ExternalFunctionId, & YieldPoint>::new();
 		if let Some(yield_points) = yield_points_opt
 		{
 			for (yield_point_id, yield_point) in yield_points.iter()
@@ -1190,7 +1196,7 @@ impl<'program> CodeGenerator<'program>
 		self.emit_pipeline_entry_point(funclet_id, input_types, output_types, None)
 	}
 
-	pub fn emit_yieldable_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId], yield_points : & [(ir::PipelineYieldPointId, YieldPoint)])
+	pub fn emit_yieldable_pipeline_entry_point(&mut self, funclet_id : ir::FuncletId, input_types : &[ffi::TypeId], output_types : &[ffi::TypeId], yield_points : & [(ffi::ExternalFunctionId, YieldPoint)])
 	{
 		self.emit_pipeline_entry_point(funclet_id, input_types, output_types, Some(yield_points))
 	}
@@ -1232,7 +1238,7 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "))}};");
 	}
 
-	pub fn build_yield(&mut self, yield_point_id : ir::PipelineYieldPointId, yielded_var_ids : &[VarId])
+	pub fn build_yield(&mut self, yield_point_id : ffi::ExternalFunctionId, yielded_var_ids : &[VarId])
 	{
 		//self.get_type_name(self.active_funclet_result_type_id.unwrap())
 		//self.active_funclet_state.as_ref().unwrap().funclet_id
@@ -1723,9 +1729,9 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, ");");
 	}*/
 
-	pub fn build_external_cpu_function_call(&mut self, external_function_id : ir::ExternalCpuFunctionId, argument_vars : &[VarId]) -> Box<[VarId]>
+	pub fn build_external_cpu_function_call(&mut self, external_function_id : ir::ExternalFunctionId, argument_vars : &[VarId]) -> Box<[VarId]>
 	{
-		let external_cpu_function = & self.native_interface.external_cpu_functions[external_function_id];
+		let external_cpu_function = & self.native_interface.external_functions[external_function_id.0].get_cpu_pure_operation().unwrap();
 		let call_result_var = self.variable_tracker.generate();
 		let mut argument_string = String::new();
 		for (index, argument) in argument_vars.iter().enumerate()
@@ -1920,7 +1926,7 @@ impl<'program> CodeGenerator<'program>
 		return output_vars;
 	}*/
 
-	pub fn build_compute_dispatch_with_outputs(&mut self, external_function_id : ir::ExternalGpuFunctionId, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
+	pub fn build_compute_dispatch_with_outputs(&mut self, external_function_id : ir::ExternalFunctionId, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
 	{
 		self.generate_compute_dispatch(external_function_id, dimension_vars, argument_vars, output_vars);
 	}

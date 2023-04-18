@@ -466,22 +466,23 @@ impl<'program> FuncletChecker<'program>
 					ir::Node::CallExternalCpu { external_function_id, arguments } =>
 					{
 						assert_ne!(* place, ir::Place::Gpu);
-						let function = & self.program.native_interface.external_cpu_functions[*external_function_id];
+						let function = & self.program.native_interface.external_functions[external_function_id.0];
+						let cpu_operation = function.get_cpu_pure_operation().unwrap();
 
 						assert_eq!(inputs.len(), arguments.len());
-						assert_eq!(inputs.len(), function.input_types.len());
-						assert_eq!(outputs.len(), function.output_types.len());
+						assert_eq!(inputs.len(), cpu_operation.input_types.len());
+						assert_eq!(outputs.len(), cpu_operation.output_types.len());
 
 						for (input_index, input_node_id) in arguments.iter().enumerate()
 						{
-							assert_eq!(self.node_types[& inputs[input_index]].storage_type().unwrap(), function.input_types[input_index]);
+							assert_eq!(self.node_types[& inputs[input_index]].storage_type().unwrap(), cpu_operation.input_types[input_index]);
 
 							let value_tag = self.scalar_node_value_tags[& inputs[input_index]];
 							let funclet_id = self.value_funclet_id;
 							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Node{node_id : * input_node_id});
 						}
 
-						for (index, output_type_id) in function.output_types.iter().enumerate()
+						for (index, output_type_id) in cpu_operation.output_types.iter().enumerate()
 						{
 							self.transition_slot(outputs[index], * place, &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)]);
 						}
@@ -489,10 +490,11 @@ impl<'program> FuncletChecker<'program>
 					ir::Node::CallExternalGpuCompute { external_function_id, arguments, dimensions } =>
 					{
 						assert_eq!(* place, ir::Place::Gpu);
-						let function = & self.program.native_interface.external_gpu_functions[*external_function_id];
+						let function = & self.program.native_interface.external_functions[external_function_id.0];
+						let kernel = function.get_gpu_kernel().unwrap();
 		
 						assert_eq!(inputs.len(), dimensions.len() + arguments.len());
-						assert_eq!(outputs.len(), function.output_types.len());
+						assert_eq!(outputs.len(), kernel.output_types.len());
 
 						for (input_index, input_node_id) in dimensions.iter().chain(arguments.iter()).enumerate()
 						{
@@ -501,15 +503,15 @@ impl<'program> FuncletChecker<'program>
 							check_value_tag_compatibility_interior(& self.program, Some(funclet_id), value_tag, ir::ValueTag::Node{node_id : * input_node_id});
 						}
 
-						ir::validation::validate_external_gpu_function_bindings(function, & inputs[dimensions.len() .. ], outputs);
+						ir::validation::validate_gpu_kernel_bindings(kernel, & inputs[dimensions.len() .. ], outputs);
 
 						let mut forwarding_input_scheduling_node_ids = HashSet::<ir::NodeId>::new();
 						let mut forwarded_output_scheduling_node_ids = HashSet::<ir::NodeId>::new();
 						for (input_index, _) in arguments.iter().enumerate()
 						{
-							assert_eq!(self.node_types[& inputs[dimensions.len() + input_index]].storage_type().unwrap(), function.input_types[input_index]);
+							assert_eq!(self.node_types[& inputs[dimensions.len() + input_index]].storage_type().unwrap(), kernel.input_types[input_index]);
 
-							if let Some(forwarded_output_index) = function.output_of_forwarding_input(input_index)
+							if let Some(forwarded_output_index) = kernel.output_of_forwarding_input(input_index)
 							{
 								let transitions = [
 									(ir::ResourceQueueStage::Encoded, ir::ResourceQueueStage::Encoded),
@@ -540,9 +542,9 @@ impl<'program> FuncletChecker<'program>
 							}
 						}
 						
-						for (index, output_type_id) in function.output_types.iter().enumerate()
+						for (index, output_type_id) in kernel.output_types.iter().enumerate()
 						{
-							assert_eq!(self.node_types[& outputs[index]].storage_type().unwrap(), function.output_types[index]);
+							assert_eq!(self.node_types[& outputs[index]].storage_type().unwrap(), kernel.output_types[index]);
 
 							let is_forwarded = forwarded_output_scheduling_node_ids.contains(& outputs[index]);
 							if ! is_forwarded
@@ -887,7 +889,7 @@ impl<'program> FuncletChecker<'program>
 					check_spatial_tag_compatibility_interior(& self.program, self.spatial_spec.funclet_id_opt, node_spatial_tag, spatial_tag);
 				}
 			}
-			ir::TailEdge::Yield{pipeline_yield_point_id, yielded_nodes : yielded_node_ids, next_funclet, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
+			ir::TailEdge::Yield{external_function_id, yielded_nodes : yielded_node_ids, next_funclet, continuation_join : continuation_join_node_id, arguments : argument_node_ids} =>
 			{
 				// To do: Need pipeline to check yield point types
 				let continuation_join_point = & self.node_join_points[continuation_join_node_id];
@@ -981,7 +983,7 @@ impl<'program> FuncletChecker<'program>
 				for (argument_index, argument_node_id) in callee_arguments.iter().enumerate()
 				{
 					let node_type = self.node_types.remove(argument_node_id).unwrap();
-					check_slot_type(& self.program, continuation_join_point.input_types[argument_index], & node_type);
+					check_slot_type(& self.program, continuation_join_point.input_types[argument_index], & node_type); // bug?
 
 					let node_timeline_tag = self.scalar_node_timeline_tags[argument_node_id];
 					let node_value_tag = self.scalar_node_value_tags[argument_node_id];

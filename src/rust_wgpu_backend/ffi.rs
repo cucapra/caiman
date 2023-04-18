@@ -1,8 +1,92 @@
 use serde_derive::{Serialize, Deserialize};
 use crate::stable_vec::StableVec;
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
-pub struct TypeId(pub usize); // temporarily exposed internals
+// Maybe this should be a derive macro
+#[macro_export]
+macro_rules! def_id_type {
+	( $type : ident ) => {
+		#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+		pub struct $type(pub usize); // temporarily exposed internals
+
+		impl std::fmt::Display for $type
+		{
+			fn fmt(& self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+			{
+				write!(f, "{}", self.0)
+			}
+		}
+
+		impl serde::Serialize for $type
+		{
+			fn serialize<S>(& self, serializer : S) -> Result<S::Ok, S::Error>
+				where S : serde::Serializer
+			{
+				serializer.serialize_u64(self.0 as u64)
+			}
+		}
+
+		impl<'de> serde::Deserialize<'de> for $type
+		{
+			fn deserialize<D>(deserializer : D) -> Result<Self, D::Error>
+				where D : serde::Deserializer<'de>
+			{
+				use serde::*;
+				u64::deserialize::<D>(deserializer).map(|x| Self(x as usize))
+			}
+		}
+	}
+}
+
+//#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+//pub struct TypeId(pub usize); // temporarily exposed internals
+
+def_id_type!(TypeId);
+
+//#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+//pub struct ExternalFunctionId(pub usize); // temporarily exposed internals
+
+def_id_type!(ExternalFunctionId);
+
+/*impl std::fmt::Display for ExternalFunctionId
+{
+	fn fmt(& self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		write!(f, "{}", self.0)
+	}
+}
+
+impl serde::Serialize for ExternalFunctionId
+{
+	fn serialize<S>(& self, serializer : S) -> Result<S::Ok, S::Error>
+		where S : serde::Serializer
+	{
+		serializer.serialize_u64(self.0 as u64)
+	}
+}
+
+impl<'de> serde::Deserialize<'de> for ExternalFunctionId
+{
+	fn deserialize<D>(deserializer : D) -> Result<Self, D::Error>
+		where D : serde::Deserializer<'de>
+	{
+		use serde::*;
+		u64::deserialize::<D>(deserializer).map(|x| Self(x as usize))
+	}
+}*/
+
+//#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+//pub struct EffectId(pub usize);
+
+/*impl std::fmt::Display for EffectId
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		write!(f, "{}", self.0)
+	}
+}*/
+
+
+def_id_type!(EffectId);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StructField
@@ -46,7 +130,15 @@ pub enum Type
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalCpuFunction
+pub struct CpuPureOperation
+{
+	pub name : String,
+	pub input_types : Box<[TypeId]>,
+	pub output_types : Box<[TypeId]>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CpuEffectfulOperation
 {
 	pub name : String,
 	pub input_types : Box<[TypeId]>,
@@ -56,7 +148,7 @@ pub struct ExternalCpuFunction
 // This describes the initial mapping from the binding in the shader to the IR
 // It's expected codegen will emit a module with a different mapping
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalGpuFunctionResourceBinding
+pub struct GpuKernelResourceBinding
 {
 	pub group : usize,
 	pub binding : usize,
@@ -71,19 +163,19 @@ pub enum ShaderModuleContent
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExternalGpuFunction
+pub struct GpuKernel // Kernel
 {
 	pub name : String,
 	pub input_types : Box<[TypeId]>,
 	pub output_types : Box<[TypeId]>,
 	// Contains pipeline and single render pass state
 	pub entry_point : String,
-	pub resource_bindings : Box<[ExternalGpuFunctionResourceBinding]>,
+	pub resource_bindings : Box<[GpuKernelResourceBinding]>,
 	pub shader_module_content : ShaderModuleContent,
 	//pub shader_module : usize,
 }
 
-impl ExternalGpuFunction
+impl GpuKernel
 {
 	// Once we stop needing to directly program in .ron files, we can make this more efficient
 	pub fn output_of_forwarding_input(& self, input_index : usize) -> Option<usize>
@@ -103,15 +195,73 @@ impl ExternalGpuFunction
 	}
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ExternalFunction
+{
+	CpuEffectfulOperation(CpuEffectfulOperation),
+	CpuPureOperation(CpuPureOperation),
+	GpuKernel(GpuKernel),
+}
+
+impl ExternalFunction
+{
+	pub fn get_gpu_kernel(&self) -> Option<& GpuKernel>
+	{
+		if let Self::GpuKernel(kernel) = self
+		{
+			Some(kernel)
+		}
+		else
+		{
+			None
+		}
+	}
+
+	pub fn get_cpu_effectful_operation(&self) -> Option<& CpuEffectfulOperation>
+	{
+		if let Self::CpuEffectfulOperation(op) = self
+		{
+			Some(op)
+		}
+		else
+		{
+			None
+		}
+	}
+
+	pub fn get_cpu_pure_operation(&self) -> Option<& CpuPureOperation>
+	{
+		if let Self::CpuPureOperation(op) = self
+		{
+			Some(op)
+		}
+		else
+		{
+			None
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Effect
+{
+	Unrestricted,
+	FullyConnected{effectful_function_ids : Vec<ExternalFunctionId>},
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct NativeInterface
 {
 	#[serde(default)]
 	pub types : StableVec<Type>,
+	//#[serde(default)]
+	//pub external_cpu_functions : StableVec<ExternalCpuFunction>,
+	//#[serde(default)]
+	//pub external_gpu_functions : StableVec<ExternalGpuFunction>,
 	#[serde(default)]
-	pub external_cpu_functions : StableVec<ExternalCpuFunction>,
+	pub external_functions : StableVec<ExternalFunction>,
 	#[serde(default)]
-	pub external_gpu_functions : StableVec<ExternalGpuFunction>,
+	pub effects : StableVec<Effect>
 }
 
 pub struct TypeBindingInfo

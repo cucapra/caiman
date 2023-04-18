@@ -6,12 +6,10 @@
 			types : {
 				0 : I32,
 			},
-			external_cpu_functions : {
-				0 : (name : "do_thing_on_cpu", input_types : [(0)], output_types : [(0)])
-			},
-			external_gpu_functions : {
-				0 : (
-					name : "do_thing_on_gpu", input_types : [(0)], output_types : [(0)], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+			external_functions : {
+				2 : CpuPureOperation((name : "do_thing_on_cpu", input_types : [0], output_types : [0])),
+				0 : GpuKernel((
+					name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
 					shader_module_content : Wgsl
 					("
 						struct Output {field_0 : i32;};
@@ -32,9 +30,9 @@
 							output_0.field_0 = output.field_0;
 						}
 					")
-				),
-				1 : (
-					name : "do_thing_on_gpu_2", input_types : [(0)], output_types : [(0)], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
+				)),
+				1 : GpuKernel((
+					name : "do_thing_on_gpu_2", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
 					shader_module_content : Wgsl
 					("
 						struct InputOutput_0 { field_0 : i32; };
@@ -44,16 +42,24 @@
 							input_output_0.field_0 = input_output_0.field_0 + 1;
 						}
 					")
-				)
+				)),
+				3 :  CpuEffectfulOperation((
+					name : "loop",
+					input_types : [],
+					output_types : [],
+				))
 			},
+			effects : {
+				0 : FullyConnected(effectful_function_ids : [3])
+			}
 		),
 		types : {
-			0 : NativeValue(storage_type : (0)),
-			1 : Slot(storage_type : (0), queue_stage : Ready, queue_place : Local ),
+			0 : NativeValue(storage_type : 0),
+			1 : Slot(storage_type : 0, queue_stage : Ready, queue_place : Local ),
 			2 : Event(place : Local),
-			3 : Slot(storage_type : (0), queue_stage : Submitted, queue_place : Gpu ),
+			3 : Slot(storage_type : 0, queue_stage : Submitted, queue_place : Gpu ),
 			4 : Fence( queue_place : Gpu ),
-			5 : Slot(storage_type : (0), queue_stage : Ready, queue_place : Gpu ),
+			5 : Slot(storage_type : 0, queue_stage : Ready, queue_place : Gpu ),
 			6 : Buffer(storage_place : Gpu, static_layout_opt : Some((alignment_bits : 0, byte_size : 4096)) ),
 			7 : BufferSpace,
 		},
@@ -65,7 +71,7 @@
 				nodes : [
 					Phi(index : 0),
 					Constant(value: I64(1), type_id : 0),
-					CallExternalCpu(external_function_id : 0, arguments : [0]),
+					CallExternalCpu(external_function_id : 2, arguments : [0]),
 					ExtractResult(node_id : 2, index : 0),
 					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 4, index : 0)
@@ -220,15 +226,15 @@
 				),
 				nodes : [
 					Phi(index : 0),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 0, node_id : 1)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 1)),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 0, node_id : 3)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 3)),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [0], outputs : [3]),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 0, node_id : 3)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 0, node_id : 3)),
 					EncodeCopy(place : Gpu, input : 3, output : 5),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 0, node_id : 4)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 0, node_id : 4), inputs : [1, 1, 1, 5], outputs : [7]),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 0, node_id : 4)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
 					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
 					SyncFence(place : Local, fence : 11, event : (funclet_id : 15, node_id : 2)),
@@ -263,11 +269,11 @@
 				),
 				nodes : [
 					Phi(index : 0),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 1)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 1)),
 					EncodeDo(place : Local, operation : (funclet_id : 9, node_id : 1), inputs : [], outputs : [1]),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 9, node_id : 0)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 9, node_id : 0)),
 					EncodeCopy(place : Gpu, input : 0, output : 3),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 9, node_id : 3)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 9, node_id : 2), inputs : [1, 1, 1, 3], outputs : [5]),
 					//AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 3)),
 					None,
@@ -385,7 +391,7 @@
 					Phi(index : 0),
 					Phi(index : 1),
 					Phi(index : 2),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 3)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
 					SyncFence(place : Local, fence : 1, event : (funclet_id : 15, node_id : 2)),
 					EncodeCopy(place : Local, input : 0, output : 3),
 				],
@@ -419,15 +425,15 @@
 					Phi(index : 0),
 					Phi(index : 1),
 					Phi(index : 2),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 1, node_id : 1)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 1, node_id : 1)),
 					EncodeDo(place : Local, operation : (funclet_id : 1, node_id : 1), inputs : [], outputs : [3]),
-					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 0)),
+					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : 0, operation : (funclet_id : 1, node_id : 0)),
 					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 0)),
 					EncodeCopy(place : Gpu, input : 0, output : 5),
-					StaticAllocFromStaticBuffer(buffer : 2, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 3)),
+					StaticAllocFromStaticBuffer(buffer : 2, place : Gpu, storage_type : 0, operation : (funclet_id : 1, node_id : 3)),
 					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 3)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 2), inputs : [3, 3, 3, 5], outputs : [7]),
-					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 5)),
+					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : 0, operation : (funclet_id : 1, node_id : 5)),
 					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 5)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 4), inputs : [3, 3, 3, 7], outputs : [9]),
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
@@ -487,12 +493,12 @@
 				),
 				nodes : [
 					Phi(index : 0),
-					UnboundSlot(place : Gpu, storage_type : (0), operation : (funclet_id : 19, node_id : 2)),
+					UnboundSlot(place : Gpu, storage_type : 0, operation : (funclet_id : 19, node_id : 2)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 19, node_id : 1), inputs : [0], outputs : [1]),
 					Submit(place : Gpu, event : (funclet_id : 22, node_id : 1)),
 					DefaultJoin,
 				],
-				tail_edge : Yield(pipeline_yield_point_id : (0), yielded_nodes : [], next_funclet : 21, arguments : [1], continuation_join : 4 )
+				tail_edge : Yield(external_function_id : 3, yielded_nodes : [], next_funclet : 21, arguments : [1], continuation_join : 4 )
 				//tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [1], continuation_join : 3)
 			),
 
@@ -677,7 +683,8 @@
 			(
 				name : "looping_pipeline",
 				entry_funclet : 20,
-				yield_points : {
+				effect_id_opt : Some(0)
+				/*yield_points : {
 					(0) :  (
 						name : "loop",
 						yielded_types : [],
@@ -686,8 +693,8 @@
 						resuming_timeline_tag : Input(funclet_id : 22, index : 0),
 						spatial_funclet_id : 18
 					)
-				}
+				}*/
 			),
-		]
+		],
 	)
 )

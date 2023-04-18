@@ -53,6 +53,7 @@ pub enum Type {
 	Local(String)
 }
 
+pub type ExternalFunctionId = String;
 pub type ExternalCpuFunctionId = String;
 pub type ExternalGpuFunctionId = String;
 pub type FuncletId = String;
@@ -75,6 +76,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
+	(ExternalFunction) => { ExternalFunctionId };
 	(ExternalCpuFunction) => { ExternalCpuFunctionId };
 	(ExternalGpuFunction) => { ExternalGpuFunctionId };
 	(ValueFunction) => { ValueFunctionId };

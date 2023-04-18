@@ -6,12 +6,10 @@
 			types : {
 				0 : I32,
 			},
-			external_cpu_functions : {
-				0 : (name : "do_thing_on_cpu", input_types : [(0)], output_types : [(0)])
-			},
-			external_gpu_functions : {
-				0 : (
-					name : "do_thing_on_gpu", input_types : [(0)], output_types : [(0)], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+			external_functions : {
+				2 : CpuPureOperation((name : "do_thing_on_cpu", input_types : [0], output_types : [0])),
+				0 : GpuKernel((
+					name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
 					shader_module_content : Wgsl
 					("
 						struct Output {field_0 : i32;};
@@ -32,9 +30,9 @@
 							output_0.field_0 = output.field_0;
 						}
 					")
-				),
-				1 : (
-					name : "do_thing_on_gpu_2", input_types : [(0)], output_types : [(0)], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
+				)),
+				1 : GpuKernel((
+					name : "do_thing_on_gpu_2", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
 					shader_module_content : Wgsl
 					("
 						struct InputOutput_0 { field_0 : i32; };
@@ -44,16 +42,24 @@
 							input_output_0.field_0 = input_output_0.field_0 + 1;
 						}
 					")
-				)
+				)),
+				3 :  CpuEffectfulOperation((
+					name : "loop",
+					input_types : [],
+					output_types : [],
+				))
 			},
+			effects : {
+				0 : FullyConnected(effectful_function_ids : [3])
+			}
 		),
 		types : {
-			0 : NativeValue(storage_type : (0)),
-			1 : Slot(storage_type : (0), queue_stage : Ready, queue_place : Local ),
+			0 : NativeValue(storage_type : 0),
+			1 : Slot(storage_type : 0, queue_stage : Ready, queue_place : Local ),
 			2 : Event(place : Local),
-			3 : Slot(storage_type : (0), queue_stage : Submitted, queue_place : Gpu ),
+			3 : Slot(storage_type : 0, queue_stage : Submitted, queue_place : Gpu ),
 			4 : Fence( queue_place : Gpu ),
-			5 : Slot(storage_type : (0), queue_stage : Ready, queue_place : Gpu ),
+			5 : Slot(storage_type : 0, queue_stage : Ready, queue_place : Gpu ),
 			6 : Buffer(storage_place : Gpu, static_layout_opt : Some((alignment_bits : 0, byte_size : 4096)) ),
 			7 : BufferSpace,
 		},
@@ -108,12 +114,12 @@
 				),
 				nodes : [
 					Phi(index : 0),
-					UnboundSlot(place : Gpu, storage_type : (0), operation : (funclet_id : 19, node_id : 2)),
+					UnboundSlot(place : Gpu, storage_type : 0, operation : (funclet_id : 19, node_id : 2)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 19, node_id : 1), inputs : [0], outputs : [1]),
 					Submit(place : Gpu, event : (funclet_id : 22, node_id : 1)),
 					DefaultJoin,
 				],
-				tail_edge : Yield(pipeline_yield_point_id : (0), yielded_nodes : [], next_funclet : 21, arguments : [1], continuation_join : 4 )
+				tail_edge : Yield(external_function_id : 3, yielded_nodes : [], next_funclet : 21, arguments : [1], continuation_join : 4 )
 				//tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [1], continuation_join : 3)
 			),
 
@@ -202,7 +208,8 @@
 			(
 				name : "looping_pipeline",
 				entry_funclet : 20,
-				yield_points : {
+				effect_id_opt : Some(0)
+				/*yield_points : {
 					(0) :  (
 						name : "loop",
 						yielded_types : [],
@@ -211,7 +218,7 @@
 						resuming_timeline_tag : Input(funclet_id : 22, index : 0),
 						spatial_funclet_id : 18
 					)
-				}
+				}*/
 			),
 		]
 	)
