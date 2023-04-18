@@ -638,7 +638,7 @@ fn ir_funclet(funclet: &assembly_ast::Funclet, context: &mut Context) -> Option<
 
     for node in &funclet.commands {
         nodes.push(ir_node(reject_hole(node.as_ref()), context).unwrap());
-        context.inner.advance_local_node();
+        context.inner.advance_current_node();
     }
 
     let tail_edge = ir_tail_edge(reject_hole(funclet.tail_edge.as_ref()), context).unwrap();
@@ -657,18 +657,19 @@ fn ir_funclets(
     context: &mut Context,
 ) -> StableVec<ir::Funclet> {
     let mut result = StableVec::new();
+    context.inner.initialize_current_funclet(); // reset to make sure we setup correctly
     for def in funclets {
         match def {
             assembly_ast::FuncletDef::Local(f) => {
                 let name = f.header.name.clone();
-                context.inner.advance_local_funclet();
                 result.add(ir_funclet(f, context).unwrap());
                 context.explicate_funclet(name.clone()); // separate operation cause order
+                context.inner.advance_current_funclet();
             }
             _ => {}
         }
     }
-    context.inner.clear_local_funclet();
+    context.inner.clear_current_funclet(); // reset again to catch mistakes
     result
 }
 
@@ -753,7 +754,7 @@ fn ir_value_extras(
                     let name = f.header.name.clone();
                     for extra in extras {
                         if extra.name == name {
-                            context.inner.advance_local_funclet();
+                            context.inner.advance_current_funclet();
                             let index =
                                 context.inner.local_funclet_id(extra.name.clone()).clone();
                             if result.contains_key(&index) {
@@ -829,7 +830,7 @@ fn setup_extras(extras: &assembly_ast::Extras, context: &mut Context) {
     let mut built_extras = HashMap::new();
     for extra in extras {
         let index = context.inner.funclet_id(&extra.name);
-        context.inner.set_local_funclet(index);
+        context.inner.set_current_funclet(index);
         built_extras.insert(
             extra.name.clone(),
             ir_scheduling_extra(&extra.data, context),
@@ -867,7 +868,6 @@ fn ir_program(program: &assembly_ast::Program, context: &mut Context) -> ir::Pro
 }
 
 pub fn explicate(mut program: assembly_ast::Program) -> frontend::Definition {
-    dbg!(&program);
     let mut assembly_context = assembly_context::Context::new();
     std::mem::swap(&mut assembly_context, &mut program.context);
     let mut context = Context::new(assembly_context, &program);

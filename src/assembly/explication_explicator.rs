@@ -67,7 +67,6 @@ fn explicate_known_operation(
                         match context.get_allocation(&operation) {
                             None => return None, // failed to explicated on this pass
                             Some(alloc_loc) => {
-                                dbg!(&alloc_loc);
                                 assert_eq!(
                                     alloc_loc.funclet_id.clone(),
                                     context.inner.current_funclet_name()

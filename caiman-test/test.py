@@ -74,6 +74,7 @@ def process_inputs(
     if not inputs:
         inputs = chain(test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron"))
     for input in inputs:
+        print(input)
         relativized = input.absolute().relative_to(test_dir)
         output =  test_dir / "src" / (input.stem + ".rs")
 

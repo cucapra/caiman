@@ -128,7 +128,7 @@ where
     }
 
     pub fn get_at_index(&self, index: usize) -> Option<&T> {
-        if index >= self.values.len() {
+        if index >= self.indices.len() {
             None
         } else {
             Some(&self.indices[index])
@@ -153,10 +153,6 @@ impl Context {
             command_var_name: None,
             location: None,
         }
-    }
-
-    pub fn reset_location(&mut self) {
-        self.location = None;
     }
 
     pub fn current_funclet_name(&self) -> String {
@@ -202,7 +198,7 @@ impl Context {
                 returns: Table::new(),
             },
         );
-        self.advance_local_funclet();
+        self.advance_current_funclet();
     }
 
     pub fn add_value_function(&mut self, name: String) {
@@ -211,38 +207,45 @@ impl Context {
         self.value_function_table.push(name, ());
     }
 
-    pub fn clear_local_funclet(&mut self) {
+    pub fn clear_current_funclet(&mut self) {
         self.location = None;
     }
 
-    pub fn set_local_funclet(&mut self, index: usize) {
+    pub fn initialize_current_funclet(&mut self) {
+        self.location = Some(ir::RemoteNodeId {
+            funclet_id: 0,
+            node_id: 0
+        });
+    }
+
+    pub fn set_current_funclet(&mut self, index: usize) {
         self.location = Some(ir::RemoteNodeId {
             funclet_id: index,
             node_id: 0,
         });
     }
 
-    pub fn set_local_node(&mut self, funclet: usize, index: usize) {
+    pub fn set_current_node(&mut self, funclet: usize, index: usize) {
         self.location = Some(ir::RemoteNodeId {
             funclet_id: funclet,
             node_id: index,
         });
     }
 
-    pub fn advance_local_funclet(&mut self) {
+    pub fn advance_current_funclet(&mut self) {
         let index = match self.location {
             None => 0,
             Some(v) => v.funclet_id + 1,
         };
-        self.set_local_funclet(index)
+        self.set_current_funclet(index)
     }
 
-    pub fn advance_local_node(&mut self) {
+    pub fn advance_current_node(&mut self) {
         let (funclet, node) = match self.location {
-            None => panic!("Cannot advance empty local node"),
+            None => panic!("Cannot advance empty current node"),
             Some(v) => (v.funclet_id, v.node_id + 1),
         };
-        self.set_local_node(funclet, node)
+        self.set_current_node(funclet, node)
     }
 
     pub fn add_node(&mut self, name: String) {
@@ -259,7 +262,7 @@ impl Context {
             }
         }
         if advance {
-            self.advance_local_node();
+            self.advance_current_node();
         }
     }
 
