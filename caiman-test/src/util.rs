@@ -29,6 +29,7 @@ impl Instance {
         };
         let device_future = adapter.request_device(&device_desc, None);
         let (device, queue) = futures::executor::block_on(device_future).unwrap();
+        device.start_capture();
         Self { device, queue }
     }
     pub fn device(&mut self) -> &'_ mut wgpu::Device {

@@ -1,0 +1,21 @@
+#version 450
+
+layout(set = 0, binding = 0) 
+readonly buffer Input_0 {
+    float field_0;
+} input_0;
+
+layout(set = 0, binding = 1)
+readonly buffer Input_1 {
+    float field_0;
+} input_1;
+
+layout(set = 0, binding = 2)
+writeonly buffer Output_0 {
+    float field_0;
+} output_0;
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1)
+void main() {
+    output_0.field_0 = input_0.field_0 + input_1.field_0;
+}

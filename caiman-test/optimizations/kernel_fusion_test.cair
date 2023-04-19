@@ -1,0 +1,116 @@
+version 0.0.1
+
+types [
+    f32,
+    slot $f32_local {
+        type : f32,
+        stage : ready,
+        place : local,
+    },
+    buffer $buffer_gpu {
+        place : gpu,
+        static_layout_opt : {
+            alignment_bits : 0,
+            byte_size : 2048
+        },
+    },
+    event $local_event {
+        place : local
+    },
+    space_buffer $space {}
+]
+
+value @fusion(%a: f32, %b: f32, %c: f32, %d:f32) -> [%ab_cd_out : f32] {
+    %ab_t = call @fmul(%a, %b);
+    %ab = extract %ab_t 0;
+    %cd_t = call @fmul(%c, %d);
+    %cd = extract %cd_t 0;
+    %ab_cd_t = call @fadd(%ab, %cd);
+    %ab_cd = extract %ab_cd_t 0;
+    return %ab_cd;
+}
+
+schedule @fusion_sched(
+    %a_local : $f32_local, 
+    %b_local : $f32_local, 
+    %c_local : $f32_local, 
+    %d_local : $f32_local,
+    %buf1 : $buffer_gpu, 
+    %buf2 : $buffer_gpu
+) -> [%ab_cd_local_out: $f32_local] {
+    %a_gpu = alloc-gpu-f32 %buf1 @fusion.%a;
+    %_ = encode-copy-gpu %a_local %a_gpu;
+    %b_gpu = alloc-gpu-f32 %buf1 @fusion.%b;
+    %_ = encode-copy-gpu %b_local %b_gpu;
+    %c_gpu = alloc-gpu-f32 %buf1 @fusion.%c;
+    %_ = encode-copy-gpu %c_local %c_gpu;
+    %d_gpu = alloc-gpu-f32 %buf1 @fusion.%d;
+    %_ = encode-copy-gpu %d_local %d_gpu;
+
+    %ab_gpu = alloc-gpu-f32 %buf2 @fusion.%ab;
+    %cd_gpu = alloc-gpu-f32 %buf2 @fusion.%cd;
+    %ab_cd_gpu = alloc-gpu-f32 %buf1 @fusion.%ab_cd;
+
+    %_ = encode-do-gpu @fusion.%ab_t(%a_gpu, %b_gpu) -> %ab_gpu;
+    %_ = encode-do-gpu @fusion.%cd_t(%c_gpu, %d_gpu) -> %cd_gpu;
+    %_ = encode-do-gpu @fusion.%ab_cd_t(%ab_gpu, %cd_gpu) -> %ab_cd_gpu;
+
+    %_ = submit-gpu @fusion_time.%submit_to_gpu;
+    %fence = encode-fence-gpu @fusion_time.%sync_local_on_gpu;
+    %_ = sync-fence-local %fence @fusion_time.%sync_local_on_gpu;
+
+    %ab_cd_local = alloc-temporary-local-f32 @fusion.%ab_cd;
+    %_ = encode-copy-local %ab_cd_gpu %ab_cd_local;
+
+    return %ab_cd_local;
+}
+
+timeline @fusion_time(%initial : $local_event) -> [%final : $local_event] {
+    %submit_to_gpu = submission-local->gpu %initial;
+    %sync_local_on_gpu = sync-local->gpu %submit_to_gpu %submit_to_gpu;
+    return %sync_local_on_gpu;
+}
+
+spatial @fusion_spatial(%s: $space) -> $space {
+    return %s;
+}
+
+external_gpu @fadd(%a : f32, %b : f32) -> [%c: f32]: "fadd.comp"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    resource {group : 0, binding : 2, output : %c}
+}
+
+external_gpu @fmul(%a : f32, %b : f32) -> [%c: f32]: "fmul.comp"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    resource {group : 0, binding : 2, output : %c}
+}
+
+extras {
+    @fusion_sched {
+        value : @fusion,
+        input_slots : {
+            %a_local : slot_info(value_tag input @fusion.%a),
+            %b_local : slot_info(value_tag input @fusion.%b),
+            %c_local : slot_info(value_tag input @fusion.%c),
+            %d_local : slot_info(value_tag input @fusion.%d),
+        },
+        output_slots : {
+            %ab_cd_local_out : slot_info(value_tag output @fusion.%ab_cd_out)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {
+            %buf1 : buffer_info(spatial_tag input @fusion_spatial.%s),
+            %buf2 : buffer_info(spatial_tag input @fusion_spatial.%s)
+        },
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @fusion_time.%initial,
+        out_timeline_tag : timeline_tag output @fusion_time.%final,
+    },
+}
+
+pipeline "fusion" = @fusion_sched;
