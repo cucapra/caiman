@@ -117,13 +117,13 @@ impl Context {
         indices.ffi_type_index += 1;
     }
 
-    pub fn add_local_type(&mut self, name : assembly_ast::TypeId) {
+    pub fn add_local_type(&mut self, name : String) {
         let indices = match &mut self.indices {
             Indices::TypeIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
         let index = indices.local_type_index;
-        self.local_type_map.insert(name.0, index);
+        self.local_type_map.insert(name.clone(), index);
         indices.local_type_index += 1;
     }
 
@@ -245,10 +245,10 @@ impl Context {
         }
     }
 
-    pub fn loc_type_id(&mut self, typ : assembly_ast::Type) -> &usize {
+    pub fn loc_type_id(&mut self, typ : assembly_ast::TypeId) -> &usize {
         match typ {
-            assembly_ast::Type::FFI(ft) => self.ffi_type_id(&ft),
-            assembly_ast::Type::Local(s) => self.local_type_id(s)
+            assembly_ast::TypeId::FFI(ft) => self.ffi_type_id(&ft),
+            assembly_ast::TypeId::Local(s) => self.local_type_id(s)
         }
     }
 
