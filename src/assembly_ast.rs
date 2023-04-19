@@ -4,7 +4,52 @@ use crate::ir;
 use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Serialize, Deserialize};
 
-// Parser "AST"
+// Assembly AST
+
+#[macro_export]
+macro_rules! def_assembly_id_type {
+	( $type : ident ) => {
+		#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+		pub struct $type(pub String); // temporarily exposed internals
+
+		impl std::fmt::Display for $type
+		{
+			fn fmt(& self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+			{
+				write!(f, "{}", self.0)
+			}
+		}
+
+		impl serde::Serialize for $type
+		{
+			fn serialize<S>(& self, serializer : S) -> Result<S::Ok, S::Error>
+				where S : serde::Serializer
+			{
+				serializer.serialize_str(&self.0)
+			}
+		}
+
+		impl<'de> serde::Deserialize<'de> for $type
+		{
+			fn deserialize<D>(deserializer : D) -> Result<Self, D::Error>
+				where D : serde::Deserializer<'de>
+			{
+				use serde::*;
+				String::deserialize::<D>(deserializer).map(|x| Self(x))
+			}
+		}
+	}
+}
+
+def_assembly_id_type!(ExternalFunctionId);
+def_assembly_id_type!(ExternalCpuFunctionId);
+def_assembly_id_type!(ExternalGpuFunctionId);
+def_assembly_id_type!(FuncletId);
+def_assembly_id_type!(NodeId);
+def_assembly_id_type!(OperationId);
+def_assembly_id_type!(TypeId);
+def_assembly_id_type!(ValueFunctionId);
+def_assembly_id_type!(StorageTypeId);
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct FFIStructField
@@ -53,15 +98,15 @@ pub enum Type {
 	Local(String)
 }
 
-pub type ExternalFunctionId = String;
-pub type ExternalCpuFunctionId = String;
-pub type ExternalGpuFunctionId = String;
-pub type FuncletId = String;
-pub type NodeId = String;
-pub type OperationId = NodeId;
-pub type TypeId = Type;
-pub type ValueFunctionId = String;
-pub type StorageTypeId = Type;
+// pub type ExternalFunctionId = String;
+// pub type ExternalCpuFunctionId = String;
+// pub type ExternalGpuFunctionId = String;
+// pub type FuncletId = String;
+// pub type NodeId = String;
+// pub type OperationId = NodeId;
+// pub type TypeId = Type;
+// pub type ValueFunctionId = String;
+// pub type StorageTypeId = Type;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
@@ -77,8 +122,8 @@ macro_rules! lookup_abstract_type_parser {
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
 	(ExternalFunction) => { ExternalFunctionId };
-	(ExternalCpuFunction) => { ExternalCpuFunctionId };
-	(ExternalGpuFunction) => { ExternalGpuFunctionId };
+	// (ExternalCpuFunction) => { ExternalCpuFunctionId };
+	// (ExternalGpuFunction) => { ExternalGpuFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
 	(RemoteOperation) => { RemoteNodeId };
