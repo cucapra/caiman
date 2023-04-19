@@ -117,71 +117,71 @@ impl Context {
         indices.ffi_type_index += 1;
     }
 
-    pub fn add_local_type(&mut self, name : String) {
+    pub fn add_local_type(&mut self, name : assembly_ast::TypeId) {
         let indices = match &mut self.indices {
             Indices::TypeIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
         let index = indices.local_type_index;
-        self.local_type_map.insert(name, index);
+        self.local_type_map.insert(name.0, index);
         indices.local_type_index += 1;
     }
 
-    pub fn add_cpu_funclet(&mut self, name : String) {
+    pub fn add_cpu_funclet(&mut self, name : assembly_ast::FuncletId) {
         // stupid borrow check, can't easily make a helper
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        if self.funclet_map.contains_key(name.as_str()) {
+        if self.funclet_map.contains_key(name.0.as_str()) {
             panic!(format!("Duplicate funclet name {} ", name));
         };
         // let indices = self.setup_add(name.clone());
         let index = indices.cpu_index;
         // cause of this tbc
-        self.funclet_map.insert(name.clone(), FuncletLocation::CpuFun(index));
+        self.funclet_map.insert(name.0.clone(), FuncletLocation::CpuFun(index));
         indices.cpu_index += 1;
     }
 
-    pub fn add_gpu_funclet(&mut self, name : String) {
+    pub fn add_gpu_funclet(&mut self, name : assembly_ast::FuncletId) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        if self.funclet_map.contains_key(name.as_str()) {
+        if self.funclet_map.contains_key(name.0.as_str()) {
             panic!(format!("Duplicate funclet name {} ", name));
         };
         let index = indices.gpu_index;
-        self.funclet_map.insert(name.clone(), FuncletLocation::GpuFun(index));
+        self.funclet_map.insert(name.0.clone(), FuncletLocation::GpuFun(index));
         indices.gpu_index += 1;
     }
 
-    pub fn add_local_funclet(&mut self, name : String) {
+    pub fn add_local_funclet(&mut self, name : assembly_ast::FuncletId) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        if self.funclet_map.contains_key(name.as_str()) {
+        if self.funclet_map.contains_key(name.0.as_str()) {
             panic!(format!("Duplicate funclet name {} ", name));
         };
         let index = indices.local_index.funclet_id;
-        self.funclet_map.insert(name.clone(), FuncletLocation::Local(index));
+        self.funclet_map.insert(name.0.clone(), FuncletLocation::Local(index));
         indices.local_index.node_id = 0;
         indices.return_index = 0;
         indices.local_index.funclet_id += 1;
-        self.update_local_funclet(name);
+        self.update_local_funclet(name.0.clone());
     }
 
-    pub fn add_value_function(&mut self, name : String) {
+    pub fn add_value_function(&mut self, name : assembly_ast::FuncletId) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        if self.funclet_map.contains_key(name.as_str()) {
+        if self.funclet_map.contains_key(name.0.as_str()) {
             panic!(format!("Duplicate funclet name {} ", name));
         };
         let index = indices.value_function_index;
-        self.funclet_map.insert(name.clone(), FuncletLocation::ValueFun(index));
+        self.funclet_map.insert(name.0.clone(), FuncletLocation::ValueFun(index));
         indices.value_function_index += 1;
     }
 
@@ -195,12 +195,12 @@ impl Context {
 
     pub fn funclet_name(&self) -> String { self.local_funclet_name.as_ref().unwrap().clone() }
 
-    pub fn add_node(&mut self, name : String) {
+    pub fn add_node(&mut self, name : assembly_ast::NodeId) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        if name == "_" { // ignore throwaway except to update index
+        if name.0 == "_" { // ignore throwaway except to update index
             indices.local_index.node_id += 1;
             return
         }
@@ -209,16 +209,16 @@ impl Context {
         let map = self.remote_map
             .entry(funclet.clone())
             .or_insert(HashMap::new());
-        map.insert(name, index);
+        map.insert(name.0, index);
         indices.local_index.node_id += 1;
     }
 
-    pub fn add_return_node(&mut self, name : String) {
+    pub fn add_return_node(&mut self, name : assembly_ast::NodeId) {
         let indices = match &mut self.indices {
             Indices::FuncletIndices(t) => t,
             _ => panic!(format!("Invalid access attempt {:?}", name))
         };
-        if name == "_" { // ignore throwaway except to update index
+        if name.0 == "_" { // ignore throwaway except to update index
             indices.return_index += 1;
             return
         }
@@ -227,7 +227,7 @@ impl Context {
         let map = self.remote_map
             .entry(funclet.clone())
             .or_insert(HashMap::new());
-        map.insert(name, index);
+        map.insert(name.0, index);
         indices.return_index += 1;
     }
 

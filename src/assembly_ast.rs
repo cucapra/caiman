@@ -41,15 +41,17 @@ macro_rules! def_assembly_id_type {
 	}
 }
 
-def_assembly_id_type!(ExternalFunctionId);
 def_assembly_id_type!(ExternalCpuFunctionId);
 def_assembly_id_type!(ExternalGpuFunctionId);
 def_assembly_id_type!(FuncletId);
+pub type ExternalFunctionId = FuncletId;
 def_assembly_id_type!(NodeId);
-def_assembly_id_type!(OperationId);
-def_assembly_id_type!(TypeId);
+pub type OperationId = NodeId;
 def_assembly_id_type!(ValueFunctionId);
-def_assembly_id_type!(StorageTypeId);
+
+def_assembly_id_type!(LocalTypeId);
+
+pub type StorageTypeId = TypeId;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct FFIStructField
@@ -93,7 +95,7 @@ pub enum FFIType
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
-pub enum Type {
+pub enum TypeId {
 	FFI(FFIType),
 	Local(String)
 }
@@ -135,9 +137,9 @@ macro_rules! lookup_abstract_type_parser {
 macro_rules! map_parser_refs {
 	// When mapping referenced nodes, we only care about mapping the Operation types,
 	// since those are the actual references.
-	($map:ident, $arg:ident : Operation) => {$map((*$arg).clone().to_string())};
+	($map:ident, $arg:ident : Operation) => {$map($arg.clone())};
 	($map:ident, $arg:ident : [Operation]) => {
-		$arg.iter().map(|op| $map((*op).clone().to_string())).collect()
+		$arg.iter().map(|op| $map(op.clone())).collect()
 	};
 	($_map:ident, $arg:ident : $_arg_type:tt) => {$arg.clone()};
 }
@@ -197,7 +199,7 @@ pub struct BufferInfo {
 #[derive(Debug, Clone)]
 pub enum TailEdge {
 	Return{ return_values : Vec<NodeId> },
-	Yield { pipeline_yield_point_id : ir::PipelineYieldPointId,
+	Yield { pipeline_yield_point : ExternalFunctionId,
 		yielded_nodes : Vec<NodeId>,
 		next_funclet : FuncletId,
 		continuation_join : NodeId,
@@ -258,10 +260,10 @@ pub enum Value {
 	None,
 	ID(String),
     FunctionLoc(RemoteNodeId),
-    VarName(String),
-    FnName(String),
+    VarName(NodeId),
+    FnName(FuncletId),
 	Num(usize),
-    Type(Type),
+    Type(TypeId),
     Place(ir::Place),
     Stage(ir::ResourceQueueStage),
     Tag(Tag),
@@ -281,9 +283,9 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
-	pub ret : Vec<(Option<String>, Type)>,
-	pub name : String,
-	pub args : Vec<(Option<String>, Type)>,
+	pub ret : Vec<(Option<NodeId>, TypeId)>,
+	pub name : FuncletId,
+	pub args : Vec<(Option<NodeId>, TypeId)>,
 }
 
 #[derive(Debug)]
@@ -302,7 +304,7 @@ pub enum TypeKind {
 #[derive(Debug)]
 pub struct LocalType {
 	pub type_kind : TypeKind,
-	pub name : String,
+	pub name : TypeId,
 	pub data : UncheckedDict
 }
 
@@ -322,7 +324,7 @@ pub struct Var {
 #[derive(Debug)]
 pub struct ExternalCpuFunction
 {
-	pub name : String,
+	pub name : FuncletId,
 	pub input_types : Vec<FFIType>,
 	pub output_types : Vec<FFIType>,
 }
@@ -330,9 +332,9 @@ pub struct ExternalCpuFunction
 #[derive(Debug)]
 pub struct ExternalGpuFunction
 {
-	pub name : String,
-	pub input_args : Vec<(FFIType, String)>,
-	pub output_types : Vec<(FFIType, String)>,
+	pub name : FuncletId,
+	pub input_args : Vec<(FFIType, NodeId)>,
+	pub output_types : Vec<(FFIType, NodeId)>,
 	// Contains pipeline and single render pass state
 	pub shader_module : String,
 	pub entry_point : String,
@@ -348,7 +350,7 @@ pub struct Version {
 
 #[derive(Debug)]
 pub struct ValueFunction {
-	pub name : String,
+	pub name : FuncletId,
 	pub input_types : Vec<TypeId>,
 	pub output_types : Vec<TypeId>,
 	pub allowed_funclets : Vec<FuncletId>
@@ -366,7 +368,7 @@ pub type FuncletDefs = Vec<FuncletDef>;
 
 #[derive(Debug)]
 pub struct Extra {
-	pub name : String,
+	pub name : FuncletId,
 	pub data : UncheckedDict
 }
 
@@ -375,7 +377,7 @@ pub type Extras = Vec<Extra>;
 #[derive(Debug)]
 pub struct Pipeline {
 	pub name : String,
-	pub funclet : String
+	pub funclet : FuncletId
 }
 
 pub type Pipelines = Vec<Pipeline>;
