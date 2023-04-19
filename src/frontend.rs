@@ -42,7 +42,7 @@ impl std::fmt::Display for CompileError
 
 fn read_definition(input_string : &str, compile_mode : CompileMode) -> Result<Definition, CompileError> {
 	match compile_mode {
-		CompileMode::Assembly => panic!("Temporarily broken"), //crate::assembly::parser::parse(input_string),
+		CompileMode::Assembly => crate::assembly::parser::parse(input_string),
 		CompileMode::RON => match ron::from_str(& input_string) {
 			Err(why) => Err(CompileError{ message: format!("Parse error: {}", why) }),
 			Ok(v) => Ok(v)

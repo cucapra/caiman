@@ -375,7 +375,7 @@ fn ir_external_cpu(external : &assembly_ast::ExternalCpuFunction, context : &mut
         output_types.push(ffi::TypeId(*context.ffi_type_id(name)))
     }
 
-    ffi::ExternalFunction::CpuEffectfulOperation(ffi::CpuEffectfulOperation {
+    ffi::ExternalFunction::CpuPureOperation(ffi::CpuPureOperation {
         name: external.name.0.clone(),
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
