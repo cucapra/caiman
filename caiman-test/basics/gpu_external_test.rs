@@ -40,7 +40,10 @@ fn main() -> Result<(), String> {
     let _result = instance.start(&mut join_stack, 0, input_alloc, output_alloc);
     wgpu_instance.device().poll(wgpu::Maintain::Wait);
     let buffer_slice = output_buffer.slice(0..);
-    let _future = buffer_slice.map_async(wgpu::MapMode::Read);
+    // TODO: ...how does this not block indefinitely? The docs say that the call will only complete
+    // once the callback returns, and the callback will only be executed once poll() or submit()
+    // is called elsewhere in the program.
+    let _future = buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
     wgpu_instance.device().poll(wgpu::Maintain::Wait);
     let slice = unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
     let final_value = i32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);

@@ -45,7 +45,7 @@ fn looping_pipeline() -> Result<(), String> {
     //futures::executor::block_on(queue.on_submitted_work_done());
     //device.poll(wgpu::Maintain::Poll);
     let buffer_slice = buffer.slice(0..);
-    let _future = buffer_slice.map_async(wgpu::MapMode::Read);
+    let _future = buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
     //futures::executor::block_on(future);
     wgpu_instance.device().poll(wgpu::Maintain::Wait);
     let slice = unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
