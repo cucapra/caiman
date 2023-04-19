@@ -1,0 +1,473 @@
+version 0.0.1
+types [
+    f32,
+    slot $local_f32 {
+        type: f32,
+        stage: ready,
+        place : local,
+    },
+    slot $gpu_f32 {
+        type: f32,
+        stage: ready,
+        place : gpu,
+    },
+    slot $gpu_f32_encoded {
+        type: f32,
+        stage: encoded,
+        place : gpu,
+    },
+    slot $gpu_f32_empty {
+        type: f32,
+        stage: bound,
+        place : gpu,
+    },
+    buffer $gpu_buffer {
+        place : gpu,
+        static_layout_opt : {
+            alignment_bits : 0,
+            byte_size : 2048
+        },
+    },
+    event $local_event {
+        place : local
+    },
+    space_buffer $buffer_space {}
+]
+
+value @saxpy_basic(%a : f32, %x : f32, %y : f32) -> [%axy: f32] {
+    %ax_t = call @fmul_gpu(%a, %x);
+    %ax = extract %ax_t 0;
+    %axy_t = call @fadd_gpu(%ax, %y);
+    %axy = extract %axy_t 0;
+    return %axy;
+}
+
+schedule @saxpy_basic_sched(
+    %a_local : $local_f32, 
+    %x_local : $local_f32, 
+    %y_local : $local_f32,
+    %buf1 : $gpu_buffer,
+    %buf2 : $gpu_buffer
+) -> [%axy_local : $local_f32] {
+    /* 
+     * You may be wondering... what's the deal with buf1 and buf2? Why not just one "temp" buffer?
+     * The answer: WGPU. Suppose we only used one buffer. When fmul_gpu is called, the input buffer
+     * containing a and the input buffer containing x would both be readonly slices of "temp". The
+     * output buffer would be a writeonly slice of "temp". Conceptually, this is fine, since
+     * a, x, and the output are all disjoint slices of a buffer. But WGPU's runtime verification
+     * sees that the underlying buffer is being bound as readonly (a, x) and writeonly (output)
+     * at the same time and panics. "Ping-pong"ing between two buffers solves this issue, but it's
+     * an unfortunate workaround and hopefully we can avoid this in the future.
+     */
+    %a_gpu = alloc-gpu-f32 %buf1 @saxpy_basic.%a;
+    %_ = encode-copy-gpu %a_local %a_gpu;
+    %x_gpu = alloc-gpu-f32 %buf1 @saxpy_basic.%x;
+    %_ = encode-copy-gpu %x_local %x_gpu;
+
+    %ax_gpu = alloc-gpu-f32 %buf2 @saxpy_basic.%ax;
+    %_ = encode-do-gpu @saxpy_basic.%ax_t(%a_gpu, %x_gpu) -> %ax_gpu;
+
+    %y_gpu = alloc-gpu-f32 %buf2 @saxpy_basic.%y;
+    %_ = encode-copy-gpu %y_local %y_gpu;
+
+    %axy_gpu = alloc-gpu-f32 %buf1 @saxpy_basic.%axy;
+    %_ = encode-do-gpu @saxpy_basic.%axy_t(%ax_gpu, %y_gpu) -> %axy_gpu;
+
+    %_ = submit-gpu @saxpy_basic_time.%gpu_work_submit;
+    %gpu_fence = encode-fence-gpu @saxpy_basic_time.%gpu_work_sync;
+    %_ = sync-fence-local %gpu_fence @saxpy_basic_time.%gpu_work_sync;
+
+    // TODO: This is UB but there's no proper way to do this right now
+    // since CPU allocation doesn't work properly
+    %axy_local = alloc-temporary-local-f32 @saxpy_basic.%axy;
+    %_ = encode-copy-local %axy_gpu %axy_local;
+
+    return %axy_local;
+} 
+
+timeline @saxpy_basic_time(%initial: $local_event) -> [%final: $local_event] {
+    %gpu_work_submit = submission-local->gpu %initial;
+    %gpu_work_sync = sync-local->gpu %gpu_work_submit %gpu_work_submit;
+    // in general, what's the deal with updating the here and there state?
+    // when is it useful to only update one?
+    // RESOLVED: It should only have one argument, having two is a historical artifact
+    return %gpu_work_sync;
+}
+
+spatial @saxpy_spatial(%bs: $buffer_space) -> $buffer_space {
+    return %bs;
+}
+
+external_cpu @fmul_cpu(f32, f32) -> f32;
+external_gpu @fmul_gpu(%a : f32, %b : f32) -> [%c : f32] : "saxpy/fmul.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    resource {group : 0, binding : 2, output : %c}
+}
+value @fmul_cpu_val(%a: f32, %b: f32) -> f32 {
+    %ab_t = call @fmul_cpu(%a, %b);
+    %ab = extract %ab_t 0;
+    return %ab;
+}
+value @fmul_gpu_val(%a: f32, %b: f32) -> f32 {
+    %ab_t = call @fmul_gpu(%a, %b);
+    %ab = extract %ab_t 0;
+    return %ab;
+}
+schedule @fmul_gpu_sched(
+    %a_gpu: $gpu_f32_encoded, 
+    %b_gpu: $gpu_f32_encoded, 
+    %ab_gpu: $gpu_f32_empty) 
+-> $gpu_f32_encoded {
+    %_ = encode-do-gpu @fmul_gpu_val.%ab_t(%a_gpu, %b_gpu) -> %ab_gpu;
+    return %ab_gpu;
+}
+
+value_function @fmul(f32, f32) -> f32: [@fmul_cpu_val, @fmul_gpu_val];
+
+external_cpu @fadd_cpu(f32, f32) -> f32;
+external_gpu @fadd_gpu(%a : f32, %b : f32) -> [%c: f32]: "saxpy/fadd.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    resource {group : 0, binding : 2, output : %c}
+}
+value @fadd_cpu_val(%a: f32, %b: f32) -> f32 {
+    %ab_t = call @fadd_cpu(%a, %b);
+    %ab = extract %ab_t 0;
+    return %ab;
+}
+value @fadd_gpu_val(%a: f32, %b: f32) -> f32 {
+    %ab_t = call @fadd_gpu(%a, %b);
+    %ab = extract %ab_t 0;
+    return %ab;
+}
+// TODO: This should be on the CPU in the future to make things more complex
+schedule @fadd_gpu_sched(
+    %a_gpu: $gpu_f32_encoded, 
+    %b_gpu: $gpu_f32_encoded, 
+    %ab_gpu: $gpu_f32_empty
+) -> $gpu_f32_encoded {
+    %_ = encode-do-gpu @fadd_gpu_val.%ab_t(%a_gpu, %b_gpu) -> %ab_gpu;
+    return %ab_gpu;
+}
+value_function @fadd(f32, f32) -> f32: [@fadd_cpu_val, @fadd_gpu_val];
+
+value @saxpy_call(%a: f32, %x: f32, %y: f32) -> f32 {
+    %ax_t = call @fmul(%a, %x);
+    %ax = extract %ax_t 0;
+    %axy_t = call @fadd(%ax, %y);
+    %axy = extract %axy_t 0;
+    return %axy;
+}
+
+value_function @saxpy(f32, f32, f32) -> f32: [@saxpy_basic, @saxpy_call];
+
+schedule @saxpy_call_sched(
+    %a_local : $local_f32, 
+    %x_local : $local_f32, 
+    %y_local : $local_f32,
+    %buf1 : $gpu_buffer,
+    %buf2 : $gpu_buffer
+) -> $local_f32 {
+    %a_gpu = alloc-gpu-f32 %buf1 @saxpy_call.%a;
+    %_ = encode-copy-gpu %a_local %a_gpu;
+    %x_gpu = alloc-gpu-f32 %buf1 @saxpy_call.%x;
+    %_ = encode-copy-gpu %x_local %x_gpu;
+    %y_gpu = alloc-gpu-f32 %buf2 @saxpy_call.%y;
+    %_ = encode-copy-gpu %y_local %y_gpu;
+    // Allocate in advance since buffers can't cross continuations
+    %ax_gpu = alloc-gpu-f32 %buf2 @saxpy_call.%ax;
+    %axy_gpu = alloc-gpu-f32 %buf1 @saxpy_call.%axy;
+
+    %default = default-join;
+    %join = inline-join @saxpy_call_sched_2 [%y_gpu, %axy_gpu] %default;
+    schedule-call @saxpy_call.%ax_t @fmul_gpu_sched [%a_gpu, %x_gpu, %ax_gpu] %join;
+}
+schedule @saxpy_call_sched_2(
+    %y_gpu: $gpu_f32_encoded,
+    %axy_gpu: $gpu_f32_empty,
+    %ax_gpu : $gpu_f32_encoded
+) -> $local_f32 {
+    %default = default-join;
+    %join = inline-join @saxpy_call_sched_3 [] %default;
+    schedule-call @saxpy_call.%axy_t @fadd_gpu_sched [%ax_gpu, %y_gpu, %axy_gpu] %join;
+}
+schedule @saxpy_call_sched_3(%axy_gpu : $gpu_f32_encoded) -> $local_f32 {
+    %_ = submit-gpu @saxpy_basic_time.%gpu_work_submit;
+    %gpu_fence = encode-fence-gpu @saxpy_basic_time.%gpu_work_sync;
+    %_ = sync-fence-local %gpu_fence @saxpy_basic_time.%gpu_work_sync;
+
+    // TODO: This is UB but there's no proper way to do this right now
+    // since CPU allocation doesn't work properly
+    %axy_local = alloc-temporary-local-f32 @saxpy_call.%axy;
+    %_ = encode-copy-local %axy_gpu %axy_local;
+
+    return %axy_local;
+}
+extras {
+    @saxpy_basic_sched {
+        value : @saxpy_basic,
+        input_slots : {
+            %a_local : slot_info(value_tag input @saxpy_basic.%a),
+            %x_local : slot_info(value_tag input @saxpy_basic.%x),
+            %y_local : slot_info(value_tag input @saxpy_basic.%y)
+        },
+        output_slots : {
+            // TODO: Fix
+            %a_local : slot_info(value_tag output @saxpy_basic.%a)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {
+            %buf1 : buffer_info(spatial_tag input @saxpy_spatial.%bs),
+            %buf2 : buffer_info(spatial_tag input @saxpy_spatial.%bs)
+        },
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @saxpy_basic_time.%initial,
+        // TODO: Fix
+        out_timeline_tag : timeline_tag output @saxpy_basic_time.%initial,
+    },
+    @fmul_gpu_sched {
+        value : @fmul_gpu_val,
+        input_slots : {
+            %a_gpu : slot_info(value_tag input @fmul_gpu_val.%a, spatial_tag input @saxpy_spatial.%bs),
+            %b_gpu : slot_info(value_tag input @fmul_gpu_val.%b, spatial_tag input @saxpy_spatial.%bs),
+            %ab_gpu : slot_info(value_tag output @fmul_gpu_val.%a, spatial_tag input @saxpy_spatial.%bs)
+        },
+        output_slots : {
+            // TODO: Fix
+            %a_gpu : slot_info(value_tag output @fmul_gpu_val.%a, spatial_tag operation @saxpy_spatial.%bs)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag none,
+        out_timeline_tag : timeline_tag none,
+    },
+    @fadd_gpu_sched {
+        value : @fadd_gpu_val,
+        input_slots : {
+            %a_gpu : slot_info(value_tag input @fadd_gpu_val.%a, spatial_tag input @saxpy_spatial.%bs),
+            %b_gpu : slot_info(value_tag input @fadd_gpu_val.%b, spatial_tag input @saxpy_spatial.%bs),
+            %ab_gpu : slot_info(value_tag operation @fadd_gpu_val.%ab, spatial_tag input @saxpy_spatial.%bs),
+        },
+        output_slots : {
+            // TODO: Fix
+            %a_gpu : slot_info(value_tag output @fadd_gpu_val.%a, spatial_tag operation @saxpy_spatial.%bs)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag none,
+        out_timeline_tag : timeline_tag none,
+    },
+    @saxpy_call_sched {
+        value : @saxpy_call,
+        input_slots : {
+            %a_local : slot_info(value_tag input @saxpy_call.%a),
+            %x_local : slot_info(value_tag input @saxpy_call.%x),
+            %y_local : slot_info(value_tag input @saxpy_call.%y)
+        },
+        output_slots : {
+            // TODO: Fix
+            %a_local : slot_info(value_tag output @saxpy_call.%a)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {
+            %buf1 : buffer_info(spatial_tag input @saxpy_spatial.%bs),
+            %buf2 : buffer_info(spatial_tag input @saxpy_spatial.%bs)
+        },
+        output_buffers : {},
+        in_timeline_tag : timeline_tag none,
+        out_timeline_tag : timeline_tag none,
+    },
+    @saxpy_call_sched_2 {
+        value : @saxpy_call,
+        input_slots : {
+            %y_gpu : slot_info(value_tag operation @saxpy_call.%y, spatial_tag operation @saxpy_spatial.%bs),
+            %axy_gpu : slot_info(spatial_tag operation @saxpy_spatial.%bs),
+            %ax_gpu : slot_info(value_tag operation @saxpy_call.%ax, spatial_tag operation @saxpy_spatial.%bs),
+        },
+        output_slots : {
+            // TODO: Fix
+            %y_gpu : slot_info(value_tag output @saxpy_call.%a)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag none,
+        out_timeline_tag : timeline_tag none,
+    },
+    @saxpy_call_sched_3 {
+        value : @saxpy_call,
+        input_slots : {
+            %axy_gpu : slot_info(value_tag operation @saxpy_call.%axy, spatial_tag operation @saxpy_spatial.%bs)
+        },
+        output_slots : {
+            // TODO: Fix
+            %axy_gpu : slot_info(value_tag output @saxpy_call.%a)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @saxpy_basic_time.%initial,
+        // TODO: Fix
+        out_timeline_tag : timeline_tag output @saxpy_basic_time.%initial,
+    },
+}
+
+pipeline "saxpy" = @saxpy_basic_sched;
+pipeline "saxpy_call" = @saxpy_call_sched;
+
+/*
+// An "extreme"-ly unoptimized version of saxpy that does as much as possible in the value funclet.
+// This mostly exists to test optimizations such as kernel fusion.
+// Without optimizations, this is the worst code you could ever write, probably.
+// NOTE REMOVE: The condition for a scheduling select is a slot, not a join. It's bugged rn though
+value @saxpy_extreme_rec_val(
+    %a : array<f32, 256>, 
+    %x : array<f32, 256>, 
+    %y : array<f32, 256>, 
+    %i : u64, 
+    %working : array<f32, 256>
+) -> array<f32, 256> {
+    %len = constant-unsigned 256u64;
+    // TODO: Is it just me, or is it kind of weird to specify the location (via external) in the
+    // value language in the first place? It kind of seems like a leaky abstraction. Obviously you
+    // will want to implement certain things in one place only, but I feel like saying "hey this
+    // is GPU stuff" belongs in the scheduling language
+    %stop_t = call @cmp_lt(%i, %len);
+    %stop = extract %stop_t 0;
+    
+    %av_t = call @array_get(%a, %i);
+    %av = extract %av_t 0;
+
+    %xv_t = call @array_get(%x, %i);
+    %xv = extract %xv_t 0;
+
+    %axv_t = call @fmul(%av_t, %xv_t);
+    %axv = extract %axv_t 0;
+
+    %yv_t = call @array_get(%y, %i);
+    %yv = extract %yv_t 0;
+
+    %axyv_t = call @fadd(%axv_t, %yv_t);
+    %axyv = extract %axyv_t 0;
+
+    %workingMut_t = call @array_put(%working, %i);
+    %workingMut = extract %workingMut_t 0;
+
+    %one = constant-unsigned 1u64;
+    %i2_t = call @uadd(%i, %one);
+    %i2 = extract %i2_t 0;
+
+    %recursed_t = call @saxpy_extreme_rec(%a, %x, %y, %i2, %workingMut);
+    %recursed = extract %recursed_t 0;
+
+    // In value language infinite recursion is actually fine
+    // You break recursion via scheduling
+    %final_t = select %stop %working %recursed;
+    %final = extract %final 0;
+
+    return %final;
+}
+
+external_cpu @uadd_cpu(u64, u64) -> u64;
+external_gpu @uadd_gpu(%a : u64, %b : u64) -> [%c: u64]: "caiman-test/basics/saxpy/uadd.wgsl"
+{
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    resource {group : 0, binding : 2, output : %c}
+}
+
+value @uadd_cpu_val(%a: u64, %b: u64) -> u64 {
+    %result_t = call @uadd_cpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+value @uadd_gpu_val(%a: u64, %b: u64) -> u64 {
+    %result_t = call @uadd_gpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+external_cpu @cmp_lt_cpu(u64, u64) -> u64;
+external_gpu @cmp_lt_gpu(%a : u64, %b : u64) -> [%c: u64]: "caiman-test/basics/saxpy/cmp_lt.wgsl"
+{
+    // Would be cool to identify optimizations here.
+    // These could *trivially* be combined into a single binding with two fields,
+    // at least by a human programmer, but will that semantically work with Caiman?
+    resource {group : 0, binding : 0, input : %a},
+    resource {group : 0, binding : 1, input : %b},
+    resource {group : 0, binding : 2, output : %c}
+}
+value @cmp_lt_cpu_val(%a: u64, %b: u64) -> u64 {
+    %result_t = call @cmp_lt_cpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+value @cmp_lt_gpu_val(%a: u64, %b: u64) -> u64 {
+    %result_t = call @cmp_lt_gpu(%a, %b);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+external_cpu @array_get_cpu(array<f32,256>, u64) -> f32;
+external_gpu @array_get_gpu(%a : array<f32,256>, %i : u64) -> [%v: f32] : "caiman-test/basics/saxpy/array_get.wgsl" 
+{
+    resource {group : 0, binding : 0, input: %a},
+    resource {group : 0, binding : 1, input: %i},
+    resource {group : 0, binding : 2, output: %v} 
+}
+value @array_get_cpu_val(%a: array<f32,256>, %i: u64) -> f32 {
+    %result_t = call @array_get_cpu(%a, %i);
+    %result = extract %result_t 0;
+    return %result;
+}
+value @array_get_gpu_val(%a: array<f32,256>, %i: u64) -> f32 {
+    %result_t = call @array_get_gpu(%a, %i);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+external_cpu @array_put_cpu(array<f32, 256>, u64, f32) -> array<f32, 256>;
+external_gpu @array_put_gpu(%a : array<f32, 256>, %i : u64, %v : f32) -> [%mutated: array<f32, 256>] : "caiman-test/basics/saxpy/array_put.wgsl" 
+{
+    resource {group : 0, binding : 0, input: %a},
+    resource {group : 0, binding : 1, input: %i},
+    resource {group : 0, binding : 2, input: %v},
+    resource {group : 0, binding : 3, output: %mutated} // TODO: Would be nice to alias this with group 0 binding 0
+}
+value @array_put_cpu_val(%a: array<f32,256>, %i: u64, %v: f32) -> array<f32, 256> {
+    %result_t = call @array_put_cpu(%a, %i, %v);
+    %result = extract %result_t 0;
+    return %result;
+}
+value @array_put_gpu_val(%a: array<f32,256>, %i: u64, %v: f32) -> array<f32, 256> {
+    %result_t = call @array_put_gpu(%a, %i, %v);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+// Surprising: 'Non-local funclet used for value function add_cpu', src\assembly\ast_to_ir.rs:732:18
+// I thought the intended use of value functions was to select between different implementations,
+// and one of the factors was whether they ran on the CPU or the GPU?
+// RESOLVED: This *should* be allowed but it's not implemented yet.
+value_function @uadd(u64, u64) -> u64: [@uadd_cpu_val, @uadd_gpu_val];
+value_function @cmp_lt(u64, u64) -> u64: [@cmp_lt_cpu_val, @cmp_lt_gpu_val];
+value_function @array_get(array<f32, 256>, u64) -> f32: [@array_get_cpu_val, @array_get_gpu_val];
+value_function @array_put(array<f32, 256>, u64, f32) -> array<f32, 256>: [@array_put_cpu_val, @array_put_gpu_val];
+value_function @saxpy_extreme_rec(array<f32, 256>, 
+    array<f32, 256>, 
+    array<f32, 256>, 
+    u64, 
+    array<f32, 256>
+) -> array<f32, 256>: [@saxpy_extreme_rec_val];
+*/
