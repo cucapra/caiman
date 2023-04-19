@@ -65,13 +65,99 @@ schedule @fusion_sched(
     return %ab_cd_local;
 }
 
+// Schedules fusion with only temporary allocations. They should eventually be elided.
+schedule @fusion_elide_sched(
+    %a_local : $f32_local, 
+    %b_local : $f32_local, 
+    %c_local : $f32_local, 
+    %d_local : $f32_local
+) -> [%ab_cd_local_out: $f32_local] {
+    %a_gpu = alloc-temporary-gpu-f32 @fusion.%a;
+    %_ = encode-copy-gpu %a_local %a_gpu;
+    %b_gpu = alloc-temporary-gpu-f32 @fusion.%b;
+    %_ = encode-copy-gpu %b_local %b_gpu;
+    %c_gpu = alloc-temporary-gpu-f32 @fusion.%c;
+    %_ = encode-copy-gpu %c_local %c_gpu;
+    %d_gpu = alloc-temporary-gpu-f32 @fusion.%d;
+    %_ = encode-copy-gpu %d_local %d_gpu;
+
+    // These three allocations should be elided via static analysis
+    %ab_gpu = alloc-temporary-gpu-f32 @fusion.%ab;
+    %cd_gpu = alloc-temporary-gpu-f32 @fusion.%cd;
+    %ab_cd_gpu = alloc-temporary-gpu-f32 @fusion.%ab_cd;
+
+    %_ = encode-do-gpu @fusion.%ab_t(%a_gpu, %b_gpu) -> %ab_gpu;
+    %_ = encode-do-gpu @fusion.%cd_t(%c_gpu, %d_gpu) -> %cd_gpu;
+    %_ = encode-do-gpu @fusion.%ab_cd_t(%ab_gpu, %cd_gpu) -> %ab_cd_gpu;
+
+    %_ = submit-gpu @fusion_time.%submit_to_gpu;
+    %fence = encode-fence-gpu @fusion_time.%sync_local_on_gpu;
+    %_ = sync-fence-local %fence @fusion_time.%sync_local_on_gpu;
+
+    %ab_cd_local = alloc-temporary-local-f32 @fusion.%ab_cd;
+    %_ = encode-copy-local %ab_cd_gpu %ab_cd_local;
+
+    return %ab_cd_local;
+}
+
+// Only partial kernel fusion can be performed here.
+schedule @fusion_partial_sched(
+    %a_local : $f32_local, 
+    %b_local : $f32_local, 
+    %c_local : $f32_local, 
+    %d_local : $f32_local
+) -> [%ab_cd_local_out: $f32_local] {
+    %a_gpu = alloc-temporary-gpu-f32 @fusion.%a;
+    %_ = encode-copy-gpu %a_local %a_gpu;
+    %b_gpu = alloc-temporary-gpu-f32 @fusion.%b;
+    %_ = encode-copy-gpu %b_local %b_gpu;
+    %c_gpu = alloc-temporary-gpu-f32 @fusion.%c;
+    %_ = encode-copy-gpu %c_local %c_gpu;
+    %d_gpu = alloc-temporary-gpu-f32 @fusion.%d;
+    %_ = encode-copy-gpu %d_local %d_gpu;
+
+    // These three allocations *seem* like they could be elided.
+    // Actually, %ab_gpu can't be elided, since it's used in a later kernel dispatch.
+    // Also, you can't fully fuse this since the kernel execution is split across a sync point.
+    %ab_gpu = alloc-temporary-gpu-f32 @fusion.%ab;
+    %cd_gpu = alloc-temporary-gpu-f32 @fusion.%cd;
+    %ab_cd_gpu = alloc-temporary-gpu-f32 @fusion.%ab_cd;
+
+    %_ = encode-do-gpu @fusion.%ab_t(%a_gpu, %b_gpu) -> %ab_gpu;
+    %_ = encode-do-gpu @fusion.%cd_t(%c_gpu, %d_gpu) -> %cd_gpu;
+
+    %_ = submit-gpu @fusion_partial_time.%submit_to_gpu_0;
+    %fence_0 = encode-fence-gpu @fusion_partial_time.%sync_local_on_gpu_0;
+    %_ = sync-fence-local %fence_0 @fusion_partial_time.%sync_local_on_gpu_0;
+
+    %_ = encode-do-gpu @fusion.%ab_cd_t(%ab_gpu, %cd_gpu) -> %ab_cd_gpu;
+
+    %_ = submit-gpu @fusion_partial_time.%submit_to_gpu_1;
+    %fence_1 = encode-fence-gpu @fusion_partial_time.%sync_local_on_gpu_1;
+    %_ = sync-fence-local %fence_1 @fusion_partial_time.%sync_local_on_gpu_1;
+
+    %ab_cd_local = alloc-temporary-local-f32 @fusion.%ab_cd;
+    %_ = encode-copy-local %ab_cd_gpu %ab_cd_local;
+
+    return %ab_cd_local;
+}
+
 timeline @fusion_time(%initial : $local_event) -> [%final : $local_event] {
     %submit_to_gpu = submission-local->gpu %initial;
     %sync_local_on_gpu = sync-local->gpu %submit_to_gpu %submit_to_gpu;
     return %sync_local_on_gpu;
 }
 
-spatial @fusion_spatial(%s: $space) -> $space {
+timeline @fusion_partial_time(%initial : $local_event) -> [%final : $local_event] {
+    %submit_to_gpu_0 = submission-local->gpu %initial;
+    %sync_local_on_gpu_0 = sync-local->gpu %submit_to_gpu_0 %submit_to_gpu_0;
+    %submit_to_gpu_1 = submission-local->gpu %sync_local_on_gpu_0;
+    %sync_local_on_gpu_1 = sync-local->gpu %submit_to_gpu_1 %submit_to_gpu_1;
+    return %sync_local_on_gpu_1;
+}
+
+
+spatial @spatial(%s: $space) -> $space {
     return %s;
 }
 
@@ -104,13 +190,51 @@ extras {
         input_fences : {},
         output_fences : {},
         input_buffers : {
-            %buf1 : buffer_info(spatial_tag input @fusion_spatial.%s),
-            %buf2 : buffer_info(spatial_tag input @fusion_spatial.%s)
+            %buf1 : buffer_info(spatial_tag input @spatial.%s),
+            %buf2 : buffer_info(spatial_tag input @spatial.%s)
         },
         output_buffers : {},
         in_timeline_tag : timeline_tag input @fusion_time.%initial,
         out_timeline_tag : timeline_tag output @fusion_time.%final,
     },
+    @fusion_elide_sched {
+        value : @fusion,
+        input_slots : {
+            %a_local : slot_info(value_tag input @fusion.%a),
+            %b_local : slot_info(value_tag input @fusion.%b),
+            %c_local : slot_info(value_tag input @fusion.%c),
+            %d_local : slot_info(value_tag input @fusion.%d),
+        },
+        output_slots : {
+            %ab_cd_local_out : slot_info(value_tag output @fusion.%ab_cd_out)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @fusion_time.%initial,
+        out_timeline_tag : timeline_tag output @fusion_time.%final,
+    },
+    @fusion_partial_sched {
+        value : @fusion,
+        input_slots : {
+            %a_local : slot_info(value_tag input @fusion.%a),
+            %b_local : slot_info(value_tag input @fusion.%b),
+            %c_local : slot_info(value_tag input @fusion.%c),
+            %d_local : slot_info(value_tag input @fusion.%d),
+        },
+        output_slots : {
+            %ab_cd_local_out : slot_info(value_tag output @fusion.%ab_cd_out)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @fusion_partial_time.%initial,
+        out_timeline_tag : timeline_tag output @fusion_partial_time.%final,
+    },
 }
 
 pipeline "fusion" = @fusion_sched;
+pipeline "fusion_elide" = @fusion_elide_sched;
+pipeline "fusion_partial" = @fusion_partial_sched;
