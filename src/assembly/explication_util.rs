@@ -6,6 +6,10 @@ use crate::assembly_ast::Hole;
 use crate::assembly_context::FuncletLocation;
 use crate::ir::ffi;
 use crate::{assembly_ast, assembly_context, frontend, ir};
+use crate::assembly_ast::{
+    ExternalCpuFunction, ExternalGpuFunction, FuncletId, NodeId, OperationId,
+    StorageTypeId, TypeId, ValueFunctionId,
+};
 use std::any::Any;
 use std::collections::HashMap;
 

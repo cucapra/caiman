@@ -6,13 +6,36 @@ use crate::assembly_ast::Hole;
 use crate::assembly_context::FuncletLocation;
 use crate::ir::ffi;
 use crate::{assembly_ast, assembly_context, frontend, ir};
+use crate::assembly_ast::{
+    ExternalCpuFunction, ExternalGpuFunction, FuncletId, NodeId, OperationId,
+    StorageTypeId, TypeId, ValueFunctionId,
+};
 use std::any::Any;
 use std::collections::HashMap;
+use crate::stable_vec::StableVec;
 
 fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
         Some(v) => v,
         None => todo!(),
+    }
+}
+
+fn find_filled<T>(v: Vec<Hole<T>>) -> StableVec<T> {
+    let mut result = StableVec::new();
+    for (index, hole) in v.into_iter().enumerate() {
+        match hole {
+            Some(value) => { result.add(value); }
+            None => {}
+        }
+    };
+    result
+}
+
+fn find_filled_hole<T>(h: Hole<Box<[Hole<T>]>>) -> StableVec<T> {
+    match h {
+        Some(v) => find_filled(v.into_vec()),
+        None => StableVec::new()
     }
 }
 
@@ -33,21 +56,40 @@ pub fn explicate_allocate_temporary(
     })
 }
 
-fn explicate_known_operation(
-    operation: assembly_ast::RemoteNodeId,
+fn infer_operation(
+    known_inputs: &StableVec<OperationId>,
+    known_outputs: &StableVec<OperationId>,
+    context: &mut Context
+) -> Option<assembly_ast::RemoteNodeId> {
+    None
+}
+
+fn explicate_operation(
+    operation_hole: &Hole<assembly_ast::RemoteNodeId>,
     input_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
-    output_vec: &Box<[Hole<assembly_ast::OperationId>]>,
+    output_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
     context: &mut Context,
 ) -> Option<(
     ir::RemoteNodeId,
     Box<[ir::OperationId]>,
     Box<[ir::OperationId]>,
 )> {
+    let known_inputs = find_filled_hole(input_hole.clone());
+    let known_outputs = find_filled_hole(output_hole.clone());
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
 
+    // First try and infer the operation.  If this can't be done, we give up
+    let operation = match operation_hole {
+        Some(op) => op.clone(),
+        None => match infer_operation(&known_inputs, &known_outputs, context) {
+            Some(op) => op,
+            None => { return None }
+        }
+    };
+
     match input_hole {
-        None => todo!(),
+        None => unreachable!("empty inputs assumed to match with empty operation"),
         Some(input_vec) => for (index, input) in input_vec.iter().enumerate() {
             match input {
                 Some(n) => inputs.push(context.inner.node_id(n.clone())),
@@ -63,6 +105,11 @@ fn explicate_known_operation(
             }
         }
     }
+
+    let output_vec = match output_hole {
+        Some(v) => v.into_vec(),
+        None => vec![None; 5]
+    };
 
     for (index, output) in output_vec.iter().enumerate() {
         match output {
@@ -106,11 +153,7 @@ pub fn explicate_encode_do(
     dbg!(&inputs_hole);
     dbg!(&outputs_hole);
     dbg!(&operation_hole);
-    let mut output_vec = reject_hole(outputs_hole.as_ref());
-    let result = match operation_hole.as_ref() {
-        Some(op) => explicate_known_operation(op.clone(), inputs_hole, output_vec, context),
-        None => todo!(),
-    };
+    let result = explicate_operation(operation_hole, inputs_hole, outputs_hole, context);
     // a bit sloppy, but oh well
     let (operation, inputs, outputs) = match result {
         None => return None,
