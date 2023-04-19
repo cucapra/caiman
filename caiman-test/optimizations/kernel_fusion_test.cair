@@ -116,13 +116,14 @@ schedule @fusion_partial_sched(
     %d_gpu = alloc-temporary-gpu-f32 @fusion.%d;
     %_ = encode-copy-gpu %d_local %d_gpu;
 
-    // These three allocations *seem* like they could be elided.
-    // Actually, %ab_gpu can't be elided, since it's used in a later kernel dispatch.
-    // Also, you can't fully fuse this since the kernel execution is split across a sync point.
+    // These two allocations *seem* like they could be elided.
+    // Actually, they can't be elided, since they're used in a later kernel dispatch.
     %ab_gpu = alloc-temporary-gpu-f32 @fusion.%ab;
     %cd_gpu = alloc-temporary-gpu-f32 @fusion.%cd;
+
     %ab_cd_gpu = alloc-temporary-gpu-f32 @fusion.%ab_cd;
 
+    // You can fuse these two dispatches, but you can't fuse the one after that.
     %_ = encode-do-gpu @fusion.%ab_t(%a_gpu, %b_gpu) -> %ab_gpu;
     %_ = encode-do-gpu @fusion.%cd_t(%c_gpu, %d_gpu) -> %cd_gpu;
 
