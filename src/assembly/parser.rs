@@ -812,8 +812,7 @@ fn read_ir_type_decl(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly
         Rule::ir_type_decl_key_sep,
         1,
         Box::new(read_ir_type_decl_key),
-    );
-    let type_kind = expect(event_rule, pairs, context);
+    );    let type_kind = expect(event_rule, pairs, context);
     let name_rule = rule_str_unwrap(Rule::type_name, 1, Box::new(read_string));
     let name_str = expect(name_rule, pairs, context);
     context.add_local_type(name_str.clone());

@@ -231,28 +231,28 @@ impl Context {
         indices.return_index += 1;
     }
 
-    pub fn ffi_type_id(&mut self, name : &assembly_ast::FFIType) -> &usize {
+    pub fn ffi_type_id(&self, name : &assembly_ast::FFIType) -> &usize {
         match self.ffi_type_map.get(name) {
             Some(i) => i,
             None => panic!(format!("Un-indexed FFI type {:?}", name))
         }
     }
 
-    pub fn local_type_id(&mut self, name : String) -> &usize {
-        match self.local_type_map.get(name.as_str()) {
+    pub fn local_type_id(&self, name : &str) -> &usize {
+        match self.local_type_map.get(name) {
             Some(t) => t,
             None => panic!(format!("Unknown local type {:?}", name))
         }
     }
 
-    pub fn loc_type_id(&mut self, typ : assembly_ast::TypeId) -> &usize {
+    pub fn loc_type_id(&self, typ : &assembly_ast::TypeId) -> &usize {
         match typ {
-            assembly_ast::TypeId::FFI(ft) => self.ffi_type_id(&ft),
+            assembly_ast::TypeId::FFI(ft) => self.ffi_type_id(ft),
             assembly_ast::TypeId::Local(s) => self.local_type_id(s)
         }
     }
 
-    pub fn funclet_id_unwrap(&mut self, name : String) -> &usize {
+    pub fn funclet_id_unwrap(&self, name : &str) -> &usize {
         match self.funclet_id(name) {
             FuncletLocation::Local(n) => n,
             FuncletLocation::GpuFun(n) => n,
@@ -261,41 +261,41 @@ impl Context {
         }
     }
 
-    pub fn funclet_id(&mut self, name : String) -> &FuncletLocation {
-        match self.funclet_map.get(name.as_str()) {
+    pub fn funclet_id(&self, name : &str) -> &FuncletLocation {
+        match self.funclet_map.get(name) {
             Some(f) => f,
             None => panic!(format!("Unknown funclet name {:?}", name))
         }
     }
 
-    pub fn local_funclet_id(&mut self, name : String) -> &usize {
+    pub fn local_funclet_id(&self, name : &str) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::Local(u) => u,
             _ => panic!(format!("Not a local funclet {}", name))
         }
     }
-    pub fn cpu_funclet_id(&mut self, name : String) -> &usize {
+    pub fn cpu_funclet_id(&self, name : &str) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::CpuFun(u) => u,
             _ => panic!(format!("Not a cpu funclet {}", name))
         }
     }
-    pub fn gpu_funclet_id(&mut self, name : String) -> &usize {
+    pub fn gpu_funclet_id(&self, name : &str) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::GpuFun(u) => u,
             _ => panic!(format!("Not a gpu funclet {}", name))
         }
     }
-    pub fn value_function_id(&mut self, name : String) -> &usize {
+    pub fn value_function_id(&self, name : &str) -> &usize {
         match self.funclet_id(name.clone()) {
             FuncletLocation::ValueFun(u) => u,
             _ => panic!(format!("Not a value function {}", name))
         }
     }
 
-    pub fn remote_node_id(&mut self, funclet : String, var : String) -> &usize {
-        match self.remote_map.get(funclet.as_str()) {
-            Some(f) => match f.get(var.as_str()) {
+    pub fn remote_node_id(&self, funclet : &str, var : &str) -> &usize {
+        match self.remote_map.get(funclet) {
+            Some(f) => match f.get(var) {
                 Some(v) => v,
                 None => panic!(format!("Unknown var name {} in funclet {}", var, funclet))
             }
@@ -303,15 +303,15 @@ impl Context {
         }
     }
 
-    pub fn node_id(&mut self, var : String) -> &usize {
-        match self.remote_map.get(self.funclet_name().as_str()).unwrap().get(var.as_str()) {
+    pub fn node_id(&self, var : &str) -> &usize {
+        match self.remote_map.get(self.funclet_name().as_str()).unwrap().get(var) {
             Some(v) => v,
             None => panic!(format!("Unknown variable name {:?} in funclet {:?}",
                                    var, self.funclet_name()))
         }
     }
 
-    pub fn remote_id(&mut self, funclet : String, var : String) -> ir::RemoteNodeId {
+    pub fn remote_id(&self, funclet : &str, var : &str) -> ir::RemoteNodeId {
         ir::RemoteNodeId {
             funclet_id: *self.local_funclet_id(funclet.clone()),
             node_id: *self.remote_node_id(funclet, var)
