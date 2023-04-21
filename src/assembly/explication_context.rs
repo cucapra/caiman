@@ -1,5 +1,9 @@
 use crate::assembly_ast;
 use crate::assembly_ast::Hole;
+use crate::assembly_ast::{
+    ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, NodeId, OperationId, StorageTypeId,
+    TypeId, ValueFunctionId,
+};
 use crate::assembly_context;
 use crate::assembly_context::Table;
 use crate::ir;
@@ -161,5 +165,41 @@ impl<'a> Context<'a> {
                 location.funclet_id.clone()
             ),
         }
+    }
+
+    pub fn get_cpu_funclet(
+        &self,
+        name: &ExternalCpuFunctionId,
+    ) -> &assembly_ast::ExternalCpuFunction {
+        for funclet in self.program.funclets {
+            match funclet {
+                assembly_ast::FuncletDef::ExternalCPU(f) => return &f,
+                _ => {}
+            }
+        }
+        panic!("CPU funclet {} not found", name);
+    }
+
+    pub fn get_gpu_funclet(
+        &self,
+        name: &ExternalGpuFunctionId,
+    ) -> &assembly_ast::ExternalGpuFunction {
+        for funclet in self.program.funclets {
+            match funclet {
+                assembly_ast::FuncletDef::ExternalGPU(f) => return &f,
+                _ => {}
+            }
+        }
+        panic!("GPU funclet {} not found", name);
+    }
+
+    pub fn get_value_function(&self, name: &ValueFunctionId) -> &assembly_ast::ValueFunction {
+        for funclet in self.program.funclets {
+            match funclet {
+                assembly_ast::FuncletDef::ValueFunction(f) => return &f,
+                _ => {}
+            }
+        }
+        panic!("Value function {} not found", name);
     }
 }
