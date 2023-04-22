@@ -203,9 +203,6 @@ pub fn explicate_encode_do(
     context: &mut Context,
 ) -> Option<ir::Node> {
     let place = todo_hole(place_hole.clone());
-    dbg!(&inputs_hole);
-    dbg!(&outputs_hole);
-    dbg!(&operation_hole);
     let result = explicate_operation(operation_hole, inputs_hole, outputs_hole, context);
     // a bit sloppy, but oh well
     let (operation, inputs, outputs) = match result {

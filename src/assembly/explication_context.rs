@@ -12,9 +12,12 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 #[derive(Debug)]
-pub struct FuncletData {
+pub struct ValueFuncletData {
     // information about allocated value elements
+    // explication locations within the scheduling world
     explicated_allocations: HashMap<String, Option<assembly_ast::RemoteNodeId>>,
+    // map from call index to output name for each call
+    call_outputs: HashMap<NodeId, HashMap<usize, NodeId>>
 }
 
 #[derive(Debug)]
@@ -26,17 +29,18 @@ struct MetaData {
 pub struct Context<'a> {
     program: &'a assembly_ast::Program, // reference to the whole program for lookups
     pub inner: assembly_context::Context, // owned for mutability
-    explicated_funclets: HashMap<String, FuncletData>, // table of explicated funclets
+    value_function_explication_data: HashMap<String, ValueFuncletData>, // table of explicated funclets
     meta_data: MetaData,
     pub schedule_extras: HashMap<String, ir::SchedulingFuncletExtra>,
     // map from schedule to value
     value_map: HashMap<assembly_ast::FuncletId, assembly_ast::FuncletId>,
 }
 
-impl FuncletData {
-    pub fn new() -> FuncletData {
-        FuncletData {
+impl ValueFuncletData {
+    pub fn new() -> ValueFuncletData {
+        ValueFuncletData {
             explicated_allocations: HashMap::new(),
+            call_outputs: HashMap::new(),
         }
     }
     pub fn allocate(&mut self, name: String, allocation: Option<assembly_ast::RemoteNodeId>) {
@@ -57,7 +61,7 @@ impl<'a> Context<'a> {
         Context {
             program,
             inner: assembly_context,
-            explicated_funclets: HashMap::new(),
+            value_function_explication_data: HashMap::new(),
             meta_data: MetaData { variable_index: 0 },
             schedule_extras: HashMap::new(),
             value_map: HashMap::new(),
@@ -77,36 +81,21 @@ impl<'a> Context<'a> {
         self.meta_data.variable_index = 0;
         let mut keys = Vec::new();
         // todo: fix
-        for key in self.explicated_funclets.keys() {
+        for key in self.value_function_explication_data.keys() {
             keys.push(key.clone());
         }
         for key in keys {
-            self.explicated_funclets
-                .insert(key.clone(), FuncletData::new());
+            self.value_function_explication_data
+                .insert(key.clone(), ValueFuncletData::new());
         }
     }
-
-    // pub fn explicate_allocation(&mut self, remote: &assembly_ast::RemoteNodeId, valid: bool) {
-    //     let allocation = if valid {
-    //         Some(assembly_ast::RemoteNodeId {
-    //             funclet_id: self.inner.current_funclet_name(),
-    //             node_id: self.allocation_name(),
-    //         })
-    //     } else {
-    //         None
-    //     };
-    //     self.explicated_funclets
-    //         .get_mut(remote.funclet_id.as_str())
-    //         .unwrap()
-    //         .allocate(remote.node_id.clone(), allocation);
-    // }
 
     pub fn add_allocation(&mut self, remote: &assembly_ast::RemoteNodeId) {
         let allocation = assembly_ast::RemoteNodeId {
             funclet_id: self.inner.current_funclet_name(),
             node_id: self.inner.current_node_name(),
         };
-        self.explicated_funclets
+        self.value_function_explication_data
             .get_mut(remote.funclet_id.as_str())
             .unwrap()
             .allocate(remote.node_id.clone(), Some(allocation));
@@ -116,26 +105,28 @@ impl<'a> Context<'a> {
         &self,
         remote: &assembly_ast::RemoteNodeId,
     ) -> Option<&assembly_ast::RemoteNodeId> {
-        self.explicated_funclets
+        self.value_function_explication_data
             .get(&remote.funclet_id)
             .and_then(|f| f.explicated_allocations.get(&remote.node_id))
             .and_then(|hole| hole.as_ref())
     }
 
-    pub fn get_funclet_data(&self, funclet: String) -> Option<&FuncletData> {
-        self.explicated_funclets.get(funclet.as_str())
+    pub fn get_funclet_data(&self, funclet: String) -> Option<&ValueFuncletData> {
+        self.value_function_explication_data.get(funclet.as_str())
     }
 
-    pub fn get_current_funclet(&self) -> Option<&FuncletData> {
+    pub fn get_current_funclet(&self) -> Option<&ValueFuncletData> {
         self.get_funclet_data(self.inner.current_funclet_name())
     }
 
     pub fn explicate_funclet(&mut self, name: String) {
-        self.explicated_funclets.insert(name, FuncletData::new()); // dupes are whatever here
+        self.value_function_explication_data
+            .insert(name, ValueFuncletData::new()); // dupes are whatever here
     }
 
     pub fn funclet_explicated(&mut self, name: String) -> bool {
-        self.explicated_funclets.contains_key(name.as_str())
+        self.value_function_explication_data
+            .contains_key(name.as_str())
     }
 
     pub fn get_current_extra(&self) -> &ir::SchedulingFuncletExtra {
@@ -171,9 +162,9 @@ impl<'a> Context<'a> {
         &self,
         name: &ExternalCpuFunctionId,
     ) -> &assembly_ast::ExternalCpuFunction {
-        for funclet in self.program.funclets {
+        for funclet in &self.program.funclets {
             match funclet {
-                assembly_ast::FuncletDef::ExternalCPU(f) => return &f,
+                assembly_ast::FuncletDef::ExternalCPU(f) => return f,
                 _ => {}
             }
         }
@@ -184,9 +175,9 @@ impl<'a> Context<'a> {
         &self,
         name: &ExternalGpuFunctionId,
     ) -> &assembly_ast::ExternalGpuFunction {
-        for funclet in self.program.funclets {
+        for funclet in &self.program.funclets {
             match funclet {
-                assembly_ast::FuncletDef::ExternalGPU(f) => return &f,
+                assembly_ast::FuncletDef::ExternalGPU(f) => return f,
                 _ => {}
             }
         }
@@ -194,9 +185,9 @@ impl<'a> Context<'a> {
     }
 
     pub fn get_value_function(&self, name: &ValueFunctionId) -> &assembly_ast::ValueFunction {
-        for funclet in self.program.funclets {
+        for funclet in &self.program.funclets {
             match funclet {
-                assembly_ast::FuncletDef::ValueFunction(f) => return &f,
+                assembly_ast::FuncletDef::ValueFunction(f) => return f,
                 _ => {}
             }
         }
