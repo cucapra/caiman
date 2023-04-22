@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::scheduling_language::ast as schedule_ast;
 //use crate::spec;
 use crate::value_language::ast as value_ast;
@@ -5,8 +7,10 @@ use crate::value_language::ast as value_ast;
 //use caiman::arena::Arena;
 use caiman::assembly_ast as asm;
 use caiman::assembly_context as asm_ctx;
+use caiman::ir;
 //use std::collections::HashMap;
 
+mod context;
 mod label;
 
 mod dual_compatibility;
@@ -32,438 +36,102 @@ pub fn go(
     schedule_ast: &schedule_ast::ParsedProgram,
 ) -> ToIRResult<asm::Program>
 {
+    let mut context = context::Context::new();
+
     let vil_program = to_vil::value_ast_to_vil(value_ast);
     let matched_schedule_stmts =
         dual_compatibility::match_vil_to_scheduling(&vil_program, schedule_ast)?;
 
-    let value_funclets = to_value_funclets::vil_to_value_funclets(&vil_program);
-    let schedule_explicit_funclets =
-        to_se_funclets::schedule_ast_to_schedule_explicit_funclets(&matched_schedule_stmts);
+    let value_funclets = to_value_funclets::vil_to_value_funclets(&vil_program, &mut context);
+    let schedule_explicit_funclets = to_se_funclets::schedule_ast_to_schedule_explicit_funclets(
+        &matched_schedule_stmts,
+        &mut context,
+    );
 
-    let funclets = 
-        value_funclets
-            .into_iter()
-            .map(ir_funclets::make_asm_funclet)
-            .chain(schedule_explicit_funclets.into_iter().map(ir_funclets::make_asm_funclet))
-            .collect();
-    // TODO what do i do with this haha
-    let version = asm::Version { major: 0, minor: 0, detailed: 0 };
+    let mut funclets: Vec<asm::FuncletDef> = value_funclets
+        .into_iter()
+        .map(ir_funclets::make_asm_funclet)
+        .chain(schedule_explicit_funclets.into_iter().map(ir_funclets::make_asm_funclet))
+        .collect();
+    funclets.push(dummy_timeline_funclet(&mut context));
+
+    let main_pipeline = asm::Pipeline {
+        name: "main".to_string(),
+        funclet: "my_great_scheduleexplicitfunclet".to_string(),
+    };
+
+    let (context, types) = context.into_context_and_types();
+
+    let version = asm::Version { major: 0, minor: 0, detailed: 1 };
     Ok(asm::Program {
-        context: asm_ctx::Context::new(),
+        context,
         version,
         funclets,
-        types: vec![],
-        pipelines: vec![],
-        extras: vec![],
+        types,
+        pipelines: vec![main_pipeline],
+        extras: dummy_extras(),
     })
 }
 
-/*
-type Index<T> = HashMap<T, usize>;
-
-#[derive(Eq, PartialEq, Hash)]
-enum Type
+fn dummy_timeline_funclet(context: &mut context::Context) -> asm::FuncletDef
 {
-    Native(typing::Type),
-    Slot(typing::Type, ir::ResourceQueueStage, ir::Place),
+    let funclet_name = "my_great_timelinefunclet".to_string();
+    context.begin_local_funclet(funclet_name.clone());
+
+    let arg_type_str = context.add_event(ir::Place::Local);
+    let arg_str = "e".to_string();
+    context.add_arg(arg_str.clone());
+    let arg_type_local = asm::Type::Local(arg_type_str);
+
+    let tail_edge =
+        Some(asm::TailEdge::Return { return_values: Some(vec![Some(arg_str.clone())]) });
+
+    // For some reason, the trivial.cair data structure has this funclets as its current
+    // funclet!! Weird. But the below line is always here if it turns out that's wrong
+    //context.end_local_funclet();
+    asm::FuncletDef::Local(asm::Funclet {
+        kind: ir::FuncletKind::Timeline,
+        header: asm::FuncletHeader {
+            args: vec![(Some(arg_str), arg_type_local.clone())],
+            ret: vec![(None, arg_type_local)],
+            name: funclet_name,
+        },
+        commands: Vec::new(),
+        tail_edge,
+    })
 }
 
-pub fn go(
-    value_ast: &value_ast::ParsedProgram,
-    schedule_ast: &schedule_ast::ParsedProgram,
-) -> ToIRResult<ir::Program>
+fn dummy_extras() -> asm::Extras
 {
-    let ffi_types_index = ffi_types_index(value_ast);
-    let context = generate_context(value_ast)?;
-    let types_index = types_index(&ffi_types_index, &context, schedule_ast)?;
-    let value_funclets = value_funclets(&types_index, value_ast)?;
-    let schedule_explicit_funclets =
-        schedule_explicit_funclets(&types_index, &context, &value_funclets, schedule_ast)?;
-    // TODO: timeline funclets,
-
-    // Finally, constructing the program out of other stuff we just made
-    let pipelines: Vec<ir::Pipeline> = schedule_explicit_funclets
-        .iter()
-        .enumerate()
-        .map(|(i, _se_funclet)| ir::Pipeline {
-            name: String::from("Pipeline") + &i.to_string(),
-            entry_funclet: value_funclets.len() + i,
-            yield_points: Default::default(),
-        })
-        .collect();
-    let types = map_index_to_arena(types_index, &|t| to_ir_type(&ffi_types_index, t));
-    let native_interface = ir::ffi::NativeInterface {
-        types: map_index_to_arena(ffi_types_index, &to_ffi_type),
-        ..Default::default()
-    };
-    let funclets = vec_to_arena(
-        value_funclets
-            .into_iter()
-            .map(make_ir_funclet)
-            .chain(schedule_explicit_funclets.into_iter().map(make_ir_funclet))
-            .collect(),
+    let mut data: asm::UncheckedDict = HashMap::new();
+    let mut data_insert = |s: &str, v| data.insert(asm::Value::ID(s.to_string()), v);
+    data_insert(
+        "value",
+        asm::DictValue::Raw(asm::Value::FnName("my_great_valuefunclet".to_string())),
     );
-    Ok(ir::Program { native_interface, types, funclets, pipelines, ..Default::default() })
+    let empty_dict = asm::DictValue::Dict(HashMap::new());
+    data_insert("input_slots", empty_dict.clone());
+    let mut output_slots_dict: asm::UncheckedDict = HashMap::new();
+    output_slots_dict.insert(
+        asm::Value::VarName("out".to_string()),
+        asm::DictValue::Raw(asm::Value::SlotInfo(asm::SlotInfo {
+            value_tag: asm::ValueTag::Core(asm::TagCore::None),
+            spatial_tag: asm::SpatialTag::Core(asm::TagCore::None),
+            timeline_tag: asm::TimelineTag::Core(asm::TagCore::None),
+        })),
+    );
+    data_insert("output_slots", asm::DictValue::Dict(output_slots_dict));
+    data_insert("input_fences", empty_dict.clone());
+    data_insert("output_fences", empty_dict.clone());
+    data_insert("input_buffers", empty_dict.clone());
+    data_insert("output_buffers", empty_dict.clone());
+    let e_tag = asm::DictValue::Raw(asm::Value::Tag(asm::Tag::TimelineTag(
+        asm::TimelineTag::Core(asm::TagCore::Input(asm::RemoteNodeId {
+            funclet_id: "my_great_timelinefunclet".to_string(),
+            node_id: "e".to_string(),
+        })),
+    )));
+    data_insert("in_timeline_tag", e_tag.clone());
+    data_insert("out_timeline_tag", e_tag);
+    vec![asm::Extra { name: "my_great_scheduleexplicitfunclet".to_string(), data }]
 }
-
-fn get_native_type_index(
-    types_index: &Index<Type>,
-    native_type: &typing::Type,
-    info: error::Info,
-) -> usize
-{
-    match types_index.get(&Type::Native(*native_type))
-    {
-        None => panic!(
-            "Type index improperly constructed: Type {:?} not found at {:?}",
-            *native_type, info
-        ),
-        Some(i) => *i,
-    }
-}
-
-enum ValueExprOutput
-{
-    Single(usize, error::Info),
-    Multi(Box<[usize]>, error::Info),
-}
-
-impl ValueExprOutput
-{
-    fn single(self) -> ToIRResult<usize>
-    {
-        match self
-        {
-            ValueExprOutput::Single(u, _) => Ok(u),
-            ValueExprOutput::Multi(v, info) =>
-            {
-                Err(make_error(ToIRError::IncompatibleArgumentNum(1, v.len()), info))
-            },
-        }
-    }
-
-    fn multi(self) -> Box<[usize]>
-    {
-        match self
-        {
-            ValueExprOutput::Multi(v, _) => v,
-            ValueExprOutput::Single(u, _) => Box::new([u]),
-        }
-    }
-}
-
-struct ValueFuncletContext<'a>
-{
-    pub nodes_vec: Vec<ir::Node>,
-    pub involved_variables: Index<String>,
-    pub types_index: &'a Index<Type>,
-}
-*/
-/*
-fn add_value_expr(
-    exp: &value_ast::ParsedExpr,
-    t: &typing::Type,
-    ctx: &mut ValueFuncletContext,
-) -> ToIRResult<ValueExprOutput>
-{
-    use value_ast::ExprKind::*;
-    let (info, kind) = exp;
-    match kind
-    {
-        Var(x) =>
-        {
-            let x_index = ctx.involved_variables.get(x).unwrap_or_else(|| {
-                panic!("Unbound var {}, type checker is either bugged or disabled.", x)
-            });
-            Ok(ValueExprOutput::Single(*x_index, *info))
-        },
-        Num(s) =>
-        {
-            let value: i64 = s.parse().unwrap();
-            let type_id = get_native_type_index(ctx.types_index, t, *info);
-            ctx.nodes_vec.push(ir::Node::ConstantInteger { value, type_id });
-            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
-        },
-        Bool(b) =>
-        {
-            let value: i64 = if *b { 1 } else { 0 };
-            let type_id = get_native_type_index(ctx.types_index, t, *info);
-            ctx.nodes_vec.push(ir::Node::ConstantInteger { value, type_id });
-            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
-        },
-        If(e1, e2, e3) =>
-        {
-            let condition = add_value_expr(e1, &typing::Type::Bool, ctx)?.single()?;
-            let true_case = add_value_expr(e2, t, ctx)?.single()?;
-            let false_case = add_value_expr(e3, t, ctx)?.single()?;
-            ctx.nodes_vec.push(ir::Node::Select { condition, true_case, false_case });
-            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
-        },
-        IRNode(spec_kind, es) =>
-        {
-            let mut node_inputs: Vec<spec::input::SpecNodeInput> = Vec::new();
-            for e in es.iter()
-            {
-                let value_e = add_value_expr(e, t, ctx)?;
-                node_inputs.push(match value_e
-                {
-                    ValueExprOutput::Single(u, _) => spec::input::SpecNodeInput::Usize(u),
-                    ValueExprOutput::Multi(us, _) => spec::input::SpecNodeInput::UsizeSlice(us),
-                });
-            }
-            ctx.nodes_vec.push(spec_kind.to_ir(node_inputs));
-            // XXX multi output nodes!!!
-            Ok(ValueExprOutput::Single(ctx.nodes_vec.len() - 1, *info))
-        },
-        n => panic!("TODO {:?}", n),
-    }
-}
-
-fn value_funclets(
-    types_index: &Index<Type>,
-    value_ast: &value_ast::ParsedProgram,
-) -> ToIRResult<Vec<ValueFunclet>>
-{
-    // Just gonna make one big value funclet... for now??
-    let mut ctx = ValueFuncletContext {
-        nodes_vec: vec![ir::Node::Phi { index: 0 }],
-        involved_variables: HashMap::new(),
-        types_index: &types_index,
-    };
-    for stmt in value_ast.iter()
-    {
-        let (info_s, kind_s) = stmt;
-        use value_ast::StmtKind::*;
-        match kind_s
-        {
-            Let((var, t), exp) =>
-            {
-                let expr_index = add_value_expr(exp, t, &mut ctx)?.single()?;
-                if ctx.involved_variables.insert(var.clone(), expr_index).is_some()
-                {
-                    panic!("Duplicate {:?} in involved variables, {:?}", var.clone(), info_s)
-                }
-            },
-            _ => panic!("TODO"),
-        }
-    }
-    // TODO: not this
-    let return_values = Box::new([ctx.nodes_vec.len() - 1]);
-    Ok(vec![ValueFunclet {
-        involved_variables: ctx.involved_variables,
-        inner_funclet: InnerFunclet {
-            input_types: Box::new([0]),  // TODO
-            output_types: Box::new([0]), // TODO
-            nodes: ctx.nodes_vec.into_boxed_slice(),
-            tail_edge: ir::TailEdge::Return { return_values },
-        },
-    }])
-}
-
-fn schedule_explicit_funclets(
-    types_index: &Index<Type>,
-    context: &HashMap<String, typing::Type>,
-    value_funclets: &Vec<ValueFunclet>,
-    schedule_ast: &schedule_ast::ParsedProgram,
-) -> ToIRResult<Vec<ScheduleExplicitFunclet>>
-{
-    let mut nodes = vec![];
-    for (info, kind) in schedule_ast.iter()
-    {
-        use schedule_ast::StmtKind::*;
-        match kind
-        {
-            Var(x) =>
-            {
-                // XXX Perhaps iterating through VFs is too slow?
-                let (funclet_id, x_vf) = value_funclets
-                    .iter()
-                    .enumerate()
-                    .find(|(_, vf)| vf.involved_variables.contains_key(x))
-                    .ok_or(make_error(ToIRError::UnboundScheduleVar(x.to_string()), *info))?;
-                let node_id = x_vf.involved_variables[x];
-                let x_type = context[x];
-                let place = ir::Place::Local;
-                let storage_type = ir::ffi::TypeId(
-                    *types_index
-                        .get(&Type::Slot(x_type, ir::ResourceQueueStage::Ready, place))
-                        .ok_or_else(|| panic!("Necessary storage type not created in index"))
-                        .unwrap(),
-                );
-                let operation = ir::RemoteNodeId { funclet_id, node_id };
-                nodes.push(ir::Node::AllocTemporary { place, storage_type, operation });
-                let inputs_v: Vec<usize> = vec![];
-                let outputs_v: Vec<usize> = vec![node_id];
-                nodes.push(ir::Node::EncodeDo {
-                    place,
-                    operation,
-                    inputs: inputs_v.into_boxed_slice(),
-                    outputs: outputs_v.into_boxed_slice(),
-                });
-            },
-        }
-    }
-    Ok(vec![ScheduleExplicitFunclet {
-        inner_funclet: InnerFunclet {
-            input_types: Box::new([0]),  // TODO
-            output_types: Box::new([0]), // TODO
-            nodes: nodes.into_boxed_slice(),
-            tail_edge: ir::TailEdge::Return { return_values: Box::new([0]) },
-        },
-    }])
-}
-*/
-/*
-fn ffi_types_index(value_ast: &value_ast::ParsedProgram) -> Index<typing::Type>
-{
-    let mut map: HashMap<typing::Type, usize> = HashMap::new();
-    let mut index = 0;
-    for stmt in value_ast.iter()
-    {
-        for t in types_of_value_stmt(stmt).iter()
-        {
-            if !map.contains_key(t)
-            {
-                let check = map.insert(*t, index);
-                if check.is_some()
-                {
-                    panic!("MAP CREATION ERROR {:?}", stmt.0);
-                }
-                index += 1;
-            }
-        }
-    }
-    map
-}
-
-fn types_of_value_stmt(stmt: &value_ast::ParsedStmt) -> Vec<typing::Type>
-{
-    let (_info, kind) = stmt;
-    use value_ast::StmtKind::*;
-    match kind
-    {
-        Let((_var, t), _exp) => vec![*t],
-        _ => panic!("TODO"),
-    }
-}
-
-fn generate_context(
-    value_ast: &value_ast::ParsedProgram,
-) -> ToIRResult<HashMap<String, typing::Type>>
-{
-    let mut ctx: HashMap<String, typing::Type> = HashMap::new();
-    for (info, kind) in value_ast.iter()
-    {
-        use value_ast::StmtKind::*;
-        match kind
-        {
-            Let((var, t), _exp) =>
-            {
-                if ctx.insert(var.to_string(), *t).is_some()
-                {
-                    panic!("Variable name collision bypassed value language checker {:?}", info);
-                }
-            },
-            _ => (),
-        }
-    }
-    Ok(ctx)
-}
-
-fn types_index(
-    ffi_types_index: &Index<typing::Type>,
-    context: &HashMap<String, typing::Type>,
-    schedule_ast: &schedule_ast::ParsedProgram,
-) -> ToIRResult<Index<Type>>
-{
-    let mut index = 0;
-    let mut types_index: Index<Type> = HashMap::new();
-    for (t, _) in ffi_types_index.iter()
-    {
-        if types_index.insert(Type::Native(*t), index).is_some()
-        {
-            panic!("Unexpected index type collision from FFI types");
-        }
-        index += 1;
-    }
-    for (info, kind) in schedule_ast.iter()
-    {
-        use schedule_ast::StmtKind::*;
-        match kind
-        {
-            Var(x) =>
-            {
-                let x_type = context
-                    .get(x)
-                    .ok_or(make_error(ToIRError::UnboundScheduleVar(x.to_string()), *info))?;
-                let inserted_type =
-                    Type::Slot(*x_type, ir::ResourceQueueStage::Ready, ir::Place::Local);
-                if !types_index.contains_key(&inserted_type)
-                {
-                    types_index.insert(inserted_type, index);
-                    index += 1;
-                }
-            },
-        }
-    }
-    Ok(types_index)
-}
-
-fn make_ir_funclet<T: Funclet>(f: T) -> ir::Funclet
-{
-    let kind = f.kind();
-    let inner = f.inner();
-    ir::Funclet {
-        kind,
-        input_types: inner.input_types,
-        output_types: inner.output_types,
-        nodes: inner.nodes,
-        tail_edge: inner.tail_edge,
-    }
-}
-
-fn to_ffi_type(t: typing::Type) -> ir::ffi::Type
-{
-    use typing::Type::*;
-    match t
-    {
-        I32 => ir::ffi::Type::I32,
-        Bool => ir::ffi::Type::I8,
-    }
-}
-
-fn to_ir_type(ffi_types_index: &Index<typing::Type>, t: Type) -> ir::Type
-{
-    match t
-    {
-        Type::Native(t) =>
-        {
-            ir::Type::NativeValue { storage_type: ir::ffi::TypeId(ffi_types_index[&t]) }
-        },
-        Type::Slot(t, queue_stage, queue_place) => ir::Type::Slot {
-            storage_type: ir::ffi::TypeId(ffi_types_index[&t]),
-            queue_stage,
-            queue_place,
-        },
-    }
-}
-
-fn vec_to_arena<T>(ts: Vec<T>) -> Arena<T>
-{
-    let mut map: HashMap<usize, T> = HashMap::new();
-    for (i, elt) in ts.into_iter().enumerate()
-    {
-        map.insert(i, elt);
-    }
-    Arena::from_hash_map(map)
-}
-
-fn map_index_to_arena<T, U>(index: Index<T>, f: &dyn Fn(T) -> U) -> Arena<U>
-{
-    let mut map: HashMap<usize, U> = HashMap::new();
-    for (t, i) in index.into_iter()
-    {
-        map.insert(i, f(t));
-    }
-    Arena::from_hash_map(map)
-}*/

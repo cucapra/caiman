@@ -24,6 +24,10 @@ struct Arguments
     typeelab: bool,
     #[clap(long)]
     vil: bool,
+
+    // By default it just prints, for now
+    #[clap(long)]
+    run: bool,
 }
 
 fn value_language_stage(args: &Arguments) -> value_language::compiler::Stage
@@ -84,7 +88,8 @@ fn main()
             let value_ast = value_language::compiler::parse_and_elaborate(&args.filename)?;
             Ok(to_ir::to_vil::value_ast_to_vil(&value_ast))
         };
-        match run() {
+        match run()
+        {
             Ok(p) => println!("{:?}", p),
             Err(e) => println!("Error: {}", e),
         }
@@ -108,8 +113,31 @@ fn main()
         };
         match run()
         {
-            Ok(ir) => println!("{:#?}", ir),
             Err(e) => println!("{}", e),
+            Ok(program) =>
+            {
+                if !args.run
+                {
+                    println!("{:#?}", program);
+                }
+                else
+                {
+                    explicate_and_execute(program);
+                }
+            },
         }
     }
+}
+
+fn explicate_and_execute(program: asm::Program)
+{
+    let version = &program.version;
+    assert_eq!((version.major, version.minor, version.detailed), (0, 0, 1));
+
+    let definition = caiman::assembly::explication::explicate(program);
+    caiman::ir::validation::validate_program(&definition.program);
+    let mut codegen = caiman::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
+    codegen.set_print_codgen_debug_info(true);
+    let output_string = codegen.generate();
+    println!("{}", output_string);
 }
