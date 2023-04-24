@@ -4,6 +4,7 @@ use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use crate::stable_vec::StableVec;
 
 // Explication and frontend AST
 
@@ -267,15 +268,20 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
     pub ret: Vec<(Option<String>, Type)>,
-    pub name: String,
     pub args: Vec<(Option<String>, Type)>,
+}
+
+#[derive(Debug)]
+pub struct NamedNode {
+    pub name: Option<String>, // allow for unnamed nodes
+    pub node: Node
 }
 
 #[derive(Debug)]
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
-    pub commands: Vec<Hole<Node>>,
+    pub commands: StableVec<NamedNode>,
     pub tail_edge: Hole<TailEdge>,
 }
 
@@ -302,7 +308,7 @@ pub enum TypeDecl {
     Local(LocalType),
 }
 
-pub type Types = Vec<TypeDecl>;
+pub type Types = StableVec<TypeDecl>;
 
 #[derive(Debug)]
 pub struct Var {
@@ -311,14 +317,12 @@ pub struct Var {
 
 #[derive(Debug)]
 pub struct ExternalCpuFunction {
-    pub name: String,
     pub input_types: Vec<FFIType>,
     pub output_types: Vec<FFIType>,
 }
 
 #[derive(Debug)]
 pub struct ExternalGpuFunction {
-    pub name: String,
     pub input_args: Vec<(FFIType, String)>,
     pub output_types: Vec<(FFIType, String)>,
     // Contains pipeline and single render pass state
@@ -350,23 +354,12 @@ pub enum FuncletDef {
     ValueFunction(ValueFunction),
 }
 
-pub type FuncletDefs = Vec<FuncletDef>;
+pub type FuncletDefs = StableVec<FuncletDef>;
 
-#[derive(Debug)]
-pub struct Extra {
-    pub name: String,
-    pub data: UncheckedDict,
-}
+// todo: rework after extra changes
+pub type Extras = HashMap<FuncletId, UncheckedDict>;
 
-pub type Extras = Vec<Extra>;
-
-#[derive(Debug)]
-pub struct Pipeline {
-    pub name: String,
-    pub funclet: String,
-}
-
-pub type Pipelines = Vec<Pipeline>;
+pub type Pipelines = HashMap<String, FuncletId>;
 
 #[derive(Debug)]
 pub struct Program {

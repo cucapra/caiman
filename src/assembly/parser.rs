@@ -11,11 +11,10 @@ use crate::assembly::explication;
 use crate::assembly_ast;
 use crate::assembly_ast::Hole;
 use crate::assembly_ast::UncheckedDict;
-use crate::assembly_context::Context;
 use crate::ir::ffi;
 use crate::{frontend, ir};
 
-// Fanciness
+// Meta stuff
 
 // Why this doesn't work in general is a bit of a mystery to me tbh, but here we are
 // fn compose<'a, T, U, V, W, G, F>(f: F, g: G) -> Box<dyn Fn(T, U) -> W + 'a>
@@ -25,6 +24,11 @@ use crate::{frontend, ir};
 // {
 //     Box::new(move |p, c| g(f(p, c)))
 // }
+
+#[derive(Debug)]
+pub struct Context {
+    // I'll leave this type as a placeholder in case we want to use it for the parser later
+}
 
 fn compose_pair<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> U + 'a>
 where
