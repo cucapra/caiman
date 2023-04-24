@@ -16,4 +16,3 @@ mod shadergen;
 mod type_system;
 #[macro_use]
 mod assembly_ast;
-mod assembly_context;

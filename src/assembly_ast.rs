@@ -1,14 +1,14 @@
-use crate::assembly_context;
 use crate::ir;
 use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use crate::stable_vec::StableVec;
 
 // Explication and frontend AST
 
 pub type Hole<T> = Option<T>;
+
+// FFI stuff, rebuilt for a few reasons (mostly strings)
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct FFIStructField {
@@ -54,6 +54,14 @@ pub enum FFIType {
     GpuBufferAllocator,
     CpuBufferAllocator,
     CpuBufferRef(Box<FFIType>),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExternalGpuFunctionResourceBinding {
+    pub group: String,
+    pub binding: String,
+    pub input: Option<String>,
+    pub output: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -267,39 +275,56 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
-    pub ret: Vec<(Option<String>, Type)>,
-    pub args: Vec<(Option<String>, Type)>,
+    pub ret: Vec<(Option<NodeId>, Type)>,
+    pub args: Vec<(Option<NodeId>, Type)>,
 }
 
 #[derive(Debug)]
 pub struct NamedNode {
-    pub name: Option<String>, // allow for unnamed nodes
-    pub node: Node
+    pub name: NodeId,
+    pub node: Node,
 }
 
 #[derive(Debug)]
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
-    pub commands: StableVec<NamedNode>,
+    pub commands: Vec<NamedNode>,
     pub tail_edge: Hole<TailEdge>,
 }
 
 #[derive(Debug)]
-pub enum TypeKind {
-    NativeValue,
-    Slot,
-    Fence,
-    Buffer,
-    Event,
+pub enum LocalTypeInfo {
+    NativeValue {
+        storage_type: StorageTypeId,
+    },
+
+    // Scheduling
+    Slot {
+        storage_type: TypeId,
+        queue_stage: ir::ResourceQueueStage,
+        queue_place: ir::Place,
+    },
+    SchedulingJoin {},
+    Fence {
+        queue_place: ir::Place,
+    },
+    Buffer {
+        storage_place: ir::Place,
+        static_layout_opt: Option<ir::StaticBufferLayout>,
+    },
+
+    // Timeline
+    Event {},
+
+    // Space
     BufferSpace,
 }
 
 #[derive(Debug)]
 pub struct LocalType {
-    pub type_kind: TypeKind,
-    pub name: String,
-    pub data: UncheckedDict,
+    pub name : String,
+    pub data : LocalTypeInfo
 }
 
 #[derive(Debug)]
@@ -308,7 +333,7 @@ pub enum TypeDecl {
     Local(LocalType),
 }
 
-pub type Types = StableVec<TypeDecl>;
+pub type Types = Vec<TypeDecl>;
 
 #[derive(Debug)]
 pub struct Var {
@@ -328,7 +353,7 @@ pub struct ExternalGpuFunction {
     // Contains pipeline and single render pass state
     pub shader_module: String,
     pub entry_point: String,
-    pub resource_bindings: Vec<UncheckedDict>, // do the work later
+    pub resource_bindings: Vec<ExternalGpuFunctionResourceBinding>,
 }
 
 #[derive(Debug)]
@@ -354,7 +379,7 @@ pub enum FuncletDef {
     ValueFunction(ValueFunction),
 }
 
-pub type FuncletDefs = StableVec<FuncletDef>;
+pub type FuncletDefs = Vec<FuncletDef>;
 
 // todo: rework after extra changes
 pub type Extras = HashMap<FuncletId, UncheckedDict>;
@@ -368,5 +393,4 @@ pub struct Program {
     pub funclets: FuncletDefs,
     pub extras: Extras,
     pub pipelines: Pipelines,
-    pub context: assembly_context::Context,
 }

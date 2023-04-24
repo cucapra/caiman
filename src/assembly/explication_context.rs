@@ -11,8 +11,8 @@ use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct Table<T>
-    where
-        T: Eq + Hash + Debug + Clone,
+where
+    T: Eq + Hash + Debug + Clone,
 {
     values: HashSet<T>,
     indices: Vec<T>,
@@ -75,29 +75,38 @@ struct MetaData {
 }
 
 #[derive(Debug)]
-pub struct Context<'a> {
-    program: &'a assembly_ast::Program, // reference to the whole program for lookups
-    pub schedule_extras: HashMap<String, ir::SchedulingFuncletExtra>,
+pub struct FuncletIndices {
+    external_funclet_table: Table<String>,
+    local_funclet_table: Table<String>,
+    value_function_table: Table<String>,
+    funclet_kind_map: HashMap<String, FuncletLocation>,
+}
 
-    value_function_explication_data: HashMap<String, ValueFuncletData>, // table of explicated funclets
+#[derive(Debug)]
+pub struct Context<'a> {
+    pub schedule_extras: HashMap<String, ir::SchedulingFuncletExtra>,
+    pub ffi_type_table: Table<assembly_ast::FFIType>,
+    pub local_type_table: Table<String>,
+    pub remote_map: HashMap<String, NodeTable>,
+    // where we currently are in the AST, using names
+    // optional cause we may not have started traversal
+    pub location: Option<assembly_ast::RemoteNodeId>,
+    pub funclet_indices: FuncletIndices,
+
+    // reference to the whole program for lookups
+    // avoid making public cause we want to control this with the context
+    program: &'a assembly_ast::Program,
+    // information found about value funclets
+    value_function_explication_data: HashMap<String, ValueFuncletData>,
     meta_data: MetaData,
     // map from schedule to value
     value_map: HashMap<assembly_ast::FuncletId, assembly_ast::FuncletId>,
-
-    pub ffi_type_table: Table<assembly_ast::FFIType>,
-    pub local_type_table: Table<String>,
-    pub external_funclet_table: Table<String>,
-    pub local_funclet_table: Table<String>,
-    pub value_function_table: Table<String>,
-    pub remote_map: HashMap<String, NodeTable>,
-    pub command_var_name: Option<String>,
-    pub location: Option<ir::RemoteNodeId>,
 }
 
 // a Table is basically a vector with no dupes
 impl<T> Table<T>
-    where
-        T: Eq + Hash + Debug + Clone,
+where
+    T: Eq + Hash + Debug + Clone,
 {
     pub fn new() -> Table<T> {
         Table {
@@ -107,7 +116,7 @@ impl<T> Table<T>
     }
 
     pub fn contains(&mut self, val: &T) -> bool {
-        self.values.contains_key(val)
+        self.values.contains(val)
     }
 
     pub fn dummy_push(&mut self, val: T) {
@@ -116,15 +125,15 @@ impl<T> Table<T>
     }
 
     pub fn push(&mut self, val: T) {
-        if self.values.contains_key(&val) {
+        if self.values.contains(&val) {
             panic!("Duplicate add of {:?}", val)
         }
         self.values.insert(val.clone());
         self.indices.push(val);
     }
 
-    pub fn insert(&mut self, index: usize, val: T, data: U) {
-        if self.values.contains_key(&val) {
+    pub fn insert(&mut self, index: usize, val: T) {
+        if self.values.contains(&val) {
             panic!("Duplicate add of {:?}", val)
         }
         self.values.insert(val.clone());
@@ -135,14 +144,14 @@ impl<T> Table<T>
         // no need to actually check the Hashset, that's just to avoid dupes
         for item in itertools::enumerate(&self.indices) {
             if item.1 == val {
-                return Some(item.0));
+                return Some(item.0);
             }
         }
         return None;
     }
 
     pub fn get_index(&self, val: &T) -> Option<usize> {
-        self.get(val).map(|x| x.1)
+        self.get(val)
     }
 
     pub fn get_at_index(&self, index: usize) -> Option<&T> {
@@ -175,160 +184,55 @@ impl ValueFuncletData {
     }
 }
 
+impl FuncletIndices {
+    pub fn new() -> FuncletIndices {
+        FuncletIndices {
+            external_funclet_table: Table::new(),
+            local_funclet_table: Table::new(),
+            value_function_table: Table::new(),
+            funclet_kind_map: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, name: String, location: FuncletLocation) {
+        self.funclet_kind_map.insert(name.clone(), location);
+        match location {
+            FuncletLocation::Local => self.local_funclet_table.push(name),
+            FuncletLocation::Value => self.value_function_table.push(name),
+            FuncletLocation::Cpu => self.external_funclet_table.push(name),
+            FuncletLocation::Gpu => self.external_funclet_table.push(name),
+        };
+    }
+
+    pub fn get_loc(&self, name: &str) -> Option<&FuncletLocation> {
+        self.funclet_kind_map.get(name)
+    }
+
+    pub fn get(&self, name: &String) -> Option<usize> {
+        self.funclet_kind_map.get(name).and_then(|x| match x {
+            FuncletLocation::Local => self.local_funclet_table.get(name),
+            FuncletLocation::Value => self.value_function_table.get(name),
+            FuncletLocation::Cpu => self.external_funclet_table.get(name),
+            FuncletLocation::Gpu => self.external_funclet_table.get(name),
+        })
+    }
+}
+
 impl<'a> Context<'a> {
-    pub fn new(
-        assembly_context: assembly_context::Context,
-        program: &'a assembly_ast::Program,
-    ) -> Context<'a> {
+    pub fn new(program: &'a assembly_ast::Program) -> Context<'a> {
         Context {
             program,
-            inner: assembly_context,
             value_function_explication_data: HashMap::new(),
             meta_data: MetaData { variable_index: 0 },
             schedule_extras: HashMap::new(),
             value_map: HashMap::new(),
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
-            funclet_kind_map: HashMap::new(),
-            local_funclet_table: Table::new(),
-            external_funclet_table: Table::new(),
-            value_function_table: Table::new(),
+            funclet_indices: FuncletIndices::new(),
             remote_map: HashMap::new(),
-            command_var_name: None,
             location: None,
         }
     }
-
-    pub fn new() -> Context {
-        Context {
-        }
-    }
-
-    pub fn current_funclet_name(&self) -> String {
-        self.local_funclet_table
-            .get_at_index(self.location.unwrap().funclet_id)
-            .unwrap()
-            .clone()
-    }
-
-    pub fn current_node_name(&self) -> String {
-        self.node_from_id(self.location.unwrap().node_id)
-    }
-
-    // for use by the explicator
-    pub fn add_ffi_type(&mut self, t: assembly_ast::FFIType) {
-        self.ffi_type_table.push(t, ());
-    }
-
-    pub fn add_local_type(&mut self, name: String) {
-        self.local_type_table.push(name, ());
-    }
-
-    pub fn add_cpu_funclet(&mut self, name: String) {
-        self.funclet_kind_map
-            .insert(name.clone(), FuncletLocation::Cpu);
-        self.external_funclet_table.push(name, ());
-    }
-
-    pub fn add_gpu_funclet(&mut self, name: String) {
-        self.funclet_kind_map
-            .insert(name.clone(), FuncletLocation::Gpu);
-        self.external_funclet_table.push(name, ());
-    }
-
-    pub fn add_local_funclet(&mut self, name: String) {
-        self.funclet_kind_map
-            .insert(name.clone(), FuncletLocation::Local);
-        self.local_funclet_table.push(name.clone(), ());
-        self.remote_map.insert(
-            name,
-            NodeTable {
-                local: Table::new(),
-                returns: Table::new(),
-            },
-        );
-        self.advance_current_funclet();
-    }
-
-    pub fn add_value_function(&mut self, name: String) {
-        self.funclet_kind_map
-            .insert(name.clone(), FuncletLocation::Value);
-        self.value_function_table.push(name, ());
-    }
-
-    pub fn clear_current_funclet(&mut self) {
-        self.location = None;
-    }
-
-    pub fn initialize_current_funclet(&mut self) {
-        self.location = Some(ir::RemoteNodeId {
-            funclet_id: 0,
-            node_id: 0,
-        });
-    }
-
-    pub fn set_current_funclet(&mut self, index: usize) {
-        self.location = Some(ir::RemoteNodeId {
-            funclet_id: index,
-            node_id: 0,
-        });
-    }
-
-    pub fn set_current_node(&mut self, funclet: usize, index: usize) {
-        self.location = Some(ir::RemoteNodeId {
-            funclet_id: funclet,
-            node_id: index,
-        });
-    }
-
-    pub fn advance_current_funclet(&mut self) {
-        let index = match self.location {
-            None => 0,
-            Some(v) => v.funclet_id + 1,
-        };
-        self.set_current_funclet(index)
-    }
-
-    pub fn advance_current_node(&mut self) {
-        let (funclet, node) = match self.location {
-            None => panic!("Cannot advance empty current node"),
-            Some(v) => (v.funclet_id, v.node_id + 1),
-        };
-        self.set_current_node(funclet, node)
-    }
-
-    pub fn add_node(&mut self, name: String) {
-        let mut advance = false;
-        match self.remote_map.get_mut(&self.current_funclet_name()) {
-            None => panic!("Invalid funclet name {:?}", name),
-            Some(table) => {
-                advance = table.local.len() > 0;
-                if name == "_" {
-                    table.local.dummy_push(name)
-                } else {
-                    table.local.push(name, ())
-                }
-            }
-        }
-        if advance {
-            self.advance_current_node();
-        }
-    }
-
-    pub fn add_return(&mut self, name: String) {
-        match self.remote_map.get_mut(&self.current_funclet_name()) {
-            None => panic!("Invalid funclet name {:?}", name),
-            Some(table) => table.returns.push(name, ()),
-        }
-    }
-
-    // pub fn insert_node(&mut self, name: String) {
-    //     match self.remote_map.get_mut(&self.funclet_name()) {
-    //         None => panic!("Invalid funclet name {:?}", name),
-    //         Some(table) => table.insert(self.location.unwrap().node_id, name)
-    //     }
-    //     self.location.unwrap().node_id += 1;
-    // }
 
     pub fn ffi_type_id(&self, name: &assembly_ast::FFIType) -> usize {
         match self.ffi_type_table.get_index(name) {
@@ -351,50 +255,10 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn funclet_location(&self, name: &String) -> &FuncletLocation {
-        match self.funclet_kind_map.get(name) {
-            Some(f) => f,
-            None => panic!("Unknown funclet name {:?}", name),
-        }
-    }
-
-    pub fn funclet_id(&self, name: &String) -> usize {
-        match self.funclet_location(name) {
-            FuncletLocation::Local => self.local_funclet_table.get(name).unwrap().1,
-            FuncletLocation::Value => self.value_function_table.get(name).unwrap().1,
-            _ => self.external_funclet_table.get(name).unwrap().1,
-        }
-    }
-
-    pub fn local_funclet_id(&self, name: String) -> usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::Local => self.local_funclet_table.get(&name).unwrap().1,
-            _ => panic!("Not a local funclet {}", name),
-        }
-    }
-    pub fn cpu_funclet_id(&self, name: String) -> usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::Cpu => self.external_funclet_table.get(&name).unwrap().1,
-            _ => panic!("Not a cpu funclet {}", name),
-        }
-    }
-    pub fn gpu_funclet_id(&self, name: String) -> usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::Gpu => self.external_funclet_table.get(&name).unwrap().1,
-            _ => panic!("Not a gpu funclet {}", name),
-        }
-    }
-    pub fn value_function_id(&self, name: String) -> usize {
-        match self.funclet_location(&name) {
-            FuncletLocation::Value => self.value_function_table.get(&name).unwrap().1,
-            _ => panic!("Not a value function {}", name),
-        }
-    }
-
     pub fn remote_node_id(&self, funclet: String, var: String) -> usize {
         match self.remote_map.get(funclet.as_str()) {
             Some(f) => match f.local.get(&var) {
-                Some(v) => v.1,
+                Some(v) => v,
                 None => panic!("Unknown local name {} in funclet {}", var, funclet),
             },
             None => panic!("Unknown funclet name {}", funclet),
@@ -413,7 +277,7 @@ impl<'a> Context<'a> {
 
     pub fn node_from_id(&self, index: usize) -> String {
         self.remote_map
-            .get(self.current_funclet_name().as_str())
+            .get(self.location.unwrap().funclet_id.as_str())
             .unwrap()
             .local
             .get_at_index(index)
@@ -422,7 +286,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn node_id(&self, var: String) -> usize {
-        let funclet = self.current_funclet_name();
+        let funclet = self.location.unwrap().funclet_id;
         match self.remote_map.get(&funclet).unwrap().local.get_index(&var) {
             Some(v) => v,
             None => panic!("Unknown variable name {:?} in funclet {:?}", var, &funclet),
@@ -430,7 +294,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn return_id(&self, var: String) -> usize {
-        let funclet = self.current_funclet_name();
+        let funclet = self.location.unwrap().funclet_id;
         match self
             .remote_map
             .get(&funclet)
@@ -443,15 +307,16 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn remote_id(&self, funclet: String, var: String) -> ir::RemoteNodeId {
+    pub fn remote_id(&self, funclet: &String, var: &String) -> ir::RemoteNodeId {
         ir::RemoteNodeId {
-            funclet_id: self.local_funclet_id(funclet.clone()).clone(),
-            node_id: self.remote_node_id(funclet, var),
+            funclet_id: self
+                .funclet_indices
+                .local_funclet_table
+                .get(funclet)
+                .unwrap()
+                .clone(),
+            node_id: self.remote_node_id(funclet.clone(), var.clone()),
         }
-    }
-
-    pub fn program(&mut self) -> &assembly_ast::Program {
-        self.program
     }
 
     fn allocation_name(&mut self) -> String {
@@ -473,10 +338,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn add_allocation(&mut self, remote: &assembly_ast::RemoteNodeId) {
-        let allocation = assembly_ast::RemoteNodeId {
-            funclet_id: self.inner.current_funclet_name(),
-            node_id: self.inner.current_node_name(),
-        };
+        let allocation = self.location.unwrap().clone();
         self.value_function_explication_data
             .get_mut(remote.funclet_id.as_str())
             .unwrap()
@@ -498,7 +360,8 @@ impl<'a> Context<'a> {
     }
 
     pub fn get_current_funclet(&self) -> Option<&ValueFuncletData> {
-        self.get_funclet_data(self.inner.current_funclet_name())
+        self.location
+            .and_then(|loc| self.get_funclet_data(loc.funclet_id))
     }
 
     pub fn explicate_funclet(&mut self, name: String) {
@@ -511,10 +374,9 @@ impl<'a> Context<'a> {
             .contains_key(name.as_str())
     }
 
-    pub fn get_current_extra(&self) -> &ir::SchedulingFuncletExtra {
-        self.schedule_extras
-            .get(&self.inner.current_funclet_name().clone())
-            .unwrap()
+    pub fn get_current_extra(&self) -> Option<&ir::SchedulingFuncletExtra> {
+        self.location
+            .and_then(|loc| self.schedule_extras.get(&loc.funclet_id))
     }
 
     pub fn get_value(&self, funclet: &assembly_ast::FuncletId) -> &assembly_ast::FuncletId {
@@ -526,18 +388,19 @@ impl<'a> Context<'a> {
         self.value_map.insert(schedule, value);
     }
 
-    pub fn node_lookup(&self, location: &assembly_ast::RemoteNodeId) -> &assembly_ast::Node {
-        let funclet_id = self.inner.funclet_id(&location.funclet_id);
-        let node_id = self
-            .inner
-            .remote_node_id(location.funclet_id.clone(), location.node_id.clone());
-        match &self.program.funclets[funclet_id] {
-            assembly_ast::FuncletDef::Local(f) => f.commands[node_id].as_ref().unwrap(),
+    pub fn node_lookup(
+        &self,
+        location: &assembly_ast::RemoteNodeId,
+    ) -> Option<&assembly_ast::NamedNode> {
+        let funclet_id = self.funclet_indices.get(&location.funclet_id);
+        let node_id = self.remote_node_id(location.funclet_id.clone(), location.node_id.clone());
+        funclet_id.and_then(|loc| match &self.program.funclets[loc] {
+            assembly_ast::FuncletDef::Local(f) => f.commands.get(loc),
             _ => panic!(
                 "attempted to access non-local node in {}",
                 location.funclet_id.clone()
             ),
-        }
+        })
     }
 
     pub fn get_cpu_funclet(

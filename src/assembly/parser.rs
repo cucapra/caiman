@@ -26,8 +26,17 @@ use crate::{frontend, ir};
 // }
 
 #[derive(Debug)]
-pub struct Context {
-    // I'll leave this type as a placeholder in case we want to use it for the parser later
+struct Context {
+    // Mostly emptied
+    var_index : usize
+}
+
+impl Context {
+    pub fn new() -> Context {
+        Context {
+            var_index: 0,
+        }
+    }
 }
 
 fn compose_pair<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> U + 'a>
