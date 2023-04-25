@@ -1,5 +1,9 @@
 use crate::ir;
-use std::collections::HashSet;
+use naga::{
+    AddressSpace, Arena, Constant, ConstantInner, GlobalVariable, Handle, Module, ResourceBinding,
+    Type, UniqueArena,
+};
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 
 #[derive(Debug)]
@@ -63,58 +67,77 @@ impl ShaderModule {
         let mut existing_mergers = vec![None; desc.mergers.len()];
 
         for (module_index, module) in desc.modules.iter().enumerate() {
-            let module = &module.shader_module;
-            let type_map = naga_fuse::fuse_types(module, &mut types);
-            let cst_map = naga_fuse::fuse_constants(module, &type_map, &mut constants);
-            let gv_map = naga_fuse::fuse_global_variables(
-                module,
+            let mut fuser = Fuser {
+                module: &module.shader_module,
+                mergers: &desc.mergers[..],
                 module_index,
-                &type_map,
-                &cst_map,
-                &desc.mergers[..],
-                &mut existing_mergers[..],
-                &mut global_variables,
-            );
+                types: &mut types,
+                constants: &mut constants,
+                global_variables: &mut global_variables,
+                existing_mergers: &mut existing_mergers,
+            };
+            let module = &module.shader_module;
+            let type_map = fuser.fuse_types();
+            let cst_map = fuser.fuse_constants(&type_map);
+            let gv_map = fuser.fuse_global_variables(&type_map, &cst_map);
         }
         todo!();
     }
 }
 
-mod naga_fuse {
-    use naga::{
-        AddressSpace, Arena, Constant, ConstantInner, GlobalVariable, Handle, Module,
-        ResourceBinding, Type, UniqueArena,
-    };
-    use std::collections::{HashMap, HashSet};
+type Remap<T> = HashMap<Handle<T>, Handle<T>>;
 
-    use super::FuseDescriptor;
+pub enum MergeState {
+    /// Not a part of any merge set
+    Independent,
+    /// Should represent the merge set with the given index
+    ShouldMerge(usize),
+    /// Has already been merged into this global variable
+    Merged(Handle<GlobalVariable>),
+}
 
-    type Remap<T> = HashMap<Handle<T>, Handle<T>>;
+// doesn't need to exist, but cuts down on the verbosity of arguments.
+struct Fuser<'a, 'b> {
+    module: &'a Module,
+    mergers: &'a [HashSet<(usize, u32, u32)>],
+    module_index: usize,
 
-    pub fn fuse_types(module: &Module, types: &mut UniqueArena<Type>) -> Remap<Type> {
+    types: &'b mut UniqueArena<Type>,
+    constants: &'b mut Arena<Constant>,
+    existing_mergers: &'b mut [Option<Handle<GlobalVariable>>],
+    global_variables: &'b mut Arena<GlobalVariable>,
+}
+
+impl<'a, 'b> Fuser<'a, 'b> {
+    fn rename(&self, name: &Option<String>) -> Option<String> {
+        return name
+            .as_ref()
+            .map(|s| format!("__fused__{}__{}", self.module_index, s));
+    }
+    fn fuse_types(&mut self) -> Remap<Type> {
         // maps original type handles to merged type handles
         let mut type_map = HashMap::new();
-        for (old_handle, ty) in module.types.iter() {
-            let span = module.types.get_span(old_handle);
-            let new_handle = types.insert(ty.clone(), span);
+        for (old_handle, old_ty) in self.module.types.iter() {
+            let span = self.module.types.get_span(old_handle);
+            let new_ty = Type {
+                name: self.rename(&old_ty.name),
+                inner: old_ty.inner.clone(),
+            };
+            let new_handle = self.types.insert(new_ty, span);
             type_map.insert(old_handle, new_handle);
         }
         // we shouldn't be raytracing in a compute shader
-        assert!(module.special_types.ray_desc.is_none());
-        assert!(module.special_types.ray_intersection.is_none());
+        assert!(self.module.special_types.ray_desc.is_none());
+        assert!(self.module.special_types.ray_intersection.is_none());
         return type_map;
     }
-
-    pub fn fuse_constants(
-        module: &Module,
-        type_map: &Remap<Type>,
-        constants: &mut Arena<Constant>,
-    ) -> Remap<Constant> {
+    fn fuse_constants(&mut self, type_map: &Remap<Type>) -> Remap<Constant> {
         let mut cst_map = HashMap::new();
-        for (old_handle, old_cst) in module.constants.iter() {
-            let span = module.constants.get_span(old_handle);
+        for (old_handle, old_cst) in self.module.constants.iter() {
+            let span = self.module.constants.get_span(old_handle);
             // don't know how to handle specialization constants
             assert!(old_cst.specialization.is_none());
+
             let new_cst_inner = match &old_cst.inner {
                 ConstantInner::Scalar { .. } => old_cst.inner.clone(),
                 ConstantInner::Composite { ty, components } => {
@@ -125,16 +148,16 @@ mod naga_fuse {
                 }
             };
             let new_cst = naga::Constant {
-                name: old_cst.name.clone(),
+                name: self.rename(&old_cst.name),
                 specialization: None,
                 inner: new_cst_inner,
             };
-            let new_handle = constants.append(new_cst, span);
+            let new_handle = self.constants.append(new_cst, span);
             cst_map.insert(old_handle, new_handle);
         }
         // go back & fix up the composite constants we created
         for &new_handle in cst_map.values() {
-            let cst = constants.get_mut(new_handle);
+            let cst = self.constants.get_mut(new_handle);
             let cst_inner = &mut cst.inner;
             if let ConstantInner::Composite { components, .. } = cst_inner {
                 for comp in components.iter_mut() {
@@ -145,40 +168,29 @@ mod naga_fuse {
         return cst_map;
     }
 
-    enum MergeState {
-        /// Not a part of any merge set
-        Independent,
-        /// Should represent the merge set with the given index
-        ShouldMerge(usize),
-        /// Has already been merged into this global variable
-        Merged(Handle<GlobalVariable>),
-    }
-
     #[rustfmt::skip]
-    fn check_merge_state(
-        old_gv: &GlobalVariable,
-        signature: (usize, u32, u32),
-        mergers: &[HashSet<(usize, u32, u32)>],
-        existing_mergers: &[Option<Handle<GlobalVariable>>],
-        global_variables: &mut Arena<GlobalVariable>,
-    ) -> MergeState {
-        for (merge_index, merge_set) in mergers.iter().enumerate() {
+    fn check_merge_state(&mut self, old_gv: &GlobalVariable, group: u32, index: u32) -> MergeState {
+        let signature = (self.module_index, group, index);
+        for (merge_index, merge_set) in self.mergers.iter().enumerate() {
             if !merge_set.contains(&signature) {
                 continue;
             }
-            let Some(new_handle) = existing_mergers[merge_index] else {
+            let Some(new_handle) = self.existing_mergers[merge_index] else {
                 // There's not something we can merge into yet...
                 return MergeState::ShouldMerge(merge_index);
             };
             // We've already added a binding in the same merge set.
-            let new_gv = global_variables.get_mut(new_handle);
+            let new_gv = self.global_variables.get_mut(new_handle);
             assert_eq!(&old_gv.binding, &new_gv.binding);
             //assert_eq!(&old_gv.ty, &new_gv.ty);
             //assert_eq!(&old_gv.init, &new_gv.init);
 
             use AddressSpace::Storage;
             match (&mut new_gv.space, &old_gv.space) {
-                (Storage { access: ref mut have }, Storage { access: need } ) => *have |= *need,
+                (
+                    Storage { access: ref mut have },
+                    Storage { access: need },
+                ) => *have |= *need,
                 (a, b) => assert_eq!(a, b),
             }
 
@@ -188,40 +200,35 @@ mod naga_fuse {
         return MergeState::Independent;
     }
 
-    pub fn fuse_global_variables(
-        module: &Module,
-        module_index: usize,
+    fn fuse_global_variables(
+        &mut self,
         type_map: &Remap<Type>,
         cst_map: &Remap<Constant>,
-        mergers: &[HashSet<(usize, u32, u32)>],
-        existing_mergers: &mut [Option<Handle<GlobalVariable>>],
-        global_variables: &mut Arena<GlobalVariable>,
     ) -> Remap<GlobalVariable> {
         let mut gv_map = HashMap::new();
-        for (old_handle, old_gv) in module.global_variables.iter() {
+        for (old_handle, old_gv) in self.module.global_variables.iter() {
             let mut state = MergeState::Independent;
             if let Some(ResourceBinding { group, binding }) = &old_gv.binding {
-                let sig = (module_index, *group, *binding);
-                state = check_merge_state(old_gv, sig, mergers, existing_mergers, global_variables);
+                state = self.check_merge_state(old_gv, *group, *binding);
             }
             if let MergeState::Merged(new_handle) = state {
                 gv_map.insert(old_handle, new_handle);
                 continue;
             }
 
-            let span = module.global_variables.get_span(old_handle);
+            let span = self.module.global_variables.get_span(old_handle);
             let new_gv = GlobalVariable {
-                name: old_gv.name.clone(),
+                name: self.rename(&old_gv.name),
                 space: old_gv.space.clone(),
                 binding: old_gv.binding.clone(),
                 ty: type_map[&old_gv.ty],
                 init: old_gv.init.map(|old_cst| cst_map[&old_cst]),
             };
-            let new_handle = global_variables.append(new_gv, span);
+            let new_handle = self.global_variables.append(new_gv, span);
             gv_map.insert(old_handle, new_handle);
 
             if let MergeState::ShouldMerge(merge_index) = state {
-                existing_mergers[merge_index] = Some(new_handle);
+                self.existing_mergers[merge_index] = Some(new_handle);
             }
         }
         return gv_map;
