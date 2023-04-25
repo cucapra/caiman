@@ -275,7 +275,7 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
-    pub name : String,
+    pub name: String,
     pub ret: Vec<(Option<NodeId>, Type)>,
     pub args: Vec<(Option<NodeId>, Type)>,
 }
@@ -324,8 +324,8 @@ pub enum LocalTypeInfo {
 
 #[derive(Debug)]
 pub struct LocalType {
-    pub name : String,
-    pub data : LocalTypeInfo
+    pub name: String,
+    pub data: LocalTypeInfo,
 }
 
 #[derive(Debug)]
@@ -343,14 +343,14 @@ pub struct Var {
 
 #[derive(Debug)]
 pub struct ExternalCpuFunction {
-    pub name : String,
+    pub name: String,
     pub input_types: Vec<FFIType>,
     pub output_types: Vec<FFIType>,
 }
 
 #[derive(Debug)]
 pub struct ExternalGpuFunction {
-    pub name : String,
+    pub name: String,
     pub input_args: Vec<(FFIType, String)>,
     pub output_types: Vec<(FFIType, String)>,
     // Contains pipeline and single render pass state

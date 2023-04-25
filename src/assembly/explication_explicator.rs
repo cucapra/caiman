@@ -7,10 +7,9 @@ use crate::assembly_ast::{
     ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, NodeId, OperationId, StorageTypeId,
     TypeId, ValueFunctionId,
 };
-use crate::assembly_context::FuncletLocation;
 use crate::ir::ffi;
 use crate::stable_vec::StableVec;
-use crate::{assembly_ast, assembly_context, frontend, ir};
+use crate::{assembly_ast, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
@@ -60,7 +59,7 @@ pub fn explicate_allocate_temporary(
     context.add_allocation(operation);
     Some(ir::Node::AllocTemporary {
         place: place.clone(),
-        storage_type: ffi::TypeId(context.inner.loc_type_id(storage_type.clone())),
+        storage_type: ffi::TypeId(context.loc_type_id(storage_type.clone())),
         operation: remote_conversion(operation, context),
     })
 }
@@ -136,18 +135,18 @@ fn explicate_operation(
         },
     };
 
-    let node = context.node_lookup(&operation);
-    let node_arguments = get_node_arguments(&node, context);
+    let node = context.node_lookup(&operation).unwrap();
+    let node_arguments = get_node_arguments(&node.node, context);
 
     match input_hole {
         None => unreachable!("empty inputs assumed to match with empty operation"),
         Some(input_vec) => {
             for (index, input) in input_vec.iter().enumerate() {
                 match input {
-                    Some(n) => inputs.push(context.inner.node_id(n.clone())),
+                    Some(n) => inputs.push(context.node_id(&n)),
                     None => {
-                        let node = context.node_lookup(&operation);
-                        match node {
+                        let node = context.node_lookup(&operation).unwrap();
+                        match node.node {
                             assembly_ast::Node::Constant { .. } => {
                                 // nothing to fill
                             }
@@ -166,19 +165,19 @@ fn explicate_operation(
 
     for (index, output) in output_vec.iter().enumerate() {
         match output {
-            Some(n) => outputs.push(context.inner.node_id(n.clone())),
+            Some(n) => outputs.push(context.node_id(&n)),
             None => {
-                let node = context.node_lookup(&operation);
-                match node {
+                let node = context.node_lookup(&operation).unwrap();
+                match node.node {
                     assembly_ast::Node::Constant { .. } => {
                         match context.get_allocation(&operation) {
                             None => return None, // failed to explicated on this pass
                             Some(alloc_loc) => {
                                 assert_eq!(
                                     alloc_loc.funclet_id.clone(),
-                                    context.inner.current_funclet_name()
+                                    context.location.funclet_id
                                 );
-                                outputs.push(context.inner.node_id(alloc_loc.node_id.clone()))
+                                outputs.push(context.node_id(&alloc_loc.node_id))
                             }
                         }
                     }

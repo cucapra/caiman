@@ -1,3 +1,4 @@
+use crate::assembly::explication_context;
 use crate::assembly::explication_context::Context;
 use crate::assembly::explication_explicator;
 use crate::assembly::parser;
@@ -7,9 +8,8 @@ use crate::assembly_ast::{
     ExternalCpuFunction, ExternalGpuFunction, FuncletId, NodeId, OperationId, StorageTypeId,
     TypeId, ValueFunctionId,
 };
-use crate::assembly_context::FuncletLocation;
 use crate::ir::ffi;
-use crate::{assembly_ast, assembly_context, frontend, ir};
+use crate::{assembly_ast, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
@@ -23,11 +23,11 @@ pub fn reject_hole<T>(h: Hole<T>) -> T {
 pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
     fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
         b.iter()
-            .map(|x| ffi::TypeId(context.inner.ffi_type_id(x)))
+            .map(|x| ffi::TypeId(context.ffi_type_id(x)))
             .collect()
     }
     fn type_id(element_type: Box<FFIType>, context: &mut Context) -> ffi::TypeId {
-        ffi::TypeId(context.inner.ffi_type_id(element_type.as_ref()))
+        ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
     }
     match value {
         FFIType::F32 => ffi::Type::F32,
@@ -114,9 +114,7 @@ pub fn remote_conversion(
     remote: &assembly_ast::RemoteNodeId,
     context: &mut Context,
 ) -> ir::RemoteNodeId {
-    context
-        .inner
-        .remote_id(remote.funclet_id.clone(), remote.node_id.clone())
+    context.remote_id(&remote.funclet_id.clone(), &remote.node_id.clone())
 }
 
 pub fn value_string(d: &assembly_ast::DictValue, _: &mut Context) -> String {
@@ -139,14 +137,8 @@ pub fn value_function_loc(d: &assembly_ast::DictValue, context: &mut Context) ->
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
-            funclet_id: context
-                .inner
-                .local_funclet_id(remote.funclet_id.clone())
-                .clone(),
-            node_id: context
-                .inner
-                .local_funclet_id(remote.node_id.clone())
-                .clone(),
+            funclet_id: context.funclet_indices.get(&remote.funclet_id).unwrap(),
+            node_id: context.funclet_indices.get(&remote.node_id).unwrap(),
         },
         _ => panic!("Expected function location got {:?}", v),
     }
@@ -157,9 +149,9 @@ pub fn value_var_name(d: &assembly_ast::DictValue, ret: bool, context: &mut Cont
     match v {
         assembly_ast::Value::VarName(s) => {
             if ret {
-                context.inner.return_id(s.clone())
+                context.return_id(&s)
             } else {
-                context.inner.node_id(s.clone())
+                context.node_id(&s)
             }
         }
         _ => panic!("Expected variable name got {:?}", v),
@@ -169,7 +161,7 @@ pub fn value_var_name(d: &assembly_ast::DictValue, ret: bool, context: &mut Cont
 pub fn value_funclet_name(d: &assembly_ast::DictValue, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::FnName(s) => context.inner.funclet_id(&s).clone(),
+        assembly_ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
         _ => panic!("Expected funclet name got {:?}", v),
     }
 }
@@ -177,7 +169,7 @@ pub fn value_funclet_name(d: &assembly_ast::DictValue, context: &mut Context) ->
 pub fn value_funclet_raw_id(d: &assembly_ast::DictValue, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly_ast::Value::FnName(s) => context.inner.funclet_id(&s).clone(),
+        assembly_ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
         _ => panic!("Expected funclet name got {:?}", v),
     }
 }
@@ -185,15 +177,15 @@ pub fn value_funclet_raw_id(d: &assembly_ast::DictValue, context: &mut Context) 
 pub fn value_type(
     d: &assembly_ast::DictValue,
     context: &mut Context,
-) -> assembly_context::Location {
+) -> explication_context::Location {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Type(t) => match t {
             assembly_ast::Type::FFI(typ) => {
-                assembly_context::Location::FFI(context.inner.ffi_type_id(&typ))
+                explication_context::Location::FFI(context.ffi_type_id(&typ))
             }
             assembly_ast::Type::Local(name) => {
-                assembly_context::Location::Local(context.inner.local_type_id(&name))
+                explication_context::Location::Local(context.local_type_id(&name))
             }
         },
         _ => panic!("Expected type got {:?}", v),
@@ -224,16 +216,12 @@ pub fn value_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::Va
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::ValueTag::Input {
-            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
         assembly_ast::TagCore::Output(r) => ir::ValueTag::Output {
-            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
     }
 }
@@ -245,16 +233,12 @@ pub fn timeline_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir:
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::TimelineTag::Input {
-            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
         assembly_ast::TagCore::Output(r) => ir::TimelineTag::Output {
-            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
     }
 }
@@ -266,16 +250,12 @@ pub fn spatial_core_tag(v: assembly_ast::TagCore, context: &mut Context) -> ir::
             remote_node_id: remote_conversion(&r, context),
         },
         assembly_ast::TagCore::Input(r) => ir::SpatialTag::Input {
-            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
         assembly_ast::TagCore::Output(r) => ir::SpatialTag::Output {
-            funclet_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
     }
 }
@@ -284,19 +264,15 @@ pub fn value_value_tag(t: &assembly_ast::ValueTag, context: &mut Context) -> ir:
     match t {
         assembly_ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
         assembly_ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
-            function_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            function_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
         assembly_ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
-            function_id: context.inner.local_funclet_id(r.funclet_id.clone()).clone(),
-            index: context
-                .inner
-                .remote_node_id(r.funclet_id.clone(), r.node_id.clone()),
+            function_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
+            index: context.remote_node_id(&r.funclet_id, &r.node_id),
         },
         assembly_ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
-            index: context.inner.node_id(n.clone()),
+            index: context.node_id(&n),
         },
     }
 }

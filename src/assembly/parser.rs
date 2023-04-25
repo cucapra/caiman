@@ -1944,7 +1944,7 @@ fn read_funclet_blob(
     context: &mut Context,
 ) -> assembly_ast::Funclet {
     let header = expect(rule_funclet_header(), pairs, context);
-    let mut commands : Vec<Hole<assembly_ast::NamedNode>> = Vec::new();
+    let mut commands: Vec<Hole<assembly_ast::NamedNode>> = Vec::new();
     // this gets very silly for checking reasons
     // we both want to check for if we have a tail edge,
     //   _and_ if the last node hole could be a tail edge
@@ -2099,11 +2099,14 @@ fn read_extras(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::
     let extras = expect_all(rule_pair(Rule::extra, read_extra), pairs, context);
     for extra in extras.into_iter() {
         result.insert(extra.0, extra.1);
-    };
+    }
     result
 }
 
-fn read_pipeline(pairs: &mut Pairs<Rule>, context: &mut Context) -> (String, assembly_ast::FuncletId) {
+fn read_pipeline(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> (String, assembly_ast::FuncletId) {
     require_rule(Rule::pipeline_sep, pairs, context);
     let name = expect(rule_string_clean(), pairs, context);
     let funclet = reject_hole(expect(rule_fn_name(), pairs, context));
@@ -2115,7 +2118,7 @@ fn read_pipelines(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_as
     let extras = expect_all(rule_pair(Rule::pipelines, read_pipeline), pairs, context);
     for extra in extras.into_iter() {
         result.insert(extra.0, extra.1);
-    };
+    }
     result
 }
 
