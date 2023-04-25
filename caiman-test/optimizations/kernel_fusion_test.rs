@@ -6,6 +6,8 @@ impl fusion_elide::CpuFunctions for Callbacks {}
 
 impl fusion_partial::CpuFunctions for Callbacks {}
 
+impl fusion_huge::CpuFunctions for Callbacks {}
+
 #[test]
 pub fn fusion() -> Result<(), String> {
     use caiman_rt::wgpu;
@@ -72,3 +74,30 @@ pub fn fusion_partial() -> Result<(), String> {
     let result = instance.start(&mut join_stack, 9.0, -5.0, 16.4, 0.75);
     crate::expect_returned!(-32.7, result.returned().map(|x| x.0));
 }
+
+#[test]
+pub fn fusion_huge() -> Result<(), String> {
+    use std::convert::TryInto;
+
+    let mut wgpu_instance = crate::util::INSTANCE.lock().unwrap();
+    let callbacks = Callbacks {};
+    let mut root_state = wgpu_instance.create_root_state();
+    let mut join_stack_bytes = [0u8; 4096usize];
+    let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
+    let instance = fusion_huge::Instance::new(&mut root_state, &callbacks);
+    let a = vec![9.0f32; 1024];
+    let b = vec![-5.0f32; 1024];
+    let c = vec![16.4f32; 1024];
+    let d = vec![0.75f32; 1024];
+    let result = instance.start(
+        &mut join_stack, 
+        a.try_into().unwrap(), 
+        b.try_into().unwrap(), 
+        c.try_into().unwrap(), 
+        d.try_into().unwrap()
+    );
+    let expected = vec![-32.7f32; 1024];
+    let returned = result.returned().map(|x| Vec::from(x.0));
+    crate::expect_returned!(&expected, returned.as_ref());
+}
+

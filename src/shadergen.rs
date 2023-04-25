@@ -12,7 +12,7 @@ impl ShaderModule {
         Ok(Self { shader_module })
     }
     pub fn from_glsl(text: &str) -> Result<Self, Box<dyn Error>> {
-        let mut parser = naga::front::glsl::Parser::default();
+        let mut parser = naga::front::glsl::Frontend::default();
         let options = naga::front::glsl::Options::from(naga::ShaderStage::Compute);
         match parser.parse(&options, text) {
             Ok(shader_module) => Ok(Self { shader_module }),

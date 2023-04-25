@@ -15,7 +15,7 @@ writeonly buffer Output_0 {
     float field_0;
 } output_0;
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1)
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
     output_0.field_0 = input_0.field_0 + input_1.field_0;
 }

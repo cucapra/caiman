@@ -679,6 +679,7 @@ impl<'program> CodeGenerator<'program>
 		self.active_pipeline_name = Some(String::from(pipeline_name));
 		self.code_writer.begin_module(pipeline_name);
 		write!(self.code_writer, "use caiman_rt::wgpu;\n");
+		write!(self.code_writer, "use caiman_rt::bytemuck;\n");
 
 		self.code_writer.begin_module("outputs");
 		{
@@ -1866,11 +1867,29 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write(format!("let {} = * unsafe {{ std::mem::transmute::<* const u8, & {}>({}.as_ptr()) }};\n", self.variable_tracker.get_var_name(output_var_id), type_name, self.variable_tracker.get_var_name(range_var_id)));
 		return output_var_id;
 	}
+	/// Returns a string representing variable `var` as a slice of little-endian bytes.
+	fn local_as_le_bytes(&self, var: VarId) -> String {
+		use ffi::Type::*;
+		let var_name = self.variable_tracker.get_var_name(var);
+		let var_type_id = self.variable_tracker.get_type_id(var);
+		let var_type = self.native_interface.types.get(var_type_id.0).unwrap();
 
+		// TODO: This should really be expanded to encompass all types, but I'm
+		// doing the bare minimum to get this working
+		match var_type {
+			F32 | F64 | U8 | U16 | U32 | U64 | USize | I8 | I16 | I32 | I64 => 
+				return format!("&{}.to_le_bytes()", var_name),
+			Array { element_type, length } => 
+				return format!("bytemuck::cast_slice(&{})", var_name),
+			_ => 
+				panic!("type {:?} not yet supported", var_type)
+		}
+	}
 	pub fn encode_copy_buffer_from_local_data(&mut self, destination_var : VarId, source_var : VarId)
 	{
 		let buffer_view_var_name = self.variable_tracker.get_var_name(destination_var);
-		self.code_writer.write(format!("instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, & {}.to_ne_bytes() );\n", buffer_view_var_name, buffer_view_var_name, self.variable_tracker.get_var_name(source_var)));
+		let source_bytes = self.local_as_le_bytes(source_var);
+		self.code_writer.write(format!("instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, {});\n", buffer_view_var_name, buffer_view_var_name, source_bytes));
 	}
 
 	pub fn encode_copy_buffer_from_buffer(&mut self, destination_var : VarId, source_var : VarId)
@@ -1888,10 +1907,10 @@ impl<'program> CodeGenerator<'program>
 	{
 		let variable_id = self.variable_tracker.generate();
 		let type_binding_info = self.get_type_binding_info(type_id);
-		let type_name = self.get_type_name(type_id);
 		let buffer_view_var_name = self.variable_tracker.get_var_name(variable_id);
+		let data_bytes = self.local_as_le_bytes(data_var);
 		self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
-		self.code_writer.write(format!("instance.state.get_queue_mut().write_buffer(& {}.buffer, {}.base_address, & {}.to_ne_bytes() );\n", buffer_view_var_name, buffer_view_var_name, self.variable_tracker.get_var_name(data_var)));
+		self.code_writer.write(format!("instance.state.get_queue_mut().write_buffer(& {}.buffer, {}.base_address, {} );\n", buffer_view_var_name, buffer_view_var_name, data_bytes));
 		variable_id
 	}
 
@@ -1911,7 +1930,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n".to_string());
 		self.code_writer.write("futures::executor::block_on(submit_recv);\n".to_string());
 		write!(self.code_writer, "}}\n");
-		//self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, data_var));
+		//self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_le_bytes() );\n", variable_id, data_var));
 		variable_id
 	}
 
