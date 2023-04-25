@@ -82,8 +82,8 @@ impl ShaderModule {
 
 mod naga_fuse {
     use naga::{
-        Arena, Constant, ConstantInner, GlobalVariable, Handle, Module, ResourceBinding, Type,
-        UniqueArena,
+        AddressSpace, Arena, Constant, ConstantInner, GlobalVariable, Handle, Module,
+        ResourceBinding, Type, UniqueArena,
     };
     use std::collections::{HashMap, HashSet};
 
@@ -145,36 +145,86 @@ mod naga_fuse {
         return cst_map;
     }
 
-    pub fn fuse_resource_binding() {}
+    enum MergeState {
+        /// Not a part of any merge set
+        Independent,
+        /// Should represent the merge set with the given index
+        ShouldMerge(usize),
+        /// Has already been merged into this global variable
+        Merged(Handle<GlobalVariable>),
+    }
+
+    #[rustfmt::skip]
+    fn check_merge_state(
+        old_gv: &GlobalVariable,
+        signature: (usize, u32, u32),
+        mergers: &[HashSet<(usize, u32, u32)>],
+        existing_mergers: &[Option<Handle<GlobalVariable>>],
+        global_variables: &mut Arena<GlobalVariable>,
+    ) -> MergeState {
+        for (merge_index, merge_set) in mergers.iter().enumerate() {
+            if !merge_set.contains(&signature) {
+                continue;
+            }
+            let Some(new_handle) = existing_mergers[merge_index] else {
+                // There's not something we can merge into yet...
+                return MergeState::ShouldMerge(merge_index);
+            };
+            // We've already added a binding in the same merge set.
+            let new_gv = global_variables.get_mut(new_handle);
+            assert_eq!(&old_gv.binding, &new_gv.binding);
+            //assert_eq!(&old_gv.ty, &new_gv.ty);
+            //assert_eq!(&old_gv.init, &new_gv.init);
+
+            use AddressSpace::Storage;
+            match (&mut new_gv.space, &old_gv.space) {
+                (Storage { access: ref mut have }, Storage { access: need } ) => *have |= *need,
+                (a, b) => assert_eq!(a, b),
+            }
+
+            return MergeState::Merged(new_handle);
+        }
+        // Ok, this variable binding isn't part of any merge group.
+        return MergeState::Independent;
+    }
+
     pub fn fuse_global_variables(
         module: &Module,
         module_index: usize,
         type_map: &Remap<Type>,
         cst_map: &Remap<Constant>,
         mergers: &[HashSet<(usize, u32, u32)>],
-        existing_mergers: &mut [Option<Handle<ResourceBinding>>],
+        existing_mergers: &mut [Option<Handle<GlobalVariable>>],
         global_variables: &mut Arena<GlobalVariable>,
     ) -> Remap<GlobalVariable> {
         let mut gv_map = HashMap::new();
         for (old_handle, old_gv) in module.global_variables.iter() {
-            let span = module.global_variables.get_span(old_handle);
+            let mut state = MergeState::Independent;
             if let Some(ResourceBinding { group, binding }) = &old_gv.binding {
-                // This is a resource binding, which means we need to merge it.
-            } else {
-                // This is just a normal global variable.
-                // Remap fields & insert it
-                let new_gv = GlobalVariable {
-                    name: old_gv.name.clone(),
-                    space: old_gv.space.clone(),
-                    binding: None,
-                    ty: type_map[&old_gv.ty],
-                    init: old_gv.init.map(|old_cst| cst_map[&old_cst]),
-                };
-                let new_handle = global_variables.append(new_gv, span);
+                let sig = (module_index, *group, *binding);
+                state = check_merge_state(old_gv, sig, mergers, existing_mergers, global_variables);
+            }
+            if let MergeState::Merged(new_handle) = state {
                 gv_map.insert(old_handle, new_handle);
+                continue;
+            }
+
+            let span = module.global_variables.get_span(old_handle);
+            let new_gv = GlobalVariable {
+                name: old_gv.name.clone(),
+                space: old_gv.space.clone(),
+                binding: old_gv.binding.clone(),
+                ty: type_map[&old_gv.ty],
+                init: old_gv.init.map(|old_cst| cst_map[&old_cst]),
+            };
+            let new_handle = global_variables.append(new_gv, span);
+            gv_map.insert(old_handle, new_handle);
+
+            if let MergeState::ShouldMerge(merge_index) = state {
+                existing_mergers[merge_index] = Some(new_handle);
             }
         }
-        todo!()
+        return gv_map;
     }
 }
 
