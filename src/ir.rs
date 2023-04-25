@@ -10,6 +10,7 @@ use crate::stable_vec::StableVec;
 pub use crate::rust_wgpu_backend::ffi as ffi;
 
 pub mod validation;
+pub mod optimizer;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Place

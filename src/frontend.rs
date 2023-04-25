@@ -56,6 +56,7 @@ pub fn compile_caiman(input_string : &str, options : CompileOptions) -> Result<S
 	assert_eq!(definition.version, (0, 0, 1));
 	crate::rust_wgpu_backend::explicate_scheduling::
 		explicate_scheduling(&mut definition.program);
+	ir::optimizer::optimize_program(&mut definition.program);
 	ir::validation::validate_program(& definition.program);
 	let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(& definition.program);
 	codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
