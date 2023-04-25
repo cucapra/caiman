@@ -58,10 +58,10 @@ pub enum FFIType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalGpuFunctionResourceBinding {
-    pub group: String,
-    pub binding: String,
-    pub input: Option<String>,
-    pub output: Option<String>,
+    pub group: NodeId,
+    pub binding: NodeId,
+    pub input: Option<NodeId>,
+    pub output: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -252,8 +252,8 @@ pub enum Value {
     None,
     ID(String),
     FunctionLoc(RemoteNodeId),
-    VarName(String),
-    FnName(String),
+    VarName(NodeId),
+    FnName(FuncletId),
     Num(usize),
     Type(Type),
     Place(ir::Place),
@@ -275,6 +275,7 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
+    pub name : String,
     pub ret: Vec<(Option<NodeId>, Type)>,
     pub args: Vec<(Option<NodeId>, Type)>,
 }
@@ -289,19 +290,19 @@ pub struct NamedNode {
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
-    pub commands: Vec<NamedNode>,
+    pub commands: Vec<Hole<NamedNode>>,
     pub tail_edge: Hole<TailEdge>,
 }
 
 #[derive(Debug)]
 pub enum LocalTypeInfo {
     NativeValue {
-        storage_type: StorageTypeId,
+        storage_type: Type,
     },
 
     // Scheduling
     Slot {
-        storage_type: TypeId,
+        storage_type: Type,
         queue_stage: ir::ResourceQueueStage,
         queue_place: ir::Place,
     },
@@ -342,12 +343,14 @@ pub struct Var {
 
 #[derive(Debug)]
 pub struct ExternalCpuFunction {
+    pub name : String,
     pub input_types: Vec<FFIType>,
     pub output_types: Vec<FFIType>,
 }
 
 #[derive(Debug)]
 pub struct ExternalGpuFunction {
+    pub name : String,
     pub input_args: Vec<(FFIType, String)>,
     pub output_types: Vec<(FFIType, String)>,
     // Contains pipeline and single render pass state

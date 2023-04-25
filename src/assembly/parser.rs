@@ -10,7 +10,6 @@ pub struct IRParser;
 use crate::assembly::explication;
 use crate::assembly_ast;
 use crate::assembly_ast::Hole;
-use crate::assembly_ast::UncheckedDict;
 use crate::ir::ffi;
 use crate::{frontend, ir};
 
@@ -28,14 +27,12 @@ use crate::{frontend, ir};
 #[derive(Debug)]
 struct Context {
     // Mostly emptied
-    var_index : usize
+    var_index: usize,
 }
 
 impl Context {
     pub fn new() -> Context {
-        Context {
-            var_index: 0,
-        }
+        Context { var_index: 0 }
     }
 }
 
@@ -86,6 +83,16 @@ where
     G: Fn(T) -> U + 'a,
 {
     Box::new(move |s, c| g(reject_hole(f(s, c))))
+}
+
+fn unchecked_value(
+    s: &assembly_ast::Value,
+    data: &assembly_ast::UncheckedDict,
+) -> assembly_ast::Value {
+    match data.get(s).unwrap() {
+        assembly_ast::DictValue::Raw(v) => v.clone(),
+        e => panic!("Expected value for {:?}, got {:?}", s, e),
+    }
 }
 
 // Rule stuff
@@ -916,40 +923,101 @@ fn read_version(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast:
     }
 }
 
-fn read_ir_type_decl_key(s: String, _: &mut Context) -> assembly_ast::TypeKind {
+fn interpret_ir_dict(s: String, data: assembly_ast::UncheckedDict) -> assembly_ast::LocalTypeInfo {
     match s.as_str() {
-        "native_value" => assembly_ast::TypeKind::NativeValue,
-        "slot" => assembly_ast::TypeKind::Slot,
-        "fence" => assembly_ast::TypeKind::Fence,
-        "buffer" => assembly_ast::TypeKind::Buffer,
-        "space_buffer" => assembly_ast::TypeKind::BufferSpace,
-        "event" => assembly_ast::TypeKind::Event,
+        "native_value" => {
+            let storage_type = match unchecked_value(
+                &assembly_ast::Value::ID("storage_type".to_string()),
+                &data,
+            ) {
+                assembly_ast::Value::Type(t) => t,
+                v => panic!("Unsupported storage type {:?}", v),
+            };
+            assembly_ast::LocalTypeInfo::NativeValue { storage_type }
+        }
+        "slot" => {
+            let storage_type = match unchecked_value(
+                &assembly_ast::Value::ID("storage_type".to_string()),
+                &data,
+            ) {
+                assembly_ast::Value::Type(t) => t,
+                v => panic!("Unsupported storage type {:?}", v),
+            };
+            let queue_stage =
+                match unchecked_value(&assembly_ast::Value::ID("queue_stage".to_string()), &data) {
+                    assembly_ast::Value::Stage(t) => t,
+                    v => panic!("Unsupported queue stage {:?}", v),
+                };
+            let queue_place =
+                match unchecked_value(&assembly_ast::Value::ID("queue_place".to_string()), &data) {
+                    assembly_ast::Value::Place(t) => t,
+                    v => panic!("Unsupported queue place {:?}", v),
+                };
+            assembly_ast::LocalTypeInfo::Slot {
+                storage_type,
+                queue_stage,
+                queue_place,
+            }
+        }
+        "fence" => {
+            let queue_place =
+                match unchecked_value(&assembly_ast::Value::ID("queue_place".to_string()), &data) {
+                    assembly_ast::Value::Place(t) => t,
+                    v => panic!("Unsupported queue place {:?}", v),
+                };
+            assembly_ast::LocalTypeInfo::Fence { queue_place }
+        }
+        "buffer" => {
+            let storage_place =
+                match unchecked_value(&assembly_ast::Value::ID("storage_place".to_string()), &data)
+                {
+                    assembly_ast::Value::Place(t) => t,
+                    v => panic!("Unsupported storage place {:?}", v),
+                };
+            let static_layout_opt = data
+                .get(&assembly_ast::Value::ID("static_layout_opt".to_string()))
+                .and_then(|v| match v {
+                    assembly_ast::DictValue::List(l) => {
+                        assert_eq!(2, l.len(), "static layouts must have two arguments");
+                        let nums: Vec<usize> = l
+                            .clone()
+                            .into_iter()
+                            .map(|v| match v {
+                                assembly_ast::DictValue::Raw(assembly_ast::Value::Num(i)) => i,
+                                e => panic!("Unsupported value for static layout opt {:?}", e),
+                            })
+                            .collect();
+                        Some(ir::StaticBufferLayout {
+                            alignment_bits: nums.get(0).unwrap().clone(),
+                            byte_size: nums.get(1).unwrap().clone(),
+                        })
+                    }
+                    _ => panic!("Unsupported static layout opt {:?}", v),
+                });
+            assembly_ast::LocalTypeInfo::Buffer {
+                storage_place,
+                static_layout_opt,
+            }
+        }
+        "space_buffer" => assembly_ast::LocalTypeInfo::BufferSpace,
+        "event" => assembly_ast::LocalTypeInfo::Event {},
         _ => panic!("Unexpected slot check {:?}", s),
     }
 }
 
 fn read_ir_type_decl(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::TypeDecl {
-    let event_rule = rule_str_unwrap(
-        Rule::ir_type_decl_key_sep,
-        1,
-        Box::new(read_ir_type_decl_key),
-    );
+    let event_rule = rule_str_unwrap(Rule::ir_type_decl_key_sep, 1, Box::new(read_string));
     let type_kind = expect(event_rule, pairs, context);
     let name_rule = rule_str_unwrap(Rule::type_name, 1, Box::new(read_string));
     let name = expect(name_rule, pairs, context);
-    let data = expect(rule_unchecked_dict(), pairs, context);
-    context.add_local_type(name.clone());
-    let result = assembly_ast::LocalType {
-        type_kind,
-        name,
-        data,
-    };
+    let unchecked_dict = expect(rule_unchecked_dict(), pairs, context);
+    let data = interpret_ir_dict(type_kind, unchecked_dict);
+    let result = assembly_ast::LocalType { name, data };
     assembly_ast::TypeDecl::Local(result)
 }
 
 fn read_ffi_type_decl(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::TypeDecl {
     let ffi_typ = expect(rule_ffi_type(), pairs, context);
-    context.add_ffi_type(ffi_typ.clone());
     assembly_ast::TypeDecl::FFI(ffi_typ)
 }
 
@@ -1001,7 +1069,6 @@ fn read_external_cpu_funclet(
         read_external_cpu_return_args,
     );
     let output_types = expect(rule_extern_return_args, pairs, context);
-    context.add_cpu_funclet(name.clone());
     assembly_ast::ExternalCpuFunction {
         name,
         input_types,
@@ -1026,13 +1093,47 @@ fn read_external_gpu_args(
     expect_all(rule, pairs, context)
 }
 
-fn read_external_gpu_body(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<UncheckedDict> {
+fn read_external_gpu_body(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> Vec<assembly_ast::UncheckedDict> {
     let rule = rule_pair_unwrap(
         Rule::external_gpu_resource,
         1,
         Box::new(read_unchecked_dict),
     );
     expect_all(rule, pairs, context)
+}
+
+fn interpret_external_gpu_dict(
+    data: assembly_ast::UncheckedDict,
+) -> assembly_ast::ExternalGpuFunctionResourceBinding {
+    let group = match unchecked_value(&assembly_ast::Value::ID("group".to_string()), &data) {
+        assembly_ast::Value::VarName(t) => t,
+        v => panic!("Unsupported group {:?}", v),
+    };
+    let binding = match unchecked_value(&assembly_ast::Value::ID("binding".to_string()), &data) {
+        assembly_ast::Value::VarName(t) => t,
+        v => panic!("Unsupported binding {:?}", v),
+    };
+    let input = data
+        .get(&assembly_ast::Value::ID("input".to_string()))
+        .and_then(|v| match v {
+            assembly_ast::DictValue::Raw(assembly_ast::Value::VarName(t)) => Some(t.clone()),
+            v => panic!("Unsupported input {:?}", v),
+        });
+    let output = data
+        .get(&assembly_ast::Value::ID("output".to_string()))
+        .and_then(|v| match v {
+            assembly_ast::DictValue::Raw(assembly_ast::Value::VarName(t)) => Some(t.clone()),
+            v => panic!("Unsupported output {:?}", v),
+        });
+    assembly_ast::ExternalGpuFunctionResourceBinding {
+        group,
+        binding,
+        input,
+        output,
+    }
 }
 
 fn read_external_gpu_funclet(
@@ -1052,9 +1153,13 @@ fn read_external_gpu_funclet(
     let shader_module = expect(rule_string_clean(), pairs, context);
 
     let rule_binding = rule_pair(Rule::external_gpu_body, read_external_gpu_body);
-    let resource_bindings = expect(rule_binding, pairs, context);
+    let unchecked_bindings = expect(rule_binding, pairs, context);
 
-    context.add_gpu_funclet(name.clone());
+    let resource_bindings = unchecked_bindings
+        .into_iter()
+        .map(|d| interpret_external_gpu_dict(d))
+        .collect();
+
     assembly_ast::ExternalGpuFunction {
         name,
         input_args,
@@ -1093,7 +1198,6 @@ fn read_funclet_arg(
         Rule::var_name => {
             // You gotta add the phi node when translating IRs when you do this!
             let var = reject_hole(read_var_name(&mut pair.into_inner(), context));
-            context.add_node(var.clone());
             let typ = reject_hole(expect(rule_type(), pairs, context));
             (Some(var), typ)
         }
@@ -1123,7 +1227,6 @@ fn read_funclet_return_arg(
         Rule::var_name => {
             // You gotta add the phi node when translating IRs when you do this!
             let var = reject_hole(read_var_name(&mut pair.into_inner(), context));
-            context.add_return(var.clone());
             let typ = reject_hole(expect(rule_type(), pairs, context));
             (Some(var), typ)
         }
@@ -1161,7 +1264,6 @@ fn read_funclet_header(
     context: &mut Context,
 ) -> assembly_ast::FuncletHeader {
     let name = reject_hole(expect(rule_fn_name(), pairs, context));
-    context.add_local_funclet(name.clone());
 
     let rule_args = rule_pair(Rule::funclet_args, read_funclet_args);
     let args = option_to_vec(optional(rule_args, pairs, context));
@@ -1177,7 +1279,6 @@ fn rule_funclet_header<'a>() -> RuleApp<'a, assembly_ast::FuncletHeader> {
 
 fn read_var_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> String {
     let var = reject_hole(expect(rule_var_name(), pairs, context));
-    context.add_node(var.clone());
     var
 }
 
@@ -1527,11 +1628,11 @@ fn read_value_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembl
     expect_vec(rules, pairs, context)
 }
 
-fn read_value_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+fn read_value_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::NamedNode {
     let name = reject_hole(expect(rule_var_name(), pairs, context));
-    context.add_node(name);
     let rule = rule_pair(Rule::value_command, read_value_command);
-    expect(rule, pairs, context)
+    let node = expect(rule, pairs, context);
+    assembly_ast::NamedNode { name, node }
 }
 
 fn read_alloc_temporary_command(
@@ -1762,11 +1863,11 @@ fn read_schedule_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> asse
     expect_vec(rules, pairs, context)
 }
 
-fn read_schedule_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+fn read_schedule_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::NamedNode {
     let name = reject_hole(expect(rule_var_name(), pairs, context));
-    context.add_node(name);
     let rule = rule_pair(Rule::schedule_command, read_schedule_command);
-    expect(rule, pairs, context)
+    let node = expect(rule, pairs, context);
+    assembly_ast::NamedNode { name, node }
 }
 
 fn read_sync_sep(
@@ -1822,28 +1923,28 @@ fn read_spatial_command(_: &mut Pairs<Rule>, _: &mut Context) -> assembly_ast::N
     unimplemented!() // currently invalid
 }
 
-fn read_timeline_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+fn read_timeline_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::NamedNode {
     let name = reject_hole(expect(rule_var_name(), pairs, context));
-    context.add_node(name);
     let rule = rule_pair(Rule::timeline_command, read_timeline_command);
-    expect(rule, pairs, context)
+    let node = expect(rule, pairs, context);
+    assembly_ast::NamedNode { name, node }
 }
 
-fn read_spatial_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Node {
+fn read_spatial_assign(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::NamedNode {
     let name = reject_hole(expect(rule_var_name(), pairs, context));
-    context.add_node(name);
     let rule = rule_pair(Rule::spatial_command, read_spatial_command);
-    expect(rule, pairs, context)
+    let node = expect(rule, pairs, context);
+    assembly_ast::NamedNode { name, node }
 }
 
 fn read_funclet_blob(
     kind: ir::FuncletKind,
-    rule_command: RuleApp<assembly_ast::Node>,
+    rule_command: RuleApp<assembly_ast::NamedNode>,
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
 ) -> assembly_ast::Funclet {
     let header = expect(rule_funclet_header(), pairs, context);
-    let mut commands = Vec::new();
+    let mut commands : Vec<Hole<assembly_ast::NamedNode>> = Vec::new();
     // this gets very silly for checking reasons
     // we both want to check for if we have a tail edge,
     //   _and_ if the last node hole could be a tail edge
@@ -1857,10 +1958,7 @@ fn read_funclet_blob(
                     commands.push(None); // push the "tail edge hole" into the commands list
                     Some(Some(read_tail_edge(&mut pair.into_inner(), context)))
                 }
-                _ => panic!(
-                    "Multiple tail edges found for funclet {}",
-                    context.current_funclet_name()
-                ),
+                _ => panic!("Multiple tail edges found for funclet",),
             }
         } else if rule == Rule::node_hole {
             tail = Some(None) // currently the hole
@@ -1872,10 +1970,7 @@ fn read_funclet_blob(
                     commands.push(None);
                     None
                 }
-                _ => panic!(
-                    "Command after tail edge found for funclet {}",
-                    context.current_funclet_name()
-                ),
+                _ => panic!("Command after tail edge found for funclet",),
             };
             commands.push(match &rule_command.application {
                 Application::P(f) => Some(f(&mut pair.into_inner(), context)),
@@ -1895,10 +1990,7 @@ fn read_funclet_blob(
                 tail_edge,
             }
         }
-        None => panic!(format!(
-            "No tail edge found for funclet {}",
-            context.current_funclet_name()
-        )),
+        None => panic!(format!("No tail edge found for funclet",)),
     }
 }
 
@@ -1980,8 +2072,6 @@ fn read_value_function(
     let rule = rule_pair(Rule::value_function_funclets, read_value_function_funclets);
     let allowed_funclets = expect(rule, pairs, context);
 
-    context.add_value_function(name.clone());
-
     assembly_ast::ValueFunction {
         name,
         input_types,
@@ -1995,25 +2085,38 @@ fn read_funclets(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast
     expect_all(rule, pairs, context)
 }
 
-fn read_extra(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Extra {
+fn read_extra(
+    pairs: &mut Pairs<Rule>,
+    context: &mut Context,
+) -> (String, assembly_ast::UncheckedDict) {
     let name = reject_hole(expect(rule_fn_name_sep(), pairs, context));
     let data = expect(rule_unchecked_dict(), pairs, context);
-    assembly_ast::Extra { name, data }
+    (name, data)
 }
 
 fn read_extras(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Extras {
-    expect_all(rule_pair(Rule::extra, read_extra), pairs, context)
+    let mut result = HashMap::new();
+    let extras = expect_all(rule_pair(Rule::extra, read_extra), pairs, context);
+    for extra in extras.into_iter() {
+        result.insert(extra.0, extra.1);
+    };
+    result
 }
 
-fn read_pipeline(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Pipeline {
+fn read_pipeline(pairs: &mut Pairs<Rule>, context: &mut Context) -> (String, assembly_ast::FuncletId) {
     require_rule(Rule::pipeline_sep, pairs, context);
     let name = expect(rule_string_clean(), pairs, context);
     let funclet = reject_hole(expect(rule_fn_name(), pairs, context));
-    assembly_ast::Pipeline { name, funclet }
+    (name, funclet)
 }
 
 fn read_pipelines(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_ast::Pipelines {
-    expect_all(rule_pair(Rule::pipeline, read_pipeline), pairs, context)
+    let mut result = HashMap::new();
+    let extras = expect_all(rule_pair(Rule::pipelines, read_pipeline), pairs, context);
+    for extra in extras.into_iter() {
+        result.insert(extra.0, extra.1);
+    };
+    result
 }
 
 fn read_program(parsed: &mut Pairs<Rule>) -> assembly_ast::Program {
@@ -2053,7 +2156,6 @@ fn read_program(parsed: &mut Pairs<Rule>) -> assembly_ast::Program {
         funclets,
         extras,
         pipelines,
-        context,
     }
 }
 
