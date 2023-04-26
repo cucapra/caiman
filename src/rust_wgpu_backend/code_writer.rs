@@ -52,7 +52,7 @@ impl CodeWriter {
     }
 
     pub fn begin_module(&mut self, name: &str) {
-        write!(self, "pub mod {} {{\n", name);
+        write!(self, "#[allow(warnings)] pub mod {} {{\n", name);
     }
 
     pub fn end_module(&mut self) {

@@ -15,14 +15,13 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
 {
     // XXX For now, we just have a big global funclet. Here's its name
     let global_sef_name = "my_great_scheduleexplicitfunclet".to_string();
-    context.begin_local_funclet(global_sef_name.clone());
 
     // For making the last thing into what's returned (very temporary)
     // Remove later. Also these are default values
     let mut last_alloc_id = 0;
     let mut last_type = asm::Type::Local("".to_string());
 
-    let mut commands: Vec<Option<asm::Node>> = Vec::new();
+    let mut node_context = context::NodeContext::new();
     for (i, mss) in program.iter().enumerate()
     {
         // Just AllocTemporary and EncodeDo each of these (as alloc statements are
@@ -50,16 +49,14 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
         });
         let operation_cloned = operation.clone();
         let storage_type = Some(value_type);
-        commands.push(Some(asm::Node::AllocTemporary { place, operation, storage_type }));
-        context.add_node();
+        node_context.add_node(Some(asm::Node::AllocTemporary { place, operation, storage_type }));
         last_alloc_id = i * 2;
-        commands.push(Some(asm::Node::EncodeDo {
+        node_context.add_node(Some(asm::Node::EncodeDo {
             place,
             operation: operation_cloned,
             inputs: Some(Box::new([])),
             outputs: Some(Box::new([Some(label::label_node(i * 2)) /* The slot */])),
         }));
-        context.add_node();
     }
     // TODO make real header & tail
     let ret_name = "out".to_string();
@@ -68,14 +65,14 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
         name: global_sef_name,
         args: vec![],
     };
-    context.add_return(ret_name);
 
     // TODO don't simply return the last node like below
     let last_id_str = label::label_node(last_alloc_id);
     let dummy_tail_edge =
         Some(asm::TailEdge::Return { return_values: Some(vec![Some(last_id_str.clone())]) });
 
-    context.end_local_funclet();
+    let commands = node_context.into_commands();
+
     vec![ScheduleExplicitFunclet {
         inner_funclet: InnerFunclet { header: dummy_header, commands, tail_edge: dummy_tail_edge },
     }]

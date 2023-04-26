@@ -6,7 +6,7 @@ use crate::value_language::ast as value_ast;
 //use crate::value_language::typing;
 //use caiman::arena::Arena;
 use caiman::assembly_ast as asm;
-use caiman::assembly_context as asm_ctx;
+//use caiman::assembly_context as asm_ctx;
 use caiman::ir;
 //use std::collections::HashMap;
 
@@ -55,20 +55,18 @@ pub fn go(
         .collect();
     funclets.push(dummy_timeline_funclet(&mut context));
 
-    let main_pipeline = asm::Pipeline {
-        name: "main".to_string(),
-        funclet: "my_great_scheduleexplicitfunclet".to_string(),
-    };
+    let mut pipelines: asm::Pipelines = HashMap::new();
+    pipelines.insert("main".to_string(), "my_great_scheduleexplicitfunclet".to_string());
 
-    let (context, types) = context.into_context_and_types();
+    let types = context.into_types();
 
     let version = asm::Version { major: 0, minor: 0, detailed: 1 };
     Ok(asm::Program {
-        context,
+        //context,
         version,
         funclets,
         types,
-        pipelines: vec![main_pipeline],
+        pipelines,
         extras: dummy_extras(),
     })
 }
@@ -76,19 +74,14 @@ pub fn go(
 fn dummy_timeline_funclet(context: &mut context::Context) -> asm::FuncletDef
 {
     let funclet_name = "my_great_timelinefunclet".to_string();
-    context.begin_local_funclet(funclet_name.clone());
 
     let arg_type_str = context.add_event(ir::Place::Local);
     let arg_str = "e".to_string();
-    context.add_arg(arg_str.clone());
     let arg_type_local = asm::Type::Local(arg_type_str);
 
     let tail_edge =
         Some(asm::TailEdge::Return { return_values: Some(vec![Some(arg_str.clone())]) });
 
-    // For some reason, the trivial.cair data structure has this funclets as its current
-    // funclet!! Weird. But the below line is always here if it turns out that's wrong
-    //context.end_local_funclet();
     asm::FuncletDef::Local(asm::Funclet {
         kind: ir::FuncletKind::Timeline,
         header: asm::FuncletHeader {
@@ -133,5 +126,7 @@ fn dummy_extras() -> asm::Extras
     )));
     data_insert("in_timeline_tag", e_tag.clone());
     data_insert("out_timeline_tag", e_tag);
-    vec![asm::Extra { name: "my_great_scheduleexplicitfunclet".to_string(), data }]
+    let mut extras: asm::Extras = HashMap::new();
+    extras.insert("my_great_scheduleexplicitfunclet".to_string(), data);
+    extras
 }
