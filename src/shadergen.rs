@@ -178,13 +178,10 @@ impl<'a> Fuser<'a> {
                     // There's an existing binding. For the time being we won't validate
                     // whether the types are compatible, we'll just fixup buffer flags
                     let new_gv = global_variables.get_mut(new_handle);
+                    use AddressSpace::Storage;
                     match (&mut new_gv.space, &old_gv.space) {
-                        (
-                            AddressSpace::Storage {
-                                access: ref mut have,
-                            },
-                            AddressSpace::Storage { access: need },
-                        ) => *have |= *need,
+                        #[rustfmt::skip]
+                        (Storage { access: ref mut a }, Storage { access: b }) => *a |= *b,
                         (a, b) => assert_eq!(a, b),
                     }
                     gv_map.insert(old_handle, new_handle);
