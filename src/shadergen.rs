@@ -1,9 +1,9 @@
 use crate::ir;
 use naga::{
-    AddressSpace, Arena, AtomicFunction, Block, Constant, ConstantInner, Expression, Function,
-    FunctionArgument, FunctionResult, GlobalVariable, Handle, ImageQuery, LocalVariable, Module,
-    Range, RayQueryFunction, ResourceBinding, SampleLevel, Statement, SwitchCase, Type,
-    UniqueArena,
+    AddressSpace, Arena, AtomicFunction, Block, Constant, ConstantInner, EntryPoint, Expression,
+    Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, ImageQuery, LocalVariable,
+    Module, Range, RayQueryFunction, ResourceBinding, SampleLevel, ShaderStage, Statement,
+    SwitchCase, Type, UniqueArena,
 };
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -12,10 +12,11 @@ use std::error::Error;
 pub struct FuseDescriptor<'a> {
     /// The modules to fuse into a single kernel dispatch, ordered by execution.
     modules: &'a [ShaderModule],
-    /// A list of mergers. Each merger specifies multiple global variables which should be merged
-    /// into the same resulting binding. The global variables are identified by means of a
-    /// (index into modules list, group number, binding number) tuple.
-    mergers: Vec<HashSet<(usize, u32, u32)>>,
+    /// Each entry `(i, g, b) -> (g', b')` specifies that `group=g`, `binding=b` of `modules[i]`
+    /// should be placed into `group=g`, `binding=b` of the resulting fused module.
+    /// Each bound resource appearing in the source modules *must* appear in this map exactly once.
+    /// The map is deliberately non-injective to allow fusing bound resources.
+    resource_map: &'a HashMap<(usize, u32, u32), (u32, u32)>,
 }
 
 #[derive(Debug)]
@@ -65,26 +66,26 @@ impl ShaderModule {
     pub fn fuse(desc: FuseDescriptor) -> ShaderModule {
         let mut types = naga::UniqueArena::new();
         let mut constants = naga::Arena::new();
-        let mut existing_mergers = vec![None; desc.mergers.len()];
+        let mut resource_locations = HashMap::new(); // maps (group, binding) to GlobalVariable
         let mut global_variables = naga::Arena::new();
         let mut functions = naga::Arena::new();
 
         for (module_index, module) in desc.modules.iter().enumerate() {
             let mut fuser = Fuser {
                 module: &module.shader_module,
-                mergers: &desc.mergers[..],
+                resource_map: desc.resource_map,
                 module_index,
-                types: &mut types,
-                constants: &mut constants,
-                existing_mergers: &mut existing_mergers,
-                global_variables: &mut global_variables,
-                functions: &mut functions,
             };
             let module = &module.shader_module;
-            let type_map = fuser.fuse_types();
-            let cst_map = fuser.fuse_constants(&type_map);
-            let gv_map = fuser.fuse_global_variables(&type_map, &cst_map);
-            let fn_map = fuser.fuse_functions(&type_map, &cst_map, &gv_map);
+            let type_map = fuser.fuse_types(&mut types);
+            let cst_map = fuser.fuse_constants(&type_map, &mut constants);
+            let gv_map = fuser.fuse_global_variables(
+                &type_map,
+                &cst_map,
+                &mut resource_locations,
+                &mut global_variables,
+            );
+            let fn_map = fuser.fuse_functions(&type_map, &cst_map, &gv_map, &mut functions);
         }
         todo!();
     }
@@ -92,35 +93,20 @@ impl ShaderModule {
 
 type Remap<T> = HashMap<Handle<T>, Handle<T>>;
 
-pub enum MergeState {
-    /// Not a part of any merge set
-    Independent,
-    /// Should represent the merge set with the given index
-    ShouldMerge(usize),
-    /// Has already been merged into this global variable
-    Merged(Handle<GlobalVariable>),
-}
-
 // doesn't need to exist, but cuts down on the verbosity of arguments.
-struct Fuser<'a, 'b> {
+struct Fuser<'a> {
     module: &'a Module,
-    mergers: &'a [HashSet<(usize, u32, u32)>],
+    resource_map: &'a HashMap<(usize, u32, u32), (u32, u32)>,
     module_index: usize,
-
-    types: &'b mut UniqueArena<Type>,
-    constants: &'b mut Arena<Constant>,
-    existing_mergers: &'b mut [Option<Handle<GlobalVariable>>],
-    global_variables: &'b mut Arena<GlobalVariable>,
-    functions: &'b mut Arena<Function>,
 }
 
-impl<'a, 'b> Fuser<'a, 'b> {
+impl<'a> Fuser<'a> {
     fn rename(&self, name: &Option<String>) -> Option<String> {
         return name
             .as_ref()
             .map(|s| format!("__fused__{}__{}", self.module_index, s));
     }
-    fn fuse_types(&mut self) -> Remap<Type> {
+    fn fuse_types(&self, types: &mut UniqueArena<Type>) -> Remap<Type> {
         let mut type_map = Remap::new();
         for (old_handle, old_ty) in self.module.types.iter() {
             let span = self.module.types.get_span(old_handle);
@@ -128,7 +114,7 @@ impl<'a, 'b> Fuser<'a, 'b> {
                 name: self.rename(&old_ty.name),
                 inner: old_ty.inner.clone(),
             };
-            let new_handle = self.types.insert(new_ty, span);
+            let new_handle = types.insert(new_ty, span);
             type_map.insert(old_handle, new_handle);
         }
         // we shouldn't be raytracing in a compute shader
@@ -136,7 +122,11 @@ impl<'a, 'b> Fuser<'a, 'b> {
         assert!(self.module.special_types.ray_intersection.is_none());
         return type_map;
     }
-    fn fuse_constants(&mut self, type_map: &Remap<Type>) -> Remap<Constant> {
+    fn fuse_constants(
+        &self,
+        type_map: &Remap<Type>,
+        constants: &mut Arena<Constant>,
+    ) -> Remap<Constant> {
         let mut cst_map = Remap::new();
         for (old_handle, old_cst) in self.module.constants.iter() {
             let span = self.module.constants.get_span(old_handle);
@@ -157,12 +147,12 @@ impl<'a, 'b> Fuser<'a, 'b> {
                 specialization: None,
                 inner: new_cst_inner,
             };
-            let new_handle = self.constants.append(new_cst, span);
+            let new_handle = constants.append(new_cst, span);
             cst_map.insert(old_handle, new_handle);
         }
         // go back & fix up the composite constants we created
         for &new_handle in cst_map.values() {
-            let cst = self.constants.get_mut(new_handle);
+            let cst = constants.get_mut(new_handle);
             let cst_inner = &mut cst.inner;
             if let ConstantInner::Composite { components, .. } = cst_inner {
                 for comp in components.iter_mut() {
@@ -173,67 +163,55 @@ impl<'a, 'b> Fuser<'a, 'b> {
         return cst_map;
     }
 
-    #[rustfmt::skip]
-    fn check_merge_state(&mut self, old_gv: &GlobalVariable, group: u32, index: u32) -> MergeState {
-        let signature = (self.module_index, group, index);
-        for (merge_index, merge_set) in self.mergers.iter().enumerate() {
-            if !merge_set.contains(&signature) {
-                continue;
-            }
-            let Some(new_handle) = self.existing_mergers[merge_index] else {
-                // There's not something we can merge into yet...
-                return MergeState::ShouldMerge(merge_index);
-            };
-            // We've already added a binding in the same merge set.
-            let new_gv = self.global_variables.get_mut(new_handle);
-            assert_eq!(&old_gv.binding, &new_gv.binding);
-            //assert_eq!(&old_gv.ty, &new_gv.ty);
-            //assert_eq!(&old_gv.init, &new_gv.init);
-
-            use AddressSpace::Storage;
-            match (&mut new_gv.space, &old_gv.space) {
-                (
-                    Storage { access: ref mut have },
-                    Storage { access: need },
-                ) => *have |= *need,
-                (a, b) => assert_eq!(a, b),
-            }
-
-            return MergeState::Merged(new_handle);
-        }
-        // Ok, this variable binding isn't part of any merge group.
-        return MergeState::Independent;
-    }
-
     fn fuse_global_variables(
         &mut self,
         type_map: &Remap<Type>,
         cst_map: &Remap<Constant>,
+        resource_locations: &mut HashMap<(u32, u32), Handle<GlobalVariable>>,
+        global_variables: &mut Arena<GlobalVariable>,
     ) -> Remap<GlobalVariable> {
         let mut gv_map = Remap::new();
         for (old_handle, old_gv) in self.module.global_variables.iter() {
-            let mut state = MergeState::Independent;
+            let mut new_binding = None;
             if let Some(ResourceBinding { group, binding }) = &old_gv.binding {
-                state = self.check_merge_state(old_gv, *group, *binding);
-            }
-            if let MergeState::Merged(new_handle) = state {
-                gv_map.insert(old_handle, new_handle);
-                continue;
+                if let Some(&new_handle) = resource_locations.get(&(*group, *binding)) {
+                    // There's an existing binding. For the time being we won't validate
+                    // whether the types are compatible, we'll just fixup buffer flags
+                    let new_gv = global_variables.get_mut(new_handle);
+                    match (&mut new_gv.space, &old_gv.space) {
+                        (
+                            AddressSpace::Storage {
+                                access: ref mut have,
+                            },
+                            AddressSpace::Storage { access: need },
+                        ) => *have |= *need,
+                        (a, b) => assert_eq!(a, b),
+                    }
+                    gv_map.insert(old_handle, new_handle);
+                    continue;
+                } else {
+                    // no existing resource binding. figure out where it should go
+                    new_binding = self
+                        .resource_map
+                        .get(&(self.module_index, *group, *binding))
+                        .map(|&(group, binding)| ResourceBinding { group, binding });
+                }
             }
 
             let span = self.module.global_variables.get_span(old_handle);
             let new_gv = GlobalVariable {
                 name: self.rename(&old_gv.name),
                 space: old_gv.space.clone(),
-                binding: old_gv.binding.clone(),
+                binding: new_binding.clone(),
                 ty: type_map[&old_gv.ty],
                 init: old_gv.init.map(|old_cst| cst_map[&old_cst]),
             };
-            let new_handle = self.global_variables.append(new_gv, span);
+            let new_handle = global_variables.append(new_gv, span);
             gv_map.insert(old_handle, new_handle);
-
-            if let MergeState::ShouldMerge(merge_index) = state {
-                self.existing_mergers[merge_index] = Some(new_handle);
+            // If we just added a new resource binding, we need to make sure later iterations
+            // know where to find it.
+            if let Some(ResourceBinding { group, binding }) = new_binding {
+                resource_locations.insert((group, binding), new_handle);
             }
         }
         return gv_map;
@@ -556,69 +534,79 @@ impl<'a, 'b> Fuser<'a, 'b> {
         }
     }
 
-    fn fuse_functions(
-        &mut self,
+    fn remap_fn(
+        &self,
+        old_fn: &Function,
+        arg_action: impl FnMut(&FunctionArgument) -> FunctionArgument,
         type_map: &Remap<Type>,
         cst_map: &Remap<Constant>,
         gv_map: &Remap<GlobalVariable>,
+        fn_map: &Remap<Function>,
+    ) -> Function {
+        let new_name = self.rename(&old_fn.name);
+        let new_arguments: Vec<_> = old_fn.arguments.iter().map(arg_action).collect();
+        let new_result = old_fn.result.as_ref().map(|res| FunctionResult {
+            ty: type_map[&res.ty],
+            binding: res.binding.clone(),
+        });
+        let mut lv_map = Remap::new();
+        let mut new_local_variables = Arena::new();
+        for (old_handle, old_local) in old_fn.local_variables.iter() {
+            let span = old_fn.local_variables.get_span(old_handle);
+            let new_local = LocalVariable {
+                // We shouldn't need to rename locals, but someone could name them something
+                // dumb like __fused__0__myVector, so may as well be consistent
+                name: self.rename(&old_local.name),
+                ty: type_map[&old_local.ty],
+                init: old_local.init.as_ref().map(|old_cst| cst_map[&old_cst]),
+            };
+            let new_handle = new_local_variables.append(new_local, span);
+            lv_map.insert(old_handle, new_handle);
+        }
+        let mut expr_map = Remap::new();
+        let mut new_expressions = Arena::new();
+        for (old_handle, old_expr) in old_fn.expressions.iter() {
+            let span = old_fn.expressions.get_span(old_handle);
+            let new_expr = Self::update_expr(
+                old_expr, type_map, cst_map, gv_map, &fn_map, &lv_map, &expr_map,
+            );
+            let new_handle = new_expressions.append(new_expr, span);
+            expr_map.insert(old_handle, new_handle);
+        }
+        // TODO: We lose information here, but in order to do this properly we need to
+        // add an indexmap and rustc_hash dependency since Naga uses those in its public
+        // interface but doesn't re-export them
+        let mut new_named_expressions = Default::default();
+        let mut new_body = Self::update_block(&old_fn.body, &fn_map, &expr_map);
+
+        return Function {
+            name: new_name,
+            arguments: new_arguments,
+            result: new_result,
+            local_variables: new_local_variables,
+            expressions: new_expressions,
+            named_expressions: new_named_expressions,
+            body: new_body,
+        };
+    }
+
+    fn fuse_functions(
+        &self,
+        type_map: &Remap<Type>,
+        cst_map: &Remap<Constant>,
+        gv_map: &Remap<GlobalVariable>,
+        functions: &mut Arena<Function>,
     ) -> Remap<Function> {
         let mut fn_map = Remap::new();
         for (old_handle, old_fn) in self.module.functions.iter() {
             let span = self.module.functions.get_span(old_handle);
-            let new_name = self.rename(&old_fn.name);
-            let new_arguments: Vec<_> = old_fn
-                .arguments
-                .iter()
-                .map(|arg| FunctionArgument {
-                    name: self.rename(&arg.name),
-                    ty: type_map[&arg.ty],
-                    binding: arg.binding.clone(),
-                })
-                .collect();
-            let new_result = old_fn.result.as_ref().map(|res| FunctionResult {
-                ty: type_map[&res.ty],
-                binding: res.binding.clone(),
-            });
-            let mut lv_map = Remap::new();
-            let mut new_local_variables = Arena::new();
-            for (old_handle, old_local) in old_fn.local_variables.iter() {
-                let span = old_fn.local_variables.get_span(old_handle);
-                let new_local = LocalVariable {
-                    // We shouldn't need to rename locals, but someone could name them something
-                    // dumb like __fused__0__myVector, so may as well be consistent
-                    name: self.rename(&old_local.name),
-                    ty: type_map[&old_local.ty],
-                    init: old_local.init.as_ref().map(|old_cst| cst_map[&old_cst]),
-                };
-                let new_handle = new_local_variables.append(new_local, span);
-                lv_map.insert(old_handle, new_handle);
-            }
-            let mut expr_map = Remap::new();
-            let mut new_expressions = Arena::new();
-            for (old_handle, old_expr) in old_fn.expressions.iter() {
-                let span = old_fn.expressions.get_span(old_handle);
-                let new_expr = Self::update_expr(
-                    old_expr, type_map, cst_map, gv_map, &fn_map, &lv_map, &expr_map,
-                );
-                let new_handle = new_expressions.append(new_expr, span);
-                expr_map.insert(old_handle, new_handle);
-            }
-            // TODO: We lose information here, but in order to do this properly we need to
-            // add an indexmap and rustc_hash dependency since Naga uses those in its public
-            // interface but doesn't re-export them
-            let mut new_named_expressions = Default::default();
-            let mut new_body = Self::update_block(&old_fn.body, &fn_map, &expr_map);
-
-            let new_fn = Function {
-                name: new_name,
-                arguments: new_arguments,
-                result: new_result,
-                local_variables: new_local_variables,
-                expressions: new_expressions,
-                named_expressions: new_named_expressions,
-                body: new_body,
+            let arg_action = |arg: &FunctionArgument| FunctionArgument {
+                name: self.rename(&arg.name),
+                ty: type_map[&arg.ty],
+                binding: arg.binding.clone(),
             };
-            let new_handle = self.functions.append(new_fn, span);
+            let new_fn = self.remap_fn(old_fn, arg_action, type_map, cst_map, gv_map, &fn_map);
+            let new_handle = functions.append(new_fn, span);
             fn_map.insert(old_handle, new_handle);
         }
         return fn_map;
