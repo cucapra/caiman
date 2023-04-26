@@ -927,7 +927,7 @@ fn interpret_ir_dict(s: String, data: assembly_ast::UncheckedDict) -> assembly_a
     match s.as_str() {
         "native_value" => {
             let storage_type = match unchecked_value(
-                &assembly_ast::Value::ID("storage_type".to_string()),
+                &assembly_ast::Value::ID("type".to_string()),
                 &data,
             ) {
                 assembly_ast::Value::Type(t) => t,
@@ -937,19 +937,19 @@ fn interpret_ir_dict(s: String, data: assembly_ast::UncheckedDict) -> assembly_a
         }
         "slot" => {
             let storage_type = match unchecked_value(
-                &assembly_ast::Value::ID("storage_type".to_string()),
+                &assembly_ast::Value::ID("type".to_string()),
                 &data,
             ) {
                 assembly_ast::Value::Type(t) => t,
                 v => panic!("Unsupported storage type {:?}", v),
             };
             let queue_stage =
-                match unchecked_value(&assembly_ast::Value::ID("queue_stage".to_string()), &data) {
+                match unchecked_value(&assembly_ast::Value::ID("stage".to_string()), &data) {
                     assembly_ast::Value::Stage(t) => t,
                     v => panic!("Unsupported queue stage {:?}", v),
                 };
             let queue_place =
-                match unchecked_value(&assembly_ast::Value::ID("queue_place".to_string()), &data) {
+                match unchecked_value(&assembly_ast::Value::ID("place".to_string()), &data) {
                     assembly_ast::Value::Place(t) => t,
                     v => panic!("Unsupported queue place {:?}", v),
                 };
@@ -961,7 +961,7 @@ fn interpret_ir_dict(s: String, data: assembly_ast::UncheckedDict) -> assembly_a
         }
         "fence" => {
             let queue_place =
-                match unchecked_value(&assembly_ast::Value::ID("queue_place".to_string()), &data) {
+                match unchecked_value(&assembly_ast::Value::ID("place".to_string()), &data) {
                     assembly_ast::Value::Place(t) => t,
                     v => panic!("Unsupported queue place {:?}", v),
                 };
@@ -969,13 +969,13 @@ fn interpret_ir_dict(s: String, data: assembly_ast::UncheckedDict) -> assembly_a
         }
         "buffer" => {
             let storage_place =
-                match unchecked_value(&assembly_ast::Value::ID("storage_place".to_string()), &data)
+                match unchecked_value(&assembly_ast::Value::ID("place".to_string()), &data)
                 {
                     assembly_ast::Value::Place(t) => t,
                     v => panic!("Unsupported storage place {:?}", v),
                 };
             let static_layout_opt = data
-                .get(&assembly_ast::Value::ID("static_layout_opt".to_string()))
+                .get(&assembly_ast::Value::ID("static_layout".to_string()))
                 .and_then(|v| match v {
                     assembly_ast::DictValue::List(l) => {
                         assert_eq!(2, l.len(), "static layouts must have two arguments");
@@ -1000,7 +1000,14 @@ fn interpret_ir_dict(s: String, data: assembly_ast::UncheckedDict) -> assembly_a
             }
         }
         "space_buffer" => assembly_ast::LocalTypeInfo::BufferSpace,
-        "event" => assembly_ast::LocalTypeInfo::Event {},
+        "event" => {
+            let place = match unchecked_value(&assembly_ast::Value::ID("place".to_string()), &data)
+            {
+                assembly_ast::Value::Place(t) => t,
+                v => panic!("Unsupported place {:?}", v),
+            };
+            assembly_ast::LocalTypeInfo::Event { place }
+        }
         _ => panic!("Unexpected slot check {:?}", s),
     }
 }

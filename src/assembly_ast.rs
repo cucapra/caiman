@@ -316,7 +316,9 @@ pub enum LocalTypeInfo {
     },
 
     // Timeline
-    Event {},
+    Event {
+        place: ir::Place
+    },
 
     // Space
     BufferSpace,

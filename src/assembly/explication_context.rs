@@ -19,7 +19,7 @@ where
 }
 
 #[derive(Debug)]
-struct NodeTable {
+pub struct NodeTable {
     // local names and return names such as [%out : i64] or whatever
     local: Table<String>,
     returns: Table<String>,
@@ -195,7 +195,7 @@ impl FuncletIndices {
     }
 
     pub fn insert(&mut self, name: String, location: FuncletLocation) {
-        self.funclet_kind_map.insert(name.clone(), location);
+        self.funclet_kind_map.insert(name.clone(), location.clone());
         match location {
             FuncletLocation::Local => self.local_funclet_table.push(name),
             FuncletLocation::Value => self.value_function_table.push(name),
@@ -259,7 +259,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn loc_type_id(&self, typ: assembly_ast::Type) -> usize {
+    pub fn loc_type_id(&self, typ: &assembly_ast::Type) -> usize {
         match typ {
             assembly_ast::Type::FFI(ft) => self.ffi_type_id(&ft),
             assembly_ast::Type::Local(s) => self.local_type_id(&s),

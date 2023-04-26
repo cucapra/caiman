@@ -59,7 +59,7 @@ pub fn explicate_allocate_temporary(
     context.add_allocation(operation);
     Some(ir::Node::AllocTemporary {
         place: place.clone(),
-        storage_type: ffi::TypeId(context.loc_type_id(storage_type.clone())),
+        storage_type: ffi::TypeId(context.loc_type_id(storage_type)),
         operation: remote_conversion(operation, context),
     })
 }
