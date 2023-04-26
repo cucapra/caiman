@@ -12,3 +12,4 @@ ron = "0.7"
 #wgpu = "0.12.0"
 futures = "0.3"
 caiman-rt = { path = "../caiman-rt" }
+once_cell = "1.17.1"

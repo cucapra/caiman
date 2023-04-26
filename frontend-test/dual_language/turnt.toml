@@ -1,1 +1,1 @@
-command = "../../target/debug/caiman-frontend {filename}"
+command = "../../target/debug/caiman-frontend --run --output asdf {filename}"
