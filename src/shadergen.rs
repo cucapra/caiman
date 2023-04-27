@@ -13,7 +13,7 @@ use std::error::Error;
 #[derive(Debug)]
 pub struct FuseDescriptor<'a> {
     /// The modules to fuse into a single kernel dispatch, ordered by execution.
-    modules: &'a [ShaderModule],
+    modules: &'a [&'a ShaderModule],
     /// Each entry `(i, g, b) -> (g', b')` specifies that `group=g`, `binding=b` of `modules[i]`
     /// should be placed into `group=g`, `binding=b` of the resulting fused module.
     /// Each bound resource appearing in the source modules *must* appear in this map exactly once.
@@ -44,7 +44,7 @@ impl ShaderModule {
             }
         }
     }
-    pub fn emit_wgsl(&mut self) -> String {
+    pub fn emit_wgsl(&self) -> String {
         let mut validator = naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
             naga::valid::Capabilities::empty(),
@@ -129,7 +129,7 @@ impl<'a> Fuser<'a> {
     fn rename(&self, name: &Option<String>) -> Option<String> {
         return name
             .as_ref()
-            .map(|s| format!("__fused__{}__{}", self.module_index, s));
+            .map(|s| format!("fused_{:02}__{}", self.module_index, s));
     }
     fn fuse_types(&self, types: &mut UniqueArena<Type>) -> Remap<Type> {
         let mut type_map = Remap::new();
@@ -197,9 +197,13 @@ impl<'a> Fuser<'a> {
     ) -> Remap<GlobalVariable> {
         let mut gv_map = Remap::new();
         for (old_handle, old_gv) in self.module.global_variables.iter() {
-            let mut new_binding = None;
+            let mut new_resource_binding = None;
             if let Some(ResourceBinding { group, binding }) = &old_gv.binding {
-                if let Some(&new_handle) = resource_locations.get(&(*group, *binding)) {
+                let location = self
+                    .resource_map
+                    .get(&(self.module_index, *group, *binding))
+                    .expect("no resource relocation info for binding");
+                if let Some(&new_handle) = resource_locations.get(&location) {
                     use AddressSpace::Storage;
                     // There's an existing binding. For the time being we won't validate
                     // whether the types are compatible, we'll just fixup buffer flags
@@ -212,11 +216,11 @@ impl<'a> Fuser<'a> {
                     gv_map.insert(old_handle, new_handle);
                     continue;
                 } else {
-                    // no existing resource binding. figure out where it should go
-                    new_binding = self
-                        .resource_map
-                        .get(&(self.module_index, *group, *binding))
-                        .map(|&(group, binding)| ResourceBinding { group, binding });
+                    // no existing resource binding. we need to add one
+                    new_resource_binding = Some(ResourceBinding {
+                        group: location.0,
+                        binding: location.1,
+                    });
                 }
             }
 
@@ -224,7 +228,7 @@ impl<'a> Fuser<'a> {
             let new_gv = GlobalVariable {
                 name: self.rename(&old_gv.name),
                 space: old_gv.space.clone(),
-                binding: new_binding.clone(),
+                binding: new_resource_binding.clone(),
                 ty: type_map[&old_gv.ty],
                 init: old_gv.init.map(|old_cst| cst_map[&old_cst]),
             };
@@ -232,7 +236,7 @@ impl<'a> Fuser<'a> {
             gv_map.insert(old_handle, new_handle);
             // If we just added a new resource binding, we need to make sure later iterations
             // know where to find it.
-            if let Some(ResourceBinding { group, binding }) = new_binding {
+            if let Some(ResourceBinding { group, binding }) = new_resource_binding {
                 resource_locations.insert((group, binding), new_handle);
             }
         }
@@ -746,8 +750,7 @@ impl<'a> Fuser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ir;
-    use crate::shadergen;
+    use super::*;
 
     const sample_text_1: &str = "
 	struct Output { field_0 : i32 }
@@ -771,7 +774,54 @@ mod tests {
 
     #[test]
     fn test_naga_sanity() {
-        let mut shader_module = shadergen::ShaderModule::from_wgsl(sample_text_1).unwrap();
+        let mut shader_module = ShaderModule::from_wgsl(sample_text_1).unwrap();
         let wgsl_text = shader_module.emit_wgsl();
+    }
+
+    #[test]
+    fn test_singleton_fusion_sanity() {
+        let pre = ShaderModule::from_wgsl(sample_text_1).unwrap();
+        let mut map = HashMap::new();
+        map.insert((0, 0, 0), (0, 0));
+        map.insert((0, 0, 1), (1, 2));
+        let fused = ShaderModule::fuse(FuseDescriptor {
+            modules: &[&pre],
+            resource_map: &map,
+        });
+        let wgsl_text = fused.emit_wgsl();
+        eprintln!("{wgsl_text}");
+    }
+
+    const fadd_wgpu: &str = "
+    @group(0) @binding(0) var<storage, read> lhs : array<f32, 1024>;
+    @group(0) @binding(1) var<storage, read> rhs : array<f32, 1024>;
+    @group(0) @binding(2) var<storage, write> output : array<f32, 1024>;
+
+    @compute @workgroup_size(256) 
+    fn main(@builtin(local_invocation_index) i : u32)
+    {
+        output[i] = lhs[i] + rhs[i];
+    }";
+
+    #[test]
+    fn test_fusion_duplicate() {
+        let pre = ShaderModule::from_wgsl(fadd_wgpu).unwrap();
+
+        let mut map = HashMap::new();
+        map.insert((0, 0, 0), (0, 0));
+        map.insert((0, 0, 1), (0, 1));
+        map.insert((0, 0, 2), (0, 2));
+        // reuse output from the first as the second output to the second
+        map.insert((1, 0, 0), (0, 3));
+        map.insert((1, 0, 1), (0, 2));
+        map.insert((1, 0, 2), (0, 4));
+
+        let fused = ShaderModule::fuse(FuseDescriptor {
+            modules: &[&pre, &pre],
+            resource_map: &map,
+        });
+
+        let wgsl_text = fused.emit_wgsl();
+        eprintln!("{wgsl_text}");
     }
 }
