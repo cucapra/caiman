@@ -824,4 +824,38 @@ mod tests {
         let wgsl_text = fused.emit_wgsl();
         eprintln!("{wgsl_text}");
     }
+
+    const struct00: &str = "
+    struct Struct00 { field_from_struct00 : f32 }
+    @group(0) @binding(0) var<storage, write> struct00_out : Struct00;
+    @compute @workgroup_size(1) fn main() { 
+        struct00_out.field_from_struct00 = 7; 
+    }";
+
+    const struct01: &str = "
+    struct Struct01 { field_from_struct01 : f32 }
+    @group(0) @binding(0) var<storage, read> struct01_in : Struct01;
+    @group(0) @binding(1) var<storage, write> struct01_out : Struct01;
+    @compute @workgroup_size(1) fn main() { 
+        struct01_out.field_from_struct01 = struct01_in.field_from_struct01; 
+    }";
+
+    #[test]
+    fn test_fusion_structs() {
+        let struct00_mod = ShaderModule::from_wgsl(struct00).unwrap();
+        let struct01_mod = ShaderModule::from_wgsl(struct01).unwrap();
+
+        let mut map = HashMap::new();
+        map.insert((0, 0, 0), (0, 0));
+        map.insert((1, 0, 0), (0, 0));
+        map.insert((1, 0, 1), (0, 1));
+
+        let fused = ShaderModule::fuse(FuseDescriptor {
+            modules: &[&struct00_mod, &struct01_mod],
+            resource_map: &map,
+        });
+
+        let wgsl_text = fused.emit_wgsl();
+        eprintln!("{wgsl_text}");
+    }
 }
