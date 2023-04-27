@@ -10,15 +10,35 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::error::Error;
 
+/// Specifies where a resource should be remapped to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FuseDestination {
+    /// The resource should live in `@group([group]) @binding([binding])`
+    Binding { group: u32, binding: u32 },
+    /// The resource should live in a global variable with the given index.
+    /// (The index is **only** used to differentiate different global destinations.)
+    Global(usize),
+}
+impl FuseDestination {
+    fn to_naga_binding(&self) -> Option<ResourceBinding> {
+        match self {
+            Self::Binding { group, binding } => Some(ResourceBinding {
+                group: *group,
+                binding: *binding,
+            }),
+            Self::Global(_) => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct FuseDescriptor<'a> {
     /// The modules to fuse into a single kernel dispatch, ordered by execution.
     modules: &'a [&'a ShaderModule],
     /// Each entry `(i, g, b) -> (g', b')` specifies that `group=g`, `binding=b` of `modules[i]`
-    /// should be placed into `group=g`, `binding=b` of the resulting fused module.
-    /// Each bound resource appearing in the source modules *must* appear in this map exactly once.
+    /// should be placed into the specified destination.
     /// The map is deliberately non-injective to allow fusing bound resources.
-    resource_map: &'a HashMap<(usize, u32, u32), (u32, u32)>,
+    resource_map: &'a HashMap<(usize, u32, u32), FuseDestination>,
 }
 
 #[derive(Debug)]
@@ -121,7 +141,7 @@ type Remap<T> = HashMap<Handle<T>, Handle<T>>;
 // doesn't need to exist, but cuts down on the verbosity of arguments.
 struct Fuser<'a> {
     module: &'a Module,
-    resource_map: &'a HashMap<(usize, u32, u32), (u32, u32)>,
+    resource_map: &'a HashMap<(usize, u32, u32), FuseDestination>,
     module_index: usize,
 }
 
@@ -192,43 +212,47 @@ impl<'a> Fuser<'a> {
         &mut self,
         type_map: &Remap<Type>,
         cst_map: &Remap<Constant>,
-        resource_locations: &mut HashMap<(u32, u32), Handle<GlobalVariable>>,
+        resource_locations: &mut HashMap<FuseDestination, Handle<GlobalVariable>>,
         global_variables: &mut Arena<GlobalVariable>,
     ) -> Remap<GlobalVariable> {
         let mut gv_map = Remap::new();
         for (old_handle, old_gv) in self.module.global_variables.iter() {
-            let mut new_resource_binding = None;
+            let mut dest = None;
+
             if let Some(ResourceBinding { group, binding }) = &old_gv.binding {
                 let location = self
                     .resource_map
                     .get(&(self.module_index, *group, *binding))
                     .expect("no resource relocation info for binding");
+                dest = Some(location);
+
                 if let Some(&new_handle) = resource_locations.get(&location) {
-                    use AddressSpace::Storage;
+                    use AddressSpace::{Private, Storage};
                     // There's an existing binding. For the time being we won't validate
                     // whether the types are compatible, we'll just fixup buffer flags
                     let new_gv = global_variables.get_mut(new_handle);
                     match (&mut new_gv.space, &old_gv.space) {
                         #[rustfmt::skip]
                         (Storage { access: dst }, Storage { access: src }) => *dst |= *src,
+                        (Private, _) => (), // moving a binding into a global
                         (a, b) => assert_eq!(a, b),
                     }
                     gv_map.insert(old_handle, new_handle);
                     continue;
-                } else {
-                    // no existing resource binding. we need to add one
-                    new_resource_binding = Some(ResourceBinding {
-                        group: location.0,
-                        binding: location.1,
-                    });
                 }
             }
+
+            // If we're turning bindings into globals, we need to fix up their address space.
+            let new_space = match dest {
+                Some(FuseDestination::Global(_)) => AddressSpace::Private,
+                _ => old_gv.space.clone(),
+            };
 
             let span = self.module.global_variables.get_span(old_handle);
             let new_gv = GlobalVariable {
                 name: self.rename(&old_gv.name),
-                space: old_gv.space.clone(),
-                binding: new_resource_binding.clone(),
+                space: new_space,
+                binding: dest.map(FuseDestination::to_naga_binding).flatten(),
                 ty: type_map[&old_gv.ty],
                 init: old_gv.init.map(|old_cst| cst_map[&old_cst]),
             };
@@ -236,8 +260,8 @@ impl<'a> Fuser<'a> {
             gv_map.insert(old_handle, new_handle);
             // If we just added a new resource binding, we need to make sure later iterations
             // know where to find it.
-            if let Some(ResourceBinding { group, binding }) = new_resource_binding {
-                resource_locations.insert((group, binding), new_handle);
+            if let Some(&location) = dest {
+                resource_locations.insert(location, new_handle);
             }
         }
         return gv_map;
@@ -752,6 +776,14 @@ impl<'a> Fuser<'a> {
 mod tests {
     use super::*;
 
+    macro_rules! binding {
+        ($g:literal, $b:literal) => {
+            FuseDestination::Binding {
+                group: $g,
+                binding: $b,
+            }
+        };
+    }
     const sample_text_1: &str = "
 	struct Output { field_0 : i32 }
 	fn do_thing_on_gpu(a : i32) -> Output 
@@ -782,8 +814,8 @@ mod tests {
     fn test_singleton_fusion_sanity() {
         let pre = ShaderModule::from_wgsl(sample_text_1).unwrap();
         let mut map = HashMap::new();
-        map.insert((0, 0, 0), (0, 0));
-        map.insert((0, 0, 1), (1, 2));
+        map.insert((0, 0, 0), binding!(0, 0));
+        map.insert((0, 0, 1), binding!(0, 1));
         let fused = ShaderModule::fuse(FuseDescriptor {
             modules: &[&pre],
             resource_map: &map,
@@ -808,13 +840,13 @@ mod tests {
         let pre = ShaderModule::from_wgsl(fadd_wgpu).unwrap();
 
         let mut map = HashMap::new();
-        map.insert((0, 0, 0), (0, 0));
-        map.insert((0, 0, 1), (0, 1));
-        map.insert((0, 0, 2), (0, 2));
+        map.insert((0, 0, 0), binding!(0, 0));
+        map.insert((0, 0, 1), binding!(0, 1));
+        map.insert((0, 0, 2), binding!(0, 2));
         // reuse output from the first as the second output to the second
-        map.insert((1, 0, 0), (0, 3));
-        map.insert((1, 0, 1), (0, 2));
-        map.insert((1, 0, 2), (0, 4));
+        map.insert((1, 0, 0), binding!(0, 3));
+        map.insert((1, 0, 1), binding!(0, 2));
+        map.insert((1, 0, 2), binding!(0, 4));
 
         let fused = ShaderModule::fuse(FuseDescriptor {
             modules: &[&pre, &pre],
@@ -846,9 +878,28 @@ mod tests {
         let struct01_mod = ShaderModule::from_wgsl(struct01).unwrap();
 
         let mut map = HashMap::new();
-        map.insert((0, 0, 0), (0, 0));
-        map.insert((1, 0, 0), (0, 0));
-        map.insert((1, 0, 1), (0, 1));
+        map.insert((0, 0, 0), binding!(0, 0));
+        map.insert((1, 0, 0), binding!(0, 0));
+        map.insert((1, 0, 1), binding!(0, 1));
+
+        let fused = ShaderModule::fuse(FuseDescriptor {
+            modules: &[&struct00_mod, &struct01_mod],
+            resource_map: &map,
+        });
+
+        let wgsl_text = fused.emit_wgsl();
+        eprintln!("{wgsl_text}");
+    }
+
+    #[test]
+    fn test_fusion_elide_global_bindings() {
+        let struct00_mod = ShaderModule::from_wgsl(struct00).unwrap();
+        let struct01_mod = ShaderModule::from_wgsl(struct01).unwrap();
+
+        let mut map = HashMap::new();
+        map.insert((0, 0, 0), FuseDestination::Global(0));
+        map.insert((1, 0, 0), FuseDestination::Global(0));
+        map.insert((1, 0, 1), binding!(0, 0));
 
         let fused = ShaderModule::fuse(FuseDescriptor {
             modules: &[&struct00_mod, &struct01_mod],
