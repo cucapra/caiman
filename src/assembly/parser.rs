@@ -1279,7 +1279,10 @@ fn read_funclet_header(
     let rule_args = rule_pair(Rule::funclet_args, read_funclet_args);
     let named_args = option_to_vec(optional(rule_args, pairs, context));
     let args = named_args.clone().into_iter().map(|x| x.1).collect();
-    let names = named_args.into_iter().map(|x| x.0.unwrap_or_else(|| context.next_var())).collect();
+    let names = named_args
+        .into_iter()
+        .map(|x| x.0.unwrap_or_else(|| context.next_var()))
+        .collect();
 
     let rule_return = rule_pair(Rule::funclet_return, read_funclet_return);
     let ret = expect(rule_return, pairs, context);
@@ -1968,11 +1971,8 @@ fn read_funclet_blob(
     let mut commands: Vec<Hole<assembly::ast::NamedNode>> = Vec::new();
     let (header, in_names) = expect(rule_funclet_header(), pairs, context);
     for (index, name) in itertools::enumerate(in_names) {
-        let node = assembly::ast::Node::Phi { index : Some(index) };
-        commands.push(Some(assembly::ast::NamedNode {
-            name,
-            node,
-        }));
+        let node = assembly::ast::Node::Phi { index: Some(index) };
+        commands.push(Some(assembly::ast::NamedNode { name, node }));
     }
     // this gets very silly for checking reasons
     // we both want to check for if we have a tail edge,

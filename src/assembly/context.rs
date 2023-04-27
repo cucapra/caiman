@@ -265,18 +265,21 @@ impl<'a> Context<'a> {
         for funclet in &self.program.funclets {
             match funclet {
                 assembly::ast::FuncletDef::ExternalCPU(f) => {
-                    self.funclet_indices.insert(f.name.clone(), FuncletLocation::Cpu);
+                    self.funclet_indices
+                        .insert(f.name.clone(), FuncletLocation::Cpu);
                 }
                 assembly::ast::FuncletDef::ExternalGPU(f) => {
-                    self.funclet_indices.insert(f.name.clone(), FuncletLocation::Gpu);
+                    self.funclet_indices
+                        .insert(f.name.clone(), FuncletLocation::Gpu);
                 }
                 assembly::ast::FuncletDef::Local(f) => {
-                    self.funclet_indices.insert(f.header.name.clone(), FuncletLocation::Local);
+                    self.funclet_indices
+                        .insert(f.header.name.clone(), FuncletLocation::Local);
                     let mut node_table = NodeTable::new();
                     for command in &f.commands {
                         match command {
                             None => {}
-                            Some(assembly::ast::NamedNode { node, name}) => {
+                            Some(assembly::ast::NamedNode { node, name }) => {
                                 node_table.local.push(name.clone());
                             }
                         }
@@ -284,13 +287,16 @@ impl<'a> Context<'a> {
                     for (n, _) in &f.header.ret {
                         match n {
                             None => {}
-                            Some(name) => { node_table.returns.push(name.clone()); }
+                            Some(name) => {
+                                node_table.returns.push(name.clone());
+                            }
                         }
                     }
                     self.variable_map.insert(f.header.name.clone(), node_table);
                 }
                 assembly::ast::FuncletDef::ValueFunction(f) => {
-                    self.funclet_indices.insert(f.name.clone(), FuncletLocation::Value);
+                    self.funclet_indices
+                        .insert(f.name.clone(), FuncletLocation::Value);
                 }
             }
         }
@@ -361,7 +367,13 @@ impl<'a> Context<'a> {
 
     pub fn return_id(&self, var: &String) -> usize {
         let funclet = &self.location.funclet_id;
-        match self.variable_map.get(funclet).unwrap().returns.get_index(var) {
+        match self
+            .variable_map
+            .get(funclet)
+            .unwrap()
+            .returns
+            .get_index(var)
+        {
             Some(v) => v,
             None => panic!("Unknown return name {:?} in funclet {:?}", var, &funclet),
         }
