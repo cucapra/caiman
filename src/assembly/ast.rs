@@ -317,7 +317,7 @@ pub enum LocalTypeInfo {
 
     // Timeline
     Event {
-        place: ir::Place
+        place: ir::Place,
     },
 
     // Space

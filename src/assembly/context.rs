@@ -1,6 +1,6 @@
-use crate::assembly_ast;
-use crate::assembly_ast::Hole;
-use crate::assembly_ast::{
+use crate::assembly;
+use crate::assembly::ast::Hole;
+use crate::assembly::ast::{
     ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, NodeId, OperationId, StorageTypeId,
     TypeId, ValueFunctionId,
 };
@@ -11,8 +11,8 @@ use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct Table<T>
-    where
-        T: Eq + Hash + Debug + Clone,
+where
+    T: Eq + Hash + Debug + Clone,
 {
     values: HashSet<T>,
     indices: Vec<T>,
@@ -29,7 +29,7 @@ pub struct NodeTable {
 pub struct ValueFuncletData {
     // information about allocated value elements
     // explication locations within the scheduling world
-    explicated_allocations: HashMap<String, Option<assembly_ast::RemoteNodeId>>,
+    explicated_allocations: HashMap<String, Option<assembly::ast::RemoteNodeId>>,
     // map from call index to output name for each call
     call_outputs: HashMap<NodeId, HashMap<usize, NodeId>>,
 }
@@ -84,29 +84,29 @@ struct MetaData {
 
 #[derive(Debug)]
 pub struct Context<'a> {
-    pub schedule_extras: HashMap<assembly_ast::FuncletId, ir::SchedulingFuncletExtra>,
-    pub ffi_type_table: Table<assembly_ast::FFIType>,
+    pub schedule_extras: HashMap<assembly::ast::FuncletId, ir::SchedulingFuncletExtra>,
+    pub ffi_type_table: Table<assembly::ast::FFIType>,
     pub local_type_table: Table<String>,
-    pub remote_map: HashMap<assembly_ast::FuncletId, NodeTable>,
+    pub remote_map: HashMap<assembly::ast::FuncletId, NodeTable>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
-    pub location: assembly_ast::RemoteNodeId,
+    pub location: assembly::ast::RemoteNodeId,
     pub funclet_indices: FuncletIndices,
 
     // reference to the whole program for lookups
     // avoid making public cause we want to control this with the context
-    program: &'a assembly_ast::Program,
+    program: &'a assembly::ast::Program,
     // information found about value funclets
     value_function_explication_data: HashMap<String, ValueFuncletData>,
     meta_data: MetaData,
     // map from schedule to value
-    value_map: HashMap<assembly_ast::FuncletId, assembly_ast::FuncletId>,
+    value_map: HashMap<assembly::ast::FuncletId, assembly::ast::FuncletId>,
 }
 
 // a Table is basically a vector with no dupes
 impl<T> Table<T>
-    where
-        T: Eq + Hash + Debug + Clone,
+where
+    T: Eq + Hash + Debug + Clone,
 {
     pub fn new() -> Table<T> {
         Table {
@@ -167,8 +167,8 @@ impl<T> Table<T>
     }
 }
 
-pub fn fresh_location() -> assembly_ast::RemoteNodeId {
-    assembly_ast::RemoteNodeId {
+pub fn fresh_location() -> assembly::ast::RemoteNodeId {
+    assembly::ast::RemoteNodeId {
         funclet_id: "".to_string(),
         node_id: "".to_string(),
     }
@@ -181,10 +181,10 @@ impl ValueFuncletData {
             call_outputs: HashMap::new(),
         }
     }
-    pub fn allocate(&mut self, name: String, allocation: Option<assembly_ast::RemoteNodeId>) {
+    pub fn allocate(&mut self, name: String, allocation: Option<assembly::ast::RemoteNodeId>) {
         self.explicated_allocations.insert(name, allocation);
     }
-    pub fn get_allocation(&self, name: String) -> Option<&assembly_ast::RemoteNodeId> {
+    pub fn get_allocation(&self, name: String) -> Option<&assembly::ast::RemoteNodeId> {
         self.explicated_allocations
             .get(name.as_str())
             .and_then(|x| x.as_ref())
@@ -226,7 +226,7 @@ impl FuncletIndices {
 }
 
 impl<'a> Context<'a> {
-    pub fn new(program: &'a assembly_ast::Program) -> Context<'a> {
+    pub fn new(program: &'a assembly::ast::Program) -> Context<'a> {
         let mut context = Context {
             program,
             value_function_explication_data: HashMap::new(),
@@ -249,8 +249,8 @@ impl<'a> Context<'a> {
     fn setup_context(&mut self) {
         for typ in &self.program.types {
             match typ {
-                assembly_ast::TypeDecl::FFI(t) => { self.ffi_type_table.push(t.clone()) }
-                assembly_ast::TypeDecl::Local(t) => { self.local_type_table.push(t.name.clone()) }
+                assembly::ast::TypeDecl::FFI(t) => self.ffi_type_table.push(t.clone()),
+                assembly::ast::TypeDecl::Local(t) => self.local_type_table.push(t.name.clone()),
             }
         }
     }
@@ -259,7 +259,7 @@ impl<'a> Context<'a> {
         self.location = fresh_location()
     }
 
-    pub fn ffi_type_id(&self, name: &assembly_ast::FFIType) -> usize {
+    pub fn ffi_type_id(&self, name: &assembly::ast::FFIType) -> usize {
         match self.ffi_type_table.get_index(name) {
             Some(i) => i,
             None => panic!("Un-indexed FFI type {:?}", name),
@@ -273,10 +273,10 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn loc_type_id(&self, typ: &assembly_ast::Type) -> usize {
+    pub fn loc_type_id(&self, typ: &assembly::ast::Type) -> usize {
         match typ {
-            assembly_ast::Type::FFI(ft) => self.ffi_type_id(&ft),
-            assembly_ast::Type::Local(s) => self.local_type_id(&s),
+            assembly::ast::Type::FFI(ft) => self.ffi_type_id(&ft),
+            assembly::ast::Type::Local(s) => self.local_type_id(&s),
         }
     }
 
@@ -320,13 +320,7 @@ impl<'a> Context<'a> {
 
     pub fn return_id(&self, var: &String) -> usize {
         let funclet = &self.location.funclet_id;
-        match self
-            .remote_map
-            .get(funclet)
-            .unwrap()
-            .returns
-            .get_index(var)
-        {
+        match self.remote_map.get(funclet).unwrap().returns.get_index(var) {
             Some(v) => v,
             None => panic!("Unknown return name {:?} in funclet {:?}", var, &funclet),
         }
@@ -362,7 +356,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn add_allocation(&mut self, remote: &assembly_ast::RemoteNodeId) {
+    pub fn add_allocation(&mut self, remote: &assembly::ast::RemoteNodeId) {
         let allocation = self.location.clone();
         self.value_function_explication_data
             .get_mut(remote.funclet_id.as_str())
@@ -372,8 +366,8 @@ impl<'a> Context<'a> {
 
     pub fn get_allocation(
         &self,
-        remote: &assembly_ast::RemoteNodeId,
-    ) -> Option<&assembly_ast::RemoteNodeId> {
+        remote: &assembly::ast::RemoteNodeId,
+    ) -> Option<&assembly::ast::RemoteNodeId> {
         self.value_function_explication_data
             .get(&remote.funclet_id)
             .and_then(|f| f.explicated_allocations.get(&remote.node_id))
@@ -402,23 +396,27 @@ impl<'a> Context<'a> {
         self.schedule_extras.get(&self.location.funclet_id)
     }
 
-    pub fn get_value(&self, funclet: &assembly_ast::FuncletId) -> &assembly_ast::FuncletId {
+    pub fn get_value(&self, funclet: &assembly::ast::FuncletId) -> &assembly::ast::FuncletId {
         self.value_map.get(funclet).unwrap()
     }
 
-    pub fn set_value(&mut self, schedule: assembly_ast::FuncletId, value: assembly_ast::FuncletId) {
+    pub fn set_value(
+        &mut self,
+        schedule: assembly::ast::FuncletId,
+        value: assembly::ast::FuncletId,
+    ) {
         assert!(!self.value_map.contains_key(&schedule));
         self.value_map.insert(schedule, value);
     }
 
     pub fn node_lookup(
         &self,
-        location: &assembly_ast::RemoteNodeId,
-    ) -> Option<&assembly_ast::NamedNode> {
+        location: &assembly::ast::RemoteNodeId,
+    ) -> Option<&assembly::ast::NamedNode> {
         let funclet_id = self.funclet_indices.get(&location.funclet_id);
         let node_id = self.remote_node_id(&location.funclet_id, &location.node_id);
         funclet_id.and_then(|loc| match &self.program.funclets[loc] {
-            assembly_ast::FuncletDef::Local(f) => f.commands.get(loc).map(|x| x.as_ref().unwrap()),
+            assembly::ast::FuncletDef::Local(f) => f.commands.get(loc).map(|x| x.as_ref().unwrap()),
             _ => panic!(
                 "attempted to access non-local node in {}",
                 location.funclet_id.clone()
@@ -429,10 +427,10 @@ impl<'a> Context<'a> {
     pub fn get_cpu_funclet(
         &self,
         name: &ExternalCpuFunctionId,
-    ) -> &assembly_ast::ExternalCpuFunction {
+    ) -> &assembly::ast::ExternalCpuFunction {
         for funclet in &self.program.funclets {
             match funclet {
-                assembly_ast::FuncletDef::ExternalCPU(f) => return f,
+                assembly::ast::FuncletDef::ExternalCPU(f) => return f,
                 _ => {}
             }
         }
@@ -442,20 +440,20 @@ impl<'a> Context<'a> {
     pub fn get_gpu_funclet(
         &self,
         name: &ExternalGpuFunctionId,
-    ) -> &assembly_ast::ExternalGpuFunction {
+    ) -> &assembly::ast::ExternalGpuFunction {
         for funclet in &self.program.funclets {
             match funclet {
-                assembly_ast::FuncletDef::ExternalGPU(f) => return f,
+                assembly::ast::FuncletDef::ExternalGPU(f) => return f,
                 _ => {}
             }
         }
         panic!("GPU funclet {} not found", name);
     }
 
-    pub fn get_value_function(&self, name: &ValueFunctionId) -> &assembly_ast::ValueFunction {
+    pub fn get_value_function(&self, name: &ValueFunctionId) -> &assembly::ast::ValueFunction {
         for funclet in &self.program.funclets {
             match funclet {
-                assembly_ast::FuncletDef::ValueFunction(f) => return f,
+                assembly::ast::FuncletDef::ValueFunction(f) => return f,
                 _ => {}
             }
         }

@@ -1,15 +1,15 @@
-use crate::assembly::context::Context;
-use crate::assembly::explication_util::*;
-use crate::assembly::parser;
-use crate::assembly_ast::FFIType;
-use crate::assembly_ast::Hole;
-use crate::assembly_ast::{
+use crate::assembly::ast::FFIType;
+use crate::assembly::ast::Hole;
+use crate::assembly::ast::{
     ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, NodeId, OperationId, StorageTypeId,
     TypeId, ValueFunctionId,
 };
+use crate::assembly::context::Context;
+use crate::assembly::explication_util::*;
+use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::stable_vec::StableVec;
-use crate::{assembly_ast, frontend, ir};
+use crate::{assembly, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
@@ -49,8 +49,8 @@ fn find_filled_hole<T>(h: Hole<Box<[Hole<T>]>>) -> StableVec<T> {
 
 pub fn explicate_allocate_temporary(
     place_hole: &Hole<ir::Place>,
-    storage_type_hole: &Hole<assembly_ast::StorageTypeId>,
-    operation_hole: &Hole<assembly_ast::RemoteNodeId>,
+    storage_type_hole: &Hole<assembly::ast::StorageTypeId>,
+    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
     context: &mut Context,
 ) -> Option<ir::Node> {
     let place = todo_hole(place_hole.as_ref());
@@ -68,11 +68,11 @@ fn infer_operation(
     known_inputs: &StableVec<OperationId>,
     known_outputs: &StableVec<OperationId>,
     context: &mut Context,
-) -> Option<assembly_ast::RemoteNodeId> {
+) -> Option<assembly::ast::RemoteNodeId> {
     None
 }
 
-fn get_node_arguments(node: &assembly_ast::Node, context: &Context) -> Vec<String> {
+fn get_node_arguments(node: &assembly::ast::Node, context: &Context) -> Vec<String> {
     fn collect_arguments(arguments: &Hole<Box<[Hole<OperationId>]>>) -> Vec<String> {
         reject_hole(arguments.as_ref())
             .to_vec()
@@ -81,24 +81,24 @@ fn get_node_arguments(node: &assembly_ast::Node, context: &Context) -> Vec<Strin
             .collect()
     }
     match node {
-        assembly_ast::Node::Constant { .. } => Vec::new(),
-        assembly_ast::Node::ExtractResult { .. } => {
+        assembly::ast::Node::Constant { .. } => Vec::new(),
+        assembly::ast::Node::ExtractResult { .. } => {
             panic!("Encode-do of an extract doesn't seem defined?")
         }
-        assembly_ast::Node::CallExternalCpu {
+        assembly::ast::Node::CallExternalCpu {
             external_function_id,
             arguments,
         } => collect_arguments(arguments),
-        assembly_ast::Node::CallExternalGpuCompute {
+        assembly::ast::Node::CallExternalGpuCompute {
             external_function_id,
             dimensions,
             arguments,
         } => collect_arguments(arguments),
-        assembly_ast::Node::CallValueFunction {
+        assembly::ast::Node::CallValueFunction {
             function_id,
             arguments,
         } => collect_arguments(arguments),
-        assembly_ast::Node::Select {
+        assembly::ast::Node::Select {
             condition,
             true_case,
             false_case,
@@ -112,9 +112,9 @@ fn get_node_arguments(node: &assembly_ast::Node, context: &Context) -> Vec<Strin
 }
 
 fn explicate_operation(
-    operation_hole: &Hole<assembly_ast::RemoteNodeId>,
-    input_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
-    output_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
+    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
+    input_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
+    output_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
     context: &mut Context,
 ) -> Option<(
     ir::RemoteNodeId,
@@ -147,7 +147,7 @@ fn explicate_operation(
                     None => {
                         let node = context.node_lookup(&operation).unwrap();
                         match node.node {
-                            assembly_ast::Node::Constant { .. } => {
+                            assembly::ast::Node::Constant { .. } => {
                                 // nothing to fill
                             }
                             _ => todo!("Unsupported node {:?}", node),
@@ -169,7 +169,7 @@ fn explicate_operation(
             None => {
                 let node = context.node_lookup(&operation).unwrap();
                 match node.node {
-                    assembly_ast::Node::Constant { .. } => {
+                    assembly::ast::Node::Constant { .. } => {
                         match context.get_allocation(&operation) {
                             None => return None, // failed to explicated on this pass
                             Some(alloc_loc) => {
@@ -196,9 +196,9 @@ fn explicate_operation(
 
 pub fn explicate_encode_do(
     place_hole: &Hole<ir::Place>,
-    operation_hole: &Hole<assembly_ast::RemoteNodeId>,
-    inputs_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
-    outputs_hole: &Hole<Box<[Hole<assembly_ast::OperationId>]>>,
+    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
+    inputs_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
+    outputs_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
     context: &mut Context,
 ) -> Option<ir::Node> {
     let place = todo_hole(place_hole.clone());

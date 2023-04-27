@@ -1,16 +1,17 @@
+use crate::assembly::ast;
+use crate::assembly::ast::FFIType;
+use crate::assembly::ast::Hole;
+use crate::assembly::ast::{
+    ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, NodeId, OperationId, StorageTypeId,
+    TypeId, ValueFunctionId,
+};
 use crate::assembly::context::Context;
 use crate::assembly::context::FuncletLocation;
 use crate::assembly::explication_explicator;
 use crate::assembly::explication_util::*;
 use crate::assembly::parser;
-use crate::assembly_ast::FFIType;
-use crate::assembly_ast::Hole;
-use crate::assembly_ast::{
-    ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, NodeId, OperationId, StorageTypeId,
-    TypeId, ValueFunctionId,
-};
 use crate::ir::ffi;
-use crate::{assembly_ast, frontend, ir};
+use crate::{assembly, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
@@ -22,12 +23,12 @@ use std::path::Path;
 
 // Translation
 
-fn ir_version(version: &assembly_ast::Version, _: &mut Context) -> (u32, u32, u32) {
+fn ir_version(version: &assembly::ast::Version, _: &mut Context) -> (u32, u32, u32) {
     (version.major, version.minor, version.detailed)
 }
 
 fn ir_external_cpu(
-    external: &assembly_ast::ExternalCpuFunction,
+    external: &assembly::ast::ExternalCpuFunction,
     context: &mut Context,
 ) -> ffi::ExternalCpuFunction {
     let mut input_types = Vec::new();
@@ -48,7 +49,7 @@ fn ir_external_cpu(
 }
 
 fn ir_external_gpu_resource(
-    d: &assembly_ast::ExternalGpuFunctionResourceBinding,
+    d: &assembly::ast::ExternalGpuFunctionResourceBinding,
     input_args: &Vec<String>,
     output_args: &Vec<String>,
     context: &mut Context,
@@ -72,8 +73,14 @@ fn ir_external_gpu_resource(
     }
     let group = local_name(&d.group, input_args, output_args);
     let binding = local_name(&d.binding, input_args, output_args);
-    let input = d.input.as_ref().map(|x| local_name(&x, input_args, output_args));
-    let output = d.output.as_ref().map(|x| local_name(&x, input_args, output_args));
+    let input = d
+        .input
+        .as_ref()
+        .map(|x| local_name(&x, input_args, output_args));
+    let output = d
+        .output
+        .as_ref()
+        .map(|x| local_name(&x, input_args, output_args));
     ffi::ExternalGpuFunctionResourceBinding {
         group,
         binding,
@@ -83,7 +90,7 @@ fn ir_external_gpu_resource(
 }
 
 fn ir_external_gpu(
-    external: &assembly_ast::ExternalGpuFunction,
+    external: &assembly::ast::ExternalGpuFunction,
     context: &mut Context,
 ) -> ffi::ExternalGpuFunction {
     let mut input_types = Vec::new();
@@ -139,7 +146,7 @@ fn ir_external_gpu(
 }
 
 fn ir_native_interface(
-    program: &assembly_ast::Program,
+    program: &assembly::ast::Program,
     context: &mut Context,
 ) -> ffi::NativeInterface {
     let mut types = StableVec::new();
@@ -148,7 +155,7 @@ fn ir_native_interface(
 
     for typ in &program.types {
         match typ {
-            assembly_ast::TypeDecl::FFI(t) => {
+            assembly::ast::TypeDecl::FFI(t) => {
                 types.add(ffi_to_ffi(t.clone(), context));
             }
             _ => {}
@@ -157,10 +164,10 @@ fn ir_native_interface(
 
     for def in &program.funclets {
         match def {
-            assembly_ast::FuncletDef::ExternalCPU(external) => {
+            assembly::ast::FuncletDef::ExternalCPU(external) => {
                 external_cpu_functions.add(ir_external_cpu(external, context));
             }
-            assembly_ast::FuncletDef::ExternalGPU(external) => {
+            assembly::ast::FuncletDef::ExternalGPU(external) => {
                 external_gpu_functions.add(ir_external_gpu(external, context));
             }
             _ => {}
@@ -174,19 +181,19 @@ fn ir_native_interface(
     }
 }
 
-fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> StableVec<ir::Type> {
+fn ir_types(types: &Vec<assembly::ast::TypeDecl>, context: &mut Context) -> StableVec<ir::Type> {
     let mut result = StableVec::new();
     for type_decl in types {
         let new_type = match type_decl {
-            assembly_ast::TypeDecl::Local(typ) => {
+            assembly::ast::TypeDecl::Local(typ) => {
                 Some(match &typ.data {
                     // only supported custom types atm
-                    assembly_ast::LocalTypeInfo::NativeValue { storage_type } => {
+                    assembly::ast::LocalTypeInfo::NativeValue { storage_type } => {
                         ir::Type::NativeValue {
                             storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
                         }
                     }
-                    assembly_ast::LocalTypeInfo::Slot {
+                    assembly::ast::LocalTypeInfo::Slot {
                         storage_type,
                         queue_stage,
                         queue_place,
@@ -195,24 +202,24 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
                         queue_stage: queue_stage.clone(),
                         queue_place: queue_place.clone(),
                     },
-                    assembly_ast::LocalTypeInfo::Fence { queue_place } => ir::Type::Fence {
+                    assembly::ast::LocalTypeInfo::Fence { queue_place } => ir::Type::Fence {
                         queue_place: queue_place.clone(),
                     },
-                    assembly_ast::LocalTypeInfo::Buffer {
+                    assembly::ast::LocalTypeInfo::Buffer {
                         storage_place,
                         static_layout_opt,
                     } => ir::Type::Buffer {
                         storage_place: storage_place.clone(),
                         static_layout_opt: static_layout_opt.clone(),
                     },
-                    assembly_ast::LocalTypeInfo::Event { place } => ir::Type::Event {
+                    assembly::ast::LocalTypeInfo::Event { place } => ir::Type::Event {
                         place: place.clone(),
                     },
-                    assembly_ast::LocalTypeInfo::BufferSpace => ir::Type::BufferSpace,
-                    assembly_ast::LocalTypeInfo::SchedulingJoin {} => ir::Type::SchedulingJoin {},
+                    assembly::ast::LocalTypeInfo::BufferSpace => ir::Type::BufferSpace,
+                    assembly::ast::LocalTypeInfo::SchedulingJoin {} => ir::Type::SchedulingJoin {},
                 })
             }
-            assembly_ast::TypeDecl::FFI(name) => None,
+            assembly::ast::TypeDecl::FFI(name) => None,
         };
         match new_type {
             Some(t) => {
@@ -224,24 +231,24 @@ fn ir_types(types: &Vec<assembly_ast::TypeDecl>, context: &mut Context) -> Stabl
     result
 }
 
-fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::Node> {
+fn ir_node(node: &assembly::ast::NamedNode, context: &mut Context) -> Option<ir::Node> {
     match &node.node {
-        assembly_ast::Node::None => Some(ir::Node::None),
-        assembly_ast::Node::Phi { index } => Some(ir::Node::Phi {
+        assembly::ast::Node::None => Some(ir::Node::None),
+        assembly::ast::Node::Phi { index } => Some(ir::Node::Phi {
             index: reject_hole(index.as_ref()).clone(),
         }),
-        assembly_ast::Node::ExtractResult { node_id, index } => Some(ir::Node::ExtractResult {
+        assembly::ast::Node::ExtractResult { node_id, index } => Some(ir::Node::ExtractResult {
             node_id: context.node_id(reject_hole(node_id.as_ref())),
             index: reject_hole(index.as_ref()).clone(),
         }),
-        assembly_ast::Node::Constant { value, type_id } => {
+        assembly::ast::Node::Constant { value, type_id } => {
             let unwrapped_value = reject_hole(value.clone());
             let unwrapped_type = reject_hole(type_id.clone());
             let parsed_value = match &unwrapped_type {
-                assembly_ast::Type::Local(_) => {
+                assembly::ast::Type::Local(_) => {
                     panic!("Cannot have a custom type constant {:?}", type_id)
                 }
-                assembly_ast::Type::FFI(t) => match t {
+                assembly::ast::Type::FFI(t) => match t {
                     FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
                     FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
                     FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
@@ -253,13 +260,13 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
                 type_id: context.loc_type_id(&unwrapped_type),
             })
         }
-        assembly_ast::Node::CallValueFunction {
+        assembly::ast::Node::CallValueFunction {
             function_id,
             arguments,
         } => {
             unreachable!() // arbitrary unification of calls
         }
-        assembly_ast::Node::Select {
+        assembly::ast::Node::Select {
             condition,
             true_case,
             false_case,
@@ -268,7 +275,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             true_case: context.node_id(reject_hole(true_case.as_ref())),
             false_case: context.node_id(reject_hole(false_case.as_ref())),
         }),
-        assembly_ast::Node::CallExternalCpu {
+        assembly::ast::Node::CallExternalCpu {
             external_function_id,
             arguments,
         } => {
@@ -297,7 +304,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
                 },
             })
         }
-        assembly_ast::Node::CallExternalGpuCompute {
+        assembly::ast::Node::CallExternalGpuCompute {
             external_function_id,
             dimensions,
             arguments,
@@ -315,7 +322,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
                 .collect(),
         }),
-        assembly_ast::Node::AllocTemporary {
+        assembly::ast::Node::AllocTemporary {
             place,
             storage_type,
             operation,
@@ -325,7 +332,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             operation,
             context,
         ),
-        assembly_ast::Node::UnboundSlot {
+        assembly::ast::Node::UnboundSlot {
             place,
             storage_type,
             operation,
@@ -334,10 +341,10 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
             operation: remote_conversion(reject_hole(operation.as_ref()), context),
         }),
-        assembly_ast::Node::Drop { node } => Some(ir::Node::Drop {
+        assembly::ast::Node::Drop { node } => Some(ir::Node::Drop {
             node: context.node_id(reject_hole(node.as_ref())),
         }),
-        assembly_ast::Node::StaticAllocFromStaticBuffer {
+        assembly::ast::Node::StaticAllocFromStaticBuffer {
             buffer,
             place,
             storage_type,
@@ -348,7 +355,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
             operation: remote_conversion(reject_hole(operation.as_ref()), context),
         }),
-        assembly_ast::Node::EncodeDo {
+        assembly::ast::Node::EncodeDo {
             place,
             operation,
             inputs,
@@ -356,7 +363,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
         } => {
             explication_explicator::explicate_encode_do(place, operation, inputs, outputs, context)
         }
-        assembly_ast::Node::EncodeCopy {
+        assembly::ast::Node::EncodeCopy {
             place,
             input,
             output,
@@ -365,15 +372,15 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             input: context.node_id(reject_hole(input.as_ref())),
             output: context.node_id(reject_hole(output.as_ref())),
         }),
-        assembly_ast::Node::Submit { place, event } => Some(ir::Node::Submit {
+        assembly::ast::Node::Submit { place, event } => Some(ir::Node::Submit {
             place: reject_hole(place.clone()),
             event: remote_conversion(reject_hole(event.as_ref()), context),
         }),
-        assembly_ast::Node::EncodeFence { place, event } => Some(ir::Node::EncodeFence {
+        assembly::ast::Node::EncodeFence { place, event } => Some(ir::Node::EncodeFence {
             place: reject_hole(place.clone()),
             event: remote_conversion(reject_hole(event.as_ref()), context),
         }),
-        assembly_ast::Node::SyncFence {
+        assembly::ast::Node::SyncFence {
             place,
             fence,
             event,
@@ -382,7 +389,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             fence: context.node_id(reject_hole(fence.as_ref())),
             event: remote_conversion(reject_hole(event.as_ref()), context),
         }),
-        assembly_ast::Node::InlineJoin {
+        assembly::ast::Node::InlineJoin {
             funclet,
             captures,
             continuation,
@@ -398,7 +405,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
                 .collect(),
             continuation: context.node_id(reject_hole(continuation.as_ref())),
         }),
-        assembly_ast::Node::SerializedJoin {
+        assembly::ast::Node::SerializedJoin {
             funclet,
             captures,
             continuation,
@@ -414,8 +421,8 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
                 .collect(),
             continuation: context.node_id(reject_hole(continuation.as_ref())),
         }),
-        assembly_ast::Node::DefaultJoin => Some(ir::Node::DefaultJoin),
-        assembly_ast::Node::SubmissionEvent {
+        assembly::ast::Node::DefaultJoin => Some(ir::Node::DefaultJoin),
+        assembly::ast::Node::SubmissionEvent {
             here_place,
             there_place,
             local_past,
@@ -424,7 +431,7 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             there_place: reject_hole(there_place.clone()),
             local_past: context.node_id(reject_hole(local_past.as_ref())),
         }),
-        assembly_ast::Node::SynchronizationEvent {
+        assembly::ast::Node::SynchronizationEvent {
             here_place,
             there_place,
             local_past,
@@ -435,13 +442,13 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
             local_past: context.node_id(reject_hole(local_past.as_ref())),
             remote_local_past: context.node_id(reject_hole(remote_local_past.as_ref())),
         }),
-        assembly_ast::Node::SeparatedLinearSpace { place, space } => {
+        assembly::ast::Node::SeparatedLinearSpace { place, space } => {
             Some(ir::Node::SeparatedLinearSpace {
                 place: reject_hole(place.clone()),
                 space: context.node_id(reject_hole(space.as_ref())),
             })
         }
-        assembly_ast::Node::MergedLinearSpace { place, spaces } => {
+        assembly::ast::Node::MergedLinearSpace { place, spaces } => {
             Some(ir::Node::MergedLinearSpace {
                 place: reject_hole(place.clone()),
                 spaces: reject_hole(spaces.as_ref())
@@ -453,15 +460,15 @@ fn ir_node(node: &assembly_ast::NamedNode, context: &mut Context) -> Option<ir::
     }
 }
 
-fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<ir::TailEdge> {
+fn ir_tail_edge(tail: &assembly::ast::TailEdge, context: &mut Context) -> Option<ir::TailEdge> {
     match tail {
-        assembly_ast::TailEdge::Return { return_values } => Some(ir::TailEdge::Return {
+        assembly::ast::TailEdge::Return { return_values } => Some(ir::TailEdge::Return {
             return_values: reject_hole(return_values.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
                 .collect(),
         }),
-        assembly_ast::TailEdge::Yield {
+        assembly::ast::TailEdge::Yield {
             pipeline_yield_point_id,
             yielded_nodes,
             next_funclet,
@@ -484,14 +491,14 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
                 .collect(),
         }),
-        assembly_ast::TailEdge::Jump { join, arguments } => Some(ir::TailEdge::Jump {
+        assembly::ast::TailEdge::Jump { join, arguments } => Some(ir::TailEdge::Jump {
             join: context.node_id(reject_hole(join.as_ref())),
             arguments: reject_hole(arguments.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
                 .collect(),
         }),
-        assembly_ast::TailEdge::ScheduleCall {
+        assembly::ast::TailEdge::ScheduleCall {
             value_operation,
             callee_funclet_id,
             callee_arguments,
@@ -509,7 +516,7 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
                 .collect(),
             continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
         }),
-        assembly_ast::TailEdge::ScheduleSelect {
+        assembly::ast::TailEdge::ScheduleSelect {
             value_operation,
             condition,
             callee_funclet_ids,
@@ -534,7 +541,7 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
                 .collect(),
             continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
         }),
-        assembly_ast::TailEdge::DynamicAllocFromBuffer {
+        assembly::ast::TailEdge::DynamicAllocFromBuffer {
             buffer,
             arguments,
             dynamic_allocation_size_slots,
@@ -566,7 +573,7 @@ fn ir_tail_edge(tail: &assembly_ast::TailEdge, context: &mut Context) -> Option<
     }
 }
 
-fn ir_funclet(funclet: &assembly_ast::Funclet, context: &mut Context) -> Option<ir::Funclet> {
+fn ir_funclet(funclet: &assembly::ast::Funclet, context: &mut Context) -> Option<ir::Funclet> {
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
@@ -602,13 +609,13 @@ fn ir_funclet(funclet: &assembly_ast::Funclet, context: &mut Context) -> Option<
 }
 
 fn ir_funclets(
-    funclets: &assembly_ast::FuncletDefs,
+    funclets: &assembly::ast::FuncletDefs,
     context: &mut Context,
 ) -> StableVec<ir::Funclet> {
     let mut result = StableVec::new();
     for def in funclets {
         match def {
-            assembly_ast::FuncletDef::Local(f) => {
+            assembly::ast::FuncletDef::Local(f) => {
                 let name = &f.header.name;
                 context.location.funclet_id = name.clone();
                 result.add(ir_funclet(f, context).unwrap());
@@ -622,7 +629,7 @@ fn ir_funclets(
 }
 
 fn ir_value_function(
-    function: &assembly_ast::ValueFunction,
+    function: &assembly::ast::ValueFunction,
     context: &mut Context,
 ) -> ir::ValueFunction {
     let mut input_types = Vec::new();
@@ -653,13 +660,13 @@ fn ir_value_function(
 }
 
 fn ir_value_functions(
-    funclets: &assembly_ast::FuncletDefs,
+    funclets: &assembly::ast::FuncletDefs,
     context: &mut Context,
 ) -> StableVec<ir::ValueFunction> {
     let mut result = StableVec::new();
     for def in funclets {
         match def {
-            assembly_ast::FuncletDef::ValueFunction(f) => {
+            assembly::ast::FuncletDef::ValueFunction(f) => {
                 result.add(ir_value_function(f, context));
             }
             _ => {}
@@ -668,7 +675,7 @@ fn ir_value_functions(
     result
 }
 
-fn ir_pipelines(pipelines: &assembly_ast::Pipelines, context: &mut Context) -> Vec<ir::Pipeline> {
+fn ir_pipelines(pipelines: &assembly::ast::Pipelines, context: &mut Context) -> Vec<ir::Pipeline> {
     let mut result = Vec::new();
     for (name, pipeline) in pipelines {
         let new_pipeline = ir::Pipeline {
@@ -681,19 +688,19 @@ fn ir_pipelines(pipelines: &assembly_ast::Pipelines, context: &mut Context) -> V
     result
 }
 
-fn ir_value_extra(_: &assembly_ast::UncheckedDict, _: &mut Context) -> ir::ValueFuncletExtra {
+fn ir_value_extra(_: &assembly::ast::UncheckedDict, _: &mut Context) -> ir::ValueFuncletExtra {
     todo!()
 }
 
 fn ir_value_extras(
-    funclets: &assembly_ast::FuncletDefs,
-    extras: &assembly_ast::Extras,
+    funclets: &assembly::ast::FuncletDefs,
+    extras: &assembly::ast::Extras,
     context: &mut Context,
 ) -> HashMap<ir::FuncletId, ir::ValueFuncletExtra> {
     let mut result = HashMap::new();
     for funclet in funclets {
         match funclet {
-            assembly_ast::FuncletDef::Local(f) => match f.kind {
+            assembly::ast::FuncletDef::Local(f) => match f.kind {
                 ir::FuncletKind::Value => {
                     let name = &f.header.name;
                     for extra in extras {
@@ -716,7 +723,7 @@ fn ir_value_extras(
 }
 
 fn ir_scheduling_extra(
-    d: &assembly_ast::UncheckedDict,
+    d: &assembly::ast::UncheckedDict,
     context: &mut Context,
 ) -> ir::SchedulingFuncletExtra {
     let index = value_funclet_raw_id(d.get(&as_key("value")).unwrap(), context);
@@ -769,15 +776,12 @@ fn ir_scheduling_extra(
     }
 }
 
-fn setup_extras(extras: &assembly_ast::Extras, context: &mut Context) {
+fn setup_extras(extras: &assembly::ast::Extras, context: &mut Context) {
     let mut built_extras = HashMap::new();
     for (name, extra) in extras {
         let index = context.funclet_indices.get(&name);
         context.location.funclet_id = name.clone();
-        built_extras.insert(
-            name.clone(),
-            ir_scheduling_extra(&extra, context),
-        );
+        built_extras.insert(name.clone(), ir_scheduling_extra(&extra, context));
     }
     context.schedule_extras = built_extras;
 }
@@ -797,7 +801,7 @@ fn ir_scheduling_extras(
     result
 }
 
-fn ir_program(program: &assembly_ast::Program, context: &mut Context) -> ir::Program {
+fn ir_program(program: &assembly::ast::Program, context: &mut Context) -> ir::Program {
     setup_extras(&program.extras, context);
     ir::Program {
         native_interface: ir_native_interface(&program, context),
@@ -810,7 +814,7 @@ fn ir_program(program: &assembly_ast::Program, context: &mut Context) -> ir::Pro
     }
 }
 
-pub fn explicate(mut program: assembly_ast::Program) -> frontend::Definition {
+pub fn explicate(mut program: assembly::ast::Program) -> frontend::Definition {
     let mut context = Context::new(&program);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
