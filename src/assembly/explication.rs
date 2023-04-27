@@ -1,5 +1,5 @@
-use crate::assembly::explication_context::Context;
-use crate::assembly::explication_context::FuncletLocation;
+use crate::assembly::context::Context;
+use crate::assembly::context::FuncletLocation;
 use crate::assembly::explication_explicator;
 use crate::assembly::explication_util::*;
 use crate::assembly::parser;

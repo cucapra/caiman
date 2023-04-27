@@ -1,5 +1,5 @@
-use crate::assembly::explication_context;
-use crate::assembly::explication_context::Context;
+use crate::assembly::context;
+use crate::assembly::context::Context;
 use crate::assembly::explication_explicator;
 use crate::assembly::parser;
 use crate::assembly_ast::FFIType;
@@ -177,15 +177,15 @@ pub fn value_funclet_raw_id(d: &assembly_ast::DictValue, context: &mut Context) 
 pub fn value_type(
     d: &assembly_ast::DictValue,
     context: &mut Context,
-) -> explication_context::Location {
+) -> context::Location {
     let v = as_value(d.clone());
     match v {
         assembly_ast::Value::Type(t) => match t {
             assembly_ast::Type::FFI(typ) => {
-                explication_context::Location::FFI(context.ffi_type_id(&typ))
+                context::Location::FFI(context.ffi_type_id(&typ))
             }
             assembly_ast::Type::Local(name) => {
-                explication_context::Location::Local(context.local_type_id(&name))
+                context::Location::Local(context.local_type_id(&name))
             }
         },
         _ => panic!("Expected type got {:?}", v),

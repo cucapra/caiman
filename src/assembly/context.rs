@@ -11,8 +11,8 @@ use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct Table<T>
-where
-    T: Eq + Hash + Debug + Clone,
+    where
+        T: Eq + Hash + Debug + Clone,
 {
     values: HashSet<T>,
     indices: Vec<T>,
@@ -70,16 +70,16 @@ pub struct FuncletInformation {
 }
 
 #[derive(Debug)]
-struct MetaData {
-    variable_index: usize,
-}
-
-#[derive(Debug)]
 pub struct FuncletIndices {
     external_funclet_table: Table<String>,
     local_funclet_table: Table<String>,
     value_function_table: Table<String>,
     funclet_kind_map: HashMap<String, FuncletLocation>,
+}
+
+#[derive(Debug)]
+struct MetaData {
+    variable_index: usize,
 }
 
 #[derive(Debug)]
@@ -105,8 +105,8 @@ pub struct Context<'a> {
 
 // a Table is basically a vector with no dupes
 impl<T> Table<T>
-where
-    T: Eq + Hash + Debug + Clone,
+    where
+        T: Eq + Hash + Debug + Clone,
 {
     pub fn new() -> Table<T> {
         Table {
@@ -167,6 +167,13 @@ where
     }
 }
 
+pub fn fresh_location() -> assembly_ast::RemoteNodeId {
+    assembly_ast::RemoteNodeId {
+        funclet_id: "".to_string(),
+        node_id: "".to_string(),
+    }
+}
+
 impl ValueFuncletData {
     pub fn new() -> ValueFuncletData {
         ValueFuncletData {
@@ -218,16 +225,9 @@ impl FuncletIndices {
     }
 }
 
-fn fresh_location() -> assembly_ast::RemoteNodeId {
-    assembly_ast::RemoteNodeId {
-        funclet_id: "".to_string(),
-        node_id: "".to_string(),
-    }
-}
-
 impl<'a> Context<'a> {
     pub fn new(program: &'a assembly_ast::Program) -> Context<'a> {
-        Context {
+        let mut context = Context {
             program,
             value_function_explication_data: HashMap::new(),
             meta_data: MetaData { variable_index: 0 },
@@ -238,6 +238,20 @@ impl<'a> Context<'a> {
             funclet_indices: FuncletIndices::new(),
             remote_map: HashMap::new(),
             location: fresh_location(),
+        };
+        context.setup_context();
+        context
+    }
+
+    // Take a pass over the program to construct the initial context
+    // We only do this once and assume the invariants are maintained by construction
+    // Note that a context without this makes little sense, so we can't build an "empty context"
+    fn setup_context(&mut self) {
+        for typ in &self.program.types {
+            match typ {
+                assembly_ast::TypeDecl::FFI(t) => { self.ffi_type_table.push(t.clone()) }
+                assembly_ast::TypeDecl::Local(t) => { self.local_type_table.push(t.name.clone()) }
+            }
         }
     }
 
