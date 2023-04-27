@@ -578,15 +578,6 @@ fn ir_funclet(funclet: &assembly::ast::Funclet, context: &mut Context) -> Option
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
 
-    for (mut index, input_type) in funclet.header.args.iter().enumerate() {
-        match input_type.0.clone() {
-            // adding the phi node
-            None => {}
-            Some(s) => nodes.push(ir::Node::Phi { index }),
-        };
-        input_types.push(context.loc_type_id(&input_type.1));
-    }
-
     for output_type in funclet.header.ret.iter() {
         output_types.push(context.loc_type_id(&output_type.1));
     }
@@ -777,6 +768,7 @@ fn ir_scheduling_extra(
 }
 
 fn setup_extras(extras: &assembly::ast::Extras, context: &mut Context) {
+    // todo: rework with extra rewok
     let mut built_extras = HashMap::new();
     for (name, extra) in extras {
         let index = context.funclet_indices.get(&name);

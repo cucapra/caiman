@@ -21,8 +21,8 @@ where
 #[derive(Debug)]
 pub struct NodeTable {
     // local names and return names such as [%out : i64] or whatever
-    local: Table<String>,
-    returns: Table<String>,
+    pub local: Table<String>,
+    pub returns: Table<String>,
 }
 
 #[derive(Debug)]
@@ -87,7 +87,7 @@ pub struct Context<'a> {
     pub schedule_extras: HashMap<assembly::ast::FuncletId, ir::SchedulingFuncletExtra>,
     pub ffi_type_table: Table<assembly::ast::FFIType>,
     pub local_type_table: Table<String>,
-    pub remote_map: HashMap<assembly::ast::FuncletId, NodeTable>,
+    pub variable_map: HashMap<assembly::ast::FuncletId, NodeTable>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
     pub location: assembly::ast::RemoteNodeId,
@@ -174,6 +174,15 @@ pub fn fresh_location() -> assembly::ast::RemoteNodeId {
     }
 }
 
+impl NodeTable {
+    pub fn new() -> NodeTable {
+        NodeTable {
+            local: Table::new(),
+            returns: Table::new(),
+        }
+    }
+}
+
 impl ValueFuncletData {
     pub fn new() -> ValueFuncletData {
         ValueFuncletData {
@@ -236,7 +245,7 @@ impl<'a> Context<'a> {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
             funclet_indices: FuncletIndices::new(),
-            remote_map: HashMap::new(),
+            variable_map: HashMap::new(),
             location: fresh_location(),
         };
         context.setup_context();
@@ -251,6 +260,38 @@ impl<'a> Context<'a> {
             match typ {
                 assembly::ast::TypeDecl::FFI(t) => self.ffi_type_table.push(t.clone()),
                 assembly::ast::TypeDecl::Local(t) => self.local_type_table.push(t.name.clone()),
+            }
+        }
+        for funclet in &self.program.funclets {
+            match funclet {
+                assembly::ast::FuncletDef::ExternalCPU(f) => {
+                    self.funclet_indices.insert(f.name.clone(), FuncletLocation::Cpu);
+                }
+                assembly::ast::FuncletDef::ExternalGPU(f) => {
+                    self.funclet_indices.insert(f.name.clone(), FuncletLocation::Gpu);
+                }
+                assembly::ast::FuncletDef::Local(f) => {
+                    self.funclet_indices.insert(f.header.name.clone(), FuncletLocation::Local);
+                    let mut node_table = NodeTable::new();
+                    for command in &f.commands {
+                        match command {
+                            None => {}
+                            Some(assembly::ast::NamedNode { node, name}) => {
+                                node_table.local.push(name.clone());
+                            }
+                        }
+                    }
+                    for (n, _) in &f.header.ret {
+                        match n {
+                            None => {}
+                            Some(name) => { node_table.returns.push(name.clone()); }
+                        }
+                    }
+                    self.variable_map.insert(f.header.name.clone(), node_table);
+                }
+                assembly::ast::FuncletDef::ValueFunction(f) => {
+                    self.funclet_indices.insert(f.name.clone(), FuncletLocation::Value);
+                }
             }
         }
     }
@@ -281,7 +322,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn remote_node_id(&self, funclet: &String, var: &String) -> usize {
-        match self.remote_map.get(funclet) {
+        match self.variable_map.get(funclet) {
             Some(f) => match f.local.get(var) {
                 Some(v) => v,
                 None => panic!("Unknown local name {} in funclet {}", var, funclet),
@@ -291,7 +332,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn remote_return_id(&self, funclet: &String, var: &String) -> usize {
-        match self.remote_map.get(funclet) {
+        match self.variable_map.get(funclet) {
             Some(f) => match f.returns.get_index(var) {
                 Some(v) => v,
                 None => panic!("Unknown return name {} in funclet {}", var, funclet),
@@ -301,7 +342,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn node_from_id(&self, index: usize) -> String {
-        self.remote_map
+        self.variable_map
             .get(self.location.funclet_id.as_str())
             .unwrap()
             .local
@@ -312,7 +353,7 @@ impl<'a> Context<'a> {
 
     pub fn node_id(&self, var: &String) -> usize {
         let funclet = &self.location.funclet_id;
-        match self.remote_map.get(funclet).unwrap().local.get_index(var) {
+        match self.variable_map.get(funclet).unwrap().local.get_index(var) {
             Some(v) => v,
             None => panic!("Unknown variable name {:?} in funclet {:?}", var, &funclet),
         }
@@ -320,7 +361,7 @@ impl<'a> Context<'a> {
 
     pub fn return_id(&self, var: &String) -> usize {
         let funclet = &self.location.funclet_id;
-        match self.remote_map.get(funclet).unwrap().returns.get_index(var) {
+        match self.variable_map.get(funclet).unwrap().returns.get_index(var) {
             Some(v) => v,
             None => panic!("Unknown return name {:?} in funclet {:?}", var, &funclet),
         }

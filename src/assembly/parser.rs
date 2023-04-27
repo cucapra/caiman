@@ -33,6 +33,10 @@ impl Context {
     pub fn new() -> Context {
         Context { var_index: 0 }
     }
+    pub fn next_var(&mut self) -> String {
+        self.var_index += 1;
+        format!("%{}", self.var_index)
+    }
 }
 
 fn compose_pair<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> U + 'a>
@@ -1269,18 +1273,20 @@ fn read_funclet_return(
 fn read_funclet_header(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> assembly::ast::FuncletHeader {
+) -> (assembly::ast::FuncletHeader, Vec<String>) {
     let name = reject_hole(expect(rule_fn_name(), pairs, context));
 
     let rule_args = rule_pair(Rule::funclet_args, read_funclet_args);
-    let args = option_to_vec(optional(rule_args, pairs, context));
+    let named_args = option_to_vec(optional(rule_args, pairs, context));
+    let args = named_args.clone().into_iter().map(|x| x.1).collect();
+    let names = named_args.into_iter().map(|x| x.0.unwrap_or_else(|| context.next_var())).collect();
 
     let rule_return = rule_pair(Rule::funclet_return, read_funclet_return);
     let ret = expect(rule_return, pairs, context);
-    assembly::ast::FuncletHeader { ret, name, args }
+    (assembly::ast::FuncletHeader { ret, name, args }, names)
 }
 
-fn rule_funclet_header<'a>() -> RuleApp<'a, assembly::ast::FuncletHeader> {
+fn rule_funclet_header<'a>() -> RuleApp<'a, (assembly::ast::FuncletHeader, Vec<String>)> {
     rule_pair(Rule::funclet_header, read_funclet_header)
 }
 
@@ -1959,8 +1965,15 @@ fn read_funclet_blob(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
 ) -> assembly::ast::Funclet {
-    let header = expect(rule_funclet_header(), pairs, context);
     let mut commands: Vec<Hole<assembly::ast::NamedNode>> = Vec::new();
+    let (header, in_names) = expect(rule_funclet_header(), pairs, context);
+    for (index, name) in itertools::enumerate(in_names) {
+        let node = assembly::ast::Node::Phi { index : Some(index) };
+        commands.push(Some(assembly::ast::NamedNode {
+            name,
+            node,
+        }));
+    }
     // this gets very silly for checking reasons
     // we both want to check for if we have a tail edge,
     //   _and_ if the last node hole could be a tail edge
