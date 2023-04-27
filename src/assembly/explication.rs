@@ -71,8 +71,8 @@ fn ir_external_gpu_resource(
         }
         panic!("Unknown GPU variable {:?}", val)
     }
-    let group = local_name(&d.group, input_args, output_args);
-    let binding = local_name(&d.binding, input_args, output_args);
+    let group = d.group.clone();
+    let binding = d.binding.clone();
     let input = d
         .input
         .as_ref()
@@ -578,8 +578,12 @@ fn ir_funclet(funclet: &assembly::ast::Funclet, context: &mut Context) -> Option
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
 
-    for output_type in funclet.header.ret.iter() {
-        output_types.push(context.loc_type_id(&output_type.1));
+    for input_type in &funclet.header.args {
+        input_types.push(context.loc_type_id(input_type));
+    }
+
+    for (_, output_type) in &funclet.header.ret {
+        output_types.push(context.loc_type_id(output_type));
     }
 
     for command in &funclet.commands {

@@ -75,6 +75,8 @@ pub struct FuncletIndices {
     local_funclet_table: Table<String>,
     value_function_table: Table<String>,
     funclet_kind_map: HashMap<String, FuncletLocation>,
+    // separate map for assembly ast location, maybe should just rework to unify the indices?
+    assembly_funclets: Table<String>,
 }
 
 #[derive(Debug)]
@@ -207,17 +209,23 @@ impl FuncletIndices {
             local_funclet_table: Table::new(),
             value_function_table: Table::new(),
             funclet_kind_map: HashMap::new(),
+            assembly_funclets: Table::new(),
         }
     }
 
     pub fn insert(&mut self, name: String, location: FuncletLocation) {
         self.funclet_kind_map.insert(name.clone(), location.clone());
+        self.assembly_funclets.push(name.clone());
         match location {
             FuncletLocation::Local => self.local_funclet_table.push(name),
             FuncletLocation::Value => self.value_function_table.push(name),
             FuncletLocation::Cpu => self.external_funclet_table.push(name),
             FuncletLocation::Gpu => self.external_funclet_table.push(name),
         };
+    }
+
+    pub fn get_index(&self, name: &String) -> Option<usize> {
+        self.assembly_funclets.get(name)
     }
 
     pub fn get_loc(&self, name: &str) -> Option<&FuncletLocation> {
@@ -234,12 +242,22 @@ impl FuncletIndices {
     }
 }
 
+impl MetaData {
+    pub fn new() -> MetaData {
+        MetaData { variable_index : 0 }
+    }
+    pub fn next_variable(&mut self) -> String {
+        self.variable_index += 1;
+        format!("%{}", self.variable_index)
+    }
+}
+
 impl<'a> Context<'a> {
     pub fn new(program: &'a assembly::ast::Program) -> Context<'a> {
         let mut context = Context {
             program,
             value_function_explication_data: HashMap::new(),
-            meta_data: MetaData { variable_index: 0 },
+            meta_data: MetaData::new(),
             schedule_extras: HashMap::new(),
             value_map: HashMap::new(),
             ffi_type_table: Table::new(),
@@ -280,7 +298,15 @@ impl<'a> Context<'a> {
                         match command {
                             None => {}
                             Some(assembly::ast::NamedNode { node, name }) => {
-                                node_table.local.push(name.clone());
+                                // a bit sketchy, but if we only correct this here, we should be ok
+                                // basically we never rebuild the context
+                                // and these names only matter for this context anyway
+                                let corrected_name = if name == "_" {
+                                    self.meta_data.next_variable()
+                                } else {
+                                    name.clone()
+                                };
+                                node_table.local.push(corrected_name);
                             }
                         }
                     }
@@ -466,10 +492,12 @@ impl<'a> Context<'a> {
         &self,
         location: &assembly::ast::RemoteNodeId,
     ) -> Option<&assembly::ast::NamedNode> {
-        let funclet_id = self.funclet_indices.get(&location.funclet_id);
+        let funclet_id = self.funclet_indices.get_index(&location.funclet_id);
         let node_id = self.remote_node_id(&location.funclet_id, &location.node_id);
-        funclet_id.and_then(|loc| match &self.program.funclets[loc] {
-            assembly::ast::FuncletDef::Local(f) => f.commands.get(loc).map(|x| x.as_ref().unwrap()),
+        funclet_id.and_then(|index| match &self.program.funclets[index] {
+            assembly::ast::FuncletDef::Local(f) => {
+                f.commands.get(node_id).map(|x| x.as_ref().unwrap())
+            }
             _ => panic!(
                 "attempted to access non-local node in {}",
                 location.funclet_id.clone()

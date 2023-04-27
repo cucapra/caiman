@@ -58,8 +58,8 @@ pub enum FFIType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalGpuFunctionResourceBinding {
-    pub group: NodeId,
-    pub binding: NodeId,
+    pub group: usize,
+    pub binding: usize,
     pub input: Option<NodeId>,
     pub output: Option<NodeId>,
 }

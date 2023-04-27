@@ -135,7 +135,6 @@ fn explicate_operation(
         },
     };
 
-    dbg!(&context);
     let node = context.node_lookup(&operation).unwrap();
     let node_arguments = get_node_arguments(&node.node, context);
 

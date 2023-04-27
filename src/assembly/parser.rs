@@ -25,17 +25,12 @@ use crate::{assembly, frontend, ir};
 
 #[derive(Debug)]
 struct Context {
-    // Mostly emptied
-    var_index: usize,
+    // keeping this here in case we need it later
 }
 
 impl Context {
     pub fn new() -> Context {
-        Context { var_index: 0 }
-    }
-    pub fn next_var(&mut self) -> String {
-        self.var_index += 1;
-        format!("%{}", self.var_index)
+        Context {}
     }
 }
 
@@ -92,9 +87,10 @@ fn unchecked_value(
     s: &assembly::ast::Value,
     data: &assembly::ast::UncheckedDict,
 ) -> assembly::ast::Value {
-    match data.get(s).unwrap() {
+    let err = format!("Expected an entry for for {:?}", s);
+    match data.get(s).unwrap_or_else(|| panic!(err.clone())) {
         assembly::ast::DictValue::Raw(v) => v.clone(),
-        e => panic!("Expected value for {:?}, got {:?}", s, e),
+        _ => panic!(err),
     }
 }
 
@@ -979,21 +975,26 @@ fn interpret_ir_dict(
                     v => panic!("Unsupported storage place {:?}", v),
                 };
             let static_layout_opt = data
-                .get(&assembly::ast::Value::ID("static_layout".to_string()))
+                .get(&assembly::ast::Value::ID("static_layout_opt".to_string()))
                 .and_then(|v| match v {
-                    assembly::ast::DictValue::List(l) => {
-                        assert_eq!(2, l.len(), "static layouts must have two arguments");
-                        let nums: Vec<usize> = l
-                            .clone()
-                            .into_iter()
-                            .map(|v| match v {
-                                assembly::ast::DictValue::Raw(assembly::ast::Value::Num(i)) => i,
-                                e => panic!("Unsupported value for static layout opt {:?}", e),
-                            })
-                            .collect();
+                    assembly::ast::DictValue::Dict(d) => {
+                        let alignment_bits = match unchecked_value(
+                            &assembly::ast::Value::ID("alignment_bits".to_string()),
+                            &d,
+                        ) {
+                            assembly::ast::Value::Num(n) => n,
+                            v => panic!("Unsupported alignment bits {:?}", v),
+                        };
+                        let byte_size = match unchecked_value(
+                            &assembly::ast::Value::ID("byte_size".to_string()),
+                            &d,
+                        ) {
+                            assembly::ast::Value::Num(n) => n,
+                            v => panic!("Unsupported byte size {:?}", v),
+                        };
                         Some(ir::StaticBufferLayout {
-                            alignment_bits: nums.get(0).unwrap().clone(),
-                            byte_size: nums.get(1).unwrap().clone(),
+                            alignment_bits,
+                            byte_size,
                         })
                     }
                     _ => panic!("Unsupported static layout opt {:?}", v),
@@ -1120,11 +1121,11 @@ fn interpret_external_gpu_dict(
     data: assembly::ast::UncheckedDict,
 ) -> assembly::ast::ExternalGpuFunctionResourceBinding {
     let group = match unchecked_value(&assembly::ast::Value::ID("group".to_string()), &data) {
-        assembly::ast::Value::VarName(t) => t,
+        assembly::ast::Value::Num(n) => n,
         v => panic!("Unsupported group {:?}", v),
     };
     let binding = match unchecked_value(&assembly::ast::Value::ID("binding".to_string()), &data) {
-        assembly::ast::Value::VarName(t) => t,
+        assembly::ast::Value::Num(n) => n,
         v => panic!("Unsupported binding {:?}", v),
     };
     let input = data
@@ -1281,7 +1282,7 @@ fn read_funclet_header(
     let args = named_args.clone().into_iter().map(|x| x.1).collect();
     let names = named_args
         .into_iter()
-        .map(|x| x.0.unwrap_or_else(|| context.next_var()))
+        .map(|x| x.0.unwrap_or("_".to_string()))
         .collect();
 
     let rule_return = rule_pair(Rule::funclet_return, read_funclet_return);
