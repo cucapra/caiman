@@ -1,11 +1,13 @@
 use crate::ir;
 use naga::{
-    AddressSpace, Arena, AtomicFunction, Block, Constant, ConstantInner, EntryPoint, Expression,
-    Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, ImageQuery, LocalVariable,
-    Module, Range, RayQueryFunction, ResourceBinding, SampleLevel, ShaderStage, Statement,
-    SwitchCase, Type, UniqueArena,
+    AddressSpace, Arena, AtomicFunction, Binding, Block, Constant, ConstantInner, EntryPoint,
+    Expression, Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, ImageQuery,
+    LocalVariable, Module, Range, RayQueryFunction, ResourceBinding, SampleLevel, ShaderStage,
+    Span, Statement, SwitchCase, Type, UniqueArena,
 };
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::error::Error;
 
 #[derive(Debug)]
@@ -69,6 +71,8 @@ impl ShaderModule {
         let mut resource_locations = HashMap::new(); // maps (group, binding) to GlobalVariable
         let mut global_variables = naga::Arena::new();
         let mut functions = naga::Arena::new();
+        let mut entry_point_arg_map = HashMap::new(); // maps entry point arguments to expressions
+        let mut entry_point = None;
 
         for (module_index, module) in desc.modules.iter().enumerate() {
             let mut fuser = Fuser {
@@ -86,8 +90,29 @@ impl ShaderModule {
                 &mut global_variables,
             );
             let fn_map = fuser.fuse_functions(&type_map, &cst_map, &gv_map, &mut functions);
+            fuser.fuse_entry_points(
+                &type_map,
+                &cst_map,
+                &gv_map,
+                &fn_map,
+                &mut functions,
+                &mut entry_point_arg_map,
+                &mut entry_point,
+            );
         }
-        todo!();
+        return ShaderModule {
+            shader_module: Module {
+                types,
+                special_types: naga::SpecialTypes {
+                    ray_desc: None,
+                    ray_intersection: None,
+                },
+                constants,
+                global_variables,
+                functions,
+                entry_points: vec![entry_point.expect("tried to merge zero kernels")],
+            },
+        };
     }
 }
 
@@ -175,13 +200,13 @@ impl<'a> Fuser<'a> {
             let mut new_binding = None;
             if let Some(ResourceBinding { group, binding }) = &old_gv.binding {
                 if let Some(&new_handle) = resource_locations.get(&(*group, *binding)) {
+                    use AddressSpace::Storage;
                     // There's an existing binding. For the time being we won't validate
                     // whether the types are compatible, we'll just fixup buffer flags
                     let new_gv = global_variables.get_mut(new_handle);
-                    use AddressSpace::Storage;
                     match (&mut new_gv.space, &old_gv.space) {
                         #[rustfmt::skip]
-                        (Storage { access: ref mut a }, Storage { access: b }) => *a |= *b,
+                        (Storage { access: dst }, Storage { access: src }) => *dst |= *src,
                         (a, b) => assert_eq!(a, b),
                     }
                     gv_map.insert(old_handle, new_handle);
@@ -607,6 +632,115 @@ impl<'a> Fuser<'a> {
             fn_map.insert(old_handle, new_handle);
         }
         return fn_map;
+    }
+
+    /// Generates an empty entry point named "main" from `template`, inheriting its stage,
+    /// workgroup size, and depth test status.
+    fn empty_entry_point(template: &EntryPoint) -> EntryPoint {
+        return EntryPoint {
+            name: "main".to_owned(),
+            stage: template.stage,
+            workgroup_size: template.workgroup_size,
+            early_depth_test: template.early_depth_test,
+            function: Function {
+                name: Some("main".to_owned()),
+                arguments: Vec::new(),
+                result: None,
+                local_variables: Arena::new(),
+                expressions: Arena::new(),
+                named_expressions: Default::default(),
+                body: Block::new(),
+            },
+        };
+    }
+
+    fn fuse_entry_points(
+        &self,
+        type_map: &Remap<Type>,
+        cst_map: &Remap<Constant>,
+        gv_map: &Remap<GlobalVariable>,
+        fn_map: &Remap<Function>,
+        functions: &mut Arena<Function>,
+        entry_point_arg_map: &mut HashMap<Binding, Handle<Expression>>,
+        fused_entry_point: &mut Option<EntryPoint>,
+    ) {
+        // We don't need to update fn_map since source entry points can't call each other.
+        assert!(
+            self.module.entry_points.len() == 1,
+            "kernel fusion: currently, only one entry point per module is supported"
+        );
+
+        let old_ep = &self.module.entry_points[0];
+        let fused = fused_entry_point.get_or_insert_with(|| Self::empty_entry_point(old_ep));
+
+        assert_eq!(
+            &old_ep.stage, &fused.stage,
+            "kernel fusion: kernels have incompatible stages"
+        );
+        assert_eq!(
+            &old_ep.workgroup_size, &fused.workgroup_size,
+            "kernel fusion: kernels specify different workgroup sizes"
+        );
+        assert_eq!(
+            &old_ep.early_depth_test, &fused.early_depth_test,
+            "kernel fusion: kernels differ in use of early depth test"
+        );
+
+        // the function arguments appearing in the fused kernel's entry point
+        let mut arguments = Vec::new();
+
+        let arg_action = |arg: &FunctionArgument| {
+            let FunctionArgument { ty, binding, name } = arg;
+            let binding = binding
+                .to_owned()
+                .expect("entry point argument which isn't not a binding?");
+            let ty = type_map[ty];
+            match entry_point_arg_map.entry(binding.clone()) {
+                Entry::Vacant(ve) => {
+                    let fused_arg = FunctionArgument {
+                        name: name.to_owned(),
+                        ty,
+                        binding: Some(binding),
+                    };
+                    // Ensure that this is passed as an argument to the new function...
+                    let fused_idx = u32::try_from(fused.function.arguments.len()).unwrap();
+                    fused.function.arguments.push(fused_arg);
+                    // Make an expression grabbing that argument..
+                    let fused_arg_expr = fused
+                        .function
+                        .expressions
+                        .append(Expression::FunctionArgument(fused_idx), Span::default());
+                    // Add to the map so we can reuse the argument if it appears in later modules
+                    ve.insert(fused_arg_expr);
+                    arguments.push(fused_arg_expr);
+                }
+                Entry::Occupied(oe) => {
+                    arguments.push(*oe.get());
+                }
+            }
+            return FunctionArgument {
+                name: name.to_owned(),
+                ty,
+                binding: None,
+            };
+        };
+
+        let new_fn = self.remap_fn(
+            &old_ep.function,
+            arg_action,
+            type_map,
+            cst_map,
+            gv_map,
+            &fn_map,
+        );
+        // not sure how we're supposed to find the span for an entry point
+        let new_handle = functions.append(new_fn, Span::default());
+        let fused_call_stmt = Statement::Call {
+            function: new_handle,
+            arguments,
+            result: None,
+        };
+        fused.function.body.push(fused_call_stmt, Span::default());
     }
 }
 

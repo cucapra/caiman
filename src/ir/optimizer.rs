@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 pub fn optimize_program(prog: &mut ir::Program) {
     for (funcId, func) in prog.funclets.iter() {
         if (func.kind == ir::FuncletKind::ScheduleExplicit) {
-            let fused = kernel_fusion(prog, &func.nodes);
+            //let fused = kernel_fusion(prog, &func.nodes);
             // TODO: I don't need to remap nodes for kernel kernel_fusion
             // if I insert none nodes instead.
         }
