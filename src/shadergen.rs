@@ -10,16 +10,25 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::error::Error;
 
+/// Specifies the "form" of a GPU kernel dispatch.
+#[derive(Debug)]
+pub struct FuseSource<'a> {
+    /// The shader module implementing this kernel dispatch.
+    shader_module: &'a ShaderModule,
+    /// The entry point used for this kernel dispatch.
+    entry_point: &'a str,
+}
+
 /// Specifies where a resource should be remapped to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum FuseDestination {
+pub enum FusedResource {
     /// The resource should live in `@group([group]) @binding([binding])`
     Binding { group: u32, binding: u32 },
     /// The resource should live in a global variable with the given index.
     /// (The index is **only** used to differentiate different global destinations.)
     Global(usize),
 }
-impl FuseDestination {
+impl FusedResource {
     fn to_naga_binding(&self) -> Option<ResourceBinding> {
         match self {
             Self::Binding { group, binding } => Some(ResourceBinding {
@@ -34,28 +43,28 @@ impl FuseDestination {
 #[derive(Debug)]
 pub struct FuseDescriptor<'a> {
     /// The modules to fuse into a single kernel dispatch, ordered by execution.
-    modules: &'a [&'a ShaderModule],
+    sources: &'a [FuseSource<'a>],
     /// Each entry `(i, g, b) -> (g', b')` specifies that `group=g`, `binding=b` of `modules[i]`
-    /// should be placed into the specified destination.
+    /// should be placed into the specified resource.
     /// The map is deliberately non-injective to allow fusing bound resources.
-    resource_map: &'a HashMap<(usize, u32, u32), FuseDestination>,
+    resources: &'a HashMap<(usize, u32, u32), FusedResource>,
 }
 
 #[derive(Debug)]
 pub struct ShaderModule {
-    shader_module: naga::Module,
+    module: naga::Module,
 }
 
 impl ShaderModule {
     pub fn from_wgsl(text: &str) -> Result<Self, Box<dyn Error>> {
-        let shader_module = naga::front::wgsl::parse_str(text)?;
-        Ok(Self { shader_module })
+        let module = naga::front::wgsl::parse_str(text)?;
+        Ok(Self { module })
     }
     pub fn from_glsl(text: &str) -> Result<Self, Box<dyn Error>> {
         let mut parser = naga::front::glsl::Frontend::default();
         let options = naga::front::glsl::Options::from(naga::ShaderStage::Compute);
         match parser.parse(&options, text) {
-            Ok(shader_module) => Ok(Self { shader_module }),
+            Ok(module) => Ok(Self { module }),
             Err(errors) => {
                 // Just report the first error for now.
                 // Could do something better here in the future, but there's a lot of
@@ -69,12 +78,12 @@ impl ShaderModule {
             naga::valid::ValidationFlags::all(),
             naga::valid::Capabilities::empty(),
         );
-        let module_info = match validator.validate(&self.shader_module) {
+        let module_info = match validator.validate(&self.module) {
             Err(why) => panic!("Error while validating WGSL: {}", why),
             Ok(module_info) => module_info,
         };
         match naga::back::wgsl::write_string(
-            &self.shader_module,
+            &self.module,
             &module_info,
             naga::back::wgsl::WriterFlags::EXPLICIT_TYPES,
         ) {
@@ -94,13 +103,13 @@ impl ShaderModule {
         let mut entry_point_arg_map = HashMap::new(); // maps entry point arguments to expressions
         let mut entry_point = None;
 
-        for (module_index, module) in desc.modules.iter().enumerate() {
+        for (index, source) in desc.sources.iter().enumerate() {
             let mut fuser = Fuser {
-                module: &module.shader_module,
-                resource_map: desc.resource_map,
-                module_index,
+                module: &source.shader_module.module,
+                entry_point: &source.entry_point,
+                resources: desc.resources,
+                index,
             };
-            let module = &module.shader_module;
             let type_map = fuser.fuse_types(&mut types);
             let cst_map = fuser.fuse_constants(&type_map, &mut constants);
             let gv_map = fuser.fuse_global_variables(
@@ -121,7 +130,7 @@ impl ShaderModule {
             );
         }
         return ShaderModule {
-            shader_module: Module {
+            module: Module {
                 types,
                 special_types: naga::SpecialTypes {
                     ray_desc: None,
@@ -141,15 +150,16 @@ type Remap<T> = HashMap<Handle<T>, Handle<T>>;
 // doesn't need to exist, but cuts down on the verbosity of arguments.
 struct Fuser<'a> {
     module: &'a Module,
-    resource_map: &'a HashMap<(usize, u32, u32), FuseDestination>,
-    module_index: usize,
+    entry_point: &'a str,
+    resources: &'a HashMap<(usize, u32, u32), FusedResource>,
+    index: usize,
 }
 
 impl<'a> Fuser<'a> {
     fn rename(&self, name: &Option<String>) -> Option<String> {
         return name
             .as_ref()
-            .map(|s| format!("fused_{:02}__{}", self.module_index, s));
+            .map(|s| format!("fused_{:02}__{}", self.index, s));
     }
     fn fuse_types(&self, types: &mut UniqueArena<Type>) -> Remap<Type> {
         let mut type_map = Remap::new();
@@ -212,7 +222,7 @@ impl<'a> Fuser<'a> {
         &mut self,
         type_map: &Remap<Type>,
         cst_map: &Remap<Constant>,
-        resource_locations: &mut HashMap<FuseDestination, Handle<GlobalVariable>>,
+        resource_locations: &mut HashMap<FusedResource, Handle<GlobalVariable>>,
         global_variables: &mut Arena<GlobalVariable>,
     ) -> Remap<GlobalVariable> {
         let mut gv_map = Remap::new();
@@ -221,8 +231,8 @@ impl<'a> Fuser<'a> {
 
             if let Some(ResourceBinding { group, binding }) = &old_gv.binding {
                 let location = self
-                    .resource_map
-                    .get(&(self.module_index, *group, *binding))
+                    .resources
+                    .get(&(self.index, *group, *binding))
                     .expect("no resource relocation info for binding");
                 dest = Some(location);
 
@@ -244,7 +254,7 @@ impl<'a> Fuser<'a> {
 
             // If we're turning bindings into globals, we need to fix up their address space.
             let new_space = match dest {
-                Some(FuseDestination::Global(_)) => AddressSpace::Private,
+                Some(FusedResource::Global(_)) => AddressSpace::Private,
                 _ => old_gv.space.clone(),
             };
 
@@ -252,7 +262,7 @@ impl<'a> Fuser<'a> {
             let new_gv = GlobalVariable {
                 name: self.rename(&old_gv.name),
                 space: new_space,
-                binding: dest.map(FuseDestination::to_naga_binding).flatten(),
+                binding: dest.map(FusedResource::to_naga_binding).flatten(),
                 ty: type_map[&old_gv.ty],
                 init: old_gv.init.map(|old_cst| cst_map[&old_cst]),
             };
@@ -693,12 +703,13 @@ impl<'a> Fuser<'a> {
         fused_entry_point: &mut Option<EntryPoint>,
     ) {
         // We don't need to update fn_map since source entry points can't call each other.
-        assert!(
-            self.module.entry_points.len() == 1,
-            "kernel fusion: currently, only one entry point per module is supported"
-        );
+        let old_ep = self
+            .module
+            .entry_points
+            .iter()
+            .find(|ep| ep.name == self.entry_point)
+            .expect("kernel fusion: unknown entry point");
 
-        let old_ep = &self.module.entry_points[0];
         let fused = fused_entry_point.get_or_insert_with(|| Self::empty_entry_point(old_ep));
 
         assert_eq!(
@@ -778,7 +789,7 @@ mod tests {
 
     macro_rules! binding {
         ($g:literal, $b:literal) => {
-            FuseDestination::Binding {
+            FusedResource::Binding {
                 group: $g,
                 binding: $b,
             }
@@ -811,14 +822,17 @@ mod tests {
     }
 
     #[test]
-    fn test_singleton_fusion_sanity() {
+    fn test_fusion_sanity() {
         let pre = ShaderModule::from_wgsl(sample_text_1).unwrap();
         let mut map = HashMap::new();
         map.insert((0, 0, 0), binding!(0, 0));
         map.insert((0, 0, 1), binding!(0, 1));
         let fused = ShaderModule::fuse(FuseDescriptor {
-            modules: &[&pre],
-            resource_map: &map,
+            sources: &[FuseSource {
+                shader_module: &pre,
+                entry_point: "main",
+            }],
+            resources: &map,
         });
         let wgsl_text = fused.emit_wgsl();
         eprintln!("{wgsl_text}");
@@ -849,8 +863,17 @@ mod tests {
         map.insert((1, 0, 2), binding!(0, 4));
 
         let fused = ShaderModule::fuse(FuseDescriptor {
-            modules: &[&pre, &pre],
-            resource_map: &map,
+            sources: &[
+                FuseSource {
+                    shader_module: &pre,
+                    entry_point: "main",
+                },
+                FuseSource {
+                    shader_module: &pre,
+                    entry_point: "main",
+                },
+            ],
+            resources: &map,
         });
 
         let wgsl_text = fused.emit_wgsl();
@@ -868,7 +891,7 @@ mod tests {
     struct Struct01 { field_from_struct01 : f32 }
     @group(0) @binding(0) var<storage, read> struct01_in : Struct01;
     @group(0) @binding(1) var<storage, write> struct01_out : Struct01;
-    @compute @workgroup_size(1) fn main() { 
+    @compute @workgroup_size(1) fn not_named_main() { 
         struct01_out.field_from_struct01 = struct01_in.field_from_struct01; 
     }";
 
@@ -883,8 +906,17 @@ mod tests {
         map.insert((1, 0, 1), binding!(0, 1));
 
         let fused = ShaderModule::fuse(FuseDescriptor {
-            modules: &[&struct00_mod, &struct01_mod],
-            resource_map: &map,
+            sources: &[
+                FuseSource {
+                    shader_module: &struct00_mod,
+                    entry_point: "main",
+                },
+                FuseSource {
+                    shader_module: &struct01_mod,
+                    entry_point: "not_named_main",
+                },
+            ],
+            resources: &map,
         });
 
         let wgsl_text = fused.emit_wgsl();
@@ -892,18 +924,27 @@ mod tests {
     }
 
     #[test]
-    fn test_fusion_elide_global_bindings() {
+    fn test_fusion_elide_bindings() {
         let struct00_mod = ShaderModule::from_wgsl(struct00).unwrap();
         let struct01_mod = ShaderModule::from_wgsl(struct01).unwrap();
 
         let mut map = HashMap::new();
-        map.insert((0, 0, 0), FuseDestination::Global(0));
-        map.insert((1, 0, 0), FuseDestination::Global(0));
+        map.insert((0, 0, 0), FusedResource::Global(0));
+        map.insert((1, 0, 0), FusedResource::Global(0));
         map.insert((1, 0, 1), binding!(0, 0));
 
         let fused = ShaderModule::fuse(FuseDescriptor {
-            modules: &[&struct00_mod, &struct01_mod],
-            resource_map: &map,
+            sources: &[
+                FuseSource {
+                    shader_module: &struct00_mod,
+                    entry_point: "main",
+                },
+                FuseSource {
+                    shader_module: &struct01_mod,
+                    entry_point: "not_named_main",
+                },
+            ],
+            resources: &map,
         });
 
         let wgsl_text = fused.emit_wgsl();
