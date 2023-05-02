@@ -38,10 +38,7 @@ pub enum Constant
 	U64(u64),
 }
 
-//pub type SpecId = usize;
 pub type ExternalFunctionId = ffi::ExternalFunctionId;
-//pub type ExternalCpuFunctionId = usize;
-//pub type ExternalGpuFunctionId = usize;
 pub type FuncletId = usize;
 pub type NodeId = usize;
 pub type OperationId = NodeId;
@@ -53,9 +50,6 @@ pub type StorageTypeId = ffi::TypeId;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
 
-//#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-//pub struct PipelineYieldPointId(pub usize);
-
 macro_rules! lookup_abstract_type {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
 	(Type) => { TypeId };
@@ -65,8 +59,6 @@ macro_rules! lookup_abstract_type {
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
 	(ExternalFunction) => { ExternalFunctionId };
-	//(ExternalCpuFunction) => { ExternalCpuFunctionId };
-	//(ExternalGpuFunction) => { ExternalGpuFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
 	(RemoteOperation) => { RemoteNodeId };
@@ -130,7 +122,6 @@ pub enum Tag
 	Halt{index : usize}
 }
 
-
 impl Tag
 {
 	fn default() -> Self
@@ -138,10 +129,6 @@ impl Tag
 		Self::None
 	}
 }
-
-pub type ValueTag = Tag;
-pub type TimelineTag = Tag;
-pub type SpatialTag = Tag;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct StaticBufferLayout
@@ -290,18 +277,6 @@ pub struct Funclet
 	pub tail_edge : TailEdge,
 }
 
-// Will phase this out, so don't depend on it
-#[derive(Debug, Clone)]
-pub struct SchedulingTagSet
-{
-	//#[serde(default = "ValueTag::default")]
-	pub value_tag : ValueTag,
-	//#[serde(default = "TimelineTag::default")]
-	pub timeline_tag : TimelineTag,
-	//#[serde(default = "SpatialTag::default")]
-	pub spatial_tag : SpatialTag,
-}
-
 fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	let mut elements = Vec::new();
 	for key in map.keys().sorted() {
@@ -311,8 +286,8 @@ fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	elements
 }
 
-// A value function is just an equivalence class over functions that behave identically at the value level
-// A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
+// A function class is just an equivalence class over functions that behave identically for some user-defined definition of identical
+// A schedule can substitute a call to it for an implementation iff that implementation is associated with the function class
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionClass
 {
@@ -326,33 +301,13 @@ pub struct FunctionClass
 	pub external_function_ids : BTreeSet<ExternalFunctionId>
 }
 
-pub type ValueFunction = FunctionClass;
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pipeline
 {
 	pub name : String,
 	pub entry_funclet : FuncletId,
 	pub effect_id_opt : Option<ffi::EffectId>,
-	//#[serde(default)]
-	//pub yield_points : BTreeMap<PipelineYieldPointId, PipelineYieldPoint>,
-	// The external functions this pipeline can use
-	//#[serde(default)]
-	//pub external_function_ids : BTreeSet<ExternalFunctionId>,
 }
-
-// Callee is permitted to change the location of slots within a buffer, the size of a space, and the timeline
-/*#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PipelineYieldPoint
-{
-	pub name : String,
-	pub yielded_types : Box<[TypeId]>,
-	pub resuming_types : Box<[TypeId]>, // All value tags must be None (callee cannot change value)
-
-	//pub yielded_timeline_tag : TimelineTag,
-	//pub resuming_timeline_tag : TimelineTag,
-	//pub spatial_funclet_id : FuncletId,
-}*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Program
@@ -375,4 +330,23 @@ impl Program
 	{
 		Default::default()
 	}
+}
+
+// Hall of shame but mostly deprecated name
+
+pub type ValueFunction = FunctionClass;
+pub type ValueTag = Tag;
+pub type TimelineTag = Tag;
+pub type SpatialTag = Tag;
+
+// Will phase this out, so don't depend on it
+#[derive(Debug, Clone)]
+pub struct SchedulingTagSet
+{
+	//#[serde(default = "ValueTag::default")]
+	pub value_tag : ValueTag,
+	//#[serde(default = "TimelineTag::default")]
+	pub timeline_tag : TimelineTag,
+	//#[serde(default = "SpatialTag::default")]
+	pub spatial_tag : SpatialTag,
 }

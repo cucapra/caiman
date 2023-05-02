@@ -8,6 +8,19 @@ macro_rules! def_id_type {
 		#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
 		pub struct $type(pub usize); // temporarily exposed internals
 
+		/*impl $type
+		{
+			pub fn from(v : usize) -> Self
+			{
+				Self(v)
+			}
+
+			pub fn as_usize(&self) -> usize
+			{
+				self.0
+			}
+		}*/
+
 		impl std::fmt::Display for $type
 		{
 			fn fmt(& self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -37,55 +50,8 @@ macro_rules! def_id_type {
 	}
 }
 
-//#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
-//pub struct TypeId(pub usize); // temporarily exposed internals
-
 def_id_type!(TypeId);
-
-//#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
-//pub struct ExternalFunctionId(pub usize); // temporarily exposed internals
-
 def_id_type!(ExternalFunctionId);
-
-/*impl std::fmt::Display for ExternalFunctionId
-{
-	fn fmt(& self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-	{
-		write!(f, "{}", self.0)
-	}
-}
-
-impl serde::Serialize for ExternalFunctionId
-{
-	fn serialize<S>(& self, serializer : S) -> Result<S::Ok, S::Error>
-		where S : serde::Serializer
-	{
-		serializer.serialize_u64(self.0 as u64)
-	}
-}
-
-impl<'de> serde::Deserialize<'de> for ExternalFunctionId
-{
-	fn deserialize<D>(deserializer : D) -> Result<Self, D::Error>
-		where D : serde::Deserializer<'de>
-	{
-		use serde::*;
-		u64::deserialize::<D>(deserializer).map(|x| Self(x as usize))
-	}
-}*/
-
-//#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
-//pub struct EffectId(pub usize);
-
-/*impl std::fmt::Display for EffectId
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-	{
-		write!(f, "{}", self.0)
-	}
-}*/
-
-
 def_id_type!(EffectId);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -163,7 +129,7 @@ pub enum ShaderModuleContent
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct GpuKernel // Kernel
+pub struct GpuKernel
 {
 	pub name : String,
 	pub input_types : Box<[TypeId]>,
@@ -254,10 +220,6 @@ pub struct NativeInterface
 {
 	#[serde(default)]
 	pub types : StableVec<Type>,
-	//#[serde(default)]
-	//pub external_cpu_functions : StableVec<ExternalCpuFunction>,
-	//#[serde(default)]
-	//pub external_gpu_functions : StableVec<ExternalGpuFunction>,
 	#[serde(default)]
 	pub external_functions : StableVec<ExternalFunction>,
 	#[serde(default)]
