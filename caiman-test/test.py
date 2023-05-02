@@ -78,7 +78,12 @@ def process_inputs(
         output =  test_dir / "src" / (input.stem + ".rs")
 
         rv = compiler.compile(input.absolute(), output)
-        if (rv.returncode != 0):
+        if (rv.returncode == 0):
+            eprint(Colorizer.grey(f"    pass: {relativized}"))
+            if not quiet and rv.stderr:
+                msg = pad_lines(rv.stderr, f"        {Colorizer.grey('|')} ")
+                print(msg, file=stderr)
+        else:
             eprint(f"    {Colorizer.red('fail:')} {relativized}")
             if not quiet:
                 msg = pad_lines(rv.stderr, f"        {Colorizer.red('|')} ")
@@ -86,7 +91,6 @@ def process_inputs(
             ps.failures += 1
             continue
 
-        eprint(Colorizer.grey(f"    pass: {relativized}"))
         lf.write(f"mod {input.stem};\n")
         ps.compiled += 1
 
