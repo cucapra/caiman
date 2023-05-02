@@ -139,7 +139,7 @@ return_sep = ${ "return" ~ sep }
 return_args = { var_name | "[" ~ var_name ~ (", " ~ var_name)* ~ "]" }
 return_command = { return_sep ~ return_args }
 yield_sep = ${ "yield" ~ sep }
-yield_command = { yield_sep ~ n ~ node_box ~ fn_name ~ var_name ~ node_box }
+yield_command = { yield_sep ~ fn_name ~ node_box ~ fn_name ~ var_name ~ node_box }
 jump_sep = ${ "jump" ~ sep }
 jump_command = { jump_sep ~ var_name ~ node_box }
 
