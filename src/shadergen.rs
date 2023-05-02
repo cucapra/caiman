@@ -50,11 +50,16 @@ pub struct FuseDescriptor<'a> {
     pub resources: &'a HashMap<(usize, u32, u32), FusedResource>,
 }
 
-#[derive(Debug)]
 pub struct ShaderModule {
     module: naga::Module,
 }
 
+impl std::fmt::Debug for ShaderModule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<<opaque shader module>>");
+        Ok(())
+    }
+}
 impl ShaderModule {
     pub fn from_wgsl(text: &str) -> Result<Self, Box<dyn Error>> {
         let module = naga::front::wgsl::parse_str(text)?;

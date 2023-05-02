@@ -11,6 +11,7 @@ use std::ops::Range;
 ///  2. Dispatches form a dependency chain.
 ///     Otherwise, fusing may be a performance loss since the GPU can execute them in parallel.
 ///  3. Dispatches share workgroup dimensions and local sizes.
+#[derive(Debug)]
 pub struct Opportunity {
     /// The scheduling nodes which should be replaced by this kernel dispatch.
     bounds: Range<ir::NodeId>,
@@ -20,6 +21,7 @@ pub struct Opportunity {
     resources: HashMap<(usize, u32, u32), FusedResource>,
 }
 
+#[derive(Debug)]
 struct FuseState {
     start: ir::NodeId,
     workgroup_dimensions: [Option<ir::NodeId>; 3],
@@ -123,10 +125,10 @@ impl FuseState {
         }
     }
 
-    pub fn finish(self, end: ir::OperationId) -> Option<Opportunity> {
-        if (end <= self.start + 1) {
+    pub fn finish(self, end: ir::OperationId, ops: &mut Vec<Opportunity>) {
+        if (self.kernels.len() <= 1) {
             // We're not actually fusing anything...
-            return None;
+            return;
         }
 
         let sources: Vec<_> = self
@@ -142,7 +144,7 @@ impl FuseState {
             resources: &self.resources,
         };
         let fused = ShaderModule::fuse(desc);
-        return Some(Opportunity {
+        ops.push(Opportunity {
             bounds: self.start..end,
             shader_module: fused,
             resources: self.resources,
@@ -150,6 +152,7 @@ impl FuseState {
     }
 }
 
+#[derive(Debug, Clone)]
 struct DispatchInfo {
     /// The ID of the kernel we're dispatching.
     id: ir::ExternalGpuFunctionId,
@@ -186,29 +189,53 @@ impl DispatchInfo {
     }
 }
 
+/// # Panics
+/// Panics if `funclet` is not a scheduling funclet.
 pub fn identify_opportunities(prog: &ir::Program, funclet: &ir::Funclet) -> Vec<Opportunity> {
+    // Nothing goes wrong if we run this on a non-scheduling funclet.
+    // But there is literally zero reason to run this on a non-scheduling funclet, so it's
+    // probably a bug if it ever gets called on one...
+    assert_eq!(ir::FuncletKind::ScheduleExplicit, funclet.kind);
+
     let mut ops = Vec::new();
     let mut state: Option<FuseState> = None;
+
     for (id, node) in funclet.nodes.iter().enumerate() {
         if let ir::Node::None = node {
+            // Always ignore None nodes.
             continue;
         }
 
+        // First: is this even a kernel?
         if let Some(dispatch) = DispatchInfo::from_node(prog, node) {
+            // Alright, it's a kernel. Are we already fusing?
             if let Some(fs) = state.as_mut() {
-                if fs.fuse(prog, dispatch) {
+                // We're already fusing. Can we add this?
+                if fs.fuse(prog, dispatch.clone()) {
+                    // Yes, we can fuse the current node into our existing dispatch!
                     continue;
+                } else {
+                    // Nope, the current node is incompatible for one reason or another.
+                    // Finish our existing fusion sequence and restart
+                    state.take().unwrap().finish(id, &mut ops);
+                    state = Some(FuseState::new(prog, id, dispatch));
                 }
-                // Intentional fallthrough here...
             } else {
+                // Ok, we're not already fusing. Let's start!
                 state = Some(FuseState::new(prog, id, dispatch));
-                continue;
+            }
+        } else {
+            // Alright, it's not a kernel. If we were in the middle of fusing, finish the job.
+            if let Some(fs) = state.take() {
+                fs.finish(id, &mut ops);
             }
         }
-
-        if let Some(op) = state.take().and_then(|fs| fs.finish(id)) {
-            ops.push(op)
-        }
     }
+
+    // Handle a fusion sequence which runs right off the end of the funclet
+    if let Some(fs) = state.take() {
+        fs.finish(funclet.nodes.len(), &mut ops);
+    }
+
     return ops;
 }

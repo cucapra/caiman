@@ -131,6 +131,8 @@ schedule @fusion_partial_sched(
     %ab_cd_gpu = alloc-temporary-gpu-f32 @fusion.%ab_cd;
 
     // You can fuse these two dispatches, but you can't fuse the one after that.
+    // Also, you shouldn't fuse these... they don't depend on each other so the GPU could
+    // run them in parallel.
     %_ = encode-do-gpu @fusion.%ab_t(%a_gpu, %b_gpu) -> %ab_gpu;
     %_ = encode-do-gpu @fusion.%cd_t(%c_gpu, %d_gpu) -> %cd_gpu;
 
