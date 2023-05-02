@@ -322,23 +322,19 @@ impl<'program> CodeGenerator<'program>
 
 		write!(self.code_writer, "let module = & instance.{};\n", shader_module_key.instance_field_name());
 
-		if ! self.shader_modules.contains_key(& shader_module_key)
+		if !self.shader_modules.contains_key(&shader_module_key)
 		{
 			let external_gpu_function = & self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
 
 			let mut shader_module = match & external_gpu_function.shader_module_content
 			{
-				ffi::ShaderModuleContent::Wgsl(text) => shadergen::ShaderModule::new_with_wgsl(text.as_str())
+				ffi::ShaderModuleContent::Wgsl(text) => {
+					shadergen::ShaderModule::from_wgsl(text.as_str()).unwrap()
+				}
+				ffi::ShaderModuleContent::Glsl(text) => {
+					shadergen::ShaderModule::from_glsl(text.as_str()).unwrap()
+				}
 			};
-
-			//self.code_writer.write_str("let module = instance.state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor { label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"");
-			/*match & external_gpu_function.shader_module_content
-			{
-				ir::ShaderModuleContent::Wgsl(text) => self.code_writer.write_str(text.as_str())
-			}*/
-			//self.code_writer.write_str(shader_module.compile_wgsl_text().as_str());
-			//self.code_writer.write_str("\"))});\n");
-
 			self.shader_modules.insert(shader_module_key, shader_module);
 		}
 
@@ -538,7 +534,7 @@ impl<'program> CodeGenerator<'program>
 		self.code_writer.write("let mut compute_pass = command_encoder.begin_compute_pass(& wgpu::ComputePassDescriptor {label : None});\n".to_string());
 		self.code_writer.write("compute_pass.set_pipeline(& pipeline);\n".to_string());
 		self.code_writer.write("compute_pass.set_bind_group(0, & bind_group, & []);\n".to_string());
-		self.code_writer.write(format!("compute_pass.dispatch({}.try_into().unwrap(), {}.try_into().unwrap(), {}.try_into().unwrap());\n", self.variable_tracker.get_var_name(dimension_vars[0]), self.variable_tracker.get_var_name(dimension_vars[1]), self.variable_tracker.get_var_name(dimension_vars[2])));
+		self.code_writer.write(format!("compute_pass.dispatch_workgroups({}.try_into().unwrap(), {}.try_into().unwrap(), {}.try_into().unwrap());\n", self.variable_tracker.get_var_name(dimension_vars[0]), self.variable_tracker.get_var_name(dimension_vars[1]), self.variable_tracker.get_var_name(dimension_vars[2])));
 		self.code_writer.write_str("}\n");
 
 		//self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
@@ -642,14 +638,18 @@ impl<'program> CodeGenerator<'program>
 	{
 		let fence_id = self.submission_queue.next_fence_id;
 		self.submission_queue.next_fence_id.0 += 1;
-		self.code_writer.write(format!("let future_var_{} = instance.state.get_queue_mut().on_submitted_work_done();\n", fence_id.0));
+		// TODO: This is probably the wrong way to do this...
+		// In essence, I just tried to carry over the old async-focused code into the new WGPU
+		// callback-focused model.
+		self.code_writer.write(format!("let (future_var_send_{0}, future_var_recv_{0}) = futures::channel::oneshot::channel::<()>();\n", fence_id.0));
+		self.code_writer.write(format!("instance.state.get_queue_mut().on_submitted_work_done(|| future_var_send_{}.send(()).unwrap());\n", fence_id.0));
 		fence_id
 	}
 
 	pub fn sync_gpu_fence(&mut self, fence_id : FenceId)
 	{
 		self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
-		self.code_writer.write(format!("futures::executor::block_on(future_var_{});\n", fence_id.0));
+		self.code_writer.write(format!("futures::executor::block_on(future_var_recv_{});\n", fence_id.0));
 	}
 
 	pub fn insert_comment(&mut self, comment_string : &str)
@@ -1055,7 +1055,7 @@ impl<'program> CodeGenerator<'program>
 
 		for (shader_module_key, shader_module) in self.shader_modules.iter_mut()
 		{
-			write!(self.code_writer, "let {} = state.get_device_mut().create_shader_module(& wgpu::ShaderModuleDescriptor {{ label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"{}\"))}});\n", shader_module_key.instance_field_name(), shader_module.compile_wgsl_text().as_str());
+			write!(self.code_writer, "let {} = state.get_device_mut().create_shader_module(wgpu::ShaderModuleDescriptor {{ label : None, source : wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(\"{}\"))}});\n", shader_module_key.instance_field_name(), shader_module.emit_wgsl().as_str());
 		}
 
 		for (gpu_function_invocation_id, gpu_function_invocation) in self.gpu_function_invocations.iter().enumerate()
@@ -1865,9 +1865,10 @@ impl<'program> CodeGenerator<'program>
 		let output_var_id = self.variable_tracker.create_local_data(type_id);
 
 		self.code_writer.write(format!("let {} = {}.slice();\n", self.variable_tracker.get_var_name(slice_var_id), self.variable_tracker.get_var_name(source_var)));
-		self.code_writer.write(format!("let {} = {}.map_async(wgpu::MapMode::Read);\n", self.variable_tracker.get_var_name(future_var_id), self.variable_tracker.get_var_name(slice_var_id)));
+		self.code_writer.write(format!("let ({0}_send, {0}_recv) = futures::channel::oneshot::channel::<()>();\n", self.variable_tracker.get_var_name(future_var_id)));
+		self.code_writer.write(format!("{1}.map_async(wgpu::MapMode::Read, |res| {{res.unwrap(); {0}_send.send(()).unwrap(); }});\n", self.variable_tracker.get_var_name(future_var_id), self.variable_tracker.get_var_name(slice_var_id)));
 		self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
-		self.code_writer.write(format!("futures::executor::block_on({});;\n", self.variable_tracker.get_var_name(future_var_id)));
+		self.code_writer.write(format!("futures::executor::block_on({}_recv);\n", self.variable_tracker.get_var_name(future_var_id)));
 		self.code_writer.write(format!("let {} = {}.get_mapped_range();\n", self.variable_tracker.get_var_name(range_var_id), self.variable_tracker.get_var_name(slice_var_id)));
 		self.code_writer.write(format!("let {} = * unsafe {{ std::mem::transmute::<* const u8, & {}>({}.as_ptr()) }};\n", self.variable_tracker.get_var_name(output_var_id), type_name, self.variable_tracker.get_var_name(range_var_id)));
 		return output_var_id;
@@ -1912,8 +1913,10 @@ impl<'program> CodeGenerator<'program>
 		write!(self.code_writer, "command_encoder.copy_buffer_to_buffer(& {}, 0, & {}, 0, {});\n", self.variable_tracker.get_var_name(data_var), self.variable_tracker.get_var_name(variable_id), type_binding_info.size);
 		self.code_writer.write("let command_buffer = command_encoder.finish();\n".to_string());
 		self.code_writer.write("instance.state.get_queue_mut().submit([command_buffer]);\n".to_string());
-		self.code_writer.write(format!("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"));
-		self.code_writer.write("futures::executor::block_on(instance.state.get_queue_mut().on_submitted_work_done());\n".to_string());
+		self.code_writer.write("let (submit_send, submit_recv) = futures::channel::oneshot::channel::<()>();\n".to_string());
+		self.code_writer.write("instance.state.get_queue_mut().on_submitted_work_done(|| submit_send.send(()).unwrap());\n".to_string());
+		self.code_writer.write("instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n".to_string());
+		self.code_writer.write("futures::executor::block_on(submit_recv);\n".to_string());
 		write!(self.code_writer, "}}\n");
 		//self.code_writer.write(format!("queue.write_buffer(& var_{}, 0, & var_{}.to_ne_bytes() );\n", variable_id, data_var));
 		variable_id

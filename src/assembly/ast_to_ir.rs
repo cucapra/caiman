@@ -500,15 +500,12 @@ fn ir_external_gpu(
 
     // Very silly
     let input_path = Path::new(&external.shader_module);
-    assert!(external.shader_module.ends_with(".wgsl"));
-    let mut input_file = match File::open(&input_path) {
-        Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
-        Ok(file) => file,
-    };
-    let mut content = String::new();
-    match input_file.read_to_string(&mut content) {
-        Err(why) => panic!("Couldn't read file: {}", why),
-        Ok(_) => (),
+    let text_content = std::fs::read_to_string(input_path).expect("failed to read shader");
+    let input_extension = input_path.extension().map(|s| s.to_str()).flatten().unwrap_or("");
+    let shader_module_content = match input_extension {
+        "wgsl" => ffi::ShaderModuleContent::Wgsl(text_content),
+        "glsl" | "comp" => ffi::ShaderModuleContent::Glsl(text_content),
+        _ => panic!("unknown shader type")
     };
 
     ffi::ExternalFunction::GpuKernel(ffi::GpuKernel {
@@ -516,8 +513,8 @@ fn ir_external_gpu(
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         entry_point: external.entry_point.clone(),
-        resource_bindings: resource_bindings.into_boxed_slice(),
-        shader_module_content: ffi::ShaderModuleContent::Wgsl(content),
+        resource_bindings : resource_bindings.into_boxed_slice(),
+        shader_module_content,
     })
 }
 

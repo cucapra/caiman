@@ -28,7 +28,7 @@ types [
     space_buffer $buffer_space {},
 ]
 
-external_gpu @trivial(%x : i32) -> [%out : i32] : "gpu_external.wgsl"
+external_gpu @trivial(%x : i32) -> [%out : i32] : "gpu_external.comp"
 {
     resource {
         group : 0,

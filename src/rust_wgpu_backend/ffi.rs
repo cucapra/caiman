@@ -125,7 +125,8 @@ pub struct GpuKernelResourceBinding
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ShaderModuleContent
 {
-	Wgsl(String)
+	Wgsl(String),
+	Glsl(String)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
