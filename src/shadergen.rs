@@ -14,9 +14,9 @@ use std::error::Error;
 #[derive(Debug)]
 pub struct FuseSource<'a> {
     /// The shader module implementing this kernel dispatch.
-    shader_module: &'a ShaderModule,
+    pub shader_module: &'a ShaderModule,
     /// The entry point used for this kernel dispatch.
-    entry_point: &'a str,
+    pub entry_point: &'a str,
 }
 
 /// Specifies where a resource should be remapped to.
@@ -43,11 +43,11 @@ impl FusedResource {
 #[derive(Debug)]
 pub struct FuseDescriptor<'a> {
     /// The modules to fuse into a single kernel dispatch, ordered by execution.
-    sources: &'a [FuseSource<'a>],
+    pub sources: &'a [FuseSource<'a>],
     /// Each entry `(i, g, b) -> (g', b')` specifies that `group=g`, `binding=b` of `modules[i]`
     /// should be placed into the specified resource.
     /// The map is deliberately non-injective to allow fusing bound resources.
-    resources: &'a HashMap<(usize, u32, u32), FusedResource>,
+    pub resources: &'a HashMap<(usize, u32, u32), FusedResource>,
 }
 
 #[derive(Debug)]
@@ -92,8 +92,23 @@ impl ShaderModule {
         }
     }
 
+    /// Returns the `(x, y, z)` local size for the compute pipeline at the given entry point.
+    ///
+    /// # Panics
+    /// Panics if no compute pipeline named `entry_point` exists.
+    pub fn local_size(&self, entry_point: &str) -> [u32; 3] {
+        return self
+            .module
+            .entry_points
+            .iter()
+            .find(|x| x.name == entry_point)
+            .expect("no such entry point exists")
+            .workgroup_size;
+    }
+
     /// Fuses all compute kernels in `modules` into a single kernel. The execution order
-    /// is defined by the order the kernels appear within `modules`.
+    /// is defined by the order the kernels appear within `modules`. The entry point of the
+    /// fused kernel is "main".
     pub fn fuse(desc: FuseDescriptor) -> ShaderModule {
         let mut types = naga::UniqueArena::new();
         let mut constants = naga::Arena::new();
