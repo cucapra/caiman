@@ -781,10 +781,10 @@ fn setup_extras(extras: &assembly::ast::Extras, context: &mut Context) {
     for (name, extra) in extras {
         let index = context.funclet_indices.get(&name);
         context.location.funclet_name = name.clone();
-        context.schedule_extras.insert(
-            context.funclet_indices.get(&name).unwrap(),
-            ir_scheduling_extra(&extra, context),
-        );
+        let extra = ir_scheduling_extra(&extra, context);
+        context
+            .schedule_extras
+            .insert(context.funclet_indices.get(&name).unwrap(), extra);
     }
 }
 
@@ -809,8 +809,33 @@ fn ir_program(program: &assembly::ast::Program, context: &mut Context) -> ir::Pr
     }
 }
 
+fn correct_names(program : &mut assembly::ast::Program) -> usize {
+    // stupid function we run up-front to get rid of `_`
+    let mut number = 0;
+    for funclet in program.funclets.iter_mut() {
+        match funclet {
+            assembly::ast::FuncletDef::Local(f) => {
+                for command in f.commands.iter_mut() {
+                    match command {
+                        None => {}
+                        Some(assembly::ast::NamedNode { node : _, name }) => {
+                            if name == "_" {
+                                *name = format!("~{}", number);
+                                number += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    };
+    number
+}
+
 pub fn explicate(mut program: assembly::ast::Program) -> frontend::Definition {
-    let mut context = Context::new(&program);
+    let node_name = correct_names(&mut program);
+    let mut context = Context::new(&program, node_name);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
         program: ir_program(&program, &mut context),

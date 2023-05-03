@@ -5,6 +5,7 @@ use crate::assembly::ast::{
     RemoteNodeName, StorageTypeId, TypeId, ValueFunctionId,
 };
 use crate::ir;
+use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -100,7 +101,7 @@ pub struct FuncletIndices {
 
 #[derive(Debug)]
 struct MetaData {
-    variable_index: usize,
+    name_index: usize,
 }
 
 #[derive(Debug)]
@@ -117,14 +118,12 @@ pub struct Context<'a> {
 
     // reference to the whole program for lookups
     // avoid making public cause we want to control this with the context
-    program: &'a assembly::ast::Program,
+    program: DebugIgnore<&'a assembly::ast::Program>,
     // information found about a given value funclet
     value_explication_data: HashMap<FuncletId, ValueFuncletData>,
     // information found about a given schedule funclet
     schedule_explication_data: HashMap<FuncletId, ScheduleFuncletData>,
     meta_data: MetaData,
-    // map from schedule to value
-    value_map: HashMap<FuncletId, FuncletId>,
     // connections from a given funclet
 }
 
@@ -292,28 +291,28 @@ impl FuncletIndices {
 }
 
 impl MetaData {
-    pub fn new() -> MetaData {
-        MetaData { variable_index: 0 }
+    pub fn new(name_index : usize) -> MetaData {
+        MetaData { name_index }
     }
-    pub fn next_variable(&mut self) -> String {
-        self.variable_index += 1;
-        format!("%{}", self.variable_index)
+    pub fn next_name(&mut self) -> String {
+        self.name_index += 1;
+        format!("~{}", self.name_index)
     }
 }
 
 impl<'a> Context<'a> {
-    pub fn new(program: &'a assembly::ast::Program) -> Context<'a> {
+    pub fn new(program: &'a assembly::ast::Program, name_index : usize) -> Context<'a> {
         let mut context = Context {
-            program,
+            program: DebugIgnore(program), // kinda dumb, but whatever
             value_explication_data: HashMap::new(),
             schedule_explication_data: HashMap::new(),
-            meta_data: MetaData::new(),
-            value_map: HashMap::new(),
+            meta_data: MetaData::new(name_index),
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
             funclet_indices: FuncletIndices::new(),
             variable_map: HashMap::new(),
             location: fresh_location(),
+            schedule_extras: HashMap::new(),
         };
         context.setup_context();
         context
@@ -357,12 +356,7 @@ impl<'a> Context<'a> {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
-                                let corrected_name = if name == "_" {
-                                    self.meta_data.next_variable()
-                                } else {
-                                    name.clone()
-                                };
-                                node_table.local.push(corrected_name);
+                                node_table.local.push(name.clone());
                             }
                         }
                     }
@@ -385,8 +379,10 @@ impl<'a> Context<'a> {
     }
 
     pub fn setup_schedule_data(&mut self, value_funclet: FuncletId) {
-        self.schedule_explication_data
-            .insert(self.location.funclet_name.clone(), ScheduleFuncletData::new(value_funclet));
+        self.schedule_explication_data.insert(
+            self.location.funclet_name.clone(),
+            ScheduleFuncletData::new(value_funclet),
+        );
     }
 
     pub fn reset_location(&mut self) {
@@ -479,8 +475,8 @@ impl<'a> Context<'a> {
     }
 
     fn allocation_name(&mut self) -> String {
-        self.meta_data.variable_index += 1;
-        format!("${}", self.meta_data.variable_index)
+        self.meta_data.name_index += 1;
+        format!("${}", self.meta_data.name_index)
     }
 
     pub fn add_allocation(&mut self, value_node: NodeId, schedule_node: NodeId) {
@@ -493,7 +489,7 @@ impl<'a> Context<'a> {
 
         // unwrap explicitly cause we assume funclet data are setup earlier
         self.value_explication_data
-            .get(value_funclet)
+            .get_mut(value_funclet)
             .unwrap()
             .allocate(
                 value_node.clone(),
@@ -502,42 +498,33 @@ impl<'a> Context<'a> {
             );
 
         self.schedule_explication_data
-            .get(&schedule_funclet)
+            .get_mut(&schedule_funclet)
             .unwrap()
             .allocate(schedule_node, value_node);
     }
 
     // get allocations of the associated value node
-    pub fn get_value_allocations(
+    pub fn get_schedule_allocations(
         &self,
-        remote: &assembly::ast::RemoteNodeName,
+        funclet: &FuncletId,
+        node: &FuncletId,
     ) -> Option<&HashMap<FuncletId, OperationId>> {
         self.value_explication_data
-            .get(&remote.funclet_name)
-            .and_then(|f| f.allocations.get(&remote.node_name))
+            .get(funclet)
+            .and_then(|f| f.allocations.get(node))
     }
 
     // get what the associated schedule node is allocating
-    pub fn get_schedule_allocations(
+    pub fn get_value_allocation(
         &self,
-        remote: &assembly::ast::RemoteNodeName,
+        funclet: &FuncletId,
+        node: &FuncletId,
     ) -> Option<&assembly::ast::OperationId> {
+        dbg!(funclet);
+        dbg!(node);
         self.schedule_explication_data
-            .get(&remote.funclet_name)
-            .and_then(|f| f.allocations.get(&remote.node_name))
-    }
-
-    pub fn get_value(&self, funclet: &assembly::ast::FuncletId) -> &assembly::ast::FuncletId {
-        self.value_map.get(funclet).unwrap()
-    }
-
-    pub fn set_value(
-        &mut self,
-        schedule: assembly::ast::FuncletId,
-        value: assembly::ast::FuncletId,
-    ) {
-        assert!(!self.value_map.contains_key(&schedule));
-        self.value_map.insert(schedule, value);
+            .get(funclet)
+            .and_then(|f| f.allocations.get(node))
     }
 
     pub fn node_lookup(
@@ -576,6 +563,14 @@ impl<'a> Context<'a> {
         }
     }
 
+    pub fn get_current_value_funclet(&self) -> &FuncletId {
+        &self
+            .schedule_explication_data
+            .get(&self.location.funclet_name)
+            .unwrap()
+            .value_funclet
+    }
+
     pub fn get_cpu_funclet(
         &self,
         name: &ExternalCpuFunctionId,
@@ -602,7 +597,7 @@ impl<'a> Context<'a> {
         panic!("GPU funclet {} not found", name);
     }
 
-    pub fn get_value_function(&self, name: &ValueFunctionId) -> &assembly::ast::ValueFunction {
+    pub fn get_value_funclet(&self, name: &ValueFunctionId) -> &assembly::ast::ValueFunction {
         for funclet in &self.program.funclets {
             match funclet {
                 assembly::ast::FuncletDef::ValueFunction(f) => return f,
@@ -610,5 +605,9 @@ impl<'a> Context<'a> {
             }
         }
         panic!("Value function {} not found", name);
+    }
+
+    pub fn next_name(&mut self) -> String {
+        self.meta_data.next_name()
     }
 }

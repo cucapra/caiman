@@ -387,3 +387,15 @@ pub fn value_index_var_dict<T>(
     }
     result
 }
+
+pub fn get_first<'a, T>(v: &'a Vec<T>, test: fn(&T) -> bool) -> Option<&'a T>
+where
+    T: Sized,
+{
+    for item in v {
+        if test(item) {
+            return Some(&item);
+        }
+    }
+    None
+}

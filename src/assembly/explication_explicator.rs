@@ -5,7 +5,7 @@ use crate::assembly::ast::{
     TypeId, ValueFunctionId,
 };
 use crate::assembly::context::Context;
-use crate::assembly::explication_util::*;
+use crate::assembly::explication_util;
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::stable_vec::StableVec;
@@ -59,33 +59,29 @@ pub fn explicate_allocate_temporary(
     let place = todo_hole(place_hole.as_ref());
     let storage_type = todo_hole(storage_type_hole.as_ref());
     let operation = todo_hole(operation_hole.as_ref());
-    context.add_allocation(operation);
+    context.add_allocation(
+        operation.node_name.clone(),
+        context.location.node_name.clone(),
+    );
     Some(ir::Node::AllocTemporary {
         place: place.clone(),
         storage_type: ffi::TypeId(context.loc_type_id(storage_type)),
-        operation: remote_conversion(operation, context),
+        operation: explication_util::remote_conversion(operation, context),
     })
 }
 
+// try to infer the value operation associated with this schedule operation
 fn infer_operation(
     known_inputs: &Vec<(usize, OperationId)>,
     known_outputs: &Vec<(usize, OperationId)>,
     context: &mut Context,
-) -> Option<assembly::ast::RemoteNodeName> {
+) -> Option<assembly::ast::OperationId> {
     // ignoring inputs for now due to being syntactically disallowed
-    for (index, output) in known_outputs {
-        match context.node_lookup(&context.location.funclet_name, output) {
-            None => None,
-            Some(node) => match &node.node {
-                assembly::ast::Node::AllocTemporary { place, storage_type, operation } => {
-
-                }
-                assembly::ast::Node::StaticAllocFromStaticBuffer { buffer, place, storage_type, operation } => {}
-                _ => None
-            }
-        }
-}
-    None
+    known_outputs.get(0).and_then(|output| {
+        context
+            .get_value_allocation(&context.location.funclet_name, &output.1)
+            .map(|name| name.clone())
+    })
 }
 
 fn get_node_arguments(node: &assembly::ast::Node, context: &Context) -> Vec<String> {
@@ -143,17 +139,21 @@ fn explicate_operation(
     let mut outputs = Vec::new();
 
     // First try and infer the operation.  If this can't be done, we give up
-    dbg!(&known_inputs);
-    dbg!(&known_outputs);
     let operation = match operation_hole {
-        Some(op) => op.clone(),
+        Some(op) => op.node_name.clone(),
         None => match infer_operation(&known_inputs, &known_outputs, context) {
             Some(op) => op,
-            None => return None,
+            None => todo!("Unfinished path"),
         },
     };
+    let op = assembly::ast::RemoteNodeName {
+        funclet_name: context.get_current_value_funclet().clone(),
+        node_name: operation,
+    };
 
-    let node = context.node_lookup(&operation.funclet_name, &operation.node_name).unwrap();
+    let node = context
+        .node_lookup(&op.funclet_name, &op.node_name)
+        .unwrap();
     let node_arguments = get_node_arguments(&node.node, context);
 
     match input_hole {
@@ -163,7 +163,9 @@ fn explicate_operation(
                 match input {
                     Some(n) => inputs.push(context.node_id(&n)),
                     None => {
-                        let node = context.node_lookup(&operation).unwrap();
+                        let node = context
+                            .node_lookup(&op.funclet_name, &op.node_name)
+                            .unwrap();
                         match node.node {
                             assembly::ast::Node::Constant { .. } => {
                                 // nothing to fill
@@ -181,22 +183,19 @@ fn explicate_operation(
         None => vec![None; 5],
     };
 
+    dbg!(&context);
     for (index, output) in output_vec.iter().enumerate() {
         match output {
             Some(n) => outputs.push(context.node_id(&n)),
             None => {
-                let node = context.node_lookup(&operation).unwrap();
+                let node = context
+                    .node_lookup(&op.funclet_name, &op.node_name)
+                    .unwrap();
                 match node.node {
                     assembly::ast::Node::Constant { .. } => {
-                        match context.get_allocation(&operation) {
-                            None => return None, // failed to explicated on this pass
-                            Some(alloc_loc) => {
-                                assert_eq!(
-                                    alloc_loc.funclet_name.clone(),
-                                    context.location.funclet_name
-                                );
-                                outputs.push(context.node_id(&alloc_loc.node_name))
-                            }
+                        match context.get_value_allocation(&op.funclet_name, &op.node_name) {
+                            None => todo!("Unfinished path"), // failed to explicate on this pass
+                            Some(alloc_loc) => outputs.push(context.node_id(&alloc_loc)),
                         }
                     }
                     _ => todo!("Unsupported node for explication {:?}", node),
@@ -206,7 +205,7 @@ fn explicate_operation(
     }
 
     Some((
-        remote_conversion(&operation, context),
+        explication_util::remote_conversion(&op, context),
         inputs.into_boxed_slice(),
         outputs.into_boxed_slice(),
     ))

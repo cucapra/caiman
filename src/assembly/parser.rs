@@ -1686,7 +1686,10 @@ fn read_encode_do_params(pairs: &mut Pairs<Rule>, context: &mut Context) -> Box<
 fn read_encode_do_call(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> (Hole<assembly::ast::RemoteNodeName>, Hole<Box<[Hole<String>]>>) {
+) -> (
+    Hole<assembly::ast::RemoteNodeName>,
+    Hole<Box<[Hole<String>]>>,
+) {
     let operation = expect(rule_funclet_loc(), pairs, context);
     let inputs = expect_hole(
         rule_pair(Rule::encode_do_params, read_encode_do_params),
