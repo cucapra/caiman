@@ -256,6 +256,8 @@ external_gpu @fmul_huge(%a : array<f32, 1024>, %b : array<f32, 1024>) -> [%c: ar
 extras {
     @fusion_sched {
         value : @fusion,
+        time : @fusion_time,
+        space : @spatial,
         input_slots : {
             %a_local : slot_info(value_tag input @fusion.%a),
             %b_local : slot_info(value_tag input @fusion.%b),
@@ -277,6 +279,8 @@ extras {
     },
     @fusion_elide_sched {
         value : @fusion,
+        time : @fusion_time,
+        space : @spatial,
         input_slots : {
             %a_local : slot_info(value_tag input @fusion.%a),
             %b_local : slot_info(value_tag input @fusion.%b),
@@ -295,6 +299,8 @@ extras {
     },
     @fusion_partial_sched {
         value : @fusion,
+        time : @fusion_partial_time,
+        space : @spatial,
         input_slots : {
             %a_local : slot_info(value_tag input @fusion.%a),
             %b_local : slot_info(value_tag input @fusion.%b),
@@ -313,6 +319,8 @@ extras {
     },
     @fusion_huge_sched {
         value : @fusion_huge,
+        time : @fusion_time,
+        space : @spatial,
         input_slots : {
             %a_local : slot_info(value_tag input @fusion_huge.%a),
             %b_local : slot_info(value_tag input @fusion_huge.%b),

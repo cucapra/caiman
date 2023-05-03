@@ -34,12 +34,16 @@ struct FuseState {
 }
 impl FuseState {
     pub fn new(prog: &ir::Program, start: ir::NodeId, dispatch: DispatchInfo) -> FuseState {
-        let info = &prog.native_interface.external_gpu_functions[dispatch.id];
-        let shader_module = match &info.shader_module_content {
+        let kernel = match &prog.native_interface.external_functions[dispatch.id.0] {
+            ffi::ExternalFunction::GpuKernel(gk) => gk,
+            _ => panic!("kernel fusion: not a GPU kernel!")
+        };
+
+        let shader_module = match &kernel.shader_module_content {
             ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
             ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
         };
-        let local_size = shader_module.local_size(&info.entry_point);
+        let local_size = shader_module.local_size(&kernel.entry_point);
 
         let mut state = FuseState {
             start,
@@ -61,7 +65,7 @@ impl FuseState {
         &mut self,
         module_index: usize,
         node: ir::NodeId,
-        resource: &ffi::ExternalGpuFunctionResourceBinding,
+        resource: &ffi::GpuKernelResourceBinding,
     ) {
         let binding = self.slot_to_binding.get(&node).copied().unwrap_or_else(|| {
             let old = self.next_binding;
@@ -80,13 +84,17 @@ impl FuseState {
             return false;
         }
 
-        let config = &prog.native_interface.external_gpu_functions[dispatch.id];
-        let shader_module = match &config.shader_module_content {
+        let kernel = match &prog.native_interface.external_functions[dispatch.id.0] {
+            ffi::ExternalFunction::GpuKernel(gk) => gk,
+            _ => panic!("kernel fusion: not a GPU kernel!")
+        };
+
+        let shader_module = match &kernel.shader_module_content {
             ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
             ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
         };
 
-        if self.local_size != shader_module.local_size(&config.entry_point) {
+        if self.local_size != shader_module.local_size(&kernel.entry_point) {
             return false;
         }
 
@@ -96,7 +104,7 @@ impl FuseState {
         // Optimistically update our resource map and slot to binding map, as if fusion would
         // succeed. It's not illegal to have *extra* elements in those maps!
         for (in_index, input) in dispatch.inputs.iter().enumerate() {
-            let resource = config
+            let resource = kernel
                 .resource_bindings
                 .iter()
                 .find(|r| r.input == Some(in_index))
@@ -106,7 +114,7 @@ impl FuseState {
         }
 
         for (output_index, output) in dispatch.outputs.iter().enumerate() {
-            let resource = config
+            let resource = kernel
                 .resource_bindings
                 .iter()
                 .find(|r| r.output == Some(output_index))
@@ -117,7 +125,7 @@ impl FuseState {
         // Update the module *if* any dependency chains were involved, or if this is the
         // first module, since otherwise we'd never make any progress.
         if (self.kernels.is_empty() || dependency_chain) {
-            let module = (shader_module, config.entry_point.clone());
+            let module = (shader_module, kernel.entry_point.clone());
             self.kernels.push(module);
             return true;
         } else {
@@ -155,7 +163,7 @@ impl FuseState {
 #[derive(Debug, Clone)]
 struct DispatchInfo {
     /// The ID of the kernel we're dispatching.
-    id: ir::ExternalGpuFunctionId,
+    id: ir::ExternalFunctionId,
     /// IDs of the scheduling nodes providing the kernel dimensions, if they're assigned.
     workgroup_dimensions: [Option<ir::NodeId>; 3],
     /// IDs of the scheduling nodes used for the inputs.

@@ -149,13 +149,14 @@ impl ShaderModule {
                 &mut entry_point,
             );
         }
+        let special_types = naga::SpecialTypes {
+            ray_desc: None,
+            ray_intersection: None,
+        };
         return ShaderModule {
             module: Module {
                 types,
-                special_types: naga::SpecialTypes {
-                    ray_desc: None,
-                    ray_intersection: None,
-                },
+                special_types,
                 constants,
                 global_variables,
                 functions,
