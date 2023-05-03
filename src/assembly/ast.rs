@@ -80,9 +80,9 @@ pub type ValueFunctionId = String;
 pub type StorageTypeId = Type;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RemoteNodeId {
-    pub funclet_id: FuncletId,
-    pub node_id: NodeId,
+pub struct RemoteNodeName {
+    pub funclet_name: FuncletId,
+    pub node_name: NodeId,
 }
 
 // Super Jank, but whatever
@@ -99,7 +99,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ExternalGpuFunction) => { ExternalGpuFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
-	(RemoteOperation) => { RemoteNodeId };
+	(RemoteOperation) => { RemoteNodeName };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -192,13 +192,13 @@ pub enum TailEdge {
         arguments: Hole<Vec<Hole<NodeId>>>,
     },
     ScheduleCall {
-        value_operation: Hole<RemoteNodeId>,
+        value_operation: Hole<RemoteNodeName>,
         callee_funclet_id: Hole<FuncletId>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
-        value_operation: Hole<RemoteNodeId>,
+        value_operation: Hole<RemoteNodeName>,
         condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
@@ -217,16 +217,16 @@ pub enum TailEdge {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TagCore {
     None,
-    Operation(RemoteNodeId),
-    Input(RemoteNodeId),
-    Output(RemoteNodeId),
+    Operation(RemoteNodeName),
+    Input(RemoteNodeName),
+    Output(RemoteNodeName),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueTag {
     Core(TagCore),
-    FunctionInput(RemoteNodeId),
-    FunctionOutput(RemoteNodeId),
+    FunctionInput(RemoteNodeName),
+    FunctionOutput(RemoteNodeName),
     Halt(NodeId),
 }
 
@@ -251,7 +251,7 @@ pub enum Tag {
 pub enum Value {
     None,
     ID(String),
-    FunctionLoc(RemoteNodeId),
+    FunctionLoc(RemoteNodeName),
     VarName(NodeId),
     FnName(FuncletId),
     Num(usize),

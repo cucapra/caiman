@@ -27,12 +27,12 @@ fn reject_hole<T>(h: Hole<T>) -> T {
     }
 }
 
-fn find_filled<T>(v: Vec<Hole<T>>) -> StableVec<T> {
-    let mut result = StableVec::new();
+fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
+    let mut result = Vec::new();
     for (index, hole) in v.into_iter().enumerate() {
         match hole {
             Some(value) => {
-                result.add(value);
+                result.push((index, value));
             }
             None => {}
         }
@@ -40,17 +40,20 @@ fn find_filled<T>(v: Vec<Hole<T>>) -> StableVec<T> {
     result
 }
 
-fn find_filled_hole<T>(h: Hole<Box<[Hole<T>]>>) -> StableVec<T> {
+fn find_filled_hole<T>(h: Hole<Box<[Hole<T>]>>) -> Vec<(usize, T)>
+where
+    T: Clone,
+{
     match h {
         Some(v) => find_filled(v.into_vec()),
-        None => StableVec::new(),
+        None => Vec::new(),
     }
 }
 
 pub fn explicate_allocate_temporary(
     place_hole: &Hole<ir::Place>,
     storage_type_hole: &Hole<assembly::ast::StorageTypeId>,
-    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
+    operation_hole: &Hole<assembly::ast::RemoteNodeName>,
     context: &mut Context,
 ) -> Option<ir::Node> {
     let place = todo_hole(place_hole.as_ref());
@@ -65,10 +68,23 @@ pub fn explicate_allocate_temporary(
 }
 
 fn infer_operation(
-    known_inputs: &StableVec<OperationId>,
-    known_outputs: &StableVec<OperationId>,
+    known_inputs: &Vec<(usize, OperationId)>,
+    known_outputs: &Vec<(usize, OperationId)>,
     context: &mut Context,
-) -> Option<assembly::ast::RemoteNodeId> {
+) -> Option<assembly::ast::RemoteNodeName> {
+    // ignoring inputs for now due to being syntactically disallowed
+    for (index, output) in known_outputs {
+        match context.node_lookup(&context.location.funclet_name, output) {
+            None => None,
+            Some(node) => match &node.node {
+                assembly::ast::Node::AllocTemporary { place, storage_type, operation } => {
+
+                }
+                assembly::ast::Node::StaticAllocFromStaticBuffer { buffer, place, storage_type, operation } => {}
+                _ => None
+            }
+        }
+}
     None
 }
 
@@ -112,7 +128,7 @@ fn get_node_arguments(node: &assembly::ast::Node, context: &Context) -> Vec<Stri
 }
 
 fn explicate_operation(
-    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
+    operation_hole: &Hole<assembly::ast::RemoteNodeName>,
     input_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
     output_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
     context: &mut Context,
@@ -127,6 +143,8 @@ fn explicate_operation(
     let mut outputs = Vec::new();
 
     // First try and infer the operation.  If this can't be done, we give up
+    dbg!(&known_inputs);
+    dbg!(&known_outputs);
     let operation = match operation_hole {
         Some(op) => op.clone(),
         None => match infer_operation(&known_inputs, &known_outputs, context) {
@@ -135,7 +153,7 @@ fn explicate_operation(
         },
     };
 
-    let node = context.node_lookup(&operation).unwrap();
+    let node = context.node_lookup(&operation.funclet_name, &operation.node_name).unwrap();
     let node_arguments = get_node_arguments(&node.node, context);
 
     match input_hole {
@@ -150,7 +168,7 @@ fn explicate_operation(
                             assembly::ast::Node::Constant { .. } => {
                                 // nothing to fill
                             }
-                            _ => todo!("Unsupported node {:?}", node),
+                            _ => todo!("Unsupported node for explication {:?}", node),
                         }
                     }
                 }
@@ -174,14 +192,14 @@ fn explicate_operation(
                             None => return None, // failed to explicated on this pass
                             Some(alloc_loc) => {
                                 assert_eq!(
-                                    alloc_loc.funclet_id.clone(),
-                                    context.location.funclet_id
+                                    alloc_loc.funclet_name.clone(),
+                                    context.location.funclet_name
                                 );
-                                outputs.push(context.node_id(&alloc_loc.node_id))
+                                outputs.push(context.node_id(&alloc_loc.node_name))
                             }
                         }
                     }
-                    _ => todo!("Unsupported node {:?}", node),
+                    _ => todo!("Unsupported node for explication {:?}", node),
                 }
             }
         }
@@ -196,7 +214,7 @@ fn explicate_operation(
 
 pub fn explicate_encode_do(
     place_hole: &Hole<ir::Place>,
-    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
+    operation_hole: &Hole<assembly::ast::RemoteNodeName>,
     inputs_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
     outputs_hole: &Hole<Box<[Hole<assembly::ast::OperationId>]>>,
     context: &mut Context,

@@ -597,21 +597,21 @@ fn rule_fn_name_sep<'a>() -> RuleApp<'a, Hole<String>> {
 fn read_funclet_loc_filled(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> assembly::ast::RemoteNodeId {
+) -> assembly::ast::RemoteNodeName {
     let rule_func = rule_str_unwrap(Rule::fn_name, 1, Box::new(read_string));
     let rule_var = rule_str_unwrap(Rule::var_name, 1, Box::new(read_string));
     let fun_name = expect(rule_func, pairs, context);
     let var_name = expect(rule_var, pairs, context);
-    assembly::ast::RemoteNodeId {
-        funclet_id: fun_name,
-        node_id: var_name,
+    assembly::ast::RemoteNodeName {
+        funclet_name: fun_name,
+        node_name: var_name,
     }
 }
 
 fn read_funclet_loc(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> Hole<assembly::ast::RemoteNodeId> {
+) -> Hole<assembly::ast::RemoteNodeName> {
     expect_hole(
         rule_pair(Rule::funclet_loc_filled, read_funclet_loc_filled),
         pairs,
@@ -619,7 +619,7 @@ fn read_funclet_loc(
     )
 }
 
-fn rule_funclet_loc<'a>() -> RuleApp<'a, Hole<assembly::ast::RemoteNodeId>> {
+fn rule_funclet_loc<'a>() -> RuleApp<'a, Hole<assembly::ast::RemoteNodeName>> {
     rule_pair(Rule::funclet_loc, read_funclet_loc)
 }
 
@@ -1686,7 +1686,7 @@ fn read_encode_do_params(pairs: &mut Pairs<Rule>, context: &mut Context) -> Box<
 fn read_encode_do_call(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> (Hole<assembly::ast::RemoteNodeId>, Hole<Box<[Hole<String>]>>) {
+) -> (Hole<assembly::ast::RemoteNodeName>, Hole<Box<[Hole<String>]>>) {
     let operation = expect(rule_funclet_loc(), pairs, context);
     let inputs = expect_hole(
         rule_pair(Rule::encode_do_params, read_encode_do_params),

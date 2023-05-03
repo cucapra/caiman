@@ -588,7 +588,7 @@ fn ir_funclet(funclet: &assembly::ast::Funclet, context: &mut Context) -> Option
 
     for command in &funclet.commands {
         let node = &reject_hole(command.as_ref());
-        context.location.node_id = node.name.clone();
+        context.location.node_name = node.name.clone();
         nodes.push(ir_node(&node, context).unwrap());
     }
 
@@ -612,9 +612,8 @@ fn ir_funclets(
         match def {
             assembly::ast::FuncletDef::Local(f) => {
                 let name = &f.header.name;
-                context.location.funclet_id = name.clone();
+                context.location.funclet_name = name.clone();
                 result.add(ir_funclet(f, context).unwrap());
-                context.explicate_funclet(name.clone()); // separate operation cause order
             }
             _ => {}
         }
@@ -700,7 +699,7 @@ fn ir_value_extras(
                     let name = &f.header.name;
                     for extra in extras {
                         if extra.0 == name {
-                            context.location.funclet_id = extra.0.clone();
+                            context.location.funclet_name = extra.0.clone();
                             let index = context.funclet_indices.get(extra.0).unwrap().clone();
                             if result.contains_key(&index) {
                                 panic!("Duplicate extras for {:?}", name);
@@ -721,9 +720,15 @@ fn ir_scheduling_extra(
     d: &assembly::ast::UncheckedDict,
     context: &mut Context,
 ) -> ir::SchedulingFuncletExtra {
-    let index = value_funclet_raw_id(d.get(&as_key("value")).unwrap(), context);
+    let value_funclet_dict = d.get(&as_key("value")).unwrap();
+    let v = as_value(value_funclet_dict.clone());
+    let value_funclet_name = match v {
+        assembly::ast::Value::FnName(s) => s,
+        _ => panic!("Expected funclet name got {:?}", v),
+    };
+    context.setup_schedule_data(value_funclet_name.clone());
     ir::SchedulingFuncletExtra {
-        value_funclet_id: index,
+        value_funclet_id: context.funclet_indices.get(&value_funclet_name).unwrap(),
         input_slots: value_index_var_dict(
             d.get(&as_key("input_slots")).unwrap(),
             value_slot_info,
@@ -773,40 +778,34 @@ fn ir_scheduling_extra(
 
 fn setup_extras(extras: &assembly::ast::Extras, context: &mut Context) {
     // todo: rework with extra rewok
-    let mut built_extras = HashMap::new();
     for (name, extra) in extras {
         let index = context.funclet_indices.get(&name);
-        context.location.funclet_id = name.clone();
-        built_extras.insert(name.clone(), ir_scheduling_extra(&extra, context));
+        context.location.funclet_name = name.clone();
+        context.schedule_extras.insert(
+            context.funclet_indices.get(&name).unwrap(),
+            ir_scheduling_extra(&extra, context),
+        );
     }
-    context.schedule_extras = built_extras;
-}
-
-fn ir_scheduling_extras(
-    context: &mut Context,
-) -> HashMap<ir::FuncletId, ir::SchedulingFuncletExtra> {
-    // duplicating some code...but it's annoying to fix and I'm lazy
-    let mut result = HashMap::new();
-    let mut schedule_extras = HashMap::new();
-    std::mem::swap(&mut schedule_extras, &mut context.schedule_extras);
-    // we don't ensure every funclet has an extra here
-    // sorta not our problem
-    for (name, extra) in schedule_extras.into_iter() {
-        result.insert(context.funclet_indices.get(&name).unwrap(), extra);
-    }
-    result
 }
 
 fn ir_program(program: &assembly::ast::Program, context: &mut Context) -> ir::Program {
     setup_extras(&program.extras, context);
+    let native_interface = ir_native_interface(&program, context);
+    let types = ir_types(&program.types, context);
+    let funclets = ir_funclets(&program.funclets, context);
+    let value_functions = ir_value_functions(&program.funclets, context);
+    let pipelines = ir_pipelines(&program.pipelines, context);
+    let value_funclet_extras = ir_value_extras(&program.funclets, &program.extras, context);
+    let mut scheduling_funclet_extras = HashMap::new();
+    std::mem::swap(&mut scheduling_funclet_extras, &mut context.schedule_extras);
     ir::Program {
-        native_interface: ir_native_interface(&program, context),
-        types: ir_types(&program.types, context),
-        funclets: ir_funclets(&program.funclets, context),
-        value_functions: ir_value_functions(&program.funclets, context),
-        pipelines: ir_pipelines(&program.pipelines, context),
-        value_funclet_extras: ir_value_extras(&program.funclets, &program.extras, context),
-        scheduling_funclet_extras: ir_scheduling_extras(context),
+        native_interface,
+        types,
+        funclets,
+        value_functions,
+        pipelines,
+        value_funclet_extras,
+        scheduling_funclet_extras,
     }
 }
 

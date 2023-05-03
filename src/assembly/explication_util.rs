@@ -112,10 +112,10 @@ pub fn as_dict(value: assembly::ast::DictValue) -> assembly::ast::UncheckedDict 
 }
 
 pub fn remote_conversion(
-    remote: &assembly::ast::RemoteNodeId,
+    remote: &assembly::ast::RemoteNodeName,
     context: &mut Context,
 ) -> ir::RemoteNodeId {
-    context.remote_id(&remote.funclet_id.clone(), &remote.node_id.clone())
+    context.remote_id(&remote.funclet_name.clone(), &remote.node_name.clone())
 }
 
 pub fn value_string(d: &assembly::ast::DictValue, _: &mut Context) -> String {
@@ -138,8 +138,8 @@ pub fn value_function_loc(d: &assembly::ast::DictValue, context: &mut Context) -
     let v = as_value(d.clone());
     match v {
         assembly::ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
-            funclet_id: context.funclet_indices.get(&remote.funclet_id).unwrap(),
-            node_id: context.funclet_indices.get(&remote.node_id).unwrap(),
+            funclet_id: context.funclet_indices.get(&remote.funclet_name).unwrap(),
+            node_id: context.funclet_indices.get(&remote.node_name).unwrap(),
         },
         _ => panic!("Expected function location got {:?}", v),
     }
@@ -212,12 +212,12 @@ pub fn value_core_tag(v: assembly::ast::TagCore, context: &mut Context) -> ir::V
             remote_node_id: remote_conversion(&r, context),
         },
         assembly::ast::TagCore::Input(r) => ir::ValueTag::Input {
-            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
         assembly::ast::TagCore::Output(r) => ir::ValueTag::Output {
-            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
     }
 }
@@ -229,12 +229,12 @@ pub fn timeline_core_tag(v: assembly::ast::TagCore, context: &mut Context) -> ir
             remote_node_id: remote_conversion(&r, context),
         },
         assembly::ast::TagCore::Input(r) => ir::TimelineTag::Input {
-            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
         assembly::ast::TagCore::Output(r) => ir::TimelineTag::Output {
-            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
     }
 }
@@ -246,12 +246,12 @@ pub fn spatial_core_tag(v: assembly::ast::TagCore, context: &mut Context) -> ir:
             remote_node_id: remote_conversion(&r, context),
         },
         assembly::ast::TagCore::Input(r) => ir::SpatialTag::Input {
-            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
         assembly::ast::TagCore::Output(r) => ir::SpatialTag::Output {
-            funclet_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
     }
 }
@@ -260,12 +260,12 @@ pub fn value_value_tag(t: &assembly::ast::ValueTag, context: &mut Context) -> ir
     match t {
         assembly::ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
         assembly::ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
-            function_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            function_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
         assembly::ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
-            function_id: context.funclet_indices.get(&r.funclet_id).unwrap(),
-            index: context.remote_node_id(&r.funclet_id, &r.node_id),
+            function_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
+            index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
         assembly::ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
             index: context.node_id(&n),
