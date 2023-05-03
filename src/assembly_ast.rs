@@ -4,7 +4,54 @@ use crate::ir;
 use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Serialize, Deserialize};
 
-// Parser "AST"
+// Assembly AST
+
+#[macro_export]
+macro_rules! def_assembly_id_type {
+	( $type : ident ) => {
+		#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+		pub struct $type(pub String); // temporarily exposed internals
+
+		impl std::fmt::Display for $type
+		{
+			fn fmt(& self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+			{
+				write!(f, "{}", self.0)
+			}
+		}
+
+		impl serde::Serialize for $type
+		{
+			fn serialize<S>(& self, serializer : S) -> Result<S::Ok, S::Error>
+				where S : serde::Serializer
+			{
+				serializer.serialize_str(&self.0)
+			}
+		}
+
+		impl<'de> serde::Deserialize<'de> for $type
+		{
+			fn deserialize<D>(deserializer : D) -> Result<Self, D::Error>
+				where D : serde::Deserializer<'de>
+			{
+				use serde::*;
+				String::deserialize::<D>(deserializer).map(|x| Self(x))
+			}
+		}
+	}
+}
+
+def_assembly_id_type!(ExternalCpuFunctionId);
+def_assembly_id_type!(ExternalGpuFunctionId);
+def_assembly_id_type!(FuncletId);
+pub type ExternalFunctionId = FuncletId;
+def_assembly_id_type!(NodeId);
+pub type OperationId = NodeId;
+def_assembly_id_type!(ValueFunctionId);
+
+def_assembly_id_type!(LocalTypeId);
+
+pub type StorageTypeId = TypeId;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct FFIStructField
@@ -48,19 +95,20 @@ pub enum FFIType
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
-pub enum Type {
+pub enum TypeId {
 	FFI(FFIType),
 	Local(String)
 }
 
-pub type ExternalCpuFunctionId = String;
-pub type ExternalGpuFunctionId = String;
-pub type FuncletId = String;
-pub type NodeId = String;
-pub type OperationId = NodeId;
-pub type TypeId = Type;
-pub type ValueFunctionId = String;
-pub type StorageTypeId = Type;
+// pub type ExternalFunctionId = String;
+// pub type ExternalCpuFunctionId = String;
+// pub type ExternalGpuFunctionId = String;
+// pub type FuncletId = String;
+// pub type NodeId = String;
+// pub type OperationId = NodeId;
+// pub type TypeId = Type;
+// pub type ValueFunctionId = String;
+// pub type StorageTypeId = Type;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
@@ -75,8 +123,9 @@ macro_rules! lookup_abstract_type_parser {
 	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
-	(ExternalCpuFunction) => { ExternalCpuFunctionId };
-	(ExternalGpuFunction) => { ExternalGpuFunctionId };
+	(ExternalFunction) => { ExternalFunctionId };
+	// (ExternalCpuFunction) => { ExternalCpuFunctionId };
+	// (ExternalGpuFunction) => { ExternalGpuFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
 	(RemoteOperation) => { RemoteNodeId };
@@ -88,9 +137,9 @@ macro_rules! lookup_abstract_type_parser {
 macro_rules! map_parser_refs {
 	// When mapping referenced nodes, we only care about mapping the Operation types,
 	// since those are the actual references.
-	($map:ident, $arg:ident : Operation) => {$map((*$arg).clone().to_string())};
+	($map:ident, $arg:ident : Operation) => {$map($arg.clone())};
 	($map:ident, $arg:ident : [Operation]) => {
-		$arg.iter().map(|op| $map((*op).clone().to_string())).collect()
+		$arg.iter().map(|op| $map(op.clone())).collect()
 	};
 	($_map:ident, $arg:ident : $_arg_type:tt) => {$arg.clone()};
 }
@@ -150,7 +199,7 @@ pub struct BufferInfo {
 #[derive(Debug, Clone)]
 pub enum TailEdge {
 	Return{ return_values : Vec<NodeId> },
-	Yield { pipeline_yield_point_id : ir::PipelineYieldPointId,
+	Yield { pipeline_yield_point : ExternalFunctionId,
 		yielded_nodes : Vec<NodeId>,
 		next_funclet : FuncletId,
 		continuation_join : NodeId,
@@ -211,10 +260,10 @@ pub enum Value {
 	None,
 	ID(String),
     FunctionLoc(RemoteNodeId),
-    VarName(String),
-    FnName(String),
+    VarName(NodeId),
+    FnName(FuncletId),
 	Num(usize),
-    Type(Type),
+    Type(TypeId),
     Place(ir::Place),
     Stage(ir::ResourceQueueStage),
     Tag(Tag),
@@ -234,9 +283,9 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
-	pub ret : Vec<(Option<String>, Type)>,
-	pub name : String,
-	pub args : Vec<(Option<String>, Type)>,
+	pub ret : Vec<(Option<NodeId>, TypeId)>,
+	pub name : FuncletId,
+	pub args : Vec<(Option<NodeId>, TypeId)>,
 }
 
 #[derive(Debug)]
@@ -255,7 +304,7 @@ pub enum TypeKind {
 #[derive(Debug)]
 pub struct LocalType {
 	pub type_kind : TypeKind,
-	pub name : String,
+	pub name : TypeId,
 	pub data : UncheckedDict
 }
 
@@ -275,7 +324,7 @@ pub struct Var {
 #[derive(Debug)]
 pub struct ExternalCpuFunction
 {
-	pub name : String,
+	pub name : FuncletId,
 	pub input_types : Vec<FFIType>,
 	pub output_types : Vec<FFIType>,
 }
@@ -283,9 +332,9 @@ pub struct ExternalCpuFunction
 #[derive(Debug)]
 pub struct ExternalGpuFunction
 {
-	pub name : String,
-	pub input_args : Vec<(FFIType, String)>,
-	pub output_types : Vec<(FFIType, String)>,
+	pub name : FuncletId,
+	pub input_args : Vec<(FFIType, NodeId)>,
+	pub output_types : Vec<(FFIType, NodeId)>,
 	// Contains pipeline and single render pass state
 	pub shader_module : String,
 	pub entry_point : String,
@@ -301,7 +350,7 @@ pub struct Version {
 
 #[derive(Debug)]
 pub struct ValueFunction {
-	pub name : String,
+	pub name : FuncletId,
 	pub input_types : Vec<TypeId>,
 	pub output_types : Vec<TypeId>,
 	pub allowed_funclets : Vec<FuncletId>
@@ -319,7 +368,7 @@ pub type FuncletDefs = Vec<FuncletDef>;
 
 #[derive(Debug)]
 pub struct Extra {
-	pub name : String,
+	pub name : FuncletId,
 	pub data : UncheckedDict
 }
 
@@ -328,7 +377,7 @@ pub type Extras = Vec<Extra>;
 #[derive(Debug)]
 pub struct Pipeline {
 	pub name : String,
-	pub funclet : String
+	pub funclet : FuncletId
 }
 
 pub type Pipelines = Vec<Pipeline>;
