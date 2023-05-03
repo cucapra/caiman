@@ -183,7 +183,6 @@ fn explicate_operation(
         None => vec![None; 5],
     };
 
-    dbg!(&context);
     for (index, output) in output_vec.iter().enumerate() {
         match output {
             Some(n) => outputs.push(context.node_id(&n)),
@@ -193,9 +192,12 @@ fn explicate_operation(
                     .unwrap();
                 match node.node {
                     assembly::ast::Node::Constant { .. } => {
-                        match context.get_value_allocation(&op.funclet_name, &op.node_name) {
+                        match context.get_schedule_allocations(&op.funclet_name, &op.node_name) {
                             None => todo!("Unfinished path"), // failed to explicate on this pass
-                            Some(alloc_loc) => outputs.push(context.node_id(&alloc_loc)),
+                            Some(alloc_map) => match alloc_map.get(&context.location.funclet_name) {
+                                None => todo!(),
+                                Some(alloc_loc) => outputs.push(context.node_id(&alloc_loc)),
+                            }
                         }
                     }
                     _ => todo!("Unsupported node for explication {:?}", node),

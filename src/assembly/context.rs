@@ -291,7 +291,7 @@ impl FuncletIndices {
 }
 
 impl MetaData {
-    pub fn new(name_index : usize) -> MetaData {
+    pub fn new(name_index: usize) -> MetaData {
         MetaData { name_index }
     }
     pub fn next_name(&mut self) -> String {
@@ -301,7 +301,7 @@ impl MetaData {
 }
 
 impl<'a> Context<'a> {
-    pub fn new(program: &'a assembly::ast::Program, name_index : usize) -> Context<'a> {
+    pub fn new(program: &'a assembly::ast::Program, name_index: usize) -> Context<'a> {
         let mut context = Context {
             program: DebugIgnore(program), // kinda dumb, but whatever
             value_explication_data: HashMap::new(),
@@ -379,6 +379,12 @@ impl<'a> Context<'a> {
     }
 
     pub fn setup_schedule_data(&mut self, value_funclet: FuncletId) {
+        self.value_explication_data
+            .get_mut(&value_funclet)
+            .unwrap()
+            .connections
+            .schedule_funclets
+            .push(self.location.funclet_name.clone());
         self.schedule_explication_data.insert(
             self.location.funclet_name.clone(),
             ScheduleFuncletData::new(value_funclet),
@@ -520,8 +526,6 @@ impl<'a> Context<'a> {
         funclet: &FuncletId,
         node: &FuncletId,
     ) -> Option<&assembly::ast::OperationId> {
-        dbg!(funclet);
-        dbg!(node);
         self.schedule_explication_data
             .get(funclet)
             .and_then(|f| f.allocations.get(node))
