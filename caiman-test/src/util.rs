@@ -9,14 +9,25 @@ pub struct Instance {
 
 impl Instance {
     fn new() -> Self {
-        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
         let adapter_future = instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
             compatible_surface: None,
             force_fallback_adapter: false,
         });
         let adapter = futures::executor::block_on(adapter_future).unwrap();
-        let device_future = adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
+        // TODO: We should not be using MAPPABLE_PRIMARY_BUFFERS.
+        // As WGPU notes, it's a really terrible idea on NUMA systems, and those systems are
+        // arguably the ones that would benefit the most from Caiman.
+        // In the future we should copy from the GPU buffer to a host-resident buffer, and then
+        // map the buffer on the host (if we're on NUMA)
+        // TODO: This comment doesn't even belong here, really... it's not an issue with the tests
+        let device_desc = wgpu::DeviceDescriptor {
+            label: None,
+            features: wgpu::Features::default() | wgpu::Features::MAPPABLE_PRIMARY_BUFFERS,
+            limits: wgpu::Limits::default(),
+        };
+        let device_future = adapter.request_device(&device_desc, None);
         let (device, queue) = futures::executor::block_on(device_future).unwrap();
         Self { device, queue }
     }

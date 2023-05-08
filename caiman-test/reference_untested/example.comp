@@ -1,0 +1,11 @@
+#version 450
+
+layout(set = 0, binding = 0) buffer InputOutput_0 {
+    int field_0;
+} input_output_0;
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    input_output_0.field_0 = input_output_0.field_0 + 1;
+}

@@ -32,7 +32,7 @@ types [
     external_cpu @flatten(i64) -> i32;
 external_cpu @cpu_add(i64, i64) -> i64;
 
-external_gpu @gpu_add(%x : i32, %y : i32) -> [%out : i32] : "src/gpu_merge.wgsl"
+external_gpu @gpu_add(%x : i32, %y : i32) -> [%out : i32] : "src/gpu_merge.comp"
 {
     resource {
         group : 0,
