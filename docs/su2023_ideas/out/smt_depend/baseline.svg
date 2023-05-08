@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentStyleType="text/css" height="253px" preserveAspectRatio="none" style="width:187px;height:253px;background:#FFFFFF;" version="1.1" viewBox="0 0 187 253" width="187px" zoomAndPan="magnify"><defs/><g><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="7" y="207"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="6" x="29" y="232.7285">x</text><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="46" y="107"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="7" x="67.5" y="132.7285">y</text><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="46" y="7"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="35" x="53.5" y="32.7285">result</text><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="131" y="107"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="6" x="153" y="132.7285">z</text><!--MD5=[ee31eb9d5e36db9d8f441adaaa72efc0]
+link y to x--><g id="link_y_x"><path d="M63.29,147.36 C57.1,162.93 48.36,184.9 41.69,201.66 " fill="none" id="y-to-x" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="39.69,206.68,46.7282,199.7906,41.5346,202.0327,39.2925,196.8392,39.69,206.68" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[1327e7d5b87f26f83d4641029e376e73]
+link result to x--><g id="link_result_x"><path d="M57.44,47.03 C47.38,62.39 34.49,85 29,107 C21.02,139.01 24.16,177.38 27.65,201.72 " fill="none" id="result-to-x" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="28.4,206.7,31.018,197.2055,27.6569,201.7555,23.1068,198.3944,28.4,206.7" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[726e441f3f879c3f1fa10c8daa8bcb6d]
+link result to y--><g id="link_result_y"><path d="M71,47.36 C71,62.93 71,84.9 71,101.66 " fill="none" id="result-to-y" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="71,106.68,75,97.68,71,101.68,67,97.68,71,106.68" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[f12b284872cd14d1265df6415053a308]
+link result to z--><g id="link_result_z"><path d="M87.79,47.36 C101.53,63.2 121.01,85.66 135.63,102.52 " fill="none" id="result-to-z" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="139.24,106.68,136.3616,97.2611,135.9626,102.9039,130.3199,102.5049,139.24,106.68" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[7f783d59782038185cbe73e53993a78c]
+@startuml baseline
+hide empty description
+
+state x
+
+y - -> x
+result - -> x
+result - -> y
+result - -> z
+
+@enduml
+
+PlantUML version 1.2022.7(Mon Aug 22 11:01:30 MDT 2022)
+(GPL source distribution)
+Java Runtime: OpenJDK Runtime Environment
+JVM: OpenJDK 64-Bit Server VM
+Default Encoding: UTF-8
+Language: en
+Country: US
+--></g></svg>

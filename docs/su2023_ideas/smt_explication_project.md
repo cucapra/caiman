@@ -64,7 +64,7 @@ z = 1
 x = 0
 ```
 
-## User-defined order
+# User-defined order
 
 However, this is just doing what "naive explication" already does.  We want to
 incorporate information on allocation location from the user.  Consider the
@@ -125,7 +125,7 @@ Then we get a timing something like the following:
 
 ![](out/smt_depend/xz_impossible.svg)
 
-## Heterogeneous Extension
+# Heterogeneous Extension
 
 Now, there is _also_ another problem to solve, and that is heterogeneity.
 Consider a user schedule (where we are focused on the allocation location and
@@ -158,3 +158,62 @@ minilp](https://docs.rs/minilp/latest/minilp/), but I suspect this is overkill?
 There are ways to get heuristic attempts at minimization out of Z3, which seem
 more sensical as a first approach at least.  I'll writeup the plan assuming the
 use of Z3, but that's less well-defined in my head, in short.
+
+# Input Format
+
+Ideally, having a tool that ingests the [assembly
+AST](https://github.com/cucapra/caiman/blob/main/src/assembly_ast.rs) directly
+would be easiest for me.  However, this AST is fairly complicated to unpack, and
+it might make more sense to write a custom tree that can be ingested and
+transformed to Z3.  I would not recommend taking in raw Caiman assembly, such is
+a path to duplicate work madness and I suspect.
+
+The alternative would be to write a custom mini-language, which might be helpful
+to describe terms in the AST _anyway_, but is probably unnecessary cause parsers
+are hard.  I'll propose a "dependency tree" that looks something like the
+following (written in Rust for simplicity):
+
+```rs
+pub type VarName(String)
+pub type FuncletName(String)
+
+pub enum FuncletKind {
+    Schedule, Timeline, Spatial
+}
+
+pub enum Variable {
+    // Managing funclet name for reference
+    pub funclet: FuncletName
+
+    // List of variables this variable depends on
+    pub dependencies: Vec<VarName>
+
+    // 
+}
+
+pub struct ExplicatableFunclet {
+    // What kind of funclet this is
+    pub kind: FuncletKind,
+
+    // The value funclet tied to this funclet
+    pub value_name: FuncletName,
+
+    // The map from variable names to more detailed information
+    pub vars: HashMap<VarName, Variable>,
+}
+
+pub struct ValueFunclet {
+    pub associated: Vec<FuncletName> // list of associated funclets
+}
+
+pub type ExplicatableFunclets = HashMap<FuncletName, ExplicatableFunclet>
+pub type ValueFunclets = HashMap<FuncletName, ValueFunclet>
+
+pub struct Program {
+    pub explicatable_funclets: Funclets,
+    pub value_funclets: ValueFunclets
+}
+```
+
+This can totally be modified based on what's needed, but that might be the
+majority of it in some sense.
