@@ -389,6 +389,87 @@ impl<'program> CodeGen<'program>
 		ffi_type_id
 	}
 
+	fn encode_fuse_header_gpu(
+		&mut self, 
+		placement_state: &mut PlacementState, 
+		funclet_scoped_state: &mut FuncletScopedState, 
+		funclet_checker: &mut type_system::scheduling::FuncletChecker, 
+		schema: &ir::fusion::Opportunity
+	) {
+		let external_function_id = self.program.native_interface.external_functions.add(
+			ffi::ExternalFunction::GpuKernel(schema.kernel.clone()));
+		let function = &self.program.native_interface.external_functions[external_function_id];
+		let kernel = function.get_gpu_kernel().unwrap();
+
+		let node_to_var_map = |(&node_id)| {
+			let slot_id = funclet_scoped_state.get_node_slot_id(node_id).unwrap();
+			placement_state.slot_variable_ids[&slot_id]
+		};
+
+		let mut dimension_var_ids = Vec::new();
+		for (i, dim) in schema.dimensions.iter().enumerate() {
+			if let Some(dimension_node_id) = dim {
+				dimension_var_ids.push(node_to_var_map(dimension_node_id));
+			} else {
+				let one = self.code_generator.build_constant_unsigned_integer(
+					1, self.default_usize_ffi_type_id);
+				dimension_var_ids.push(one);
+			}
+		}
+		assert_eq!(3, dimension_var_ids.len());
+		let dimension_var_ids: [VarId; 3] = dimension_var_ids.as_slice().try_into().unwrap();
+
+		let input_var_ids: Vec<_> = schema.inputs.iter().map(node_to_var_map).collect();
+		let output_var_ids: Vec<_> = schema.outputs.iter().map(node_to_var_map).collect();
+
+		use std::convert::TryInto;
+		self.code_generator.build_compute_dispatch_with_outputs(
+			ffi::ExternalFunctionId(external_function_id), 
+			&dimension_var_ids,
+			&input_var_ids, 
+			&output_var_ids);
+	}
+
+	/// This is similar to encode_do_node_gpu, but it only updates the type system.
+	/// It doesn't actually generate any code.
+	fn encode_fused_node_gpu(
+		&mut self, 
+		placement_state: &mut PlacementState,
+		value_node: &ir::Node, 
+		input_slot_ids: &[SlotId], 
+		output_slot_ids: &[SlotId]
+	) {
+		let (external_function_id, arguments, dimensions) = match value_node {
+			ir::Node::CallExternalGpuCompute {external_function_id, arguments, dimensions} 
+				=> (external_function_id, arguments, dimensions),
+			ir::Node::None => return, // nothing to do...
+			_ => panic!("fused node is not a kernel dispatch or no-op")
+		};
+
+		let function = &self.program.native_interface.external_functions[external_function_id.0];
+		let kernel = function.get_gpu_kernel().expect("function ID is not a kernel dispatch");
+
+		// Ensure we have the right number of inputs (including dimensions)
+		assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
+		// Ensure we have the same number of outputs as the original kernel.
+		assert_eq!(output_slot_ids.len(), kernel.output_types.len());
+
+		// << removed a loop updating slot variable IDs -- that happens in the header now >>
+		// << removed a loop building constant integers for dimensions -- also happens in header >>
+		// << removed remappings of dimensions and arguments, since they're only used for codegen >>
+
+		// The variable IDs corresponding to the output slots should already exist since this
+		// is strictly called after the header.
+		let output_var_ids: Box<[VarId]> = output_slot_ids.iter()
+			.map(|&x| placement_state.get_slot_var_id(x).unwrap())
+			.collect();
+
+		for i in 0..kernel.output_types.len() {
+			placement_state.update_slot_state(
+				output_slot_ids[i], ir::ResourceQueueStage::Encoded, output_var_ids[i]);
+		}
+
+	}
 	fn encode_do_node_gpu(&mut self, placement_state : &mut PlacementState, funclet_scoped_state : &mut FuncletScopedState, funclet_checker : &mut type_system::scheduling::FuncletChecker, node : & ir::Node, input_slot_ids : & [SlotId], output_slot_ids : & [SlotId])
 	{
 		match node
@@ -993,6 +1074,9 @@ impl<'program> CodeGen<'program>
 		let mut funclet_scoped_state = FuncletScopedState::new(funclet.spec_binding.get_value_spec().funclet_id_opt.unwrap(), funclet_id);
 		let mut funclet_checker = type_system::scheduling::FuncletChecker::new(& self.program, funclet);
 
+		let fusion_opportunities = ir::fusion::identify_opportunities(self.program, funclet_id, funclet);
+		//dbg!(&fusion_opportunities);
+
 		if self.print_codegen_debug_info
 		{
 			println!("Compiling Funclet #{} with join {:?}...\n{:?}\n", funclet_id, default_join_point_id_opt, funclet);
@@ -1037,6 +1121,8 @@ impl<'program> CodeGen<'program>
 					funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id, queue_place : * place, storage_type : * storage_type});
 
 					// To do: Allocate from buffers for GPU/CPU and assign variable
+					// TODO: Elide this if the temporary is small enough and *strictly* used
+					// as an input to a single real kernel dispatch
 					match place
 					{
 						ir::Place::Cpu => (),
@@ -1095,6 +1181,7 @@ impl<'program> CodeGen<'program>
 						}
 					}
 
+					
 					match place
 					{
 						ir::Place::Local =>
@@ -1103,7 +1190,31 @@ impl<'program> CodeGen<'program>
 						}
 						ir::Place::Gpu =>
 						{
-							self.encode_do_node_gpu(placement_state, &mut funclet_scoped_state, &mut funclet_checker, encoded_node, input_slot_ids.as_slice(), output_slot_ids.as_slice());
+							let opportunity = fusion_opportunities.iter().find(|schema| {
+								schema.bounds.start <= current_node_id 
+								&& current_node_id <= schema.bounds.end
+							});
+							if let Some(schema) = opportunity {
+								if schema.bounds.start == current_node_id {
+									self.encode_fuse_header_gpu(
+										placement_state, 
+										&mut funclet_scoped_state, 
+										&mut funclet_checker, schema);
+								}
+								self.encode_fused_node_gpu(
+									placement_state, 
+									encoded_node, 
+									input_slot_ids.as_slice(), 
+									output_slot_ids.as_slice());
+							} else {
+								self.encode_do_node_gpu(
+									placement_state, 
+									&mut funclet_scoped_state, 
+									&mut funclet_checker, 
+									encoded_node, 
+									input_slot_ids.as_slice(), 
+									output_slot_ids.as_slice());
+							}
 						}
 						ir::Place::Cpu => (),
 					}
