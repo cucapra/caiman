@@ -137,17 +137,17 @@ struct ActiveFuncletState
 	next_funclet_input_types : Option<Box<[Box<[ffi::TypeId]>]>>
 }
 
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug, Default)]
 struct ShaderModuleKey
 {
-	external_gpu_function_id : ir::ExternalFunctionId
+	external_gpu_function_name: String
 }
 
 impl ShaderModuleKey
 {
 	fn instance_field_name(&self) -> String
 	{
-		format!("external_gpu_function_{}_module", self.external_gpu_function_id)
+		format!("external_gpu_function_{}_module", self.external_gpu_function_name)
 	}
 }
 
@@ -181,7 +181,7 @@ impl PipelineLayoutKey
 
 struct GpuFunctionInvocation
 {
-	external_gpu_function_id : ir::ExternalFunctionId,
+	external_gpu_function_name : String,
 	bindings : BTreeMap<usize, (Option<usize>, Option<usize>)>,
 	shader_module_key : ShaderModuleKey,
 }
@@ -215,7 +215,7 @@ pub struct CodeGenerator<'program>
 	active_funclet_state : Option<ActiveFuncletState>,
 	use_recording : bool,
 	active_submission_encoding_state : Option<SubmissionEncodingState>,
-	active_external_gpu_function_id : Option<ir::ExternalFunctionId>,
+	active_external_gpu_function_name : Option<String>,
 	active_shader_module_key : Option<ShaderModuleKey>,
 	shader_modules : BTreeMap<ShaderModuleKey, shadergen::ShaderModule>,
 	submission_queue : SubmissionQueue,
@@ -239,7 +239,7 @@ impl<'program> CodeGenerator<'program>
 		let state_code_writer = CodeWriter::new();
 		let code_writer = CodeWriter::new();
 		let has_been_generated = HashSet::new();
-		let mut code_generator = Self {original_native_interface : native_interface, native_interface : native_interface.clone(), type_code_writer, state_code_writer, code_writer, /*types,*/ has_been_generated, variable_tracker, /*external_cpu_functions, external_gpu_functions,*/ active_pipeline_name : None, active_funclet_result_type_ids : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_id : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0), gpu_function_invocations : Vec::new(), active_closures : HashMap::new(), closure_id_generator : IdGenerator::new(), active_yield_point_ids : HashSet::new(), dispatcher_id_generator : IdGenerator::new(), active_dispatchers : HashMap::new()};
+		let mut code_generator = Self {original_native_interface : native_interface, native_interface : native_interface.clone(), type_code_writer, state_code_writer, code_writer, /*types,*/ has_been_generated, variable_tracker, /*external_cpu_functions, external_gpu_functions,*/ active_pipeline_name : None, active_funclet_result_type_ids : None, active_funclet_state : None, use_recording : true, active_submission_encoding_state : None, active_external_gpu_function_name : None, active_shader_module_key : None, shader_modules : BTreeMap::new(), submission_queue : Default::default(), next_command_buffer_id : CommandBufferId(0), gpu_function_invocations : Vec::new(), active_closures : HashMap::new(), closure_id_generator : IdGenerator::new(), active_yield_point_ids : HashSet::new(), dispatcher_id_generator : IdGenerator::new(), active_dispatchers : HashMap::new()};
 
 		let type_ids = code_generator.native_interface.types.iter().map(|(type_id, _)| ffi::TypeId(type_id)).collect::<Box<[ffi::TypeId]>>();
 		for & type_id in type_ids.iter()
@@ -305,28 +305,27 @@ impl<'program> CodeGenerator<'program>
 		self.active_shader_module = Some(shader_module);
 	}*/
 
-	fn set_active_external_gpu_function(&mut self, external_function_id : ir::ExternalFunctionId)
+	fn set_active_external_gpu_function(&mut self, kernel: &ffi::GpuKernel)
 	{
 		// Will need to be more careful with this check once modules no longer correspond to external gpu functions one to one
-		if let Some(previous_id) = self.active_external_gpu_function_id.as_ref()
+		// FIXME: Assumes every kernel has a distinct name
+		if let Some(previous_name) = self.active_external_gpu_function_name.as_ref()
 		{
-			if * previous_id == external_function_id
+			if previous_name == &kernel.name
 			{
 				return;
 			}
 		}
 
-		self.active_external_gpu_function_id = None;
+		self.active_external_gpu_function_name = None;
 
-		let shader_module_key = ShaderModuleKey{external_gpu_function_id : external_function_id};
+		let shader_module_key = ShaderModuleKey{external_gpu_function_name: kernel.name.clone()};
 
 		write!(self.code_writer, "let module = & instance.{};\n", shader_module_key.instance_field_name());
 
 		if !self.shader_modules.contains_key(&shader_module_key)
 		{
-			let external_gpu_function = & self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
-
-			let mut shader_module = match & external_gpu_function.shader_module_content
+			let mut shader_module = match &kernel.shader_module_content
 			{
 				ffi::ShaderModuleContent::Wgsl(text) => {
 					shadergen::ShaderModule::from_wgsl(text.as_str()).unwrap()
@@ -335,23 +334,23 @@ impl<'program> CodeGenerator<'program>
 					shadergen::ShaderModule::from_glsl(text.as_str()).unwrap()
 				}
 			};
-			self.shader_modules.insert(shader_module_key, shader_module);
+			self.shader_modules.insert(shader_module_key.clone(), shader_module);
 		}
 
-		self.active_external_gpu_function_id = Some(external_function_id);
+		self.active_external_gpu_function_name = Some(kernel.name.clone());
 		self.active_shader_module_key = Some(shader_module_key);
 	}
 
-	fn set_active_bindings(&mut self, argument_vars : &[VarId], output_vars : &[VarId])// -> Box<[usize]>
+	fn set_active_bindings(&mut self, kernel: &ffi::GpuKernel, argument_vars : &[VarId], output_vars : &[VarId])// -> Box<[usize]>
 	{
-		let external_function_id = self.active_external_gpu_function_id.unwrap();
-		let external_gpu_function = & self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
+		let active_kernel_name = self.active_external_gpu_function_name.as_ref().unwrap();
+		assert_eq!(active_kernel_name, &kernel.name);
 
 		let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
 		let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
 		let mut input_binding_map = std::collections::BTreeMap::<usize, usize>::new();
 
-		for resource_binding in external_gpu_function.resource_bindings.iter()
+		for resource_binding in kernel.resource_bindings.iter()
 		{
 			assert_eq!(resource_binding.group, 0);
 			bindings.insert(resource_binding.binding, (resource_binding.input, resource_binding.output));
@@ -368,10 +367,10 @@ impl<'program> CodeGenerator<'program>
 		}
 
 		let mut input_staging_variables = Vec::<VarId>::new();
-		assert_eq!(argument_vars.len(), external_gpu_function.input_types.len());
-		for input_index in 0 .. external_gpu_function.input_types.len()
+		assert_eq!(argument_vars.len(), kernel.input_types.len());
+		for input_index in 0 .. kernel.input_types.len()
 		{
-			let type_id = external_gpu_function.input_types[input_index];
+			let type_id = kernel.input_types[input_index];
 			//let variable_id = self.build_create_buffer_with_data(argument_vars[input_index], type_id);
 			let input_variable_id = argument_vars[input_index];
 
@@ -389,7 +388,7 @@ impl<'program> CodeGenerator<'program>
 		}
 
 		let mut output_staging_variables = Vec::<VarId>::new();
-		for output_index in 0 .. external_gpu_function.output_types.len()
+		for output_index in 0 .. kernel.output_types.len()
 		{
 			let binding = output_binding_map[& output_index];
 			if let (Some(input), _) = bindings[& binding]
@@ -401,7 +400,7 @@ impl<'program> CodeGenerator<'program>
 			}
 			else
 			{
-				let type_id = external_gpu_function.output_types[output_index];
+				let type_id = kernel.output_types[output_index];
 				//let variable_id = self.build_create_buffer(type_id);
 				let variable_id = output_vars[output_index];
 				output_staging_variables.push(variable_id);
@@ -409,7 +408,7 @@ impl<'program> CodeGenerator<'program>
 		};
 
 		let invocation_id = self.gpu_function_invocations.len();
-		self.gpu_function_invocations.push(GpuFunctionInvocation{external_gpu_function_id : external_function_id, bindings, shader_module_key : self.active_shader_module_key.unwrap()});
+		self.gpu_function_invocations.push(GpuFunctionInvocation{external_gpu_function_name : kernel.name.clone(), bindings, shader_module_key : self.active_shader_module_key.clone().unwrap()});
 		let gpu_function_invocation = & self.gpu_function_invocations[invocation_id];
 
 		self.code_writer.write("let entries = [".to_string());
@@ -466,7 +465,7 @@ impl<'program> CodeGenerator<'program>
 
 	fn reset_pipeline(&mut self)
 	{
-		self.active_external_gpu_function_id = None;
+		self.active_external_gpu_function_name = None;
 		self.active_shader_module_key = None;
 	}
 
@@ -503,23 +502,22 @@ impl<'program> CodeGenerator<'program>
 		}*/
 	}
 
-	fn generate_compute_dispatch(&mut self, external_function_id : ir::ExternalFunctionId, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
+	fn generate_compute_dispatch(&mut self, kernel : &ffi::GpuKernel, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
 	{
 		self.require_local(dimension_vars);
 		self.require_on_gpu(argument_vars);
 
-		self.set_active_external_gpu_function(external_function_id);
+		self.set_active_external_gpu_function(kernel);
 		//let output_staging_variables =
-		self.set_active_bindings(argument_vars, output_vars);
+		self.set_active_bindings(kernel, argument_vars, output_vars);
 
 		self.begin_command_encoding();
 
-		let external_gpu_function = & self.native_interface.external_functions[external_function_id.0].get_gpu_kernel().unwrap();
-		assert_eq!(external_gpu_function.input_types.len(), argument_vars.len());
+		assert_eq!(kernel.input_types.len(), argument_vars.len());
 		//let mut output_variables = Vec::<usize>::new();
 		self.code_writer.write(format!("let ("));
 		//self.code_writer.write(format!("let (old_command_buffer_{}, ", command_buffer_id));
-		for output_index in 0 .. external_gpu_function.output_types.len()
+		for output_index in 0 .. kernel.output_types.len()
 		{
 			//let var_id = self.variable_tracker.generate();
 			//output_variables.push(var_id);
@@ -543,10 +541,10 @@ impl<'program> CodeGenerator<'program>
 		//self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
 
 		let mut output_temp_variables = Vec::<VarId>::new();
-		for output_index in 0 .. external_gpu_function.output_types.len()
+		for output_index in 0 .. kernel.output_types.len()
 		{
 			let staging_var_id = output_vars[output_index];
-			let type_id = external_gpu_function.output_types[output_index];
+			let type_id = kernel.output_types[output_index];
 			let range_var_id = self.variable_tracker.generate();
 			let output_temp_var_id = self.variable_tracker.generate();
 			let slice_var_id = self.variable_tracker.generate();
@@ -1948,8 +1946,8 @@ impl<'program> CodeGenerator<'program>
 		return output_vars;
 	}*/
 
-	pub fn build_compute_dispatch_with_outputs(&mut self, external_function_id : ir::ExternalFunctionId, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
+	pub fn build_compute_dispatch_with_outputs(&mut self, kernel : &ffi::GpuKernel, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
 	{
-		self.generate_compute_dispatch(external_function_id, dimension_vars, argument_vars, output_vars);
+		self.generate_compute_dispatch(kernel, dimension_vars, argument_vars, output_vars);
 	}
 }

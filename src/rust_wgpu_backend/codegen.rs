@@ -396,11 +396,6 @@ impl<'program> CodeGen<'program>
 		funclet_checker: &mut type_system::scheduling::FuncletChecker, 
 		schema: &ir::fusion::Opportunity
 	) {
-		let external_function_id = self.program.native_interface.external_functions.add(
-			ffi::ExternalFunction::GpuKernel(schema.kernel.clone()));
-		let function = &self.program.native_interface.external_functions[external_function_id];
-		let kernel = function.get_gpu_kernel().unwrap();
-
 		let node_to_var_map = |(&node_id)| {
 			let slot_id = funclet_scoped_state.get_node_slot_id(node_id).unwrap();
 			placement_state.slot_variable_ids[&slot_id]
@@ -424,7 +419,7 @@ impl<'program> CodeGen<'program>
 
 		use std::convert::TryInto;
 		self.code_generator.build_compute_dispatch_with_outputs(
-			ffi::ExternalFunctionId(external_function_id), 
+			&schema.kernel, 
 			&dimension_var_ids,
 			&input_var_ids, 
 			&output_var_ids);
@@ -562,7 +557,11 @@ impl<'program> CodeGen<'program>
 
 				let dimensions_slice : &[VarId] = & dimension_var_ids;
 				//let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
-				self.code_generator.build_compute_dispatch_with_outputs(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids, & output_var_ids);
+				self.code_generator.build_compute_dispatch_with_outputs(
+					kernel, 
+					dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), 
+					&argument_var_ids, 
+					&output_var_ids);
 
 				for (index, output_type_id) in kernel.output_types.iter().enumerate()
 				{
