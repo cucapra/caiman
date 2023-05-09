@@ -156,27 +156,33 @@ fn explicate_operation(
         .unwrap();
     let node_arguments = get_node_arguments(&node.node, context);
 
+    // lookup the allocation location and add the argument to the inputs
+    fn add_to_inputs(op: &assembly::ast::RemoteNodeName, inputs: &mut Vec<usize>,
+                     argument: &String, context: &Context) {
+        let alloc_name = context
+            .get_current_schedule_allocation(&op.funclet_name, argument)
+            .unwrap();
+        inputs.push(context.node_id(alloc_name))
+    }
+
     match input_hole {
-        None => unreachable!("empty inputs assumed to match with empty operation"),
+        None => {
+            for argument in node_arguments.iter() {
+                add_to_inputs(&op, &mut inputs, argument, context);
+            }
+        }
         Some(input_vec) => {
             for (index, input) in input_vec.iter().enumerate() {
                 match input {
                     Some(n) => inputs.push(context.node_id(&n)),
                     None => {
-                        let node = context
-                            .node_lookup(&op.funclet_name, &op.node_name)
-                            .unwrap();
-                        match node.node {
-                            assembly::ast::Node::Constant { .. } => {
-                                // nothing to fill
-                            }
-                            _ => todo!("Unsupported node for explication {:?}", node),
-                        }
+                        let argument = node_arguments.get(index).unwrap();
+                        add_to_inputs(&op, &mut inputs, argument, context);
                     }
                 }
             }
         }
-    }
+    };
 
     let output_vec = match output_hole {
         Some(v) => v.clone().into_vec(),
@@ -194,9 +200,11 @@ fn explicate_operation(
                     assembly::ast::Node::Constant { .. } => {
                         match context.get_schedule_allocations(&op.funclet_name, &op.node_name) {
                             None => todo!("Unfinished path"), // failed to explicate on this pass
-                            Some(alloc_map) => match alloc_map.get(&context.location.funclet_name) {
-                                None => todo!(),
-                                Some(alloc_loc) => outputs.push(context.node_id(&alloc_loc)),
+                            Some(alloc_map) => {
+                                match alloc_map.get(&context.location.funclet_name) {
+                                    None => todo!(),
+                                    Some(alloc_loc) => outputs.push(context.node_id(&alloc_loc)),
+                                }
                             }
                         }
                     }

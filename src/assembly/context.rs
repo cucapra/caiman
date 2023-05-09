@@ -520,6 +520,16 @@ impl<'a> Context<'a> {
             .and_then(|f| f.allocations.get(node))
     }
 
+    pub fn get_current_schedule_allocation(
+        &self,
+        funclet: &FuncletId,
+        node: &FuncletId,
+    ) -> Option<&OperationId> {
+        self.get_schedule_allocations(funclet, node)
+            .unwrap()
+            .get(&self.location.funclet_name)
+    }
+
     // get what the associated schedule node is allocating
     pub fn get_value_allocation(
         &self,
