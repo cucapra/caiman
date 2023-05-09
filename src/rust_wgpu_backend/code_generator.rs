@@ -1,5 +1,6 @@
 use crate::ir;
 use crate::shadergen;
+use crate::shadergen::ShaderModule;
 use crate::stable_vec::StableVec;
 use std::default::Default;
 use std::collections::HashMap;
@@ -8,6 +9,7 @@ use std::collections::HashSet;
 use crate::rust_wgpu_backend::code_writer::CodeWriter;
 use std::fmt::Write;
 use crate::id_generator::IdGenerator;
+use super::codegen::PlacementState;
 use super::ffi;
 
 // The dependency on crate::ir is not good
@@ -182,7 +184,7 @@ impl PipelineLayoutKey
 struct GpuFunctionInvocation
 {
 	external_gpu_function_name : String,
-	bindings : BTreeMap<usize, (Option<usize>, Option<usize>)>,
+	bindings : BTreeMap<usize, (Option<usize>, Option<usize>, bool)>,
 	shader_module_key : ShaderModuleKey,
 }
 
@@ -341,29 +343,56 @@ impl<'program> CodeGenerator<'program>
 		self.active_shader_module_key = Some(shader_module_key);
 	}
 
-	fn set_active_bindings(&mut self, kernel: &ffi::GpuKernel, argument_vars : &[VarId], output_vars : &[VarId])// -> Box<[usize]>
+	fn compute_written_buffers(&self, placement_state: &PlacementState, resource_bindings: &[ffi::GpuKernelResourceBinding], output_vars: &[VarId]) -> HashSet<ir::NodeId> {
+		// If a buffer allocator ID is in the set, that buffer allocator's buffers are written to
+		let mut any_writes = HashSet::new();
+
+		for resource_binding in resource_bindings.iter() {
+			if let Some(&out_index) = resource_binding.output.as_ref() {
+				let out_var = output_vars[out_index];
+				if let Some(out_buf) = placement_state.get_var_buffer_id(out_var) {
+					any_writes.insert(out_buf);
+				}
+			}
+		}
+		return any_writes;
+	}
+
+	fn set_active_bindings(&mut self, placement_state: &PlacementState, kernel: &ffi::GpuKernel, argument_vars : &[VarId], output_vars : &[VarId])// -> Box<[usize]>
 	{
 		let active_kernel_name = self.active_external_gpu_function_name.as_ref().unwrap();
 		assert_eq!(active_kernel_name, &kernel.name);
 
-		let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
+		let mut bindings = std::collections::BTreeMap::<usize, (Option<usize>, Option<usize>, bool)>::new();
 		let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
 		let mut input_binding_map = std::collections::BTreeMap::<usize, usize>::new();
-
+		
+		let any_writes = self.compute_written_buffers(placement_state, &kernel.resource_bindings, output_vars);
 		for resource_binding in kernel.resource_bindings.iter()
 		{
 			assert_eq!(resource_binding.group, 0);
-			bindings.insert(resource_binding.binding, (resource_binding.input, resource_binding.output));
 
+			let mut rw_override = false;
 			if let Some(input) = resource_binding.input
 			{
 				input_binding_map.insert(input, resource_binding.binding);
+				let in_var = argument_vars[input];
+				if let Some(in_buf) = placement_state.get_var_buffer_id(in_var) {
+					rw_override |= any_writes.contains(&in_buf);
+				}
 			}
 
 			if let Some(output) = resource_binding.output
 			{
 				output_binding_map.insert(output, resource_binding.binding);
+				let out_var = output_vars[output];
+				if let Some(out_buf) = placement_state.get_var_buffer_id(out_var) {
+					rw_override |= any_writes.contains(&out_buf);
+				}
 			}
+
+			bindings.insert(resource_binding.binding, 
+				(resource_binding.input, resource_binding.output, rw_override));
 		}
 
 		let mut input_staging_variables = Vec::<VarId>::new();
@@ -375,7 +404,7 @@ impl<'program> CodeGenerator<'program>
 			let input_variable_id = argument_vars[input_index];
 
 			let binding = input_binding_map[& input_index];
-			if let (_, Some(_output)) = bindings[& binding]
+			if let (_, Some(_output), _) = bindings[& binding]
 			{
 				//panic!("Incorrectly handled");
 				//let variable_id = self.build_create_buffer_with_buffer_data(input_variable_id, type_id);
@@ -391,7 +420,7 @@ impl<'program> CodeGenerator<'program>
 		for output_index in 0 .. kernel.output_types.len()
 		{
 			let binding = output_binding_map[& output_index];
-			if let (Some(input), _) = bindings[& binding]
+			if let (Some(input), _, _) = bindings[& binding]
 			{
 				//panic!("Incorrectly handled");
 				let variable_id = input_staging_variables[input];
@@ -412,7 +441,7 @@ impl<'program> CodeGenerator<'program>
 		let gpu_function_invocation = & self.gpu_function_invocations[invocation_id];
 
 		self.code_writer.write("let entries = [".to_string());
-		for (binding, (input_opt, output_opt)) in gpu_function_invocation.bindings.iter()
+		for (binding, (input_opt, output_opt, rw_override)) in gpu_function_invocation.bindings.iter()
 		{
 			let mut variable_id : Option<VarId> = None;
 
@@ -502,14 +531,46 @@ impl<'program> CodeGenerator<'program>
 		}*/
 	}
 
-	fn generate_compute_dispatch(&mut self, kernel : &ffi::GpuKernel, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
+	fn generate_compute_dispatch(&mut self, placement_state: &PlacementState, kernel : &ffi::GpuKernel, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
 	{
 		self.require_local(dimension_vars);
 		self.require_on_gpu(argument_vars);
 
-		self.set_active_external_gpu_function(kernel);
+		let any_writes = self.compute_written_buffers(placement_state, &kernel.resource_bindings, output_vars);
+		let mut rw_bindings = HashSet::new();
+		for rb in kernel.resource_bindings.iter() {
+			if let Some(input) = rb.input {
+				let in_var = argument_vars[input];
+				if let Some(in_buf) = placement_state.get_var_buffer_id(in_var) {
+					if any_writes.contains(&in_buf) {
+						rw_bindings.insert((0u32, rb.binding as u32));
+					}
+				}
+			}
+			if let Some(output) = rb.output {
+				rw_bindings.insert((0u32, rb.binding as u32));
+			}
+		}
+
+		// HACK: Truly disgusting, we need to fix up the readwrite specifiers on shader bindings
+		// to account for the actual buffer usage pattern
+		let mut module = match &kernel.shader_module_content {
+			ffi::ShaderModuleContent::Wgsl(text) => ShaderModule::from_wgsl(text).unwrap(),
+			ffi::ShaderModuleContent::Glsl(text) => ShaderModule::from_glsl(text).unwrap(),
+		};
+		module.force_writable_bindings(&rw_bindings);
+		let kernel = ffi::GpuKernel {
+			name: kernel.name.clone(),
+			input_types: kernel.input_types.clone(),
+			output_types: kernel.output_types.clone(),
+			entry_point: kernel.entry_point.clone(),
+			resource_bindings: kernel.resource_bindings.clone(),
+			shader_module_content: ffi::ShaderModuleContent::Wgsl(module.emit_wgsl())
+		};
+
+		self.set_active_external_gpu_function(&kernel);
 		//let output_staging_variables =
-		self.set_active_bindings(kernel, argument_vars, output_vars);
+		self.set_active_bindings(placement_state, &kernel, argument_vars, output_vars);
 
 		self.begin_command_encoding();
 
@@ -1060,9 +1121,9 @@ impl<'program> CodeGenerator<'program>
 		for (gpu_function_invocation_id, gpu_function_invocation) in self.gpu_function_invocations.iter().enumerate()
 		{
 			self.code_writer.write("let bind_group_layout_entries = [".to_string());
-			for (binding, (_input_opt, output_opt)) in gpu_function_invocation.bindings.iter()
+			for (binding, (_input_opt, output_opt, rw_override)) in gpu_function_invocation.bindings.iter()
 			{
-				let is_read_only : bool = output_opt.is_none();
+				let is_read_only : bool = output_opt.is_none() && !rw_override;
 				self.code_writer.write("wgpu::BindGroupLayoutEntry { ".to_string());
 				self.code_writer.write(format!("binding : {}, visibility : wgpu::ShaderStages::COMPUTE, ty : wgpu::BindingType::Buffer{{ ty : wgpu::BufferBindingType::Storage {{ read_only : {} }}, has_dynamic_offset : false, min_binding_size : None}}, count : None", binding, is_read_only));
 				self.code_writer.write(" }, ".to_string());
@@ -1946,8 +2007,8 @@ impl<'program> CodeGenerator<'program>
 		return output_vars;
 	}*/
 
-	pub fn build_compute_dispatch_with_outputs(&mut self, kernel : &ffi::GpuKernel, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
+	pub fn build_compute_dispatch_with_outputs(&mut self, placement_state: &PlacementState, kernel : &ffi::GpuKernel, dimension_vars : &[VarId; 3], argument_vars : &[VarId], output_vars : &[VarId])
 	{
-		self.generate_compute_dispatch(kernel, dimension_vars, argument_vars, output_vars);
+		self.generate_compute_dispatch(placement_state, kernel, dimension_vars, argument_vars, output_vars);
 	}
 }

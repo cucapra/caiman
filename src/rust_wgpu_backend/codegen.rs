@@ -118,10 +118,11 @@ impl JoinGraph
 }
 
 #[derive(Debug)]
-struct PlacementState
+pub struct PlacementState
 {
 	scheduling_state : scheduling_state::SchedulingState,
 	slot_variable_ids : HashMap<SlotId, VarId>,
+	var_buffer_ids : HashMap<VarId, ir::NodeId>,
 	join_graph : JoinGraph,
 }
 
@@ -129,7 +130,12 @@ impl PlacementState
 {
 	fn new() -> Self
 	{
-		Self{ scheduling_state : scheduling_state::SchedulingState::new(), slot_variable_ids : HashMap::new(), join_graph : JoinGraph::new()}
+		Self { 
+			scheduling_state: scheduling_state::SchedulingState::new(), 
+			slot_variable_ids: HashMap::new(), 
+			var_buffer_ids: HashMap::new(), 
+			join_graph:  JoinGraph::new()
+		}
 	}
 
 	fn update_slot_state(&mut self, slot_id : SlotId, stage : ir::ResourceQueueStage, var_id : VarId)
@@ -139,9 +145,19 @@ impl PlacementState
 		self.scheduling_state.advance_queue_stage(slot_id, stage);
 	}
 
-	fn get_slot_var_id(&self, slot_id : SlotId) -> Option<VarId>
+	fn mark_var_buffer(&mut self, var_id: VarId, buffer_id: ir::NodeId) {
+		let old = self.var_buffer_ids.insert(var_id, buffer_id);
+		assert!(old.is_none(), "attempted to change buffer assignment of a var");
+	}
+
+	fn get_slot_var_id(&self, slot_id: SlotId) -> Option<VarId>
 	{
-		self.slot_variable_ids.get(& slot_id).map(|x| * x)
+		self.slot_variable_ids.get(&slot_id).copied()
+	}
+
+	pub fn get_var_buffer_id(&self, var_id: VarId) -> Option<ir::NodeId>
+	{
+		self.var_buffer_ids.get(&var_id).copied()
 	}
 
 	fn get_node_result_var_id(&self, node_result : &NodeResult) -> Option<VarId>
@@ -419,6 +435,7 @@ impl<'program> CodeGen<'program>
 
 		use std::convert::TryInto;
 		self.code_generator.build_compute_dispatch_with_outputs(
+			&placement_state,
 			&schema.kernel, 
 			&dimension_var_ids,
 			&input_var_ids, 
@@ -558,6 +575,7 @@ impl<'program> CodeGen<'program>
 				let dimensions_slice : &[VarId] = & dimension_var_ids;
 				//let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
 				self.code_generator.build_compute_dispatch_with_outputs(
+					&placement_state,
 					kernel, 
 					dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), 
 					&argument_var_ids, 
@@ -1324,6 +1342,7 @@ impl<'program> CodeGen<'program>
 						let slot_id = placement_state.scheduling_state.insert_hacked_slot(* storage_type, * place, ir::ResourceQueueStage::Bound);
 						funclet_scoped_state.node_results.insert(current_node_id, NodeResult::Slot{slot_id, queue_place : * place, storage_type : * storage_type});
 						placement_state.update_slot_state(slot_id, ir::ResourceQueueStage::Bound, allocation_var_id);
+						placement_state.mark_var_buffer(allocation_var_id, *buffer_node_id);
 					}
 					else
 					{
