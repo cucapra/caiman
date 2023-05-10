@@ -117,7 +117,8 @@ def process_inputs(
 
         input_str = str(input) # cause I wanna do direct string manipulations
         if input_str.endswith('test.cair'):
-            baseline = Path(input_str.replace('test.cair', 'baseline.cair'))
+            baseline_name = input.name[:input.name.find("_")] + '_baseline.cair'
+            baseline = input.parent / baseline_name
             if baseline.is_file():
                 # we compile here for explication only
                 test_out = output.with_suffix(".txt")

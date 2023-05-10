@@ -49,9 +49,7 @@ value @foo(%x : i32) -> i32 {
 }
 
 timeline @foo_time(%e : $event0) -> $event0 {
-    %sub = submission-local->gpu %e;
-    %sync = sync-local->gpu %sub %sub;
-    return %sync;
+    ???;
 }
 
 schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> [%out : $slot_gpu] {

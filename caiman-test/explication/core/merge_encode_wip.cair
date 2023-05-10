@@ -28,17 +28,14 @@ value @foo(%0 : i64) -> i64 {
 
 schedule @foo1() -> [%out : $slot0] {
     %xloc = alloc-temporary-local-i64 @foo.%x;
-    %_ = encode-do-local @foo.%x() -> %xloc;
     %yloc = alloc-temporary-local-i64 @foo.%y;
-    %_ = encode-do-local @foo.%y() -> %yloc;
 
     %n1loc = alloc-temporary-local-i64 @foo.%n1;
-    %_ = encode-do-local @foo.%n1_t(%0, %1) -> %n1loc;
     %n2loc = alloc-temporary-local-i64 @foo.%n2;
-    %_ = encode-do-local @foo.%n2_t(%0, %2) -> %n2loc;
-
+    
     %resloc = alloc-temporary-local-i64 @foo.%res;
-    %_ = encode-do-local @foo.%res_t(%2, %3) -> %resloc;
+
+    ???; // as usual, we can batch here
     return %resloc;
 }
 

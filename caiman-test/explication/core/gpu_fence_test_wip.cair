@@ -49,19 +49,14 @@ value @foo(%x : i32) -> i32 {
 }
 
 timeline @foo_time(%e : $event0) -> $event0 {
-    %sub = submission-local->gpu %e;
-    %sync = sync-local->gpu %sub %sub;
-    return %sync;
+    ???;
 }
 
 schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> [%out : $slot_gpu] {
     %xloc = alloc-gpu-i32 %in_buff @foo.%x;
     %_ = encode-copy-gpu %s %xloc;
     %yloc = alloc-gpu-i32 %out_buff @foo.%y;
-    %_ = encode-do-gpu @foo.%y(%xloc) -> %yloc;
-    %_ = submit-gpu @foo_time.%sub;
-    %fence = encode-fence-gpu @foo_time.%sub;
-    %_ = sync-fence-local %fence @foo_time.%sync;
+    ???;
     return %yloc;
 }
 

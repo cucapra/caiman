@@ -61,7 +61,7 @@ schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer
     %_ = encode-do-gpu @foo.%y(%xloc) -> %yloc;
     %_ = submit-gpu @foo_time.%sub;
     %fence = encode-fence-gpu @foo_time.%sub;
-    %_ = sync-fence-local %fence @foo_time.%sync;
+    %_ = sync-fence-local ? @foo_time.%sync;
     return %yloc;
 }
 
