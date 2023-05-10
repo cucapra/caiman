@@ -33,12 +33,12 @@ schedule @foo1() -> [%out : $slot0] {
     %_ = encode-do-local @foo.%y() -> %yloc;
 
     %n1loc = alloc-temporary-local-i64 @foo.%n1;
-    %_ = encode-do-local @foo.%n1_t(%0, %1) -> %n1loc;
+    %_ = encode-do-local @foo.%n1_t(%xloc, %yloc) -> %n1loc;
     %n2loc = alloc-temporary-local-i64 @foo.%n2;
-    %_ = encode-do-local @foo.%n2_t(%0, %2) -> %n2loc;
-
+    %_ = encode-do-local @foo.%n2_t(%xloc, %n1loc) -> %n2loc;
+    
     %resloc = alloc-temporary-local-i64 @foo.%res;
-    %_ = encode-do-local @foo.%res_t(%2, %3) -> %resloc;
+    %_ = encode-do-local @foo.%res_t(%n1loc, %n2loc) -> %resloc;
     return %resloc;
 }
 
