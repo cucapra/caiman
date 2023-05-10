@@ -38,8 +38,7 @@ pub enum Constant
 	U64(u64),
 }
 
-pub type ExternalCpuFunctionId = usize;
-pub type ExternalGpuFunctionId = usize;
+pub type ExternalFunctionId = ffi::ExternalFunctionId;
 pub type FuncletId = usize;
 pub type NodeId = usize;
 pub type OperationId = NodeId;
@@ -51,9 +50,6 @@ pub type StorageTypeId = ffi::TypeId;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId{pub funclet_id : FuncletId, pub node_id : NodeId}
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PipelineYieldPointId(pub usize);
-
 macro_rules! lookup_abstract_type {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
 	(Type) => { TypeId };
@@ -62,8 +58,7 @@ macro_rules! lookup_abstract_type {
 	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
-	(ExternalCpuFunction) => { ExternalCpuFunctionId };
-	(ExternalGpuFunction) => { ExternalGpuFunctionId };
+	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
 	(RemoteOperation) => { RemoteNodeId };
@@ -118,36 +113,21 @@ macro_rules! make_nodes {
 with_operations!(make_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ValueTag
+pub enum Tag
 {
-	// Intended for scheduling purposes
 	None,
-	// These two are implementation-agnostic and are only allowed in external interfaces
-	FunctionInput{function_id : ValueFunctionId, index : usize},
-	FunctionOutput{function_id : ValueFunctionId, index : usize},
-	// These are not, and are intended for funclets
-	Operation{ remote_node_id : RemoteNodeId },
-	Input{funclet_id : FuncletId, index : usize},
-	Output{funclet_id : FuncletId, index : usize},
+	Node{node_id : usize},
+	Input{index : usize},
+	Output{index : usize},
 	Halt{index : usize}
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TimelineTag
+impl Tag
 {
-	None,
-	Operation{ remote_node_id : RemoteNodeId },
-	Input{ funclet_id : FuncletId, index : usize },
-	Output{ funclet_id : FuncletId, index : usize },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum SpatialTag
-{
-	None,
-	Operation{ remote_node_id : RemoteNodeId },
-	Input{ funclet_id : FuncletId, index : usize },
-	Output{ funclet_id : FuncletId, index : usize },
+	fn default() -> Self
+	{
+		Self::None
+	}
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -187,7 +167,7 @@ pub enum TailEdge
 {
 	// Common?
 	Return { return_values : Box<[NodeId]> },
-	Yield { pipeline_yield_point_id : PipelineYieldPointId, yielded_nodes : Box<[NodeId]>, next_funclet : FuncletId, continuation_join : NodeId, arguments : Box<[NodeId]> },
+	Yield { external_function_id : ExternalFunctionId, yielded_nodes : Box<[NodeId]>, next_funclet : FuncletId, continuation_join : NodeId, arguments : Box<[NodeId]> },
 	Jump { join : NodeId, arguments : Box<[NodeId]> },
 
 	// Scheduling only
@@ -205,79 +185,96 @@ pub enum TailEdge
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum FuncletKind
 {
-	MixedImplicit,
-	MixedExplicit,
+	Unknown,
 	Value,
 	ScheduleExplicit,
-	Inline, // Adopts the constraints of the calling funclet
 	Timeline,
 	Spatial
 }
 
 impl FuncletKind
 {
-	fn easy_default() -> Self
+	fn default() -> Self
 	{
-		FuncletKind::MixedImplicit
+		FuncletKind::Unknown
+	}
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FuncletSpec
+{
+	pub funclet_id_opt : Option<FuncletId>,
+	pub input_tags : Box<[Tag]>,
+	pub output_tags : Box<[Tag]>,
+	#[serde(default = "Tag::default")]
+	pub implicit_in_tag : Tag,
+	#[serde(default = "Tag::default")]
+	pub implicit_out_tag : Tag,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum FuncletSpecBinding
+{
+	None,
+	Value{value_function_id_opt : Option<ValueFunctionId>},
+	ScheduleExplicit{value : FuncletSpec, spatial : FuncletSpec, timeline : FuncletSpec},
+}
+
+impl FuncletSpecBinding
+{
+	fn default() -> Self
+	{
+		FuncletSpecBinding::None
+	}
+
+	pub fn get_value_spec<'binding>(& 'binding self) -> & 'binding FuncletSpec
+	{
+		if let FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = self
+		{
+			value
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+
+	pub fn get_timeline_spec<'binding>(& 'binding self) -> & 'binding FuncletSpec
+	{
+		if let FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = self
+		{
+			timeline
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
+	}
+
+	pub fn get_spatial_spec<'binding>(& 'binding self) -> & 'binding FuncletSpec
+	{
+		if let FuncletSpecBinding::ScheduleExplicit{value, spatial, timeline} = self
+		{
+			spatial
+		}
+		else
+		{
+			panic!("Does not have a ScheduleExplicit spec binding")
+		}
 	}
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet
 {
-	#[serde(default = "FuncletKind::easy_default")]
+	#[serde(default = "FuncletKind::default")]
 	pub kind : FuncletKind,
+	#[serde(default = "FuncletSpecBinding::default")]
+	pub spec_binding : FuncletSpecBinding,
 	pub input_types : Box<[TypeId]>,
 	pub output_types : Box<[TypeId]>,
 	pub nodes : Box<[Node]>,
 	pub tail_edge : TailEdge,
-}
-
-// Funclet-relative slot info goes here
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SlotInfo
-{
-	pub value_tag : ValueTag,
-	pub timeline_tag : TimelineTag, // marks the event that put the slot into its current state
-	pub spatial_tag : SpatialTag,
-}
-
-// Funclet-relative join info goes here
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct JoinInfo
-{
-	// To do: Which subregions of resources are reserved by this join
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FenceInfo
-{
-	pub timeline_tag : TimelineTag,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BufferInfo
-{
-	pub spatial_tag : SpatialTag,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct SchedulingFuncletExtra
-{
-	pub value_funclet_id : FuncletId,
-	//pub spatial_funclet_id : FuncletId,
-	//pub temporal_funclet_id : FuncletId,
-	pub input_slots : HashMap<usize, SlotInfo>,
-	pub output_slots : HashMap<usize, SlotInfo>,
-	pub input_fences : HashMap<usize, FenceInfo>,
-	pub output_fences : HashMap<usize, FenceInfo>,
-	pub input_buffers : HashMap<usize, BufferInfo>,
-	pub output_buffers : HashMap<usize, BufferInfo>,
-	//pub input_joins : HashMap<usize, JoinInfo>,
-
-	// Applies to the computation itself
-	pub in_timeline_tag : TimelineTag,
-	pub out_timeline_tag : TimelineTag,
 }
 
 fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
@@ -289,53 +286,19 @@ fn ordered_map<'a, T>(map : &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 	elements
 }
 
-impl serde::Serialize for SchedulingFuncletExtra {
-	fn serialize<S>(& self, serializer : S) -> std::result::Result<<S as serde::Serializer>::Ok, <S as Serializer>::Error>
-		where S : Serializer {
-		let input_slots = ordered_map(&self.input_slots);
-		let output_slots = ordered_map(&self.output_slots);
-		let input_fences = ordered_map(&self.input_fences);
-		let output_fences = ordered_map(&self.output_fences);
-		let input_buffers = ordered_map(&self.input_buffers);
-		let output_buffers = ordered_map(&self.output_buffers);
-
-		let mut state = serializer.serialize_struct("SchedulingFucletExtra", 9)?;
-		state.serialize_field("value_funclet_id", &self.value_funclet_id);
-		state.serialize_field("input_states", &input_slots);
-		state.serialize_field("output_states", &output_slots);
-		state.serialize_field("input_fences", &input_fences);
-		state.serialize_field("output_fences", &output_fences);
-		state.serialize_field("input_buffers", &input_buffers);
-		state.serialize_field("output_buffers", &output_buffers);
-		state.serialize_field("in_timeline_tag", &self.in_timeline_tag);
-		state.serialize_field("out_timeline_tag", &self.out_timeline_tag);
-		state.end()
-	}
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub struct CompatibleValueFunctionKey
-{
-	pub value_function_id : ValueFunctionId
-}
-
+// A function class is just an equivalence class over functions that behave identically for some user-defined definition of identical
+// A schedule can substitute a call to it for an implementation iff that implementation is associated with the function class
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ValueFuncletExtra
+pub struct FunctionClass
 {
-	// Value functions this funclet implements
-	#[serde(default)]
-	pub compatible_value_functions : BTreeSet<CompatibleValueFunctionKey>
-}
-
-// A value function is just an equivalence class over functions that behave identically at the value level
-// A schedule can substitute a call to it for an implementation iff that implementation is associated with the value function
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ValueFunction
-{
-	pub name : String,
+	pub name_opt : Option<String>,
 	pub input_types : Box<[TypeId]>,
 	pub output_types : Box<[TypeId]>,
+	// A hint about what funclet the explicator can use to instantiate this class
+	// This doesn't need to exist for caiman to compile if everything is already explicit
 	pub default_funclet_id : Option<FuncletId>,
+	// The external functions that implement this function
+	pub external_function_ids : BTreeSet<ExternalFunctionId>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -343,24 +306,10 @@ pub struct Pipeline
 {
 	pub name : String,
 	pub entry_funclet : FuncletId,
-	#[serde(default)]
-	pub yield_points : BTreeMap<PipelineYieldPointId, PipelineYieldPoint>
+	pub effect_id_opt : Option<ffi::EffectId>,
 }
 
-// Callee is permitted to change the location of slots within a buffer, the size of a space, and the timeline
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PipelineYieldPoint
-{
-	pub name : String,
-	pub yielded_types : Box<[TypeId]>,
-	pub resuming_types : Box<[TypeId]>, // All value tags must be None (callee cannot change value)
-
-	pub yielded_timeline_tag : TimelineTag,
-	pub resuming_timeline_tag : TimelineTag,
-	pub spatial_funclet_id : FuncletId,
-}
-
-#[derive(Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Program
 {
 	#[serde(default)]
@@ -370,31 +319,9 @@ pub struct Program
 	#[serde(default)]
 	pub funclets : StableVec<Funclet>,
 	#[serde(default)]
-	pub value_functions : StableVec<ValueFunction>,
+	pub function_classes : StableVec<FunctionClass>,
 	#[serde(default)]
 	pub pipelines : Vec<Pipeline>,
-	#[serde(default)]
-	pub value_funclet_extras : HashMap<FuncletId, ValueFuncletExtra>,
-	#[serde(default)]
-	pub scheduling_funclet_extras : HashMap<FuncletId, SchedulingFuncletExtra>,
-}
-
-impl serde::Serialize for Program {
-	fn serialize<S>(&self, serializer: S) -> std::result::Result<<S as serde::Serializer>::Ok, <S as Serializer>::Error>
-		where S: Serializer {
-		let value_funclet_extras = ordered_map(&self.value_funclet_extras);
-		let scheduling_funclet_extras = ordered_map(&self.scheduling_funclet_extras);
-
-		let mut state = serializer.serialize_struct("SchedulingFucletExtra", 9)?;
-		state.serialize_field("native_interface", &self.native_interface);
-		state.serialize_field("types", &self.types);
-		state.serialize_field("funclets", &self.funclets);
-		state.serialize_field("value_functions", &self.value_functions);
-		state.serialize_field("pipelines", &self.pipelines);
-		state.serialize_field("value_funclet_extras", &value_funclet_extras);
-		state.serialize_field("scheduling_funclet_extras", &scheduling_funclet_extras);
-		state.end()
-	}
 }
 
 impl Program
@@ -403,4 +330,23 @@ impl Program
 	{
 		Default::default()
 	}
+}
+
+// Hall of shame but mostly deprecated name
+
+pub type ValueFunction = FunctionClass;
+pub type ValueTag = Tag;
+pub type TimelineTag = Tag;
+pub type SpatialTag = Tag;
+
+// Will phase this out, so don't depend on it
+#[derive(Debug, Clone)]
+pub struct SchedulingTagSet
+{
+	//#[serde(default = "ValueTag::default")]
+	pub value_tag : ValueTag,
+	//#[serde(default = "TimelineTag::default")]
+	pub timeline_tag : TimelineTag,
+	//#[serde(default = "SpatialTag::default")]
+	pub spatial_tag : SpatialTag,
 }

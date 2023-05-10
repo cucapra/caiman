@@ -49,6 +49,7 @@ timeline @time(%e : $event0) -> $event0 {
 extras {
     @foo1 {
         value : @foo,
+        time : @time,
         input_slots : {
             %blob : slot_info()
         },
