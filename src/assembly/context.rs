@@ -446,7 +446,7 @@ impl<'a> Context<'a> {
             .clone()
     }
 
-    pub fn node_id(&self, var: &String) -> usize {
+    pub fn node_id(&self, var: &NodeId) -> usize {
         let funclet = &self.location.funclet_name;
         match self.variable_map.get(funclet).unwrap().local.get_index(var) {
             Some(v) => v,
@@ -454,7 +454,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn return_id(&self, var: &String) -> usize {
+    pub fn return_id(&self, var: &NodeId) -> usize {
         let funclet = &self.location.funclet_name;
         match self
             .variable_map
@@ -520,14 +520,12 @@ impl<'a> Context<'a> {
             .and_then(|f| f.allocations.get(node))
     }
 
-    pub fn get_current_schedule_allocation(
-        &self,
-        funclet: &FuncletId,
-        node: &FuncletId,
-    ) -> Option<&OperationId> {
-        self.get_schedule_allocations(funclet, node)
-            .unwrap()
-            .get(&self.location.funclet_name)
+    pub fn get_current_schedule_allocation(&self, node: &FuncletId) -> Option<&OperationId> {
+        self.get_current_value_funclet().as_ref().and_then(|vf| {
+            self.get_schedule_allocations(&vf, node)
+                .unwrap()
+                .get(&self.location.funclet_name)
+        })
     }
 
     // get what the associated schedule node is allocating
@@ -577,12 +575,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn get_current_value_funclet(&self) -> &FuncletId {
-        &self
+    pub fn get_current_value_funclet(&self) -> Option<&FuncletId> {
+        self
             .schedule_explication_data
             .get(&self.location.funclet_name)
-            .unwrap()
-            .value_funclet
+            .map(|f| &f.value_funclet)
     }
 
     pub fn get_cpu_funclet(
@@ -611,7 +608,7 @@ impl<'a> Context<'a> {
         panic!("GPU funclet {} not found", name);
     }
 
-    pub fn get_value_funclet(&self, name: &ValueFunctionId) -> &assembly::ast::ValueFunction {
+    pub fn get_value_function(&self, name: &ValueFunctionId) -> &assembly::ast::ValueFunction {
         for funclet in &self.program.funclets {
             match funclet {
                 assembly::ast::FuncletDef::ValueFunction(f) => return f,
@@ -621,7 +618,21 @@ impl<'a> Context<'a> {
         panic!("Value function {} not found", name);
     }
 
+    pub fn get_local_funclet(&self, name: &FuncletId) -> &assembly::ast::Funclet {
+        for funclet in &self.program.funclets {
+            match funclet {
+                assembly::ast::FuncletDef::Local(f) => return f,
+                _ => {}
+            }
+        }
+        panic!("Value function {} not found", name);
+    }
+
     pub fn next_name(&mut self) -> String {
         self.meta_data.next_name()
+    }
+
+    pub fn get_tail_edge(&self, name: &FuncletId) -> &Hole<assembly::ast::TailEdge> {
+        &self.get_local_funclet(name).tail_edge
     }
 }

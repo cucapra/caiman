@@ -462,12 +462,9 @@ fn ir_node(node: &assembly::ast::NamedNode, context: &mut Context) -> Option<ir:
 
 fn ir_tail_edge(tail: &assembly::ast::TailEdge, context: &mut Context) -> Option<ir::TailEdge> {
     match tail {
-        assembly::ast::TailEdge::Return { return_values } => Some(ir::TailEdge::Return {
-            return_values: reject_hole(return_values.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-        }),
+        assembly::ast::TailEdge::Return { return_values } => {
+            explication_explicator::explicate_return(return_values, context)
+        }
         assembly::ast::TailEdge::Yield {
             pipeline_yield_point_id,
             yielded_nodes,

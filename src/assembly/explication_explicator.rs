@@ -147,7 +147,7 @@ fn explicate_operation(
         },
     };
     let op = assembly::ast::RemoteNodeName {
-        funclet_name: context.get_current_value_funclet().clone(),
+        funclet_name: context.get_current_value_funclet().unwrap().clone(),
         node_name: operation,
     };
 
@@ -163,9 +163,7 @@ fn explicate_operation(
         argument: &String,
         context: &Context,
     ) {
-        let alloc_name = context
-            .get_current_schedule_allocation(&op.funclet_name, argument)
-            .unwrap();
+        let alloc_name = context.get_current_schedule_allocation(argument).unwrap();
         inputs.push(context.node_id(alloc_name))
     }
 
@@ -251,7 +249,32 @@ pub fn explicate_return(
     return_values: &Hole<Vec<Hole<NodeId>>>,
     context: &mut Context,
 ) -> Option<ir::TailEdge> {
+    // special case cause a return can be considered unique sorta?
+    let mut result = Vec::new();
+
+    let value_returns = match context
+        .get_current_value_funclet()
+        .as_ref()
+        .and_then(|vf| context.get_tail_edge(vf).as_ref())
+    {
+        Some(assembly::ast::TailEdge::Return { return_values }) => {
+            Some(return_values.as_ref().unwrap())
+        }
+        _ => None,
+    };
+
+    for (index, return_value) in reject_hole(return_values.as_ref()).iter().enumerate() {
+        match return_value {
+            Some(value) => result.push(context.node_id(value)),
+            None => {
+                let value = reject_hole(value_returns.unwrap().get(index).unwrap().as_ref());
+                let alloc = context.get_current_schedule_allocation(value);
+                result.push(context.node_id(todo_hole(alloc)));
+            }
+        }
+    }
+
     Some(ir::TailEdge::Return {
-        return_values: Box::new([]),
+        return_values: result.into_boxed_slice(),
     })
 }
