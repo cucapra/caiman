@@ -809,7 +809,7 @@ fn ir_program(program: &assembly::ast::Program, context: &mut Context) -> ir::Pr
     }
 }
 
-fn correct_names(program : &mut assembly::ast::Program) -> usize {
+fn correct_names(program: &mut assembly::ast::Program) -> usize {
     // stupid function we run up-front to get rid of `_`
     let mut number = 0;
     for funclet in program.funclets.iter_mut() {
@@ -818,7 +818,7 @@ fn correct_names(program : &mut assembly::ast::Program) -> usize {
                 for command in f.commands.iter_mut() {
                     match command {
                         None => {}
-                        Some(assembly::ast::NamedNode { node : _, name }) => {
+                        Some(assembly::ast::NamedNode { node: _, name }) => {
                             if name == "_" {
                                 *name = format!("~{}", number);
                                 number += 1;
@@ -829,7 +829,7 @@ fn correct_names(program : &mut assembly::ast::Program) -> usize {
             }
             _ => {}
         }
-    };
+    }
     number
 }
 

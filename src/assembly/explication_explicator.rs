@@ -157,8 +157,12 @@ fn explicate_operation(
     let node_arguments = get_node_arguments(&node.node, context);
 
     // lookup the allocation location and add the argument to the inputs
-    fn add_to_inputs(op: &assembly::ast::RemoteNodeName, inputs: &mut Vec<usize>,
-                     argument: &String, context: &Context) {
+    fn add_to_inputs(
+        op: &assembly::ast::RemoteNodeName,
+        inputs: &mut Vec<usize>,
+        argument: &String,
+        context: &Context,
+    ) {
         let alloc_name = context
             .get_current_schedule_allocation(&op.funclet_name, argument)
             .unwrap();
@@ -240,5 +244,14 @@ pub fn explicate_encode_do(
         operation,
         inputs,
         outputs,
+    })
+}
+
+pub fn explicate_return(
+    return_values: &Hole<Vec<Hole<NodeId>>>,
+    context: &mut Context,
+) -> Option<ir::TailEdge> {
+    Some(ir::TailEdge::Return {
+        return_values: Box::new([]),
     })
 }
