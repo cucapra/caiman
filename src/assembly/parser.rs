@@ -8,7 +8,7 @@ use std::collections::HashMap;
 pub struct IRParser;
 
 use crate::assembly::ast::Hole;
-use crate::assembly::explication;
+use crate::assembly::lowering_pass;
 use crate::ir::ffi;
 use crate::{assembly, frontend, ir};
 
