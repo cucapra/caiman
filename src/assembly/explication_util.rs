@@ -111,10 +111,7 @@ pub fn as_dict(value: ast::DictValue) -> ast::UncheckedDict {
     }
 }
 
-pub fn remote_conversion(
-    remote: &ast::RemoteNodeName,
-    context: &mut Context,
-) -> ir::RemoteNodeId {
+pub fn remote_conversion(remote: &ast::RemoteNodeName, context: &mut Context) -> ir::RemoteNodeId {
     context.remote_id(&remote.funclet_name.clone(), &remote.node_name.clone())
 }
 
@@ -180,9 +177,7 @@ pub fn value_type(d: &ast::DictValue, context: &mut Context) -> context::Locatio
     match v {
         ast::Value::Type(t) => match t {
             ast::Type::FFI(typ) => context::Location::FFI(context.ffi_type_id(&typ)),
-            ast::Type::Local(name) => {
-                context::Location::Local(context.local_type_id(&name))
-            }
+            ast::Type::Local(name) => context::Location::Local(context.local_type_id(&name)),
         },
         _ => panic!("Expected type got {:?}", v),
     }
@@ -284,19 +279,13 @@ pub fn value_dict_value_tag(d: &ast::DictValue, context: &mut Context) -> ir::Va
     }
 }
 
-pub fn value_timeline_tag(
-    t: &ast::TimelineTag,
-    context: &mut Context,
-) -> ir::TimelineTag {
+pub fn value_timeline_tag(t: &ast::TimelineTag, context: &mut Context) -> ir::TimelineTag {
     match t {
         ast::TimelineTag::Core(c) => timeline_core_tag(c.clone(), context),
     }
 }
 
-pub fn value_dict_timeline_tag(
-    d: &ast::DictValue,
-    context: &mut Context,
-) -> ir::TimelineTag {
+pub fn value_dict_timeline_tag(d: &ast::DictValue, context: &mut Context) -> ir::TimelineTag {
     let v = as_value(d.clone());
     match v {
         ast::Value::Tag(t) => match t {
@@ -313,10 +302,7 @@ pub fn value_spatial_tag(t: &ast::SpatialTag, context: &mut Context) -> ir::Spat
     }
 }
 
-pub fn value_dict_spatial_tag(
-    d: &ast::DictValue,
-    context: &mut Context,
-) -> ir::SpatialTag {
+pub fn value_dict_spatial_tag(d: &ast::DictValue, context: &mut Context) -> ir::SpatialTag {
     let v = as_value(d.clone());
     match v {
         ast::Value::Tag(t) => match t {

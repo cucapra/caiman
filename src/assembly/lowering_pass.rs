@@ -7,6 +7,7 @@ use crate::assembly::ast::{
 };
 use crate::assembly::context::Context;
 use crate::assembly::context::FuncletLocation;
+use crate::assembly::explication;
 use crate::assembly::explication_explicator;
 use crate::assembly::explication_util::*;
 use crate::assembly::parser;
@@ -14,7 +15,6 @@ use crate::ir::ffi;
 use crate::{assembly, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
-use crate::assembly::explication;
 
 // for reading GPU stuff
 use crate::stable_vec::StableVec;
@@ -146,10 +146,7 @@ fn ir_external_gpu(
     }
 }
 
-fn ir_native_interface(
-    program: &ast::Program,
-    context: &mut Context,
-) -> ffi::NativeInterface {
+fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::NativeInterface {
     let mut types = StableVec::new();
     let mut external_cpu_functions = StableVec::new();
     let mut external_gpu_functions = StableVec::new();
@@ -189,11 +186,9 @@ fn ir_types(types: &Vec<ast::TypeDecl>, context: &mut Context) -> StableVec<ir::
             ast::TypeDecl::Local(typ) => {
                 Some(match &typ.data {
                     // only supported custom types atm
-                    ast::LocalTypeInfo::NativeValue { storage_type } => {
-                        ir::Type::NativeValue {
-                            storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
-                        }
-                    }
+                    ast::LocalTypeInfo::NativeValue { storage_type } => ir::Type::NativeValue {
+                        storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
+                    },
                     ast::LocalTypeInfo::Slot {
                         storage_type,
                         queue_stage,
@@ -451,34 +446,28 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> Option<ir::Node> {
             local_past: context.node_id(reject_hole(local_past.as_ref())),
             remote_local_past: context.node_id(reject_hole(remote_local_past.as_ref())),
         }),
-        ast::Node::SeparatedLinearSpace { place, space } => {
-            Some(ir::Node::SeparatedLinearSpace {
-                place: reject_hole(place.clone()),
-                space: context.node_id(reject_hole(space.as_ref())),
-            })
-        }
-        ast::Node::MergedLinearSpace { place, spaces } => {
-            Some(ir::Node::MergedLinearSpace {
-                place: reject_hole(place.clone()),
-                spaces: reject_hole(spaces.as_ref())
-                    .iter()
-                    .map(|n| context.node_id(reject_hole(n.as_ref())))
-                    .collect(),
-            })
-        }
+        ast::Node::SeparatedLinearSpace { place, space } => Some(ir::Node::SeparatedLinearSpace {
+            place: reject_hole(place.clone()),
+            space: context.node_id(reject_hole(space.as_ref())),
+        }),
+        ast::Node::MergedLinearSpace { place, spaces } => Some(ir::Node::MergedLinearSpace {
+            place: reject_hole(place.clone()),
+            spaces: reject_hole(spaces.as_ref())
+                .iter()
+                .map(|n| context.node_id(reject_hole(n.as_ref())))
+                .collect(),
+        }),
     }
 }
 
 fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> Option<ir::TailEdge> {
     match tail {
-        ast::TailEdge::Return { return_values } => {
-            Some(ir::TailEdge::Return {
-                return_values: reject_hole(return_values.as_ref())
-                    .iter()
-                    .map(|n| context.node_id(reject_hole(n.as_ref())))
-                    .collect(),
-            })
-        }
+        ast::TailEdge::Return { return_values } => Some(ir::TailEdge::Return {
+            return_values: reject_hole(return_values.as_ref())
+                .iter()
+                .map(|n| context.node_id(reject_hole(n.as_ref())))
+                .collect(),
+        }),
         ast::TailEdge::Yield {
             pipeline_yield_point_id,
             yielded_nodes,
@@ -614,10 +603,7 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> Option<ir::Funcl
     })
 }
 
-fn ir_funclets(
-    funclets: &ast::FuncletDefs,
-    context: &mut Context,
-) -> StableVec<ir::Funclet> {
+fn ir_funclets(funclets: &ast::FuncletDefs, context: &mut Context) -> StableVec<ir::Funclet> {
     let mut result = StableVec::new();
     for def in funclets {
         match def {
@@ -633,10 +619,7 @@ fn ir_funclets(
     result
 }
 
-fn ir_value_function(
-    function: &ast::ValueFunction,
-    context: &mut Context,
-) -> ir::ValueFunction {
+fn ir_value_function(function: &ast::ValueFunction, context: &mut Context) -> ir::ValueFunction {
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut default_funclet_id = None;
@@ -693,10 +676,7 @@ fn ir_pipelines(pipelines: &ast::Pipelines, context: &mut Context) -> Vec<ir::Pi
     result
 }
 
-fn ir_value_extra(
-    _: &ast::UncheckedDict,
-    context: &mut Context,
-) -> ir::ValueFuncletExtra {
+fn ir_value_extra(_: &ast::UncheckedDict, context: &mut Context) -> ir::ValueFuncletExtra {
     todo!()
 }
 
