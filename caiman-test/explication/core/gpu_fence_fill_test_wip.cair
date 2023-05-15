@@ -86,5 +86,3 @@ extras {
         out_timeline_tag : timeline_tag output @foo_time.%e,
     },
 }
-
-pipeline "main" = @foo_main;

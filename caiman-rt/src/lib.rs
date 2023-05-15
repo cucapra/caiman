@@ -1,4 +1,5 @@
 #![allow(warnings)]
+pub extern crate bytemuck;
 pub extern crate wgpu;
 
 pub trait State {

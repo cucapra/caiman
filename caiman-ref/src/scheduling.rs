@@ -98,7 +98,8 @@ struct Fence {
     fenced_place: Place,
     time_inserted_opt: Option<LogicalTimestamp>,
     // This is disgusting in so many ways
-    completion_future: Option<Pin<Box<dyn futures::Future<Output = ()> + Send>>>,
+    // TODO: See comment for sync_fence
+    // completion_future : Option<Pin<Box<dyn futures::Future<Output = ()> + Send>>>
 }
 
 struct FuncletInstance {
@@ -247,7 +248,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue> {
         assert!(fence.time_inserted_opt.is_none());
         fence.fenced_place = fenced_place;
         fence.time_inserted_opt = Some(self.local_logical_timestamp);
-        fence.completion_future = Some(Box::pin(self.queue.on_submitted_work_done()));
+        //fence.completion_future = Some(Box::pin(self.queue.on_submitted_work_done()));
     }
 
     fn transition_resource_states(
@@ -275,6 +276,11 @@ impl<'device, 'queue> SchedulerState<'device, 'queue> {
     }
 
     // Stalls the queue of synced_place until signaled through the given fence
+    // TODO: WGPU 0.15 switched from "poll on a future to sync with a fence" to
+    // "when the fence is fired, execute a callback". This function was never actually used,
+    // so I just disabled it. The same issue reappears in actual codegen though. There, I used
+    // oneshot channels to emulate the old solution. No clue whether that's a good or bad idea...
+    #[cfg(off)]
     pub async fn sync_fence(&mut self, synced_place: Place, fence_id: FenceId) {
         self.local_logical_timestamp.step();
 
@@ -513,7 +519,7 @@ impl<'device, 'queue> SchedulerState<'device, 'queue> {
 }
 
 fn main() {
-    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
     let adapter =
         futures::executor::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),

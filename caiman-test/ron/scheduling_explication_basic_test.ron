@@ -6,171 +6,52 @@
 			types : {
 				0 : I32,
 			},
-			external_cpu_functions : {
-				0 : (name : "do_thing_on_cpu", input_types : [(0)], output_types : [(0)])
-			},
-			external_gpu_functions : {
-				0 : (
-					name : "do_thing_on_gpu", input_types : [(0)], output_types : [(0)], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
-					shader_module_content : Wgsl
+			external_functions : {
+				2 : CpuPureOperation((name : "do_thing_on_cpu", input_types : [0], output_types : [0])),
+				0 : GpuKernel((
+					name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+					shader_module_content : Glsl
 					("
-						struct Output {field_0 : i32;};
-						fn do_thing_on_gpu(a : i32) -> Output 
-						{
-							var output : Output;
-							output.field_0 = a + 1;
-							return output;
-						}
-						
-						struct Input_0 { field_0 : i32; };
-						[[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
-						struct Output_0 { field_0 : i32; };
-						[[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
-						[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
-						{
-							let output = do_thing_on_gpu(input_0.field_0);
-							output_0.field_0 = output.field_0;
+						#version 450
+						layout(set = 0, binding = 0) readonly buffer Input_0 {
+							int field_0;
+						} input_0;
+						layout(set = 0, binding = 1) buffer Output_0 {
+							int field_0;
+						} output_0;
+						layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+						void main() {
+							output_0.field_0 = input_0.field_0 + 1;
 						}
 					")
-				),
-				1 : (
-					name : "do_thing_on_gpu_2", input_types : [(0)], output_types : [(0)], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
-					shader_module_content : Wgsl
+				)),
+				1 : GpuKernel((
+					name : "do_thing_on_gpu_2", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
+					shader_module_content : Glsl
 					("
-						struct InputOutput_0 { field_0 : i32; };
-						[[group(0), binding(0)]] var<storage, read_write> input_output_0 : InputOutput_0;
-						[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
-						{
+						#version 450
+						layout(set = 0, binding = 0) buffer InputOutput_0 {
+							int field_0;
+						} input_output_0;
+						layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+						void main() {
 							input_output_0.field_0 = input_output_0.field_0 + 1;
 						}
 					")
-				)
+				))
 			},
 		),
 		types : {
-			0 : NativeValue(storage_type : (0)),
-			1 : Slot(storage_type : (0), queue_stage : Ready, queue_place : Local ),
+			0 : NativeValue(storage_type : 0),
+			1 : Slot(storage_type : 0, queue_stage : Ready, queue_place : Local ),
 			2 : Event(place : Local),
-			3 : Slot(storage_type : (0), queue_stage : Submitted, queue_place : Gpu ),
+			3 : Slot(storage_type : 0, queue_stage : Submitted, queue_place : Gpu ),
 			4 : Fence( queue_place : Gpu ),
-			5 : Slot(storage_type : (0), queue_stage : Ready, queue_place : Gpu ),
+			5 : Slot(storage_type : 0, queue_stage : Ready, queue_place : Gpu ),
 			6 : Buffer(storage_place : Gpu, static_layout_opt : Some((alignment_bits : 0, byte_size : 4096)) ),
 			7 : BufferSpace,
 		},
 		funclets : {
-			0 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-					Constant(value: I64(1), type_id : 0),
-					CallExternalCpu(external_function_id : 0, arguments : [0]),
-					ExtractResult(node_id : 2, index : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
-					ExtractResult(node_id : 4, index : 0)
-				],
-				tail_edge : Return(return_values : [5])
-			),
-			1 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-					Constant(value: I64(1), type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
-					ExtractResult(node_id : 2, index : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
-					ExtractResult(node_id : 4, index : 0)
-				],
-				tail_edge : Return(return_values : [5])
-			),
-			/*2 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-					CallExternalCpu(external_function_id : 0, arguments : [0]),
-					ExtractResult(node_id : 1, index : 0),
-				],
-				tail_edge : Return(return_values : [2])
-			),
-			3 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
-					ExtractResult(node_id : 2, index : 0),
-					CallExternalCpu(external_function_id : 0, arguments : [3]),
-					ExtractResult(node_id : 4, index : 0)
-				],
-				tail_edge : Return(return_values : [5])
-			),
-			4 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
-					CallExternalCpu(external_function_id : 0, arguments : [0]),
-					ExtractResult(node_id : 2, index : 0),
-					CallExternalCpu(external_function_id : 0, arguments : [3]),
-					ExtractResult(node_id : 4, index : 0)
-				],
-				tail_edge : Return(return_values : [5])
-			),
-			5 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
-					ExtractResult(node_id : 2, index : 0),
-				],
-				tail_edge : Return(return_values : [3])
-			),
-			6 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0, 0],
-				nodes : [
-					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
-					ExtractResult(node_id : 2, index : 0),
-				],
-				tail_edge : Yield(funclet_ids : [7, 8], captured_arguments : [3], return_values : [3])
-			),
-			7 : (
-				kind : Value,
-				input_types : [0, 0],
-				output_types : [0, 0],
-				nodes : [
-					Phi(index : 0),
-					ConstantInteger(value: 1, type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
-					ExtractResult(node_id : 2, index : 0),
-					Phi(index : 1),
-				],
-				tail_edge : Yield(funclet_ids : [7, 8], captured_arguments : [3], return_values : [4])
-			),
-			8 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-				],
-				tail_edge : Return(return_values : [0])
-			),*/
 			9 : (
 				kind : Value,
 				input_types : [0],
@@ -199,18 +80,36 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(0),
+						input_tags : [Input(index : 0)],
+						output_tags : [None]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Input(index : 0),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 0, node_id : 1)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 1)),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 0, node_id : 3)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 3)),
 					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [0], outputs : [3]),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 0, node_id : 3)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 0, node_id : 3)),
 					EncodeCopy(place : Gpu, input : 3, output : 5),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 0, node_id : 4)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 0, node_id : 4), inputs : [1, 1, 1, 5], outputs : [7]),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 0, node_id : 4)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
 					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
 					SyncFence(place : Local, fence : 11, event : (funclet_id : 15, node_id : 2)),
@@ -224,16 +123,34 @@
 				input_types : [1],
 				//output_types : [3, 4, 3],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(9),
+						input_tags : [Input(index : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 0),
+						implicit_out_tag : Node(node_id : 2)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 1)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 1)),
 					EncodeDo(place : Local, operation : (funclet_id : 9, node_id : 1), inputs : [], outputs : [1]),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 9, node_id : 0)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 9, node_id : 0)),
 					EncodeCopy(place : Gpu, input : 0, output : 3),
-					AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 9, node_id : 3)),
+					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
 					EncodeDo(place : Gpu, operation : (funclet_id : 9, node_id : 2), inputs : [1, 1, 1, 3], outputs : [5]),
-					//AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 3)),
+					//AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
 					None,
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
 					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
@@ -250,7 +167,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(10),
+						input_tags : [Input(index : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Input(index : 0),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					DefaultJoin,
@@ -266,7 +201,25 @@
 				kind : ScheduleExplicit,
 				input_types : [1],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(10),
+						input_tags : [Node(node_id : 2)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [None],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 2),
+						implicit_out_tag : Output(index : 0)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 				],
@@ -290,42 +243,34 @@
 				kind : ScheduleExplicit,
 				input_types : [3, 4, 3],
 				output_types : [1],
-
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(9),
+						input_tags : [Node(node_id : 3), None, Node(node_id : 0)],
+						output_tags : [Output(index : 0)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [None, None, None],
+						output_tags : [None]
+					),
+					timeline : (
+						funclet_id_opt : Some(15),
+						input_tags : [Node(node_id : 1), Node(node_id : 1), Node(node_id : 1)],
+						output_tags : [None],
+						implicit_in_tag : Node(node_id : 1),
+						implicit_out_tag : Node(node_id : 2)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
 					Phi(index : 1),
 					Phi(index : 2),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 3)),
+					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
 					SyncFence(place : Local, fence : 1, event : (funclet_id : 15, node_id : 2)),
 					EncodeCopy(place : Local, input : 0, output : 3),
 				],
 				tail_edge : Return(return_values : [3])
-			),
-
-			17 : (
-				kind : ScheduleExplicit,
-				input_types : [1, 6],
-				output_types : [5],
-
-				nodes : [
-					Phi(index : 0),
-					Phi(index : 1),
-					AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 1, node_id : 1)),
-					EncodeDo(place : Local, operation : (funclet_id : 1, node_id : 1), inputs : [], outputs : [2]),
-					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 0)),
-					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 0)),
-					EncodeCopy(place : Gpu, input : 0, output : 4),
-					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 3)),
-					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 3)),
-					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 2), inputs : [2, 2, 2, 4], outputs : [6]),
-					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 5)),
-					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 5)),
-					EncodeDo(place : Gpu, operation : (funclet_id : 1, node_id : 4), inputs : [2, 2, 2, 6], outputs : [8]),
-					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					SyncFence(place : Local, fence : 11, event : (funclet_id : 15, node_id : 2)),
-				],
-				tail_edge : Return(return_values : [8])
 			),
 
 			18 : (
@@ -339,239 +284,63 @@
 				tail_edge : Return(return_values : [0])
 			),
 
-			19 : (
-				kind : Value,
-				input_types : [0],
-				output_types : [0],
-				nodes : [
-					Phi(index : 0),
-					CallExternalGpuCompute(external_function_id : 1, dimensions : [], arguments : [0]),
-					ExtractResult(node_id : 1, index : 0),
-					CallValueFunction(function_id : 1, arguments : [2]),
-					ExtractResult(node_id : 3, index : 0),
-				],
-				tail_edge : Return(return_values : [4])
-			),
-
-			20 : (
-				kind : ScheduleExplicit,
-				input_types : [3],
-				output_types : [3],
-
-				nodes : [
-					Phi(index : 0),
-					UnboundSlot(place : Gpu, storage_type : (0), operation : (funclet_id : 19, node_id : 2)),
-					EncodeDo(place : Gpu, operation : (funclet_id : 19, node_id : 1), inputs : [0], outputs : [1]),
-					Submit(place : Gpu, event : (funclet_id : 22, node_id : 1)),
-					DefaultJoin,
-				],
-				tail_edge : Yield(pipeline_yield_point_id : (0), yielded_nodes : [], next_funclet : 21, arguments : [1], continuation_join : 4 )
-				//tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [1], continuation_join : 3)
-			),
-
-			21 : (
-				kind : ScheduleExplicit,
-				input_types : [3],
-				output_types : [3],
-
-				nodes : [
-					Phi(index : 0),
-					DefaultJoin,
-					//Join(funclet : 23, captures : [], continuation : 1),
-				],
-				tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [0], continuation_join : 1)
-			),
-
-
-			22 : (
-				kind : Timeline,
-				input_types : [2],
-				output_types : [2],
-
-				nodes : [
-					Phi(index : 0),
-					SubmissionEvent(here_place : Local, there_place : Gpu, local_past : 0),
-				],
-				tail_edge : Return(return_values : [1])
-			),
-
-			/*23 : (
-				kind : ScheduleExplicit,
-				input_types : [3],
-				output_types : [3],
-
-				nodes : [
-					Phi(index : 0),
-					DefaultJoin,
-					Join(funclet : 23, captures : [], continuation : 1),
-				],
-				tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [0], continuation_join : 2)
-			),*/
-
 		},
-		/*external_cpu_functions : [
-			(name : "do_thing_on_cpu", input_types : [0], output_types : [0])
-		],
-		external_gpu_functions : [
-			(
-				name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
-				shader_module_content : Wgsl
-				("
-					struct Output {field_0 : i32;};
-					fn do_thing_on_gpu(a : i32) -> Output 
-					{
-						var output : Output;
-						output.field_0 = a + 1;
-						return output;
-					}
-					
-					struct Input_0 { field_0 : i32; };
-					[[group(0), binding(0)]] var<storage, read> input_0 : Input_0;
-					struct Output_0 { field_0 : i32; };
-					[[group(0), binding(1)]] var<storage, read_write> output_0 : Output_0;
-					[[stage(compute), workgroup_size(1, 1, 1)]] fn main()
-					{
-						let output = do_thing_on_gpu(input_0.field_0);
-						output_0.field_0 = output.field_0;
-					}
-				")
-			)
-		],*/
 		value_functions : {
 			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9)),
-			1 : (name : "looping_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(19))
 		},
-		scheduling_funclet_extras : {
+		/*scheduling_funclet_extras : {
 			11 : (
-				value_funclet_id : 0,
-				input_slots : {0 : (value_tag : Input(funclet_id : 0, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : None, timeline_tag : None, spatial_tag : None)},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				external_timestamps : [],
-				external_spaces : [],
+				value_funclet_id_opt : Some(0),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
+				input_tag_sets : [ (value_tag : Input(funclet_id : 0, index : 0), timeline_tag : None, spatial_tag : None)],
+				output_tag_sets : [ (value_tag : None, timeline_tag : None, spatial_tag : None)],
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
-			/*12 : (
-				value_funclet_id : 9,
-				input_slots : {0 : (value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1))), 2 : (value_tag : Operation(remote_node_id : (funclet_id : 9, node_id : 3)), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
-				input_fences : {},
-				output_fences : {1 : (external_timestamp_id : 0, timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
-				external_timestamps : [],
-				external_spaces : [],
-				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 0)),
-				out_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
-			),*/
 			12 : (
-				value_funclet_id : 9,
-				input_slots : {0 : (value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)},//Operation(remote_node_id : (funclet_id : 15, node_id : 1))
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 0)),
-				out_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
+				value_funclet_id_opt : Some(9),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
+				input_tag_sets : [ (value_tag : Input(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
+				output_tag_sets : [ (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
+				in_timeline_tag : Node(node_id : 0),
+				out_timeline_tag : Node(node_id : 2),
 			),
 			13 : (
-				value_funclet_id : 10,
-				input_slots : {0 : (value_tag : Input(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None )},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
+				value_funclet_id_opt : Some(10),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
+				input_tag_sets : [ (value_tag : Input(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)],
+				output_tag_sets : [ (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None )],
 				in_timeline_tag : Input(funclet_id : 15, index : 0),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
 			14 : (
-				value_funclet_id : 10,
-				input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 10, node_id : 2)), timeline_tag : None, spatial_tag : None )}, //Operation(remote_node_id : (funclet_id : 15, node_id : 1))
-				output_slots : {0 : (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
+				value_funclet_id_opt : Some(10),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
+				input_tag_sets : [ (value_tag : Node(node_id : 2), timeline_tag : None, spatial_tag : None )],
+				output_tag_sets : [ (value_tag : Output(funclet_id : 10, index : 0), timeline_tag : None, spatial_tag : None)],
+				in_timeline_tag : Node(node_id : 2),
 				out_timeline_tag : Output(funclet_id : 15, index : 0),
 			),
 			16 : (
-				value_funclet_id : 9,
-				input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 9, node_id : 3)), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)), spatial_tag : None ), 2 : (value_tag : Operation(remote_node_id : (funclet_id : 9, node_id : 0)), timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)), spatial_tag : None )},
-				output_slots : {0 : (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)},
-				input_fences : {1 : (external_timestamp_id : 0, timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)))},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				in_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 1)),
-				out_timeline_tag : Operation(remote_node_id : (funclet_id : 15, node_id : 2)),
+				value_funclet_id_opt : Some(9),
+				spatial_funclet_id_opt : Some(18),
+				temporal_funclet_id_opt : Some(15),
+				input_tag_sets : [
+					(value_tag : Node(node_id : 3), timeline_tag : Node(node_id : 1), spatial_tag : None ),
+					(timeline_tag : Node(node_id : 1)),
+					 (value_tag : Node(node_id : 0), timeline_tag : Node(node_id : 1), spatial_tag : None )
+				],
+				output_tag_sets : [ (value_tag : Output(funclet_id : 9, index : 0), timeline_tag : None, spatial_tag : None)],
+				in_timeline_tag : Node(node_id : 1),
+				out_timeline_tag : Node(node_id : 2),
 			),
-			17 : (
-				value_funclet_id : 1,
-				input_slots : {0 : (value_tag : Input(funclet_id : 1, index : 0), timeline_tag : None, spatial_tag : None)},
-				output_slots : {0 : (value_tag : Output(funclet_id : 1, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {1 : (spatial_tag : Input(funclet_id : 18, index : 0))},
-				output_buffers : {},
-				in_timeline_tag : Input(funclet_id : 15, index : 0),
-				out_timeline_tag : Output(funclet_id : 15, index : 0),
-			),
-			20 : (
-				value_funclet_id : 19,
-				input_slots : {0 : (value_tag : Input(funclet_id : 19, index : 0), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Input(funclet_id : 18, index : 0))},
-				output_slots : {0 : (value_tag : Output(funclet_id : 19, index : 0), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				external_timestamps : [],
-				external_spaces : [],
-				in_timeline_tag : Input(funclet_id : 22, index : 0),
-				out_timeline_tag : Output(funclet_id : 22, index : 0),
-			),
-			21 : (
-				value_funclet_id : 19,
-				input_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 2)), timeline_tag : Input(funclet_id : 22, index : 0), spatial_tag : Operation(remote_node_id : (funclet_id : 18, node_id : 0)))},
-				output_slots : {0 : (value_tag : Operation(remote_node_id : (funclet_id : 19, node_id : 4)), timeline_tag : None, spatial_tag : Output(funclet_id : 18, index : 0))},
-				input_fences : {},
-				output_fences : {},
-				input_buffers : {},
-				output_buffers : {},
-				external_timestamps : [],
-				external_spaces : [],
-				in_timeline_tag : Input(funclet_id : 22, index : 0), //Operation(remote_node_id : (funclet_id : 22, node_id : 1))
-				out_timeline_tag : Output(funclet_id : 22, index : 0),
-			),
-		},
+		},*/
 		pipelines : [
-			(name : "pipeline_1", entry_funclet : 11), 
-			/*(name : "pipeline_with_gpu_gpu_communication", entry_funclet : 1),
-			(name : "pipeline_with_single_cpu_call", entry_funclet : 2),
-			(name : "pipeline_with_gpu_cpu_communication", entry_funclet : 3),
-			(name : "pipeline_with_cpu_cpu_communication", entry_funclet : 4),
-			(name : "pipeline_with_single_gpu_call", entry_funclet : 5),
-			(name : "pipeline_with_yield_enter_loop_exit", entry_funclet : 6),*/
 			(name : "pipeline_with_value_function", entry_funclet : 13),
-			(name : "allocation_test_pipeline", entry_funclet : 17),
-			(
-				name : "looping_pipeline",
-				entry_funclet : 20,
-				yield_points : {
-					(0) :  (
-						name : "loop",
-						yielded_types : [],
-						resuming_types : [],
-						yielded_timeline_tag : Output(funclet_id : 22, index : 0),
-						resuming_timeline_tag : Input(funclet_id : 22, index : 0),
-						spatial_funclet_id : 18
-					)
-				}
-			),
 		]
 	)
 )

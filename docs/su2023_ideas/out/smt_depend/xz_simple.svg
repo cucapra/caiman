@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentStyleType="text/css" height="421px" preserveAspectRatio="none" style="width:235px;height:421px;background:#FFFFFF;" version="1.1" viewBox="0 0 235 421" width="235px" zoomAndPan="magnify"><defs/><g><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="46.35" y="375"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="6" x="68.35" y="400.7285">x</text><rect fill="#555555" height="8" style="stroke:none;stroke-width:1.0;" width="80" x="124.35" y="207"/><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="61.35" y="107"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="7" x="82.85" y="132.7285">y</text><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="100.35" y="7"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="35" x="107.85" y="32.7285">result</text><rect fill="#F1F1F1" height="40" rx="12.5" ry="12.5" style="stroke:#181818;stroke-width:0.5;" width="50" x="139.35" y="275"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="6" x="161.35" y="300.7285">z</text><!--MD5=[ee31eb9d5e36db9d8f441adaaa72efc0]
+link y to x--><g id="link_y_x"><path d="M85.27,147.13 C82.6,194.46 75.69,317.02 72.73,369.53 " fill="none" id="y-to-x" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="72.44,374.69,76.9233,365.9208,72.7118,369.6974,68.9352,365.4859,72.44,374.69" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[1327e7d5b87f26f83d4641029e376e73]
+link result to x--><g id="link_result_x"><path d="M100.29,44.01 C80.95,57.99 55.64,80.21 44.35,107 C6,197.95 42.77,319.11 61.67,369.95 " fill="none" id="result-to-x" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="63.55,374.93,64.099,365.0965,61.7772,370.2548,56.6188,367.933,63.55,374.93" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[726e441f3f879c3f1fa10c8daa8bcb6d]
+link result to y--><g id="link_result_y"><path d="M117.64,47.36 C111.45,62.93 102.7,84.9 96.03,101.66 " fill="none" id="result-to-y" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="94.04,106.68,101.0782,99.7906,95.8846,102.0327,93.6425,96.8392,94.04,106.68" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[f12b284872cd14d1265df6415053a308]
+link result to z--><g id="link_result_z"><path d="M140.31,47.24 C163.59,78.57 207.36,143.53 222.35,207 C228.12,231.47 210.67,254.93 193.43,271.31 " fill="none" id="result-to-z" style="stroke:#181818;stroke-width:1.0;"/><polygon fill="#181818" points="189.53,274.91,198.8579,271.7492,193.2057,271.5204,193.4345,265.8682,189.53,274.91" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[df34995210b2a0a9a759f1dab0a5001f]
+link block to z--><g id="link_block_z"><path d="M164.35,215.11 C164.35,223.98 164.35,249.97 164.35,269.71 " fill="none" id="block-to-z" style="stroke:#181818;stroke-width:1.0;stroke-dasharray:1.0,3.0;"/><polygon fill="#181818" points="164.35,274.84,168.35,265.84,164.35,269.84,160.35,265.84,164.35,274.84" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[6354bdfd55fc6341c5c0ecd8e482de11]
+link z to x--><g id="link_z_x"><path d="M145.97,315.36 C130.82,331.33 109.27,354.04 93.22,370.95 " fill="none" id="z-to-x" style="stroke:#181818;stroke-width:1.0;stroke-dasharray:1.0,3.0;"/><polygon fill="#181818" points="89.68,374.68,98.7764,370.9044,93.1215,371.0529,92.973,365.398,89.68,374.68" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[7ecd385406c5b7c03814649120a8472d]
+link y to block--><g id="link_y_block"><path d="M104.44,147.02 C121.43,164.88 145.95,190.66 157.64,202.95 " fill="none" id="y-to-block" style="stroke:#181818;stroke-width:1.0;stroke-dasharray:7.0,7.0;"/><polygon fill="#181818" points="161.34,206.84,158.047,197.558,157.8985,203.2129,152.2436,203.0644,161.34,206.84" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[ff3cc80006995b97e138571a164c4076]
+link result to block--><g id="link_result_block"><path d="M129.45,47.13 C137.85,86.33 156.71,174.38 162.58,201.73 " fill="none" id="result-to-block" style="stroke:#181818;stroke-width:1.0;stroke-dasharray:7.0,7.0;"/><polygon fill="#181818" points="163.67,206.85,165.682,197.2088,162.6155,201.9625,157.8619,198.896,163.67,206.85" style="stroke:#181818;stroke-width:1.0;"/></g><!--MD5=[34c06a46ae6b5eafe781487cb56cd858]
+@startuml xz_simple
+hide empty description
+
+state x
+
+state block <<fork>>
+
+y - -> x
+result - -> x
+result - -> y
+result - -> z
+
+block -[dotted]-> z
+z -[dotted]-> x
+y -[dashed]-> block
+result -[dashed]-> block
+@enduml
+
+PlantUML version 1.2022.7(Mon Aug 22 11:01:30 MDT 2022)
+(GPL source distribution)
+Java Runtime: OpenJDK Runtime Environment
+JVM: OpenJDK 64-Bit Server VM
+Default Encoding: UTF-8
+Language: en
+Country: US
+--></g></svg>

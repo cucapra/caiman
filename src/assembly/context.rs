@@ -80,6 +80,7 @@ impl Location {
         match self {
             Location::Local(u) => *u,
             Location::FFI(u) => *u,
+            Location::FFI(u) => *u,
         }
     }
 }
@@ -636,3 +637,4 @@ impl<'a> Context<'a> {
         &self.get_local_funclet(name).tail_edge
     }
 }
+

@@ -1,0 +1,83 @@
+@startuml baseline
+hide empty description
+
+state x
+
+y --> x
+result --> x
+result --> y
+result --> z
+
+@enduml
+
+@startuml xz_simple
+hide empty description
+
+state x
+
+state block <<fork>>
+
+y --> x
+result --> x
+result --> y
+result --> z
+
+block -[dotted]-> z
+z -[dotted]-> x
+y -[dashed]-> block
+result -[dashed]-> block
+@enduml
+
+@startuml xz_extra
+hide empty description
+
+state x
+
+state block1 <<fork>>
+state block2 <<fork>>
+
+y --> x
+result --> x
+result --> y
+result --> z
+
+block1 -[dotted]-> x
+block2 -[dotted]-> z
+
+z -[dotted]-> block1
+y -[dashed]-> block1
+result -[dashed]-> block1
+y -[dashed]-> block2
+result -[dashed]-> block2
+@enduml
+
+@startuml xz_impossible
+hide empty description
+
+state x
+
+state block <<fork>>
+
+y --> x
+result --> x
+result --> y
+result --> z
+
+block --> x
+y -[dashed]-> block
+result --> block
+z -[dotted]-> block
+@enduml
+
+@startuml colored
+hide empty description
+
+state x #BlueViolet
+
+y --> x
+result --> x
+result --> y
+result --> z
+
+state z #GreenYellow
+@enduml
