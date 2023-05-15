@@ -8,7 +8,10 @@ use std::collections::HashMap;
 pub struct IRParser;
 
 use crate::assembly::ast::Hole;
-use crate::assembly::lowering_pass;
+use crate::assembly::ast::{
+    ExternalFunctionId, FFIType, FuncletId, OperationId, RemoteNodeId, StorageTypeId, TypeId,
+    ValueFunctionId,
+};
 use crate::ir::ffi;
 use crate::{assembly, frontend, ir};
 
@@ -46,15 +49,10 @@ fn compose_str<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(String, &mut Context) -
 where
     F: Fn(String, &mut Context) -> T + 'a,
     G: Fn(T) -> U + 'a,
-fn compose_str<'a, T, U, G, F>(f: F, g: G) -> Box<dyn Fn(String, &mut Context) -> U + 'a>
-where
-    F: Fn(String, &mut Context) -> T + 'a,
-    G: Fn(T) -> U + 'a,
 {
     Box::new(move |s, c| g(f(s, c)))
 }
 
-fn option_to_vec<T>(o: Option<Vec<T>>) -> Vec<T> {
 fn option_to_vec<T>(o: Option<Vec<T>>) -> Vec<T> {
     match o {
         None => Vec::new(),
@@ -102,7 +100,6 @@ fn unchecked_value(
 // Rule stuff
 
 fn unexpected(value: String) -> String {
-fn unexpected(value: String) -> String {
     format!("Unexpected string {}", value)
 }
 
@@ -112,15 +109,8 @@ fn unexpected_rule<T>(potentials: &Vec<RuleApp<T>>, rule: Rule) -> String {
         rule_app_vec_as_str(potentials),
         rule
     )
-fn unexpected_rule<T>(potentials: &Vec<RuleApp<T>>, rule: Rule) -> String {
-    format!(
-        "Expected rule {:?}, got {:?}",
-        rule_app_vec_as_str(potentials),
-        rule
-    )
 }
 
-fn unexpected_rule_raw(potentials: Vec<Rule>, rule: Rule) -> String {
 fn unexpected_rule_raw(potentials: Vec<Rule>, rule: Rule) -> String {
     format!("Expected rule {:?}, got {:?}", potentials, rule)
 }
@@ -128,24 +118,18 @@ fn unexpected_rule_raw(potentials: Vec<Rule>, rule: Rule) -> String {
 enum Application<'a, T> {
     P(Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a>),
     S(Box<dyn Fn(String, &mut Context) -> T + 'a>),
-    S(Box<dyn Fn(String, &mut Context) -> T + 'a>),
 }
 
 struct RuleApp<'a, T> {
     rule: Rule,
     unwrap: usize,
     application: Application<'a, T>,
-    rule: Rule,
-    unwrap: usize,
-    application: Application<'a, T>,
 }
 
-fn rule_app_as_str<T>(rule: &RuleApp<T>) -> String {
 fn rule_app_as_str<T>(rule: &RuleApp<T>) -> String {
     return format!("{:?} {:?}", rule.rule, rule.unwrap);
 }
 
-fn rule_app_vec_as_str<T>(rules: &Vec<RuleApp<T>>) -> String {
 fn rule_app_vec_as_str<T>(rules: &Vec<RuleApp<T>>) -> String {
     let mut result = Vec::new();
     for rule in rules.iter() {
@@ -159,17 +143,7 @@ fn rule_pair_unwrap<'a, T>(
     unwrap: usize,
     apply: Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a>,
 ) -> RuleApp<'a, T> {
-fn rule_pair_unwrap<'a, T>(
-    rule: Rule,
-    unwrap: usize,
-    apply: Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a>,
-) -> RuleApp<'a, T> {
     let application = Application::P(apply);
-    RuleApp {
-        rule,
-        unwrap,
-        application,
-    }
     RuleApp {
         rule,
         unwrap,
@@ -177,10 +151,6 @@ fn rule_pair_unwrap<'a, T>(
     }
 }
 
-fn rule_pair_boxed<'a, T>(
-    rule: Rule,
-    apply: Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a>,
-) -> RuleApp<'a, T> {
 fn rule_pair_boxed<'a, T>(
     rule: Rule,
     apply: Box<dyn Fn(&mut Pairs<Rule>, &mut Context) -> T + 'a>,
@@ -188,10 +158,6 @@ fn rule_pair_boxed<'a, T>(
     rule_pair_unwrap(rule, 0, apply)
 }
 
-fn rule_pair<'a, T: 'a>(
-    rule: Rule,
-    apply: fn(&mut Pairs<Rule>, &mut Context) -> T,
-) -> RuleApp<'a, T> {
 fn rule_pair<'a, T: 'a>(
     rule: Rule,
     apply: fn(&mut Pairs<Rule>, &mut Context) -> T,
@@ -204,17 +170,7 @@ fn rule_str_unwrap<'a, T>(
     unwrap: usize,
     apply: Box<dyn Fn(String, &mut Context) -> T + 'a>,
 ) -> RuleApp<'a, T> {
-fn rule_str_unwrap<'a, T>(
-    rule: Rule,
-    unwrap: usize,
-    apply: Box<dyn Fn(String, &mut Context) -> T + 'a>,
-) -> RuleApp<'a, T> {
     let application = Application::S(apply);
-    RuleApp {
-        rule,
-        unwrap,
-        application,
-    }
     RuleApp {
         rule,
         unwrap,
@@ -222,10 +178,6 @@ fn rule_str_unwrap<'a, T>(
     }
 }
 
-fn rule_str_boxed<'a, T>(
-    rule: Rule,
-    apply: Box<dyn Fn(String, &mut Context) -> T + 'a>,
-) -> RuleApp<'a, T> {
 fn rule_str_boxed<'a, T>(
     rule: Rule,
     apply: Box<dyn Fn(String, &mut Context) -> T + 'a>,
@@ -234,15 +186,12 @@ fn rule_str_boxed<'a, T>(
 }
 
 fn rule_str<'a, T: 'a>(rule: Rule, apply: fn(String, &mut Context) -> T) -> RuleApp<'a, T> {
-fn rule_str<'a, T: 'a>(rule: Rule, apply: fn(String, &mut Context) -> T) -> RuleApp<'a, T> {
     rule_str_unwrap(rule, 0, Box::new(apply))
 }
 
 fn check_rule(potentials: Vec<Rule>, rule: Rule, context: &mut Context) -> bool {
-fn check_rule(potentials: Vec<Rule>, rule: Rule, context: &mut Context) -> bool {
     for potential in potentials {
         if rule == potential {
-            return true;
             return true;
         }
     }
@@ -250,15 +199,12 @@ fn check_rule(potentials: Vec<Rule>, rule: Rule, context: &mut Context) -> bool 
 }
 
 fn is_rule(potentials: Vec<Rule>, pairs: &mut Pairs<Rule>, context: &mut Context) -> bool {
-fn is_rule(potentials: Vec<Rule>, pairs: &mut Pairs<Rule>, context: &mut Context) -> bool {
     match pairs.peek() {
         None => false,
-        Some(pair) => check_rule(potentials, pair.as_rule(), context),
         Some(pair) => check_rule(potentials, pair.as_rule(), context),
     }
 }
 
-fn require_rules(potentials: Vec<Rule>, pairs: &mut Pairs<Rule>, context: &mut Context) {
 fn require_rules(potentials: Vec<Rule>, pairs: &mut Pairs<Rule>, context: &mut Context) {
     let rule = pairs.next().unwrap().as_rule();
     if !check_rule(potentials, rule, context) {
@@ -267,15 +213,9 @@ fn require_rules(potentials: Vec<Rule>, pairs: &mut Pairs<Rule>, context: &mut C
 }
 
 fn require_rule(potential: Rule, pairs: &mut Pairs<Rule>, context: &mut Context) {
-fn require_rule(potential: Rule, pairs: &mut Pairs<Rule>, context: &mut Context) {
     require_rules(vec![potential], pairs, context)
 }
 
-fn apply_pair<T>(
-    potentials: &Vec<RuleApp<T>>,
-    pair: Pair<Rule>,
-    context: &mut Context,
-) -> Option<T> {
 fn apply_pair<T>(
     potentials: &Vec<RuleApp<T>>,
     pair: Pair<Rule>,
@@ -293,10 +233,8 @@ fn apply_pair<T>(
                     }
                     Some(apply(&mut pairs, context))
                 }
-                }
                 Application::S(apply) => {
                     // cloning is slow, but fixing takes work
-                    let mut new_pair = pair.clone();
                     let mut new_pair = pair.clone();
                     let mut pairs = pair.into_inner();
                     for unwrap in 0..potential.unwrap {
@@ -304,8 +242,6 @@ fn apply_pair<T>(
                         pairs = new_pair.clone().into_inner(); // whatever, just whatever
                     }
                     Some(apply(new_pair.as_span().as_str().to_string(), context))
-                }
-            };
                 }
             };
         }
@@ -318,18 +254,8 @@ fn optional_vec<T>(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
 ) -> Option<T> {
-fn optional_vec<T>(
-    potentials: Vec<RuleApp<T>>,
-    pairs: &mut Pairs<Rule>,
-    context: &mut Context,
-) -> Option<T> {
     match pairs.peek() {
         None => None,
-        Some(pair) => match apply_pair(&potentials, pair, context) {
-            None => None,
-            t => {
-                pairs.next();
-                t
         Some(pair) => match apply_pair(&potentials, pair, context) {
             None => None,
             t => {
@@ -339,15 +265,7 @@ fn optional_vec<T>(
         },
     }
 }
-        },
-    }
-}
 
-fn optional<T>(
-    potentials: RuleApp<T>,
-    pairs: &mut Pairs<Rule>,
-    context: &mut Context,
-) -> Option<T> {
 fn optional<T>(
     potentials: RuleApp<T>,
     pairs: &mut Pairs<Rule>,
@@ -357,16 +275,10 @@ fn optional<T>(
 }
 
 fn expect_raw<T>(potentials: &Vec<RuleApp<T>>, pair: Pair<Rule>, context: &mut Context) -> T {
-fn expect_raw<T>(potentials: &Vec<RuleApp<T>>, pair: Pair<Rule>, context: &mut Context) -> T {
     let rule = pair.as_rule();
     let span = pair.as_span();
     match apply_pair(&potentials, pair, context) {
-    match apply_pair(&potentials, pair, context) {
         Some(result) => result,
-        None => {
-            println!("{:?}", span);
-            panic!(unexpected_rule(potentials, rule))
-        }
         None => {
             println!("{:?}", span);
             panic!(unexpected_rule(potentials, rule))
@@ -375,12 +287,10 @@ fn expect_raw<T>(potentials: &Vec<RuleApp<T>>, pair: Pair<Rule>, context: &mut C
 }
 
 fn expect_vec<T>(potentials: Vec<RuleApp<T>>, pairs: &mut Pairs<Rule>, context: &mut Context) -> T {
-fn expect_vec<T>(potentials: Vec<RuleApp<T>>, pairs: &mut Pairs<Rule>, context: &mut Context) -> T {
     let pair = pairs.next().unwrap();
     expect_raw(&potentials, pair, context)
 }
 
-fn expect<T>(potential: RuleApp<T>, pairs: &mut Pairs<Rule>, context: &mut Context) -> T {
 fn expect<T>(potential: RuleApp<T>, pairs: &mut Pairs<Rule>, context: &mut Context) -> T {
     expect_vec(vec![potential], pairs, context)
 }
@@ -442,13 +352,11 @@ fn expect_all_vec<T>(
 }
 
 fn expect_all<T>(potential: RuleApp<T>, pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<T> {
-fn expect_all<T>(potential: RuleApp<T>, pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<T> {
     expect_all_vec(vec![potential], pairs, context)
 }
 
 // Core Reading
 
-fn read_n(s: String, context: &mut Context) -> usize {
 fn read_n(s: String, context: &mut Context) -> usize {
     s.parse::<usize>().unwrap()
 }
@@ -460,13 +368,10 @@ fn rule_n<'a>() -> RuleApp<'a, usize> {
 fn read_string(s: String, context: &mut Context) -> String {
     s
 }
-fn read_string(s: String, context: &mut Context) -> String {
-    s
-}
 
-fn rule_string<'a>(rule: Rule) -> RuleApp<'a, String> {
-fn rule_string<'a>(rule: Rule) -> RuleApp<'a, String> {
-    rule_str(rule, read_string)
+fn read_string_as<T>(s: String, context: &mut Context) -> T
+where T {
+    s
 }
 
 fn rule_id_raw<'a>() -> RuleApp<'a, String> {
@@ -477,8 +382,18 @@ fn rule_n_raw<'a>() -> RuleApp<'a, String> {
     rule_str(Rule::n, read_string)
 }
 
-fn read_string_clean(s: String, context: &mut Context) -> String {
-    (&s[1..s.len() - 1]).to_string()
+fn rule_string<'a>(rule: Rule) -> RuleApp<'a, String> {
+    rule_str(rule, read_string)
+}
+
+fn rule_funclet_id<'a>(rule: Rule) -> RuleApp<'a, FuncletId> {
+    rule_str(rule, read_funclet_id)
+}
+
+fn rule_operation_id<'a>(rule: Rule) -> RuleApp<'a, OperationId> {
+    rule_str(rule, read_operation_id)
+}
+
 fn read_string_clean(s: String, context: &mut Context) -> String {
     (&s[1..s.len() - 1]).to_string()
 }
@@ -487,8 +402,7 @@ fn rule_string_clean<'a>() -> RuleApp<'a, String> {
     rule_str(Rule::str, read_string_clean)
 }
 
-fn read_type_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> String {
-fn read_type_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> String {
+fn read_type_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> TypeId {
     let mut rules = Vec::new();
     rules.push(rule_str(Rule::ffi_type, read_string));
     rules.push(rule_str_unwrap(Rule::type_name, 1, Box::new(read_string)));
@@ -612,10 +526,6 @@ fn read_ffi_parameterized_type(
         Rule::ffi_parameterized_ref,
         read_ffi_parameterized_ref,
     ));
-    rules.push(rule_pair(
-        Rule::ffi_parameterized_ref,
-        read_ffi_parameterized_ref,
-    ));
     let func = Box::new(read_ffi_tuple_params);
     rules.push(rule_pair_unwrap(Rule::ffi_parameterized_tuple, 1, func));
 
@@ -625,10 +535,6 @@ fn read_ffi_parameterized_type(
 fn read_ffi_type(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly::ast::FFIType {
     let mut rules = Vec::new();
     rules.push(rule_str(Rule::ffi_type_base, read_ffi_type_base));
-    rules.push(rule_pair(
-        Rule::ffi_parameterized_type,
-        read_ffi_parameterized_type,
-    ));
     rules.push(rule_pair(
         Rule::ffi_parameterized_type,
         read_ffi_parameterized_type,
@@ -665,7 +571,6 @@ fn rule_type_sep<'a>() -> RuleApp<'a, Hole<assembly::ast::Type>> {
 }
 
 fn read_throwaway(_: String, context: &mut Context) -> String {
-fn read_throwaway(_: String, context: &mut Context) -> String {
     "_".to_string()
 }
 
@@ -689,15 +594,15 @@ fn rule_var_name<'a>() -> RuleApp<'a, Hole<String>> {
     rule_pair(Rule::var_name, read_var_name)
 }
 
-fn read_fn_name(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<String> {
+fn read_fn_name(pairs: &mut Pairs<Rule>, context: &mut Context) -> Hole<FuncletId> {
     let mut rules = Vec::new();
-    let rule = compose_str(read_string, Some);
+    let rule = compose_str(read_funclet_id, Some);
     rules.push(rule_str_boxed(Rule::id, rule));
     rules.push(rule_hole());
     expect_vec(rules, pairs, context)
 }
 
-fn rule_fn_name<'a>() -> RuleApp<'a, Hole<String>> {
+fn rule_fn_name<'a>() -> RuleApp<'a, Hole<FuncletId>> {
     rule_pair(Rule::fn_name, read_fn_name)
 }
 
@@ -708,12 +613,12 @@ fn rule_fn_name_sep<'a>() -> RuleApp<'a, Hole<String>> {
 fn read_funclet_loc_filled(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> assembly::ast::RemoteNodeName {
+) -> assembly::ast::RemoteNodeId {
     let rule_func = rule_str_unwrap(Rule::fn_name, 1, Box::new(read_string));
     let rule_var = rule_str_unwrap(Rule::var_name, 1, Box::new(read_string));
     let fun_name = expect(rule_func, pairs, context);
     let var_name = expect(rule_var, pairs, context);
-    assembly::ast::RemoteNodeName {
+    assembly::ast::RemoteNodeId {
         funclet_name: fun_name,
         node_name: var_name,
     }
@@ -722,7 +627,7 @@ fn read_funclet_loc_filled(
 fn read_funclet_loc(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> Hole<assembly::ast::RemoteNodeName> {
+) -> Hole<assembly::ast::RemoteNodeId> {
     expect_hole(
         rule_pair(Rule::funclet_loc_filled, read_funclet_loc_filled),
         pairs,
@@ -730,7 +635,7 @@ fn read_funclet_loc(
     )
 }
 
-fn rule_funclet_loc<'a>() -> RuleApp<'a, Hole<assembly::ast::RemoteNodeName>> {
+fn rule_funclet_loc<'a>() -> RuleApp<'a, Hole<assembly::ast::RemoteNodeId>> {
     rule_pair(Rule::funclet_loc, read_funclet_loc)
 }
 
@@ -994,7 +899,6 @@ struct DictPair {
 }
 
 fn read_dict_element(pairs: &mut Pairs<Rule>, context: &mut Context) -> DictPair {
-fn read_dict_element(pairs: &mut Pairs<Rule>, context: &mut Context) -> DictPair {
     let rule_key = rule_pair(Rule::dict_key, read_dict_key);
     let rule_value = rule_pair(Rule::dict_value, read_dict_value);
     let key = expect(rule_key, pairs, context);
@@ -1174,10 +1078,6 @@ fn read_external_cpu_return_args(
         Rule::ffi_type,
         compose_pair(read_ffi_type, |t| vec![t]),
     ));
-    rules.push(rule_pair_boxed(
-        Rule::ffi_type,
-        compose_pair(read_ffi_type, |t| vec![t]),
-    ));
     expect_vec(rules, pairs, context)
 }
 
@@ -1200,7 +1100,6 @@ fn read_external_cpu_funclet(
     assembly::ast::ExternalCpuFunction {
         name,
         input_types,
-        output_types,
         output_types,
     }
 }
@@ -1295,7 +1194,6 @@ fn read_external_gpu_funclet(
         output_types,
         shader_module,
         entry_point: "main".to_string(), // todo: uhhhh, allow syntax perhaps
-        resource_bindings,
         resource_bindings,
     }
 }
@@ -1427,10 +1325,6 @@ fn read_node_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<Hole
             vec![]
         }
         Some(_) => {
-        None => {
-            vec![]
-        }
-        Some(_) => {
             let rule = rule_pair(Rule::node_list, read_node_list);
             expect(rule, pairs, context)
         }
@@ -1527,10 +1421,6 @@ fn read_tail_fn_box_raw(pairs: &mut Pairs<Rule>, context: &mut Context) -> Vec<H
             vec![]
         }
         Some(_) => {
-        None => {
-            vec![]
-        }
-        Some(_) => {
             let rule = rule_pair(Rule::tail_fn_nodes, read_tail_fn_nodes);
             expect(rule, pairs, context)
         }
@@ -1597,10 +1487,6 @@ fn read_tail_option_box_raw(
     context: &mut Context,
 ) -> Vec<Option<Hole<String>>> {
     match pairs.peek() {
-        None => {
-            vec![]
-        }
-        Some(_) => {
         None => {
             vec![]
         }
@@ -1816,10 +1702,7 @@ fn read_encode_do_params(pairs: &mut Pairs<Rule>, context: &mut Context) -> Box<
 fn read_encode_do_call(
     pairs: &mut Pairs<Rule>,
     context: &mut Context,
-) -> (
-    Hole<assembly::ast::RemoteNodeName>,
-    Hole<Box<[Hole<String>]>>,
-) {
+) -> (Hole<assembly::ast::RemoteNodeId>, Hole<Box<[Hole<String>]>>) {
     let operation = expect(rule_funclet_loc(), pairs, context);
     let inputs = expect_hole(
         rule_pair(Rule::encode_do_params, read_encode_do_params),
@@ -2045,7 +1928,6 @@ fn read_sync_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly
         there_place,
         local_past,
         remote_local_past,
-        remote_local_past,
     }
 }
 
@@ -2141,7 +2023,6 @@ fn read_funclet_blob(
                 _ => panic!("Internal error with rules"),
             });
         } else {
-        } else {
             panic!(unexpected_rule(&vec![rule_command], rule));
         }
     }
@@ -2172,12 +2053,6 @@ fn read_schedule_funclet(pairs: &mut Pairs<Rule>, context: &mut Context) -> asse
         pairs,
         context,
     )
-    read_funclet_blob(
-        ir::FuncletKind::ScheduleExplicit,
-        rule_command,
-        pairs,
-        context,
-    )
 }
 
 fn read_timeline_funclet(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly::ast::Funclet {
@@ -2201,7 +2076,6 @@ fn read_funclet(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly::ast
         Rule::schedule_sep => expect(srule, pairs, context),
         Rule::timeline_sep => expect(trule, pairs, context),
         Rule::spatial_sep => expect(sprule, pairs, context),
-        _ => panic!(unexpected_rule(&vec![vrule, srule, trule], rule)),
         _ => panic!(unexpected_rule(&vec![vrule, srule, trule], rule)),
     }
 }

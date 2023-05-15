@@ -2,7 +2,7 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalCpuFunction, ExternalGpuFunction, FuncletId, NodeId, OperationId, StorageTypeId,
+    ExternalCpuFunction, ExternalGpuFunction, FuncletId, OperationId, OperationId, StorageTypeId,
     TypeId, ValueFunctionId,
 };
 use crate::assembly::context;
@@ -111,7 +111,7 @@ pub fn as_dict(value: ast::DictValue) -> ast::UncheckedDict {
     }
 }
 
-pub fn remote_conversion(remote: &ast::RemoteNodeName, context: &mut Context) -> ir::RemoteNodeId {
+pub fn remote_conversion(remote: &ast::RemoteNodeId, context: &mut Context) -> ir::RemoteNodeId {
     context.remote_id(&remote.funclet_name.clone(), &remote.node_name.clone())
 }
 

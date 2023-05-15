@@ -1,8 +1,8 @@
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalCpuFunctionId, ExternalGpuFunctionId, FFIType, FuncletId, NodeId, OperationId,
-    RemoteNodeName, StorageTypeId, TypeId, ValueFunctionId,
+    ExternalFunctionId, FFIType, FuncletId, OperationId, RemoteNodeId, StorageTypeId, TypeId,
+    ValueFunctionId,
 };
 use crate::ir;
 use debug_ignore::DebugIgnore;
@@ -22,8 +22,8 @@ where
 #[derive(Debug)]
 pub struct NodeTable {
     // local names and return names such as [%out : i64] or whatever
-    pub local: Table<NodeId>,
-    pub returns: Table<NodeId>,
+    pub local: Table<OperationId>,
+    pub returns: Table<OperationId>,
 }
 
 #[derive(Debug)]
@@ -53,7 +53,7 @@ struct ValueFuncletData {
     explication_information: HashMap<OperationId, ValueExplicationInformation>,
 
     // map from call index to output name for each call
-    call_outputs: HashMap<OperationId, HashMap<usize, NodeId>>,
+    call_outputs: HashMap<OperationId, HashMap<usize, OperationId>>,
 }
 
 #[derive(Debug)]
@@ -61,7 +61,7 @@ struct ScheduleFuncletData {
     // associated value funclet
     value_funclet: FuncletId,
     // map from the variables available to which node they are allocated
-    allocations: HashMap<NodeId, OperationId>,
+    allocations: HashMap<OperationId, OperationId>,
     // list of explication holes found, by index
     explication_holes: Vec<usize>,
 }
@@ -69,9 +69,8 @@ struct ScheduleFuncletData {
 #[derive(Debug, Clone)]
 pub enum FuncletLocation {
     Local,
-    Value,
-    Cpu,
-    Gpu,
+    ValueFunction,
+    External,
 }
 
 #[derive(Debug, Clone)]
@@ -104,12 +103,10 @@ pub struct FuncletInformation {
 
 #[derive(Debug)]
 pub struct FuncletIndices {
-    external_funclet_table: Table<String>,
-    local_funclet_table: Table<String>,
-    value_function_table: Table<String>,
+    external_funclet_table: Table<ExternalFunctionId>,
+    local_funclet_table: Table<FuncletId>,
+    value_function_table: Table<ValueFunctionId>,
     funclet_kind_map: HashMap<String, FuncletLocation>,
-    // separate map for assembly ast location, maybe should just rework to unify the indices?
-    assembly_funclets: Table<String>,
 }
 
 #[derive(Debug)]
@@ -124,10 +121,8 @@ pub struct Context {
     pub variable_map: HashMap<FuncletId, NodeTable>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
-    pub location: ast::RemoteNodeName,
+    pub location: ast::RemoteNodeId,
     pub funclet_indices: FuncletIndices,
-    // todo: hack to get rid of
-    pub schedule_extras: HashMap<ir::FuncletId, ir::SchedulingFuncletExtra>,
 
     // information found about a given value funclet
     value_explication_data: HashMap<FuncletId, ValueFuncletData>,
@@ -205,10 +200,10 @@ where
     }
 }
 
-pub fn fresh_location() -> ast::RemoteNodeName {
-    ast::RemoteNodeName {
-        funclet_name: "".to_string(),
-        node_name: "".to_string(),
+pub fn fresh_location() -> ast::RemoteNodeId {
+    ast::RemoteNodeId {
+        funclet_name: FuncletId("".to_string()),
+        node_name: OperationId("".to_string()),
     }
 }
 
@@ -250,7 +245,7 @@ impl ValueFuncletData {
     }
     pub fn allocate(
         &mut self,
-        value_node: NodeId,
+        value_node: OperationId,
         schedule_funclet: FuncletId,
         schedule_node: OperationId,
     ) {
@@ -270,7 +265,7 @@ impl ScheduleFuncletData {
             explication_holes: Vec::new(),
         }
     }
-    pub fn allocate(&mut self, schedule_node: NodeId, value_node: OperationId) {
+    pub fn allocate(&mut self, schedule_node: OperationId, value_node: OperationId) {
         self.allocations.insert(schedule_node, value_node);
     }
 }
@@ -282,35 +277,39 @@ impl FuncletIndices {
             local_funclet_table: Table::new(),
             value_function_table: Table::new(),
             funclet_kind_map: HashMap::new(),
-            assembly_funclets: Table::new(),
         }
     }
 
     pub fn insert(&mut self, name: String, location: FuncletLocation) {
-        self.funclet_kind_map.insert(name.clone(), location.clone());
-        self.assembly_funclets.push(name.clone());
         match location {
-            FuncletLocation::Local => self.local_funclet_table.push(name),
-            FuncletLocation::Value => self.value_function_table.push(name),
-            FuncletLocation::Cpu => self.external_funclet_table.push(name),
-            FuncletLocation::Gpu => self.external_funclet_table.push(name),
-        };
+            FuncletLocation::Local => self.local_funclet_table.push(FuncletId(name.clone())),
+            FuncletLocation::External => self
+                .external_funclet_table
+                .push(ExternalFunctionId(name.clone())),
+            FuncletLocation::ValueFunction => self
+                .value_function_table
+                .push(ValueFunctionId(name.clone())),
+        }
+        self.funclet_kind_map.insert(name, location);
     }
 
-    pub fn get_index(&self, name: &String) -> Option<usize> {
-        self.assembly_funclets.get(name)
+    pub fn get_index(&self, name: &FuncletId) -> Option<usize> {
+        self.local_funclet_table.get(name)
     }
 
-    pub fn get_loc(&self, name: &str) -> Option<&FuncletLocation> {
+    pub fn get_loc(&self, name: &String) -> Option<&FuncletLocation> {
         self.funclet_kind_map.get(name)
     }
 
-    pub fn get(&self, name: &String) -> Option<usize> {
+    pub fn get_funclet(&self, name: &String) -> Option<usize> {
         self.funclet_kind_map.get(name).and_then(|x| match x {
-            FuncletLocation::Local => self.local_funclet_table.get(name),
-            FuncletLocation::Value => self.value_function_table.get(name),
-            FuncletLocation::Cpu => self.external_funclet_table.get(name),
-            FuncletLocation::Gpu => self.external_funclet_table.get(name),
+            FuncletLocation::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
+            FuncletLocation::External => self
+                .external_funclet_table
+                .get(&ExternalFunctionId(name.clone())),
+            FuncletLocation::ValueFunction => self
+                .value_function_table
+                .get(&ValueFunctionId(name.clone())),
         })
     }
 }
@@ -336,7 +335,6 @@ impl Context {
             funclet_indices: FuncletIndices::new(),
             variable_map: HashMap::new(),
             location: fresh_location(),
-            schedule_extras: HashMap::new(),
         };
         context.setup_context(program);
         context
@@ -354,13 +352,9 @@ impl Context {
         }
         for funclet in &program.funclets {
             match funclet {
-                ast::FuncletDef::ExternalCPU(f) => {
+                ast::FuncletDef::External(f) => {
                     self.funclet_indices
-                        .insert(f.name.clone(), FuncletLocation::Cpu);
-                }
-                ast::FuncletDef::ExternalGPU(f) => {
-                    self.funclet_indices
-                        .insert(f.name.clone(), FuncletLocation::Gpu);
+                        .insert(f.name.clone(), FuncletLocation::External);
                 }
                 ast::FuncletDef::Local(f) => {
                     match f.kind {
@@ -371,7 +365,7 @@ impl Context {
                         _ => {}
                     };
                     self.funclet_indices
-                        .insert(f.header.name.clone(), FuncletLocation::Local);
+                        .insert(f.header.name.0.clone(), FuncletLocation::Local);
                     let mut node_table = NodeTable::new();
                     for command in &f.commands {
                         match command {
@@ -396,7 +390,7 @@ impl Context {
                 }
                 ast::FuncletDef::ValueFunction(f) => {
                     self.funclet_indices
-                        .insert(f.name.clone(), FuncletLocation::Value);
+                        .insert(f.name.clone(), FuncletLocation::ValueFunction);
                 }
             }
         }
@@ -440,7 +434,7 @@ impl Context {
         }
     }
 
-    pub fn remote_node_id(&self, funclet: &String, var: &String) -> usize {
+    pub fn remote_node_id(&self, funclet: &FuncletId, var: &OperationId) -> usize {
         match self.variable_map.get(funclet) {
             Some(f) => match f.local.get(var) {
                 Some(v) => v,
@@ -450,7 +444,7 @@ impl Context {
         }
     }
 
-    pub fn remote_return_id(&self, funclet: &String, var: &String) -> usize {
+    pub fn remote_return_id(&self, funclet: &FuncletId, var: &OperationId) -> usize {
         match self.variable_map.get(funclet) {
             Some(f) => match f.returns.get_index(var) {
                 Some(v) => v,
@@ -460,9 +454,9 @@ impl Context {
         }
     }
 
-    pub fn node_from_id(&self, index: usize) -> String {
+    pub fn node_from_id(&self, index: usize) -> OperationId {
         self.variable_map
-            .get(self.location.funclet_name.as_str())
+            .get(&self.location.funclet_name)
             .unwrap()
             .local
             .get_at_index(index)
@@ -470,7 +464,7 @@ impl Context {
             .clone()
     }
 
-    pub fn node_id(&self, var: &NodeId) -> usize {
+    pub fn node_id(&self, var: &OperationId) -> usize {
         let funclet = &self.location.funclet_name;
         match self.variable_map.get(funclet).unwrap().local.get_index(var) {
             Some(v) => v,
@@ -478,7 +472,7 @@ impl Context {
         }
     }
 
-    pub fn return_id(&self, var: &NodeId) -> usize {
+    pub fn return_id(&self, var: &OperationId) -> usize {
         let funclet = &self.location.funclet_name;
         match self
             .variable_map
@@ -492,7 +486,7 @@ impl Context {
         }
     }
 
-    pub fn remote_id(&self, funclet: &String, var: &String) -> ir::RemoteNodeId {
+    pub fn remote_id(&self, funclet: &FuncletId, var: &OperationId) -> ir::RemoteNodeId {
         ir::RemoteNodeId {
             funclet_id: self
                 .funclet_indices
@@ -509,7 +503,7 @@ impl Context {
         format!("${}", self.meta_data.name_index)
     }
 
-    pub fn add_allocation(&mut self, value_node: NodeId, schedule_node: NodeId) {
+    pub fn add_allocation(&mut self, value_node: OperationId, schedule_node: OperationId) {
         let schedule_funclet = self.location.funclet_name.clone();
         let value_funclet = &self
             .schedule_explication_data
@@ -543,7 +537,7 @@ impl Context {
     pub fn get_schedule_allocations(
         &self,
         funclet: &FuncletId,
-        node: &FuncletId,
+        node: &OperationId,
     ) -> Option<&HashMap<FuncletId, OperationId>> {
         self.value_explication_data.get(funclet).and_then(|f| {
             f.explication_information
@@ -552,7 +546,7 @@ impl Context {
         })
     }
 
-    pub fn get_current_schedule_allocation(&self, node: &FuncletId) -> Option<&OperationId> {
+    pub fn get_current_schedule_allocation(&self, node: &OperationId) -> Option<&OperationId> {
         self.get_current_value_funclet().as_ref().and_then(|vf| {
             self.get_schedule_allocations(&vf, node)
                 .unwrap()
@@ -564,7 +558,7 @@ impl Context {
     pub fn get_value_allocation(
         &self,
         funclet: &FuncletId,
-        node: &FuncletId,
+        node: &OperationId,
     ) -> Option<&ast::OperationId> {
         self.schedule_explication_data
             .get(funclet)
@@ -581,4 +575,3 @@ impl Context {
         self.meta_data.next_name()
     }
 }
-

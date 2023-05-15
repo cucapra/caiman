@@ -8,6 +8,47 @@ use std::hash::{Hash, Hasher};
 
 pub type Hole<T> = Option<T>;
 
+#[macro_export]
+macro_rules! def_assembly_id_type {
+    ( $type : ident ) => {
+        #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug, Default, Hash)]
+        pub struct $type(pub String); // temporarily exposed internals
+
+        impl std::fmt::Display for $type {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl serde::Serialize for $type {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(&self.0)
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for $type {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                use serde::*;
+                String::deserialize::<D>(deserializer).map(|x| Self(x))
+            }
+        }
+    };
+}
+
+def_assembly_id_type!(FuncletId);
+def_assembly_id_type!(ExternalFunctionId);
+def_assembly_id_type!(ValueFunctionId);
+def_assembly_id_type!(OperationId);
+def_assembly_id_type!(LocalTypeId);
+
+pub type StorageTypeId = TypeId;
+
 // FFI stuff, rebuilt for a few reasons (mostly strings)
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -56,12 +97,18 @@ pub enum FFIType {
     CpuBufferRef(Box<FFIType>),
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub enum TypeId {
+    FFI(FFIType),
+    Local(String),
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalGpuFunctionResourceBinding {
     pub group: usize,
     pub binding: usize,
-    pub input: Option<NodeId>,
-    pub output: Option<NodeId>,
+    pub input: Option<OperationId>,
+    pub output: Option<OperationId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -70,36 +117,26 @@ pub enum Type {
     Local(String),
 }
 
-pub type ExternalCpuFunctionId = String;
-pub type ExternalGpuFunctionId = String;
-pub type FuncletId = String;
-pub type NodeId = String;
-pub type OperationId = NodeId;
-pub type TypeId = Type;
-pub type ValueFunctionId = String;
-pub type StorageTypeId = Type;
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RemoteNodeName {
+pub struct RemoteNodeId {
     pub funclet_name: FuncletId,
-    pub node_name: NodeId,
+    pub node_name: OperationId,
 }
 
 // Super Jank, but whatever
 
 macro_rules! lookup_abstract_type_parser {
-	([$elem_type:ident]) => { Box<[Hole<lookup_abstract_type_parser!($elem_type)>]> };
+	([$elem_type:ident]) => { Box<[lookup_abstract_type_parser!($elem_type)]> };
 	(Type) => { TypeId };
 	(Immediate) => { String };
 	(ImmediateI64) => { i64 };
 	(ImmediateI32) => { i32 };
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
-	(ExternalCpuFunction) => { ExternalCpuFunctionId };
-	(ExternalGpuFunction) => { ExternalGpuFunctionId };
+	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
-	(RemoteOperation) => { RemoteNodeName };
+	(RemoteOperation) => { RemoteNodeId };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -109,14 +146,10 @@ macro_rules! map_parser_refs {
     // When mapping referenced nodes, we only care about mapping the Operation types,
     // since those are the actual references.
     ($map:ident, $arg:ident : Operation) => {
-        $arg.clone().map(|x| $map((*x.clone()).to_string()))
+        $map($arg.clone())
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.clone().map(|x| {
-            x.iter()
-                .map(|y| y.clone().map(|op| $map((*op.clone()).to_string())))
-                .collect()
-        })
+        $arg.iter().map(|op| $map(op.clone())).collect()
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()
@@ -130,7 +163,8 @@ macro_rules! make_parser_nodes {
 			$($fields)*
 		}
 		impl Node {
-			pub fn map_referenced_nodes(&self, mut $map: impl FnMut(NodeId) -> NodeId) -> Self {
+			pub fn map_referenced_nodes(&self,
+            mut $map: impl FnMut(OperationId) -> OperationId) -> Self {
 				match self {$($mapper)*}
 			}
 		}
@@ -145,7 +179,7 @@ macro_rules! make_parser_nodes {
 	(@ $map:ident {$name:ident ($($arg:ident : $arg_type:tt,)*), $($rest:tt)*} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
 		make_parser_nodes! {
 			@ $map { $($rest)* } ->
-			($($fields)* $name { $($arg: Hole<lookup_abstract_type_parser!($arg_type)>),* },),
+			($($fields)* $name { $($arg: lookup_abstract_type_parser!($arg_type)),* },),
 			($($mapper)* Self::$name { $($arg),* } => Self::$name {
 				$($arg: map_parser_refs!($map, $arg : $arg_type)),*
 			},)
@@ -178,56 +212,56 @@ pub struct BufferInfo {
 #[derive(Debug, Clone)]
 pub enum TailEdge {
     Return {
-        return_values: Hole<Vec<Hole<NodeId>>>,
+        return_values: Hole<Vec<Hole<OperationId>>>,
     },
     Yield {
-        pipeline_yield_point_id: Hole<ir::PipelineYieldPointId>,
-        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
+        pipeline_yield_point: ExternalFunctionId,
+        yielded_nodes: Hole<Vec<Hole<OperationId>>>,
         next_funclet: Hole<FuncletId>,
-        continuation_join: Hole<NodeId>,
-        arguments: Hole<Vec<Hole<NodeId>>>,
+        continuation_join: Hole<OperationId>,
+        arguments: Hole<Vec<Hole<OperationId>>>,
     },
     Jump {
-        join: Hole<NodeId>,
-        arguments: Hole<Vec<Hole<NodeId>>>,
+        join: Hole<OperationId>,
+        arguments: Hole<Vec<Hole<OperationId>>>,
     },
     ScheduleCall {
-        value_operation: Hole<RemoteNodeName>,
+        value_operation: Hole<RemoteNodeId>,
         callee_funclet_id: Hole<FuncletId>,
-        callee_arguments: Hole<Vec<Hole<NodeId>>>,
-        continuation_join: Hole<NodeId>,
+        callee_arguments: Hole<Vec<Hole<OperationId>>>,
+        continuation_join: Hole<OperationId>,
     },
     ScheduleSelect {
-        value_operation: Hole<RemoteNodeName>,
-        condition: Hole<NodeId>,
+        value_operation: Hole<RemoteNodeId>,
+        condition: Hole<OperationId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
-        callee_arguments: Hole<Vec<Hole<NodeId>>>,
-        continuation_join: Hole<NodeId>,
+        callee_arguments: Hole<Vec<Hole<OperationId>>>,
+        continuation_join: Hole<OperationId>,
     },
     DynamicAllocFromBuffer {
-        buffer: Hole<NodeId>,
-        arguments: Hole<Vec<Hole<NodeId>>>,
-        dynamic_allocation_size_slots: Hole<Vec<Hole<Option<NodeId>>>>,
+        buffer: Hole<OperationId>,
+        arguments: Hole<Vec<Hole<OperationId>>>,
+        dynamic_allocation_size_slots: Hole<Vec<Hole<Option<OperationId>>>>,
         success_funclet_id: Hole<FuncletId>,
         failure_funclet_id: Hole<FuncletId>,
-        continuation_join: Hole<NodeId>,
+        continuation_join: Hole<OperationId>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TagCore {
     None,
-    Operation(RemoteNodeName),
-    Input(RemoteNodeName),
-    Output(RemoteNodeName),
+    Operation(RemoteNodeId),
+    Input(RemoteNodeId),
+    Output(RemoteNodeId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueTag {
     Core(TagCore),
-    FunctionInput(RemoteNodeName),
-    FunctionOutput(RemoteNodeName),
-    Halt(NodeId),
+    FunctionInput(RemoteNodeId),
+    FunctionOutput(RemoteNodeId),
+    Halt(OperationId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -251,8 +285,8 @@ pub enum Tag {
 pub enum Value {
     None,
     ID(String),
-    FunctionLoc(RemoteNodeName),
-    VarName(NodeId),
+    FunctionLoc(RemoteNodeId),
+    VarName(OperationId),
     FnName(FuncletId),
     Num(usize),
     Type(Type),
@@ -275,14 +309,14 @@ pub type UncheckedDict = HashMap<Value, DictValue>;
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
-    pub name: String,
-    pub ret: Vec<(Option<NodeId>, Type)>,
+    pub name: FuncletId,
+    pub ret: Vec<(Option<OperationId>, Type)>,
     pub args: Vec<Type>,
 }
 
 #[derive(Debug)]
 pub struct NamedNode {
-    pub name: NodeId,
+    pub name: OperationId,
     pub node: Node,
 }
 
@@ -344,14 +378,7 @@ pub struct Var {
 }
 
 #[derive(Debug)]
-pub struct ExternalCpuFunction {
-    pub name: String,
-    pub input_types: Vec<FFIType>,
-    pub output_types: Vec<FFIType>,
-}
-
-#[derive(Debug)]
-pub struct ExternalGpuFunction {
+pub struct ExternalFunction {
     pub name: String,
     pub input_args: Vec<(FFIType, String)>,
     pub output_types: Vec<(FFIType, String)>,
@@ -378,8 +405,7 @@ pub struct ValueFunction {
 
 #[derive(Debug)]
 pub enum FuncletDef {
-    ExternalCPU(ExternalCpuFunction),
-    ExternalGPU(ExternalGpuFunction),
+    External(ExternalFunction),
     Local(Funclet),
     ValueFunction(ValueFunction),
 }

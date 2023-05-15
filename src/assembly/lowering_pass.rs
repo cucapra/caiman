@@ -2,8 +2,8 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, NodeId, OperationId, StorageTypeId,
-    TypeId, ValueFunctionId,
+    ExternalCpuFunctionId, ExternalGpuFunctionId, FuncletId, OperationId, StorageTypeId, TypeId,
+    ValueFunctionId,
 };
 use crate::assembly::context::Context;
 use crate::assembly::context::FuncletLocation;
@@ -285,7 +285,7 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> Option<ir::Node> {
                 FuncletLocation::Local => {
                     panic!("Cannot directly call local funclet {}", name)
                 }
-                FuncletLocation::Value => ir::Node::CallValueFunction {
+                FuncletLocation::ValueFunction => ir::Node::CallValueFunction {
                     function_id: id.clone(),
                     arguments: mapped_arguments,
                 },
