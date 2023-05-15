@@ -1,4 +1,4 @@
-mod code_writer;
-pub mod ffi;
 pub mod code_generator;
+mod code_writer;
 pub mod codegen;
+pub mod ffi;

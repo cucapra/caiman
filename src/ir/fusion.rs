@@ -2,7 +2,7 @@ use crate::ir;
 use crate::rust_wgpu_backend::ffi;
 use crate::shadergen::{FuseDescriptor, FuseSource, FusedResource, ShaderModule};
 
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::hash_map::{Entry, HashMap};
 use std::ops::Range;
 
 use super::ffi::GpuKernelResourceBinding;
@@ -24,7 +24,7 @@ pub struct Opportunity {
     /// The concrete input arguments to the fused kernel.
     pub inputs: Vec<ir::NodeId>,
     /// The concrete outputs of the fused kernel.
-    pub outputs: Vec<ir::NodeId>
+    pub outputs: Vec<ir::NodeId>,
 }
 
 #[derive(Debug)]
@@ -36,7 +36,7 @@ struct SlotState {
     /// Is this type an input?
     input: bool,
     /// Is this type an output? (note: at least one of `input`, `output` must be set)
-    output: bool
+    output: bool,
 }
 
 #[derive(Debug)]
@@ -98,7 +98,12 @@ impl FuseState {
             Entry::Vacant(entry) => {
                 let binding = self.next_binding;
                 self.next_binding += 1;
-                entry.insert(SlotState { ty, binding, input: is_input, output: !is_input });
+                entry.insert(SlotState {
+                    ty,
+                    binding,
+                    input: is_input,
+                    output: !is_input,
+                });
                 binding
             }
         };
@@ -163,7 +168,12 @@ impl FuseState {
         }
     }
 
-    pub fn finish(self, end: ir::OperationId, funclet_id: ir::FuncletId, ops: &mut Vec<Opportunity>) {
+    pub fn finish(
+        self,
+        end: ir::OperationId,
+        funclet_id: ir::FuncletId,
+        ops: &mut Vec<Opportunity>,
+    ) {
         if (self.kernels.len() <= 1) {
             // We're not actually fusing anything...
             return;
@@ -193,7 +203,9 @@ impl FuseState {
         // assigned to it. Otherwise we would be merging equivalent inputs or equivalent outputs,
         // which is out-of-scope
         for (&slot, state) in self.slots.iter() {
-            let existing = resource_bindings.iter_mut().find(|b| b.binding == state.binding as usize);
+            let existing = resource_bindings
+                .iter_mut()
+                .find(|b| b.binding == state.binding as usize);
             let res = match existing {
                 Some(inner) => {
                     assert_eq!(0, inner.group, "foreign binding?");
@@ -205,7 +217,7 @@ impl FuseState {
                         group: 0,
                         binding: state.binding as usize,
                         input: None,
-                        output: None
+                        output: None,
                     });
                     resource_bindings.get_mut(i).unwrap()
                 }
@@ -235,7 +247,7 @@ impl FuseState {
             output_types: output_types.into_boxed_slice(),
             entry_point: "main".to_owned(),
             resource_bindings: resource_bindings.into_boxed_slice(),
-            shader_module_content: ffi::ShaderModuleContent::Wgsl(shader_module.emit_wgsl())
+            shader_module_content: ffi::ShaderModuleContent::Wgsl(shader_module.emit_wgsl()),
         };
         ops.push(Opportunity {
             bounds: self.start..end,
@@ -286,7 +298,11 @@ impl DispatchInfo {
 
 /// # Panics
 /// Panics if `funclet` is not a scheduling funclet.
-pub fn identify_opportunities(prog: &ir::Program, funclet_id: ir::FuncletId, funclet: &ir::Funclet) -> Vec<Opportunity> {
+pub fn identify_opportunities(
+    prog: &ir::Program,
+    funclet_id: ir::FuncletId,
+    funclet: &ir::Funclet,
+) -> Vec<Opportunity> {
     // Nothing goes wrong if we run this on a non-scheduling funclet.
     // But there is literally zero reason to run this on a non-scheduling funclet, so it's
     // probably a bug if it ever gets called on one...
