@@ -29,6 +29,7 @@ impl Instance {
         };
         let device_future = adapter.request_device(&device_desc, None);
         let (device, queue) = futures::executor::block_on(device_future).unwrap();
+        device.start_capture();
         Self { device, queue }
     }
     pub fn device(&mut self) -> &'_ mut wgpu::Device {
@@ -47,11 +48,11 @@ pub static INSTANCE: Lazy<Mutex<Instance>> = Lazy::new(|| Mutex::new(Instance::n
 /// Convienence macro for asserting test outputs without poisoning the global instance on failure.
 #[macro_export]
 macro_rules! expect_returned {
-    ($expected:literal, $result:expr) => {{
+    ($expected:expr, $result:expr) => {{
         if (Some($expected) == $result) {
             return Ok(());
         } else if let Some(rv) = $result {
-            return Err(format!("expected {}, got {}", $expected, rv));
+            return Err(format!("expected {:?}, got {:?}", $expected, rv));
         } else {
             return Err("couldn't unwrap result".to_string());
         }

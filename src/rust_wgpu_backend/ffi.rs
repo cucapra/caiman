@@ -256,7 +256,13 @@ impl NativeInterface
 			Type::MutRef { element_type } => panic!("Unimplemented"),
 			Type::ConstSlice { element_type } => panic!("Unimplemented"),
 			Type::MutSlice { element_type } => panic!("Unimplemented"),
-			Type::Array { element_type, length } => panic!("Unimplemented"),
+			Type::Array { element_type, length } => {
+				let inner = self.calculate_type_binding_info(*element_type);
+				TypeBindingInfo { 
+					size: inner.size * length, 
+					alignment: inner.alignment
+				}
+			}
 			Type::Struct { fields, byte_alignment, byte_size } => panic!("Unimplemented"),
 			_ => panic!("Unimplemented")
 		}

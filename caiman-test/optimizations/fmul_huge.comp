@@ -1,0 +1,25 @@
+#version 450
+#extension GL_ARB_compute_shader : require
+
+#define NUM_ELEMS 1024
+
+layout(set = 0, binding = 0) 
+readonly buffer Input_0 {
+    float field_0[NUM_ELEMS];
+} input_0;
+
+layout(set = 0, binding = 1)
+readonly buffer Input_1 {
+    float field_0[NUM_ELEMS];
+} input_1;
+
+layout(set = 0, binding = 2)
+writeonly buffer Output_0 {
+    float field_0[NUM_ELEMS];
+} output_0;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    output_0.field_0[i] = input_0.field_0[i] * input_1.field_0[i];
+}
