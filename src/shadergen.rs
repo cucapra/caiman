@@ -116,15 +116,16 @@ impl ShaderModule {
             if let Some(ResourceBinding { group, binding }) = gv.binding {
                 if bindings.contains(&(group, binding)) {
                     match &mut gv.space {
-                        AddressSpace::Storage { ref mut access } 
-                            => *access = naga::StorageAccess::LOAD | naga::StorageAccess::STORE,
-                        _ => ()
+                        AddressSpace::Storage { ref mut access } => {
+                            *access = naga::StorageAccess::LOAD | naga::StorageAccess::STORE
+                        }
+                        _ => (),
                     }
                 }
             }
         }
     }
-    
+
     /// Fuses all compute kernels in `modules` into a single kernel. The execution order
     /// is defined by the order the kernels appear within `modules`. The entry point of the
     /// fused kernel is "main".
