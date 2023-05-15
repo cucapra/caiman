@@ -1,17 +1,17 @@
 let vadd_4_sch(v1 : arr_slot, v2 : arr_slot) : vadd_4 -> slot {
     allocate $baseline;
-    return $result.vadd_4_1_sch(_); // this is where you could pick!
+    return $result.vadd_4_1_sch(?); // this is where you could pick!
 }
 
 let vadd_4_1_sch(v1 : arr_slot, v2 : arr_slot, 
 baseline : arr_slot, index : slot) : vadd_4_1 -> slot {
     return { 
-        $result.if(_) {
+        $result.if(?) {
             allocate $add_res;
 
-            rec_res = $rec_res._;
-            add_res = $add_res.plus(_);
-            new_arr = $new_arr._;
+            rec_res = $rec_res.?;
+            add_res = $add_res.plus(?);
+            new_arr = $new_arr.?;
 
             new_arr
         } else {
@@ -25,12 +25,12 @@ baseline : arr_slot, index : slot) : vadd_2_2 -> slot {
     // I wrote this as the same schedule as above pretty much
     // but you don't have to of course
     return {
-        $result.if(_) {
+        $result.if(?) {
             allocate $add_res;
 
-            rec_res = $rec_res._;
-            add_res = $add_res.plus(_);
-            new_arr = $new_arr._;
+            rec_res = $rec_res.?;
+            add_res = $add_res.plus(?);
+            new_arr = $new_arr.?;
 
             new_arr
         } else {
@@ -43,7 +43,7 @@ let vadd_1_4_sch(v1 : arr_slot, v2 : arr_slot,
 baseline : arr_slot, index : slot) : vadd_2_2 -> slot {
     allocate $add_res;
 
-    add_res = $add_res.plus(_);
-    new_arr = $new_arr._;
+    add_res = $add_res.plus(?);
+    new_arr = $new_arr.?;
     return new_arr;
 }
