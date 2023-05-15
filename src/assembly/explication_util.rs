@@ -1,4 +1,4 @@
-use crate::assembly;
+use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
@@ -17,7 +17,7 @@ use std::collections::HashMap;
 pub fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
         Some(v) => v,
-        None => panic!("Unimplemented Hole"),
+        None => unreachable!("Unimplemented Hole"),
     }
 }
 
@@ -86,58 +86,55 @@ pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
     }
 }
 
-pub fn as_key(k: &str) -> assembly::ast::Value {
-    assembly::ast::Value::ID(k.to_string())
+pub fn as_key(k: &str) -> ast::Value {
+    ast::Value::ID(k.to_string())
 }
 
-pub fn as_value(value: assembly::ast::DictValue) -> assembly::ast::Value {
+pub fn as_value(value: ast::DictValue) -> ast::Value {
     match value {
-        assembly::ast::DictValue::Raw(v) => v,
+        ast::DictValue::Raw(v) => v,
         _ => panic!("Expected raw value got {:?}", value),
     }
 }
 
-pub fn as_list(value: assembly::ast::DictValue) -> Vec<assembly::ast::DictValue> {
+pub fn as_list(value: ast::DictValue) -> Vec<ast::DictValue> {
     match value {
-        assembly::ast::DictValue::List(v) => v,
+        ast::DictValue::List(v) => v,
         _ => panic!("Expected list got {:?}", value),
     }
 }
 
-pub fn as_dict(value: assembly::ast::DictValue) -> assembly::ast::UncheckedDict {
+pub fn as_dict(value: ast::DictValue) -> ast::UncheckedDict {
     match value {
-        assembly::ast::DictValue::Dict(d) => d,
+        ast::DictValue::Dict(d) => d,
         _ => panic!("Expected dict got {:?}", value),
     }
 }
 
-pub fn remote_conversion(
-    remote: &assembly::ast::RemoteNodeName,
-    context: &mut Context,
-) -> ir::RemoteNodeId {
+pub fn remote_conversion(remote: &ast::RemoteNodeName, context: &mut Context) -> ir::RemoteNodeId {
     context.remote_id(&remote.funclet_name.clone(), &remote.node_name.clone())
 }
 
-pub fn value_string(d: &assembly::ast::DictValue, _: &mut Context) -> String {
+pub fn value_string(d: &ast::DictValue, _: &mut Context) -> String {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::ID(s) => s.clone(),
+        ast::Value::ID(s) => s.clone(),
         _ => panic!("Expected id got {:?}", v),
     }
 }
 
-pub fn value_num(d: &assembly::ast::DictValue, _: &mut Context) -> usize {
+pub fn value_num(d: &ast::DictValue, _: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::Num(n) => n.clone(),
+        ast::Value::Num(n) => n.clone(),
         _ => panic!("Expected num got {:?}", v),
     }
 }
 
-pub fn value_function_loc(d: &assembly::ast::DictValue, context: &mut Context) -> ir::RemoteNodeId {
+pub fn value_function_loc(d: &ast::DictValue, context: &mut Context) -> ir::RemoteNodeId {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
+        ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
             funclet_id: context.funclet_indices.get(&remote.funclet_name).unwrap(),
             node_id: context.funclet_indices.get(&remote.node_name).unwrap(),
         },
@@ -145,10 +142,10 @@ pub fn value_function_loc(d: &assembly::ast::DictValue, context: &mut Context) -
     }
 }
 
-pub fn value_var_name(d: &assembly::ast::DictValue, ret: bool, context: &mut Context) -> usize {
+pub fn value_var_name(d: &ast::DictValue, ret: bool, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::VarName(s) => {
+        ast::Value::VarName(s) => {
             if ret {
                 context.return_id(&s)
             } else {
@@ -159,178 +156,167 @@ pub fn value_var_name(d: &assembly::ast::DictValue, ret: bool, context: &mut Con
     }
 }
 
-pub fn value_funclet_name(d: &assembly::ast::DictValue, context: &mut Context) -> usize {
+pub fn value_funclet_name(d: &ast::DictValue, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
+        ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
         _ => panic!("Expected funclet name got {:?}", v),
     }
 }
 
-pub fn value_funclet_raw_id(d: &assembly::ast::DictValue, context: &mut Context) -> usize {
+pub fn value_funclet_raw_id(d: &ast::DictValue, context: &mut Context) -> usize {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
+        ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
         _ => panic!("Expected funclet name got {:?}", v),
     }
 }
 
-pub fn value_type(d: &assembly::ast::DictValue, context: &mut Context) -> context::Location {
+pub fn value_type(d: &ast::DictValue, context: &mut Context) -> context::Location {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::Type(t) => match t {
-            assembly::ast::Type::FFI(typ) => context::Location::FFI(context.ffi_type_id(&typ)),
-            assembly::ast::Type::Local(name) => {
-                context::Location::Local(context.local_type_id(&name))
-            }
+        ast::Value::Type(t) => match t {
+            ast::Type::FFI(typ) => context::Location::FFI(context.ffi_type_id(&typ)),
+            ast::Type::Local(name) => context::Location::Local(context.local_type_id(&name)),
         },
         _ => panic!("Expected type got {:?}", v),
     }
 }
 
-pub fn value_place(d: &assembly::ast::DictValue, _: &mut Context) -> ir::Place {
+pub fn value_place(d: &ast::DictValue, _: &mut Context) -> ir::Place {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::Place(p) => p.clone(),
+        ast::Value::Place(p) => p.clone(),
         _ => panic!("Expected place got {:?}", v),
     }
 }
 
-pub fn value_stage(d: &assembly::ast::DictValue, _: &mut Context) -> ir::ResourceQueueStage {
+pub fn value_stage(d: &ast::DictValue, _: &mut Context) -> ir::ResourceQueueStage {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::Stage(s) => s.clone(),
+        ast::Value::Stage(s) => s.clone(),
         _ => panic!("Expected stage got {:?}", v),
     }
 }
 
 // This all feels very dumb
-pub fn value_core_tag(v: assembly::ast::TagCore, context: &mut Context) -> ir::ValueTag {
+pub fn value_core_tag(v: ast::TagCore, context: &mut Context) -> ir::ValueTag {
     match v {
-        assembly::ast::TagCore::None => ir::ValueTag::None,
-        assembly::ast::TagCore::Operation(r) => ir::ValueTag::Operation {
+        ast::TagCore::None => ir::ValueTag::None,
+        ast::TagCore::Operation(r) => ir::ValueTag::Operation {
             remote_node_id: remote_conversion(&r, context),
         },
-        assembly::ast::TagCore::Input(r) => ir::ValueTag::Input {
+        ast::TagCore::Input(r) => ir::ValueTag::Input {
             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
-        assembly::ast::TagCore::Output(r) => ir::ValueTag::Output {
+        ast::TagCore::Output(r) => ir::ValueTag::Output {
             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
     }
 }
 
-pub fn timeline_core_tag(v: assembly::ast::TagCore, context: &mut Context) -> ir::TimelineTag {
+pub fn timeline_core_tag(v: ast::TagCore, context: &mut Context) -> ir::TimelineTag {
     match v {
-        assembly::ast::TagCore::None => ir::TimelineTag::None,
-        assembly::ast::TagCore::Operation(r) => ir::TimelineTag::Operation {
+        ast::TagCore::None => ir::TimelineTag::None,
+        ast::TagCore::Operation(r) => ir::TimelineTag::Operation {
             remote_node_id: remote_conversion(&r, context),
         },
-        assembly::ast::TagCore::Input(r) => ir::TimelineTag::Input {
+        ast::TagCore::Input(r) => ir::TimelineTag::Input {
             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
-        assembly::ast::TagCore::Output(r) => ir::TimelineTag::Output {
+        ast::TagCore::Output(r) => ir::TimelineTag::Output {
             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
     }
 }
 
-pub fn spatial_core_tag(v: assembly::ast::TagCore, context: &mut Context) -> ir::SpatialTag {
+pub fn spatial_core_tag(v: ast::TagCore, context: &mut Context) -> ir::SpatialTag {
     match v {
-        assembly::ast::TagCore::None => ir::SpatialTag::None,
-        assembly::ast::TagCore::Operation(r) => ir::SpatialTag::Operation {
+        ast::TagCore::None => ir::SpatialTag::None,
+        ast::TagCore::Operation(r) => ir::SpatialTag::Operation {
             remote_node_id: remote_conversion(&r, context),
         },
-        assembly::ast::TagCore::Input(r) => ir::SpatialTag::Input {
+        ast::TagCore::Input(r) => ir::SpatialTag::Input {
             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
-        assembly::ast::TagCore::Output(r) => ir::SpatialTag::Output {
+        ast::TagCore::Output(r) => ir::SpatialTag::Output {
             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
     }
 }
 
-pub fn value_value_tag(t: &assembly::ast::ValueTag, context: &mut Context) -> ir::ValueTag {
+pub fn value_value_tag(t: &ast::ValueTag, context: &mut Context) -> ir::ValueTag {
     match t {
-        assembly::ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
-        assembly::ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
+        ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
+        ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
             function_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
-        assembly::ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
+        ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
             function_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
             index: context.remote_node_id(&r.funclet_name, &r.node_name),
         },
-        assembly::ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
+        ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
             index: context.node_id(&n),
         },
     }
 }
 
-pub fn value_dict_value_tag(d: &assembly::ast::DictValue, context: &mut Context) -> ir::ValueTag {
+pub fn value_dict_value_tag(d: &ast::DictValue, context: &mut Context) -> ir::ValueTag {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::Tag(t) => match t {
-            assembly::ast::Tag::ValueTag(v) => value_value_tag(&v, context),
+        ast::Value::Tag(t) => match t {
+            ast::Tag::ValueTag(v) => value_value_tag(&v, context),
             _ => panic!("Expected value tag got {:?}", d),
         },
         _ => panic!("Expected tag got {:?}", d),
     }
 }
 
-pub fn value_timeline_tag(
-    t: &assembly::ast::TimelineTag,
-    context: &mut Context,
-) -> ir::TimelineTag {
+pub fn value_timeline_tag(t: &ast::TimelineTag, context: &mut Context) -> ir::TimelineTag {
     match t {
-        assembly::ast::TimelineTag::Core(c) => timeline_core_tag(c.clone(), context),
+        ast::TimelineTag::Core(c) => timeline_core_tag(c.clone(), context),
     }
 }
 
-pub fn value_dict_timeline_tag(
-    d: &assembly::ast::DictValue,
-    context: &mut Context,
-) -> ir::TimelineTag {
+pub fn value_dict_timeline_tag(d: &ast::DictValue, context: &mut Context) -> ir::TimelineTag {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::Tag(t) => match t {
-            assembly::ast::Tag::TimelineTag(t) => value_timeline_tag(&t, context),
+        ast::Value::Tag(t) => match t {
+            ast::Tag::TimelineTag(t) => value_timeline_tag(&t, context),
             _ => panic!("Expected timeline tag got {:?}", d),
         },
         _ => panic!("Expected tag got {:?}", d),
     }
 }
 
-pub fn value_spatial_tag(t: &assembly::ast::SpatialTag, context: &mut Context) -> ir::SpatialTag {
+pub fn value_spatial_tag(t: &ast::SpatialTag, context: &mut Context) -> ir::SpatialTag {
     match t {
-        assembly::ast::SpatialTag::Core(c) => spatial_core_tag(c.clone(), context),
+        ast::SpatialTag::Core(c) => spatial_core_tag(c.clone(), context),
     }
 }
 
-pub fn value_dict_spatial_tag(
-    d: &assembly::ast::DictValue,
-    context: &mut Context,
-) -> ir::SpatialTag {
+pub fn value_dict_spatial_tag(d: &ast::DictValue, context: &mut Context) -> ir::SpatialTag {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::Tag(t) => match t {
-            assembly::ast::Tag::SpatialTag(t) => value_spatial_tag(&t, context),
+        ast::Value::Tag(t) => match t {
+            ast::Tag::SpatialTag(t) => value_spatial_tag(&t, context),
             _ => panic!("Expected spatial tag got {:?}", d),
         },
         _ => panic!("Expected tag got {:?}", d),
     }
 }
 
-pub fn value_slot_info(d: &assembly::ast::DictValue, context: &mut Context) -> ir::SlotInfo {
+pub fn value_slot_info(d: &ast::DictValue, context: &mut Context) -> ir::SlotInfo {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::SlotInfo(s) => ir::SlotInfo {
+        ast::Value::SlotInfo(s) => ir::SlotInfo {
             value_tag: value_value_tag(&s.value_tag, context),
             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
@@ -339,20 +325,20 @@ pub fn value_slot_info(d: &assembly::ast::DictValue, context: &mut Context) -> i
     }
 }
 
-pub fn value_fence_info(d: &assembly::ast::DictValue, context: &mut Context) -> ir::FenceInfo {
+pub fn value_fence_info(d: &ast::DictValue, context: &mut Context) -> ir::FenceInfo {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::FenceInfo(s) => ir::FenceInfo {
+        ast::Value::FenceInfo(s) => ir::FenceInfo {
             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
         },
         _ => panic!("Expected tag got {:?}", v),
     }
 }
 
-pub fn value_buffer_info(d: &assembly::ast::DictValue, context: &mut Context) -> ir::BufferInfo {
+pub fn value_buffer_info(d: &ast::DictValue, context: &mut Context) -> ir::BufferInfo {
     let v = as_value(d.clone());
     match v {
-        assembly::ast::Value::BufferInfo(s) => ir::BufferInfo {
+        ast::Value::BufferInfo(s) => ir::BufferInfo {
             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
         },
         _ => panic!("Expected tag got {:?}", v),
@@ -360,8 +346,8 @@ pub fn value_buffer_info(d: &assembly::ast::DictValue, context: &mut Context) ->
 }
 
 pub fn value_list<T>(
-    v: &assembly::ast::DictValue,
-    f: fn(&assembly::ast::DictValue, &mut Context) -> T,
+    v: &ast::DictValue,
+    f: fn(&ast::DictValue, &mut Context) -> T,
     context: &mut Context,
 ) -> HashMap<usize, T> {
     let lst = as_list(v.clone());
@@ -374,15 +360,15 @@ pub fn value_list<T>(
 }
 
 pub fn value_index_var_dict<T>(
-    v: &assembly::ast::DictValue,
-    f: fn(&assembly::ast::DictValue, &mut Context) -> T,
+    v: &ast::DictValue,
+    f: fn(&ast::DictValue, &mut Context) -> T,
     ret: bool, // read remote or not
     context: &mut Context,
 ) -> HashMap<usize, T> {
     let d = as_dict(v.clone());
     let mut result = HashMap::new();
     for pair in d.iter() {
-        let index = value_var_name(&assembly::ast::DictValue::Raw(pair.0.clone()), ret, context);
+        let index = value_var_name(&ast::DictValue::Raw(pair.0.clone()), ret, context);
         result.insert(index, f(&pair.1.clone(), context));
     }
     result

@@ -41,7 +41,7 @@ fn read_definition(
         CompileMode::Assembly => {
             let program = crate::assembly::parser::parse(input_string);
             // dbg!(&program.context);
-            let result = crate::assembly::explication::explicate(program);
+            let result = crate::assembly::lowering_pass::lower(program);
             // dbg!(&result);
             Ok(result) // errors are a future problem
         }
