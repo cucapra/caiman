@@ -41,9 +41,13 @@ fn read_definition(
         CompileMode::Assembly => {
             let program = crate::assembly::parser::parse(input_string);
             // dbg!(&program.context);
-            let result = crate::assembly::lowering_pass::lower(program);
-            // dbg!(&result);
-            Ok(result) // errors are a future problem
+
+            match program {
+                Err(why) => Err(CompileError {
+                    message: format!("Parse error: {}", why),
+                }),
+                Ok(v) => crate::assembly::lowering_pass::lower(v)
+            }
         }
         CompileMode::RON => match ron::from_str(&input_string) {
             Err(why) => Err(CompileError {
