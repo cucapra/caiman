@@ -57,11 +57,7 @@ impl FuseState {
             .get_gpu_kernel()
             .expect("kernel fusion: not a GPU kernel!");
 
-        let shader_module = match &kernel.shader_module_content {
-            ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
-            ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
-        };
-        let local_size = shader_module.local_size(&kernel.entry_point);
+        let local_size = kernel.shader_module.local_size(&kernel.entry_point);
 
         let mut state = FuseState {
             start,
@@ -122,12 +118,7 @@ impl FuseState {
             .get_gpu_kernel()
             .expect("kernel fusion: not a GPU kernel!");
 
-        let shader_module = match &kernel.shader_module_content {
-            ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
-            ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
-        };
-
-        if self.local_size != shader_module.local_size(&kernel.entry_point) {
+        if self.local_size != kernel.shader_module.local_size(&kernel.entry_point) {
             return false;
         }
 
@@ -160,7 +151,8 @@ impl FuseState {
         // Update the module *if* any dependency chains were involved, or if this is the
         // first module, since otherwise we'd never make any progress.
         if (self.kernels.is_empty() || dependency_chain) {
-            let module = (shader_module, kernel.entry_point.clone());
+            // TODO: Should really store a reference here
+            let module = (kernel.shader_module.clone(), kernel.entry_point.clone());
             self.kernels.push(module);
             return true;
         } else {
@@ -247,7 +239,7 @@ impl FuseState {
             output_types: output_types.into_boxed_slice(),
             entry_point: "main".to_owned(),
             resource_bindings: resource_bindings.into_boxed_slice(),
-            shader_module_content: ffi::ShaderModuleContent::Wgsl(shader_module.emit_wgsl()),
+            shader_module,
         };
         ops.push(Opportunity {
             bounds: self.start..end,
