@@ -28,24 +28,20 @@ funclet_loc_sep = ${ funclet_loc ~ sep }
 //    ffi_types
 ffi_type_base = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
                       "i16" | "i32" | "i64" | "gpu_buffer_allocator" | "cpu_buffer_allocator" }
-ffi_ref_parameter = { "<" ~ ffi_type ~ ">"}
 ffi_array_parameters = { "<" ~ ffi_type ~ "," ~ n ~ ">" }
 ffi_tuple_parameters = { "<" ~ ffi_type ~ ("," ~ ffi_type)* ~ ">" } // must have at least one field
 ffi_parameterized_ref_name = { "erased_length_array" | "const_ref" |
     "mut_ref" | "const_slice" | "mut_slice" | "gpu_buffer_ref" | "gpu_buffer_slice" |
     "cpu_buffer_ref" }
 
-ffi_parameterized_array = { "array" ~ ffi_array_parameters } // kinda lazy tbh, but annoying to make nicer
-ffi_parameterized_ref = { ffi_parameterized_ref_name ~ ffi_ref_parameter }
-ffi_parameterized_tuple = { "tuple" ~ ffi_tuple_parameters }
-// ffi_parameterized_struct = TODO
-ffi_parameterized_type = !{ ffi_parameterized_array | ffi_parameterized_ref | ffi_parameterized_tuple }
+ffi_parameterized_ref = { ffi_parameterized_ref_name ~ "<" ~ ffi_type ~ ">" }
+ffi_parameterized_type = !{ "array" ~ ffi_array_parameters | ffi_parameterized_ref | "tuple" ~ ffi_tuple_parameters }
 ffi_type = { ffi_type_base | ffi_parameterized_type }
 ffi_type_sep = ${ ffi_type ~ sep }
 
-// extra names
+//   extra names
 
-typ = { ffi_type | type_name | hole }
+typ = { ffi_type | type_name }
 typ_sep = ${ typ ~ sep }
 place = { "local" | "cpu" | "gpu" | "?" }
 stage = { "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" | "?" }
@@ -59,31 +55,13 @@ tag_halt = ${ "halt" ~ sep ~ var_name }
 value_tag_op = { "function_input" | "function_output" }
 value_tag_loc = ${ value_tag_op ~ sep ~ funclet_loc }
 value_tag_data = { tag_core | value_tag_loc | tag_halt }
-value_tag_sep = @{ "value_tag" ~ sep }
-value_tag = { value_tag_sep ~ value_tag_data }
-timeline_tag_data = { tag_core }
-timeline_tag_sep = @{ "timeline_tag" ~ sep }
-timeline_tag = { timeline_tag_sep ~ timeline_tag_data }
-spatial_tag_data = { tag_core }
-spatial_tag_sep = @{ "spatial_tag" ~ sep }
-spatial_tag = { spatial_tag_sep ~ spatial_tag_data }
+value_tag = ${ "value_tag" ~ sep ~ value_tag_data }
+timeline_tag = ${ "timeline_tag" ~ sep ~ tag_core }
+spatial_tag = ${ "spatial_tag" ~ sep ~ tag_core }
 tag = ${ value_tag | timeline_tag | spatial_tag }
 
-//   extras
-slot_info = { "slot_info" ~ "(" ~ (tag ~ ("," ~ tag)*)? ~ ")" }
-fence_info = { "fence_info" ~ "(" ~ timeline_tag? ~ ")" }
-buffer_info = { "buffer_info" ~ "(" ~ spatial_tag? ~ ")" }
-dict_key = { id | var_name }
-value = { var_name | n | funclet_loc | fn_name | typ | place | none |
-    stage | tag | slot_info | fence_info | buffer_info | str }
-list_values = { dict_value ~ ("," ~ dict_value)* ~ ","? }
-list = { "[" ~ list_values? ~ "]" }
-dict_value = { value | list | unchecked_dict }
-dict_element = { dict_key ~ ":" ~ dict_value }
-unchecked_dict = { "{" ~ (dict_element ~ ("," ~ dict_element)*)? ~ ","? ~ "}" }
-
 // Program
-program = { SOI ~ version ~ types ~ funclets ~ extras ~ pipelines ~ EOI }
+program = { SOI ~ version ~ types ~ funclets ~ pipelines ~ EOI }
 
 version_keyword = @{ "version" ~ sep }
 version = ${ version_keyword ~ n ~ "." ~ n ~ "." ~ n }
@@ -92,7 +70,7 @@ version = ${ version_keyword ~ n ~ "." ~ n ~ "." ~ n }
 types = { "types" ~ "[" ~ type_def? ~ ("," ~ type_def)* ~ ","? ~ "]" }
 ir_type_decl_key = { "native_value" | "slot" | "fence" | "buffer" | "event" | "space_buffer" }
 ir_type_decl_key_sep = ${ ir_type_decl_key ~ sep }
-ir_type_decl = { ir_type_decl_key_sep ~ type_name ~ unchecked_dict }
+ir_type_decl = { ir_type_decl_key_sep ~ type_name }
 ffi_type_decl = { ffi_type }
 type_def = { ffi_type_decl | ir_type_decl }
 
@@ -108,7 +86,7 @@ external_cpu_return_args = { "[" ~ external_cpu_args ~ "]" | ffi_type }
 external_cpu = { external_cpu_sep ~ fn_name ~ "(" ~ external_cpu_args? ~ ")" ~ "->" ~ external_cpu_return_args ~ ";" }
 
 external_gpu_sep = @{ "external_gpu" ~ sep }
-external_gpu_resource = { "resource" ~ unchecked_dict }
+external_gpu_resource = { "resource" } // todo: fix
 external_gpu_body = { external_gpu_resource ~ ("," ~ external_gpu_resource)* }
 external_gpu_arg = { (var_name ~ ":")? ~ ffi_type }
 external_gpu_args = { external_gpu_arg ~ ("," ~ external_gpu_arg)* }
@@ -126,9 +104,12 @@ value_function = { value_function_sep ~ fn_name ~ "("
 
 //   funclet
 value_sep = @{ "value" ~ sep }
-schedule_sep = @{ "schedule" ~ sep }
-timeline_sep = @{ "timeline" ~ sep }
-spatial_sep = @{ "spatial" ~ sep }
+schedule_parameter = !{ "schedule" ~ "<" ~ fn_name ~ ">" }
+schedule_sep = ${ schedule_parameter ~ sep }
+timeline_parameter = !{ "timeline" ~ "<" ~ fn_name ~ ">" }
+timeline_sep = ${ timeline_parameter ~ sep }
+spatial_parameter = !{ "spatial" ~ "<" ~ fn_name ~ ">" }
+spatial_sep = ${ spatial_parameter ~ sep }
 funclet = { value_sep ~ value_funclet | schedule_sep ~ schedule_funclet |
     timeline_sep ~ timeline_funclet | spatial_sep ~ spatial_funclet }
 funclet_arg = { (var_name ~ ":")? ~ typ }
@@ -239,10 +220,6 @@ timeline_command = { phi_command | sync_command | submission_command }
 //     spatial
 
 spatial_command = { "INVALID" } // empty for now...
-
-// Extras
-extras = { "extras" ~ "{" ~ (extra ~ ",")* ~ "}" }
-extra = { fn_name_sep ~ unchecked_dict }
 
 // Pipelines
 pipelines = { (pipeline ~ ";")+ }

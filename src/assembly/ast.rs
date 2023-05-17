@@ -114,13 +114,13 @@ pub struct ExternalGpuFunctionResourceBinding {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum Type {
     FFI(FFIType),
-    Local(String),
+    Local(TypeId),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId {
-    pub funclet_name: FuncletId,
-    pub node_name: OperationId,
+    pub funclet_name: Hole<FuncletId>,
+    pub node_name: Hole<OperationId>,
 }
 
 // Super Jank, but whatever
@@ -192,23 +192,6 @@ macro_rules! make_parser_nodes {
 
 with_operations!(make_parser_nodes);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SlotInfo {
-    pub value_tag: ValueTag,
-    pub timeline_tag: TimelineTag,
-    pub spatial_tag: SpatialTag,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FenceInfo {
-    pub timeline_tag: TimelineTag,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BufferInfo {
-    pub spatial_tag: SpatialTag,
-}
-
 #[derive(Debug, Clone)]
 pub enum TailEdge {
     Return {
@@ -249,36 +232,12 @@ pub enum TailEdge {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TagCore {
-    None,
-    Operation(RemoteNodeId),
-    Input(RemoteNodeId),
-    Output(RemoteNodeId),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ValueTag {
-    Core(TagCore),
-    FunctionInput(RemoteNodeId),
-    FunctionOutput(RemoteNodeId),
-    Halt(OperationId),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TimelineTag {
-    Core(TagCore),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SpatialTag {
-    Core(TagCore),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
-    ValueTag(ValueTag),
-    TimelineTag(TimelineTag),
-    SpatialTag(SpatialTag),
+    None,
+    Node { node_id: OperationId },
+    Input { index: OperationId },
+    Output { index: OperationId },
+    Halt { index: OperationId },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -411,9 +370,6 @@ pub enum FuncletDef {
 }
 
 pub type FuncletDefs = Vec<FuncletDef>;
-
-// todo: rework after extra changes
-pub type Extras = HashMap<FuncletId, UncheckedDict>;
 
 pub type Pipelines = HashMap<String, FuncletId>;
 
