@@ -76,7 +76,7 @@ value[impl %simple] %j(%abc : i64) -> [i64] {
 }
 
 // can syntactically be empty, even though this is meaningless
-schedule[] %bar(%0 : %slot0) -> [%out : %slot0] {
+schedule[] %bar<none, none>(%0 : %slot0) -> [%out : %slot0] {
     %x = alloc-temporary-local-i64 %foo.%1;
     %2 = encode-do-local %foo.%1() -> %x;
     %1 = create-local-i64 %foo.%x; // unbound slot
@@ -92,19 +92,24 @@ schedule[] %bar(%0 : %slot0) -> [%out : %slot0] {
     return %x;
 }
 
-schedule[value $val = %foo] %scall(%abc : $val.%x $slot0) -> [%out : $val.%y $slot0] {
+schedule[value $val = %foo] %scall<none, none>(%abc : input($val.%x) $slot0)
+-> [%out : output($val.%y) $slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-call %j.%abc %foo [%abc, %abc] %abc;
 }
 
 schedule[timeline $time = %time, value $val = %foo, spatial $space = %space]
-%sselect(%abc : $time.%e $val.%x $slot0) -> time.%e $val.%x $slot0 {
+%sselect<input($time.%e), output($time.%e)>
+(%abc : input($time.%e) halt($val.%x) $slot0)
+-> input(time.%e) output($val.%x) $slot0 {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-select %y.%abc %abc [%foo, %j] [%abc, %abc] %abc;
 }
 
 schedule[spatial $space = %space, timeline $time = %time]
-%dalloc(%abc : $space.%bs %event0) -> [%out : $space.%bs %buffer0] {
+%dalloc<halt($time.%e), node($time.%e)>
+(%abc : input($space.%bs) %event0)
+-> [%out : node($space.%bs) %buffer0] {
     // pretty clunky tbh -- note that `none` literally means `none`
     dynamic-alloc %abc [] [%abc, none, %abc] %foo %j %abc;
 }
@@ -118,7 +123,5 @@ timeline %time(%e : %event0) -> [%event_out : %event0] {
 spatial %space(%b : %buffer_space0) -> [%iout : i64] {
     return %b;
 }
-
-// ---
 
 pipeline "pipeline_trivial" = %bar;

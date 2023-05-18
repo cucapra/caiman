@@ -241,32 +241,33 @@ pub enum Tag {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncletSpec {
-    pub funclet_id_opt: Option<FuncletId>,
-    pub input_tags: HashMap<OperationId, Tag>,
-    pub output_tags: HashMap<OperationId, Tag>,
-    pub implicit_in_tag: Tag,
-    pub implicit_out_tag: Tag,
+pub struct ScheduleBinding {
+    pub implicit_tags: Option<(Tag, Tag)>,
+    pub value : FuncletId,
+    pub timeline : FuncletId,
+    pub spatial : FuncletId
 }
 
-pub enum FuncletSpecBinding {
-    None,
-    Value {
-        value_function_id_opt: Option<ValueFunctionId>,
-    },
-    ScheduleExplicit {
-        value: FuncletSpec,
-        spatial: FuncletSpec,
-        timeline: FuncletSpec,
-    },
+#[derive(Debug, Clone)]
+pub enum FuncletBinding {
+    ValueBinding(FuncletId),
+    ScheduleBinding(ScheduleBinding),
+    None
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncletArgument {
+    pub name: Option<OperationId>,
+    pub typ: Type,
+    pub tags: Vec<Tag>
 }
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
     pub name: FuncletId,
-    pub ret: Vec<(Option<OperationId>, Type, Option<Tag>)>,
-    pub spec: FuncletSpec,
-    pub args: Vec<Type>,
+    pub ret: Vec<FuncletArgument>,
+    pub args: Vec<FuncletArgument>,
+    pub binding: FuncletBinding,
 }
 
 #[derive(Debug)]
@@ -325,8 +326,6 @@ pub enum TypeDecl {
     Local(LocalType),
 }
 
-pub type Types = Vec<TypeDecl>;
-
 #[derive(Debug)]
 pub struct Var {
     pub id: usize,
@@ -351,7 +350,7 @@ pub struct Version {
 }
 
 #[derive(Debug)]
-pub struct ValueFunction {
+pub struct FunctionClass {
     pub name: String,
     pub input_types: Vec<TypeId>,
     pub output_types: Vec<TypeId>,
@@ -359,20 +358,22 @@ pub struct ValueFunction {
 }
 
 #[derive(Debug)]
-pub enum FuncletDef {
-    External(ExternalFunction),
-    Local(Funclet),
-    ValueFunction(ValueFunction),
+pub struct Pipeline {
+    pub name: String,
+    pub funclet: FuncletId
 }
 
-pub type FuncletDefs = Vec<FuncletDef>;
-
-pub type Pipelines = HashMap<String, FuncletId>;
+#[derive(Debug)]
+pub enum Declaration {
+    TypeDecl(TypeDecl),
+    ExternalFunction(ExternalFunction),
+    FunctionClass(FunctionClass),
+    Funclet(Funclet),
+    Pipeline(Pipeline),
+}
 
 #[derive(Debug)]
 pub struct Program {
     pub version: Version,
-    pub types: Types,
-    pub funclets: FuncletDefs,
-    pub pipelines: Pipelines,
+    pub declarations: Vec<Declaration>
 }
