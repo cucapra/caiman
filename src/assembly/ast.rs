@@ -240,36 +240,32 @@ pub enum Tag {
     Halt { index: OperationId },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Value {
-    None,
-    ID(String),
-    FunctionLoc(RemoteNodeId),
-    VarName(OperationId),
-    FnName(FuncletId),
-    Num(usize),
-    Type(Type),
-    Place(ir::Place),
-    Stage(ir::ResourceQueueStage),
-    Tag(Tag),
-    SlotInfo(SlotInfo),
-    FenceInfo(FenceInfo),
-    BufferInfo(BufferInfo),
-}
-
 #[derive(Debug, Clone)]
-pub enum DictValue {
-    Raw(Value),
-    List(Vec<DictValue>),
-    Dict(UncheckedDict),
+pub struct FuncletSpec {
+    pub funclet_id_opt: Option<FuncletId>,
+    pub input_tags: HashMap<OperationId, Tag>,
+    pub output_tags: HashMap<OperationId, Tag>,
+    pub implicit_in_tag: Tag,
+    pub implicit_out_tag: Tag
 }
 
-pub type UncheckedDict = HashMap<Value, DictValue>;
+pub enum FuncletSpecBinding {
+    None,
+    Value {
+        value_function_id_opt: Option<ValueFunctionId>,
+    },
+    ScheduleExplicit {
+        value: FuncletSpec,
+        spatial: FuncletSpec,
+        timeline: FuncletSpec,
+    },
+}
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
     pub name: FuncletId,
-    pub ret: Vec<(Option<OperationId>, Type)>,
+    pub ret: Vec<(Option<OperationId>, Type, Option<Tag>)>,
+    pub spec: FuncletSpec,
     pub args: Vec<Type>,
 }
 
@@ -378,6 +374,5 @@ pub struct Program {
     pub version: Version,
     pub types: Types,
     pub funclets: FuncletDefs,
-    pub extras: Extras,
     pub pipelines: Pipelines,
 }

@@ -82,7 +82,7 @@ extras {
         },
         input_fences : {},
         output_fences : {},
-        input_buffers : {%in_buff : buffer_info(spatial_tag input @foo_space.%bs),
+            input_buffers : {%in_buff : buffer_info(spatial_tag input @foo_space.%bs),
             %out_buff : buffer_info(spatial_tag input @foo_space.%bs)},
         output_buffers : {},
         in_timeline_tag : timeline_tag input @foo_time.%e,
