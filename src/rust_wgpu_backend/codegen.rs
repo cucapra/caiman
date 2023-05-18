@@ -1467,9 +1467,10 @@ impl<'program> CodeGen<'program> {
         let mut funclet_checker =
             type_system::scheduling::FuncletChecker::new(&self.program, funclet);
 
-        let fusion_opportunities =
-            ir::fusion::identify_opportunities(self.program, funclet_id, funclet);
-        //dbg!(&fusion_opportunities);
+        let live_ranges = ir::analysis::live_ranges(funclet);
+        let fusion_info =
+            ir::fusion::FusionInfo::within_funclet(self.program, funclet_id, funclet, &live_ranges);
+        dbg!(&fusion_info.elided_temps);
 
         if self.print_codegen_debug_info {
             println!(
@@ -1524,7 +1525,8 @@ impl<'program> CodeGen<'program> {
                             .unwrap(),
                         operation.funclet_id
                     );
-
+                    // We *could* do unused temporary elision here, but after writing test cases
+                    // I discovered that codegen panics if any slots are unused.
                     let slot_id = placement_state.scheduling_state.insert_hacked_slot(
                         *storage_type,
                         *place,
@@ -1655,7 +1657,7 @@ impl<'program> CodeGen<'program> {
                             );
                         }
                         ir::Place::Gpu => {
-                            let opportunity = fusion_opportunities.iter().find(|schema| {
+                            let opportunity = fusion_info.opportunities.iter().find(|schema| {
                                 schema.bounds.start <= current_node_id
                                     && current_node_id <= schema.bounds.end
                             });
