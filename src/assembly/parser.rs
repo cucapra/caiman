@@ -34,8 +34,8 @@ fn reject_hole<T>(input: Node, h: Hole<T>) -> ParseResult<T> {
 
 // dumb hack
 fn create_map<F, T, U>(f: &'static F) -> Box<dyn Fn(T) -> U>
-    where
-        F: Fn(T) -> U,
+where
+    F: Fn(T) -> U,
 {
     Box::new(move |x| f(x))
 }
@@ -267,10 +267,13 @@ impl CaimanAssemblyParser {
     }
 
     fn tag_core(input: Node) -> ParseResult<ast::TagCore> {
-        reject_hole(input, match_nodes!(input.into_children();
-            [tag_core_op(op), funclet_loc(f)] => f.map(|loc| op(loc)),
-            [none] => Some(ast::TagCore::None)
-        ))
+        reject_hole(
+            input,
+            match_nodes!(input.into_children();
+                [tag_core_op(op), funclet_loc(f)] => f.map(|loc| op(loc)),
+                [none] => Some(ast::TagCore::None)
+            ),
+        )
     }
 
     fn tag_halt(input: Node) -> ParseResult<ast::OperationId> {
@@ -292,9 +295,12 @@ impl CaimanAssemblyParser {
     }
 
     fn value_tag_loc(input: Node) -> ParseResult<ast::ValueTag> {
-        reject_hole(input, match_nodes!(input.into_children();
-            [value_tag_op(op), funclet_loc(f)] => f.map(|loc| op(loc))
-        ))
+        reject_hole(
+            input,
+            match_nodes!(input.into_children();
+                [value_tag_op(op), funclet_loc(f)] => f.map(|loc| op(loc))
+            ),
+        )
     }
 
     fn value_tag_data(input: Node) -> ParseResult<ast::ValueTag> {
@@ -332,7 +338,7 @@ impl CaimanAssemblyParser {
     }
 
     fn slot_info(input: Node) -> ParseResult<ast::SlotInfo> {
-        let tags : Vec<ast::Tag> = match_nodes!(input.into_children();
+        let tags: Vec<ast::Tag> = match_nodes!(input.into_children();
             [tag(t)..] => t.collect()
         );
         let mut value_tag = ast::ValueTag::Core(ast::TagCore::None);

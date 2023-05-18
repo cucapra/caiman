@@ -46,7 +46,7 @@ fn read_definition(
                 Err(why) => Err(CompileError {
                     message: format!("Parse error: {}", why),
                 }),
-                Ok(v) => crate::assembly::lowering_pass::lower(v)
+                Ok(v) => crate::assembly::lowering_pass::lower(v),
             }
         }
         CompileMode::RON => match ron::from_str(&input_string) {

@@ -246,7 +246,7 @@ pub struct FuncletSpec {
     pub input_tags: HashMap<OperationId, Tag>,
     pub output_tags: HashMap<OperationId, Tag>,
     pub implicit_in_tag: Tag,
-    pub implicit_out_tag: Tag
+    pub implicit_out_tag: Tag,
 }
 
 pub enum FuncletSpecBinding {
