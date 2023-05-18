@@ -116,6 +116,34 @@ pub enum Type {
     },
 }
 
+impl Type {
+    pub fn estimate_size(&self, types: &StableVec<Type>) -> usize {
+        match self {
+            Self::F32 => 4,
+            Self::F64 => 8,
+            Self::U8 => 1,
+            Self::U16 => 2,
+            Self::U32 => 4,
+            Self::U64 => 8,
+            Self::USize => std::mem::size_of::<usize>(),
+            Self::I8 => 1,
+            Self::I16 => 2,
+            Self::I32 => 4,
+            Self::I64 => 8,
+            Self::Array {
+                element_type,
+                length,
+            } => {
+                // assuming no padding, probably incorrect
+                // that's ok though, this is only an estimate
+                return length * types[element_type.0].estimate_size(types);
+            }
+            // TODO: finish this for other types
+            _ => usize::MAX,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CpuPureOperation {
     pub name: String,

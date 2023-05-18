@@ -181,10 +181,10 @@ impl<'a> FuseState<'a> {
         }
     }
 
-    // TODO: The funclet arg can be removed once #58 is merged
+    // TODO: The program arg can be removed once #58 is merged
     pub fn finish(
         mut self,
-        funclet: &ir::Funclet,
+        prog: &ir::Program,
         end: ir::OperationId,
         funclet_id: ir::FuncletId,
         opportunities: &mut Vec<Opportunity>,
@@ -195,6 +195,8 @@ impl<'a> FuseState<'a> {
             return;
         }
 
+        let funclet = &prog.funclets[funclet_id];
+
         let mut inputs = Vec::new();
         let mut input_types = Vec::new();
         let mut outputs = Vec::new();
@@ -204,13 +206,20 @@ impl<'a> FuseState<'a> {
         let mut elide_bindings = HashMap::new();
         // TODO: Correctness of elision logic depends on the assumption that workgroup dimensions
         // will always be on the local or CPU queue.
-        // let mut elidable_bindings = HashMap::new();
         for (&slot, state) in self.slots.iter() {
             let mut should_elide = false;
-            if let ir::Node::AllocTemporary { place, .. } = funclet.nodes[slot] {
-                if (place == ir::Place::Gpu) {
+            if let ir::Node::AllocTemporary {
+                place,
+                storage_type,
+                ..
+            } = funclet.nodes[slot]
+            {
+                let ffi_type = &prog.native_interface.types[storage_type.0];
+                let size = ffi_type.estimate_size(&prog.native_interface.types);
+
+                // TODO: 64 is an arbitrary size.
+                if (place == ir::Place::Gpu && size <= 64) {
                     let live_range = self.live_ranges.get(&slot).unwrap();
-                    dbg!(slot, live_range);
                     if self.start <= *live_range.start() && *live_range.end() < end {
                         should_elide = true;
                         elided_temps.insert(slot);
@@ -387,7 +396,7 @@ impl FusionInfo {
                         // Nope, the current node is incompatible for one reason or another.
                         // Finish our existing fusion sequence and restart
                         state.take().unwrap().finish(
-                            funclet,
+                            prog,
                             id,
                             funclet_id,
                             &mut opportunities,
@@ -402,13 +411,7 @@ impl FusionInfo {
             } else {
                 // Alright, it's not a kernel. If we were in the middle of fusing, finish the job.
                 if let Some(fs) = state.take() {
-                    fs.finish(
-                        funclet,
-                        id,
-                        funclet_id,
-                        &mut opportunities,
-                        &mut elided_temps,
-                    );
+                    fs.finish(prog, id, funclet_id, &mut opportunities, &mut elided_temps);
                 }
             }
         }
@@ -416,7 +419,7 @@ impl FusionInfo {
         // Handle a fusion sequence which runs right off the end of the funclet
         if let Some(fs) = state.take() {
             fs.finish(
-                funclet,
+                prog,
                 funclet.nodes.len(),
                 funclet_id,
                 &mut opportunities,
