@@ -4,8 +4,8 @@ use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
     ExternalFunctionId, FuncletId, OperationId, StorageTypeId, TypeId, ValueFunctionId,
 };
-use crate::assembly::context::Context;
-use crate::assembly::context::FuncletLocation;
+// use crate::assembly::context::Context;
+// use crate::assembly::context::FuncletLocation;
 use crate::assembly::explication;
 use crate::assembly::explication_explicator;
 use crate::assembly::explication_util::*;

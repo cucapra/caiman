@@ -29,7 +29,7 @@ slot %slot0 : i64-ready-local;
 fence %fence0 : cpu;
 buffer %buffer0 : gpu<alignment_bits = 4, byte_size = 8>;
 event %event0 : local;
-scheduling_join %scheduling-join0;
+scheduling_join %scheduling_join0;
 buffer_space %buffer_space0;
 
 function %simple(i64) -> i64;
@@ -44,12 +44,12 @@ external-gpu[impl %simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
     resource {
         group : 0,
         binding : 0,
-        input : %x,
+        input : %x
     },
     resource {
         group : 0,
         binding : 1,
-        output : %out,
+        output : %out
     }
 }
 
@@ -57,7 +57,6 @@ function %simple_32(i32) -> i32;
 
 value[impl %simple_32] %foo(%test : i32) -> [%out : i32] {
     %1 = constant 4i64;
-    %3 = constant-unsigned 4u64;
     %2 = extract %1 0;
     %4 = call %simple(%1);
     %5 = select %1 %2 %3;
@@ -92,8 +91,9 @@ schedule[] %bar<none, none>(%0 : %slot0) -> [%out : %slot0] {
     return %x;
 }
 
-schedule[value $val = %foo] %scall<none, none>(%abc : input($val.%x) $slot0)
--> [%out : output($val.%y) $slot0] {
+schedule[value $val = %foo]
+%scall<none, none>(%abc : input($val.%x) %slot0)
+-> [%out : output($val.%y) %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-call %j.%abc %foo [%abc, %abc] %abc;
 }
