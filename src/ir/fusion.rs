@@ -299,7 +299,9 @@ impl<'a> FuseState<'a> {
                 res.output = Some(output_id);
             }
         }
-
+        //dbg!(&elided_temps);
+        //dbg!(&outputs);
+        //dbg!(&inputs);
         let kernel = ffi::GpuKernel {
             // The name doesn't *really* matter, but we can uniquely identify each fused shader
             // by it's scheduling funclet ID and the starting node (fuse sequences are disjoint)
