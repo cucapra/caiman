@@ -44,7 +44,7 @@ macro_rules! def_assembly_id_type {
 def_assembly_id_type!(FuncletId);
 def_assembly_id_type!(ExternalFunctionId);
 def_assembly_id_type!(ValueFunctionId);
-def_assembly_id_type!(OperationId);
+def_assembly_id_type!(NodeId);
 def_assembly_id_type!(LocalTypeId);
 
 pub type StorageTypeId = TypeId;
@@ -107,8 +107,8 @@ pub enum TypeId {
 pub struct ExternalGpuFunctionResourceBinding {
     pub group: usize,
     pub binding: usize,
-    pub input: Option<OperationId>,
-    pub output: Option<OperationId>,
+    pub input: Option<NodeId>,
+    pub output: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -120,7 +120,7 @@ pub enum Type {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId {
     pub funclet_name: Hole<FuncletId>,
-    pub node_name: Hole<OperationId>,
+    pub node_name: Hole<NodeId>,
 }
 
 // Super Jank, but whatever
@@ -195,71 +195,71 @@ with_operations!(make_parser_nodes);
 #[derive(Debug, Clone)]
 pub enum TailEdge {
     Return {
-        return_values: Hole<Vec<Hole<OperationId>>>,
+        return_values: Hole<Vec<Hole<NodeId>>>,
     },
     Yield {
         pipeline_yield_point: ExternalFunctionId,
-        yielded_nodes: Hole<Vec<Hole<OperationId>>>,
+        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         next_funclet: Hole<FuncletId>,
-        continuation_join: Hole<OperationId>,
-        arguments: Hole<Vec<Hole<OperationId>>>,
+        continuation_join: Hole<NodeId>,
+        arguments: Hole<Vec<Hole<NodeId>>>,
     },
     Jump {
-        join: Hole<OperationId>,
-        arguments: Hole<Vec<Hole<OperationId>>>,
+        join: Hole<NodeId>,
+        arguments: Hole<Vec<Hole<NodeId>>>,
     },
     ScheduleCall {
         value_operation: Hole<RemoteNodeId>,
         callee_funclet_id: Hole<FuncletId>,
-        callee_arguments: Hole<Vec<Hole<OperationId>>>,
-        continuation_join: Hole<OperationId>,
+        callee_arguments: Hole<Vec<Hole<NodeId>>>,
+        continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
         value_operation: Hole<RemoteNodeId>,
-        condition: Hole<OperationId>,
+        condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
-        callee_arguments: Hole<Vec<Hole<OperationId>>>,
-        continuation_join: Hole<OperationId>,
+        callee_arguments: Hole<Vec<Hole<NodeId>>>,
+        continuation_join: Hole<NodeId>,
     },
     DynamicAllocFromBuffer {
-        buffer: Hole<OperationId>,
-        arguments: Hole<Vec<Hole<OperationId>>>,
-        dynamic_allocation_size_slots: Hole<Vec<Hole<Option<OperationId>>>>,
+        buffer: Hole<NodeId>,
+        arguments: Hole<Vec<Hole<NodeId>>>,
+        dynamic_allocation_size_slots: Hole<Vec<Hole<Option<NodeId>>>>,
         success_funclet_id: Hole<FuncletId>,
         failure_funclet_id: Hole<FuncletId>,
-        continuation_join: Hole<OperationId>,
+        continuation_join: Hole<NodeId>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
     None,
-    Node { node_id: OperationId },
-    Input { index: OperationId },
-    Output { index: OperationId },
-    Halt { index: OperationId },
+    Node { node_id: NodeId },
+    Input { index: NodeId },
+    Output { index: NodeId },
+    Halt { index: NodeId },
 }
 
 #[derive(Debug, Clone)]
 pub struct ScheduleBinding {
     pub implicit_tags: Option<(Tag, Tag)>,
-    pub value : FuncletId,
-    pub timeline : FuncletId,
-    pub spatial : FuncletId
+    pub value: FuncletId,
+    pub timeline: FuncletId,
+    pub spatial: FuncletId,
 }
 
 #[derive(Debug, Clone)]
 pub enum FuncletBinding {
     ValueBinding(FuncletId),
     ScheduleBinding(ScheduleBinding),
-    None
+    None,
 }
 
 #[derive(Debug, Clone)]
 pub struct FuncletArgument {
-    pub name: Option<OperationId>,
+    pub name: Option<NodeId>,
     pub typ: Type,
-    pub tags: Vec<Tag>
+    pub tags: Vec<Tag>,
 }
 
 #[derive(Debug, Clone)]
@@ -272,7 +272,7 @@ pub struct FuncletHeader {
 
 #[derive(Debug)]
 pub struct NamedNode {
-    pub name: OperationId,
+    pub name: NodeId,
     pub node: Node,
 }
 
@@ -360,7 +360,7 @@ pub struct FunctionClass {
 #[derive(Debug)]
 pub struct Pipeline {
     pub name: String,
-    pub funclet: FuncletId
+    pub funclet: FuncletId,
 }
 
 #[derive(Debug)]
@@ -375,5 +375,5 @@ pub enum Declaration {
 #[derive(Debug)]
 pub struct Program {
     pub version: Version,
-    pub declarations: Vec<Declaration>
+    pub declarations: Vec<Declaration>,
 }

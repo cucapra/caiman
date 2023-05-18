@@ -241,5 +241,6 @@ timeline_command = { phi_command | sync_command | submission_command }
 spatial_command = { "INVALID" } // empty for now...
 
 // Pipelines
+
 pipeline_sep = @{ "pipeline" ~ sep }
 pipeline = { pipeline_sep ~ str ~ "=" ~ name ~ ";" }

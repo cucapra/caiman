@@ -1,7 +1,7 @@
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, OperationId, RemoteNodeId, StorageTypeId, TypeId,
+    ExternalFunctionId, FFIType, FuncletId, NodeId, RemoteNodeId, StorageTypeId, TypeId,
     ValueFunctionId,
 };
 use crate::ir;

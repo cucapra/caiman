@@ -10,7 +10,7 @@ use crate::{assembly, frontend, ir};
 use assembly::ast;
 use ast::Hole;
 use ast::{
-    ExternalFunctionId, FFIType, FuncletId, OperationId, RemoteNodeId, StorageTypeId, TypeId,
+    ExternalFunctionId, FFIType, FuncletId, NodeId, RemoteNodeId, StorageTypeId, TypeId,
     ValueFunctionId,
 };
 use ir::ffi;
@@ -54,72 +54,37 @@ impl CaimanAssemblyParser {
         input.as_str().parse::<usize>().map_err(|e| input.error(e))
     }
 
-    // fn type_name(input: Node) -> ParseResult<Hole<TypeId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [id(s)] => Some(TypeId::Local(s)),
-    //         [hole] => None
-    //     ))
-    // }
-    //
-    // fn type_name_sep(input: Node) -> ParseResult<Hole<TypeId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [type_name(t)] => t
-    //     ))
-    // }
-    //
-    // fn throwaway(input: Node) -> ParseResult<String> {
-    //     input.as_str().parse::<String>().map_err(|e| input.error(e))
-    // }
-    //
-    // fn var_name(input: Node) -> ParseResult<Hole<OperationId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [id(s)] => Some(OperationId(s)),
-    //         [n] => Some(OperationId(n.as_str().to_string())),
-    //         [throwaway(s)] => Some(OperationId(s)),
-    //         [hole] => None
-    //     ))
-    // }
-    //
-    // fn var_name_sep(input: Node) -> ParseResult<Hole<OperationId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [var_name(t)] => t
-    //     ))
-    // }
-    //
-    // fn fn_name(input: Node) -> ParseResult<Hole<FuncletId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [id(s)] => Some(FuncletId(s)),
-    //         [hole] => None
-    //     ))
-    // }
-    //
-    // fn fn_name_sep(input: Node) -> ParseResult<Hole<FuncletId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [fn_name(t)] => t
-    //     ))
-    // }
+    fn name(input: Node) -> ParseResult<Hole<String>> {
+        Ok(match_nodes!(input.into_children();
+            [id(s)] => Some(s),
+            [n(n)] => Some(n.to_string()),
+            [hole] => None
+        ))
+    }
+    fn throwaway(input: Node) -> ParseResult<String> {
+        input.as_str().parse::<String>().map_err(|e| input.error(e))
+    }
+    fn funclet_loc_filled(input: Node) -> ParseResult<RemoteNodeId> {
+        Ok(match_nodes!(input.into_children();
+            [name(funclet_name), name(node_name)] => ast::RemoteNodeId {
+                funclet_name: funclet_name.map(|s| FuncletId(s)),
+                node_name: node_name.map(|s| NodeId(s))
+            }
+        ))
+    }
 
-    // fn funclet_loc_filled(input: Node) -> ParseResult<RemoteNodeId> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [fn_name(funclet_name), var_name(node_name)] => ast::RemoteNodeId {
-    //             funclet_name,
-    //             node_name
-    //         }
-    //     ))
-    // }
+    fn funclet_loc(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
+        Ok(match_nodes!(input.into_children();
+            [funclet_loc_filled(f)] => Some(f),
+            [hole] => None
+        ))
+    }
 
-    // fn funclet_loc(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [funclet_loc_filled(f)] => Some(f),
-    //         [hole] => None
-    //     ))
-    // }
-
-    // fn funclet_loc_sep(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
-    //     Ok(match_nodes!(input.into_children();
-    //         [funclet_loc(t)] => t
-    //     ))
-    // }
+    fn funclet_loc_sep(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
+        Ok(match_nodes!(input.into_children();
+            [funclet_loc(t)] => t
+        ))
+    }
 
     fn ffi_type_base(input: Node) -> ParseResult<ast::FFIType> {
         input
