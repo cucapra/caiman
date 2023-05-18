@@ -1,4 +1,4 @@
-version 0.0.1
+version 0.0.2
 
 type f32;
 type f64;
@@ -100,8 +100,8 @@ schedule[value $val = %foo] %scall<none, none>(%abc : input($val.%x) $slot0)
 
 schedule[timeline $time = %time, value $val = %foo, spatial $space = %space]
 %sselect<input($time.%e), output($time.%e)>
-(%abc : input($time.%e) halt($val.%x) $slot0)
--> input(time.%e) output($val.%x) $slot0 {
+(%abc : input($time.%e) halt($val.%x) %slot0)
+-> input($time.%e) output($val.%x) %slot0 {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-select %y.%abc %abc [%foo, %j] [%abc, %abc] %abc;
 }
