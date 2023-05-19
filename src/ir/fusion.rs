@@ -40,30 +40,28 @@ struct SlotState {
 }
 
 #[derive(Debug)]
-struct FuseState {
+struct FuseState<'a> {
+    prog: &'a ir::Program,
     start: ir::NodeId,
     workgroup_dimensions: [Option<ir::NodeId>; 3],
     local_size: [u32; 3],
     next_binding: u32,
     /// (shader source, entry point)
-    kernels: Vec<(ShaderModule, String)>,
+    kernels: Vec<(&'a ShaderModule, &'a str)>,
     resources: HashMap<(usize, u32, u32), FusedResource>,
     slots: HashMap<ir::NodeId, SlotState>,
 }
 
-impl FuseState {
-    pub fn new(prog: &ir::Program, start: ir::NodeId, dispatch: DispatchInfo) -> FuseState {
+impl<'a> FuseState<'a> {
+    pub fn new(prog: &'a ir::Program, start: ir::NodeId, dispatch: DispatchInfo) -> FuseState<'a> {
         let kernel = prog.native_interface.external_functions[dispatch.id.0]
             .get_gpu_kernel()
             .expect("kernel fusion: not a GPU kernel!");
 
-        let shader_module = match &kernel.shader_module_content {
-            ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
-            ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
-        };
-        let local_size = shader_module.local_size(&kernel.entry_point);
+        let local_size = kernel.shader_module.local_size(&kernel.entry_point);
 
         let mut state = FuseState {
+            prog,
             start,
             workgroup_dimensions: dispatch.workgroup_dimensions,
             local_size,
@@ -74,7 +72,7 @@ impl FuseState {
         };
 
         // TODO: Shader setup is duplicated here
-        let result = state.fuse(prog, dispatch);
+        let result = state.fuse(dispatch);
         assert!(result);
         return state;
     }
@@ -113,21 +111,16 @@ impl FuseState {
         );
     }
 
-    pub fn fuse(&mut self, prog: &ir::Program, dispatch: DispatchInfo) -> bool {
+    pub fn fuse(&mut self, dispatch: DispatchInfo) -> bool {
         if self.workgroup_dimensions != dispatch.workgroup_dimensions {
             return false;
         }
 
-        let kernel = prog.native_interface.external_functions[dispatch.id.0]
+        let kernel = self.prog.native_interface.external_functions[dispatch.id.0]
             .get_gpu_kernel()
             .expect("kernel fusion: not a GPU kernel!");
 
-        let shader_module = match &kernel.shader_module_content {
-            ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
-            ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
-        };
-
-        if self.local_size != shader_module.local_size(&kernel.entry_point) {
+        if self.local_size != kernel.shader_module.local_size(&kernel.entry_point) {
             return false;
         }
 
@@ -160,8 +153,8 @@ impl FuseState {
         // Update the module *if* any dependency chains were involved, or if this is the
         // first module, since otherwise we'd never make any progress.
         if (self.kernels.is_empty() || dependency_chain) {
-            let module = (shader_module, kernel.entry_point.clone());
-            self.kernels.push(module);
+            self.kernels
+                .push((&kernel.shader_module, &kernel.entry_point));
             return true;
         } else {
             return false;
@@ -247,7 +240,7 @@ impl FuseState {
             output_types: output_types.into_boxed_slice(),
             entry_point: "main".to_owned(),
             resource_bindings: resource_bindings.into_boxed_slice(),
-            shader_module_content: ffi::ShaderModuleContent::Wgsl(shader_module.emit_wgsl()),
+            shader_module,
         };
         ops.push(Opportunity {
             bounds: self.start..end,
@@ -322,7 +315,7 @@ pub fn identify_opportunities(
             // Alright, it's a kernel. Are we already fusing?
             if let Some(fs) = state.as_mut() {
                 // We're already fusing. Can we add this?
-                if fs.fuse(prog, dispatch.clone()) {
+                if fs.fuse(dispatch.clone()) {
                     // Yes, we can fuse the current node into our existing dispatch!
                     continue;
                 } else {

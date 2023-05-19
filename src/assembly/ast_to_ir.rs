@@ -6,6 +6,7 @@ use crate::assembly_ast::{
     StorageTypeId, TypeId, ValueFunctionId,
 };
 use crate::ir::ffi;
+use crate::shadergen::ShaderModule;
 use crate::{assembly_ast, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
@@ -506,9 +507,9 @@ fn ir_external_gpu(
         .map(|s| s.to_str())
         .flatten()
         .unwrap_or("");
-    let shader_module_content = match input_extension {
-        "wgsl" => ffi::ShaderModuleContent::Wgsl(text_content),
-        "glsl" | "comp" => ffi::ShaderModuleContent::Glsl(text_content),
+    let shader_module = match input_extension {
+        "wgsl" => ShaderModule::from_wgsl(&text_content).unwrap(),
+        "glsl" | "comp" => ShaderModule::from_glsl(&text_content).unwrap(),
         _ => panic!("unknown shader type"),
     };
 
@@ -518,7 +519,7 @@ fn ir_external_gpu(
         output_types: output_types.into_boxed_slice(),
         entry_point: external.entry_point.clone(),
         resource_bindings: resource_bindings.into_boxed_slice(),
-        shader_module_content,
+        shader_module,
     })
 }
 
