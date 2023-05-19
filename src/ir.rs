@@ -9,6 +9,7 @@ use crate::stable_vec::StableVec;
 
 pub use crate::rust_wgpu_backend::ffi;
 
+pub mod analysis;
 pub mod fusion;
 pub mod validation;
 
