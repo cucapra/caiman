@@ -1,3 +1,4 @@
+use crate::shadergen::ShaderModule;
 use crate::stable_vec::StableVec;
 use serde_derive::{Deserialize, Serialize};
 
@@ -169,12 +170,6 @@ pub struct GpuKernelResourceBinding {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ShaderModuleContent {
-    Wgsl(String),
-    Glsl(String),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GpuKernel {
     pub name: String,
     pub input_types: Box<[TypeId]>,
@@ -182,8 +177,7 @@ pub struct GpuKernel {
     // Contains pipeline and single render pass state
     pub entry_point: String,
     pub resource_bindings: Box<[GpuKernelResourceBinding]>,
-    pub shader_module_content: ShaderModuleContent,
-    //pub shader_module : usize,
+    pub shader_module: ShaderModule,
 }
 
 impl GpuKernel {

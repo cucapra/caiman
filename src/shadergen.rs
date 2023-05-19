@@ -5,6 +5,8 @@ use naga::{
     LocalVariable, Module, Range, RayQueryFunction, ResourceBinding, SampleLevel, ShaderStage,
     Span, Statement, SwitchCase, Type, UniqueArena,
 };
+use serde::{Deserializer, Serializer};
+use serde_derive::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
@@ -50,16 +52,38 @@ pub struct FuseDescriptor<'a> {
     pub resources: &'a HashMap<(usize, u32, u32), FusedResource>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ShaderModuleContent {
+    Wgsl(String),
+    Glsl(String),
+}
+
+#[derive(Debug, Clone)]
 pub struct ShaderModule {
     module: naga::Module,
 }
 
-impl std::fmt::Debug for ShaderModule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("<<opaque shader module>>");
-        Ok(())
+impl<'de> serde::Deserialize<'de> for ShaderModule {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let contents = ShaderModuleContent::deserialize(deserializer)?;
+        let result = match contents {
+            ShaderModuleContent::Glsl(glsl) => Self::from_glsl(&glsl),
+            ShaderModuleContent::Wgsl(wgsl) => Self::from_wgsl(&wgsl),
+        };
+        result.map_err(|e| <D::Error as serde::de::Error>::custom(e))
     }
 }
+
+impl serde::Serialize for ShaderModule {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let contents = ShaderModuleContent::Wgsl(self.emit_wgsl());
+        contents.serialize(serializer)
+    }
+}
+
 impl ShaderModule {
     pub fn from_wgsl(text: &str) -> Result<Self, Box<dyn Error>> {
         let module = naga::front::wgsl::parse_str(text)?;
