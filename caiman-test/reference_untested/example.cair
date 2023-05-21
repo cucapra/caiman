@@ -41,6 +41,7 @@ external-gpu[impl %simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
 {
     // I dunno if this is worth cleaning up, probably not
     path : "caiman-test/reference_untested/example.comp",
+    entry : "main",
     resource {
         group : 0,
         binding : 0,
@@ -98,15 +99,15 @@ schedule[value $val = %foo]
     schedule-call %j.%abc %foo [%abc, %abc] %abc;
 }
 
-schedule[timeline $time = %time, value $val = %foo, spatial $space = %space]
+// value, timeline, spatial order is mandatory (though you can freely omit one of course)
+schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 %sselect<input($time.%e), output($time.%e)>
 (%abc : input($time.%e) halt($val.%x) %slot0)
 -> input($time.%e) output($val.%x) %slot0 {
-    // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-select %y.%abc %abc [%foo, %j] [%abc, %abc] %abc;
 }
 
-schedule[spatial $space = %space, timeline $time = %time]
+schedule[timeline $time = %time, spatial $space = %space]
 %dalloc<halt($time.%e), node($time.%e)>
 (%abc : input($space.%bs) %event0)
 -> [%out : node($space.%bs) %buffer0] {

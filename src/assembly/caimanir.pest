@@ -13,20 +13,24 @@ str = @{ str_single | str_double }
 
 // special keywords
 none = @{ "none" }
-pure = @{ "pure" }
+pure_keyword = @{ "pure" }
 hole = @{ "?" }
 node_hole = @{ "???" }
 throwaway = @{ "_" }
-impl = @{ "impl" }
-impl_sep = ${ impl ~ sep }
+impl_keyword = @{ "impl" }
+impl_sep = ${ impl_keyword ~ sep }
 
-name = ${ "%" ~ (id | n | throwaway) | hole }
+name = ${ "%" ~ (id | n | throwaway) }
 name_sep = ${ name ~ sep }
-meta_name = ${ "$" ~ (id | throwaway) | hole }
+name_hole = { name | hole }
+name_hole_sep = ${ name_hole ~ sep }
+meta_name = ${ "$" ~ (id | throwaway) }
 meta_name_sep = ${ meta_name ~ sep }
-funclet_loc_filled = ${ (meta_name | name) ~ "." ~ name }
-funclet_loc = { funclet_loc_filled | hole }
+funclet_loc = ${ name ~ "." ~ name }
 funclet_loc_sep = ${ funclet_loc ~ sep }
+funclet_loc_hole = { name_hole ~ "." ~ name_hole | hole }
+meta_funclet_loc_inner = ${ meta_name ~ "." ~ name }
+meta_funclet_loc = { funclet_loc | meta_funclet_loc_inner }
 
 //    ffi_types
 ffi_type_base = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
@@ -46,81 +50,82 @@ ffi_type_sep = ${ ffi_type ~ sep }
 
 typ = { ffi_type | name }
 typ_sep = ${ typ ~ sep }
+type_hole = { typ | hole }
 // using `?` rather than `hole` for ease of matching
-place = @{ "local" | "cpu" | "gpu" | "?" }
-stage = @{ "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" | "?" }
+place = @{ "local" | "cpu" | "gpu" }
+place_hole = { place | hole }
+stage = @{ "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" }
+stage_hole = { stage | hole }
 constant_raw = { n ~ ffi_type }
 constant = ${ constant_raw | hole }
 tag_op = { "node" | "input" | "output" | "halt" }
 tag = { none | tag_op ~ "(" ~ funclet_loc ~ ")" }
 
 // Program
-program = { SOI ~ version ~ definition* ~ EOI }
 
 version_keyword = @{ "version" ~ sep }
 version = ${ version_keyword ~ n ~ "." ~ n ~ "." ~ n }
 
-definition = { type_def | funclet_def | pipeline }
+declaration = { type_decl | external_function | funclet | function_class | pipeline }
 
 // Types
 ffi_type_decl = ${ "type" ~ sep ~ ffi_type }
 
-name_typ_separator = !{ name ~ ":" ~ "" }
-native_value_decl = ${ "native_value" ~ sep ~ name_typ_separator ~ typ }
-slot_decl = ${ "slot" ~ sep ~ name_typ_separator ~ typ ~ "-" ~ stage ~ "-" ~ place }
-fence_decl = ${ "fence" ~ sep ~ name_typ_separator ~ place }
+name_type_separator = !{ name ~ ":" ~ "" }
+native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ typ }
+slot_decl = ${ "slot" ~ sep ~ name_type_separator ~ typ ~ "-" ~ stage ~ "-" ~ place }
+fence_decl = ${ "fence" ~ sep ~ name_type_separator ~ place }
 buffer_alignment_decl = !{ name ~ ":" ~ place ~ "<"
     ~ "alignment_bits" ~ "=" ~ n ~ "," ~ "byte_size" ~ "=" ~ n ~ ">" }
 
 buffer_decl = ${ "buffer" ~ sep ~ buffer_alignment_decl}
-event_decl = ${ "event" ~ sep ~ name_typ_separator ~ place }
+event_decl = ${ "event" ~ sep ~ name_type_separator ~ place }
 scheduling_join_decl = ${ "scheduling_join" ~ sep ~ name }
 buffer_space_decl = ${ "buffer_space" ~ sep ~ name }
 
-type_def = { (ffi_type_decl | native_value_decl | slot_decl | fence_decl | buffer_alignment_decl
+type_decl = { (ffi_type_decl | native_value_decl | slot_decl | fence_decl | buffer_alignment_decl
     | buffer_decl | event_decl | scheduling_join_decl | buffer_space_decl) ~ ";" }
 
 // Funclets
-funclet_def = { external_funclet | funclet | function_class }
 
 impl_box = { "[" ~ impl_sep ~ name ~ "]" }
 
 //   external
 
-// this is so dumb
 external_group = { "group" ~ ":" ~ n }
 external_binding = { "binding" ~ ":" ~ n }
 external_input = { "input" ~ ":" ~ name }
 external_output = { "output" ~ ":" ~ name }
-external_resource_element = { external_group | external_binding | external_input | external_output }
-external_resource_elements = { external_resource_element ~ ("," ~ external_resource_element)* }
-external_resource = { "resource" ~ "{" ~ external_resource_elements ~ "}" } // todo: cleanup
-external_path = { "path" ~ ":" ~ str }
+// gonna make order matter for parser simplicity
+external_resource = { "resource" ~ "{" ~ external_group ~ "," ~ external_binding ~ "," ~
+     external_input? ~ "," ~ external_output? ~ "}" } // todo: cleanup
 
-external_element = { external_path | external_resource }
-external_body = { external_element ~ ("," ~ external_element)* }
+external_path = { "path" ~ ":" ~ str }
+external_entry_point = { "entry" ~ ":" ~ str }
+// gonna make order matter for parser simplicity
+external_body = { ";" | "{" ~ external_path ~ external_entry_point ~ external_resource* ~ "}" }
 external_arg = { (name ~ ":")? ~ ffi_type }
-external_args = { external_arg ~ ("," ~ external_arg)* }
-external_loc = ${ "external-" ~ place ~ ("-" ~ pure)? }
-external_funclet = { external_loc ~ impl_box
-    ~ name ~ "(" ~ external_args? ~ ")" ~ "->"
-    ~ ("[" ~ external_args ~ "]" | typ)
-    ~ (";" | "{" ~ external_body ~ "}") }
+external_args = { (external_arg ~ ("," ~ external_arg)*)? }
+external_loc = ${ "external-" ~ place ~ ("-" ~ pure_keyword )? }
+external_ret = { "[" ~ external_args ~ "]" | ffi_type }
+external_function = { external_loc ~ impl_box ~ name
+    ~ "(" ~ external_args ~ ")" ~ "->" ~ external_ret ~ external_body }
 
 //   value functions
 function_class_sep = @{ "function" ~ sep }
-function_class_args = { typ ~ ("," ~ typ)* }
+function_class_args = { (typ ~ ("," ~ typ)*)? }
+function_class_ret = { ("[" ~ function_class_args ~ "]") | typ }
 function_class = { function_class_sep ~ name ~ "("
-    ~ function_class_args? ~ ")" ~ "->" ~ typ ~ ";" }
+    ~ function_class_args ~ ")" ~ "->" ~ function_class_ret ~ ";" }
 
 //   funclet
 value_sep = @{ "value" ~ sep }
 timeline_sep = @{ "timeline" ~ sep }
 spatial_sep = @{ "spatial" ~ sep }
-schedule_box_keyword = { value_sep | timeline_sep | spatial_sep }
-schedule_box_component = { schedule_box_keyword ~ meta_name ~ "=" ~ name }
-schedule_box_components = { schedule_box_component ~ ("," ~ schedule_box_component)* }
-schedule_box = { "[" ~ schedule_box_components? ~ "]" }
+schedule_box_value = { (value_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box_timeline = { (timeline_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box_spatial = { (spatial_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
 
 funclet = { "value" ~ impl_box ~ value_funclet | "schedule" ~ schedule_box ~ schedule_funclet |
     timeline_sep ~ timeline_funclet | spatial_sep ~ spatial_funclet }
@@ -128,27 +133,27 @@ funclet = { "value" ~ impl_box ~ value_funclet | "schedule" ~ schedule_box ~ sch
 //   header setup
 
 funclet_arg = { (name ~ ":")? ~ typ }
-funclet_args = { funclet_arg ~ ("," ~ funclet_arg)* }
+funclet_args = { (funclet_arg ~ ("," ~ funclet_arg)*)? }
 funclet_return = { "[" ~ funclet_args ~ "]" | typ }
-funclet_header = { name ~ "(" ~ funclet_args? ~ ")" ~ "->" ~ funclet_return }
+funclet_header = { name ~ "(" ~ funclet_args ~ ")" ~ "->" ~ funclet_return }
 
-value_assign = { name ~ "=" ~ value_command }
-value_funclet = { funclet_header ~ "{" ~ (value_assign ~ ";")* ~ tail_edge ~ ";" ~ "}" }
+value_command = { name ~ "=" ~ value_node | tail_edge }
+value_funclet = { funclet_header ~ "{" ~ (value_command ~ ";")* ~ "}" }
 
-timeline_assign = { name ~ "=" ~ timeline_command }
-timeline_funclet = { funclet_header ~ "{" ~ ((timeline_assign | tail_edge | node_hole) ~ ";")* ~ "}" }
+timeline_command = { name ~ "=" ~ timeline_node | tail_edge | node_hole }
+timeline_funclet = { funclet_header ~ "{" ~ (timeline_command ~ ";")* ~ "}" }
 
-spatial_assign = { name ~ "=" ~ spatial_command }
-spatial_funclet = { funclet_header ~ "{" ~ ((spatial_assign | tail_edge | node_hole) ~ ";")* ~ "}" }
+spatial_command = { name ~ "=" ~ spatial_node | tail_edge | node_hole }
+spatial_funclet = { funclet_header ~ "{" ~ (spatial_command ~ ";")* ~ "}" }
 
 schedule_typ = ${ (tag ~ sep)* ~ typ }
 schedule_arg = { (name ~ ":")? ~ schedule_typ }
-schedule_args = { schedule_arg ~ ("," ~ schedule_arg)* }
+schedule_args = { (schedule_arg ~ ("," ~ schedule_arg)*)? }
 schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
-schedule_header = { name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args? ~ ")" ~ "->" ~ schedule_return }
+schedule_header = { name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
 
-schedule_assign = { name ~ "=" ~ schedule_command }
-schedule_funclet = { schedule_header ~ "{" ~ ((schedule_assign | tail_edge | node_hole) ~ ";")* ~ "}" }
+schedule_command = { name ~ "=" ~ schedule_node | tail_edge | node_hole }
+schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
 
@@ -158,89 +163,91 @@ node_box = { node_box_raw | hole }
 
 return_sep = ${ "return" ~ sep }
 return_args = { name | "[" ~ name ~ (", " ~ name)* ~ "]" }
-return_command = { return_sep ~ return_args }
+return_node = { return_sep ~ return_args }
 yield_sep = ${ "yield" ~ sep }
-yield_command = { yield_sep ~ (n | hole) ~ node_box ~ name ~ name ~ node_box }
+yield_node = { yield_sep ~ (n | hole) ~ node_box ~ name ~ name ~ node_box }
 jump_sep = ${ "jump" ~ sep }
-jump_command = { jump_sep ~ name ~ node_box }
+jump_node = { jump_sep ~ name ~ node_box }
 
 schedule_call_sep = ${ "schedule-call" ~ sep }
-schedule_call_command = { schedule_call_sep ~ funclet_loc ~ name ~ node_box ~ name }
+schedule_call_node = { schedule_call_sep ~ funclet_loc ~ name ~ node_box ~ name }
 schedule_select_sep = ${ "schedule-select" ~ sep }
 tail_fn_nodes = { name ~ ("," ~ name)* }
 tail_fn_box_raw = { "[" ~ tail_fn_nodes? ~ "]" }
 tail_fn_box = { tail_fn_box_raw | hole }
-schedule_select_command = { schedule_select_sep ~ funclet_loc ~ name ~ tail_fn_box ~ node_box ~ name }
+schedule_select_node = { schedule_select_sep ~ funclet_loc ~ name ~ tail_fn_box ~ node_box ~ name }
 
 dynamic_alloc_sep = ${ "dynamic-alloc" ~ sep }
 tail_option_node = { name | none }
 tail_option_nodes = { tail_option_node ~ ("," ~ tail_option_node)* }
 tail_option_box_raw = { "[" ~ tail_option_nodes? ~ "]" }
 tail_option_box = { tail_option_box_raw | hole }
-dynamic_alloc_command = { dynamic_alloc_sep ~ name ~ node_box ~ tail_option_box ~ name ~ name ~ name }
+dynamic_alloc_node = { dynamic_alloc_sep ~ name ~ node_box ~ tail_option_box ~ name ~ name ~ name }
 
-tail_edge = { return_command | yield_command | jump_command |
-    schedule_call_command | schedule_select_command | dynamic_alloc_command }
+tail_edge = { return_node | yield_node | jump_node |
+    schedule_call_node | schedule_select_node | dynamic_alloc_node }
 
 //    commands
 
-phi_command = ${ "phi" ~ sep ~ n }
+phi_node = ${ "phi" ~ sep ~ n }
 
 //     value
 
-constant_command = ${ "constant" ~ sep ~ constant }
+constant_node = ${ "constant" ~ sep ~ constant }
 extract_sep = @{ "extract" ~ sep }
-extract_command = { extract_sep ~ name ~ n }
+extract_node = { extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }
 call_args = { name ~ ("," ~ name)* }
-call_command = { call_sep ~ name ~ ("<" ~ call_args? ~ ">" | hole )? ~ ("(" ~ call_args? ~ ")" | hole ) }
+call_node = { call_sep ~ name ~ ("<" ~ call_args? ~ ">" | hole )? ~ ("(" ~ call_args? ~ ")" | hole ) }
 select_sep = @{ "select" ~ sep }
-select_command = { select_sep ~ name ~ name ~ name }
+select_node = { select_sep ~ name ~ name ~ name }
 
-value_command = { phi_command | constant_command |
-    extract_command | call_command | select_command }
+value_node = { phi_node | constant_node |
+    extract_node | call_node | select_node }
 
 //     scheduling
 
-alloc_temporary_command = ${ "alloc-temporary-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
+alloc_temporary_node = ${ "alloc-temporary-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
 encode_do_sep = ${ "encode-do-" ~ place ~ sep }
 encode_do_args = { name ~ ("," ~ name)* }
 encode_do_params = { "(" ~ encode_do_args? ~ ")" }
 encode_do_call = { funclet_loc ~ ( encode_do_params | hole ) }
-encode_do_command = { encode_do_sep ~ ( encode_do_call | hole ) ~ "->" ~ name }
-create_command = ${ "create-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
-drop_command = ${ "drop" ~ sep ~ name }
+encode_do_node = { encode_do_sep ~ ( encode_do_call | hole ) ~ "->" ~ name }
+create_node = ${ "create-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
+drop_node = ${ "drop" ~ sep ~ name }
 alloc_sep = ${"alloc-" ~ place ~ "-" ~ typ ~ sep}
-alloc_command = { alloc_sep ~ name ~ funclet_loc }
+alloc_node = { alloc_sep ~ name ~ funclet_loc }
 encode_copy_sep = ${ "encode-copy-" ~ place ~ sep }
-encode_copy_command = { encode_copy_sep ~ name ~ name }
-submit_command = ${ "submit-" ~ place ~ sep ~ funclet_loc }
-encode_fence_command = ${ "encode-fence-" ~ place ~ sep ~ funclet_loc }
+encode_copy_node = { encode_copy_sep ~ name ~ name }
+submit_node = ${ "submit-" ~ place ~ sep ~ funclet_loc }
+encode_fence_node = ${ "encode-fence-" ~ place ~ sep ~ funclet_loc }
 sync_fence_sep = ${ "sync-fence-" ~ place ~ sep }
-sync_fence_command = { sync_fence_sep ~ name ~ funclet_loc }
+sync_fence_node = { sync_fence_sep ~ name ~ funclet_loc }
 inline_join_sep = @{ "inline-join" ~ sep }
-inline_join_command = { inline_join_sep ~ name ~ node_box ~ name }
+inline_join_node = { inline_join_sep ~ name ~ node_box ~ name }
 serialized_join_sep = @{ "serialized-join" ~ sep }
-serialized_join_command = { serialized_join_sep ~ name ~ node_box ~ name }
-default_join_command = { "default-join" }
+serialized_join_node = { serialized_join_sep ~ name ~ node_box ~ name }
+default_join_node = { "default-join" }
 
-schedule_command = { phi_command | alloc_temporary_command | encode_do_command | create_command |
-    drop_command | alloc_command | encode_copy_command | submit_command | encode_fence_command  |
-    sync_fence_command | inline_join_command | serialized_join_command | default_join_command }
+schedule_node = { phi_node | alloc_temporary_node | encode_do_node | create_node |
+    drop_node | alloc_node | encode_copy_node | submit_node | encode_fence_node  |
+    sync_fence_node | inline_join_node | serialized_join_node | default_join_node }
 
 //     timeline
 
 sync_sep = ${ "sync-" ~ place ~ "->" ~ place ~ sep }
-sync_command = { sync_sep ~ name ~ name }
-submission_command = ${ "submission-" ~ place ~ "->" ~ place ~ sep ~ name }
+sync_node = { sync_sep ~ name ~ name }
+submission_node = ${ "submission-" ~ place ~ "->" ~ place ~ sep ~ name }
 
-timeline_command = { phi_command | sync_command | submission_command }
+timeline_node = { phi_node | sync_node | submission_node }
 
 //     spatial
 
-spatial_command = { "INVALID" } // empty for now...
+spatial_node = { "INVALID" } // empty for now...
 
 // Pipelines
 
 pipeline_sep = @{ "pipeline" ~ sep }
 pipeline = { pipeline_sep ~ str ~ "=" ~ name ~ ";" }
+
+program = { SOI ~ version ~ declaration* ~ EOI }

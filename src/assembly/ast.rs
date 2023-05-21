@@ -111,12 +111,6 @@ pub struct ExternalGpuFunctionResourceBinding {
     pub output: Option<NodeId>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
-pub enum Type {
-    FFI(FFIType),
-    Local(TypeId),
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RemoteNodeId {
     pub funclet_name: Hole<FuncletId>,
@@ -135,7 +129,7 @@ macro_rules! lookup_abstract_type_parser {
 	(Index) => { usize };
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { ValueFunctionId };
-	(Operation) => { OperationId };
+	(Operation) => { NodeId };
 	(RemoteOperation) => { RemoteNodeId };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
@@ -164,7 +158,7 @@ macro_rules! make_parser_nodes {
 		}
 		impl Node {
 			pub fn map_referenced_nodes(&self,
-            mut $map: impl FnMut(OperationId) -> OperationId) -> Self {
+            mut $map: impl FnMut(NodeId) -> NodeId) -> Self {
 				match self {$($mapper)*}
 			}
 		}
@@ -234,18 +228,18 @@ pub enum TailEdge {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
     None,
-    Node { node_id: NodeId },
-    Input { index: NodeId },
-    Output { index: NodeId },
-    Halt { index: NodeId },
+    Node (Hole<RemoteNodeId>),
+    Input (Hole<RemoteNodeId>),
+    Output (Hole<RemoteNodeId>),
+    Halt (Hole<RemoteNodeId>),
 }
 
 #[derive(Debug, Clone)]
 pub struct ScheduleBinding {
     pub implicit_tags: Option<(Tag, Tag)>,
-    pub value: FuncletId,
-    pub timeline: FuncletId,
-    pub spatial: FuncletId,
+    pub value: Option<FuncletId>,
+    pub timeline: Option<FuncletId>,
+    pub spatial: Option<FuncletId>,
 }
 
 #[derive(Debug, Clone)]
@@ -258,15 +252,15 @@ pub enum FuncletBinding {
 #[derive(Debug, Clone)]
 pub struct FuncletArgument {
     pub name: Option<NodeId>,
-    pub typ: Type,
+    pub typ: TypeId,
     pub tags: Vec<Tag>,
 }
 
 #[derive(Debug, Clone)]
 pub struct FuncletHeader {
     pub name: FuncletId,
-    pub ret: Vec<FuncletArgument>,
     pub args: Vec<FuncletArgument>,
+    pub ret: Vec<FuncletArgument>,
     pub binding: FuncletBinding,
 }
 
@@ -277,22 +271,27 @@ pub struct NamedNode {
 }
 
 #[derive(Debug)]
+pub enum Command {
+    Node(NamedNode),
+    TailEdge(TailEdge),
+}
+
+#[derive(Debug)]
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
-    pub commands: Vec<Hole<NamedNode>>,
-    pub tail_edge: Hole<TailEdge>,
+    pub commands: Vec<Hole<Command>>,
 }
 
 #[derive(Debug)]
 pub enum LocalTypeInfo {
     NativeValue {
-        storage_type: Type,
+        storage_type: TypeId,
     },
 
     // Scheduling
     Slot {
-        storage_type: Type,
+        storage_type: TypeId,
         queue_stage: ir::ResourceQueueStage,
         queue_place: ir::Place,
     },
@@ -332,21 +331,39 @@ pub struct Var {
 }
 
 #[derive(Debug)]
-pub struct ExternalFunction {
-    pub name: String,
-    pub input_args: Vec<(FFIType, String)>,
-    pub output_types: Vec<(FFIType, String)>,
-    // Contains pipeline and single render pass state
+pub struct ExternalGPUInfo {
     pub shader_module: String,
     pub entry_point: String,
     pub resource_bindings: Vec<ExternalGpuFunctionResourceBinding>,
 }
 
 #[derive(Debug)]
+pub enum ExternalFunctionKind {
+    CPUPure,
+    CPUEffect,
+    GPU(ExternalGPUInfo)
+}
+
+#[derive(Debug)]
+pub struct ExternalArgument {
+    pub name: Option<String>,
+    pub ffi_type: FFIType
+}
+
+#[derive(Debug)]
+pub struct ExternalFunction {
+    pub kind: ExternalFunctionKind,
+    pub name: String,
+    pub input_args: Vec<ExternalArgument>,
+    pub output_types: Vec<ExternalArgument>,
+    // Contains pipeline and single render pass state
+}
+
+#[derive(Debug)]
 pub struct Version {
-    pub major: u32,
-    pub minor: u32,
-    pub detailed: u32,
+    pub major: usize,
+    pub minor: usize,
+    pub detailed: usize,
 }
 
 #[derive(Debug)]
@@ -354,7 +371,6 @@ pub struct FunctionClass {
     pub name: String,
     pub input_types: Vec<TypeId>,
     pub output_types: Vec<TypeId>,
-    pub allowed_funclets: Vec<FuncletId>,
 }
 
 #[derive(Debug)]
