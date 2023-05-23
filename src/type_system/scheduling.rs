@@ -846,6 +846,25 @@ impl<'program> FuncletChecker<'program> {
 
                 self.check_do_output(operation, encoded_funclet, encoded_node, outputs);
             }
+            ir::Node::LocalCopy {
+                input,
+                output,
+            } => {
+                let source_value_tag = self.scalar_node_value_tags[input];
+                let destination_value_tag = self.scalar_node_value_tags[output];
+                check_value_tag_compatibility_interior(
+                    &self.program,
+                    self.value_spec.funclet_id_opt,
+                    source_value_tag,
+                    destination_value_tag,
+                );
+                
+                self.transition_slot(
+                    *output,
+                    ir::Place::Local,
+                    &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)],
+                );
+            }
             ir::Node::EncodeCopy {
                 place,
                 input,

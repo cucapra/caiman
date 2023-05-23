@@ -1780,6 +1780,48 @@ impl<'program> CodeGen<'program> {
                         ir::Place::Cpu => panic!("EncodeDoExternal to CPU is unsupported"),
                     }
                 }
+                ir::Node::LocalCopy {
+                    input,
+                    output,
+                } => {
+                    let src_slot_id = funclet_scoped_state.get_node_slot_id(*input).unwrap();
+                    let dst_slot_id = funclet_scoped_state.get_node_slot_id(*output).unwrap();
+
+                    let (src_slot_id, src_place) = if let Some(NodeResult::Slot {
+                        slot_id,
+                        queue_place,
+                        ..
+                    }) =
+                        funclet_scoped_state.get_node_result(*input)
+                    {
+                        (*slot_id, *queue_place)
+                    } else {
+                        panic!("Not a slot")
+                    };
+
+                    let (dst_slot_id, dst_place) = if let Some(NodeResult::Slot {
+                        slot_id,
+                        queue_place,
+                        ..
+                    }) =
+                        funclet_scoped_state.get_node_result(*output)
+                    {
+                        (*slot_id, *queue_place)
+                    } else {
+                        panic!("Not a slot")
+                    };
+                    match (ir::Place::Local, dst_place, src_place) {
+                        (ir::Place::Local, ir::Place::Local, ir::Place::Local) => {
+                            let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+                            placement_state.update_slot_state(
+                                dst_slot_id,
+                                ir::ResourceQueueStage::Ready,
+                                src_var_id,
+                            );
+                        }
+                        _ => panic!("Unimplemented"),
+                    }
+                }
                 ir::Node::EncodeCopy {
                     place,
                     input,
@@ -1821,14 +1863,14 @@ impl<'program> CodeGen<'program> {
                                 src_var_id,
                             );
                         }
-                        (ir::Place::Local, ir::Place::Local, ir::Place::Local) => {
+                        /*(ir::Place::Local, ir::Place::Local, ir::Place::Local) => {
                             let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
                             placement_state.update_slot_state(
                                 dst_slot_id,
                                 ir::ResourceQueueStage::Ready,
                                 src_var_id,
                             );
-                        }
+                        }*/
                         (ir::Place::Local, ir::Place::Local, ir::Place::Gpu) => {
                             let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
                             let dst_var_id = self
