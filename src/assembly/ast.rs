@@ -233,10 +233,10 @@ pub enum TailEdge {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
     None,
-    Node(Hole<RemoteNodeId>),
-    Input(Hole<RemoteNodeId>),
-    Output(Hole<RemoteNodeId>),
-    Halt(Hole<RemoteNodeId>),
+    Node(RemoteNodeId),
+    Input(RemoteNodeId),
+    Output(RemoteNodeId),
+    Halt(RemoteNodeId),
 }
 
 #[derive(Debug, Clone)]

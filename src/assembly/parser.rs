@@ -334,10 +334,10 @@ impl CaimanAssemblyParser {
     }
 
     // weirdly, this seems like the best way to do this with pest_consume for now?
-    fn tag_op(input: Node) -> ParseResult<Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Tag>> {
-        fn box_up<F>(f: &'static F) -> Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Tag>
+    fn tag_op(input: Node) -> ParseResult<Box<dyn Fn(ast::RemoteNodeId) -> ast::Tag>> {
+        fn box_up<F>(f: &'static F) -> Box<dyn Fn(ast::RemoteNodeId) -> ast::Tag>
         where
-            F: Fn(Hole<ast::RemoteNodeId>) -> ast::Tag,
+            F: Fn(ast::RemoteNodeId) -> ast::Tag,
         {
             Box::new(move |x| f(x))
         }
@@ -347,10 +347,10 @@ impl CaimanAssemblyParser {
             .parse::<String>()
             .map_err(|e| input.error(e))
             .and_then(|s| match s.as_str() {
-                "node" => Ok(create_map(&ast::Tag::Node)),
-                "input" => Ok(create_map(&ast::Tag::Input)),
-                "output" => Ok(create_map(&ast::Tag::Output)),
-                "halt" => Ok(create_map(&ast::Tag::Halt)),
+                "node" => Ok(box_up(&ast::Tag::Node)),
+                "input" => Ok(box_up(&ast::Tag::Input)),
+                "output" => Ok(box_up(&ast::Tag::Output)),
+                "halt" => Ok(box_up(&ast::Tag::Halt)),
                 _ => Err(input.error(unexpected(s))),
             })
     }
@@ -358,7 +358,7 @@ impl CaimanAssemblyParser {
     fn tag(input: Node) -> ParseResult<ast::Tag> {
         Ok(match_nodes!(input.into_children();
             [none] => ast::Tag::None,
-            [tag_op(op), funclet_loc_hole(loc)] => op(loc),
+            [tag_op(op), meta_funclet_loc(loc)] => op(loc),
         ))
     }
 
@@ -652,9 +652,9 @@ impl CaimanAssemblyParser {
 
     // some duplication, but it's annoying to fix...
     fn schedule_box_value(input: Node) -> ParseResult<Option<(String, String)>> {
+        // the type is a bit of a lie here, but it reflects the AST better
         Ok(match_nodes!(input.into_children();
             [value_sep, meta_name(meta_name), name(name)] => Some((meta_name, name)),
-            [] => None
         ))
     }
 
@@ -1009,8 +1009,7 @@ impl CaimanAssemblyParser {
 
     fn dynamic_alloc_size_slot(input: Node) -> ParseResult<Hole<Option<NodeId>>> {
         Ok(match_nodes!(input.into_children();
-            [name(name)] => Some(Some(NodeId(name))),
-            [hole] => None,
+            [name_hole(name)] => name.map(|s| Some(NodeId(s))),
             [none] => Some(None)
         ))
     }
@@ -1025,7 +1024,7 @@ impl CaimanAssemblyParser {
     fn dynamic_alloc_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
             [dynamic_alloc_sep,
-                name_hole_sep(buffer),
+                name_hole(buffer),
                 node_box(arguments),
                 dynamic_alloc_size_slot_list(dynamic_allocation_size_slots),
                 name_hole_sep(success_funclet_id),
@@ -1215,9 +1214,15 @@ impl CaimanAssemblyParser {
         }))
     }
 
+    fn sync_fence_sep(input: Node) -> ParseResult<Hole<ir::Place>> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place)] => place
+        ))
+    }
+
     fn sync_fence_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-            [place_hole(place), name_hole(fence),
+            [sync_fence_sep(place), name_hole_sep(fence),
                 funclet_loc_hole(event)] => ast::Node::SyncFence {
                 place,
                 fence: fence.map(|s| NodeId(s)),

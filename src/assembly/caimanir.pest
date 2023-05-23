@@ -58,7 +58,7 @@ place_hole = { place | hole }
 stage = @{ "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" }
 stage_hole = { stage | hole }
 tag_op = { "node" | "input" | "output" | "halt" }
-tag = { none | tag_op ~ "(" ~ funclet_loc ~ ")" }
+tag = !{ none | tag_op ~ "(" ~ meta_funclet_loc ~ ")" }
 
 // Program
 
@@ -96,13 +96,14 @@ external_binding = { "binding" ~ ":" ~ n }
 external_input = { "input" ~ ":" ~ name }
 external_output = { "output" ~ ":" ~ name }
 // gonna make order matter for parser simplicity
-external_resource = { "resource" ~ "{" ~ external_group ~ "," ~ external_binding ~ "," ~
-     external_input? ~ "," ~ external_output? ~ "}" } // todo: cleanup
+external_resource = { "resource" ~ "{" ~ external_group ~ "," ~ external_binding
+     ~ ("," ~ external_input)?  ~ ("," ~ external_output)? ~ "}" } // todo: cleanup
 
 external_path = { "path" ~ ":" ~ str }
 external_entry_point = { "entry" ~ ":" ~ str }
 // gonna make order matter for parser simplicity
-external_body = { ";" | "{" ~ external_path ~ external_entry_point ~ external_resource* ~ "}" }
+external_body = { ";" | "{" ~ external_path ~ "," ~ external_entry_point
+    ~ ("," ~ external_resource)* ~ ","? ~ "}" }
 external_arg = { (name ~ ":")? ~ ffi_type }
 external_args = { (external_arg ~ ("," ~ external_arg)*)? }
 external_loc = ${ "external-" ~ place ~ ("-" ~ pure_keyword )? }
@@ -121,9 +122,9 @@ function_class = { function_class_sep ~ name ~ "("
 value_sep = @{ "value" ~ sep }
 timeline_sep = @{ "timeline" ~ sep }
 spatial_sep = @{ "spatial" ~ sep }
-schedule_box_value = { (value_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box_timeline = { (timeline_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box_spatial = { (spatial_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
+schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
 schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
 
 funclet = { "value" ~ impl_box ~ value_funclet | "schedule" ~ schedule_box ~ schedule_funclet |
@@ -156,9 +157,9 @@ schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
 
-node_list = { (name_hole ~ ("," ~ name_hole)*)? }
-node_box = { "[" ~ node_list ~ "]" | hole }
-node_call = { ("(" ~ node_list ~ ")" | hole ) }
+node_list = !{ (name_hole ~ ("," ~ name_hole)*)? }
+node_box = !{ "[" ~ node_list ~ "]" | hole }
+node_call = !{ ("(" ~ node_list ~ ")" | hole ) }
 
 return_sep = @{ "return" ~ sep }
 return_args = { name_hole | "[" ~ node_box ~ "]" }
@@ -176,11 +177,11 @@ schedule_select_node = { schedule_select_sep ~ funclet_loc_hole ~ name_hole
     ~ node_box ~ node_box ~ name_hole }
 
 // extra form cause we need to have `none` as an option
-dynamic_alloc_size_slot = { name | hole | none }
-dynamic_alloc_size_slot_list = !{ ("[" ~ (dynamic_alloc_size_slot ~ ("," ~ dynamic_alloc_size_slot)*)? ~ "]") | hole }
-dynamic_alloc_sep = { "dynamic-alloc" ~ sep }
+dynamic_alloc_size_slot = { name_hole | none }
+dynamic_alloc_size_slot_list = { ("[" ~ (dynamic_alloc_size_slot ~ ("," ~ dynamic_alloc_size_slot)*)? ~ "]") | hole }
+dynamic_alloc_sep = ${ "dynamic-alloc" ~ sep }
 dynamic_alloc_node = { dynamic_alloc_sep
-    ~ name_hole_sep ~ node_box ~ dynamic_alloc_size_slot_list
+    ~ name_hole ~ node_box ~ dynamic_alloc_size_slot_list
     ~ name_hole_sep ~ name_hole_sep ~ name_hole }
 
 tail_edge = { return_node | yield_node | jump_node |
@@ -204,7 +205,7 @@ select_node = { select_sep ~ name_hole ~ name_hole ~ name_hole }
 //     scheduling
 
 alloc_temporary_node = ${ "alloc-temporary-" ~ place_hole ~ "-" ~ type_hole ~ sep ~ funclet_loc_hole }
-unbound_slot_node = ${ "unbound-slot" ~ place_hole ~ "-" ~ type_hole ~ sep ~ funclet_loc_hole }
+unbound_slot_node = ${ "unbound-slot-" ~ place_hole ~ "-" ~ type_hole ~ sep ~ funclet_loc_hole }
 drop_node = ${ "drop" ~ sep ~ name_hole }
 alloc_sep = ${"alloc-" ~ place_hole ~ "-" ~ type_hole ~ sep}
 alloc_node = { alloc_sep ~ name_hole ~ funclet_loc_hole }
@@ -216,7 +217,8 @@ encode_copy_sep = ${ "encode-copy-" ~ place_hole ~ sep }
 encode_copy_node = { encode_copy_sep ~ name_hole_sep ~ name_hole }
 submit_node = ${ "submit-" ~ place_hole ~ sep ~ funclet_loc_hole }
 encode_fence_node = ${ "encode-fence-" ~ place_hole ~ sep ~ funclet_loc_hole }
-sync_fence_node = { "sync-fence-" ~ place_hole ~ sep ~ name_hole ~ sep ~ funclet_loc_hole }
+sync_fence_sep = ${ "sync-fence-" ~ place_hole ~ sep }
+sync_fence_node = { sync_fence_sep ~ name_hole_sep ~ funclet_loc_hole }
 inline_join_sep = @{ "inline-join" ~ sep }
 inline_join_node = { inline_join_sep ~ name_hole ~ node_box ~ name_hole }
 serialized_join_sep = @{ "serialized-join" ~ sep }
@@ -231,15 +233,15 @@ synchronization_node = { synchronization_sep ~ name_hole_sep ~ name_hole }
 
 //    spatial
 
-separated_linear_space_node = ${ "separated-linear-space" ~ place_hole ~ sep ~ name_hole }
-merged_linear_space_node = ${ "merged-linear-space" ~ place_hole ~ sep ~ node_box }
+separated_linear_space_node = ${ "separated-linear-space-" ~ place_hole ~ sep ~ name_hole }
+merged_linear_space_node = ${ "merged-linear-space-" ~ place_hole ~ sep ~ node_box }
 
 //   nodes
 
 value_node = { phi_node | constant_node |
     extract_node | call_node | select_node }
 
-schedule_node = { phi_node | alloc_temporary_node | encode_do_node |
+schedule_node = { phi_node | alloc_temporary_node | unbound_slot_node | encode_do_node |
     drop_node | alloc_node | encode_copy_node | submit_node | encode_fence_node  |
     sync_fence_node | inline_join_node | serialized_join_node | default_join_node }
 
