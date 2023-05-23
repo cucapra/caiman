@@ -174,7 +174,7 @@ pub struct GpuKernel {
     pub name: String,
     pub input_types: Box<[TypeId]>,
     pub output_types: Box<[TypeId]>,
-    //pub dimensionality : usize,
+    pub dimensionality : usize,
     // Contains pipeline and single render pass state
     pub entry_point: String,
     pub resource_bindings: Box<[GpuKernelResourceBinding]>,

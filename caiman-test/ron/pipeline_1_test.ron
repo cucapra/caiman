@@ -10,6 +10,7 @@
 				2 : CpuPureOperation((name : "do_thing_on_cpu", input_types : [0], output_types : [0])),
 				0 : GpuKernel((
 					name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+					dimensionality : 3,
 					shader_module : Glsl
 					("
 						#version 450
@@ -27,6 +28,7 @@
 				)),
 				1 : GpuKernel((
 					name : "do_thing_on_gpu_2", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
+					dimensionality : 0,
 					shader_module : Glsl
 					("
 						#version 450
@@ -52,7 +54,9 @@
 		function_classes : {
 			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9)),
 			1 : (name : "looping_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(19)),
-			3 : (input_types : [0], output_types : [0], external_function_ids : [2])
+			3 : (input_types : [0], output_types : [0], external_function_ids : [2]),
+			4 : (input_types : [0], output_types : [0], external_function_ids : [0]),
+			5 : (input_types : [0], output_types : [0], external_function_ids : [1])
 		},
 		types : {
 			0 : NativeValue(storage_type : 0),
@@ -74,7 +78,7 @@
 					Constant(value: I64(1), type_id : 0),
 					CallValueFunction(function_id : 3, arguments : [0]),
 					ExtractResult(node_id : 2, index : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
+					CallValueFunction(function_id : 4, arguments : [1, 1, 1, 3], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 4, index : 0)
 				],
 				tail_edge : Return(return_values : [5])
@@ -86,9 +90,9 @@
 				nodes : [
 					Phi(index : 0),
 					Constant(value: I64(1), type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
+					CallValueFunction(function_id : 4, arguments : [1, 1, 1, 0], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 2, index : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [3], dimensions : [1, 1, 1]),
+					CallValueFunction(function_id : 4, arguments : [1, 1, 1, 3], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 4, index : 0)
 				],
 				tail_edge : Return(return_values : [5])
@@ -185,7 +189,7 @@
 				nodes : [
 					Phi(index : 0),
 					Constant(value: I64(1), type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
+					CallValueFunction(function_id : 4, arguments : [1, 1, 1, 0], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 2, index : 0),
 				],
 				tail_edge : Return(return_values : [3])
@@ -461,7 +465,7 @@
 				output_types : [0],
 				nodes : [
 					Phi(index : 0),
-					CallExternalGpuCompute(external_function_id : 1, dimensions : [], arguments : [0]),
+					CallValueFunction(function_id : 5, dimensions : [], arguments : [0]),
 					ExtractResult(node_id : 1, index : 0),
 					CallValueFunction(function_id : 1, arguments : [2]),
 					ExtractResult(node_id : 3, index : 0),

@@ -458,7 +458,7 @@ impl<'program> FuncletChecker<'program> {
             ir::Node::Select { .. } => false,
             // Multiple return nodes
             ir::Node::CallValueFunction { .. } => true,
-            ir::Node::CallExternalGpuCompute { .. } => true,
+            //ir::Node::CallExternalGpuCompute { .. } => true,
             _ => panic!("Cannot encode {:?}", encoded_node),
         };
 
@@ -716,23 +716,23 @@ impl<'program> FuncletChecker<'program> {
                 let encoded_node = &encoded_funclet.nodes[operation.node_id];
 
                 match encoded_node {
-                    ir::Node::CallExternalGpuCompute {
-                        external_function_id,
+                    ir::Node::CallValueFunction {
+                        function_id,
                         arguments,
-                        dimensions,
+                        //dimensions,
                     } => {
                         assert_eq!(*place, ir::Place::Gpu);
-                       // assert!(self.program.function_classes[*function_id].external_function_ids.contains(external_function_id));
+                        assert!(self.program.function_classes[*function_id].external_function_ids.contains(external_function_id));
 
                         let function = &self.program.native_interface.external_functions
                             [external_function_id.0];
                         let kernel = function.get_gpu_kernel().unwrap();
 
-                        assert_eq!(inputs.len(), dimensions.len() + arguments.len());
+                        assert_eq!(inputs.len(), arguments.len());
                         assert_eq!(outputs.len(), kernel.output_types.len());
 
                         for (input_index, input_node_id) in
-                            dimensions.iter().chain(arguments.iter()).enumerate()
+                            arguments.iter().enumerate()
                         {
                             let value_tag = self.scalar_node_value_tags[&inputs[input_index]];
                             let funclet_id = self.value_funclet_id;
@@ -748,15 +748,15 @@ impl<'program> FuncletChecker<'program> {
 
                         ir::validation::validate_gpu_kernel_bindings(
                             kernel,
-                            &inputs[dimensions.len()..],
+                            &inputs[kernel.dimensionality..],
                             outputs,
                         );
 
                         let mut forwarding_input_scheduling_node_ids = HashSet::<ir::NodeId>::new();
                         let mut forwarded_output_scheduling_node_ids = HashSet::<ir::NodeId>::new();
-                        for (input_index, _) in arguments.iter().enumerate() {
+                        for (input_index, _) in arguments[kernel.dimensionality..].iter().enumerate() {
                             assert_eq!(
-                                self.node_types[&inputs[dimensions.len() + input_index]]
+                                self.node_types[&inputs[kernel.dimensionality + input_index]]
                                     .storage_type()
                                     .unwrap(),
                                 kernel.input_types[input_index]
@@ -795,7 +795,7 @@ impl<'program> FuncletChecker<'program> {
                         //output_of_forwarding_input
 
                         // To do: Input checks
-                        for input_scheduling_node_id in inputs[dimensions.len()..].iter() {
+                        for input_scheduling_node_id in inputs[kernel.dimensionality..].iter() {
                             let is_forwarding = forwarding_input_scheduling_node_ids
                                 .contains(input_scheduling_node_id);
                             if !is_forwarding {

@@ -83,38 +83,6 @@
 			has_local_side_effect : false
 		),
 
-		// Intrinsic nodes
-		// Exposes functionality that should be used with caution to implement other functionality
-		// These break the illusion that the value language doesn't know about cpu vs gpu
-		// It's intended that these are used as part of an ffi and then hidden via indirection through function equivalence classes
-		/*(
-			// Invokes an external cpu function with multiple arguments and multiple returns (encoded as a tuple on the host code side)
-			// Doesn't (yet) implement mutable in-out arguments (unbound slots with forwarding) so all outputs must be value types
-			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
-			name : "CallExternalCpu",
-			inputs : [
-				(name : "external_function_id", kind : ExternalFunction),
-				(name : "arguments", kind : Operation, is_array : true)
-			],
-			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
-			has_local_side_effect : false
-		),*/
-		(
-			// Invokes an external gpu compute kernel with multiple arguments, multiple returns, and up to 3 dimensions
-			// For EncodeDo: Is a value operation where the first 0-3 input slots are the corresponding dimensions
-			// Each of the remaining input slots corresponds to a single argument node and each output corresponds to a single field of the output tuple
-			name : "CallExternalGpuCompute",
-			inputs : [
-				(name : "external_function_id", kind : ExternalFunction),
-				(name : "dimensions", kind : Operation, is_array : true),
-				(name : "arguments", kind : Operation, is_array : true)
-			],
-			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
-			has_local_side_effect : false
-		),
-
 		// These are convenience instructions that rely on codegen doing some questionable magic
 		// Don't expect these to be predictable
 		// It's possible for them to do the worst thing possible that is still legal without knowing the future

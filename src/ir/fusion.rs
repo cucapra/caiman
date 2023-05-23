@@ -328,8 +328,8 @@ struct DispatchInfo {
 
 impl DispatchInfo {
     fn from_node(prog: &ir::Program, node: &ir::Node) -> Option<Self> {
-        use ir::Node::{CallExternalGpuCompute, EncodeDoExternal};
-        let EncodeDoExternal { operation, inputs, outputs, .. } = node else {
+        use ir::Node::{CallExternalGpuCompute, EncodeDo};
+        let EncodeDo { operation, inputs, outputs, .. } = node else {
             return None;
         };
         let remote = &prog.funclets[operation.funclet_id].nodes[operation.node_id];

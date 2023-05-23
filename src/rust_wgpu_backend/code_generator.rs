@@ -592,6 +592,7 @@ impl<'program> CodeGenerator<'program> {
         shader_module.force_writable_bindings(&rw_bindings);
         let kernel = ffi::GpuKernel {
             name: kernel.name.clone(),
+            dimensionality: kernel.dimensionality,
             input_types: kernel.input_types.clone(),
             output_types: kernel.output_types.clone(),
             entry_point: kernel.entry_point.clone(),

@@ -463,12 +463,14 @@ impl<'program> CodeGen<'program> {
         ffi_type_id
     }
 
+    #[cfg(feature = "fusion")]
     fn encode_fuse_header_gpu(
         &mut self,
         placement_state: &mut PlacementState,
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         schema: &ir::fusion::Opportunity,
+        external_function_id : ir::ffi::ExternalFunctionId,
     ) {
         let node_to_var_map = |(&node_id)| {
             let slot_id = funclet_scoped_state.get_node_slot_id(node_id).unwrap();
@@ -502,16 +504,18 @@ impl<'program> CodeGen<'program> {
         );
     }
 
+    #[cfg(feature = "fusion")]
     /// This is similar to encode_do_node_gpu, but it only updates the type system.
     /// It doesn't actually generate any code.
     fn encode_fused_node_gpu(
         &mut self,
         placement_state: &mut PlacementState,
         value_node: &ir::Node,
+        external_function_id : ir::ffi::ExternalFunctionId,
         input_slot_ids: &[SlotId],
         output_slot_ids: &[SlotId],
     ) {
-        let (external_function_id, arguments, dimensions) = match value_node {
+        /*let (external_function_id, arguments, dimensions) = match value_node {
             ir::Node::CallExternalGpuCompute {
                 external_function_id,
                 arguments,
@@ -519,7 +523,7 @@ impl<'program> CodeGen<'program> {
             } => (external_function_id, arguments, dimensions),
             ir::Node::None => return, // nothing to do...
             _ => panic!("fused node is not a kernel dispatch or no-op"),
-        };
+        };*/
 
         let function = &self.program.native_interface.external_functions[external_function_id.0];
         let kernel = function
@@ -527,7 +531,7 @@ impl<'program> CodeGen<'program> {
             .expect("function ID is not a kernel dispatch");
 
         // Ensure we have the right number of inputs (including dimensions)
-        assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
+        //assert_eq!(input_slot_ids.len(), arguments.len());
         // Ensure we have the same number of outputs as the original kernel.
         assert_eq!(output_slot_ids.len(), kernel.output_types.len());
 
@@ -558,20 +562,23 @@ impl<'program> CodeGen<'program> {
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         node: &ir::Node,
+        external_function_id : ir::ffi::ExternalFunctionId,
         input_slot_ids: &[SlotId],
         output_slot_ids: &[SlotId],
     ) {
         match node {
-            ir::Node::CallExternalGpuCompute {
-                external_function_id,
+            ir::Node::CallValueFunction {
+                function_id,
                 arguments,
-                dimensions,
+                //dimensions,
             } => {
+                assert!(self.program.function_classes[*function_id].external_function_ids.contains(& external_function_id));
+
                 let function =
                     &self.program.native_interface.external_functions[external_function_id.0];
                 let kernel = function.get_gpu_kernel().unwrap();
 
-                assert_eq!(input_slot_ids.len(), dimensions.len() + arguments.len());
+                assert_eq!(input_slot_ids.len(), arguments.len());
                 assert_eq!(output_slot_ids.len(), kernel.output_types.len());
 
                 /*let mut input_slot_counts = HashMap::<SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
@@ -612,11 +619,11 @@ impl<'program> CodeGen<'program> {
                     }
                 }*/
 
-                for (input_index, _) in arguments.iter().enumerate() {
+                for (input_index, _) in arguments[kernel.dimensionality..].iter().enumerate() {
                     if let Some(forwarded_output_index) =
                         kernel.output_of_forwarding_input(input_index)
                     {
-                        let input_slot_id = input_slot_ids[dimensions.len() + input_index];
+                        let input_slot_id = input_slot_ids[kernel.dimensionality + input_index];
                         let output_slot_id = output_slot_ids[forwarded_output_index];
                         //placement_state.scheduling_state.forward_slot(output_slot_id, input_slot_id);
                         let var_id = placement_state.slot_variable_ids[&input_slot_id];
@@ -635,12 +642,12 @@ impl<'program> CodeGen<'program> {
                     placement_state.slot_variable_ids[&slot_id]
                 };
                 let argument_map = |(index, x)| {
-                    let slot_id = input_slot_ids[dimensions.len() + index];
+                    let slot_id = input_slot_ids[kernel.dimensionality + index];
                     placement_state.slot_variable_ids[&slot_id]
                 };
 
                 let mut dimension_var_ids =
-                    Vec::from_iter(dimensions.iter().enumerate().map(dimension_map));
+                    Vec::from_iter(arguments[..kernel.dimensionality].iter().enumerate().map(dimension_map));
                 if dimension_var_ids.len() < 3 {
                     for i in dimension_var_ids.len()..3 {
                         dimension_var_ids.push(
@@ -651,7 +658,7 @@ impl<'program> CodeGen<'program> {
                 }
                 let dimension_var_ids = dimension_var_ids.into_boxed_slice();
                 let argument_var_ids =
-                    Vec::from_iter(arguments.iter().enumerate().map(argument_map))
+                    Vec::from_iter(arguments[kernel.dimensionality..].iter().enumerate().map(argument_map))
                         .into_boxed_slice();
                 let output_var_ids = output_slot_ids
                     .iter()
@@ -1506,9 +1513,9 @@ impl<'program> CodeGen<'program> {
         let mut funclet_checker =
             type_system::scheduling::FuncletChecker::new(&self.program, funclet);
 
-        let live_ranges = ir::analysis::live_ranges(funclet);
+        /*let live_ranges = ir::analysis::live_ranges(funclet);
         let fusion_info =
-            ir::fusion::FusionInfo::within_funclet(self.program, funclet_id, funclet, &live_ranges);
+            ir::fusion::FusionInfo::within_funclet(self.program, funclet_id, funclet, &live_ranges);*/
         // dbg!(&fusion_info.elided_temps);
 
         if self.print_codegen_debug_info {
@@ -1579,9 +1586,9 @@ impl<'program> CodeGen<'program> {
                             storage_type: *storage_type,
                         },
                     );
-                    if fusion_info.elided_temps.contains(&current_node_id) {
+                    /*if fusion_info.elided_temps.contains(&current_node_id) {
                         continue;
-                    }
+                    }*/
 
                     // To do: Allocate from buffers for GPU/CPU and assign variable
                     match place {
@@ -1727,7 +1734,7 @@ impl<'program> CodeGen<'program> {
                     match place {
                         ir::Place::Local => panic!("EncodeDoExternal to Local is unsupported"),
                         ir::Place::Gpu => {
-                            let opportunity = fusion_info.opportunities.iter().find(|schema| {
+                            /*let opportunity = fusion_info.opportunities.iter().find(|schema| {
                                 schema.bounds.start <= current_node_id
                                     && current_node_id <= schema.bounds.end
                             });
@@ -1738,11 +1745,13 @@ impl<'program> CodeGen<'program> {
                                         &mut funclet_scoped_state,
                                         &mut funclet_checker,
                                         schema,
+                                        *external_function_id
                                     );
                                 }
                                 self.encode_fused_node_gpu(
                                     placement_state,
                                     encoded_node,
+                                    *external_function_id,
                                     & input_slot_ids,
                                     & output_slot_ids,
                                 );
@@ -1752,10 +1761,21 @@ impl<'program> CodeGen<'program> {
                                     &mut funclet_scoped_state,
                                     &mut funclet_checker,
                                     encoded_node,
+                                    *external_function_id,
                                     & input_slot_ids,
                                     & output_slot_ids,
                                 );
-                            }
+                            }*/
+
+                            self.encode_do_node_gpu(
+                                placement_state,
+                                &mut funclet_scoped_state,
+                                &mut funclet_checker,
+                                encoded_node,
+                                *external_function_id,
+                                & input_slot_ids,
+                                & output_slot_ids,
+                            );
                         }
                         ir::Place::Cpu => panic!("EncodeDoExternal to CPU is unsupported"),
                     }

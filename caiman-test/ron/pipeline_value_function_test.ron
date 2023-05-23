@@ -10,6 +10,7 @@
 				2 : CpuPureOperation((name : "do_thing_on_cpu", input_types : [0], output_types : [0])),
 				0 : GpuKernel((
 					name : "do_thing_on_gpu", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : None), (group : 0, binding : 1, input : None, output : Some(0))],
+					dimensionality : 3,
 					shader_module : Glsl
 					("
 						#version 450
@@ -27,6 +28,7 @@
 				)),
 				1 : GpuKernel((
 					name : "do_thing_on_gpu_2", input_types : [0], output_types : [0], entry_point : "main", resource_bindings : [(group : 0, binding : 0, input : Some(0), output : Some(0))],
+					dimensionality : 0,
 					shader_module : Glsl
 					("
 						#version 450
@@ -64,7 +66,7 @@
 				nodes : [
 					Phi(index : 0),
 					Constant(value: I64(1), type_id : 0),
-					CallExternalGpuCompute(external_function_id : 0, arguments : [0], dimensions : [1, 1, 1]),
+					CallValueFunction(function_id : 4, arguments : [1, 1, 1, 0], dimensions : [1, 1, 1]),
 					ExtractResult(node_id : 2, index : 0),
 				],
 				tail_edge : Return(return_values : [3])

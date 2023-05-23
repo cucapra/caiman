@@ -10,6 +10,7 @@ use crate::stable_vec::StableVec;
 pub use crate::rust_wgpu_backend::ffi;
 
 pub mod analysis;
+#[cfg(feature = "fusion")]
 pub mod fusion;
 pub mod validation;
 
