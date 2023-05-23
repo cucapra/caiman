@@ -308,6 +308,24 @@ impl FuncletScopedState {
 
         return None;
     }
+
+    fn collect_slots_for_node_ids(&self, node_ids : &[ir::NodeId]) -> Box<[SlotId]> {
+        let mut slot_ids = Vec::<SlotId>::new();
+
+        for &node_id in node_ids.iter() {
+            if let Some(slot_id) = self.get_node_slot_id(node_id)
+            {
+                slot_ids.push(slot_id);
+            } else {
+                panic!(
+                    "Node #{} (content: {:?}) is not a slot",
+                    node_id, self.node_results[&node_id]
+                );
+            }
+        }
+
+        slot_ids.into_boxed_slice()
+    }
 }
 
 fn check_storage_type_implements_value_type(
@@ -665,7 +683,7 @@ impl<'program> CodeGen<'program> {
         }
     }
 
-    fn encode_do_node_local(
+    fn encode_do_node_local_builtin(
         &mut self,
         placement_state: &mut PlacementState,
         funclet_scoped_state: &mut FuncletScopedState,
@@ -729,10 +747,29 @@ impl<'program> CodeGen<'program> {
                     variable_id,
                 );
             }
-            ir::Node::CallExternalCpu {
-                external_function_id,
+            _ => panic!("Cannot be scheduled as local builtin"),
+        }
+    }
+
+    fn encode_do_node_local_external(
+        &mut self,
+        placement_state: &mut PlacementState,
+        funclet_scoped_state: &mut FuncletScopedState,
+        funclet_checker: &mut type_system::scheduling::FuncletChecker,
+        node: &ir::Node,
+        external_function_id : ir::ffi::ExternalFunctionId,
+        input_slot_ids: &[SlotId],
+        output_slot_ids: &[SlotId],
+        output_slot_node_ids: &[ir::NodeId],
+    ) {
+        // To do: Do something about the value
+        match node {
+            ir::Node::CallValueFunction {
+                function_id,
                 arguments,
             } => {
+                assert!(self.program.function_classes[*function_id].external_function_ids.contains(& external_function_id));
+
                 let function =
                     &self.program.native_interface.external_functions[external_function_id.0];
                 let cpu_operation = function.get_cpu_pure_operation().unwrap();
@@ -747,7 +784,7 @@ impl<'program> CodeGen<'program> {
                     .into_boxed_slice();
                 let raw_outputs = self
                     .code_generator
-                    .build_external_cpu_function_call(*external_function_id, &argument_var_ids);
+                    .build_external_cpu_function_call(external_function_id, &argument_var_ids);
 
                 for (index, output_type_id) in cpu_operation.output_types.iter().enumerate() {
                     let slot_id = output_slot_ids[index];
@@ -758,7 +795,7 @@ impl<'program> CodeGen<'program> {
                     );
                 }
             }
-            _ => panic!("Cannot be scheduled local"),
+            _ => panic!("Cannot be scheduled as local external"),
         }
     }
 
@@ -1602,8 +1639,7 @@ impl<'program> CodeGen<'program> {
                 } => {
                     funclet_scoped_state.move_node_result(*dropped_node_id);
                 }
-                ir::Node::EncodeDo {
-                    place,
+                ir::Node::LocalDoBuiltin {
                     operation,
                     inputs,
                     outputs,
@@ -1617,48 +1653,79 @@ impl<'program> CodeGen<'program> {
                         operation.funclet_id
                     );
 
-                    let mut input_slot_ids = Vec::<SlotId>::new();
-                    let mut output_slot_ids = Vec::<SlotId>::new();
+                    let encoded_funclet = &self.program.funclets[operation.funclet_id];
+                    let encoded_node = &encoded_funclet.nodes[operation.node_id];
+
+                    let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
+                    let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
+
+                    self.encode_do_node_local_builtin(
+                        placement_state,
+                        &mut funclet_scoped_state,
+                        &mut funclet_checker,
+                        encoded_node,
+                        & input_slot_ids,
+                        & output_slot_ids,
+                        outputs,
+                    );
+                }
+                ir::Node::LocalDoExternal {
+                    operation,
+                    external_function_id,
+                    inputs,
+                    outputs,
+                } => {
+                    assert_eq!(
+                        funclet
+                            .spec_binding
+                            .get_value_spec()
+                            .funclet_id_opt
+                            .unwrap(),
+                        operation.funclet_id
+                    );
 
                     let encoded_funclet = &self.program.funclets[operation.funclet_id];
                     let encoded_node = &encoded_funclet.nodes[operation.node_id];
 
-                    for &input_node_id in inputs.iter() {
-                        if let Some(slot_id) = funclet_scoped_state.get_node_slot_id(input_node_id)
-                        {
-                            input_slot_ids.push(slot_id);
-                        } else {
-                            panic!(
-                                "Node #{} (content: {:?}) is not a slot",
-                                input_node_id, funclet_scoped_state.node_results[&input_node_id]
-                            );
-                        }
-                    }
+                    let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
+                    let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
 
-                    for &output_node_id in outputs.iter() {
-                        if let Some(slot_id) = funclet_scoped_state.get_node_slot_id(output_node_id)
-                        {
-                            output_slot_ids.push(slot_id);
-                        } else {
-                            panic!(
-                                "Node #{} (content: {:?}) is not a slot",
-                                output_node_id, funclet_scoped_state.node_results[&output_node_id]
-                            );
-                        }
-                    }
+                    self.encode_do_node_local_external(
+                        placement_state,
+                        &mut funclet_scoped_state,
+                        &mut funclet_checker,
+                        encoded_node,
+                        * external_function_id,
+                        & input_slot_ids,
+                        & output_slot_ids,
+                        outputs,
+                    );
+                }
+                ir::Node::EncodeDoExternal {
+                    place,
+                    operation,
+                    external_function_id,
+                    inputs,
+                    outputs,
+                } => {
+                    assert_eq!(*place, ir::Place::Gpu);
+                    assert_eq!(
+                        funclet
+                            .spec_binding
+                            .get_value_spec()
+                            .funclet_id_opt
+                            .unwrap(),
+                        operation.funclet_id
+                    );
+
+                    let encoded_funclet = &self.program.funclets[operation.funclet_id];
+                    let encoded_node = &encoded_funclet.nodes[operation.node_id];
+
+                    let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
+                    let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
 
                     match place {
-                        ir::Place::Local => {
-                            self.encode_do_node_local(
-                                placement_state,
-                                &mut funclet_scoped_state,
-                                &mut funclet_checker,
-                                encoded_node,
-                                input_slot_ids.as_slice(),
-                                output_slot_ids.as_slice(),
-                                outputs,
-                            );
-                        }
+                        ir::Place::Local => panic!("EncodeDoExternal to Local is unsupported"),
                         ir::Place::Gpu => {
                             let opportunity = fusion_info.opportunities.iter().find(|schema| {
                                 schema.bounds.start <= current_node_id
@@ -1676,8 +1743,8 @@ impl<'program> CodeGen<'program> {
                                 self.encode_fused_node_gpu(
                                     placement_state,
                                     encoded_node,
-                                    input_slot_ids.as_slice(),
-                                    output_slot_ids.as_slice(),
+                                    & input_slot_ids,
+                                    & output_slot_ids,
                                 );
                             } else {
                                 self.encode_do_node_gpu(
@@ -1685,12 +1752,12 @@ impl<'program> CodeGen<'program> {
                                     &mut funclet_scoped_state,
                                     &mut funclet_checker,
                                     encoded_node,
-                                    input_slot_ids.as_slice(),
-                                    output_slot_ids.as_slice(),
+                                    & input_slot_ids,
+                                    & output_slot_ids,
                                 );
                             }
                         }
-                        ir::Place::Cpu => (),
+                        ir::Place::Cpu => panic!("EncodeDoExternal to CPU is unsupported"),
                     }
                 }
                 ir::Node::EncodeCopy {

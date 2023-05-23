@@ -55,9 +55,9 @@
 		(
 			// Represents a function call with multiple arguments and multiple returns
 			// Does not invoke a funclet directly
-			// Instead, it represents a call to any funclet that is a member of the given equivalence class
+			// Instead, it represents a call to any funclet or external function that is a member of the given equivalence class
 			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
-			name : "CallValueFunction",
+			name : "CallValueFunction", // to become CallFunctionClass
 			inputs : [
 				(name : "function_id", kind : ValueFunction),
 				(name : "arguments", kind : Operation, is_array : true)
@@ -87,7 +87,7 @@
 		// Exposes functionality that should be used with caution to implement other functionality
 		// These break the illusion that the value language doesn't know about cpu vs gpu
 		// It's intended that these are used as part of an ffi and then hidden via indirection through function equivalence classes
-		(
+		/*(
 			// Invokes an external cpu function with multiple arguments and multiple returns (encoded as a tuple on the host code side)
 			// Doesn't (yet) implement mutable in-out arguments (unbound slots with forwarding) so all outputs must be value types
 			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
@@ -99,7 +99,7 @@
 			output : Multiple,
 			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : false
-		),
+		),*/
 		(
 			// Invokes an external gpu compute kernel with multiple arguments, multiple returns, and up to 3 dimensions
 			// For EncodeDo: Is a value operation where the first 0-3 input slots are the corresponding dimensions
@@ -176,6 +176,33 @@
 			has_local_side_effect : true
 		),
 
+		(
+			// Executes a function and returns the result
+			name : "LocalDoBuiltin",
+			inputs : [
+				(name : "operation", kind : RemoteOperation),
+				(name : "inputs", kind : Operation, is_array : true),
+				(name : "outputs", kind : Operation, is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+
+		(
+			// Executes a pure function and returns the result
+			name : "LocalDoExternal",
+			inputs : [
+				(name : "operation", kind : RemoteOperation),
+				(name : "external_function_id", kind : ExternalFunction),
+				(name : "inputs", kind : Operation, is_array : true),
+				(name : "outputs", kind : Operation, is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+
 		/*(
 			// Executes a pure function and returns the result
 			name : "LocalDoSimple",
@@ -189,13 +216,25 @@
 			has_local_side_effect : true
 		),*/
 
+		(
+			name : "LocalCopy",
+			inputs : [
+				(name : "input", kind : Operation),
+				(name : "output", kind : Operation)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(
 			// Encodes a computation of the given operation to the queue for the given place
-			name : "EncodeDo",
+			name : "EncodeDoExternal",
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "operation", kind : RemoteOperation),
+				(name : "external_function_id", kind : ExternalFunction),
 				(name : "inputs", kind : Operation, is_array : true),
 				(name : "outputs", kind : Operation, is_array : true)
 			],
@@ -344,5 +383,14 @@
 			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
 			has_local_side_effect : false
 		),
-	]
+	],
+	/*terminators : [
+		(
+			name : "Return",
+			inputs : [
+				(name : "return_values", kind : Operation, is_array : true),
+			],
+			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
+		),
+	]*/
 )

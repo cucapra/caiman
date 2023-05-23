@@ -102,13 +102,13 @@
 				nodes : [
 					Phi(index : 0),
 					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 1)),
-					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
+					LocalDoBuiltin(place : Local, operation : (funclet_id : 0, node_id : 1), inputs : [], outputs : [1]),
 					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 3)),
-					EncodeDo(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [0], outputs : [3]),
+					LocalDoBuiltin(place : Local, operation : (funclet_id : 0, node_id : 2), inputs : [0], outputs : [3]),
 					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 0, node_id : 3)),
 					EncodeCopy(place : Gpu, input : 3, output : 5),
 					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
-					EncodeDo(place : Gpu, operation : (funclet_id : 0, node_id : 4), inputs : [1, 1, 1, 5], outputs : [7]),
+					EncodeDoExternal(place : Gpu, operation : (funclet_id : 0, node_id : 4), external_function_id : 0, inputs : [1, 1, 1, 5], outputs : [7]),
 					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
 					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
@@ -145,11 +145,11 @@
 				nodes : [
 					Phi(index : 0),
 					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 1)),
-					EncodeDo(place : Local, operation : (funclet_id : 9, node_id : 1), inputs : [], outputs : [1]),
+					LocalDoBuiltin(place : Local, operation : (funclet_id : 9, node_id : 1), inputs : [], outputs : [1]),
 					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 9, node_id : 0)),
 					EncodeCopy(place : Gpu, input : 0, output : 3),
 					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
-					EncodeDo(place : Gpu, operation : (funclet_id : 9, node_id : 2), inputs : [1, 1, 1, 3], outputs : [5]),
+					EncodeDoExternal(place : Gpu, operation : (funclet_id : 9, node_id : 2), external_function_id : 0, inputs : [1, 1, 1, 3], outputs : [5]),
 					//AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
 					None,
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
@@ -285,9 +285,9 @@
 			),
 
 		},
-		value_functions : {
+		/*value_functions : {
 			0 : (name : "test_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(9)),
-		},
+		},*/
 		/*scheduling_funclet_extras : {
 			11 : (
 				value_funclet_id_opt : Some(0),

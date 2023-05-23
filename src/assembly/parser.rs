@@ -1471,7 +1471,7 @@ fn read_do_command(pairs: &mut Pairs<Rule>, context: &mut Context) -> assembly_a
     let rule_args = rule_pair(Rule::do_args, read_do_args);
     let inputs = option_to_vec(optional(rule_args, pairs, context));
     let output = expect(rule_var_name(), pairs, context);
-    assembly_ast::Node::EncodeDo {
+    assembly_ast::Node::EncodeDoExternal {
         place,
         operation,
         inputs: inputs.into_boxed_slice(),

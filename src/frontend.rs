@@ -33,15 +33,25 @@ impl std::fmt::Display for CompileError {
     }
 }
 
+#[cfg(feature = "assembly")]
+fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
+    crate::assembly::parser::parse(input_string)
+}
+
+#[cfg(not(feature = "assembly"))]
+fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
+    Result::Err(CompileError{message : String::from("Assembly is unsupported in this build")})
+}
+
 fn read_definition(
     input_string: &str,
     compile_mode: CompileMode,
 ) -> Result<Definition, CompileError> {
     match compile_mode {
-        CompileMode::Assembly => crate::assembly::parser::parse(input_string),
+        CompileMode::Assembly => read_assembly(input_string),
         CompileMode::RON => match ron::from_str(&input_string) {
             Err(why) => Err(CompileError {
-                message: format!("Parse error: {}", why),
+                message: format!("Parse error at {}: {}", why.position, why),
             }),
             Ok(v) => Ok(v),
         },

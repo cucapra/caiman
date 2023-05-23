@@ -450,10 +450,65 @@ impl<'program> FuncletChecker<'program> {
             .insert(destination_slot_node_id, destination_node_type);
     }
 
+    fn check_do_output(&self, operation : &ir::RemoteNodeId, encoded_funclet : &ir::Funclet, encoded_node : &ir::Node, outputs : &[ir::NodeId])
+    {
+        let output_is_tuple = match encoded_node {
+            // Single return nodes
+            ir::Node::Constant { .. } => false,
+            ir::Node::Select { .. } => false,
+            // Multiple return nodes
+            ir::Node::CallValueFunction { .. } => true,
+            ir::Node::CallExternalGpuCompute { .. } => true,
+            _ => panic!("Cannot encode {:?}", encoded_node),
+        };
+
+        if output_is_tuple {
+            for (output_index, output_scheduling_node_id) in outputs.iter().enumerate() {
+                let value_tag = self.scalar_node_value_tags[output_scheduling_node_id];
+                match value_tag {
+                    ir::ValueTag::None => (),
+                    ir::ValueTag::Node { node_id } => {
+                        if let ir::Node::ExtractResult {
+                            node_id: node_id_2,
+                            index,
+                        } = &encoded_funclet.nodes[node_id]
+                        {
+                            assert_eq!(output_index, *index);
+                            assert_eq!(operation.node_id, *node_id_2);
+                        }
+                    }
+                    ir::ValueTag::Input {
+                        /*funclet_id,*/ index,
+                    } => panic!("{:?} can only appear in interface of funclet", value_tag),
+                    ir::ValueTag::Output {
+                        /*funclet_id,*/ index,
+                    } => panic!("{:?} can only appear in interface of funclet", value_tag),
+                    ir::ValueTag::Halt { .. } => panic!(""),
+                }
+            }
+        } else {
+            assert_eq!(outputs.len(), 1);
+            let value_tag = self.scalar_node_value_tags[&outputs[0]];
+            match value_tag {
+                ir::ValueTag::None => (),
+                ir::ValueTag::Node { node_id } => {
+                    assert_eq!(operation.node_id, node_id);
+                }
+                ir::ValueTag::Input {
+                    /*funclet_id,*/ index,
+                } => panic!("{:?} can only appear in interface of funclet", value_tag),
+                ir::ValueTag::Output {
+                    /*funclet_id,*/ index,
+                } => panic!("{:?} can only appear in interface of funclet", value_tag),
+                ir::ValueTag::Halt { .. } => panic!(""),
+            }
+        }
+    }
+
     pub fn check_next_node(&mut self, current_node_id: ir::NodeId) {
         assert_eq!(self.current_node_id, current_node_id);
-
-        match &self.scheduling_funclet.nodes[current_node_id] {
+        let current_node = &self.scheduling_funclet.nodes[current_node_id];
+        match current_node {
             ir::Node::None => (),
             ir::Node::Phi { .. } => (),
             //ir::Node::ExtractResult { node_id, index } => (),
@@ -523,8 +578,7 @@ impl<'program> FuncletChecker<'program> {
                     panic!("No node at #{}", dropped_node_id)
                 }
             }
-            ir::Node::EncodeDo {
-                place,
+            ir::Node::LocalDoBuiltin {
                 operation,
                 inputs,
                 outputs,
@@ -539,13 +593,12 @@ impl<'program> FuncletChecker<'program> {
 
                 match encoded_node {
                     ir::Node::Constant { .. } => {
-                        assert_eq!(*place, ir::Place::Local);
                         assert_eq!(inputs.len(), 0);
                         assert_eq!(outputs.len(), 1);
 
                         self.transition_slot(
                             outputs[0],
-                            *place,
+                            ir::Place::Local,
                             &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)],
                         );
                     }
@@ -554,7 +607,6 @@ impl<'program> FuncletChecker<'program> {
                         true_case,
                         false_case,
                     } => {
-                        assert_eq!(*place, ir::Place::Local);
                         assert_eq!(inputs.len(), 3);
                         assert_eq!(outputs.len(), 1);
 
@@ -575,15 +627,35 @@ impl<'program> FuncletChecker<'program> {
 
                         self.transition_slot(
                             outputs[0],
-                            *place,
+                            ir::Place::Local,
                             &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)],
                         );
                     }
-                    ir::Node::CallExternalCpu {
-                        external_function_id,
+                    _ => panic!("Node is not supported with LocalDoBuiltin: {:?}", encoded_node)
+                }
+
+                self.check_do_output(operation, encoded_funclet, encoded_node, outputs);
+            }
+            ir::Node::LocalDoExternal {
+                operation,
+                external_function_id,
+                inputs,
+                outputs,
+            } => {
+                assert_eq!(
+                    self.value_spec.funclet_id_opt.unwrap(),
+                    operation.funclet_id
+                );
+
+                let encoded_funclet = &self.program.funclets[operation.funclet_id];
+                let encoded_node = &encoded_funclet.nodes[operation.node_id];
+
+                match encoded_node {
+                    ir::Node::CallValueFunction {
+                        function_id,
                         arguments,
                     } => {
-                        assert_ne!(*place, ir::Place::Gpu);
+                        assert!(self.program.function_classes[*function_id].external_function_ids.contains(external_function_id));
                         let function = &self.program.native_interface.external_functions
                             [external_function_id.0];
                         let cpu_operation = function.get_cpu_pure_operation().unwrap();
@@ -616,17 +688,42 @@ impl<'program> FuncletChecker<'program> {
                         {
                             self.transition_slot(
                                 outputs[index],
-                                *place,
+                                ir::Place::Local,
                                 &[(ir::ResourceQueueStage::Bound, ir::ResourceQueueStage::Ready)],
                             );
                         }
                     }
+                    _ => panic!("Node is not supported with LocalDoExternal: {:?}", encoded_node)
+                }
+
+                self.check_do_output(operation, encoded_funclet, encoded_node, outputs);
+            }
+            ir::Node::EncodeDoExternal {
+                place,
+                operation,
+                external_function_id,
+                inputs,
+                outputs,
+            } => {
+                assert_eq!(
+                    self.value_spec.funclet_id_opt.unwrap(),
+                    operation.funclet_id
+                );
+
+                assert_eq!(*place, ir::Place::Gpu);
+
+                let encoded_funclet = &self.program.funclets[operation.funclet_id];
+                let encoded_node = &encoded_funclet.nodes[operation.node_id];
+
+                match encoded_node {
                     ir::Node::CallExternalGpuCompute {
                         external_function_id,
                         arguments,
                         dimensions,
                     } => {
                         assert_eq!(*place, ir::Place::Gpu);
+                       // assert!(self.program.function_classes[*function_id].external_function_ids.contains(external_function_id));
+
                         let function = &self.program.native_interface.external_functions
                             [external_function_id.0];
                         let kernel = function.get_gpu_kernel().unwrap();
@@ -747,68 +844,7 @@ impl<'program> FuncletChecker<'program> {
                     _ => panic!("Cannot encode {:?}", encoded_node),
                 }
 
-                let output_is_tuple = match encoded_node {
-                    // Single return nodes
-                    ir::Node::Constant { .. } => false,
-                    ir::Node::Select { .. } => false,
-                    // Multiple return nodes
-                    ir::Node::CallExternalCpu { .. } => true,
-                    ir::Node::CallExternalGpuCompute { .. } => true,
-                    _ => panic!("Cannot encode {:?}", encoded_node),
-                };
-
-                if output_is_tuple {
-                    for (output_index, output_scheduling_node_id) in outputs.iter().enumerate() {
-                        let value_tag = self.scalar_node_value_tags[output_scheduling_node_id];
-                        match value_tag {
-                            ir::ValueTag::None => (),
-                            //ir::ValueTag::FunctionInput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-                            //ir::ValueTag::FunctionOutput{function_id, index} => panic!("{:?} is not a concrete value", value_tag),
-                            /*ir::ValueTag::Operation{remote_node_id} =>
-                            {
-                                assert_eq!(operation.funclet_id, remote_node_id.funclet_id);
-                                if let ir::Node::ExtractResult { node_id, index } = & encoded_funclet.nodes[remote_node_id.node_id]
-                                {
-                                    assert_eq!(output_index, * index);
-                                    assert_eq!(operation.node_id, * node_id);
-                                }
-                            }*/
-                            ir::ValueTag::Node { node_id } => {
-                                if let ir::Node::ExtractResult {
-                                    node_id: node_id_2,
-                                    index,
-                                } = &encoded_funclet.nodes[node_id]
-                                {
-                                    assert_eq!(output_index, *index);
-                                    assert_eq!(operation.node_id, *node_id_2);
-                                }
-                            }
-                            ir::ValueTag::Input {
-                                /*funclet_id,*/ index,
-                            } => panic!("{:?} can only appear in interface of funclet", value_tag),
-                            ir::ValueTag::Output {
-                                /*funclet_id,*/ index,
-                            } => panic!("{:?} can only appear in interface of funclet", value_tag),
-                            ir::ValueTag::Halt { .. } => panic!(""),
-                        }
-                    }
-                } else {
-                    assert_eq!(outputs.len(), 1);
-                    let value_tag = self.scalar_node_value_tags[&outputs[0]];
-                    match value_tag {
-                        ir::ValueTag::None => (),
-                        ir::ValueTag::Node { node_id } => {
-                            assert_eq!(operation.node_id, node_id);
-                        }
-                        ir::ValueTag::Input {
-                            /*funclet_id,*/ index,
-                        } => panic!("{:?} can only appear in interface of funclet", value_tag),
-                        ir::ValueTag::Output {
-                            /*funclet_id,*/ index,
-                        } => panic!("{:?} can only appear in interface of funclet", value_tag),
-                        ir::ValueTag::Halt { .. } => panic!(""),
-                    }
-                }
+                self.check_do_output(operation, encoded_funclet, encoded_node, outputs);
             }
             ir::Node::EncodeCopy {
                 place,
