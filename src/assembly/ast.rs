@@ -120,7 +120,7 @@ pub struct RemoteNodeId {
 // Super Jank, but whatever
 
 macro_rules! lookup_abstract_type_parser {
-	([$elem_type:ident]) => { Box<[lookup_abstract_type_parser!($elem_type)]> };
+	([$elem_type:ident]) => { Vec<Hole<lookup_abstract_type_parser!($elem_type)>> };
 	(Type) => { TypeId };
 	(Immediate) => { String };
 	(ImmediateI64) => { i64 };
@@ -140,10 +140,14 @@ macro_rules! map_parser_refs {
     // When mapping referenced nodes, we only care about mapping the Operation types,
     // since those are the actual references.
     ($map:ident, $arg:ident : Operation) => {
-        $map($arg.clone())
+        $arg.as_ref().map(|x| $map(x.clone()))
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.iter().map(|op| $map(op.clone())).collect()
+        $arg.as_ref().map(|lst| {
+            lst.iter()
+                .map(|arg_hole| arg_hole.as_ref().map(|arg| $map(arg.clone())))
+                .collect()
+        })
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()
@@ -170,10 +174,11 @@ macro_rules! make_parser_nodes {
 			($($mapper)* Self::$name => Self::$name,)
 		}
 	};
-	(@ $map:ident {$name:ident ($($arg:ident : $arg_type:tt,)*), $($rest:tt)*} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
+	(@ $map:ident {$name:ident ($($arg:ident : $arg_type:tt,)*), $($rest:tt)*}
+        -> ($($fields:tt)*), ($($mapper:tt)*)) => {
 		make_parser_nodes! {
 			@ $map { $($rest)* } ->
-			($($fields)* $name { $($arg: lookup_abstract_type_parser!($arg_type)),* },),
+			($($fields)* $name { $($arg: Hole<lookup_abstract_type_parser!($arg_type)>),* },),
 			($($mapper)* Self::$name { $($arg),* } => Self::$name {
 				$($arg: map_parser_refs!($map, $arg : $arg_type)),*
 			},)
@@ -192,14 +197,14 @@ pub enum TailEdge {
         return_values: Hole<Vec<Hole<NodeId>>>,
     },
     Yield {
-        pipeline_yield_point: ExternalFunctionId,
+        pipeline_yield_point: Hole<ExternalFunctionId>,
         yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         next_funclet: Hole<FuncletId>,
         continuation_join: Hole<NodeId>,
         arguments: Hole<Vec<Hole<NodeId>>>,
     },
     Jump {
-        join: Hole<NodeId>,
+        join: Hole<FuncletId>,
         arguments: Hole<Vec<Hole<NodeId>>>,
     },
     ScheduleCall {
@@ -228,10 +233,10 @@ pub enum TailEdge {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
     None,
-    Node (Hole<RemoteNodeId>),
-    Input (Hole<RemoteNodeId>),
-    Output (Hole<RemoteNodeId>),
-    Halt (Hole<RemoteNodeId>),
+    Node(Hole<RemoteNodeId>),
+    Input(Hole<RemoteNodeId>),
+    Output(Hole<RemoteNodeId>),
+    Halt(Hole<RemoteNodeId>),
 }
 
 #[derive(Debug, Clone)]
@@ -341,13 +346,13 @@ pub struct ExternalGPUInfo {
 pub enum ExternalFunctionKind {
     CPUPure,
     CPUEffect,
-    GPU(ExternalGPUInfo)
+    GPU(ExternalGPUInfo),
 }
 
 #[derive(Debug)]
 pub struct ExternalArgument {
     pub name: Option<String>,
-    pub ffi_type: FFIType
+    pub ffi_type: FFIType,
 }
 
 #[derive(Debug)]

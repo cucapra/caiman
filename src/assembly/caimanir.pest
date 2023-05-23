@@ -12,10 +12,11 @@ str_double = @{ "\"" ~ (!"\"" ~ !NEWLINE ~ ANY)* ~ "\"" }
 str = @{ str_single | str_double }
 
 // special keywords
-none = @{ "none" }
-pure_keyword = @{ "pure" }
 hole = @{ "?" }
 node_hole = @{ "???" }
+n_hole = { n | hole }
+none = @{ "none" }
+pure_keyword = @{ "pure" }
 throwaway = @{ "_" }
 impl_keyword = @{ "impl" }
 impl_sep = ${ impl_keyword ~ sep }
@@ -56,8 +57,6 @@ place = @{ "local" | "cpu" | "gpu" }
 place_hole = { place | hole }
 stage = @{ "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" }
 stage_hole = { stage | hole }
-constant_raw = { n ~ ffi_type }
-constant = ${ constant_raw | hole }
 tag_op = { "node" | "input" | "output" | "halt" }
 tag = { none | tag_op ~ "(" ~ funclet_loc ~ ")" }
 
@@ -157,93 +156,96 @@ schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
 
-node_list = { name ~ ("," ~ name)* }
-node_box_raw = { "[" ~ node_list? ~ "]" }
-node_box = { node_box_raw | hole }
+node_list = { (name_hole ~ ("," ~ name_hole)*)? }
+node_box = { "[" ~ node_list ~ "]" | hole }
+node_call = { ("(" ~ node_list ~ ")" | hole ) }
 
-return_sep = ${ "return" ~ sep }
-return_args = { name | "[" ~ name ~ (", " ~ name)* ~ "]" }
+return_sep = @{ "return" ~ sep }
+return_args = { name_hole | "[" ~ node_box ~ "]" }
 return_node = { return_sep ~ return_args }
-yield_sep = ${ "yield" ~ sep }
-yield_node = { yield_sep ~ (n | hole) ~ node_box ~ name ~ name ~ node_box }
-jump_sep = ${ "jump" ~ sep }
-jump_node = { jump_sep ~ name ~ node_box }
+yield_sep = @{ "yield" ~ sep }
+yield_node = { yield_sep ~ name_hole ~ node_box ~ name_hole_sep ~ name_hole ~ node_box }
+jump_sep = @{ "jump" ~ sep }
+jump_node = { jump_sep ~ name_hole ~ node_box }
 
 schedule_call_sep = ${ "schedule-call" ~ sep }
-schedule_call_node = { schedule_call_sep ~ funclet_loc ~ name ~ node_box ~ name }
+schedule_call_node = { schedule_call_sep ~ funclet_loc_hole
+    ~ name_hole ~ node_box ~ name_hole }
 schedule_select_sep = ${ "schedule-select" ~ sep }
-tail_fn_nodes = { name ~ ("," ~ name)* }
-tail_fn_box_raw = { "[" ~ tail_fn_nodes? ~ "]" }
-tail_fn_box = { tail_fn_box_raw | hole }
-schedule_select_node = { schedule_select_sep ~ funclet_loc ~ name ~ tail_fn_box ~ node_box ~ name }
+schedule_select_node = { schedule_select_sep ~ funclet_loc_hole ~ name_hole
+    ~ node_box ~ node_box ~ name_hole }
 
-dynamic_alloc_sep = ${ "dynamic-alloc" ~ sep }
-tail_option_node = { name | none }
-tail_option_nodes = { tail_option_node ~ ("," ~ tail_option_node)* }
-tail_option_box_raw = { "[" ~ tail_option_nodes? ~ "]" }
-tail_option_box = { tail_option_box_raw | hole }
-dynamic_alloc_node = { dynamic_alloc_sep ~ name ~ node_box ~ tail_option_box ~ name ~ name ~ name }
+// extra form cause we need to have `none` as an option
+dynamic_alloc_size_slot = { name | hole | none }
+dynamic_alloc_size_slot_list = !{ ("[" ~ (dynamic_alloc_size_slot ~ ("," ~ dynamic_alloc_size_slot)*)? ~ "]") | hole }
+dynamic_alloc_sep = { "dynamic-alloc" ~ sep }
+dynamic_alloc_node = { dynamic_alloc_sep
+    ~ name_hole_sep ~ node_box ~ dynamic_alloc_size_slot_list
+    ~ name_hole_sep ~ name_hole_sep ~ name_hole }
 
 tail_edge = { return_node | yield_node | jump_node |
     schedule_call_node | schedule_select_node | dynamic_alloc_node }
 
 //    commands
 
-phi_node = ${ "phi" ~ sep ~ n }
+phi_node = ${ "phi" ~ sep ~ n_hole }
 
 //     value
 
-constant_node = ${ "constant" ~ sep ~ constant }
+constant_node = ${ "constant" ~ sep ~ n ~ ffi_type }
 extract_sep = @{ "extract" ~ sep }
 extract_node = { extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }
-call_args = { name ~ ("," ~ name)* }
-call_node = { call_sep ~ name ~ ("<" ~ call_args? ~ ">" | hole )? ~ ("(" ~ call_args? ~ ")" | hole ) }
+call_params = { ("<" ~ node_list ~ ">")? }
+call_node = { call_sep ~ name_hole ~ call_params ~ node_call }
 select_sep = @{ "select" ~ sep }
-select_node = { select_sep ~ name ~ name ~ name }
+select_node = { select_sep ~ name_hole ~ name_hole ~ name_hole }
+
+//     scheduling
+
+alloc_temporary_node = ${ "alloc-temporary-" ~ place_hole ~ "-" ~ type_hole ~ sep ~ funclet_loc_hole }
+unbound_slot_node = ${ "unbound-slot" ~ place_hole ~ "-" ~ type_hole ~ sep ~ funclet_loc_hole }
+drop_node = ${ "drop" ~ sep ~ name_hole }
+alloc_sep = ${"alloc-" ~ place_hole ~ "-" ~ type_hole ~ sep}
+alloc_node = { alloc_sep ~ name_hole ~ funclet_loc_hole }
+encode_do_sep = ${ "encode-do-" ~ place_hole ~ sep }
+encode_do_call = { (funclet_loc_hole ~ node_call) | hole }
+encode_do_ret = { node_box | name } // node_box captures "?"
+encode_do_node = { encode_do_sep ~ encode_do_call ~ "->" ~ encode_do_ret }
+encode_copy_sep = ${ "encode-copy-" ~ place_hole ~ sep }
+encode_copy_node = { encode_copy_sep ~ name_hole_sep ~ name_hole }
+submit_node = ${ "submit-" ~ place_hole ~ sep ~ funclet_loc_hole }
+encode_fence_node = ${ "encode-fence-" ~ place_hole ~ sep ~ funclet_loc_hole }
+sync_fence_node = { "sync-fence-" ~ place_hole ~ sep ~ name_hole ~ sep ~ funclet_loc_hole }
+inline_join_sep = @{ "inline-join" ~ sep }
+inline_join_node = { inline_join_sep ~ name_hole ~ node_box ~ name_hole }
+serialized_join_sep = @{ "serialized-join" ~ sep }
+serialized_join_node = { serialized_join_sep ~ name_hole ~ node_box ~ name_hole }
+default_join_node = { "default-join" }
+
+//     timeline
+
+submission_node = ${ "submission-" ~ place_hole ~ "->" ~ place_hole ~ sep ~ name_hole }
+synchronization_sep = ${ "sync-" ~ place_hole ~ "->" ~ place_hole ~ sep }
+synchronization_node = { synchronization_sep ~ name_hole_sep ~ name_hole }
+
+//    spatial
+
+separated_linear_space_node = ${ "separated-linear-space" ~ place_hole ~ sep ~ name_hole }
+merged_linear_space_node = ${ "merged-linear-space" ~ place_hole ~ sep ~ node_box }
+
+//   nodes
 
 value_node = { phi_node | constant_node |
     extract_node | call_node | select_node }
 
-//     scheduling
-
-alloc_temporary_node = ${ "alloc-temporary-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
-encode_do_sep = ${ "encode-do-" ~ place ~ sep }
-encode_do_args = { name ~ ("," ~ name)* }
-encode_do_params = { "(" ~ encode_do_args? ~ ")" }
-encode_do_call = { funclet_loc ~ ( encode_do_params | hole ) }
-encode_do_node = { encode_do_sep ~ ( encode_do_call | hole ) ~ "->" ~ name }
-create_node = ${ "create-" ~ place ~ "-" ~ typ ~ sep ~ funclet_loc }
-drop_node = ${ "drop" ~ sep ~ name }
-alloc_sep = ${"alloc-" ~ place ~ "-" ~ typ ~ sep}
-alloc_node = { alloc_sep ~ name ~ funclet_loc }
-encode_copy_sep = ${ "encode-copy-" ~ place ~ sep }
-encode_copy_node = { encode_copy_sep ~ name ~ name }
-submit_node = ${ "submit-" ~ place ~ sep ~ funclet_loc }
-encode_fence_node = ${ "encode-fence-" ~ place ~ sep ~ funclet_loc }
-sync_fence_sep = ${ "sync-fence-" ~ place ~ sep }
-sync_fence_node = { sync_fence_sep ~ name ~ funclet_loc }
-inline_join_sep = @{ "inline-join" ~ sep }
-inline_join_node = { inline_join_sep ~ name ~ node_box ~ name }
-serialized_join_sep = @{ "serialized-join" ~ sep }
-serialized_join_node = { serialized_join_sep ~ name ~ node_box ~ name }
-default_join_node = { "default-join" }
-
-schedule_node = { phi_node | alloc_temporary_node | encode_do_node | create_node |
+schedule_node = { phi_node | alloc_temporary_node | encode_do_node |
     drop_node | alloc_node | encode_copy_node | submit_node | encode_fence_node  |
     sync_fence_node | inline_join_node | serialized_join_node | default_join_node }
 
-//     timeline
+timeline_node = { phi_node | synchronization_node | submission_node }
 
-sync_sep = ${ "sync-" ~ place ~ "->" ~ place ~ sep }
-sync_node = { sync_sep ~ name ~ name }
-submission_node = ${ "submission-" ~ place ~ "->" ~ place ~ sep ~ name }
-
-timeline_node = { phi_node | sync_node | submission_node }
-
-//     spatial
-
-spatial_node = { "INVALID" } // empty for now...
+spatial_node = { phi_node | separated_linear_space_node | merged_linear_space_node }
 
 // Pipelines
 

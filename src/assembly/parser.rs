@@ -97,6 +97,13 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn n_hole(input: Node) -> ParseResult<Hole<usize>> {
+        Ok(match_nodes!(input.into_children();
+            [n(n)] => Some(n),
+            [hole] => None
+        ))
+    }
+
     fn name(input: Node) -> ParseResult<String> {
         Ok(match_nodes!(input.into_children();
             [id(s)] => s,
@@ -115,6 +122,12 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [name(name)] => Some(name),
             [hole] => None
+        ))
+    }
+
+    fn name_hole_sep(input: Node) -> ParseResult<Hole<String>> {
+        Ok(match_nodes!(input.into_children();
+            [name_hole(name)] => name
         ))
     }
 
@@ -316,27 +329,6 @@ impl CaimanAssemblyParser {
     fn stage_hole(input: Node) -> ParseResult<Hole<ir::ResourceQueueStage>> {
         Ok(match_nodes!(input.into_children();
             [stage(stage)] => Some(stage),
-            [hole] => None
-        ))
-    }
-
-    fn constant_raw(input: Node) -> ParseResult<ast::Node> {
-        match_nodes!(input.into_children();
-        [n, ffi_type(type_id)] => {
-            n
-                .as_str()
-                .parse::<String>()
-                .map_err(|e| n.error(e))
-                .map(|num| ast::Node::Constant {
-                    type_id: TypeId::FFI(type_id),
-                    value: num,
-                })
-        })
-    }
-
-    fn constant(input: Node) -> ParseResult<Hole<ast::Node>> {
-        Ok(match_nodes!(input.into_children();
-            [constant_raw(n)] => Some(n),
             [hole] => None
         ))
     }
@@ -924,318 +916,433 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn node_list(input: Node) -> ParseResult<()> {
+    fn node_list(input: Node) -> ParseResult<Vec<Hole<NodeId>>> {
         Ok(match_nodes!(input.into_children();
+            [name_hole(names)..] => names.map(|name| name.map(|s| NodeId(s))).collect()
         ))
     }
 
-    fn node_box_raw(input: Node) -> ParseResult<()> {
+    fn node_box(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
+            [node_list(lst)] => Some(lst),
+            [hole] => None
         ))
     }
 
-    fn node_box(input: Node) -> ParseResult<()> {
+    fn node_call(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
+            [node_list(lst)] => Some(lst),
+            [hole] => None
         ))
     }
 
-    fn return_sep(input: Node) -> ParseResult<()> {
+    fn return_args(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
+            [node_box(names)] => names,
+            [name_hole(name)] => name.map(|s| vec![Some(NodeId(s))])
         ))
     }
 
-    fn return_args(input: Node) -> ParseResult<()> {
+    fn return_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
+            [return_sep, return_args(return_values)] => ast::TailEdge::Return {
+                return_values
+            }
         ))
     }
 
-    fn return_node(input: Node) -> ParseResult<()> {
+    fn yield_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
+            [yield_sep, name_hole(pipeline_yield_point), node_box(yielded_nodes),
+                name_hole_sep(next_funclet), name_hole(continuation_join), node_box(arguments)] =>
+                ast::TailEdge::Yield {
+                    pipeline_yield_point: pipeline_yield_point.map(|s| ExternalFunctionId(s)),
+                    yielded_nodes,
+                    next_funclet: next_funclet.map(|s| FuncletId(s)),
+                    continuation_join: continuation_join.map(|s| NodeId(s)),
+                    arguments,
+                }
         ))
     }
 
-    fn yield_sep(input: Node) -> ParseResult<()> {
+    fn jump_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
+            [join_sep, name_hole(join), node_box(arguments)] =>
+                ast::TailEdge::Jump {
+                    join: join.map(|s| FuncletId(s)),
+                    arguments
+                }
         ))
     }
 
-    fn yield_node(input: Node) -> ParseResult<()> {
+    fn schedule_call_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
+            [join_sep, funclet_loc_hole(value_operation), name_hole(callee_funclet_id),
+                node_box(callee_arguments), name_hole(continuation_join)] =>
+                ast::TailEdge::ScheduleCall {
+                    value_operation,
+                    callee_funclet_id: callee_funclet_id.map(|s| FuncletId(s)),
+                    callee_arguments,
+                    continuation_join: continuation_join.map(|s| NodeId(s))
+                }
         ))
     }
 
-    fn jump_sep(input: Node) -> ParseResult<()> {
+    fn schedule_select_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
+            [join_sep,
+                name_hole(condition),
+                funclet_loc_hole(value_operation),
+                node_box(callee_funclet_ids),
+                node_box(callee_arguments),
+                name_hole(continuation_join)] =>
+                ast::TailEdge::ScheduleSelect {
+                    value_operation,
+                    condition: condition.map(|s| NodeId(s)),
+                    callee_funclet_ids: callee_funclet_ids.map(|ids| ids.iter().map(|id|
+                        id.as_ref().map(|s| FuncletId(s.0.clone()))).collect()),
+                    callee_arguments,
+                    continuation_join: continuation_join.map(|s| NodeId(s))
+                }
         ))
     }
 
-    fn jump_node(input: Node) -> ParseResult<()> {
+    fn dynamic_alloc_size_slot(input: Node) -> ParseResult<Hole<Option<NodeId>>> {
         Ok(match_nodes!(input.into_children();
+            [name(name)] => Some(Some(NodeId(name))),
+            [hole] => None,
+            [none] => Some(None)
         ))
     }
 
-    fn schedule_call_sep(input: Node) -> ParseResult<()> {
+    fn dynamic_alloc_size_slot_list(input: Node) -> ParseResult<Hole<Vec<Hole<Option<NodeId>>>>> {
         Ok(match_nodes!(input.into_children();
+            [dynamic_alloc_size_slot(slots)..] => Some(slots.collect()),
+            [hole] => None
         ))
     }
 
-    fn schedule_call_node(input: Node) -> ParseResult<()> {
+    fn dynamic_alloc_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn schedule_select_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn tail_fn_nodes(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn tail_fn_box_raw(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn tail_fn_box(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn schedule_select_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn dynamic_alloc_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn tail_option_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn tail_option_nodes(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn tail_option_box_raw(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn tail_option_box(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn dynamic_alloc_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
+            [dynamic_alloc_sep,
+                name_hole_sep(buffer),
+                node_box(arguments),
+                dynamic_alloc_size_slot_list(dynamic_allocation_size_slots),
+                name_hole_sep(success_funclet_id),
+                name_hole_sep(failure_funclet_id),
+                name_hole(continuation_join)] =>
+                ast::TailEdge::DynamicAllocFromBuffer {
+                    buffer: buffer.map(|s| NodeId(s)),
+                    arguments,
+                    dynamic_allocation_size_slots,
+                    success_funclet_id: success_funclet_id.map(|s| FuncletId(s)),
+                    failure_funclet_id: failure_funclet_id.map(|s| FuncletId(s)),
+                    continuation_join: continuation_join.map(|s| NodeId(s))
+                }
         ))
     }
 
     fn tail_edge(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
+            [return_node(t)] => t,
+            [yield_node(t)] => t,
+            [jump_node(t)] => t,
+            [schedule_call_node(t)] => t,
+            [schedule_select_node(t)] => t,
+            [dynamic_alloc_node(t)] => t,
         ))
     }
 
-    fn phi_node(input: Node) -> ParseResult<()> {
+    fn phi_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
+            [n_hole(index)] => ast::Node::Phi { index }
         ))
     }
 
-    fn constant_node(input: Node) -> ParseResult<()> {
+    fn constant_node(input: Node) -> ParseResult<ast::Node> {
+        match_nodes!(input.into_children();
+            [n, ffi_type(type_id)] =>
+                n.as_str()
+                .parse::<String>()
+                .map_err(|e| n.error(e))
+                .map(|value| ast::Node::Constant {
+                    value: Some(value),
+                    type_id: Some(ast::TypeId::FFI(type_id))
+                })
+        )
+    }
+
+    fn extract_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
+            [extract_sep, name_hole(node_id), n_hole(index)] => ast::Node::ExtractResult {
+                node_id: node_id.map(|s| NodeId(s)),
+                index
+        }))
+    }
+
+    fn call_params(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
+        Ok(match_nodes!(input.into_children();
+            [node_list(nodes)] => Some(nodes),
+            [] => None
         ))
     }
 
-    fn extract_sep(input: Node) -> ParseResult<()> {
+    fn call_node(input: Node) -> ParseResult<ast::Node> {
+        // will split apart later
         Ok(match_nodes!(input.into_children();
+            [call_sep, name_hole(external_function_id),
+                call_params(dimensions), node_call(arguments), call_args] =>
+                ast::Node::CallExternalGpuCompute {
+                    external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
+                    dimensions,
+                    arguments
+        }))
+    }
+
+    fn select_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [select_sep, name_hole(condition),
+                name_hole(true_case), name_hole(false_case)] => ast::Node::Select {
+                condition: condition.map(|s| NodeId(s)),
+                true_case: true_case.map(|s| NodeId(s)),
+                false_case: false_case.map(|s| NodeId(s))
+        }))
+    }
+
+    fn alloc_temporary_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place), type_hole(storage_type),
+                funclet_loc_hole(operation)] => ast::Node::AllocTemporary {
+                place,
+                storage_type,
+                operation
+        }))
+    }
+
+    fn unbound_slot_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place), type_hole(storage_type),
+                funclet_loc_hole(operation)] => ast::Node::UnboundSlot {
+                place,
+                storage_type,
+                operation
+        }))
+    }
+
+    fn drop_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [name_hole(node)] => ast::Node::Drop {
+                node: node.map(|s| NodeId(s))
+        }))
+    }
+
+    fn alloc_sep(input: Node) -> ParseResult<(Hole<ir::Place>, Hole<TypeId>)> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place), type_hole(typ)] => (place, typ)
         ))
     }
 
-    fn extract_node(input: Node) -> ParseResult<()> {
+    fn alloc_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
+            [alloc_sep((place, storage_type)), name_hole(buffer),
+                funclet_loc_hole(operation)] => ast::Node::StaticAllocFromStaticBuffer {
+                buffer: buffer.map(|s| NodeId(s)),
+                place,
+                storage_type,
+                operation
+        }))
+    }
+
+    fn encode_do_sep(input: Node) -> ParseResult<Hole<ir::Place>> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place)] => place
         ))
     }
 
-    fn call_sep(input: Node) -> ParseResult<()> {
+    fn encode_do_call(input: Node) -> ParseResult<(Hole<RemoteNodeId>, Hole<Vec<Hole<NodeId>>>)> {
         Ok(match_nodes!(input.into_children();
+            [funclet_loc_hole(fnloc), node_call(args)] => (fnloc, args),
+            [hole] => (None, None)
         ))
     }
 
-    fn call_args(input: Node) -> ParseResult<()> {
+    fn encode_do_ret(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
+            [node_box(nodes)] => nodes,
+            [name(name)] => Some(vec![Some(NodeId(name))])
         ))
     }
 
-    fn call_node(input: Node) -> ParseResult<()> {
+    fn encode_do_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
+            [encode_do_sep(place), encode_do_call((operation, inputs)),
+                encode_do_ret(outputs)] => ast::Node::EncodeDo {
+                place,
+                operation,
+                inputs,
+                outputs
+        }))
+    }
+
+    fn encode_copy_sep(input: Node) -> ParseResult<Hole<ir::Place>> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place)] => place
         ))
     }
 
-    fn select_sep(input: Node) -> ParseResult<()> {
+    fn encode_copy_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
+            [encode_copy_sep(place), name_hole(input), name_hole(output)] => ast::Node::EncodeCopy {
+                place,
+                input: input.map(|s| NodeId(s)),
+                output: output.map(|s| NodeId(s))
+        }))
+    }
+
+    fn submit_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place), funclet_loc_hole(event)] => ast::Node::Submit {
+                place,
+                event
+        }))
+    }
+
+    fn encode_fence_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place), funclet_loc_hole(event)] => ast::Node::EncodeFence {
+                place,
+                event
+        }))
+    }
+
+    fn sync_fence_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(place), name_hole(fence),
+                funclet_loc_hole(event)] => ast::Node::SyncFence {
+                place,
+                fence: fence.map(|s| NodeId(s)),
+                event
+        }))
+    }
+
+    fn inline_join_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [inline_join_sep, name_hole(funclet), node_box(captures),
+                name_hole(continuation)] => ast::Node::InlineJoin {
+                funclet: funclet.map(|s| FuncletId(s)),
+                captures,
+                continuation: continuation.map(|s| NodeId(s))
+        }))
+    }
+
+    fn serialized_join_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [serialized_join_sep, name_hole(funclet), node_box(captures),
+                name_hole(continuation)] => ast::Node::SerializedJoin {
+                funclet: funclet.map(|s| FuncletId(s)),
+                captures,
+                continuation: continuation.map(|s| NodeId(s))
+        }))
+    }
+
+    fn default_join_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [] => ast::Node::DefaultJoin {}
         ))
     }
 
-    fn select_node(input: Node) -> ParseResult<()> {
+    fn submission_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
+            [place_hole(here_place), place_hole(there_place),
+                name_hole(local_past)] => ast::Node::SubmissionEvent {
+                here_place,
+                there_place,
+                local_past: local_past.map(|s| NodeId(s))
+        }))
+    }
+
+    fn synchronization_sep(input: Node) -> ParseResult<(Hole<ir::Place>, Hole<ir::Place>)> {
+        Ok(match_nodes!(input.into_children();
+            [place_hole(here_place), place_hole(there_place)] => (here_place, there_place)
         ))
+    }
+
+    fn synchronization_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+            [synchronization_sep((here_place, there_place)),
+                name_hole(local_past), name_hole(remote_local_past)]
+                => ast::Node::SynchronizationEvent {
+                here_place,
+                there_place,
+                local_past: local_past.map(|s| NodeId(s)),
+                remote_local_past: remote_local_past.map(|s| NodeId(s))
+        }))
+    }
+
+    fn separated_linear_space_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+        [place_hole(place), name_hole(space)] => ast::Node::SeparatedLinearSpace {
+            place,
+            space: space.map(|s| NodeId(s))
+        }))
+    }
+
+    fn merged_linear_space_node(input: Node) -> ParseResult<ast::Node> {
+        Ok(match_nodes!(input.into_children();
+        [place_hole(place), node_box(spaces)] => ast::Node::MergedLinearSpace {
+            place,
+            spaces
+        }))
     }
 
     fn value_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn alloc_temporary_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_do_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_do_args(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_do_params(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_do_call(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_do_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn create_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn drop_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn alloc_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn alloc_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_copy_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_copy_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn submit_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn encode_fence_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn sync_fence_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn sync_fence_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn inline_join_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn inline_join_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn serialized_join_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn serialized_join_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn default_join_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
+            [phi_node(n)] => n,
+            [constant_node(n)] => n,
+            [extract_node(n)] => n,
+            [call_node(n)] => n,
+            [select_node(n)] => n
         ))
     }
 
     fn schedule_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn sync_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn sync_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn submission_node(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
+            [phi_node(n)] => n,
+            [alloc_temporary_node(n)] => n,
+            [encode_do_node(n)] => n,
+            [drop_node(n)] => n,
+            [alloc_node(n)] => n,
+            [encode_copy_node(n)] => n,
+            [submit_node(n)] => n,
+            [encode_fence_node(n)] => n,
+            [sync_fence_node(n)] => n,
+            [inline_join_node(n)] => n,
+            [serialized_join_node(n)] => n,
+            [default_join_node(n)] => n,
         ))
     }
 
     fn timeline_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
+            [phi_node(n)] => n,
+            [synchronization_node(n)] => n,
+            [submission_node(n)] => n,
         ))
     }
 
     fn spatial_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-        ))
-    }
-
-    fn pipeline_sep(input: Node) -> ParseResult<()> {
-        Ok(match_nodes!(input.into_children();
+            [phi_node(n)] => n,
+            [separated_linear_space_node(n)] => n,
+            [merged_linear_space_node(n)] => n,
         ))
     }
 
     fn pipeline(input: Node) -> ParseResult<ast::Pipeline> {
         Ok(match_nodes!(input.into_children();
+            [str(name), name(funclet)] => ast::Pipeline{
+                name, funclet: FuncletId(funclet)
+            }
         ))
     }
 

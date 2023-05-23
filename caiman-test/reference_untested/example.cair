@@ -78,8 +78,8 @@ value[impl %simple] %j(%abc : i64) -> [i64] {
 // can syntactically be empty, even though this is meaningless
 schedule[] %bar<none, none>(%0 : %slot0) -> [%out : %slot0] {
     %x = alloc-temporary-local-i64 %foo.%1;
+    %y = unbound-slot-local-i64 %foo.%1;
     %2 = encode-do-local %foo.%1() -> %x;
-    %1 = create-local-i64 %foo.%x; // unbound slot
     %3 = drop %0;
     %4 = alloc-local-i64 %0 %foo.%1;
     %5 = encode-copy-cpu %2 %4;
@@ -122,6 +122,8 @@ timeline %time(%e : %event0) -> [%event_out : %event0] {
 }
 
 spatial %space(%b : %buffer_space0) -> [%iout : i64] {
+    %1 = separated-linear-space-cpu %b;
+    %2 = merged-linear-space-cpu [%b, %1];
     return %b;
 }
 
