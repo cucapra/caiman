@@ -34,14 +34,6 @@ struct UserData {
 type ParseResult<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, UserData>;
 
-// dumb hack
-fn create_map<F, T, U>(f: &'static F) -> Box<dyn Fn(T) -> U>
-where
-    F: Fn(T) -> U,
-{
-    Box::new(move |x| f(x))
-}
-
 // helper stuff
 
 fn unexpected(s: String) -> String {
@@ -70,9 +62,103 @@ fn clean_string(input: Node) -> ParseResult<String> {
 
 #[pest_consume::parser]
 impl CaimanAssemblyParser {
-    fn EOI(_input: Node) -> ParseResult<()> {
-        Ok(())
+    // dummy declarations
+    // we make them unreachable to highlight they are never called
+    // this is done so that if they _are_ called, they should be updated
+
+    fn version_keyword(_input: Node) -> ParseResult<()> {
+        unreachable!()
     }
+
+    fn pure_keyword(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn impl_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn none(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn hole(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn node_hole(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn function_class_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn return_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn yield_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn jump_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn schedule_call_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn schedule_select_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn dynamic_alloc_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn extract_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn call_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn select_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn inline_join_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn serialized_join_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn value_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn timeline_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn spatial_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn pipeline_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    fn EOI(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
+    // real declarations
 
     fn id(input: Node) -> ParseResult<String> {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
@@ -132,7 +218,10 @@ impl CaimanAssemblyParser {
     }
 
     fn meta_name(input: Node) -> ParseResult<String> {
-        CaimanAssemblyParser::name(input)
+        Ok(match_nodes!(input.into_children();
+            [id(s)] => s,
+            [throwaway] => "_".to_string()
+        ))
     }
 
     fn meta_name_sep(input: Node) -> ParseResult<String> {
@@ -429,7 +518,7 @@ impl CaimanAssemblyParser {
 
     fn buffer_alignment_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name), place(storage_place), n(alignment_bits), n(byte_size)] =>
+            [name(name), place(storage_place), n(alignment_bits), n(byte_size)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::Buffer {
@@ -461,7 +550,7 @@ impl CaimanAssemblyParser {
 
     fn scheduling_join_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name)] => ast::TypeDecl::Local(ast::LocalType {
+            [name(name)] => ast::TypeDecl::Local(ast::LocalType {
                 name,
                 data: ast::LocalTypeInfo::SchedulingJoin {}
             })
@@ -470,7 +559,7 @@ impl CaimanAssemblyParser {
 
     fn buffer_space_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name)] => ast::TypeDecl::Local(ast::LocalType {
+            [name(name)] => ast::TypeDecl::Local(ast::LocalType {
                 name,
                 data: ast::LocalTypeInfo::BufferSpace {}
             })
@@ -715,14 +804,12 @@ impl CaimanAssemblyParser {
                 Ok(value)
             },
             [schedule_box(schedule), mut schedule_funclet] => {
-                let mut local_map = schedule_funclet.user_data().binding_info.clone();
-                local_map.replace(Some(schedule));
+                *schedule_funclet.user_data().binding_info.borrow_mut() = Some(schedule);
                 let mut result = CaimanAssemblyParser::schedule_funclet(schedule_funclet);
-                local_map.replace(None);
                 result
             },
-            [timeline_funclet(funclet)] => Ok(funclet),
-            [spatial_funclet(funclet)] => Ok(funclet),
+            [timeline_sep, timeline_funclet(funclet)] => Ok(funclet),
+            [spatial_sep, spatial_funclet(funclet)] => Ok(funclet),
         )
     }
 
@@ -908,8 +995,8 @@ impl CaimanAssemblyParser {
 
     fn schedule_funclet(input: Node) -> ParseResult<ast::Funclet> {
         Ok(match_nodes!(input.into_children();
-            [funclet_header(header), schedule_command(commands)..] => ast::Funclet {
-                kind: ir::FuncletKind::Spatial,
+            [schedule_header(header), schedule_command(commands)..] => ast::Funclet {
+                kind: ir::FuncletKind::ScheduleExplicit,
                 header,
                 commands: commands.collect(),
             }
@@ -990,9 +1077,9 @@ impl CaimanAssemblyParser {
 
     fn schedule_select_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
-            [join_sep,
-                name_hole(condition),
+            [schedule_select_sep,
                 funclet_loc_hole(value_operation),
+                name_hole(condition),
                 node_box(callee_funclet_ids),
                 node_box(callee_arguments),
                 name_hole(continuation_join)] =>
@@ -1073,9 +1160,9 @@ impl CaimanAssemblyParser {
 
     fn extract_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-            [extract_sep, name_hole(node_id), n_hole(index)] => ast::Node::ExtractResult {
-                node_id: node_id.map(|s| NodeId(s)),
-                index
+            [extract_sep, name(node_id), n(index)] => ast::Node::ExtractResult {
+                node_id: Some(NodeId(node_id)),
+                index: Some(index)
         }))
     }
 
@@ -1089,10 +1176,10 @@ impl CaimanAssemblyParser {
     fn call_node(input: Node) -> ParseResult<ast::Node> {
         // will split apart later
         Ok(match_nodes!(input.into_children();
-            [call_sep, name_hole(external_function_id),
-                call_params(dimensions), node_call(arguments), call_args] =>
+            [call_sep, name(external_function_id),
+                call_params(dimensions), node_call(arguments)] =>
                 ast::Node::CallExternalGpuCompute {
-                    external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
+                    external_function_id: Some(ExternalFunctionId(external_function_id)),
                     dimensions,
                     arguments
         }))
@@ -1100,11 +1187,11 @@ impl CaimanAssemblyParser {
 
     fn select_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-            [select_sep, name_hole(condition),
-                name_hole(true_case), name_hole(false_case)] => ast::Node::Select {
-                condition: condition.map(|s| NodeId(s)),
-                true_case: true_case.map(|s| NodeId(s)),
-                false_case: false_case.map(|s| NodeId(s))
+            [select_sep, name_sep(condition),
+                name_sep(true_case), name(false_case)] => ast::Node::Select {
+                condition: Some(NodeId(condition)),
+                true_case: Some(NodeId(true_case)),
+                false_case: Some(NodeId(false_case))
         }))
     }
 
@@ -1191,7 +1278,8 @@ impl CaimanAssemblyParser {
 
     fn encode_copy_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-            [encode_copy_sep(place), name_hole(input), name_hole(output)] => ast::Node::EncodeCopy {
+            [encode_copy_sep(place), name_hole_sep(input),
+                name_hole(output)] => ast::Node::EncodeCopy {
                 place,
                 input: input.map(|s| NodeId(s)),
                 output: output.map(|s| NodeId(s))
@@ -1275,7 +1363,7 @@ impl CaimanAssemblyParser {
     fn synchronization_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
             [synchronization_sep((here_place, there_place)),
-                name_hole(local_past), name_hole(remote_local_past)]
+                name_hole_sep(local_past), name_hole(remote_local_past)]
                 => ast::Node::SynchronizationEvent {
                 here_place,
                 there_place,
@@ -1314,6 +1402,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [phi_node(n)] => n,
             [alloc_temporary_node(n)] => n,
+            [unbound_slot_node(n)] => n,
             [encode_do_node(n)] => n,
             [drop_node(n)] => n,
             [alloc_node(n)] => n,
@@ -1345,7 +1434,7 @@ impl CaimanAssemblyParser {
 
     fn pipeline(input: Node) -> ParseResult<ast::Pipeline> {
         Ok(match_nodes!(input.into_children();
-            [str(name), name(funclet)] => ast::Pipeline{
+            [pipeline_sep, str(name), name(funclet)] => ast::Pipeline{
                 name, funclet: FuncletId(funclet)
             }
         ))
@@ -1353,7 +1442,7 @@ impl CaimanAssemblyParser {
 
     fn program(input: Node) -> ParseResult<ast::Program> {
         Ok(match_nodes!(input.into_children();
-            [version(version), declaration(declarations).., EOI(_)] => ast::Program {
+            [version(version), declaration(declarations).., EOI] => ast::Program {
                 version,
                 declarations: declarations.collect()
             }

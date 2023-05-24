@@ -9,7 +9,7 @@ id = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 n = @{ ASCII_DIGIT+ }
 str_single = @{ "'" ~ (!"'" ~ !NEWLINE ~ ANY)* ~ "'" }
 str_double = @{ "\"" ~ (!"\"" ~ !NEWLINE ~ ANY)* ~ "\"" }
-str = @{ str_single | str_double }
+str = { str_single | str_double }
 
 // special keywords
 hole = @{ "?" }
@@ -169,17 +169,17 @@ yield_node = { yield_sep ~ name_hole ~ node_box ~ name_hole_sep ~ name_hole ~ no
 jump_sep = @{ "jump" ~ sep }
 jump_node = { jump_sep ~ name_hole ~ node_box }
 
-schedule_call_sep = ${ "schedule-call" ~ sep }
+schedule_call_sep = @{ "schedule-call" ~ sep }
 schedule_call_node = { schedule_call_sep ~ funclet_loc_hole
     ~ name_hole ~ node_box ~ name_hole }
-schedule_select_sep = ${ "schedule-select" ~ sep }
+schedule_select_sep = @{ "schedule-select" ~ sep }
 schedule_select_node = { schedule_select_sep ~ funclet_loc_hole ~ name_hole
     ~ node_box ~ node_box ~ name_hole }
 
 // extra form cause we need to have `none` as an option
 dynamic_alloc_size_slot = { name_hole | none }
 dynamic_alloc_size_slot_list = { ("[" ~ (dynamic_alloc_size_slot ~ ("," ~ dynamic_alloc_size_slot)*)? ~ "]") | hole }
-dynamic_alloc_sep = ${ "dynamic-alloc" ~ sep }
+dynamic_alloc_sep = @{ "dynamic-alloc" ~ sep }
 dynamic_alloc_node = { dynamic_alloc_sep
     ~ name_hole ~ node_box ~ dynamic_alloc_size_slot_list
     ~ name_hole_sep ~ name_hole_sep ~ name_hole }
@@ -193,14 +193,15 @@ phi_node = ${ "phi" ~ sep ~ n_hole }
 
 //     value
 
+// we can syntactically disallow holes to a (limited) extent here, so might as well
 constant_node = ${ "constant" ~ sep ~ n ~ ffi_type }
 extract_sep = @{ "extract" ~ sep }
 extract_node = { extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }
 call_params = { ("<" ~ node_list ~ ">")? }
-call_node = { call_sep ~ name_hole ~ call_params ~ node_call }
+call_node = { call_sep ~ name ~ call_params ~ node_call }
 select_sep = @{ "select" ~ sep }
-select_node = { select_sep ~ name_hole ~ name_hole ~ name_hole }
+select_node = { select_sep ~ name_sep ~ name_sep ~ name }
 
 //     scheduling
 
