@@ -17,6 +17,7 @@ node_hole = @{ "???" }
 n_hole = { n | hole }
 none = @{ "none" }
 pure_keyword = @{ "pure" }
+default_keyword = @{ "default" }
 throwaway = @{ "_" }
 impl_keyword = @{ "impl" }
 impl_sep = ${ impl_keyword ~ sep }
@@ -58,7 +59,7 @@ place_hole = { place | hole }
 stage = @{ "unbound" | "bound" | "encoded" | "submitted" | "ready" | "dead" }
 stage_hole = { stage | hole }
 tag_op = { "node" | "input" | "output" | "halt" }
-tag = !{ none | tag_op ~ "(" ~ meta_funclet_loc ~ ")" }
+tag = !{ tag_op ~ "(" ~ meta_funclet_loc ~ ")" | none }
 
 // Program
 
@@ -87,7 +88,7 @@ type_decl = { (ffi_type_decl | native_value_decl | slot_decl | fence_decl | buff
 
 // Funclets
 
-impl_box = { "[" ~ impl_sep ~ name ~ "]" }
+impl_box = { "[" ~ impl_sep ~ default_keyword? ~ name ~ "]" }
 
 //   external
 

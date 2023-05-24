@@ -240,6 +240,12 @@ pub enum Tag {
 }
 
 #[derive(Debug, Clone)]
+pub struct ValueFunctionBinding {
+    pub default: bool,
+    pub value_function: FuncletId
+}
+
+#[derive(Debug, Clone)]
 pub struct ScheduleBinding {
     pub implicit_tags: Option<(Tag, Tag)>,
     pub value: Option<FuncletId>,
@@ -249,7 +255,7 @@ pub struct ScheduleBinding {
 
 #[derive(Debug, Clone)]
 pub enum FuncletBinding {
-    ValueBinding(FuncletId),
+    ValueBinding(ValueFunctionBinding),
     ScheduleBinding(ScheduleBinding),
     None,
 }
@@ -358,6 +364,7 @@ pub struct ExternalArgument {
 #[derive(Debug)]
 pub struct ExternalFunction {
     pub kind: ExternalFunctionKind,
+    pub value_function_binding: ValueFunctionBinding,
     pub name: String,
     pub input_args: Vec<ExternalArgument>,
     pub output_types: Vec<ExternalArgument>,

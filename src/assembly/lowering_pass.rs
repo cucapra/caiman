@@ -837,5 +837,6 @@ use std::path::Path;
 //     }
 // }
 pub fn lower<T>(mut program: ast::Program) -> Result<frontend::Definition, T> {
+    dbg!(&program);
     todo!()
 }

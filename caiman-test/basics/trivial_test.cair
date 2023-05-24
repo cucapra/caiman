@@ -4,22 +4,23 @@ type i64;
 slot %slot0 : i64-ready-local;
 event %event0 : local;
 
-function @main() -> i64;
+function %main() -> i64;
 
-value[impl-default @main] &foo(%inp : i64) -> i64 {
+value[impl default %main] %foo(%inp : i64) -> i64 {
     %x = constant 4i64;
     return %x;
 }
 
 schedule[value $val = %foo, timeline $time = %foo]
-%bar<input %e, output %e>() -> [%out : $time.%e $slot0] {
-    %x_loc = alloc-temporary-local-i64 @foo.%x;
-    %_ = encode-do-local @foo.%x() -> %x_loc;
+%bar<input($time.%e), output($time.%e)>() ->
+[%out : output($time.%e) %slot0] {
+    %x_loc = alloc-temporary-local-i64 %foo.%x;
+    %_ = encode-do-local %foo.%x() -> %x_loc;
     return %x_loc;
 }
 
-timeline &time(%e : $event0) -> $event0 {
+timeline %time(%e : %event0) -> %event0 {
     return %e;
 }
 
-pipeline "main" = @bar;
+pipeline "main" = %bar;

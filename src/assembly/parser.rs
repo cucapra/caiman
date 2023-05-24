@@ -74,6 +74,10 @@ impl CaimanAssemblyParser {
         unreachable!()
     }
 
+    fn default_keyword(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+
     fn impl_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
@@ -579,9 +583,10 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn impl_box(input: Node) -> ParseResult<FuncletId> {
+    fn impl_box(input: Node) -> ParseResult<(bool, FuncletId)> {
         Ok(match_nodes!(input.into_children();
-            [impl_sep, name(name)] => FuncletId(name)
+            [impl_sep, name(name)] => (false, FuncletId(name)),
+            [impl_sep, default, name(name)] => (true, FuncletId(name))
         ))
     }
 
@@ -693,8 +698,12 @@ impl CaimanAssemblyParser {
     fn external_function(input: Node) -> ParseResult<ast::ExternalFunction> {
         let error = input.error("Invalid external, missing information");
         match_nodes!(input.into_children();
-            [external_loc(loc), impl_box(imp), name(name), external_args(input_args),
-                external_ret(output_types), external_body(body)] => {
+            [external_loc(loc),
+                impl_box((default, value_function)),
+                name(name),
+                external_args(input_args),
+                external_ret(output_types),
+                external_body(body)] => {
                     let kind_result = match loc {
                         (Cpu, true) => Ok(ast::ExternalFunctionKind::CPUPure),
                         (Cpu, false) => Ok(ast::ExternalFunctionKind::CPUEffect),
@@ -704,8 +713,13 @@ impl CaimanAssemblyParser {
                         }
                         _ => Err(error.clone()),
                     };
+                    let value_function_binding = ast::ValueFunctionBinding {
+                        default,
+                        value_function
+                    };
                     kind_result.map(|kind| ast::ExternalFunction {
                         kind,
+                        value_function_binding,
                         name,
                         input_args,
                         output_types,
@@ -799,8 +813,12 @@ impl CaimanAssemblyParser {
 
     fn funclet(input: Node) -> ParseResult<ast::Funclet> {
         match_nodes!(input.into_children();
-            [impl_box(imp), value_funclet(mut value)] => {
-                value.header.binding = ast::FuncletBinding::ValueBinding(imp);
+            [impl_box((default, value_function)), value_funclet(mut value)] => {
+                value.header.binding = ast::FuncletBinding::ValueBinding(
+                    ast::ValueFunctionBinding {
+                        default,
+                        value_function
+                });
                 Ok(value)
             },
             [schedule_box(schedule), mut schedule_funclet] => {
