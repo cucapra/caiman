@@ -1,387 +1,123 @@
-// use crate::assembly::ast;
-// use crate::assembly::ast::FFIType;
-// use crate::assembly::ast::Hole;
-// use crate::assembly::ast::{
-//     ExternalCpuFunction, ExternalGpuFunction, FuncletId, OperationId, StorageTypeId, TypeId,
-//     ValueFunctionId,
-// };
-// use crate::assembly::context;
-// use crate::assembly::context::Context;
-// use crate::assembly::explication_explicator;
-// use crate::assembly::parser;
-// use crate::ir::ffi;
-// use crate::{frontend, ir};
-// use std::any::Any;
-// use std::collections::HashMap;
-//
-// pub fn reject_hole<T>(h: Hole<T>) -> T {
-//     match h {
-//         Some(v) => v,
-//         None => unreachable!("Unimplemented Hole"),
-//     }
-// }
-//
-// pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
-//     fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
-//         b.iter()
-//             .map(|x| ffi::TypeId(context.ffi_type_id(x)))
-//             .collect()
-//     }
-//     fn type_id(element_type: Box<FFIType>, context: &mut Context) -> ffi::TypeId {
-//         ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
-//     }
-//     match value {
-//         FFIType::F32 => ffi::Type::F32,
-//         FFIType::F64 => ffi::Type::F64,
-//         FFIType::U8 => ffi::Type::U8,
-//         FFIType::U16 => ffi::Type::U16,
-//         FFIType::U32 => ffi::Type::U32,
-//         FFIType::U64 => ffi::Type::U64,
-//         FFIType::USize => ffi::Type::USize,
-//         FFIType::I8 => ffi::Type::I8,
-//         FFIType::I16 => ffi::Type::I16,
-//         FFIType::I32 => ffi::Type::I32,
-//         FFIType::I64 => ffi::Type::I64,
-//         FFIType::Array {
-//             element_type,
-//             length,
-//         } => ffi::Type::Array {
-//             element_type: type_id(element_type, context),
-//             length,
-//         },
-//         FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
-//             element_type: type_id(element_type, context),
-//         },
-//         FFIType::Struct {
-//             fields,
-//             byte_alignment,
-//             byte_size,
-//         } => todo!(),
-//         FFIType::Tuple(element_types) => ffi::Type::Tuple {
-//             fields: box_map(element_types.into_boxed_slice(), context),
-//         },
-//         FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
-//             element_type: type_id(element_type, context),
-//         },
-//         FFIType::MutRef(element_type) => ffi::Type::MutRef {
-//             element_type: type_id(element_type, context),
-//         },
-//         FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
-//             element_type: type_id(element_type, context),
-//         },
-//         FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
-//             element_type: type_id(element_type, context),
-//         },
-//         FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
-//             element_type: type_id(element_type, context),
-//         },
-//         FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
-//             element_type: type_id(element_type, context),
-//         },
-//         FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
-//         FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
-//         FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
-//             element_type: type_id(element_type, context),
-//         },
-//     }
-// }
-//
-// pub fn as_key(k: &str) -> ast::Value {
-//     ast::Value::ID(k.to_string())
-// }
-//
-// pub fn as_value(value: ast::DictValue) -> ast::Value {
-//     match value {
-//         ast::DictValue::Raw(v) => v,
-//         _ => panic!("Expected raw value got {:?}", value),
-//     }
-// }
-//
-// pub fn as_list(value: ast::DictValue) -> Vec<ast::DictValue> {
-//     match value {
-//         ast::DictValue::List(v) => v,
-//         _ => panic!("Expected list got {:?}", value),
-//     }
-// }
-//
-// pub fn as_dict(value: ast::DictValue) -> ast::UncheckedDict {
-//     match value {
-//         ast::DictValue::Dict(d) => d,
-//         _ => panic!("Expected dict got {:?}", value),
-//     }
-// }
-//
-// pub fn remote_conversion(remote: &ast::RemoteNodeId, context: &mut Context) -> ir::RemoteNodeId {
-//     context.remote_id(&remote.funclet_name.clone(), &remote.node_name.clone())
-// }
-//
-// pub fn value_string(d: &ast::DictValue, _: &mut Context) -> String {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::ID(s) => s.clone(),
-//         _ => panic!("Expected id got {:?}", v),
-//     }
-// }
-//
-// pub fn value_num(d: &ast::DictValue, _: &mut Context) -> usize {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::Num(n) => n.clone(),
-//         _ => panic!("Expected num got {:?}", v),
-//     }
-// }
-//
-// pub fn value_function_loc(d: &ast::DictValue, context: &mut Context) -> ir::RemoteNodeId {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::FunctionLoc(remote) => ir::RemoteNodeId {
-//             funclet_id: context.funclet_indices.get(&remote.funclet_name).unwrap(),
-//             node_id: context.funclet_indices.get(&remote.node_name).unwrap(),
-//         },
-//         _ => panic!("Expected function location got {:?}", v),
-//     }
-// }
-//
-// pub fn value_var_name(d: &ast::DictValue, ret: bool, context: &mut Context) -> usize {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::VarName(s) => {
-//             if ret {
-//                 context.return_id(&s)
-//             } else {
-//                 context.node_id(&s)
-//             }
-//         }
-//         _ => panic!("Expected variable name got {:?}", v),
-//     }
-// }
-//
-// pub fn value_funclet_name(d: &ast::DictValue, context: &mut Context) -> usize {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
-//         _ => panic!("Expected funclet name got {:?}", v),
-//     }
-// }
-//
-// pub fn value_funclet_raw_id(d: &ast::DictValue, context: &mut Context) -> usize {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::FnName(s) => context.funclet_indices.get(&s).unwrap(),
-//         _ => panic!("Expected funclet name got {:?}", v),
-//     }
-// }
-//
-// pub fn value_type(d: &ast::DictValue, context: &mut Context) -> context::Location {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::Type(t) => match t {
-//             ast::Type::FFI(typ) => context::Location::FFI(context.ffi_type_id(&typ)),
-//             ast::Type::Local(name) => context::Location::Local(context.local_type_id(&name)),
-//         },
-//         _ => panic!("Expected type got {:?}", v),
-//     }
-// }
-//
-// pub fn value_place(d: &ast::DictValue, _: &mut Context) -> ir::Place {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::Place(p) => p.clone(),
-//         _ => panic!("Expected place got {:?}", v),
-//     }
-// }
-//
-// pub fn value_stage(d: &ast::DictValue, _: &mut Context) -> ir::ResourceQueueStage {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::Stage(s) => s.clone(),
-//         _ => panic!("Expected stage got {:?}", v),
-//     }
-// }
-//
-// // This all feels very dumb
-// pub fn value_core_tag(v: ast::TagCore, context: &mut Context) -> ir::ValueTag {
-//     match v {
-//         ast::TagCore::None => ir::ValueTag::None,
-//         ast::TagCore::Operation(r) => ir::ValueTag::Operation {
-//             remote_node_id: remote_conversion(&r, context),
-//         },
-//         ast::TagCore::Input(r) => ir::ValueTag::Input {
-//             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//         ast::TagCore::Output(r) => ir::ValueTag::Output {
-//             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//     }
-// }
-//
-// pub fn timeline_core_tag(v: ast::TagCore, context: &mut Context) -> ir::TimelineTag {
-//     match v {
-//         ast::TagCore::None => ir::TimelineTag::None,
-//         ast::TagCore::Operation(r) => ir::TimelineTag::Operation {
-//             remote_node_id: remote_conversion(&r, context),
-//         },
-//         ast::TagCore::Input(r) => ir::TimelineTag::Input {
-//             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//         ast::TagCore::Output(r) => ir::TimelineTag::Output {
-//             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//     }
-// }
-//
-// pub fn spatial_core_tag(v: ast::TagCore, context: &mut Context) -> ir::SpatialTag {
-//     match v {
-//         ast::TagCore::None => ir::SpatialTag::None,
-//         ast::TagCore::Operation(r) => ir::SpatialTag::Operation {
-//             remote_node_id: remote_conversion(&r, context),
-//         },
-//         ast::TagCore::Input(r) => ir::SpatialTag::Input {
-//             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//         ast::TagCore::Output(r) => ir::SpatialTag::Output {
-//             funclet_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//     }
-// }
-//
-// pub fn value_value_tag(t: &ast::ValueTag, context: &mut Context) -> ir::ValueTag {
-//     match t {
-//         ast::ValueTag::Core(c) => value_core_tag(c.clone(), context),
-//         ast::ValueTag::FunctionInput(r) => ir::ValueTag::FunctionInput {
-//             function_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//         ast::ValueTag::FunctionOutput(r) => ir::ValueTag::FunctionOutput {
-//             function_id: context.funclet_indices.get(&r.funclet_name).unwrap(),
-//             index: context.remote_node_id(&r.funclet_name, &r.node_name),
-//         },
-//         ast::ValueTag::Halt(n) => ir::ValueTag::Halt {
-//             index: context.node_id(&n),
-//         },
-//     }
-// }
-//
-// pub fn value_dict_value_tag(d: &ast::DictValue, context: &mut Context) -> ir::ValueTag {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::Tag(t) => match t {
-//             ast::Tag::ValueTag(v) => value_value_tag(&v, context),
-//             _ => panic!("Expected value tag got {:?}", d),
-//         },
-//         _ => panic!("Expected tag got {:?}", d),
-//     }
-// }
-//
-// pub fn value_timeline_tag(t: &ast::TimelineTag, context: &mut Context) -> ir::TimelineTag {
-//     match t {
-//         ast::TimelineTag::Core(c) => timeline_core_tag(c.clone(), context),
-//     }
-// }
-//
-// pub fn value_dict_timeline_tag(d: &ast::DictValue, context: &mut Context) -> ir::TimelineTag {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::Tag(t) => match t {
-//             ast::Tag::TimelineTag(t) => value_timeline_tag(&t, context),
-//             _ => panic!("Expected timeline tag got {:?}", d),
-//         },
-//         _ => panic!("Expected tag got {:?}", d),
-//     }
-// }
-//
-// pub fn value_spatial_tag(t: &ast::SpatialTag, context: &mut Context) -> ir::SpatialTag {
-//     match t {
-//         ast::SpatialTag::Core(c) => spatial_core_tag(c.clone(), context),
-//     }
-// }
-//
-// pub fn value_dict_spatial_tag(d: &ast::DictValue, context: &mut Context) -> ir::SpatialTag {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::Tag(t) => match t {
-//             ast::Tag::SpatialTag(t) => value_spatial_tag(&t, context),
-//             _ => panic!("Expected spatial tag got {:?}", d),
-//         },
-//         _ => panic!("Expected tag got {:?}", d),
-//     }
-// }
-//
-// pub fn value_slot_info(d: &ast::DictValue, context: &mut Context) -> ir::SlotInfo {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::SlotInfo(s) => ir::SlotInfo {
-//             value_tag: value_value_tag(&s.value_tag, context),
-//             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
-//             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
-//         },
-//         _ => panic!("Expected tag got {:?}", v),
-//     }
-// }
-//
-// pub fn value_fence_info(d: &ast::DictValue, context: &mut Context) -> ir::FenceInfo {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::FenceInfo(s) => ir::FenceInfo {
-//             timeline_tag: value_timeline_tag(&s.timeline_tag, context),
-//         },
-//         _ => panic!("Expected tag got {:?}", v),
-//     }
-// }
-//
-// pub fn value_buffer_info(d: &ast::DictValue, context: &mut Context) -> ir::BufferInfo {
-//     let v = as_value(d.clone());
-//     match v {
-//         ast::Value::BufferInfo(s) => ir::BufferInfo {
-//             spatial_tag: value_spatial_tag(&s.spatial_tag, context),
-//         },
-//         _ => panic!("Expected tag got {:?}", v),
-//     }
-// }
-//
-// pub fn value_list<T>(
-//     v: &ast::DictValue,
-//     f: fn(&ast::DictValue, &mut Context) -> T,
-//     context: &mut Context,
-// ) -> HashMap<usize, T> {
-//     let lst = as_list(v.clone());
-//     let mut result = HashMap::new();
-//     let index = 0;
-//     for value in lst.iter() {
-//         result.insert(index, f(value, context));
-//     }
-//     result
-// }
-//
-// pub fn value_index_var_dict<T>(
-//     v: &ast::DictValue,
-//     f: fn(&ast::DictValue, &mut Context) -> T,
-//     ret: bool, // read remote or not
-//     context: &mut Context,
-// ) -> HashMap<usize, T> {
-//     let d = as_dict(v.clone());
-//     let mut result = HashMap::new();
-//     for pair in d.iter() {
-//         let index = value_var_name(&ast::DictValue::Raw(pair.0.clone()), ret, context);
-//         result.insert(index, f(&pair.1.clone(), context));
-//     }
-//     result
-// }
-//
-// pub fn get_first<'a, T>(v: &'a Vec<T>, test: fn(&T) -> bool) -> Option<&'a T>
-// where
-//     T: Sized,
-// {
-//     for item in v {
-//         if test(item) {
-//             return Some(&item);
-//         }
-//     }
-//     None
-// }
+use crate::assembly::ast;
+use crate::assembly::ast::FFIType;
+use crate::assembly::ast::Hole;
+use crate::assembly::ast::{
+    ExternalFunctionId, FuncletId, NodeId, StorageTypeId, TypeId, ValueFunctionId,
+};
+use crate::assembly::context;
+use crate::assembly::context::Context;
+use crate::assembly::explication_explicator;
+use crate::assembly::parser;
+use crate::ir::ffi;
+use crate::{frontend, ir};
+use std::any::Any;
+use std::collections::HashMap;
+
+pub fn reject_hole<T>(h: Hole<T>) -> T {
+    match h {
+        Some(v) => v,
+        None => unreachable!("Unimplemented Hole"),
+    }
+}
+
+pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
+    fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
+        b.iter()
+            .map(|x| ffi::TypeId(context.ffi_type_id(x)))
+            .collect()
+    }
+    fn type_id(element_type: Box<FFIType>, context: &mut Context) -> ffi::TypeId {
+        ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
+    }
+    match value {
+        FFIType::F32 => ffi::Type::F32,
+        FFIType::F64 => ffi::Type::F64,
+        FFIType::U8 => ffi::Type::U8,
+        FFIType::U16 => ffi::Type::U16,
+        FFIType::U32 => ffi::Type::U32,
+        FFIType::U64 => ffi::Type::U64,
+        FFIType::USize => ffi::Type::USize,
+        FFIType::I8 => ffi::Type::I8,
+        FFIType::I16 => ffi::Type::I16,
+        FFIType::I32 => ffi::Type::I32,
+        FFIType::I64 => ffi::Type::I64,
+        FFIType::Array {
+            element_type,
+            length,
+        } => ffi::Type::Array {
+            element_type: type_id(element_type, context),
+            length,
+        },
+        FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::Struct {
+            fields,
+            byte_alignment,
+            byte_size,
+        } => todo!(),
+        FFIType::Tuple(element_types) => ffi::Type::Tuple {
+            fields: box_map(element_types.into_boxed_slice(), context),
+        },
+        FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::MutRef(element_type) => ffi::Type::MutRef {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
+        FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
+        FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
+            element_type: type_id(element_type, context),
+        },
+    }
+}
+
+pub fn remote_conversion(remote: &ast::RemoteNodeId, context: &Context) -> ir::RemoteNodeId {
+    ir::RemoteNodeId {
+        funclet_id: context
+            .funclet_indices
+            .get_funclet(&remote.funclet_name.clone().unwrap().0)
+            .unwrap()
+            .clone(),
+        node_id: context.node_id(&remote.node_name.clone().unwrap()).clone(),
+    }
+}
+
+pub fn remote_location_conversion(
+    remote: &context::LocationNames,
+    context: &Context,
+) -> ir::RemoteNodeId {
+    ir::RemoteNodeId {
+        funclet_id: context
+            .funclet_indices
+            .get_funclet(&remote.funclet_name.0)
+            .unwrap()
+            .clone(),
+        node_id: context.node_id(&remote.node_name).clone(),
+    }
+}
+
+pub fn get_first<'a, T>(v: &'a Vec<T>, test: fn(&T) -> bool) -> Option<&'a T>
+where
+    T: Sized,
+{
+    for item in v {
+        if test(item) {
+            return Some(&item);
+        }
+    }
+    None
+}

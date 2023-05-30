@@ -197,7 +197,7 @@ pub enum TailEdge {
         return_values: Hole<Vec<Hole<NodeId>>>,
     },
     Yield {
-        pipeline_yield_point: Hole<ExternalFunctionId>,
+        external_function_id: Hole<ExternalFunctionId>,
         yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         next_funclet: Hole<FuncletId>,
         continuation_join: Hole<NodeId>,
@@ -240,9 +240,9 @@ pub enum Tag {
 }
 
 #[derive(Debug, Clone)]
-pub struct ValueFunctionBinding {
+pub struct FunctionClassBinding {
     pub default: bool,
-    pub value_function: FuncletId
+    pub function_class: FuncletId
 }
 
 #[derive(Debug, Clone)]
@@ -255,7 +255,7 @@ pub struct ScheduleBinding {
 
 #[derive(Debug, Clone)]
 pub enum FuncletBinding {
-    ValueBinding(ValueFunctionBinding),
+    ValueBinding(FunctionClassBinding),
     ScheduleBinding(ScheduleBinding),
     None,
 }
@@ -357,14 +357,14 @@ pub enum ExternalFunctionKind {
 
 #[derive(Debug)]
 pub struct ExternalArgument {
-    pub name: Option<String>,
+    pub name: Option<NodeId>,
     pub ffi_type: FFIType,
 }
 
 #[derive(Debug)]
 pub struct ExternalFunction {
     pub kind: ExternalFunctionKind,
-    pub value_function_binding: ValueFunctionBinding,
+    pub value_function_binding: FunctionClassBinding,
     pub name: String,
     pub input_args: Vec<ExternalArgument>,
     pub output_types: Vec<ExternalArgument>,

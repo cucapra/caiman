@@ -670,7 +670,7 @@ impl CaimanAssemblyParser {
     fn external_arg(input: Node) -> ParseResult<ast::ExternalArgument> {
         Ok(match_nodes!(input.into_children();
             [name(name), ffi_type(ffi_type)] =>
-                ast::ExternalArgument { name: Some(name), ffi_type },
+                ast::ExternalArgument { name: Some(NodeId(name)), ffi_type },
             [ffi_type(ffi_type)] => ast::ExternalArgument{ name: None, ffi_type }
         ))
     }
@@ -699,7 +699,7 @@ impl CaimanAssemblyParser {
         let error = input.error("Invalid external, missing information");
         match_nodes!(input.into_children();
             [external_loc(loc),
-                impl_box((default, value_function)),
+                impl_box((default, function_class)),
                 name(name),
                 external_args(input_args),
                 external_ret(output_types),
@@ -713,9 +713,9 @@ impl CaimanAssemblyParser {
                         }
                         _ => Err(error.clone()),
                     };
-                    let value_function_binding = ast::ValueFunctionBinding {
+                    let value_function_binding = ast::FunctionClassBinding {
                         default,
-                        value_function
+                        function_class
                     };
                     kind_result.map(|kind| ast::ExternalFunction {
                         kind,
@@ -813,11 +813,11 @@ impl CaimanAssemblyParser {
 
     fn funclet(input: Node) -> ParseResult<ast::Funclet> {
         match_nodes!(input.into_children();
-            [impl_box((default, value_function)), value_funclet(mut value)] => {
+            [impl_box((default, function_class)), value_funclet(mut value)] => {
                 value.header.binding = ast::FuncletBinding::ValueBinding(
-                    ast::ValueFunctionBinding {
+                    ast::FunctionClassBinding {
                         default,
-                        value_function
+                        function_class
                 });
                 Ok(value)
             },
@@ -1061,7 +1061,7 @@ impl CaimanAssemblyParser {
             [yield_sep, name_hole(pipeline_yield_point), node_box(yielded_nodes),
                 name_hole_sep(next_funclet), name_hole(continuation_join), node_box(arguments)] =>
                 ast::TailEdge::Yield {
-                    pipeline_yield_point: pipeline_yield_point.map(|s| ExternalFunctionId(s)),
+                    external_function_id: pipeline_yield_point.map(|s| ExternalFunctionId(s)),
                     yielded_nodes,
                     next_funclet: next_funclet.map(|s| FuncletId(s)),
                     continuation_join: continuation_join.map(|s| NodeId(s)),
