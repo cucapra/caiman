@@ -6,12 +6,12 @@ event %event0 : local;
 
 function %main() -> i64;
 
-value[impl default %main] %foo(%inp : i64) -> i64 {
+value[impl default %main] %foo() -> i64 {
     %x = constant 4i64;
     return %x;
 }
 
-schedule[value $val = %foo, timeline $time = %foo]
+schedule[value $val = %foo, timeline $time = %time]
 %bar<input($time.%e), output($time.%e)>() ->
 [%out : output($time.%e) %slot0] {
     %x_loc = alloc-temporary-local-i64 %foo.%x;

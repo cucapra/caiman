@@ -377,6 +377,14 @@ impl Context {
                     self.funclet_indices
                         .insert(f.header.name.0.clone(), FuncletLocation::Local);
                     let mut node_table = NodeTable::new();
+                    for arg in &f.header.args {
+                        match &arg.name {
+                            None => {}
+                            Some(name) => {
+                                node_table.local.push(name.clone());
+                            }
+                        }
+                    }
                     for command in &f.commands {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
@@ -413,6 +421,7 @@ impl Context {
                 _ => {}
             }
         }
+        dbg!(&self);
     }
 
     pub fn setup_schedule_data(&mut self, value_funclet: FuncletId) {
@@ -426,10 +435,6 @@ impl Context {
             self.location.funclet_name.clone(),
             ScheduleFuncletData::new(value_funclet),
         );
-    }
-
-    pub fn reset_location(&mut self) {
-        self.location = LocationNames::new()
     }
 
     pub fn ffi_type_id(&self, name: &ast::FFIType) -> usize {

@@ -561,7 +561,10 @@ fn map_tag(tag: &ast::Tag, context: &mut Context) -> Option<(Hole<FuncletId>, ir
         }) => Some((
             funclet_name.clone(),
             ir::Tag::Node {
-                node_id: context.node_id(reject_hole(node_name.as_ref())),
+                node_id: context.remote_node_id(
+                    reject_hole(funclet_name.as_ref()),
+                    reject_hole(node_name.as_ref()),
+                ),
             },
         )),
         ast::Tag::Input(ast::RemoteNodeId {
@@ -570,7 +573,10 @@ fn map_tag(tag: &ast::Tag, context: &mut Context) -> Option<(Hole<FuncletId>, ir
         }) => Some((
             funclet_name.clone(),
             ir::Tag::Input {
-                index: context.node_id(reject_hole(node_name.as_ref())),
+                index: context.remote_node_id(
+                    reject_hole(funclet_name.as_ref()),
+                    reject_hole(node_name.as_ref()),
+                ),
             },
         )),
         ast::Tag::Output(ast::RemoteNodeId {
@@ -579,7 +585,10 @@ fn map_tag(tag: &ast::Tag, context: &mut Context) -> Option<(Hole<FuncletId>, ir
         }) => Some((
             funclet_name.clone(),
             ir::Tag::Output {
-                index: context.node_id(reject_hole(node_name.as_ref())),
+                index: context.remote_node_id(
+                    reject_hole(funclet_name.as_ref()),
+                    reject_hole(node_name.as_ref()),
+                ),
             },
         )),
         ast::Tag::Halt(ast::RemoteNodeId {
@@ -588,7 +597,10 @@ fn map_tag(tag: &ast::Tag, context: &mut Context) -> Option<(Hole<FuncletId>, ir
         }) => Some((
             funclet_name.clone(),
             ir::Tag::Halt {
-                index: context.node_id(reject_hole(node_name.as_ref())),
+                index: context.remote_node_id(
+                    reject_hole(funclet_name.as_ref()),
+                    reject_hole(node_name.as_ref()),
+                ),
             },
         )),
     }
@@ -707,14 +719,18 @@ fn ir_schedule_binding(
 
     ir::FuncletSpecBinding::ScheduleExplicit {
         value: ir::FuncletSpec {
-            funclet_id_opt: value.clone().map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
+            funclet_id_opt: value
+                .clone()
+                .map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
             input_tags: input_tags.value_tags.into_boxed_slice(),
             output_tags: output_tags.value_tags.into_boxed_slice(),
             implicit_in_tag: ir::Tag::None,
             implicit_out_tag: ir::Tag::None,
         },
         spatial: ir::FuncletSpec {
-            funclet_id_opt: value.clone().map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
+            funclet_id_opt: value
+                .clone()
+                .map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
             input_tags: input_tags.spatial_tags.into_boxed_slice(),
             output_tags: output_tags.spatial_tags.into_boxed_slice(),
             implicit_in_tag: ir::Tag::None,
@@ -722,7 +738,9 @@ fn ir_schedule_binding(
         },
         timeline: ir::FuncletSpec {
             // assume implicit is timeline for now?
-            funclet_id_opt: value.clone().map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
+            funclet_id_opt: value
+                .clone()
+                .map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
             implicit_in_tag,
@@ -768,6 +786,7 @@ fn ir_spec_binding(
 }
 
 fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
+    context.location.funclet_name = funclet.header.name.clone();
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
@@ -847,12 +866,12 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
 
     for declaration in &program.declarations {
         match declaration {
-            ast::Declaration::TypeDecl(t) => {
-                match ir_type_decl(t, context) {
-                    Some(typ) => { types.add(typ); },
-                    None => {}
+            ast::Declaration::TypeDecl(t) => match ir_type_decl(t, context) {
+                Some(typ) => {
+                    types.add(typ);
                 }
-            }
+                None => {}
+            },
             ast::Declaration::ExternalFunction(e) => {
                 // nothing to do cause in the native_interface
                 // some duplicate looping, but whatever
@@ -867,7 +886,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
                 pipelines.push(ir_pipeline(p, context));
             }
         }
-    };
+    }
 
     ir::Program {
         native_interface,
