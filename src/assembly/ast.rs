@@ -242,7 +242,7 @@ pub enum Tag {
 #[derive(Debug, Clone)]
 pub struct FunctionClassBinding {
     pub default: bool,
-    pub function_class: FuncletId
+    pub function_class: FuncletId,
 }
 
 #[derive(Debug, Clone)]

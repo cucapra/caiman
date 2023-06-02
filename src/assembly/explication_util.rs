@@ -86,10 +86,13 @@ pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
 }
 
 pub fn remote_conversion(remote: &ast::RemoteNodeId, context: &Context) -> ir::RemoteNodeId {
-    remote_location_conversion(&context::LocationNames {
-        funclet_name: remote.funclet_name.clone().unwrap(),
-        node_name: remote.node_name.clone().unwrap(),
-    }, context)
+    remote_location_conversion(
+        &context::LocationNames {
+            funclet_name: remote.funclet_name.clone().unwrap(),
+            node_name: remote.node_name.clone().unwrap(),
+        },
+        context,
+    )
 }
 
 pub fn remote_location_conversion(
@@ -102,7 +105,9 @@ pub fn remote_location_conversion(
             .get_funclet(&remote.funclet_name.0)
             .unwrap()
             .clone(),
-        node_id: context.remote_node_id(&remote.funclet_name, &remote.node_name).clone(),
+        node_id: context
+            .remote_node_id(&remote.funclet_name, &remote.node_name)
+            .clone(),
     }
 }
 

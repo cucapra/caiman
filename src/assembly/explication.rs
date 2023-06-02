@@ -2,7 +2,7 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FuncletId, StorageTypeId, TypeId, ValueFunctionId, NodeId
+    ExternalFunctionId, FuncletId, NodeId, StorageTypeId, TypeId, ValueFunctionId,
 };
 use crate::assembly::context::Context;
 use crate::assembly::context::FuncletLocation;
@@ -17,30 +17,32 @@ use std::collections::HashMap;
 // always called immediately, turns arguments into phi nodes
 // note that phi nodes will precede anything in the function, including other phi nodes
 fn add_phi_nodes(program: ast::Program, context: &mut Context) -> ast::Program {
-    let declarations = program.declarations.into_iter().map(|declaration| match declaration {
-        ast::Declaration::Funclet(f) => {
-            let mut commands = Vec::new();
-            let mut index = 0;
-            for arg in &f.header.args {
-                commands.push(Some(ast::Command::Node(
-                    ast::NamedNode {
+    let declarations = program
+        .declarations
+        .into_iter()
+        .map(|declaration| match declaration {
+            ast::Declaration::Funclet(f) => {
+                let mut commands = Vec::new();
+                let mut index = 0;
+                for arg in &f.header.args {
+                    commands.push(Some(ast::Command::Node(ast::NamedNode {
                         name: arg.name.clone().unwrap_or(NodeId("".to_string())),
-                        node: ast::Node::Phi {
-                    index: Some(index),
-                }})));
-                index += 1;
+                        node: ast::Node::Phi { index: Some(index) },
+                    })));
+                    index += 1;
+                }
+                for command in f.commands.into_iter() {
+                    commands.push(command);
+                }
+                ast::Declaration::Funclet(ast::Funclet {
+                    kind: f.kind,
+                    header: f.header,
+                    commands,
+                })
             }
-            for command in f.commands.into_iter() {
-                commands.push(command);
-            }
-            ast::Declaration::Funclet(ast::Funclet {
-                kind: f.kind,
-                header: f.header,
-                commands,
-            })
-        }
-        d => d,
-    }).collect();
+            d => d,
+        })
+        .collect();
     ast::Program {
         version: program.version,
         declarations,

@@ -14,7 +14,7 @@ use std::hash::Hash;
 pub struct LocationNames {
     // a bit confusing, but unwrapping holes is annoying
     pub funclet_name: FuncletId,
-    pub node_name: NodeId
+    pub node_name: NodeId,
 }
 
 #[derive(Debug)]
@@ -364,8 +364,8 @@ impl Context {
             match declaration {
                 ast::Declaration::TypeDecl(typ) => match typ {
                     ast::TypeDecl::FFI(t) => self.ffi_type_table.push(t.clone()),
-                        ast::TypeDecl::Local(t) => self.local_type_table.push(t.name.clone()),
-                }
+                    ast::TypeDecl::Local(t) => self.local_type_table.push(t.name.clone()),
+                },
                 ast::Declaration::Funclet(f) => {
                     match f.kind {
                         ir::FuncletKind::Value => {
@@ -580,11 +580,7 @@ impl Context {
     }
 
     // get what the associated schedule node is allocating
-    pub fn get_value_allocation(
-        &self,
-        funclet: &FuncletId,
-        node: &NodeId,
-    ) -> Option<&ast::NodeId> {
+    pub fn get_value_allocation(&self, funclet: &FuncletId, node: &NodeId) -> Option<&ast::NodeId> {
         self.schedule_explication_data
             .get(funclet)
             .and_then(|f| f.allocations.get(node))
