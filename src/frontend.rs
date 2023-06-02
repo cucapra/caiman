@@ -40,7 +40,6 @@ fn read_definition(
     match compile_mode {
         CompileMode::Assembly => {
             let program = crate::assembly::parser::parse(input_string);
-            // dbg!(&program.context);
 
             match program {
                 Err(why) => Err(CompileError {
@@ -74,7 +73,7 @@ pub fn explicate_caiman(
 ) -> Result<String, CompileError> {
     let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
     let mut definition = read_definition(input_string, options.compile_mode)?;
-    assert_eq!(definition.version, (0, 0, 1));
+    assert_eq!(definition.version, (0, 0, 2));
     let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
     Ok(output_string_result.unwrap())
 }

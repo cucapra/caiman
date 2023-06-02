@@ -378,6 +378,8 @@ impl Context {
                         .insert(f.header.name.0.clone(), FuncletLocation::Local);
                     let mut node_table = NodeTable::new();
                     for arg in &f.header.args {
+                        // duplicate work with adding the phi nodes, but probably ok?
+                        // we don't want to own the program here, so here we are
                         match &arg.name {
                             None => {}
                             Some(name) => {
@@ -421,7 +423,6 @@ impl Context {
                 _ => {}
             }
         }
-        dbg!(&self);
     }
 
     pub fn setup_schedule_data(&mut self, value_funclet: FuncletId) {

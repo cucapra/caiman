@@ -614,6 +614,7 @@ fn ir_schedule_binding(
     spatial: &Option<FuncletId>,
     context: &mut Context,
 ) -> ir::FuncletSpecBinding {
+    #[derive(Debug)]
     struct TagSet {
         value: ir::Tag,
         spatial: ir::Tag,
@@ -713,7 +714,7 @@ fn ir_schedule_binding(
         None => {}
         Some((in_tag, out_tag)) => {
             implicit_in_tag = map_tag(in_tag, context).unwrap_or((None, ir::Tag::None)).1;
-            implicit_out_tag = map_tag(in_tag, context).unwrap_or((None, ir::Tag::None)).1;
+            implicit_out_tag = map_tag(out_tag, context).unwrap_or((None, ir::Tag::None)).1;
         }
     }
 
@@ -728,7 +729,7 @@ fn ir_schedule_binding(
             implicit_out_tag: ir::Tag::None,
         },
         spatial: ir::FuncletSpec {
-            funclet_id_opt: value
+            funclet_id_opt: spatial
                 .clone()
                 .map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
             input_tags: input_tags.spatial_tags.into_boxed_slice(),
@@ -738,7 +739,7 @@ fn ir_schedule_binding(
         },
         timeline: ir::FuncletSpec {
             // assume implicit is timeline for now?
-            funclet_id_opt: value
+            funclet_id_opt: timeline
                 .clone()
                 .map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
@@ -825,9 +826,15 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     }
 }
 
-fn ir_function_class(function: &ast::FunctionClass, context: &mut Context) -> ir::FunctionClass {
+fn ir_function_class(
+    declarations: &Vec<ast::Declaration>,
+    function: &ast::FunctionClass,
+    context: &mut Context,
+) -> ir::FunctionClass {
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
+    let mut default_funclet_id = None;
+    let mut external_function_ids = BTreeSet::new();
 
     for typ in &function.input_types {
         input_types.push(context.loc_type_id(&typ));
@@ -836,12 +843,36 @@ fn ir_function_class(function: &ast::FunctionClass, context: &mut Context) -> ir
         output_types.push(context.loc_type_id(&typ));
     }
 
+    // not efficient, but whatever
+    for declaration in declarations {
+        match declaration {
+            ast::Declaration::Funclet(f) => match &f.header.binding {
+                ast::FuncletBinding::ValueBinding(binding) => {
+                    let current_id = context
+                        .funclet_indices
+                        .get_funclet(&f.header.name.0)
+                        .unwrap();
+                    if binding.default {
+                        default_funclet_id = match default_funclet_id {
+                            None => Some(current_id),
+                            Some(_) => {
+                                panic!("Duplicate default ids for {:?}", function.name.clone())
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+
     ir::FunctionClass {
         name_opt: Some(function.name.clone()),
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
-        default_funclet_id: None,
-        external_function_ids: BTreeSet::new(),
+        default_funclet_id,
+        external_function_ids,
     }
 }
 
@@ -877,7 +908,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
                 // some duplicate looping, but whatever
             }
             ast::Declaration::FunctionClass(c) => {
-                function_classes.add(ir_function_class(c, context));
+                function_classes.add(ir_function_class(&program.declarations, c, context));
             }
             ast::Declaration::Funclet(f) => {
                 funclets.add(ir_funclet(f, context));
