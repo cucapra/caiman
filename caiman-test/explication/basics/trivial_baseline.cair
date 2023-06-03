@@ -15,7 +15,7 @@ schedule[value $val = %foo, timeline $time = %time]
 %bar<input($time.%e), output($time.%e)>() ->
 [%out : %slot0] {
     %x_loc = alloc-temporary-local-i64 %foo.%x;
-    %_ = encode-do-local ? -> %x_loc;
+    %_ = encode-do-local %foo.%x() -> %x_loc;
     return %x_loc;
 }
 
