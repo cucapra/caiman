@@ -938,7 +938,6 @@ fn correct_names(program: &mut ast::Program) -> usize {
 
 pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
-    dbg!(&program);
     let node_name = correct_names(&mut program);
     let mut context = Context::new(&program, node_name);
     let explicated_program = explication::explicate(program, &mut context);
