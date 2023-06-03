@@ -4,9 +4,9 @@ type i64;
 slot %slot0 : i64-ready-local;
 event %event0 : local;
 
-function %main() -> i64;
+function @main() -> i64;
 
-value[impl default %main] %foo() -> i64 {
+value[impl default @main] %foo() -> i64 {
     %x = constant 4i64;
     return %x;
 }

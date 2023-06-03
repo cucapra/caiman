@@ -2,7 +2,7 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FuncletId, NodeId, StorageTypeId, TypeId, ValueFunctionId,
+    ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
 use crate::assembly::context::Context;
 use crate::assembly::context::FuncletLocation;

@@ -24,6 +24,8 @@ impl_sep = ${ impl_keyword ~ sep }
 
 name = ${ "%" ~ (id | n | throwaway) }
 name_sep = ${ name ~ sep }
+function_name = ${ "@" ~ id }
+function_name_sep = ${ function_name ~ sep }
 name_hole = { name | hole }
 name_hole_sep = ${ name_hole ~ sep }
 meta_name = ${ "$" ~ (id | throwaway) }
@@ -88,7 +90,7 @@ type_decl = { (ffi_type_decl | native_value_decl | slot_decl | fence_decl | buff
 
 // Funclets
 
-impl_box = { "[" ~ impl_sep ~ default_keyword? ~ name ~ "]" }
+impl_box = { "[" ~ impl_sep ~ default_keyword? ~ function_name ~ "]" }
 
 //   external
 
@@ -116,7 +118,7 @@ external_function = { external_loc ~ impl_box ~ name
 function_class_sep = @{ "function" ~ sep }
 function_class_args = { (typ ~ ("," ~ typ)*)? }
 function_class_ret = { ("[" ~ function_class_args ~ "]") | typ }
-function_class = { function_class_sep ~ name ~ "("
+function_class = { function_class_sep ~ function_name ~ "("
     ~ function_class_args ~ ")" ~ "->" ~ function_class_ret ~ ";" }
 
 //   funclet
@@ -199,8 +201,7 @@ constant_node = ${ "constant" ~ sep ~ n ~ ffi_type }
 extract_sep = @{ "extract" ~ sep }
 extract_node = { extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }
-call_params = { ("<" ~ node_list ~ ">")? }
-call_node = { call_sep ~ name ~ call_params ~ node_call }
+call_node = { call_sep ~ function_name ~ node_call }
 select_sep = @{ "select" ~ sep }
 select_node = { select_sep ~ name_sep ~ name_sep ~ name }
 

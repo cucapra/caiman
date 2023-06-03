@@ -2,7 +2,7 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FuncletId, NodeId, StorageTypeId, TypeId, ValueFunctionId,
+    ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
 use crate::assembly::context::Context;
 use crate::assembly::context::FuncletLocation;
@@ -240,7 +240,21 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> Option<ir::Node> {
         ast::Node::CallValueFunction {
             function_id,
             arguments,
-        } => unreachable!(), // arbitrary unification of calls
+        } => {
+            let name = reject_hole(function_id.clone());
+            let mapped_arguments: Vec<ir::NodeId> = reject_hole(arguments.as_ref())
+                .iter()
+                .map(|n| context.node_id(reject_hole(n.as_ref())))
+                .collect();
+            let function_id = context.funclet_indices.get_funclet(&name.0).unwrap();
+            Some(ir::Node::CallValueFunction {
+                function_id: context
+                    .function_classes
+                    .get(&FunctionClassId(name.0.clone()))
+                    .unwrap(),
+                arguments: mapped_arguments.into_boxed_slice(),
+            })
+        }
         ast::Node::Select {
             condition,
             true_case,
@@ -253,40 +267,12 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> Option<ir::Node> {
         ast::Node::CallExternalCpu {
             external_function_id,
             arguments,
-        } => unreachable!(), // arbitrary unification of calls
+        } => unreachable!(), // unification of calls
         ast::Node::CallExternalGpuCompute {
             external_function_id,
             dimensions,
             arguments,
-        } => {
-            let name = reject_hole(external_function_id.clone());
-            let mapped_arguments = reject_hole(arguments.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect();
-            let function_id = context.funclet_indices.get_funclet(&name.0).unwrap();
-            Some(match context.funclet_indices.get_loc(&name.0).unwrap() {
-                FuncletLocation::Local => {
-                    panic!("Cannot directly call local funclet {}", name)
-                }
-                FuncletLocation::FunctionClass => ir::Node::CallValueFunction {
-                    function_id,
-                    arguments: mapped_arguments,
-                },
-                FuncletLocation::ExternalCpu => ir::Node::CallExternalCpu {
-                    external_function_id: ffi::ExternalFunctionId(function_id),
-                    arguments: mapped_arguments,
-                },
-                FuncletLocation::ExternalGpu => ir::Node::CallExternalGpuCompute {
-                    external_function_id: ffi::ExternalFunctionId(function_id),
-                    dimensions: reject_hole(dimensions.as_ref())
-                        .iter()
-                        .map(|n| context.node_id(reject_hole(n.as_ref())))
-                        .collect(),
-                    arguments: mapped_arguments,
-                },
-            })
-        }
+        } => unreachable!(), // unification of calls
         ast::Node::AllocTemporary {
             place,
             storage_type,
@@ -760,12 +746,8 @@ fn ir_spec_binding(
             default,
             function_class,
         }) => {
-            let value_function_id_opt = Some(
-                context
-                    .funclet_indices
-                    .get_funclet(&function_class.0)
-                    .unwrap(),
-            );
+            let value_function_id_opt =
+                Some(context.function_classes.get(&function_class).unwrap());
             ir::FuncletSpecBinding::Value {
                 value_function_id_opt,
             }
@@ -868,7 +850,7 @@ fn ir_function_class(
     }
 
     ir::FunctionClass {
-        name_opt: Some(function.name.clone()),
+        name_opt: Some(function.name.0.clone()),
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         default_funclet_id,
@@ -956,6 +938,7 @@ fn correct_names(program: &mut ast::Program) -> usize {
 
 pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
+    dbg!(&program);
     let node_name = correct_names(&mut program);
     let mut context = Context::new(&program, node_name);
     let explicated_program = explication::explicate(program, &mut context);

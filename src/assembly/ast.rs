@@ -43,7 +43,7 @@ macro_rules! def_assembly_id_type {
 
 def_assembly_id_type!(FuncletId);
 def_assembly_id_type!(ExternalFunctionId);
-def_assembly_id_type!(ValueFunctionId);
+def_assembly_id_type!(FunctionClassId);
 def_assembly_id_type!(NodeId);
 def_assembly_id_type!(LocalTypeId);
 
@@ -128,7 +128,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ImmediateU64) => { u64 };
 	(Index) => { usize };
 	(ExternalFunction) => { ExternalFunctionId };
-	(ValueFunction) => { ValueFunctionId };
+	(ValueFunction) => { FunctionClassId };
 	(Operation) => { NodeId };
 	(RemoteOperation) => { RemoteNodeId };
 	(Place) => { ir::Place };
@@ -242,7 +242,7 @@ pub enum Tag {
 #[derive(Debug, Clone)]
 pub struct FunctionClassBinding {
     pub default: bool,
-    pub function_class: FuncletId,
+    pub function_class: FunctionClassId,
 }
 
 #[derive(Debug, Clone)]
@@ -380,7 +380,7 @@ pub struct Version {
 
 #[derive(Debug)]
 pub struct FunctionClass {
-    pub name: String,
+    pub name: FunctionClassId,
     pub input_types: Vec<TypeId>,
     pub output_types: Vec<TypeId>,
 }

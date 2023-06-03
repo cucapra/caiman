@@ -32,12 +32,12 @@ event %event0 : local;
 scheduling_join %scheduling_join0;
 buffer_space %buffer_space0;
 
-function %simple(i64) -> i64;
+function @simple(i64) -> i64;
 
-external-cpu-pure[impl %simple] %do_pure_thing_on_cpu(i64) -> i64;
-external-cpu[impl %simple] %do_thing_on_cpu(i64) -> i64;
+external-cpu-pure[impl @simple] %do_pure_thing_on_cpu(i64) -> i64;
+external-cpu[impl @simple] %do_thing_on_cpu(i64) -> i64;
 // the path is required, and is relative to where you run this thing at the moment (unfortunately)
-external-gpu[impl %simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
+external-gpu[impl @simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
 {
     // I dunno if this is worth cleaning up, probably not
     path : "caiman-test/reference_untested/example.comp",
@@ -54,24 +54,24 @@ external-gpu[impl %simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
     }
 }
 
-function %simple_32(i32) -> i32;
+function @simple_32(i32) -> i32;
 
-value[impl %simple_32] %foo(%test : i32) -> [%out : i32] {
+value[impl @simple_32] %foo(%test : i32) -> [%out : i32] {
     %1 = constant 4i64;
     %2 = extract %1 0;
-    %4 = call %simple(%1);
-    %5 = select %1 %2 %3;
-    %6 = call %do_thing_on_cpu(%1);
-    %_ = call %do_thing_on_gpu<%1>(%1);
+    %4 = call @simple(%1);
+    %5 = select %1 %2 %4;
+    %6 = call @simple(%1);
+    %_ = call @simple<%1>(%1);
     return %1;
 }
 
-value[impl %simple] %y(%abc : i64) -> [%out : i64] {
+value[impl @simple] %y(%abc : i64) -> [%out : i64] {
     // pretty clunky tbh
     yield %abc [%abc] %foo %abc [%abc, %abc];
 }
 
-value[impl %simple] %j(%abc : i64) -> [i64] {
+value[impl @simple] %j(%abc : i64) -> [i64] {
     jump %abc [%abc, %abc];
 }
 

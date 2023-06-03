@@ -11,8 +11,8 @@ use crate::{assembly, frontend, ir};
 use assembly::ast;
 use ast::Hole;
 use ast::{
-    ExternalFunctionId, FFIType, FuncletId, NodeId, RemoteNodeId, StorageTypeId, TypeId,
-    ValueFunctionId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
+    TypeId,
 };
 use ir::ffi;
 
@@ -208,6 +208,18 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn function_name(input: Node) -> ParseResult<String> {
+        Ok(match_nodes!(input.into_children();
+            [id(s)] => s,
+        ))
+    }
+
+    fn function_name_sep(input: Node) -> ParseResult<String> {
+        Ok(match_nodes!(input.into_children();
+            [function_name(name)] => name
+        ))
+    }
+
     fn name_hole(input: Node) -> ParseResult<Hole<String>> {
         Ok(match_nodes!(input.into_children();
             [name(name)] => Some(name),
@@ -264,12 +276,24 @@ impl CaimanAssemblyParser {
     }
 
     fn meta_funclet_loc_inner(input: Node) -> ParseResult<RemoteNodeId> {
-        Ok(match_nodes!(input.into_children();
-            [meta_name(funclet_name), name(node_name)] => ast::RemoteNodeId {
-                funclet_name: Some(FuncletId(funclet_name)),
-                node_name: Some(NodeId(node_name))
-            }
-        ))
+        let error = input.error("Unknown meta name");
+        let meta_map = input
+            .user_data()
+            .binding_info
+            .borrow()
+            .clone()
+            .unwrap()
+            .meta_map;
+        match_nodes!(input.into_children();
+            [meta_name(meta_name), name(node_name)] =>
+                match meta_map.get(&meta_name) {
+                        Some(funclet_name) => Ok(ast::RemoteNodeId {
+                            funclet_name: Some(funclet_name.clone()),
+                            node_name: Some(NodeId(node_name))
+                        }),
+                        None => Err(error)
+                }
+        )
     }
 
     fn meta_funclet_loc(input: Node) -> ParseResult<RemoteNodeId> {
@@ -583,10 +607,10 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn impl_box(input: Node) -> ParseResult<(bool, FuncletId)> {
+    fn impl_box(input: Node) -> ParseResult<(bool, FunctionClassId)> {
         Ok(match_nodes!(input.into_children();
-            [impl_sep, name(name)] => (false, FuncletId(name)),
-            [impl_sep, default, name(name)] => (true, FuncletId(name))
+            [impl_sep, function_name(name)] => (false, FunctionClassId(name)),
+            [impl_sep, default, function_name(name)] => (true, FunctionClassId(name))
         ))
     }
 
@@ -743,10 +767,10 @@ impl CaimanAssemblyParser {
 
     fn function_class(input: Node) -> ParseResult<ast::FunctionClass> {
         match_nodes!(input.into_children();
-            [function_class_sep, name(name),
+            [function_class_sep, function_name(name),
             function_class_args(input_types), function_class_ret(output_types)] =>
                 Ok(ast::FunctionClass {
-                    name,
+                    name: FunctionClassId(name),
                     input_types,
                     output_types
                 })
@@ -1184,21 +1208,12 @@ impl CaimanAssemblyParser {
         }))
     }
 
-    fn call_params(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
-        Ok(match_nodes!(input.into_children();
-            [node_list(nodes)] => Some(nodes),
-            [] => None
-        ))
-    }
-
     fn call_node(input: Node) -> ParseResult<ast::Node> {
         // will split apart later
         Ok(match_nodes!(input.into_children();
-            [call_sep, name(external_function_id),
-                call_params(dimensions), node_call(arguments)] =>
-                ast::Node::CallExternalGpuCompute {
-                    external_function_id: Some(ExternalFunctionId(external_function_id)),
-                    dimensions,
+            [call_sep, function_name(external_function_id), node_call(arguments)] =>
+                ast::Node::CallValueFunction {
+                    function_id: Some(FunctionClassId(external_function_id)),
                     arguments
         }))
     }

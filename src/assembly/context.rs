@@ -1,8 +1,8 @@
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, NodeId, RemoteNodeId, StorageTypeId, TypeId,
-    ValueFunctionId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
+    TypeId,
 };
 use crate::ir;
 use debug_ignore::DebugIgnore;
@@ -76,7 +76,6 @@ struct ScheduleFuncletData {
 #[derive(Debug, Clone)]
 pub enum FuncletLocation {
     Local,
-    FunctionClass,
     ExternalCpu, // todo: fix later
     ExternalGpu,
 }
@@ -113,7 +112,6 @@ pub struct FuncletInformation {
 pub struct FuncletIndices {
     external_funclet_table: Table<ExternalFunctionId>,
     local_funclet_table: Table<FuncletId>,
-    value_function_table: Table<ValueFunctionId>,
     funclet_kind_map: HashMap<String, FuncletLocation>,
 }
 
@@ -131,6 +129,7 @@ pub struct Context {
     // optional cause we may not have started traversal
     pub location: LocationNames,
     pub funclet_indices: FuncletIndices,
+    pub function_classes: Table<FunctionClassId>,
 
     // information found about a given value funclet
     value_explication_data: HashMap<FuncletId, ValueFuncletData>,
@@ -285,7 +284,6 @@ impl FuncletIndices {
         FuncletIndices {
             external_funclet_table: Table::new(),
             local_funclet_table: Table::new(),
-            value_function_table: Table::new(),
             funclet_kind_map: HashMap::new(),
         }
     }
@@ -299,9 +297,6 @@ impl FuncletIndices {
             FuncletLocation::ExternalGpu => self
                 .external_funclet_table
                 .push(ExternalFunctionId(name.clone())),
-            FuncletLocation::FunctionClass => self
-                .value_function_table
-                .push(ValueFunctionId(name.clone())),
         }
         self.funclet_kind_map.insert(name, location);
     }
@@ -323,9 +318,6 @@ impl FuncletIndices {
             FuncletLocation::ExternalGpu => self
                 .external_funclet_table
                 .get(&ExternalFunctionId(name.clone())),
-            FuncletLocation::FunctionClass => self
-                .value_function_table
-                .get(&ValueFunctionId(name.clone())),
         })
     }
 }
@@ -349,6 +341,7 @@ impl Context {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
             funclet_indices: FuncletIndices::new(),
+            function_classes: Table::new(),
             variable_map: HashMap::new(),
             location: LocationNames::new(),
         };
@@ -417,8 +410,7 @@ impl Context {
                     self.funclet_indices.insert(f.name.clone(), location);
                 }
                 ast::Declaration::FunctionClass(f) => {
-                    self.funclet_indices
-                        .insert(f.name.clone(), FuncletLocation::FunctionClass);
+                    self.function_classes.push(f.name.clone());
                 }
                 _ => {}
             }
