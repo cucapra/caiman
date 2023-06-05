@@ -8,8 +8,6 @@ use crate::assembly::context::Context;
 use crate::assembly::context::FuncletLocation;
 use crate::assembly::context::LocationNames;
 use crate::assembly::explication;
-use crate::assembly::explication_explicator;
-use crate::assembly::explication_util::*;
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::{assembly, frontend, ir};
@@ -22,6 +20,106 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+
+// Utility stuff
+
+pub fn reject_hole<T>(h: Hole<T>) -> T {
+    match h {
+        Some(v) => v,
+        None => unreachable!("Unimplemented Hole"),
+    }
+}
+
+pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
+    fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
+        b.iter()
+            .map(|x| ffi::TypeId(context.ffi_type_id(x)))
+            .collect()
+    }
+    fn type_id(element_type: Box<FFIType>, context: &mut Context) -> ffi::TypeId {
+        ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
+    }
+    match value {
+        FFIType::F32 => ffi::Type::F32,
+        FFIType::F64 => ffi::Type::F64,
+        FFIType::U8 => ffi::Type::U8,
+        FFIType::U16 => ffi::Type::U16,
+        FFIType::U32 => ffi::Type::U32,
+        FFIType::U64 => ffi::Type::U64,
+        FFIType::USize => ffi::Type::USize,
+        FFIType::I8 => ffi::Type::I8,
+        FFIType::I16 => ffi::Type::I16,
+        FFIType::I32 => ffi::Type::I32,
+        FFIType::I64 => ffi::Type::I64,
+        FFIType::Array {
+            element_type,
+            length,
+        } => ffi::Type::Array {
+            element_type: type_id(element_type, context),
+            length,
+        },
+        FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::Struct {
+            fields,
+            byte_alignment,
+            byte_size,
+        } => todo!(),
+        FFIType::Tuple(element_types) => ffi::Type::Tuple {
+            fields: box_map(element_types.into_boxed_slice(), context),
+        },
+        FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::MutRef(element_type) => ffi::Type::MutRef {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
+            element_type: type_id(element_type, context),
+        },
+        FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
+        FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
+        FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
+            element_type: type_id(element_type, context),
+        },
+    }
+}
+
+pub fn remote_conversion(remote: &ast::RemoteNodeId, context: &Context) -> ir::RemoteNodeId {
+    remote_location_conversion(
+        &LocationNames {
+            funclet_name: remote.funclet_name.clone().unwrap(),
+            node_name: remote.node_name.clone().unwrap(),
+        },
+        context,
+    )
+}
+
+pub fn remote_location_conversion(
+    remote: &LocationNames,
+    context: &Context,
+) -> ir::RemoteNodeId {
+    ir::RemoteNodeId {
+        funclet_id: context
+            .funclet_indices
+            .get_funclet(&remote.funclet_name.0)
+            .unwrap()
+            .clone(),
+        node_id: context
+            .remote_node_id(&remote.funclet_name, &remote.node_name)
+            .clone(),
+    }
+}
 
 // Translation
 
@@ -910,37 +1008,10 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
     }
 }
 
-fn correct_names(program: &mut ast::Program) -> usize {
-    // stupid function we run up-front to get rid of `_`
-    // this is mostly to help with debugging, but also kinda needed for the reflection I want
-    let mut number = 0;
-    for funclet in program.declarations.iter_mut() {
-        match funclet {
-            ast::Declaration::Funclet(f) => {
-                for command in f.commands.iter_mut() {
-                    match command {
-                        None => {}
-                        Some(ast::Command::Node(ast::NamedNode { node: _, name })) => {
-                            if name.0 == "_" {
-                                name.0 = format!("~{}", number);
-                                number += 1;
-                            }
-                        }
-                        Some(_) => {}
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    number
-}
-
 pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
-    let node_name = correct_names(&mut program);
-    let mut context = Context::new(&program, node_name);
-    let explicated_program = explication::explicate(program, &mut context);
+    let explicated_program = explication::explicate(program);
+    let mut context = Context::new(&explicated_program);
     frontend::Definition {
         version: ir_version(&explicated_program.version, &mut context),
         program: ir_program(&explicated_program, &mut context),

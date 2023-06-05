@@ -1,22 +1,25 @@
+mod explicator;
+mod util;
+mod context;
+
 use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
-use crate::assembly::context::Context;
+use context::Context;
 use crate::assembly::context::FuncletLocation;
-use crate::assembly::explication_explicator;
-use crate::assembly::explication_util::*;
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::{assembly, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
-// always called immediately, turns arguments into phi nodes
+// always called immediately, turns arguments into phi nodes and renames `_`
 // note that phi nodes will precede anything in the function, including other phi nodes
-fn add_phi_nodes(program: ast::Program, context: &mut Context) -> ast::Program {
+fn corrections(program: ast::Program) -> (usize, ast::Program) {
+    let mut number = 0;
     let declarations = program
         .declarations
         .into_iter()
@@ -32,7 +35,22 @@ fn add_phi_nodes(program: ast::Program, context: &mut Context) -> ast::Program {
                     index += 1;
                 }
                 for command in f.commands.into_iter() {
-                    commands.push(command);
+                    let new_command = match command {
+                        Some(ast::Command::Node(ast::NamedNode { node, name })) => {
+                            Some(ast::Command::Node(ast::NamedNode {
+                                name: if name.0 == "_" {
+                                    let result = NodeId(format!("~{}", number));
+                                    number += 1;
+                                    result
+                                } else {
+                                    name
+                                },
+                                node
+                            }))
+                        }
+                        _ => command
+                    };
+                    commands.push(new_command);
                 }
                 ast::Declaration::Funclet(ast::Funclet {
                     kind: f.kind,
@@ -43,10 +61,10 @@ fn add_phi_nodes(program: ast::Program, context: &mut Context) -> ast::Program {
             d => d,
         })
         .collect();
-    ast::Program {
+    (number, ast::Program {
         version: program.version,
         declarations,
-    }
+    })
 }
 
 // it's probably best to do the lowering pass like this,
@@ -55,6 +73,8 @@ fn add_phi_nodes(program: ast::Program, context: &mut Context) -> ast::Program {
 //   seems cool, but probably too much work
 // arguably this pass should be on the lowered AST rather than on the frontend
 //   but debugging explication is gonna be even harder without names...
-pub fn explicate(program: ast::Program, context: &mut Context) -> ast::Program {
-    add_phi_nodes(program, context)
+pub fn explicate(program: ast::Program) -> ast::Program {
+    let (number, program) = corrections(program);
+    let context = Context::new(&program, number);
+    program
 }

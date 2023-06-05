@@ -3,8 +3,8 @@ use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
-use crate::assembly::context::Context;
-use crate::assembly::explication_util;
+use crate::assembly::explication::context::Context;
+use crate::assembly::explication::util;
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::stable_vec::StableVec;
@@ -54,7 +54,7 @@ pub fn explicate_allocate_temporary(
     storage_type_hole: &Hole<assembly::ast::StorageTypeId>,
     operation_hole: &Hole<assembly::ast::RemoteNodeId>,
     context: &mut Context,
-) -> Option<ir::Node> {
+) {
     let place = todo_hole(place_hole.as_ref());
     let storage_type = todo_hole(storage_type_hole.as_ref());
     let operation = todo_hole(operation_hole.as_ref());
@@ -62,11 +62,6 @@ pub fn explicate_allocate_temporary(
         todo_hole(operation.node_name.as_ref()).clone(),
         context.location.node_name.clone(),
     );
-    Some(ir::Node::AllocTemporary {
-        place: place.clone(),
-        storage_type: ffi::TypeId(context.loc_type_id(storage_type)),
-        operation: explication_util::remote_conversion(operation, context),
-    })
 }
 
 // try to infer the value operation associated with this schedule operation
@@ -214,7 +209,7 @@ fn explicate_operation(
     }
 
     Some((
-        explication_util::remote_conversion(&op, context),
+        util::remote_conversion(&op, context),
         inputs.into_boxed_slice(),
         outputs.into_boxed_slice(),
     ))
