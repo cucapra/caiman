@@ -4,8 +4,7 @@ use super::index::Index;
 use super::vil;
 use crate::value_language::typing as vl_typing;
 use caiman::ir;
-use caiman::assembly_ast as asm;
-use caiman::stable_vec::StableVec;
+use caiman::assembly::ast as asm;
 
 #[derive(Eq, PartialEq, Hash)]
 pub enum IRType
@@ -51,7 +50,7 @@ impl IRTypesIndex
     }
 }
 
-pub fn vl_type_to_asm_type(t: &vl_typing::Type) -> asm::Type
+pub fn vl_type_to_asm_type(t: &vl_typing::Type) -> asm::TypeId
 {
     use vl_typing::Type::*;
     let ffi = match t 
@@ -59,7 +58,7 @@ pub fn vl_type_to_asm_type(t: &vl_typing::Type) -> asm::Type
         I32 => asm::FFIType::I32,
         Bool => asm::FFIType::U64,
     };
-    asm::Type::FFI(ffi)
+    asm::TypeId::FFI(ffi)
 }
 
 fn convert_ffi_type(t: vl_typing::Type) -> ir::ffi::Type

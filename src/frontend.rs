@@ -40,11 +40,12 @@ fn read_definition(
     match compile_mode {
         CompileMode::Assembly => {
             let program = crate::assembly::parser::parse(input_string);
-            dbg!(&program);
-            // dbg!(&program.context);
-            let result = crate::assembly::explication::explicate(program);
-            // dbg!(&result);
-            Ok(result) // errors are a future problem
+            match program {
+                Err(why) => Err(CompileError {
+                    message: format!("Parse error: {}", why),
+                }),
+                Ok(v) => Ok(crate::assembly::lowering_pass::lower(v)),
+            }
         }
         CompileMode::RON => match ron::from_str(&input_string) {
             Err(why) => Err(CompileError {
@@ -57,7 +58,7 @@ fn read_definition(
 
 pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<String, CompileError> {
     let mut definition = read_definition(input_string, options.compile_mode)?;
-    assert_eq!(definition.version, (0, 0, 1));
+    assert_eq!(definition.version, (0, 0, 2));
     ir::validation::validate_program(&definition.program);
     let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
     codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
@@ -71,7 +72,7 @@ pub fn explicate_caiman(
 ) -> Result<String, CompileError> {
     let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
     let mut definition = read_definition(input_string, options.compile_mode)?;
-    assert_eq!(definition.version, (0, 0, 1));
+    assert_eq!(definition.version, (0, 0, 2));
     let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
     Ok(output_string_result.unwrap())
 }

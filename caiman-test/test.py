@@ -117,7 +117,8 @@ def process_inputs(
 
         input_str = str(input) # cause I wanna do direct string manipulations
         if input_str.endswith('test.cair'):
-            baseline = Path(input_str.replace('test.cair', 'baseline.cair'))
+            baseline_name = input.name[:input.name.find("_")] + '_baseline.cair'
+            baseline = input.parent / baseline_name
             if baseline.is_file():
                 # we compile here for explication only
                 test_out = output.with_suffix(".txt")
@@ -144,10 +145,19 @@ def process_inputs(
                 continue
 
         rv = compiler.compile(input.absolute(), output)
-        if compiler_error(rv, relativized, quiet, ps):
+        if (rv.returncode == 0):
+            eprint(Colorizer.grey(f"    pass: {relativized}"))
+            if not quiet and rv.stderr:
+                msg = pad_lines(rv.stderr, f"        {Colorizer.grey('|')} ")
+                print(msg, file=stderr)
+        else:
+            eprint(f"    {Colorizer.red('fail:')} {relativized}")
+            if not quiet:
+                msg = pad_lines(rv.stderr, f"        {Colorizer.red('|')} ")
+                print(msg, file=stderr)
+            ps.failures += 1
             continue
 
-        eprint(Colorizer.grey(f"    pass: {relativized}"))
         lf.write(f"mod {input.stem};\n")
         ps.compiled += 1
 

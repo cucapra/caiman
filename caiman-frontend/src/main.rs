@@ -2,7 +2,7 @@ extern crate clap;
 
 use std::path::Path;
 
-use caiman::assembly_ast as asm;
+use caiman::assembly::ast as asm;
 use caiman_frontend::error;
 use caiman_frontend::scheduling_language;
 use caiman_frontend::to_ir;
@@ -139,7 +139,7 @@ fn explicate_and_execute(output: Option<String>, program: asm::Program)
     let version = &program.version;
     assert_eq!((version.major, version.minor, version.detailed), (0, 0, 1));
 
-    let definition = caiman::assembly::explication::explicate(program);
+    let definition = caiman::assembly::lowering_pass::lower(program);
     caiman::ir::validation::validate_program(&definition.program);
     let mut codegen = caiman::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
     codegen.set_print_codgen_debug_info(true);

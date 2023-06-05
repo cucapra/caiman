@@ -11,15 +11,12 @@ pub enum SpecNodeInput
 
 impl Default for SpecNodeInput
 {
-    fn default() -> Self {
-        SpecNodeInput::Usize(0)
-    }
+    fn default() -> Self { SpecNodeInput::Usize(0) }
 }
 
-macro_rules! unwrapper 
-{
+macro_rules! unwrapper {
     ($f:ident, $rt:ty, $p:pat, $p_extract:expr, $strname:expr) => {
-        pub fn $f (self) -> $rt
+        pub fn $f(self) -> $rt
         {
             match self
             {
@@ -27,7 +24,7 @@ macro_rules! unwrapper
                 _ => panic!("Expected {} as input to spec node", $strname),
             }
         }
-    }
+    };
 }
 
 impl SpecNodeInput
@@ -37,6 +34,13 @@ impl SpecNodeInput
     unwrapper!(unwrap_i64, i64, SpecNodeInput::I64(i), i, "i64");
     unwrapper!(unwrap_i32, i32, SpecNodeInput::I32(i), i, "i32");
     unwrapper!(unwrap_usize, usize, SpecNodeInput::Usize(u), u, "usize");
+    unwrapper!(
+        unwrap_externalfunction,
+        ir::ffi::ExternalFunctionId,
+        SpecNodeInput::Usize(u),
+        ir::ffi::ExternalFunctionId(u),
+        "ir::ffi::ExternalFunctionId"
+    );
 
     pub fn unwrap_irconstant(self) -> ir::Constant
     {

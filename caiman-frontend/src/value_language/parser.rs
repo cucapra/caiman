@@ -1,4 +1,4 @@
-// auto-generated: "lalrpop 0.19.8"
+// auto-generated: "lalrpop 0.19.12"
 // sha3: bbc1f563b9c2effab41fec27badc2ebdf18619d4af39434535a3248a65546cad
 use crate::value_language::ast::*;
 use crate::value_language::typing::Type;

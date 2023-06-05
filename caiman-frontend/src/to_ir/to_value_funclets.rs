@@ -1,22 +1,22 @@
-use super::ir_funclets::{InnerFunclet, ValueFunclet};
 use super::context;
+use super::ir_funclets::{InnerFunclet, ValueFunclet};
 use super::label;
 use super::vil::{self, Expr, Value};
-use caiman::assembly_ast as asm;
+use caiman::assembly::ast as asm;
 //use super::error::ToIRResult;
 
 pub fn vil_to_value_funclets(
     vil_program: &vil::Program,
-    context: &mut context::Context
+    context: &mut context::Context,
 ) -> Vec<ValueFunclet>
 {
     // XXX For now, we just have a big global funclet. Here's its name
-    let global_vf_name = "my_great_valuefunclet".to_string();
+    let global_vf_name = asm::FuncletId("my_great_valuefunclet".to_string());
 
     let mut node_context = context::NodeContext::new();
     // Used for returning the last node, which should eventually be undone
     // The below value is just a default, essentially
-    let mut last_type = asm::Type::FFI(asm::FFIType::I32);
+    let mut last_type = asm::TypeId::FFI(asm::FFIType::I32);
     for (i, stmt) in vil_program.stmts.iter().enumerate()
     {
         match &stmt.expr
@@ -30,10 +30,10 @@ pub fn vil_to_value_funclets(
                     Value::U64(u) => (u.to_string(), asm::FFIType::U64),
                 };
                 context.add_ffi_type(t.clone());
-                last_type = asm::Type::FFI(t.clone());
+                last_type = asm::TypeId::FFI(t.clone());
                 node_context.add_node(Some(asm::Node::Constant {
                     value: Some(value_str),
-                    type_id: Some(asm::Type::FFI(t)),
+                    type_id: Some(asm::TypeId::FFI(t)),
                 }));
             },
             Expr::If(guard, e1, e2) =>
@@ -44,8 +44,12 @@ pub fn vil_to_value_funclets(
     }
 
     // TODO actually calculate the header and tail edge
-    let dummy_header =
-        asm::FuncletHeader { ret: vec![(None, last_type)], name: global_vf_name, args: vec![] };
+    let dummy_header = asm::FuncletHeader {
+        ret: vec![asm::FuncletArgument { name: None, typ: last_type, tags: Vec::new() }],
+        name: global_vf_name,
+        args: vec![],
+        binding: asm::FuncletBinding::None,
+    };
 
     let commands = node_context.into_commands();
 

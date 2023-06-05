@@ -1,5 +1,5 @@
 let main (x : i32) -> i32 {
-    return (sum x);
+    returns (sum x).
 }
 
 let sum(x : i32) -> i32 {

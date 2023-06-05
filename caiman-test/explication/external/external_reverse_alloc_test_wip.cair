@@ -1,0 +1,52 @@
+version 0.0.1
+
+types [
+    i64,
+    slot $slot0 {
+        type : i64,
+        stage : ready,
+        place : local,
+    },
+    event $event0 {
+        place : local
+    },
+]
+
+external_cpu @op(i64) -> i64;
+
+value @foo() -> i64 {
+    %z = extract %y 0;
+    %y = call @op(%x);
+    %x = constant 2i64;
+    return %z;
+}
+
+schedule @bar() -> [%out : $slot0] {
+    ???;
+    %_ = encode-do-local @foo.%x() -> ?;
+    ???;
+    %_ = encode-do-local @foo.%y_t(?) -> ?;
+    return ?;
+}
+
+timeline @time(%e : $event0) -> $event0 {
+    return %e;
+}
+
+extras {
+    @bar {
+        value : @foo,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+}
+
+pipeline "main" = @bar;

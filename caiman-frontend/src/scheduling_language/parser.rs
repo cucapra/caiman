@@ -1,4 +1,4 @@
-// auto-generated: "lalrpop 0.19.8"
+// auto-generated: "lalrpop 0.19.12"
 // sha3: 25106a02d3bfc5b5813e1fb336da67f5465871917df22cb3e07f8cb13eb3dc36
 use crate::scheduling_language::ast::*;
 use crate::scheduling_language::ast_factory::ASTFactory;

@@ -14,6 +14,4 @@ pub mod rust_wgpu_backend;
 mod scheduling_state;
 mod shadergen;
 mod type_system;
-#[macro_use]
-pub mod assembly_ast;
 //pub mod assembly_context;

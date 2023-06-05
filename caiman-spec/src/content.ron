@@ -93,7 +93,7 @@
 			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
 			name : "CallExternalCpu",
 			inputs : [
-				(name : "external_function_id", kind : ExternalCpuFunction),
+				(name : "external_function_id", kind : ExternalFunction),
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
@@ -106,7 +106,7 @@
 			// Each of the remaining input slots corresponds to a single argument node and each output corresponds to a single field of the output tuple
 			name : "CallExternalGpuCompute",
 			inputs : [
-				(name : "external_function_id", kind : ExternalGpuFunction),
+				(name : "external_function_id", kind : ExternalFunction),
 				(name : "dimensions", kind : Operation, is_array : true),
 				(name : "arguments", kind : Operation, is_array : true)
 			],

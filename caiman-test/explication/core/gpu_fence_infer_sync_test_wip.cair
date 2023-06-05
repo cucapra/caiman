@@ -1,0 +1,91 @@
+version 0.0.1
+
+types [
+    i32,
+    native_value $native_i32 {
+        type : i32
+    },
+    slot $slot_local {
+        type : i32,
+        stage : ready,
+        place : local,
+    },
+    slot $slot_gpu {
+        type : i32,
+        stage : ready,
+        place : gpu,
+    },
+    buffer $buffer_gpu {
+        place : gpu,
+        static_layout_opt : {
+            alignment_bits : 0,
+            byte_size : 1024
+        },
+    },
+    event $event0 {
+        place : local
+    },
+    space_buffer $buffer_space {},
+]
+
+external_gpu @trivial(%x : i32) -> [%out : i32] : "C:\Users\d-gei\caiman\caiman-test\basics\gpu_external.wgsl"
+{
+    resource {
+        group : 0,
+        binding : 0,
+        input : %x,
+    },
+    resource {
+        group : 0,
+        binding : 1,
+        output : %out,
+    }
+}
+
+value @foo(%x : i32) -> i32 {
+    %y_t = call @trivial(%x);
+    %y = extract %y_t 0;
+    return %y;
+}
+
+timeline @foo_time(%e : $event0) -> $event0 {
+    %sub = submission-local->gpu %e;
+    %sync = sync-local->gpu %sub %sub;
+    return %sync;
+}
+
+schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> [%out : $slot_gpu] {
+    %xloc = alloc-gpu-i32 %in_buff @foo.%x;
+    %_ = encode-copy-gpu %s %xloc;
+    %yloc = alloc-gpu-i32 %out_buff @foo.%y;
+    %_ = encode-do-gpu @foo.%y(%xloc) -> %yloc;
+    %_ = submit-gpu @foo_time.%sub;
+    %fence = encode-fence-gpu @foo_time.%sub;
+    ???;
+    return %yloc;
+}
+
+spatial @foo_space(%bs : $buffer_space) -> $buffer_space {
+    return %bs;
+}
+
+extras {
+    @foo_main {
+        value : @foo,
+        input_slots : {
+            %s : slot_info(value_tag input @foo.%x)
+        },
+        output_slots : {
+            %out : slot_info(value_tag output @foo.%x, spatial_tag output @foo_space.%bs)
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {%in_buff : buffer_info(spatial_tag input @foo_space.%bs),
+            %out_buff : buffer_info(spatial_tag input @foo_space.%bs)},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @foo_time.%e,
+        out_timeline_tag : timeline_tag output @foo_time.%e,
+    },
+}
+
+pipeline "main" = @foo_main;

@@ -1,4 +1,4 @@
-use caiman::assembly_ast as asm;
+use caiman::assembly::ast as asm;
 use caiman::ir;
 
 pub struct InnerFunclet
@@ -37,14 +37,19 @@ impl Funclet for ScheduleExplicitFunclet
     fn kind(&self) -> ir::FuncletKind { ir::FuncletKind::ScheduleExplicit }
 }
 
-pub fn make_asm_funclet<T: Funclet>(f: T) -> asm::FuncletDef
+pub fn make_asm_funclet<T: Funclet>(f: T) -> asm::Funclet
 {
     let kind = f.kind();
     let inner = f.inner();
-    asm::FuncletDef::Local(asm::Funclet {
+    let mut commands : Vec<Option<asm::Command>> = inner.commands.into_iter().map(|c| c.map(|nn| asm::Command::Node(nn))).collect();
+    match inner.tail_edge {
+        Some(te) => commands.push(Some(asm::Command::TailEdge(te))),
+        // XXX do we push none always? The whole tail edges thing may need changing
+        None => commands.push(None),
+    };
+    asm::Funclet {
         kind,
         header: inner.header,
-        commands: inner.commands,
-        tail_edge: inner.tail_edge,
-    })
+        commands,
+    }
 }

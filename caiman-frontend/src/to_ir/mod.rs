@@ -5,7 +5,7 @@ use crate::scheduling_language::ast as schedule_ast;
 use crate::value_language::ast as value_ast;
 //use crate::value_language::typing;
 //use caiman::arena::Arena;
-use caiman::assembly_ast as asm;
+use caiman::assembly::ast as asm;
 //use caiman::assembly_context as asm_ctx;
 use caiman::ir;
 //use std::collections::HashMap;
@@ -29,7 +29,13 @@ pub mod vil;
 
 mod error;
 pub use error::ToIRError;
-use error::{make_error, ToIRResult};
+use error::ToIRResult;
+
+macro_rules! to_decl {
+    ($v : expr, $kind : ident) => {
+        $v.into_iter().map(|x| asm::Declaration::$kind(x))
+    };
+}
 
 pub fn go(
     value_ast: &value_ast::TypedProgram,
@@ -48,53 +54,61 @@ pub fn go(
         &mut context,
     );
 
-    let mut funclets: Vec<asm::FuncletDef> = value_funclets
+    let mut funclets: Vec<asm::Funclet> = value_funclets
         .into_iter()
         .map(ir_funclets::make_asm_funclet)
         .chain(schedule_explicit_funclets.into_iter().map(ir_funclets::make_asm_funclet))
         .collect();
     funclets.push(dummy_timeline_funclet(&mut context));
 
-    let mut pipelines: asm::Pipelines = HashMap::new();
-    pipelines.insert("main".to_string(), "my_great_scheduleexplicitfunclet".to_string());
+    let mut pipelines: Vec<asm::Pipeline> = Vec::new();
+    pipelines.push(asm::Pipeline {
+        name: "main".to_string(),
+        funclet: asm::FuncletId("my_great_scheduleexplicitfunclet".to_string()),
+    });
 
     let types = context.into_types();
+    let declarations = to_decl!(types, TypeDecl)
+        .chain(to_decl!(funclets, Funclet))
+        .chain(to_decl!(pipelines, Pipeline))
+        .collect();
 
     let version = asm::Version { major: 0, minor: 0, detailed: 1 };
     Ok(asm::Program {
-        //context,
         version,
-        funclets,
-        types,
-        pipelines,
-        extras: dummy_extras(),
+        declarations,
+        //extras: dummy_extras(),
     })
 }
 
-fn dummy_timeline_funclet(context: &mut context::Context) -> asm::FuncletDef
+fn dummy_timeline_funclet(context: &mut context::Context) -> asm::Funclet
 {
     let funclet_name = "my_great_timelinefunclet".to_string();
 
     let arg_type_str = context.add_event(ir::Place::Local);
-    let arg_str = "e".to_string();
-    let arg_type_local = asm::Type::Local(arg_type_str);
+    let arg_str = asm::NodeId("e".to_string());
+    let arg_type_local = asm::TypeId::Local(arg_type_str);
 
     let tail_edge =
         Some(asm::TailEdge::Return { return_values: Some(vec![Some(arg_str.clone())]) });
 
-    asm::FuncletDef::Local(asm::Funclet {
+    asm::Funclet {
         kind: ir::FuncletKind::Timeline,
         header: asm::FuncletHeader {
-            args: vec![(Some(arg_str), arg_type_local.clone())],
-            ret: vec![(None, arg_type_local)],
-            name: funclet_name,
+            args: vec![asm::FuncletArgument {
+                name: Some(arg_str),
+                typ: arg_type_local.clone(),
+                tags: Vec::new(),
+            }],
+            ret: vec![asm::FuncletArgument { name: None, typ: arg_type_local, tags: Vec::new() }],
+            name: asm::FuncletId(funclet_name),
+            binding: asm::FuncletBinding::None,
         },
         commands: Vec::new(),
-        tail_edge,
-    })
+    }
 }
 
-fn dummy_extras() -> asm::Extras
+/*fn dummy_extras() -> asm::Extras
 {
     let mut data: asm::UncheckedDict = HashMap::new();
     let mut data_insert = |s: &str, v| data.insert(asm::Value::ID(s.to_string()), v);
@@ -129,4 +143,4 @@ fn dummy_extras() -> asm::Extras
     let mut extras: asm::Extras = HashMap::new();
     extras.insert("my_great_scheduleexplicitfunclet".to_string(), data);
     extras
-}
+}*/

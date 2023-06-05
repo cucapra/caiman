@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use super::label;
-use caiman::assembly_ast as asm;
+use caiman::assembly::ast as asm;
 use caiman::ir;
 
 pub struct NodeContext
@@ -31,7 +29,7 @@ impl NodeContext
 
 pub struct Context
 {
-    assembly_types: asm::Types,
+    assembly_types: Vec<asm::TypeDecl>,
     slot_label_index: usize,
     event_label_index: usize,
 }
@@ -67,7 +65,7 @@ impl Context
     
     pub fn add_slot(
         &mut self,
-        storage_type: asm::Type,
+        storage_type: asm::TypeId,
         queue_place: ir::Place,
         queue_stage: ir::ResourceQueueStage,
     ) -> String
@@ -92,10 +90,6 @@ impl Context
         let event_str = self.label_event();
         self.event_label_index += 1;
 
-        let mut data: asm::UncheckedDict = HashMap::new();
-        let mut data_insert =
-            |s: &str, v| data.insert(asm::Value::ID(s.to_string()), asm::DictValue::Raw(v));
-        data_insert("place", asm::Value::Place(place));
         self.assembly_types.push(asm::TypeDecl::Local(asm::LocalType {
             name: event_str.clone(),
             data: asm::LocalTypeInfo::Event {
@@ -106,7 +100,7 @@ impl Context
         event_str
     }
 
-    pub fn into_types(self) -> asm::Types
+    pub fn into_types(self) -> Vec<asm::TypeDecl>
     {
         self.assembly_types
     }

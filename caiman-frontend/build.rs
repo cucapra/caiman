@@ -51,6 +51,7 @@ fn write_spec_nodes_module(spec: &spec::Spec) -> Result<(), std::io::Error>
                     OIK::ImmediateU64 |
                     OIK::Immediate |
                     OIK::ImmediateI32 => "irconstant",
+                    OIK::ExternalFunction => "externalfunction",
                     _ => "usize",
                 };
                 let type_extn = if input.is_array { "_slice" } else { "" };

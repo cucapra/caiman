@@ -3,7 +3,6 @@ use crate::scheduling_language::schedulable;
 use crate::value_language::ast::{self, ExprKind};
 use crate::value_language::typing::Type;
 use std::collections::HashMap;
-use std::ops::Index;
 
 #[derive(Clone)]
 struct ExprPath

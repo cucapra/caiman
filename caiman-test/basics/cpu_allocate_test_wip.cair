@@ -63,6 +63,8 @@ spatial $buffer_space @space(%bs : $buffer_space) {
 extras {
     @bar {
         value : @foo,
+        space : @space,
+        time : @time,
         input_slots : {
             %s : slot_info(value_tag input @foo.%i)
         },

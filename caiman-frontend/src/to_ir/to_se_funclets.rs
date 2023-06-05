@@ -1,7 +1,7 @@
 use super::ir_funclets::{InnerFunclet, ScheduleExplicitFunclet};
 //use super::ir_typing::{IRType /*vl_type_to_asm_type*/, IRTypesIndex};
 //use super::vil::{self, Expr, Value};
-use caiman::assembly_ast as asm;
+use caiman::assembly::ast as asm;
 //use super::error::ToIRResult;
 use super::context;
 use super::dual_compatibility::MatchedScheduleStmt;
@@ -14,12 +14,12 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
 ) -> Vec<ScheduleExplicitFunclet>
 {
     // XXX For now, we just have a big global funclet. Here's its name
-    let global_sef_name = "my_great_scheduleexplicitfunclet".to_string();
+    let global_sef_name = asm::FuncletId("my_great_scheduleexplicitfunclet".to_string());
 
     // For making the last thing into what's returned (very temporary)
     // Remove later. Also these are default values
     let mut last_alloc_id = 0;
-    let mut last_type = asm::Type::Local("".to_string());
+    let mut last_type = asm::TypeId::Local("".to_string());
 
     let mut node_context = context::NodeContext::new();
     for (i, mss) in program.iter().enumerate()
@@ -32,20 +32,20 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
         let place_filling = ir::Place::Local;
 
         // TODO this is hard coded!!! should convert mss.vl_type
-        let value_type = asm::Type::FFI(asm::FFIType::I32);
+        let value_type = asm::TypeId::FFI(asm::FFIType::I32);
         let slot_str = context.add_slot(
             value_type.clone(),
             place_filling.clone(),
             ir::ResourceQueueStage::Ready,
         );
-        last_type = asm::Type::Local(slot_str);
+        last_type = asm::TypeId::Local(slot_str);
 
         let place = Some(place_filling);
 
         // TODO find funclet id... once there are multiple funclets
         let operation = Some(asm::RemoteNodeId {
-            funclet_id: "my_great_valuefunclet".to_string(),
-            node_id: label::label_node(mss.vil_index),
+            funclet_name: Some(asm::FuncletId("my_great_valuefunclet".to_string())),
+            node_name: Some(label::label_node(mss.vil_index)),
         });
         let operation_cloned = operation.clone();
         let storage_type = Some(value_type);
@@ -54,16 +54,22 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
         node_context.add_node(Some(asm::Node::EncodeDo {
             place,
             operation: operation_cloned,
-            inputs: Some(Box::new([])),
-            outputs: Some(Box::new([Some(label::label_node(i * 2)) /* The slot */])),
+            inputs: Some(Vec::new()),
+            outputs: Some(vec![Some(label::label_node(i * 2)) /* The slot */]),
         }));
     }
     // TODO make real header & tail
-    let ret_name = "out".to_string();
+    let ret_name = asm::NodeId("out".to_string());
     let dummy_header = asm::FuncletHeader {
-        ret: vec![(Some(ret_name.clone()), last_type)],
+        ret: vec![
+            asm::FuncletArgument {
+            name: Some(ret_name.clone()), 
+            typ: last_type,
+            tags: Vec::new(),
+        }],
         name: global_sef_name,
         args: vec![],
+        binding: asm::FuncletBinding::None,
     };
 
     // TODO don't simply return the last node like below

@@ -3,7 +3,7 @@ let main(x : slot) : main -> slot {
 }
 
 let sum_sch(x : slot) : sum -> slot {
-    allocate check;
+    ???
     return { 
         $result.if(?) {
             allocate $left_res;
