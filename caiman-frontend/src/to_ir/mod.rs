@@ -61,24 +61,29 @@ pub fn go(
         .collect();
     funclets.push(dummy_timeline_funclet(&mut context));
 
+    // XXX THESE ARE BOTH VERY TEMPORARY AND A HACK! :)
+    let main_name = "main".to_string();
+    let header = &funclets[0].header;
+    let function_classes: Vec<asm::FunctionClass> = vec![asm::FunctionClass {
+        name: main_name.clone(),
+        input_types: header.args.iter().map(|fa| fa.typ.clone()).collect(),
+        output_types: header.ret.iter().map(|fa| fa.typ.clone()).collect(),
+    }];
     let mut pipelines: Vec<asm::Pipeline> = Vec::new();
     pipelines.push(asm::Pipeline {
-        name: "main".to_string(),
+        name: main_name,
         funclet: asm::FuncletId("my_great_scheduleexplicitfunclet".to_string()),
     });
 
     let types = context.into_types();
     let declarations = to_decl!(types, TypeDecl)
+        .chain(to_decl!(function_classes, FunctionClass))
         .chain(to_decl!(funclets, Funclet))
         .chain(to_decl!(pipelines, Pipeline))
         .collect();
 
-    let version = asm::Version { major: 0, minor: 0, detailed: 1 };
-    Ok(asm::Program {
-        version,
-        declarations,
-        //extras: dummy_extras(),
-    })
+    let version = asm::Version { major: 0, minor: 0, detailed: 2 };
+    Ok(asm::Program { version, declarations })
 }
 
 fn dummy_timeline_funclet(context: &mut context::Context) -> asm::Funclet
@@ -89,8 +94,7 @@ fn dummy_timeline_funclet(context: &mut context::Context) -> asm::Funclet
     let arg_str = asm::NodeId("e".to_string());
     let arg_type_local = asm::TypeId::Local(arg_type_str);
 
-    let tail_edge =
-        Some(asm::TailEdge::Return { return_values: Some(vec![Some(arg_str.clone())]) });
+    let tail_edge = asm::TailEdge::Return { return_values: Some(vec![Some(arg_str.clone())]) };
 
     asm::Funclet {
         kind: ir::FuncletKind::Timeline,
@@ -104,7 +108,7 @@ fn dummy_timeline_funclet(context: &mut context::Context) -> asm::Funclet
             name: asm::FuncletId(funclet_name),
             binding: asm::FuncletBinding::None,
         },
-        commands: Vec::new(),
+        commands: vec![Some(asm::Command::TailEdge(tail_edge))],
     }
 }
 

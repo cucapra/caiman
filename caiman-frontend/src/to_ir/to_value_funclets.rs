@@ -48,7 +48,11 @@ pub fn vil_to_value_funclets(
         ret: vec![asm::FuncletArgument { name: None, typ: last_type, tags: Vec::new() }],
         name: global_vf_name,
         args: vec![],
-        binding: asm::FuncletBinding::None,
+        binding: asm::FuncletBinding::ValueBinding(asm::FunctionClassBinding {
+            default: true,
+            // TODO hack!!!! not always gonna be main
+            function_class: asm::FuncletId("main".to_string()),
+        }),
     };
 
     let commands = node_context.into_commands();

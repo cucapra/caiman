@@ -20,6 +20,7 @@ struct Arguments {
     input: PathBuf,
     output: Option<PathBuf>,
     explicate_only: bool,
+    show_assembly_tree: bool,
     print_codegen_debug_info: bool,
 }
 impl Arguments {
@@ -50,6 +51,13 @@ impl Arguments {
                     .takes_value(false),
             )
             .arg(
+                Arg::with_name("show_assembly_tree")
+                .short("a")
+                .long("show_assembly_tree")
+                .help("Only parse CaIR file and show tree")
+                .takes_value(false)
+            )
+            .arg(
                 Arg::with_name("print_codegen_debug_info")
                     .long("print_codegen_debug_info")
                     .help("Print Codegen Debug Info")
@@ -62,10 +70,12 @@ impl Arguments {
             .into();
         let output = matches.value_of("output").map(PathBuf::from);
         let explicate_only = matches.is_present("explicate_only");
+        let show_assembly_tree = matches.is_present("show_assembly_tree");
         let print_codegen_debug_info = matches.is_present("print_codegen_debug_info");
         Arguments {
             input,
             output,
+            show_assembly_tree,
             explicate_only,
             print_codegen_debug_info,
         }
@@ -93,6 +103,8 @@ fn main() {
 
     let result = if args.explicate_only {
         frontend::explicate_caiman(&input_string, options)
+    } else if args.show_assembly_tree {
+        frontend::show_assembly_tree(&input_string, options)
     } else {
         frontend::compile_caiman(&input_string, options)
     };

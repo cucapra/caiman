@@ -56,6 +56,28 @@ fn read_definition(
     }
 }
 
+pub fn show_assembly_tree(
+    input_string: &str, 
+    options: CompileOptions,
+) -> Result<String, CompileError> {
+    match options.compile_mode {
+        CompileMode::Assembly => {
+            let program = crate::assembly::parser::parse(input_string);
+            match program {
+                Err(why) => Err(CompileError {
+                    message: format!("Parse error: {}", why),
+                }),
+                Ok(v) => Ok(format!("{:#?}", v)),
+            }
+        },
+        CompileMode::RON => {
+            Err(CompileError {
+                message: format!("Cannot output assembly tree of RON"),
+            })
+        },
+    }
+}
+
 pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<String, CompileError> {
     let mut definition = read_definition(input_string, options.compile_mode)?;
     assert_eq!(definition.version, (0, 0, 2));

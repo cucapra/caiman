@@ -137,7 +137,7 @@ fn main()
 fn explicate_and_execute(output: Option<String>, program: asm::Program)
 {
     let version = &program.version;
-    assert_eq!((version.major, version.minor, version.detailed), (0, 0, 1));
+    assert_eq!((version.major, version.minor, version.detailed), (0, 0, 2));
 
     let definition = caiman::assembly::lowering_pass::lower(program);
     caiman::ir::validation::validate_program(&definition.program);

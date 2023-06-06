@@ -60,16 +60,30 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
     }
     // TODO make real header & tail
     let ret_name = asm::NodeId("out".to_string());
+    let timeline_funclet_name = "my_great_timelinefunclet";
+    let timeline_node_name = "e";
+    let timeline_rmi =  asm::RemoteNodeId {
+        funclet_name: Some(asm::FuncletId(timeline_funclet_name.to_string())),
+        node_name: Some(asm::NodeId(timeline_node_name.to_string())),
+    };
     let dummy_header = asm::FuncletHeader {
-        ret: vec![
-            asm::FuncletArgument {
-            name: Some(ret_name.clone()), 
+        ret: vec![asm::FuncletArgument {
+            name: Some(ret_name.clone()),
             typ: last_type,
             tags: Vec::new(),
         }],
         name: global_sef_name,
         args: vec![],
-        binding: asm::FuncletBinding::None,
+        // TODO also obviously hard coded
+        binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
+            implicit_tags: Some((
+                asm::Tag::Input(timeline_rmi.clone()),
+                asm::Tag::Output(timeline_rmi)
+            )),
+            value: Some(asm::FuncletId("my_great_valuefunclet".to_string())),
+            timeline: Some(asm::FuncletId(timeline_funclet_name.to_string())),
+            spatial: None,
+        }),
     };
 
     // TODO don't simply return the last node like below
