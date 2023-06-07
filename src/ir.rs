@@ -22,16 +22,6 @@ pub enum Place {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ResourceQueueStage {
-    Unbound,
-    Bound,
-    Encoded,
-    Submitted,
-    Ready,
-    Dead,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Constant {
     I32(i32),
     I64(i64),
@@ -125,12 +115,55 @@ pub enum Tag {
     Node { node_id: usize },
     Input { index: usize },
     Output { index: usize },
-    Halt { index: usize },
 }
 
 impl Tag {
     fn default() -> Self {
         Self::None
+    }
+}
+
+// positive = have, negative = need, neutral = paired
+// Encodes the "sign" of the data (this can be made more formal categorically as the interaction of adjunction pairs with a chirality structure)
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Flow {
+    None, // Does not transform, can only be discarded and not read
+    Have, // Transforms forwards with state changes
+    Need, // Transforms backwards with state changes
+    Met // Have has met Need and associated state will not change, but can still be read
+}
+
+// Met is a zero value that cannot be discarded or duplicated
+// None is a zero value that can only be discarded or duplicated
+// Have is a nonzero (owning) value that can only be read and discarded
+// Need is a nonzero (owning) value that can only be written and duplicated
+
+impl Flow {
+    pub fn is_droppable(&self) -> bool {
+		match self {
+			Self::None => true,
+			Self::Have => true,
+			Self::Need => false,
+			Self::Met => false,
+		}
+    }
+
+    pub fn is_duplicable(&self) -> bool {
+		match self {
+			Self::None => false,
+			Self::Have => false,
+			Self::Need => true,
+			Self::Met => false,
+		}
+    }
+
+    pub fn is_readable(&self) -> bool {
+		match self {
+			Self::None => false,
+			Self::Have => true,
+			Self::Need => false,
+			Self::Met => true,
+		}
     }
 }
 
@@ -150,22 +183,25 @@ pub enum Type {
     // Scheduling
     Slot {
         storage_type: ffi::TypeId,
-        queue_stage: ResourceQueueStage,
+        //queue_stage: ResourceQueueStage,
         queue_place: Place,
     },
-    SchedulingJoin {
-        /*input_types : Box<[TypeId]>,
+    /*SchedulingJoin {
+        input_types : Box<[TypeId]>,
         value_funclet_id : FuncletId,
         input_slots : HashMap<usize, SlotInfo>,
         input_fences : HashMap<usize, FenceInfo>,
-        in_timeline_tag : TimelineTag,*/
-    },
+        in_timeline_tag : TimelineTag,
+    },*/
     Fence {
         queue_place: Place,
     },
     Buffer {
         storage_place: Place,
         static_layout_opt: Option<StaticBufferLayout>,
+    },
+    Encoder {
+        queue_place: Place,
     },
 
     // Timeline
@@ -244,7 +280,9 @@ impl FuncletKind {
 pub struct FuncletSpec {
     pub funclet_id_opt: Option<FuncletId>,
     pub input_tags: Box<[Tag]>,
+    pub input_flows : Box<[Flow]>,
     pub output_tags: Box<[Tag]>,
+    pub output_flows : Box<[Flow]>,
     #[serde(default = "Tag::default")]
     pub implicit_in_tag: Tag,
     #[serde(default = "Tag::default")]

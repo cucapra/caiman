@@ -158,10 +158,10 @@ pub fn check_value_tag_compatibility_interior(
     destination_value_tag: ir::ValueTag,
 ) {
     match (source_value_tag, destination_value_tag) {
-        (ir::ValueTag::Halt { index }, ir::ValueTag::Halt { index: index_2 }) => {
+        /*(ir::ValueTag::Halt { index }, ir::ValueTag::Halt { index: index_2 }) => {
             assert_eq!(index, index_2)
         }
-        (ir::ValueTag::Halt { .. }, _) => panic!("Halt can only match halt"),
+        (ir::ValueTag::Halt { .. }, _) => panic!("Halt can only match halt"),*/
         (_, ir::ValueTag::None) => (),
         (
             ir::ValueTag::Input {

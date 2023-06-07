@@ -214,17 +214,23 @@
 					value : (
 						funclet_id_opt : Some(0),
 						input_tags : [Input(index : 0)],
-						output_tags : [None]
+						input_flows : [Have],
+						output_tags : [None],
+						output_flows : [Have]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [None],
-						output_tags : [None]
+						input_flows : [Have],
+						output_tags : [None],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
 						input_tags : [None],
+						input_flows : [Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Input(index : 0),
 						implicit_out_tag : Output(index : 0)
 					)
@@ -240,9 +246,10 @@
 					AllocTemporary(place : Gpu, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
 					EncodeDoExternal(place : Gpu, operation : (funclet_id : 0, node_id : 4), external_function_id : 0, inputs : [1, 1, 1, 5], outputs : [7]),
 					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
-					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					SyncFence(place : Local, fence : 11, event : (funclet_id : 15, node_id : 2)),
+					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1), encoded : []),
+					//EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
+					None,
+					SyncFence(place : Local, fence : 10, event : (funclet_id : 15, node_id : 2)),
 					EncodeCopy(place : Local, input : 7, output : 9),
 				],
 				tail_edge : Return(return_values : [9])
@@ -257,17 +264,23 @@
 					value : (
 						funclet_id_opt : Some(9),
 						input_tags : [Input(index : 0)],
-						output_tags : [Output(index : 0)]
+						input_flows : [Have],
+						output_tags : [Output(index : 0)],
+						output_flows : [Have],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [None],
-						output_tags : [None]
+						input_flows : [Have],
+						output_tags : [None],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
 						input_tags : [None],
+						input_flows : [Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Node(node_id : 0),
 						implicit_out_tag : Node(node_id : 2)
 					)
@@ -282,14 +295,15 @@
 					EncodeDoExternal(place : Gpu, operation : (funclet_id : 9, node_id : 2), external_function_id : 0, inputs : [1, 1, 1, 3], outputs : [5]),
 					//AllocTemporary(place : Local, storage_type : (0), operation : (funclet_id : 9, node_id : 3)),
 					None,
-					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
+					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1), encoded : []),
+					//EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
+					None,
 					//SyncFence(place : Local, fence : 9, event : (funclet_id : 15, node_id : 2)),
 					//EncodeCopy(place : Local, input : 5, output : 7),
 					DefaultJoin,
 					InlineJoin(funclet : 16, captures : [], continuation : 10),
 				],
-				tail_edge : Jump(join : 11, arguments : [5, 9, 3])
+				tail_edge : Jump(join : 11, arguments : [5, 8, 3])
 				//tail_edge : Return(return_values : [5, 9, 3])
 			),
 
@@ -301,17 +315,23 @@
 					value : (
 						funclet_id_opt : Some(10),
 						input_tags : [Input(index : 0)],
-						output_tags : [Output(index : 0)]
+						input_flows : [Have],
+						output_tags : [Output(index : 0)],
+						output_flows : [Have],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [None],
-						output_tags : [None]
+						input_flows : [Have],
+						output_tags : [None],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
 						input_tags : [None],
+						input_flows : [Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Input(index : 0),
 						implicit_out_tag : Output(index : 0)
 					)
@@ -335,17 +355,23 @@
 					value : (
 						funclet_id_opt : Some(10),
 						input_tags : [Node(node_id : 2)],
-						output_tags : [Output(index : 0)]
+						input_flows : [Have],
+						output_tags : [Output(index : 0)],
+						output_flows : [Have],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [None],
-						output_tags : [None]
+						input_flows : [Have],
+						output_tags : [None],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
 						input_tags : [None],
+						input_flows : [Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Node(node_id : 2),
 						implicit_out_tag : Output(index : 0)
 					)
@@ -377,17 +403,23 @@
 					value : (
 						funclet_id_opt : Some(9),
 						input_tags : [Node(node_id : 3), None, Node(node_id : 0)],
-						output_tags : [Output(index : 0)]
+						input_flows : [Have, Have, Have],
+						output_tags : [Output(index : 0)],
+						output_flows : [Have],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [None, None, None],
-						output_tags : [None]
+						input_flows : [Have, Have, Have],
+						output_tags : [None],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
 						input_tags : [Node(node_id : 1), Node(node_id : 1), Node(node_id : 1)],
+						input_flows : [Have, Have, Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Node(node_id : 1),
 						implicit_out_tag : Node(node_id : 2)
 					)
@@ -411,17 +443,23 @@
 					value : (
 						funclet_id_opt : Some(1),
 						input_tags : [Input(funclet_id : 1, index : 0), None, None],
-						output_tags : [Output(funclet_id : 1, index : 0)]
+						input_flows : [Have, Have, Have],
+						output_tags : [Output(funclet_id : 1, index : 0)],
+						output_flows : [Have],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [None, Input(funclet_id : 18, index : 0), Input(funclet_id : 18, index : 0)],
-						output_tags : [Output(funclet_id : 18, index : 0)]
+						input_flows : [Have, Have, Have],
+						output_tags : [Output(funclet_id : 18, index : 0)],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
 						input_tags : [None, None, None],
+						input_flows : [Have, Have, Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Input(funclet_id : 15, index : 0),
 						implicit_out_tag : Output(funclet_id : 15, index : 0)
 					)
@@ -441,9 +479,10 @@
 					StaticAllocFromStaticBuffer(buffer : 1, place : Gpu, storage_type : 0, operation : (funclet_id : 1, node_id : 5)),
 					//AllocTemporary(place : Gpu, storage_type : (0), operation : (funclet_id : 1, node_id : 5)),
 					EncodeDoExternal(place : Gpu, operation : (funclet_id : 1, node_id : 4), external_function_id : 0, inputs : [3, 3, 3, 7], outputs : [9]),
-					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					SyncFence(place : Local, fence : 12, event : (funclet_id : 15, node_id : 2)),
+					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1), encoded : []),
+					//EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
+					None,
+					SyncFence(place : Local, fence : 11, event : (funclet_id : 15, node_id : 2)),
 				],
 				tail_edge : Return(return_values : [9])
 			),
@@ -481,29 +520,36 @@
 					value : (
 						funclet_id_opt : Some(19),
 						input_tags : [Input(funclet_id : 19, index : 0)],
-						output_tags : [Output(funclet_id : 19, index : 0)]
+						input_flows : [Have],
+						output_tags : [Output(funclet_id : 19, index : 0)],
+						output_flows : [Have],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [Input(funclet_id : 18, index : 0)],
-						output_tags : [Output(funclet_id : 18, index : 0)]
+						input_flows : [Have],
+						output_tags : [Output(funclet_id : 18, index : 0)],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(22),
 						input_tags : [Input(funclet_id : 22, index : 0)],
+						input_flows : [Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Input(funclet_id : 22, index : 0),
 						implicit_out_tag : Output(funclet_id : 22, index : 0)
 					)
 				),
 				nodes : [
 					Phi(index : 0),
-					UnboundSlot(place : Gpu, storage_type : 0, operation : (funclet_id : 19, node_id : 2)),
-					EncodeDoExternal(place : Gpu, operation : (funclet_id : 19, node_id : 1), external_function_id : 1, inputs : [0], outputs : [1]),
-					Submit(place : Gpu, event : (funclet_id : 22, node_id : 1)),
+					//UnboundSlot(place : Gpu, storage_type : 0, operation : (funclet_id : 19, node_id : 2)),
+					None,
+					EncodeDoExternal(place : Gpu, operation : (funclet_id : 19, node_id : 1), external_function_id : 1, inputs : [0], outputs : [0]),
+					Submit(place : Gpu, event : (funclet_id : 22, node_id : 1), encoded : []),
 					DefaultJoin,
 				],
-				tail_edge : Yield(external_function_id : 3, yielded_nodes : [], next_funclet : 21, arguments : [1], continuation_join : 4 )
+				tail_edge : Yield(external_function_id : 3, yielded_nodes : [], next_funclet : 21, arguments : [0], continuation_join : 4 )
 				//tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [1], continuation_join : 3)
 			),
 
@@ -515,17 +561,23 @@
 					value : (
 						funclet_id_opt : Some(19),
 						input_tags : [Node(node_id : 2)],
-						output_tags : [Node(node_id : 4)]
+						input_flows : [Have],
+						output_tags : [Node(node_id : 4)],
+						output_flows : [Have],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
 						input_tags : [Node(node_id : 0)],
-						output_tags : [Output(funclet_id : 18, index : 0)]
+						input_flows : [Have],
+						output_tags : [Output(funclet_id : 18, index : 0)],
+						output_flows : [Have],
 					),
 					timeline : (
 						funclet_id_opt : Some(22),
 						input_tags : [Input(funclet_id : 22, index : 0)],
+						input_flows : [Have],
 						output_tags : [None],
+						output_flows : [Have],
 						implicit_in_tag : Input(funclet_id : 22, index : 0),
 						implicit_out_tag : Output(funclet_id : 22, index : 0)
 					)

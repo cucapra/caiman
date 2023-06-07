@@ -65,7 +65,6 @@ struct Slot {
     //value_instance_id_opt : Option<ValueInstanceId>,
     timestamp: LogicalTimestamp,
     queue_place: ir::Place,
-    queue_stage: ir::ResourceQueueStage,
     state_binding: StateBinding,
 }
 
@@ -120,7 +119,6 @@ impl SchedulingState {
         &mut self,
         type_id: ir::ffi::TypeId,
         queue_place: ir::Place,
-        queue_stage: ir::ResourceQueueStage,
     ) -> SlotId {
         let timestamp = self.get_local_time();
         let slot = Slot {
@@ -128,7 +126,6 @@ impl SchedulingState {
             value_tag_opt: None,
             /*value_instance_id_opt : None,*/ timestamp,
             queue_place,
-            queue_stage,
             state_binding: StateBinding::TemporaryHack,
         };
         SlotId(self.slots.add(slot))
@@ -167,13 +164,6 @@ impl SchedulingState {
                 continue;
             }
 
-            match slot.queue_stage {
-                ir::ResourceQueueStage::Encoded => {
-                    slot.queue_stage = ir::ResourceQueueStage::Submitted;
-                    slot.timestamp = timestamp;
-                }
-                _ => (),
-            }
         }
 
         SubmissionId(self.submissions.add(Submission {
@@ -196,10 +186,6 @@ impl SchedulingState {
         self.slots[slot_id.0].type_id
     }
 
-    pub fn get_slot_queue_stage(&self, slot_id: SlotId) -> ir::ResourceQueueStage {
-        self.slots[slot_id.0].queue_stage
-    }
-
     pub fn get_slot_queue_place(&self, slot_id: SlotId) -> ir::Place {
         self.slots[slot_id.0].queue_place
     }
@@ -210,21 +196,14 @@ impl SchedulingState {
 
     pub fn discard_slot(&mut self, slot_id: SlotId) {
         let slot = &mut self.slots[slot_id.0];
-        assert!(slot.queue_stage < ir::ResourceQueueStage::Dead);
-        slot.queue_stage = ir::ResourceQueueStage::Dead;
     }
 
     pub fn forward_slot(&mut self, destination_slot_id: SlotId, source_slot_id: SlotId) {
-        assert!(self.slots[source_slot_id.0].queue_stage < ir::ResourceQueueStage::Dead);
-        assert!(self.slots[destination_slot_id.0].queue_stage == ir::ResourceQueueStage::Unbound);
-        self.slots[destination_slot_id.0].queue_stage = ir::ResourceQueueStage::Bound;
-        self.slots[source_slot_id.0].queue_stage = ir::ResourceQueueStage::Dead;
+        
     }
 
-    pub fn advance_queue_stage(&mut self, slot_id: SlotId, to: ir::ResourceQueueStage) {
-        let slot = &mut self.slots[slot_id.0];
-        assert!(slot.queue_stage <= to);
-        slot.queue_stage = to;
+    pub fn advance_queue_stage(&mut self, slot_id: SlotId/*, to: ir::ResourceQueueStage*/) {
+        
     }
 
     fn get_local_time(&self) -> LogicalTimestamp {
@@ -291,20 +270,6 @@ impl SchedulingState {
         }
 
         // Transition resource stages
-
-        for (slot_index, slot) in self.slots.iter_mut() {
-            if slot.queue_place != place || slot.timestamp > known_timestamp {
-                continue;
-            }
-
-            match slot.queue_stage {
-                ir::ResourceQueueStage::Submitted => {
-                    slot.queue_stage = ir::ResourceQueueStage::Ready;
-                    slot.timestamp = local_timestamp;
-                }
-                _ => (),
-            }
-        }
 
         None
     }

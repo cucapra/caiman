@@ -42,7 +42,7 @@
 		// Functional-only nodes
 		(
 			// Represents a constant
-			// For EncodeDo: Is a value operation with no inputs and one output
+			// For (Local/Encode)Do: Is a value operation with no inputs and one output
 			name : "Constant",
 			inputs : [
 				(name : "value", kind : Immediate),
@@ -104,22 +104,7 @@
 
 		// State management
 		(
-			// Creates a slot in the unbound state that has no associated memory (yet)
-			// May be used as the associated forwarding target of an operation that consumes an input slot
-			// Has no space yet so cannot be captured (caiman doesn't check this yet).
-			name : "UnboundSlot",
-			inputs : [
-				(name : "place", kind : Place),
-				(name : "storage_type", kind : StorageType),
-				(name : "operation", kind : RemoteOperation),
-				//(name : "space", kind : RemoteOperation),
-			],
-			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : true
-		),
-		(
-			// Consumes resources with no pending operation (not in the encoded or submitted state)
+			// Consumes resources with no pending operation (must have flow of "none" or "have")
 			name : "Drop",
 			inputs : [
 				(name : "node", kind : Operation)
@@ -197,10 +182,22 @@
 
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(
+			name : "BeginEncoding",
+			inputs : [
+				(name : "place", kind : Place),
+				(name : "event", kind : RemoteOperation),
+				(name : "encoded", kind : Operation, is_array : true), // Resources that will be used
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
 			// Encodes a computation of the given operation to the queue for the given place
 			name : "EncodeDoExternal",
 			inputs : [
 				(name : "place", kind : Place),
+				(name : "encoder", kind : Operation),
 				(name : "operation", kind : RemoteOperation),
 				(name : "external_function_id", kind : ExternalFunction),
 				(name : "inputs", kind : Operation, is_array : true),
@@ -216,6 +213,7 @@
 			name : "EncodeCopy",
 			inputs : [
 				(name : "place", kind : Place),
+				(name : "encoder", kind : Operation),
 				(name : "input", kind : Operation),
 				(name : "output", kind : Operation)
 			],
@@ -230,13 +228,15 @@
 			name : "Submit",
 			inputs : [
 				(name : "place", kind : Place),
-				(name : "event", kind : RemoteOperation)
+				(name : "encoder", kind : Operation),
+				(name : "event", kind : RemoteOperation),
+				//(name : "encoded", kind : Operation, is_array : true), // Resources that were used
 			],
-			output : None,
+			output : Single, // a fence
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
-		(
+		/*(
 			// Creates a fence that will be signalled when the given place completes the most recently submitted command
 			// Currently, can only be created for the gpu
 			// Event encodes a point in the timeline funclet that this fence observes
@@ -248,7 +248,7 @@
 			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
-		),
+		),*/
 		(
 			// Synchronizes the given place on the fence
 			// Event encodes a point in the timeline funclet that this synchronization advances the current timeline to
@@ -256,7 +256,8 @@
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "fence", kind : Operation),
-				(name : "event", kind : RemoteOperation)
+				(name : "event", kind : RemoteOperation),
+				//(name : "submitted", kind : Operation, is_array : true), // Resouces that were used in submission
 			],
 			output : None,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
@@ -299,8 +300,40 @@
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
+		(
+			name : "PromiseCaptures",
+			inputs : [
+				(name : "count", kind : Index),
+				(name : "continuation", kind : Operation),
+			],
+			output : Multiple,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "FulfillCaptures",
+			inputs : [
+				(name : "continuation", kind : Operation),
+				(name : "haves", kind : Operation, is_array : true),
+				(name : "needs", kind : Operation, is_array : true),
+			],
+			output : Multiple,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
 
 		// Timeline nodes
+		(
+			name : "EncodingEvent",
+			inputs : [
+				(name : "here_place", kind : Place),
+				(name : "there_place", kind : Place),
+				(name : "local_past", kind : Operation),
+			],
+			output : Multiple, // First is the state that will stay local. Second is the state that will be used in encoding.
+			language_set : (functional : false, scheduling: false, timeline : true, spatial : false, intrinsic : false),
+			has_local_side_effect : false
+		),
 		(
 			// Represents the state of the coordinator (at here_place) after a submission to there_place
 			// local_past is the previous state of the coordinator as known by the coordinator
@@ -331,7 +364,7 @@
 		),
 
 		// Space nodes (ignore for now)
-		(
+		/*(
 			name : "SeparatedLinearSpace",
 			inputs : [
 				(name : "place", kind : Place),
@@ -350,7 +383,7 @@
 			output : Multiple,
 			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
 			has_local_side_effect : false
-		),
+		),*/
 	],
 	/*terminators : [
 		(
@@ -358,7 +391,7 @@
 			inputs : [
 				(name : "return_values", kind : Operation, is_array : true),
 			],
-			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
+			language_set : (functional : true, scheduling: true, timeline : true, spatial : true, intrinsic : true),
 		),
 	]*/
 )

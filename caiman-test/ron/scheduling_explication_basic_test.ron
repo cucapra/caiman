@@ -118,8 +118,9 @@
 					EncodeDoExternal(place : Gpu, operation : (funclet_id : 0, node_id : 4), external_function_id : 0, inputs : [1, 1, 1, 5], outputs : [7]),
 					AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 0, node_id : 4)),
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					SyncFence(place : Local, fence : 11, event : (funclet_id : 15, node_id : 2)),
+					//EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
+					None,
+					SyncFence(place : Local, fence : 10, event : (funclet_id : 15, node_id : 2)),
 					EncodeCopy(place : Local, input : 7, output : 9),
 				],
 				tail_edge : Return(return_values : [9])
@@ -160,13 +161,14 @@
 					//AllocTemporary(place : Local, storage_type : 0, operation : (funclet_id : 9, node_id : 3)),
 					None,
 					Submit(place : Gpu, event : (funclet_id : 15, node_id : 1)),
-					EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
+					//EncodeFence(place : Gpu, event : (funclet_id : 15, node_id : 1)),
+					None,
 					//SyncFence(place : Local, fence : 9, event : (funclet_id : 15, node_id : 2)),
 					//EncodeCopy(place : Local, input : 5, output : 7),
 					DefaultJoin,
 					InlineJoin(funclet : 16, captures : [], continuation : 10),
 				],
-				tail_edge : Jump(join : 11, arguments : [5, 9, 3])
+				tail_edge : Jump(join : 11, arguments : [5, 8, 3])
 				//tail_edge : Return(return_values : [5, 9, 3])
 			),
 
