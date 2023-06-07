@@ -72,6 +72,28 @@ class Compiler:
             + [ "--explicate_only" ] * explicate_only
         return subprocess.run(args, capture_output=True, encoding="utf8", cwd=input.parent)
 
+class FrontendCompiler:
+    def __init__(self, test_dir):
+        manifest_path = test_dir / ".." / "caiman-frontend" / "Cargo.toml"
+        args = [ "cargo", "build"] 
+        rv = subprocess.run(args)
+        if rv.returncode != 0:
+            eprint(f"{COLOR_WARN} using previous caiman-frontend")
+        self.test_dir = test_dir
+
+    def _compiler_path(self) -> Path:
+        return self.test_dir / ".." / "target" / "debug" / "caiman-frontend"
+
+    def compile(self, input: Path, output: Path) -> subprocess.CompletedProcess:
+        input = input.with_suffix("")
+        args = [ self._compiler_path(), 
+            "--run",
+            "--output", output,
+            input ] 
+        return subprocess.run(args, capture_output=True, encoding="utf8", cwd=input.parent)
+
+
+
 @dataclass
 class ProcessStatistics:
     """Successfully compiled inputs which are associated with a test Rust file."""
@@ -102,6 +124,7 @@ def compiler_error(
 # returns num failed, num succeeded
 def process_inputs(
     compiler: Compiler, 
+    frontend_compiler: FrontendCompiler, 
     test_dir: Path,
     inputs,
     quiet: bool
@@ -110,7 +133,11 @@ def process_inputs(
     lf.write("pub mod util;\n")
     ps = ProcessStatistics(0,0,0)
     if not inputs:
-        inputs = chain(test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron"))
+        inputs = chain(
+                test_dir.rglob("*test.cair"), 
+                test_dir.rglob("*test.ron"),
+                test_dir.rglob("*.vl"),
+        )
     for input in inputs:
         relativized = input.absolute().relative_to(test_dir)
         output =  test_dir / "src" / (input.stem + ".rs")
@@ -144,7 +171,9 @@ def process_inputs(
 
                 continue
 
-        rv = compiler.compile(input.absolute(), output)
+        input_compiler = frontend_compiler if input_str.endswith(".vl") else compiler
+        rv = input_compiler.compile(input.absolute(), output)
+
         if (rv.returncode == 0):
             eprint(Colorizer.grey(f"    pass: {relativized}"))
             if not quiet and rv.stderr:
@@ -179,8 +208,11 @@ def build(test_dir: Path, inputs, quiet: bool):
     eprint(f"{COLOR_INFO} building caimanc")
     c = Compiler(test_dir)
 
+    eprint(f"{COLOR_INFO} building caiman-frontend")
+    fc = FrontendCompiler(test_dir)
+
     eprint(f"{COLOR_INFO} compiling Caiman source files")
-    ps = process_inputs(c, test_dir, inputs, quiet)
+    ps = process_inputs(c, fc, test_dir, inputs, quiet)
     if (ps.failures > 0):
         eprint(f"{COLOR_WARN} {ps.failures}/{ps.total()} files failed to compile")
 
