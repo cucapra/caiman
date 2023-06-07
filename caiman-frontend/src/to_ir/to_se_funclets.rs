@@ -62,7 +62,7 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
     let ret_name = asm::NodeId("out".to_string());
     let timeline_funclet_name = "my_great_timelinefunclet";
     let timeline_node_name = "e";
-    let timeline_rmi =  asm::RemoteNodeId {
+    let timeline_rmi = asm::RemoteNodeId {
         funclet_name: Some(asm::FuncletId(timeline_funclet_name.to_string())),
         node_name: Some(asm::NodeId(timeline_node_name.to_string())),
     };
@@ -78,7 +78,7 @@ pub fn schedule_ast_to_schedule_explicit_funclets(
         binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
             implicit_tags: Some((
                 asm::Tag::Input(timeline_rmi.clone()),
-                asm::Tag::Output(timeline_rmi)
+                asm::Tag::Output(timeline_rmi),
             )),
             value: Some(asm::FuncletId("my_great_valuefunclet".to_string())),
             timeline: Some(asm::FuncletId(timeline_funclet_name.to_string())),

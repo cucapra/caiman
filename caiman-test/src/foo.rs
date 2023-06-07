@@ -2,15 +2,14 @@
 // Type #1: USize
 // Type #2: U64
 
-		use caiman_rt::wgpu;
-
 		/*pub struct CpuFunctionInvocationState<'parent>
 		{
 			parent_state : & 'parent mut dyn caiman_rt::State
 		}*/
-pub mod main {
-use super::*;
-pub mod outputs {
+#[allow(warnings)] pub mod main {
+use caiman_rt::wgpu;
+use caiman_rt::bytemuck;
+#[allow(warnings)] pub mod outputs {
 }
 pub trait CpuFunctions
 {
@@ -20,7 +19,7 @@ fn funclet1_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(ins
 	use std::convert::TryInto;
 //  node #0: AllocTemporary { place: Local, storage_type: TypeId(0), operation: RemoteNodeId { funclet_id: 0, node_id: 0 } }
 //  node #1: EncodeDo { place: Local, operation: RemoteNodeId { funclet_id: 0, node_id: 0 }, inputs: [], outputs: [0] }
-let var_0 : i32 = 5;
+let var_0 : i32 = 4;
 //  tail edge: Return { return_values: [0] }
 if join_stack.used_bytes().len() > 0 { return pop_join_and_dispatch_at_0::<Callbacks, PipelineOutputTuple<'callee>>(instance, join_stack, var_0) }return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {instance, phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((var_0, ))};}
 
@@ -73,3 +72,5 @@ fn pop_join_and_dispatch_at_0<'state, 'cpu_functions, 'callee, Callbacks : CpuFu
 {
 let closure_header = unsafe { join_stack.pop_unsafe_unaligned::<ClosureHeader>().unwrap() }; match closure_header {
 _ => panic!("Dispatcher cannot dispatch given closure {:?}", closure_header), } }}
+
+include!(r##"../high_level_frontend/foo.rs"##);

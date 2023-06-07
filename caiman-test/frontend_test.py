@@ -6,6 +6,7 @@ from itertools import chain
 from sys import stderr
 from dataclasses import dataclass
 from shutil import rmtree
+import os
 
 def eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
@@ -62,7 +63,6 @@ class ProcessStatistics:
 
 # returns num failed, num succeeded
 def process_inputs(
-        #compiler: Compiler, 
     compiler: FrontendCompiler, 
     test_dir: Path,
     inputs,
@@ -72,7 +72,7 @@ def process_inputs(
     lf.write("pub mod util;\n")
     ps = ProcessStatistics(0,0,0)
     if not inputs:
-        inputs = chain(test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron"))
+        raise Exception("No inputs provided")
     for input in inputs:
         relativized = input.absolute().relative_to(test_dir)
         output =  test_dir / "src" / (input.stem + ".rs")
@@ -140,7 +140,12 @@ def main():
     parser.add_argument("command", choices=["run", "build", "clean"])
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress extra info.")
     # Just going to hard-code this in here for now
-    files = ["high_level_frontend/foo"]
+    dirs = ["high_level_frontend"]
+    files = []
+    for dir in dirs:
+        files += [dir + "/" + p.stem 
+                  for p in map(lambda f: Path(f), os.listdir(dir)) 
+                  if p.suffix == ".vl"]
     args = parser.parse_args()
     inputs = [Path(file) for file in files]
     if args.command == "run":
