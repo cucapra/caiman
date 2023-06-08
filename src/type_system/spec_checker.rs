@@ -1,22 +1,23 @@
 use crate::ir;
-use super::tag::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::default::Default;
+use super::error::Error;
 
 // Language independent plumbing for type checking
 
-#[derive(Debug)]
+/*#[derive(Debug)]
 pub struct Scalar
 {
 	pub tag : ir::Tag,
 	pub flow : ir::Flow,
-}
+}*/
+pub type Scalar = ir::Tag;
 
 #[derive(Debug)]
 struct JoinPoint {
     implicit_tag: ir::Tag,
     input_tags: Box<[ir::Tag]>,
-	input_flows: Box<[ir::Flow]>,
+	//input_flows: Box<[ir::Flow]>,
 }
 
 
@@ -29,7 +30,7 @@ pub struct FuncletSpecChecker<'program> {
     pub scalar_nodes: HashMap<ir::NodeId, Scalar>,
     join_nodes: HashMap<ir::NodeId, JoinPoint>,
     //current_node_id: ir::NodeId,
-    pub current_implicit_tag: ir::TimelineTag,
+    pub current_implicit_tag: ir::Tag,
 }
 
 //{tags : &[ir::Tag], flows : &[ir::Flow], implicit_tag : ir::Tag, stage : bool},
@@ -106,166 +107,165 @@ impl<'program> FuncletSpecChecker<'program> {
 
 	fn initialize(&mut self) {
 		self.current_implicit_tag = concretize_input_to_internal_tag(self.current_implicit_tag);
-		assert_eq!(self.funclet_spec.input_tags.len(), self.funclet_spec.input_flows.len());
-		assert_eq!(self.funclet_spec.output_tags.len(), self.funclet_spec.output_flows.len());
 		for input_index in 0 .. self.funclet_spec.input_tags.len()
 		{
-			let tag = self.funclet_spec.input_tags[input_index];
-			let flow = self.funclet_spec.input_flows[input_index];
-			self.scalar_nodes.insert(input_index, Scalar{tag, flow});
+			let mut tag = self.funclet_spec.input_tags[input_index];
+			tag = concretize_input_to_internal_tag(tag);
+			self.scalar_nodes.insert(input_index, tag);
 		}
 		// To do: DefaultJoin should probably immediately follow last input
 	}
 
-	pub fn update_scalar_node(&mut self, node_id : ir::NodeId, tag : ir::Tag, flow : ir::Flow) {
-		self.scalar_nodes.insert(node_id, Scalar{tag, flow});
+	pub fn update_scalar_node(&mut self, node_id : ir::NodeId, quot : ir::Quotient, flow : ir::Flow) {
+		self.scalar_nodes.insert(node_id, Scalar{quot, flow});
 	}
 
-	pub fn update_join_node(&mut self, node_id : ir::NodeId, tags : &[ir::Tag], flows : &[ir::Flow], implicit_tag : ir::Tag) {
-		assert_eq!(tags.len(), flows.len());
-		self.join_nodes.insert(node_id, JoinPoint{implicit_tag, input_tags: tags.to_vec().into_boxed_slice(), input_flows: flows.to_vec().into_boxed_slice()});
+	pub fn update_join_node(&mut self, node_id : ir::NodeId, tags : &[ir::Tag], implicit_tag : ir::Tag) {
+		self.join_nodes.insert(node_id, JoinPoint{implicit_tag, input_tags: tags.to_vec().into_boxed_slice()});
 	}
 
-	pub fn join(&mut self, node_id : ir::NodeId, capture_node_ids : &[ir::NodeId], funclet_spec : &ir::FuncletSpec, continuation_node_id : ir::NodeId) {
+	pub fn join(&mut self, node_id : ir::NodeId, capture_node_ids : &[ir::NodeId], funclet_spec : &ir::FuncletSpec, continuation_node_id : ir::NodeId) -> Result<(), Error> {
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
 		
         check_tag_compatibility_interior(
             self.spec_funclet,
             funclet_spec.implicit_out_tag,
             continuation_join.implicit_tag,
-        );
+        )?;
 
         for (capture_index, capture_node_id) in capture_node_ids.iter().enumerate() {
             let scalar = & self.scalar_nodes[capture_node_id];
 			
 			assert_eq!(scalar.flow, ir::Flow::Have);
-			assert_eq!(funclet_spec.input_flows[capture_index], ir::Flow::Have);
+			assert_eq!(funclet_spec.input_tags[capture_index].flow, ir::Flow::Have);
 
             check_tag_compatibility_interior(
                 self.spec_funclet,
-                scalar.tag,
+                *scalar,
                 funclet_spec.input_tags[capture_index],
-            );
+            )?;
 
-			let tag = scalar.tag;
-			self.update_scalar_node(*capture_node_id, tag, ir::Flow::Met);
+			let quot = scalar.quot;
+			self.update_scalar_node(*capture_node_id, quot, ir::Flow::Met);
 		}
 
 		let mut remaining_input_tags = Vec::<ir::Tag>::new();
-		let mut remaining_input_flows = Vec::<ir::Flow>::new();
         for index in capture_node_ids.len() .. funclet_spec.input_tags.len() {
-			assert_eq!(funclet_spec.input_flows[index], ir::Flow::Have);
+			assert_eq!(funclet_spec.input_tags[index].flow, ir::Flow::Have);
 			remaining_input_tags.push(funclet_spec.input_tags[index]);
-			remaining_input_flows.push(funclet_spec.input_flows[index]);
 		}
 
 		assert_eq!(funclet_spec.output_tags.len(), continuation_join.input_tags.len());
         for index in 0 .. funclet_spec.output_tags.len() {
-			assert_eq!(funclet_spec.output_flows[index], ir::Flow::Have);
-			assert_eq!(continuation_join.input_flows[index], ir::Flow::Have);
+			assert_eq!(funclet_spec.output_tags[index].flow, ir::Flow::Have);
+			assert_eq!(continuation_join.input_tags[index].flow, ir::Flow::Have);
 
             check_tag_compatibility_interior(
                 self.spec_funclet,
                 funclet_spec.output_tags[index],
                 continuation_join.input_tags[index],
-            );
+            )?;
 		}
 
-		self.update_join_node(node_id, remaining_input_tags.as_slice(), remaining_input_flows.as_slice(), funclet_spec.implicit_in_tag);
+		self.update_join_node(node_id, remaining_input_tags.as_slice(), funclet_spec.implicit_in_tag);
+
+		return Ok(());
 	}
 
 	pub fn initialize_default_join(&mut self, node_id : ir::NodeId) {
-		self.update_join_node(node_id, & self.funclet_spec.output_tags, & self.funclet_spec.output_flows, self.funclet_spec.implicit_out_tag);
+		self.update_join_node(node_id, & self.funclet_spec.output_tags, self.funclet_spec.implicit_out_tag);
 	}
 
-	pub fn check_jump(&mut self, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId]) {
+	pub fn check_jump(&mut self, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId]) -> Result<(), Error> {
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
         check_tag_compatibility_interior(
             self.spec_funclet,
             self.current_implicit_tag,
             continuation_join.implicit_tag,
-        );
+        )?;
 		
 		assert_eq!(argument_node_ids.len(), continuation_join.input_tags.len());
         for index in 0 .. argument_node_ids.len() {
 			let scalar = & self.scalar_nodes[& argument_node_ids[index]];
 			assert_eq!(scalar.flow, ir::Flow::Have);
-			assert_eq!(continuation_join.input_flows[index], ir::Flow::Have);
+			assert_eq!(continuation_join.input_tags[index].flow, ir::Flow::Have);
 
             check_tag_compatibility_interior(
                 self.spec_funclet,
-                scalar.tag,
+                *scalar,
                 continuation_join.input_tags[index],
-            );
+            )?;
 		}
+
+		return Ok(());
 	}
 
-	pub fn check_return(&mut self, return_value_node_ids : &[ir::NodeId]) {
+	pub fn check_return(&mut self, return_value_node_ids : &[ir::NodeId]) -> Result<(), Error> {
         check_tag_compatibility_interior(
             self.spec_funclet,
             self.current_implicit_tag,
             self.funclet_spec.implicit_out_tag,
-        );
+        )?;
 		
 		assert_eq!(return_value_node_ids.len(), self.funclet_spec.output_tags.len());
         for index in 0 .. return_value_node_ids.len() {
 			let scalar = & self.scalar_nodes[& return_value_node_ids[index]];
 			assert_eq!(scalar.flow, ir::Flow::Have);
-			assert_eq!(self.funclet_spec.output_flows[index], ir::Flow::Have);
+			assert_eq!(self.funclet_spec.output_tags[index].flow, ir::Flow::Have);
 
             check_tag_compatibility_interior(
                 self.spec_funclet,
-                scalar.tag,
+                *scalar,
                 self.funclet_spec.output_tags[index],
-            );
+            )?;
 		}
+		
+		return Ok(());
 	}
 
-	pub fn check_interior_call(&mut self, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec) {
+	pub fn check_interior_call(&mut self, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec) -> Result<(), Error> {
         check_tag_compatibility_interior(
             self.spec_funclet,
             self.current_implicit_tag,
             callee_funclet_spec.implicit_in_tag,
-        );
+        )?;
 
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
         check_tag_compatibility_interior(
             self.spec_funclet,
             callee_funclet_spec.implicit_out_tag,
             continuation_join.implicit_tag,
-        );
+        )?;
 
 		assert_eq!(argument_node_ids.len(), callee_funclet_spec.input_tags.len());
         for index in 0 .. argument_node_ids.len() {
 			let scalar = & self.scalar_nodes[& argument_node_ids[index]];
-			assert_eq!(callee_funclet_spec.input_flows[index], scalar.flow);
 
             check_tag_compatibility_interior(
                 self.spec_funclet,
-                scalar.tag,
+                *scalar,
                 callee_funclet_spec.input_tags[index],
-            );
+            )?;
 		}
 
 		assert_eq!(continuation_join.input_tags.len(), callee_funclet_spec.output_tags.len());
         for index in 0 .. callee_funclet_spec.output_tags.len() {
-			assert_eq!(callee_funclet_spec.output_flows[index], ir::Flow::Have);
-			assert_eq!(continuation_join.input_flows[index], ir::Flow::Have);
-
             check_tag_compatibility_interior(
                 self.spec_funclet,
                 callee_funclet_spec.output_tags[index],
                 continuation_join.input_tags[index],
-            );
+            )?;
 		}
+
+		return Ok(());
 	}
 
-	pub fn check_vertical_call(&mut self, continuation_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec, output_spec_node_ids : &[ir::NodeId], call_spec_node_id : ir::NodeId) {
+	pub fn check_vertical_call(&mut self, continuation_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec, output_spec_node_ids : &[ir::NodeId], call_spec_node_id : ir::NodeId) -> Result<(), Error> {
         check_tag_compatibility_enter(
             output_spec_node_ids,
             self.current_implicit_tag,
             callee_funclet_spec.implicit_in_tag,
-        );
+        )?;
 
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
         check_tag_compatibility_exit(
@@ -273,59 +273,55 @@ impl<'program> FuncletSpecChecker<'program> {
 			call_spec_node_id,
             callee_funclet_spec.implicit_out_tag,
             continuation_join.implicit_tag,
-        );
+        )?;
 
 		assert_eq!(input_impl_node_ids.len(), callee_funclet_spec.input_tags.len());
         for index in 0 .. input_impl_node_ids.len() {
 			let scalar = & self.scalar_nodes[& input_impl_node_ids[index]];
-			assert_eq!(callee_funclet_spec.input_flows[index], scalar.flow);
 
             check_tag_compatibility_enter(
                 output_spec_node_ids,
-                scalar.tag,
+                *scalar,
                 callee_funclet_spec.input_tags[index],
-            );
+            )?;
 		}
 
 		assert_eq!(continuation_join.input_tags.len(), callee_funclet_spec.output_tags.len());
         for index in 0 .. callee_funclet_spec.output_tags.len() {
-			assert_eq!(callee_funclet_spec.output_flows[index], ir::Flow::Have);
-			assert_eq!(continuation_join.input_flows[index], ir::Flow::Have);
-
             check_tag_compatibility_exit(
                 self.spec_funclet,
 				call_spec_node_id,
                 callee_funclet_spec.output_tags[index],
                 continuation_join.input_tags[index],
-            );
+            )?;
 		}
+
+		return Ok(());
 	}
 
-	pub fn check_choice(&mut self, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], choice_from_tags : &[ir::Tag], choice_to_tags : &[ir::Tag], choice_specs : &[&ir::FuncletSpec]) {
+	pub fn check_choice(&mut self, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], choice_remaps : &[&[(ir::NodeId, ir::NodeId)]], choice_specs : &[&ir::FuncletSpec]) -> Result<(), Error> {
 		let continuation_join = self.join_nodes.remove(& continuation_impl_node_id).unwrap();
 
-		assert_eq!(choice_from_tags.len(), choice_specs.len());
+		assert_eq!(choice_remaps.len(), choice_specs.len());
 		for choice_index in 0 .. choice_specs.len() {
 			let choice_spec = & choice_specs[choice_index];
-			let choice_from_tag = choice_from_tags[choice_index];
-			let choice_to_tag = choice_to_tags[choice_index];
+			let choice_remap = choice_remaps[choice_index];
 			// 
 			check_tag_compatibility_interior(
 				self.spec_funclet,
 				self.current_implicit_tag,
 				choice_spec.implicit_in_tag,
-			);
+			)?;
 
 			assert_eq!(input_impl_node_ids.len(), choice_spec.input_tags.len());
 			for index in 0 .. input_impl_node_ids.len() {
 				let scalar = & self.scalar_nodes[& input_impl_node_ids[index]];
-				assert_eq!(choice_spec.input_flows[index], scalar.flow);
 
 				check_tag_compatibility_interior(
 					self.spec_funclet,
-					scalar.tag,
+					*scalar,
 					choice_spec.input_tags[index],
-				);
+				)?;
 			}
 
 			// Continuation gets the unified result
@@ -333,35 +329,36 @@ impl<'program> FuncletSpecChecker<'program> {
 				self.spec_funclet,
 				choice_spec.implicit_out_tag,
 				continuation_join.implicit_tag,
-				&[(choice_from_tag, choice_to_tag)]
-			);
+				choice_remap
+			)?;
 
 			assert_eq!(continuation_join.input_tags.len(), choice_spec.output_tags.len());
 			for index in 0 .. choice_spec.output_tags.len() {
-				assert_eq!(choice_spec.output_flows[index], ir::Flow::Have);
-				assert_eq!(continuation_join.input_flows[index], ir::Flow::Have);
-				
 				check_tag_compatibility_interior_cast(
 					self.spec_funclet,
 					choice_spec.output_tags[index],
 					continuation_join.input_tags[index],
-					&[(choice_from_tag, choice_to_tag)]
-				);
+					choice_remap
+				)?;
 			}
 		}
+
+		return Ok(());
 	}
-
-	// The long term intent is to use this in a macro
-	// DO NOT RELY on ANYTHING about this interface
-	pub fn check(node_id : ir::NodeId, input_tags : &[ir::Tag], input_flows : &[ir::Flow], output_tags : &[ir::Tag], output_flows : &[ir::Flow]) {
-
-	}
-
 
 	// To do: Join
 	pub fn can_drop_node(&self, impl_node_id : ir::NodeId) -> bool {
-		let scalar = & self.scalar_nodes[& impl_node_id];
-		return scalar.flow.is_droppable();
+		if let Some(scalar) = & self.scalar_nodes.get(& impl_node_id) {
+			return scalar.flow.is_droppable();
+		}
+		return true;
+	}
+
+	pub fn is_neutral_node(&self, impl_node_id : ir::NodeId) -> bool {
+		if let Some(scalar) = & self.scalar_nodes.get(& impl_node_id) {
+			return scalar.flow.is_neutral();
+		}
+		return true;
 	}
 
 	// To do: Join
@@ -369,52 +366,62 @@ impl<'program> FuncletSpecChecker<'program> {
 		self.scalar_nodes.remove(& impl_node_id);
 	}
 
-	pub fn check_implicit_tag(&self, tag : ir::Tag) {
-		assert_eq!(tag, self.current_implicit_tag);
+	pub fn check_implicit_tag(&self, tag : ir::Tag) -> Result<(), Error>  {
+		//assert_eq!(tag, self.current_implicit_tag);
+		check_tag_compatibility_interior(
+			self.spec_funclet,
+			self.current_implicit_tag,
+			tag,
+		).map_err(|e| e.append_message(format!("While checking that the implicit tag {:?} is compatible with {:?}", self.current_implicit_tag, tag)))?;
+
+		return Ok(());
 	}
 
-	pub fn transition_state_forwards(&mut self, from_tag : ir::Tag, to_spec_node_id : ir::NodeId) {
-		let to_tag = ir::Tag::Node{node_id: to_spec_node_id};
+	pub fn check_node_tag(&self, node_id : ir::NodeId, tag : ir::Tag) -> Result<(), Error> {
+		let scalar = self.scalar_nodes.get(& node_id).unwrap();
+		//assert_eq!(*scalar, tag);
+		check_tag_compatibility_interior(
+			self.spec_funclet,
+			*scalar,
+			tag,
+		).map_err(|e| e.append_message(format!("While checking that node #{} has tag {:?}", node_id, tag)))?;
 
-		for (impl_node_id, scalar) in self.scalar_nodes.iter_mut() {
-			if scalar.tag == from_tag {
-				let (tag, flow) = match scalar.flow {
-					ir::Flow::None => (scalar.tag, scalar.flow),
-					ir::Flow::Have => (to_tag, ir::Flow::Have),
+		return Ok(());
+	}
+
+	fn transition_tag_forwards(tag : &mut ir::Tag, from_spec_node_id : ir::NodeId, to_spec_node_id : ir::NodeId) -> Result<(), Error> {
+		match tag.quot {
+			ir::Quotient::Node{node_id} if node_id == from_spec_node_id => {
+				match tag.flow {
+					ir::Flow::None => (),
+					ir::Flow::Have => {
+						tag.quot = ir::Quotient::Node{node_id: to_spec_node_id};
+					}
 					ir::Flow::Need => panic!("Flow::Need cannot advance forwards"),
 					ir::Flow::Met => panic!("Flow::Met cannot advance"),
-				};
-				scalar.tag = tag;
-				scalar.flow = flow;
+				}
 			}
-			//self.update_scalar_node(impl_node_id, tag, flow);
+			_ => (),
 		}
 
-		if self.current_implicit_tag == from_tag {
-			self.current_implicit_tag = to_tag;
-		}
+		return Ok(());
 	}
 
-	pub fn transition_state_subset_forwards(&mut self, impl_node_ids : &[ir::NodeId], from_tag : ir::Tag, to_spec_node_id : ir::NodeId) {
-		let to_tag = ir::Tag::Node{node_id: to_spec_node_id};
+	pub fn transition_state_forwards(&mut self, from_spec_node_id : ir::NodeId, to_spec_node_id : ir::NodeId) -> Result<(), Error> {
+		for (impl_node_id, scalar) in self.scalar_nodes.iter_mut() {
+			Self::transition_tag_forwards(scalar, from_spec_node_id, to_spec_node_id)?;
+		}
 
+		Self::transition_tag_forwards(&mut self.current_implicit_tag, from_spec_node_id, to_spec_node_id)?;
+		return Ok(());
+	}
+
+	pub fn transition_state_subset_forwards(&mut self, impl_node_ids : &[ir::NodeId], from_spec_node_id : ir::NodeId, to_spec_node_id : ir::NodeId) -> Result<(), Error> {
 		for impl_node_id in impl_node_ids.iter() {
 			let scalar = self.scalar_nodes.get_mut(impl_node_id).unwrap();
-			if scalar.tag == from_tag {
-				let (tag, flow) = match scalar.flow {
-					ir::Flow::None => (scalar.tag, scalar.flow),
-					ir::Flow::Have => (to_tag, ir::Flow::Have),
-					ir::Flow::Need => panic!("Flow::Need cannot advance forwards"),
-					ir::Flow::Met => panic!("Flow::Met cannot advance"),
-				};
-				scalar.tag = tag;
-				scalar.flow = flow;
-			}
-			else {
-				panic!("Node does not have expected tag")
-			}
-			//self.update_scalar_node(impl_node_id, tag, flow);
+			Self::transition_tag_forwards(scalar, from_spec_node_id, to_spec_node_id)?;
 		}
+		return Ok(());
 	}
 
 	/*fn check_single_output(&self, spec_node_id : ir::NodeId, impl_node_id : ir::NodeId) {
@@ -512,4 +519,156 @@ impl<'program> FuncletSpecChecker<'program> {
 	// Do the transition, clobbering outputs
 
 	// These two have very different semantics (output tags are irrelevant to advance)
+}
+
+fn concretize_input_to_internal_tag(tag: ir::Tag) -> ir::Tag {
+    let quot = match tag.quot {
+        ir::Quotient::None => ir::Quotient::None,
+        ir::Quotient::Node { node_id } => ir::Quotient::Node { node_id },
+        ir::Quotient::Input { index } => ir::Quotient::Node { node_id: index },
+        ir::Quotient::Output { index } => ir::Quotient::Output { index },
+    };
+	ir::Tag{quot, flow: tag.flow}
+}
+
+fn check_tag_compatibility_enter(
+    input_spec_node_ids : &[ir::NodeId],
+    caller_tag: ir::Tag,
+    callee_tag: ir::Tag,
+) -> Result<(), Error>  {
+	assert_eq!(caller_tag.flow, callee_tag.flow);
+    match (caller_tag.quot, callee_tag.quot) {
+        (_, ir::Quotient::None) => (),
+        (ir::Quotient::Node { node_id }, ir::Quotient::Input { index }) => {
+            assert_eq!(input_spec_node_ids[index], node_id);
+        }
+        _ => return Err(Error::Generic{message: format!(
+            "Ill-formed: {:?} to {:?} via enter",
+            caller_tag, callee_tag
+        )}),
+    }
+	return Ok(());
+}
+
+// Check value tag in callee (source) scope transfering to caller (destination) scope
+fn check_tag_compatibility_exit(
+    caller_spec_funclet: &ir::Funclet,
+    caller_spec_node_id: ir::NodeId,
+    source_tag: ir::Tag,
+    destination_tag: ir::Tag,
+) -> Result<(), Error>  {
+	assert_eq!(source_tag.flow, ir::Flow::Have);
+	assert_eq!(destination_tag.flow, ir::Flow::Have);
+    match (source_tag.quot, destination_tag.quot) {
+        (_, ir::Quotient::None) => (),
+        (ir::Quotient::Output {index: output_index}, ir::Quotient::Node { node_id }) => {
+            let node = &caller_spec_funclet.nodes[node_id];
+            if let ir::Node::ExtractResult {node_id: call_node_id, index} = node {
+                assert_eq!(*index, output_index);
+                assert_eq!(*call_node_id, caller_spec_node_id);
+            }
+            else {
+                panic!(
+                    "Target operation is not a result extraction: #{:?} {:?}",
+                    node_id, node
+                );
+            }
+        }
+        _ => panic!(
+            "Ill-formed: {:?} to {:?}",
+            source_tag, destination_tag
+        ),
+    };
+
+	return Ok(());
+}
+
+fn check_tag_compatibility_interior_cast(
+    current_spec_funclet: &ir::Funclet,
+    source_tag: ir::Tag,
+    destination_tag: ir::Tag,
+    casts : &[(ir::NodeId, ir::NodeId)]
+) -> Result<(), Error> {
+	match (source_tag, destination_tag) {
+		(ir::Tag{quot: ir::Quotient::Node{node_id: src_node_id}, flow: src_flow}, ir::Tag{quot: ir::Quotient::Node{node_id: dst_node_id}, flow: dst_flow}) => {
+			if src_flow == dst_flow && casts.contains(&(src_node_id, dst_node_id)) {
+				return Ok(());
+			}
+		}
+		_ => (),
+	}
+
+    check_tag_compatibility_interior(
+        current_spec_funclet,
+        source_tag,
+        destination_tag,
+    )?;
+
+	return Ok(());
+}
+
+// Check value tag transition in same scope
+fn check_tag_compatibility_interior(
+    current_value_funclet: &ir::Funclet,
+    source_tag: ir::Tag,
+    destination_tag: ir::Tag
+) -> Result<(), Error> {
+	assert_eq!(source_tag.flow, destination_tag.flow);
+	let flow = source_tag.flow;
+
+    match (source_tag.quot, destination_tag.quot) {
+        (_, ir::Quotient::None) if flow.is_droppable() => (),
+        (ir::Quotient::None, _) if flow.is_duplicable() => (),
+		// Input and the first few nodes are equivalent
+        ( ir::Quotient::Input { index }, ir::Quotient::Node { node_id: remote_node_id } ) => {
+            if let ir::Node::Phi { index: phi_index } =
+                &current_value_funclet.nodes[remote_node_id]
+            {
+                assert_eq!(*phi_index, index);
+            } else {
+                panic!("Not a phi");
+            }
+        }
+        ( ir::Quotient::Node { node_id: remote_node_id }, ir::Quotient::Input { index } ) => {
+            if let ir::Node::Phi { index: phi_index } =
+                &current_value_funclet.nodes[remote_node_id]
+            {
+                assert_eq!(*phi_index, index);
+            } else {
+                panic!("Not a phi");
+            }
+        }
+        (ir::Quotient::Node { node_id }, ir::Quotient::Node { node_id: node_id_2 }) => {
+            //assert_eq!(node_id, node_id_2);
+			if node_id != node_id_2 {
+				return Err(Error::Generic{message: format!("Tag of node #{} is not compatibile with tag of node #{}", node_id, node_id_2)});
+			}
+        }
+		// An output is not necessarily equivalent to a node (there are some monad things going on)
+        ( ir::Quotient::Node { node_id }, ir::Quotient::Output { index } ) if flow == ir::Flow::Have => {
+            match &current_value_funclet.tail_edge {
+                ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], node_id),
+                _ => panic!("Not a unit"),
+            }
+        }
+        ( ir::Quotient::Output { index }, ir::Quotient::Node { node_id } ) if flow == ir::Flow::Need => {
+            match &current_value_funclet.tail_edge {
+                ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], node_id),
+                _ => panic!("Not a unit"),
+            }
+        }
+        (
+            ir::Quotient::Output { index },
+            ir::Quotient::Output { index: index_2 },
+        ) => {
+            //assert_eq!(funclet_id, funclet_id_2);
+            assert_eq!(index, index_2);
+        }
+        _ => panic!(
+            "Ill-formed: {:?} to {:?}",
+            source_tag, destination_tag
+        ),
+    }
+
+	Ok(())
 }

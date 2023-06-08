@@ -1,10 +1,8 @@
-use super::spatial_tag::*;
-use super::timeline_tag::*;
-use super::value_tag::*;
 use crate::ir;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::default::Default;
 use super::spec_checker::*;
+use super::error::Error;
 
 #[derive(Debug)]
 struct Slot {
@@ -96,14 +94,15 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
     }
 }
 
-fn advance_forward_value_copy<'program>(value_spec_checker : &mut FuncletSpecChecker<'program>, input_impl_node_id : ir::NodeId, output_impl_node_id : ir::NodeId) {
+fn advance_forward_value_copy<'program>(value_spec_checker : &mut FuncletSpecChecker<'program>, input_impl_node_id : ir::NodeId, output_impl_node_id : ir::NodeId) -> Result<(), Error> {
     let scalar = & value_spec_checker.scalar_nodes[& input_impl_node_id];
     assert!(scalar.flow.is_readable());
     assert!(value_spec_checker.can_drop_node(output_impl_node_id));
-    value_spec_checker.update_scalar_node(output_impl_node_id, scalar.tag, ir::Flow::Have);
+    value_spec_checker.update_scalar_node(output_impl_node_id, scalar.quot, ir::Flow::Have);
+    return Ok(());
 }
 
-fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecChecker<'program>, spec_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], output_impl_node_ids : &[ir::NodeId]) {
+fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecChecker<'program>, spec_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], output_impl_node_ids : &[ir::NodeId]) -> Result<(), Error> {
     // Can only advance if output flow is either have or none
 
     let encoded_node = & value_spec_checker.spec_funclet.nodes[spec_node_id];
@@ -114,7 +113,7 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             // Outputs
             assert_eq!(output_impl_node_ids.len(), 1);
             assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
-            value_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Tag::Node{node_id: spec_node_id}, ir::Flow::Have);
+            value_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id}, ir::Flow::Have);
         }
         ir::Node::Select {
             condition,
@@ -126,13 +125,13 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             for (input_index, input_spec_node_id) in [*condition, *true_case, *false_case].iter().enumerate()
             {
                 let scalar = & value_spec_checker.scalar_nodes[& input_impl_node_ids[input_index]];
-                assert_eq!(scalar.tag, ir::Tag::Node{node_id: *input_spec_node_id});
+                assert_eq!(scalar.quot, ir::Quotient::Node{node_id: *input_spec_node_id});
                 assert!(scalar.flow.is_readable());
             }
             // Outputs
             assert_eq!(output_impl_node_ids.len(), 1);
             assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
-            value_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Tag::Node{node_id: spec_node_id}, ir::Flow::Have);
+            value_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id}, ir::Flow::Have);
         }
         ir::Node::CallValueFunction {
             function_id,
@@ -143,7 +142,8 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             for (input_index, input_spec_node_id) in arguments.iter().enumerate()
             {
                 let scalar = & value_spec_checker.scalar_nodes[& input_impl_node_ids[input_index]];
-                assert_eq!(scalar.tag, ir::Tag::Node{node_id: *input_spec_node_id});
+                
+                assert_eq!(scalar.quot, ir::Quotient::Node{node_id: *input_spec_node_id});
                 assert!(scalar.flow.is_readable());
             }
             // Outputs
@@ -151,14 +151,16 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             {
                 // To do: Check that spec node is really an extractresult
                 assert!(value_spec_checker.can_drop_node(*output_impl_node_id));
-                value_spec_checker.update_scalar_node(*output_impl_node_id, ir::Tag::Node{node_id: spec_node_id + 1 + output_index}, ir::Flow::Have);
+                value_spec_checker.update_scalar_node(*output_impl_node_id, ir::Quotient::Node{node_id: spec_node_id + 1 + output_index}, ir::Flow::Have);
             }
         }
         _ => panic!("Unsupported node: {:?}", encoded_node)
     }
+
+    return Ok(());
 }
 
-fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecChecker<'program>, spec_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], output_impl_node_ids : &[ir::NodeId]) {
+fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecChecker<'program>, spec_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], output_impl_node_ids : &[ir::NodeId]) -> Result<(), Error> {
     let encoded_node = & timeline_spec_checker.spec_funclet.nodes[spec_node_id];
     match encoded_node {
         ir::Node::EncodingEvent { here_place, there_place, local_past } => {
@@ -169,51 +171,45 @@ fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecCh
                 }
                 _ => panic!("Tag must be Node")
             }*/
-            let from_tag = ir::Tag::Node{node_id: *local_past};
-            timeline_spec_checker.check_implicit_tag(from_tag);
-            timeline_spec_checker.transition_state_subset_forwards(input_impl_node_ids, from_tag, spec_node_id + 2);
-            timeline_spec_checker.transition_state_forwards(timeline_spec_checker.current_implicit_tag, spec_node_id + 1);
-            timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Tag::Node{node_id: spec_node_id + 2}, ir::Flow::Have);
+            let from_tag = ir::Tag{quot: ir::Quotient::Node{node_id: *local_past}, flow: ir::Flow::Have};
+            timeline_spec_checker.check_implicit_tag(from_tag)?;
+            timeline_spec_checker.transition_state_subset_forwards(input_impl_node_ids, *local_past, spec_node_id + 2)?;
+            timeline_spec_checker.transition_state_forwards(*local_past, spec_node_id + 1)?;
+            timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id + 2}, ir::Flow::Have);
         }
         ir::Node::SubmissionEvent { here_place, there_place, local_past } => {
             assert_eq!(input_impl_node_ids.len(), 1);
             assert_eq!(output_impl_node_ids.len(), 1);
 
-            let from_tag = ir::Tag::Node{node_id: *local_past};
+            let from_tag = ir::Tag{quot: ir::Quotient::Node{node_id: *local_past}, flow: ir::Flow::Have};
             // Use encoder
-            {
-                let scalar = timeline_spec_checker.scalar_nodes.get_mut(& input_impl_node_ids[0]).unwrap();
-                assert_eq!(scalar.flow, ir::Flow::Have);
-                assert_eq!(scalar.tag, from_tag);
-                scalar.flow = ir::Flow::None;
-            }
+            timeline_spec_checker.check_node_tag(input_impl_node_ids[0], from_tag)?;
+            timeline_spec_checker.update_scalar_node(input_impl_node_ids[0], ir::Quotient::Node{node_id: *local_past}, ir::Flow::None);
 
-            timeline_spec_checker.check_implicit_tag(from_tag);
-            timeline_spec_checker.transition_state_forwards(timeline_spec_checker.current_implicit_tag, spec_node_id);
-            timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Tag::Node{node_id: spec_node_id}, ir::Flow::Have);
+            //timeline_spec_checker.check_implicit_tag(from_tag)?;
+            timeline_spec_checker.transition_state_forwards(*local_past, spec_node_id)?;
+            timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id}, ir::Flow::Have);
         }
         ir::Node::SynchronizationEvent { here_place, there_place, local_past, remote_local_past } => {
             assert_eq!(input_impl_node_ids.len(), 1);
             assert_eq!(output_impl_node_ids.len(), 0);
 
-            let from_tag = ir::Tag::Node{node_id: *local_past};
-            let remote_from_tag = ir::Tag::Node{node_id: *remote_local_past};
-            timeline_spec_checker.check_implicit_tag(from_tag);
+            let from_tag = ir::Tag{quot: ir::Quotient::Node{node_id: *local_past}, flow: ir::Flow::Have};
+            let remote_from_tag = ir::Tag{quot: ir::Quotient::Node{node_id: *remote_local_past}, flow: ir::Flow::Have};
+            timeline_spec_checker.check_implicit_tag(from_tag)?;
 
             // Use fence
-            {
-                let scalar = timeline_spec_checker.scalar_nodes.get_mut(& input_impl_node_ids[0]).unwrap();
-                assert_eq!(scalar.flow, ir::Flow::Have);
-                assert_eq!(scalar.tag, remote_from_tag);
-                scalar.flow = ir::Flow::None;
-            }
+            timeline_spec_checker.check_node_tag(input_impl_node_ids[0], remote_from_tag)?;
+            timeline_spec_checker.update_scalar_node(input_impl_node_ids[0], ir::Quotient::Node{node_id: *remote_local_past}, ir::Flow::None);
 
-            timeline_spec_checker.transition_state_forwards(from_tag, spec_node_id);
+            timeline_spec_checker.transition_state_forwards(*local_past, spec_node_id)?;
             //timeline_spec_checker.transition_state_forwards(remote_from_tag, spec_node_id + 2);
             //timeline_spec_checker.transition_state_forwards(from_tag, spec_node_id + 1);
         }
         _ => panic!("Unsupported node: {:?}", encoded_node)
     }
+
+    return Ok(());
 }
 
 #[derive(Debug)]
@@ -295,7 +291,7 @@ impl<'program> FuncletChecker<'program> {
             self.node_types.insert(index, node_type);
         }
 
-        for (output_index, output_type) in self.scheduling_funclet.output_types.iter().enumerate() {
+        /*for (output_index, output_type) in self.scheduling_funclet.output_types.iter().enumerate() {
             let (value_tag, timeline_tag, spatial_tag) = (
                 self.value_spec.output_tags[output_index],
                 self.timeline_spec.output_tags[output_index],
@@ -320,7 +316,7 @@ impl<'program> FuncletChecker<'program> {
                 }
                 _ => (),
             }
-        }
+        }*/
     }
 
     fn get_funclet_value_spec<'funclet>(
@@ -371,52 +367,16 @@ impl<'program> FuncletChecker<'program> {
         }
     }
 
-    fn get_funclet_input_tags(
-        &self,
-        funclet: &ir::Funclet,
-        input_index: usize,
-    ) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag) {
-        if let ir::FuncletSpecBinding::ScheduleExplicit {
-            value,
-            spatial,
-            timeline,
-        } = &funclet.spec_binding
-        {
-            (
-                value.input_tags[input_index],
-                timeline.input_tags[input_index],
-                spatial.input_tags[input_index],
-            )
-        } else {
-            panic!("Does not have a ScheduleExplicit spec binding")
-        }
-    }
-
-    fn get_funclet_output_tags(
-        &self,
-        funclet: &ir::Funclet,
-        output_index: usize,
-    ) -> (ir::ValueTag, ir::TimelineTag, ir::SpatialTag) {
-        if let ir::FuncletSpecBinding::ScheduleExplicit {
-            value,
-            spatial,
-            timeline,
-        } = &funclet.spec_binding
-        {
-            (
-                value.output_tags[output_index],
-                timeline.output_tags[output_index],
-                spatial.output_tags[output_index],
-            )
-        } else {
-            panic!("Does not have a ScheduleExplicit spec binding")
-        }
-    }
-
     fn can_drop_node(&self, node_id : ir::NodeId) -> bool {
         self.value_spec_checker_opt.as_ref().unwrap().can_drop_node(node_id) || 
         self.timeline_spec_checker_opt.as_ref().unwrap().can_drop_node(node_id) ||
         self.spatial_spec_checker_opt.as_ref().unwrap().can_drop_node(node_id)
+    }
+
+    fn is_neutral_node(&self, node_id : ir::NodeId) -> bool {
+        self.value_spec_checker_opt.as_ref().unwrap().is_neutral_node(node_id) || 
+        self.timeline_spec_checker_opt.as_ref().unwrap().is_neutral_node(node_id) ||
+        self.spatial_spec_checker_opt.as_ref().unwrap().is_neutral_node(node_id)
     }
 
     fn drop_node(&mut self, node_id : ir::NodeId) {
@@ -425,7 +385,18 @@ impl<'program> FuncletChecker<'program> {
         self.spatial_spec_checker_opt.as_mut().unwrap().drop_node(node_id);
     }
 
-    pub fn check_next_node(&mut self, current_node_id: ir::NodeId) {
+    fn contextualize_error(&self, error : Error) -> Error {
+        match error {
+            Error::Unknown{message} => Error::Unknown{message},
+            Error::Generic{message} => Error::Generic{message: format!("Node #{} ({:?}):\n\t{}\n--- Funclet ---\n{:?}\n", self.current_node_id, & self.scheduling_funclet.nodes[self.current_node_id], message, self.scheduling_funclet)}
+        }
+    }
+
+    /*fn report_if_error<T>(&self, result : Result<T, Error>) -> Result<T, Error> {
+        Ok(result?)
+    }*/
+
+    pub fn check_next_node(&mut self, current_node_id: ir::NodeId) -> Result<(), Error> {
         assert_eq!(self.current_node_id, current_node_id);
         let current_node = &self.scheduling_funclet.nodes[current_node_id];
         match current_node {
@@ -437,9 +408,9 @@ impl<'program> FuncletChecker<'program> {
                 storage_type,
                 operation,
             } => {
-                self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Tag::Node{node_id: operation.node_id}, ir::Flow::Have);
-                self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Tag::None, ir::Flow::Have);
-                self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Tag::None, ir::Flow::Have);
+                self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::Node{node_id: operation.node_id}, ir::Flow::Have);
+                self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
+                self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
                 self.node_types.insert(
                     current_node_id,
                     NodeType::Slot(Slot {
@@ -454,11 +425,6 @@ impl<'program> FuncletChecker<'program> {
             } => {
                 if let Some(node_type) = self.node_types.remove(dropped_node_id) {
                     assert!(self.can_drop_node(*dropped_node_id));
-                    /*match {
-                        ir::Flow::None => {}
-                        ir::Flow::Have => {}
-                        _ => panic!("Cannot drop node #{}", dropped_node_id)
-                    }*/
                 } else {
                     panic!("No node at #{}", dropped_node_id)
                 }
@@ -474,7 +440,7 @@ impl<'program> FuncletChecker<'program> {
                     operation.funclet_id
                 );
 
-                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs);
+                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
 
                 // To do: Check timeline and spatial
             }
@@ -489,7 +455,7 @@ impl<'program> FuncletChecker<'program> {
                     operation.funclet_id
                 );
 
-                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs);
+                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
                 // To do: Check timeline and spatial
 
                 /*let encoded_funclet = &self.program.funclets[operation.funclet_id];
@@ -558,7 +524,7 @@ impl<'program> FuncletChecker<'program> {
 
                 assert_eq!(*place, ir::Place::Gpu);
                 
-                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs);
+                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
                 // To do: Check timeline and spatial
 
                 /*let encoded_funclet = &self.program.funclets[operation.funclet_id];
@@ -699,7 +665,7 @@ impl<'program> FuncletChecker<'program> {
                 input,
                 output,
             } => {
-                advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *input, *output);
+                advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *input, *output).map_err(|e| self.contextualize_error(e))?;
             }
             ir::Node::EncodeCopy {
                 place,
@@ -707,7 +673,7 @@ impl<'program> FuncletChecker<'program> {
                 output,
                 encoder,
             } => {
-                advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *input, *output);
+                advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *input, *output).map_err(|e| self.contextualize_error(e))?;
             }
             ir::Node::BeginEncoding { place, event, encoded } => {
                 assert_eq!(
@@ -716,7 +682,8 @@ impl<'program> FuncletChecker<'program> {
                 );
 
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                advance_forward_timeline(timeline_spec_checker, event.node_id, &[], &[current_node_id]);
+                let ir::Node::EncodingEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be an encoding event") };
+                advance_forward_timeline(timeline_spec_checker, event.node_id, &[], &[current_node_id]).map_err(|e| self.contextualize_error(e))?;
 
                 self.node_types.insert(
                     current_node_id,
@@ -741,7 +708,8 @@ impl<'program> FuncletChecker<'program> {
                 assert_eq!(encoded_place, * place);
 
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                advance_forward_timeline(timeline_spec_checker, event.node_id, &[*encoder], &[current_node_id]);
+                let ir::Node::SubmissionEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be a submission event") };
+                advance_forward_timeline(timeline_spec_checker, event.node_id, &[*encoder], &[current_node_id]).map_err(|e| self.contextualize_error(e))?;
                 //self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Tag::None, ir::Flow::Have);
                 //let implicit_tag = timeline_spec_checker.current_implicit_tag;
                 //self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, implicit_tag, ir::Flow::Have);
@@ -765,7 +733,8 @@ impl<'program> FuncletChecker<'program> {
                 );
 
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                advance_forward_timeline(timeline_spec_checker, event.node_id, &[*fence], &[]);
+                let ir::Node::SynchronizationEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be an synchronization event") };
+                advance_forward_timeline(timeline_spec_checker, event.node_id, &[*fence], &[]).map_err(|e| self.contextualize_error(e))?;
 
                 // Only implemented for the local queue for now
                 assert_eq!(*synced_place, ir::Place::Local);
@@ -780,7 +749,7 @@ impl<'program> FuncletChecker<'program> {
 
                 assert_eq!(fenced_place, ir::Place::Gpu);
             }
-            ir::Node::StaticAllocFromStaticBuffer {
+            /*ir::Node::StaticAllocFromStaticBuffer {
                 buffer: buffer_node_id,
                 place,
                 storage_type,
@@ -839,7 +808,7 @@ impl<'program> FuncletChecker<'program> {
                 } else {
                     panic!("No static buffer at node #{}", buffer_node_id)
                 }
-            }
+            }*/
             ir::Node::DefaultJoin => {
                 let mut input_types = Vec::<ir::TypeId>::new();
                 for (index, type_id) in self.scheduling_funclet.output_types.iter().enumerate() {
@@ -865,7 +834,7 @@ impl<'program> FuncletChecker<'program> {
                 captures,
                 *continuation_join_node_id,
                 JoinKind::Inline,
-            ),
+            ).map_err(|e| self.contextualize_error(e))?,
             ir::Node::SerializedJoin {
                 funclet: join_funclet_id,
                 captures,
@@ -875,11 +844,12 @@ impl<'program> FuncletChecker<'program> {
                 captures,
                 *continuation_join_node_id,
                 JoinKind::Serialized,
-            ),
+            ).map_err(|e| self.contextualize_error(e))?,
             _ => panic!("Unimplemented"),
         }
 
         self.current_node_id += 1;
+        return Ok(());
     }
 
     fn handle_join(
@@ -888,7 +858,7 @@ impl<'program> FuncletChecker<'program> {
         captures: &[ir::NodeId],
         continuation_join_node_id: ir::NodeId,
         join_kind: JoinKind,
-    ) {
+    ) -> Result<(), Error> {
         let join_funclet = &self.program.funclets[join_funclet_id];
         let join_funclet_value_spec = &self.get_funclet_value_spec(join_funclet);
         let join_funclet_timeline_spec = &self.get_funclet_timeline_spec(join_funclet);
@@ -928,25 +898,26 @@ impl<'program> FuncletChecker<'program> {
             join_kind,
             input_types: remaining_input_types.into_boxed_slice(),
         };
-        self.value_spec_checker_opt.as_mut().unwrap().join(self.current_node_id, captures, join_funclet_value_spec, continuation_join_node_id);
-        self.timeline_spec_checker_opt.as_mut().unwrap().join(self.current_node_id, captures, join_funclet_timeline_spec, continuation_join_node_id);
-        self.spatial_spec_checker_opt.as_mut().unwrap().join(self.current_node_id, captures, join_funclet_spatial_spec, continuation_join_node_id);
+        self.value_spec_checker_opt.as_mut().unwrap().join(self.current_node_id, captures, join_funclet_value_spec, continuation_join_node_id)?;
+        self.timeline_spec_checker_opt.as_mut().unwrap().join(self.current_node_id, captures, join_funclet_timeline_spec, continuation_join_node_id)?;
+        self.spatial_spec_checker_opt.as_mut().unwrap().join(self.current_node_id, captures, join_funclet_spatial_spec, continuation_join_node_id)?;
         self.node_join_points
             .insert(self.current_node_id, join_point);
         self.node_types
             .insert(self.current_node_id, NodeType::JoinPoint);
+        
+        return Ok(());
     }
 
-    /*pub fn check_tail_edge(&mut self) {
-    }*/
-
     
-    pub fn check_tail_edge(&mut self) {
+    pub fn check_tail_edge(&mut self) -> Result<(), Error> {
         assert_eq!(self.current_node_id, self.scheduling_funclet.nodes.len());
         match &self.scheduling_funclet.tail_edge {
             ir::TailEdge::Return { return_values } => {
                 for (return_index, return_node_id) in return_values.iter().enumerate() {
-                    let node_type = self.node_types.remove(return_node_id).unwrap();
+                    let Some(node_type) = self.node_types.remove(return_node_id) else {
+                        return Err(Error::Generic{message: format!("Returning nonexistent node #{}. Was it already used?", return_node_id)});
+                    };
                     check_slot_type(
                         &self.program,
                         self.scheduling_funclet.output_types[return_index],
@@ -954,11 +925,11 @@ impl<'program> FuncletChecker<'program> {
                     );
                 }
 
-                self.value_spec_checker_opt.as_mut().unwrap().check_return(return_values);
-                self.timeline_spec_checker_opt.as_mut().unwrap().check_return(return_values);
-                self.spatial_spec_checker_opt.as_mut().unwrap().check_return(return_values);
+                self.value_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
             }
-            ir::TailEdge::Yield {
+            /*ir::TailEdge::Yield {
                 external_function_id,
                 yielded_nodes: yielded_node_ids,
                 next_funclet,
@@ -989,7 +960,7 @@ impl<'program> FuncletChecker<'program> {
                 {
                     check_slot_type(& self.program, true_funclet.input_types[argument_index], & node_type);
                 }*/
-            }
+            }*/
             ir::TailEdge::Jump { join, arguments } => {
                 let join_point = &self.node_join_points[join];
 
@@ -1008,9 +979,9 @@ impl<'program> FuncletChecker<'program> {
                     );
                 }
 
-                self.value_spec_checker_opt.as_mut().unwrap().check_jump(*join, arguments);
-                self.timeline_spec_checker_opt.as_mut().unwrap().check_jump(*join, arguments);
-                self.spatial_spec_checker_opt.as_mut().unwrap().check_jump(*join, arguments);
+                self.value_spec_checker_opt.as_mut().unwrap().check_jump(*join, arguments).map_err(|e| self.contextualize_error(e))?;
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_jump(*join, arguments).map_err(|e| self.contextualize_error(e))?;
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_jump(*join, arguments).map_err(|e| self.contextualize_error(e))?;
             }
             ir::TailEdge::ScheduleCall {
                 value_operation: value_operation_ref,
@@ -1042,14 +1013,14 @@ impl<'program> FuncletChecker<'program> {
                 let timeline_spec = self.get_funclet_timeline_spec(callee_funclet);
                 let spatial_spec = self.get_funclet_spatial_spec(callee_funclet);
                 if let ir::Node::CallValueFunction{function_id, arguments} = &callee_value_funclet.nodes[value_operation.node_id] {
-                    self.value_spec_checker_opt.as_mut().unwrap().check_vertical_call(*continuation_join_node_id, callee_arguments, value_spec, arguments, value_operation.node_id);
+                    self.value_spec_checker_opt.as_mut().unwrap().check_vertical_call(*continuation_join_node_id, callee_arguments, value_spec, arguments, value_operation.node_id).map_err(|e| self.contextualize_error(e))?;
                 }
                 else {
                     panic!("Not a call")
                 };
                 
-                self.timeline_spec_checker_opt.as_mut().unwrap().check_interior_call(*continuation_join_node_id, callee_arguments, timeline_spec);
-                self.spatial_spec_checker_opt.as_mut().unwrap().check_interior_call(*continuation_join_node_id, callee_arguments, spatial_spec);
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_interior_call(*continuation_join_node_id, callee_arguments, timeline_spec).map_err(|e| self.contextualize_error(e))?;
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_interior_call(*continuation_join_node_id, callee_arguments, spatial_spec).map_err(|e| self.contextualize_error(e))?;
 
                 // Step 1: Check current -> callee edge
                 for (argument_index, argument_node_id) in callee_arguments.iter().enumerate() {
@@ -1101,7 +1072,7 @@ impl<'program> FuncletChecker<'program> {
                 let current_value_funclet = &self.program.funclets[value_operation.funclet_id];
                 assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
-                let condition_value_tag = self.value_spec_checker_opt.as_mut().unwrap().scalar_nodes[condition_slot_node_id].tag;
+                let condition_value_tag = self.value_spec_checker_opt.as_mut().unwrap().scalar_nodes[condition_slot_node_id];
 
                 assert_eq!(
                     value_operation.funclet_id,
@@ -1116,14 +1087,14 @@ impl<'program> FuncletChecker<'program> {
                 assert_eq!(callee_arguments.len(), false_funclet.input_types.len());
 
                 if let ir::Node::Select{condition, true_case, false_case} = &current_value_funclet.nodes[value_operation.node_id] {
-                    let cast_to_tag = ir::Tag::Node{node_id: value_operation.node_id};
-                    self.value_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[ir::Tag::Node{node_id: *true_case}, ir::Tag::Node{node_id: *false_case}], &[cast_to_tag, cast_to_tag], &[true_funclet_value_spec, false_funclet_value_spec]);
+                    let cast_to_tag = ir::Quotient::Node{node_id: value_operation.node_id};
+                    self.value_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[&[(*true_case, value_operation.node_id)], &[(*false_case, value_operation.node_id)]], &[true_funclet_value_spec, false_funclet_value_spec]).map_err(|e| self.contextualize_error(e))?;
                 }
                 else {
                     panic!("Not a select")
                 };
-                self.timeline_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[ir::Tag::None, ir::Tag::None], &[ir::Tag::None, ir::Tag::None], &[true_funclet_value_spec, false_funclet_value_spec]);
-                self.spatial_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[ir::Tag::None, ir::Tag::None], &[ir::Tag::None, ir::Tag::None], &[true_funclet_value_spec, false_funclet_value_spec]);
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[&[], &[]], &[true_funclet_value_spec, false_funclet_value_spec]).map_err(|e| self.contextualize_error(e))?;
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[&[], &[]], &[true_funclet_value_spec, false_funclet_value_spec]).map_err(|e| self.contextualize_error(e))?;
 
                 for (argument_index, argument_node_id) in callee_arguments.iter().enumerate() {
                     let node_type = self.node_types.remove(argument_node_id).unwrap();
@@ -1158,289 +1129,15 @@ impl<'program> FuncletChecker<'program> {
                     );
                 }
             }
-            /*ir::TailEdge::DynamicAllocFromBuffer {
-                buffer: buffer_node_id,
-                dynamic_allocation_size_slots: dynamic_allocation_size_node_ids,
-                success_funclet_id,
-                failure_funclet_id,
-                arguments,
-                continuation_join: continuation_join_node_id,
-            } => {
-                let continuation_join_point = &self.node_join_points[continuation_join_node_id];
-
-                if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
-                {
-                    // Nothing, for now...
-                } else {
-                    panic!("Node at #{} is not a join point", continuation_join_node_id)
-                }
-
-                let true_funclet_id = success_funclet_id;
-                let false_funclet_id = failure_funclet_id;
-                let true_funclet = &self.program.funclets[*true_funclet_id];
-                let false_funclet = &self.program.funclets[*false_funclet_id];
-                let true_funclet_value_spec = &self.get_funclet_value_spec(true_funclet);
-                let true_funclet_timeline_spec = &self.get_funclet_timeline_spec(true_funclet);
-                let false_funclet_value_spec = &self.get_funclet_value_spec(false_funclet);
-                let false_funclet_timeline_spec = &self.get_funclet_timeline_spec(false_funclet);
-
-                let current_value_funclet = &self.program.funclets[self.value_funclet_id];
-                assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
-
-                let buffer_spatial_tag = self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[buffer_node_id].tag;
-                let buffer_storage_place = if let Some(NodeType::Buffer(Buffer {
-                    storage_place,
-                    static_layout_opt,
-                    ..
-                })) = self.node_types.get_mut(buffer_node_id)
-                {
-                    *static_layout_opt = None;
-                    *storage_place
-                } else {
-                    panic!("")
-                };
-
-                // Temporary restriction
-                assert_eq!(buffer_storage_place, ir::Place::Gpu);
-
-                assert_eq!(
-                    self.value_funclet_id,
-                    true_funclet_value_spec.funclet_id_opt.unwrap()
-                );
-                assert_eq!(
-                    self.value_funclet_id,
-                    false_funclet_value_spec.funclet_id_opt.unwrap()
-                );
-
-                assert_eq!(
-                    arguments.len() + dynamic_allocation_size_node_ids.len(),
-                    true_funclet.input_types.len()
-                );
-                assert_eq!(arguments.len(), false_funclet.input_types.len());
-
-                check_timeline_tag_compatibility_interior(
-                    &self.program,
-                    self.timeline_spec.funclet_id_opt,
-                    self.current_timeline_tag,
-                    true_funclet_timeline_spec.implicit_in_tag,
-                );
-                check_timeline_tag_compatibility_interior(
-                    &self.program,
-                    self.timeline_spec.funclet_id_opt,
-                    self.current_timeline_tag,
-                    false_funclet_timeline_spec.implicit_in_tag,
-                );
-                check_timeline_tag_compatibility_interior(
-                    &self.program,
-                    self.timeline_spec.funclet_id_opt,
-                    true_funclet_timeline_spec.implicit_out_tag,
-                    continuation_join_point.in_timeline_tag,
-                );
-                check_timeline_tag_compatibility_interior(
-                    &self.program,
-                    self.timeline_spec.funclet_id_opt,
-                    false_funclet_timeline_spec.implicit_out_tag,
-                    continuation_join_point.in_timeline_tag,
-                );
-
-                // Check these first because they don't take ownership
-                for (allocation_size_slot_index, allocation_size_node_id_opt) in
-                    dynamic_allocation_size_node_ids.iter().enumerate()
-                {
-                    let input_index = allocation_size_slot_index + arguments.len();
-                    let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) =
-                        self.get_funclet_input_tags(true_funclet, input_index);
-                    check_spatial_tag_compatibility_interior(
-                        &self.program,
-                        self.timeline_spec.funclet_id_opt,
-                        buffer_spatial_tag,
-                        true_input_spatial_tag,
-                    );
-
-                    if let Some(allocation_size_node_id) = allocation_size_node_id_opt {
-                        if let Some(NodeType::Slot(Slot {
-                            queue_place,
-                            //queue_stage,
-                            storage_type,
-                            ..
-                        })) = self.node_types.get(allocation_size_node_id)
-                        {
-                            assert_eq!(*queue_place, ir::Place::Local);
-                            //assert_eq!(*queue_stage, ir::ResourceQueueStage::Ready);
-                        // To do: Check storage type
-                        } else {
-                            panic!(
-                                "Allocation size slot #{} does not exist at node #{}",
-                                allocation_size_slot_index, allocation_size_node_id
-                            )
-                        }
-                    }
-
-                    let destination_type_id = true_funclet.input_types[input_index];
-                    match &self.program.types[destination_type_id] {
-                        ir::Type::Slot {
-                            //queue_stage,
-                            queue_place,
-                            storage_type,
-                            ..
-                        } => {
-                            assert_eq!(*queue_place, buffer_storage_place);
-                            //assert_eq!(*queue_stage, ir::ResourceQueueStage::Bound);
-                            if allocation_size_node_id_opt.is_some() {
-                                match & self.program.native_interface.types[storage_type.0]
-								{
-									ir::ffi::Type::ErasedLengthArray{element_type} => (),
-									_ => panic!("Invalid storage type for dynamic allocation (native interface type {})", storage_type.0)
-								}
-                            } else {
-                                match & self.program.native_interface.types[storage_type.0]
-								{
-									ir::ffi::Type::ErasedLengthArray{element_type} => panic!("Invalid storage type for dynamic allocation (native interface type {})", storage_type.0),
-									_ => ()
-								}
-                            }
-                        }
-                        _ => panic!(
-                            "Allocation success funclet input #{} must be a slot",
-                            input_index
-                        ),
-                    }
-                }
-
-                for (argument_index, argument_node_id) in arguments.iter().enumerate() {
-                    let node_type = self.node_types.remove(argument_node_id).unwrap();
-                    check_slot_type(
-                        &self.program,
-                        true_funclet.input_types[argument_index],
-                        &node_type,
-                    );
-                    check_slot_type(
-                        &self.program,
-                        false_funclet.input_types[argument_index],
-                        &node_type,
-                    );
-
-                    let argument_slot_value_tag = self.value_spec_checker_opt.as_mut().unwrap().scalar_nodes[argument_node_id].tag;
-                    let argument_slot_timeline_tag =
-                        self.timeline_spec_checker_opt.as_mut().unwrap().scalar_nodes[argument_node_id].tag;
-                    let argument_slot_spatial_tag = self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[argument_node_id].tag;
-                    let (true_input_value_tag, true_input_timeline_tag, true_input_spatial_tag) =
-                        self.get_funclet_input_tags(true_funclet, argument_index);
-                    let (false_input_value_tag, false_input_timeline_tag, false_input_spatial_tag) =
-                        self.get_funclet_input_tags(false_funclet, argument_index);
-
-                    check_value_tag_compatibility_interior(
-                        &self.program,
-                        self.value_spec.funclet_id_opt,
-                        argument_slot_value_tag,
-                        true_input_value_tag,
-                    );
-                    check_value_tag_compatibility_interior(
-                        &self.program,
-                        self.value_spec.funclet_id_opt,
-                        argument_slot_value_tag,
-                        false_input_value_tag,
-                    );
-                    check_timeline_tag_compatibility_interior(
-                        &self.program,
-                        self.timeline_spec.funclet_id_opt,
-                        argument_slot_timeline_tag,
-                        true_input_timeline_tag,
-                    );
-                    check_timeline_tag_compatibility_interior(
-                        &self.program,
-                        self.timeline_spec.funclet_id_opt,
-                        argument_slot_timeline_tag,
-                        false_input_timeline_tag,
-                    );
-                    check_spatial_tag_compatibility_interior(
-                        &self.program,
-                        self.spatial_spec.funclet_id_opt,
-                        argument_slot_spatial_tag,
-                        true_input_spatial_tag,
-                    );
-                    check_spatial_tag_compatibility_interior(
-                        &self.program,
-                        self.spatial_spec.funclet_id_opt,
-                        argument_slot_spatial_tag,
-                        false_input_spatial_tag,
-                    );
-                }
-
-                let continuation_join_value_tags = &continuation_join_point.input_value_tags;
-                let continuation_join_timeline_tags = &continuation_join_point.input_timeline_tags;
-                let continuation_join_spatial_tags = &continuation_join_point.input_spatial_tags;
-                assert_eq!(
-                    true_funclet.output_types.len(),
-                    continuation_join_point.input_types.len()
-                );
-                assert_eq!(
-                    false_funclet.output_types.len(),
-                    continuation_join_point.input_types.len()
-                );
-                for (output_index, _) in true_funclet.output_types.iter().enumerate() {
-                    assert_eq!(
-                        true_funclet.output_types[output_index],
-                        continuation_join_point.input_types[output_index]
-                    );
-                    assert_eq!(
-                        false_funclet.output_types[output_index],
-                        continuation_join_point.input_types[output_index]
-                    );
-
-                    let continuation_input_value_tag = continuation_join_value_tags[output_index];
-                    let (true_output_value_tag, true_output_timeline_tag, true_output_spatial_tag) =
-                        self.get_funclet_output_tags(true_funclet, output_index);
-                    let (
-                        false_output_value_tag,
-                        false_output_timeline_tag,
-                        false_output_spatial_tag,
-                    ) = self.get_funclet_output_tags(false_funclet, output_index);
-                    check_value_tag_compatibility_interior(
-                        &self.program,
-                        self.value_spec.funclet_id_opt,
-                        true_output_value_tag,
-                        continuation_input_value_tag,
-                    );
-                    check_value_tag_compatibility_interior(
-                        &self.program,
-                        self.value_spec.funclet_id_opt,
-                        false_output_value_tag,
-                        continuation_input_value_tag,
-                    );
-                    check_timeline_tag_compatibility_interior(
-                        &self.program,
-                        self.timeline_spec.funclet_id_opt,
-                        true_output_timeline_tag,
-                        continuation_join_timeline_tags[output_index],
-                    );
-                    check_timeline_tag_compatibility_interior(
-                        &self.program,
-                        self.timeline_spec.funclet_id_opt,
-                        false_output_timeline_tag,
-                        continuation_join_timeline_tags[output_index],
-                    );
-                    check_spatial_tag_compatibility_interior(
-                        &self.program,
-                        self.spatial_spec.funclet_id_opt,
-                        true_output_spatial_tag,
-                        continuation_join_spatial_tags[output_index],
-                    );
-                    check_spatial_tag_compatibility_interior(
-                        &self.program,
-                        self.spatial_spec.funclet_id_opt,
-                        false_output_spatial_tag,
-                        continuation_join_spatial_tags[output_index],
-                    );
-                }
-            }*/
             _ => panic!("Unimplemented"),
         }
 
         // Enforce use of all nodes
         for (node_id, node_type) in self.node_types.iter() {
-            assert!(self.can_drop_node(*node_id));
+            assert!(self.can_drop_node(*node_id) || self.is_neutral_node(*node_id));
             //self.drop_node(*dropped_node_id)
         }
+
+        return Ok(());
     }
 }

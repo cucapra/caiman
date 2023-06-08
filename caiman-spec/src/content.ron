@@ -236,19 +236,6 @@
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
-		/*(
-			// Creates a fence that will be signalled when the given place completes the most recently submitted command
-			// Currently, can only be created for the gpu
-			// Event encodes a point in the timeline funclet that this fence observes
-			name : "EncodeFence",
-			inputs : [
-				(name : "place", kind : Place),
-				(name : "event", kind : RemoteOperation)
-			],
-			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : true
-		),*/
 		(
 			// Synchronizes the given place on the fence
 			// Event encodes a point in the timeline funclet that this synchronization advances the current timeline to

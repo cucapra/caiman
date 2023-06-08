@@ -4,8 +4,6 @@ use crate::rust_wgpu_backend::code_generator::{CodeGenerator, SubmissionId, VarI
 use crate::shadergen;
 use crate::stable_vec::StableVec;
 use crate::type_system;
-use crate::type_system::timeline_tag::*;
-use crate::type_system::value_tag::*;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -1535,7 +1533,7 @@ impl<'program> CodeGen<'program> {
                 );
             }
 
-            funclet_checker.check_next_node(current_node_id);
+            funclet_checker.check_next_node(current_node_id).expect("");
 
             match node {
                 ir::Node::None => (),
@@ -1819,6 +1817,17 @@ impl<'program> CodeGen<'program> {
                                 src_var_id,
                             );
                         }
+                        (ir::Place::Local, ir::Place::Local, ir::Place::Gpu) => {
+                            let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+                            let dst_var_id = self
+                                .code_generator
+                                .encode_clone_local_data_from_buffer(src_var_id);
+                            placement_state.update_slot_state(
+                                dst_slot_id,
+                                //ir::ResourceQueueStage::Ready,
+                                dst_var_id,
+                            );
+                        }
                         _ => panic!("Unimplemented"),
                     }
                 }
@@ -1878,7 +1887,7 @@ impl<'program> CodeGen<'program> {
                                 ir::ResourceQueueStage::Ready,
                                 src_var_id,
                             );
-                        }*/
+                        }
                         (ir::Place::Local, ir::Place::Local, ir::Place::Gpu) => {
                             let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
                             let dst_var_id = self
@@ -1889,7 +1898,7 @@ impl<'program> CodeGen<'program> {
                                 //ir::ResourceQueueStage::Ready,
                                 dst_var_id,
                             );
-                        }
+                        }*/
                         (ir::Place::Gpu, ir::Place::Gpu, ir::Place::Local) => {
                             let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
                             let dst_var_id = placement_state.get_slot_var_id(dst_slot_id).unwrap();
@@ -2151,7 +2160,7 @@ impl<'program> CodeGen<'program> {
             );
         }
 
-        funclet_checker.check_tail_edge();
+        funclet_checker.check_tail_edge().expect("");
 
         self.code_generator
             .insert_comment(format!(" tail edge: {:?}", funclet.tail_edge).as_str());

@@ -110,14 +110,14 @@ macro_rules! make_nodes {
 with_operations!(make_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Tag {
+pub enum Quotient {
     None,
     Node { node_id: usize },
     Input { index: usize },
     Output { index: usize },
 }
 
-impl Tag {
+impl Quotient {
     fn default() -> Self {
         Self::None
     }
@@ -164,6 +164,27 @@ impl Flow {
 			Self::Need => false,
 			Self::Met => true,
 		}
+    }
+
+    pub fn is_neutral(&self) -> bool {
+		match self {
+			Self::None => true,
+			Self::Have => false,
+			Self::Need => false,
+			Self::Met => true,
+		}
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Tag {
+    pub quot : Quotient, // What a given value maps to in a specification
+    pub flow : Flow, // How this value transforms relative to the specification
+}
+
+impl Tag {
+    fn default() -> Self {
+        Self{quot : Quotient::None, flow : Flow::Have }
     }
 }
 
@@ -280,9 +301,9 @@ impl FuncletKind {
 pub struct FuncletSpec {
     pub funclet_id_opt: Option<FuncletId>,
     pub input_tags: Box<[Tag]>,
-    pub input_flows : Box<[Flow]>,
+    //pub input_flows : Box<[Flow]>,
     pub output_tags: Box<[Tag]>,
-    pub output_flows : Box<[Flow]>,
+    //pub output_flows : Box<[Flow]>,
     #[serde(default = "Tag::default")]
     pub implicit_in_tag: Tag,
     #[serde(default = "Tag::default")]
@@ -415,7 +436,7 @@ impl Program {
 // Hall of shame but mostly deprecated name
 
 pub type ValueFunction = FunctionClass;
-pub type ValueTag = Tag;
+/*pub type ValueTag = Tag;
 pub type TimelineTag = Tag;
 pub type SpatialTag = Tag;
 
@@ -428,4 +449,4 @@ pub struct SchedulingTagSet {
     pub timeline_tag: TimelineTag,
     //#[serde(default = "SpatialTag::default")]
     pub spatial_tag: SpatialTag,
-}
+}*/

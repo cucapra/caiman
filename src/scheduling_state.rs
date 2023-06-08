@@ -61,7 +61,6 @@ struct ValueInstance
 #[derive(Debug)]
 struct Slot {
     type_id: ir::ffi::TypeId,
-    value_tag_opt: Option<ir::ValueTag>,
     //value_instance_id_opt : Option<ValueInstanceId>,
     timestamp: LogicalTimestamp,
     queue_place: ir::Place,
@@ -123,7 +122,6 @@ impl SchedulingState {
         let timestamp = self.get_local_time();
         let slot = Slot {
             type_id,
-            value_tag_opt: None,
             /*value_instance_id_opt : None,*/ timestamp,
             queue_place,
             state_binding: StateBinding::TemporaryHack,
