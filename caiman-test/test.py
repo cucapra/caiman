@@ -136,7 +136,7 @@ def process_inputs(
         inputs = chain(
                 test_dir.rglob("*test.cair"), 
                 test_dir.rglob("*test.ron"),
-                test_dir.rglob("*.vl"),
+                test_dir.rglob("*.cavl"),
         )
     for input in inputs:
         relativized = input.absolute().relative_to(test_dir)
@@ -171,7 +171,7 @@ def process_inputs(
 
                 continue
 
-        input_compiler = frontend_compiler if input_str.endswith(".vl") else compiler
+        input_compiler = frontend_compiler if input_str.endswith(".cavl") else compiler
         rv = input_compiler.compile(input.absolute(), output)
 
         if (rv.returncode == 0):

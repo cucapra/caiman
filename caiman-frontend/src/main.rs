@@ -69,8 +69,8 @@ fn scheduling_language_stage(args: &Arguments) -> scheduling_language::compiler:
 
 fn filenames(filename: &str) -> (String, String)
 {
-    let value_filename = filename.to_string() + ".vl";
-    let sched_filename = filename.to_string() + ".sl";
+    let value_filename = filename.to_string() + ".cavl";
+    let sched_filename = filename.to_string() + ".casl";
     (value_filename, sched_filename)
 }
 
