@@ -97,8 +97,8 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
 fn advance_forward_value_copy<'program>(value_spec_checker : &mut FuncletSpecChecker<'program>, input_impl_node_id : ir::NodeId, output_impl_node_id : ir::NodeId) -> Result<(), Error> {
     let scalar = & value_spec_checker.scalar_nodes[& input_impl_node_id];
     assert!(scalar.flow.is_readable());
-    value_spec_checker.check_node_tag(output_impl_node_id, ir::Tag{quot: scalar.quot, flow: ir::Flow::Need})?;
-    //assert!(value_spec_checker.can_drop_node(output_impl_node_id));
+    //value_spec_checker.check_node_tag(output_impl_node_id, ir::Tag{quot: scalar.quot, flow: ir::Flow::None})?;
+    assert!(value_spec_checker.can_drop_node(output_impl_node_id));
     value_spec_checker.update_scalar_node(output_impl_node_id, scalar.quot, ir::Flow::Have);
     return Ok(());
 }
@@ -113,8 +113,8 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             assert_eq!(input_impl_node_ids.len(), 0);
             // Outputs
             assert_eq!(output_impl_node_ids.len(), 1);
-            value_spec_checker.check_node_tag(output_impl_node_ids[0], ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::Need})?;
-            //assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
+            //value_spec_checker.check_node_tag(output_impl_node_ids[0], ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::None})?;
+            assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
             value_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id}, ir::Flow::Have);
         }
         ir::Node::Select {
@@ -132,8 +132,8 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             }
             // Outputs
             assert_eq!(output_impl_node_ids.len(), 1);
-            value_spec_checker.check_node_tag(output_impl_node_ids[0], ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::Need})?;
-            //assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
+            //value_spec_checker.check_node_tag(output_impl_node_ids[0], ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::None})?;
+            assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
             value_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id}, ir::Flow::Have);
         }
         ir::Node::CallFunctionClass {
@@ -153,8 +153,8 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             for (output_index, output_impl_node_id) in output_impl_node_ids.iter().enumerate()
             {
                 // To do: Check that spec node is really an extractresult
-                //assert!(value_spec_checker.can_drop_node(*output_impl_node_id));
-                value_spec_checker.check_node_tag(*output_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::Need})?;
+                assert!(value_spec_checker.can_drop_node(*output_impl_node_id));
+                //value_spec_checker.check_node_tag(*output_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::Need})?;
                 value_spec_checker.update_scalar_node(*output_impl_node_id, ir::Quotient::Node{node_id: spec_node_id + 1 + output_index}, ir::Flow::Have);
             }
         }
@@ -411,8 +411,8 @@ impl<'program> FuncletChecker<'program> {
                 place,
                 storage_type,
             } => {
-                 // Has no value yet
-                self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Need);
+                // Has no value and can only be overwritten
+                self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::None);
                 // Can be used in encoding
                 self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
                 let spatial_flow = match *place {
