@@ -566,7 +566,7 @@ impl<'program> CodeGen<'program> {
         output_slot_ids: &[SlotId],
     ) {
         match node {
-            ir::Node::CallValueFunction {
+            ir::Node::CallFunctionClass {
                 function_id,
                 arguments,
                 //dimensions,
@@ -771,7 +771,7 @@ impl<'program> CodeGen<'program> {
     ) {
         // To do: Do something about the value
         match node {
-            ir::Node::CallValueFunction {
+            ir::Node::CallFunctionClass {
                 function_id,
                 arguments,
             } => {

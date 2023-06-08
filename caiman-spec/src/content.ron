@@ -57,7 +57,7 @@
 			// Does not invoke a funclet directly
 			// Instead, it represents a call to any funclet or external function that is a member of the given equivalence class
 			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
-			name : "CallValueFunction", // to become CallFunctionClass
+			name : "CallFunctionClass",
 			inputs : [
 				(name : "function_id", kind : ValueFunction),
 				(name : "arguments", kind : Operation, is_array : true)

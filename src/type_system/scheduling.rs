@@ -133,7 +133,7 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
             assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
             value_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id}, ir::Flow::Have);
         }
-        ir::Node::CallValueFunction {
+        ir::Node::CallFunctionClass {
             function_id,
             arguments,
         } => {
@@ -1001,7 +1001,7 @@ impl<'program> FuncletChecker<'program> {
 				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
                 let timeline_spec = self.get_funclet_timeline_spec(callee_funclet);
                 let spatial_spec = self.get_funclet_spatial_spec(callee_funclet);
-                if let ir::Node::CallValueFunction{function_id, arguments} = &callee_value_funclet.nodes[value_operation.node_id] {
+                if let ir::Node::CallFunctionClass{function_id, arguments} = &callee_value_funclet.nodes[value_operation.node_id] {
                     self.value_spec_checker_opt.as_mut().unwrap().check_vertical_call(*continuation_join_node_id, callee_arguments, value_spec, arguments, value_operation.node_id).map_err(|e| self.contextualize_error(e))?;
                 }
                 else {
