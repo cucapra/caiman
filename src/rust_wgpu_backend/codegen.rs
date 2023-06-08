@@ -35,6 +35,9 @@ enum NodeResult {
         place: ir::Place,
         fence_id: code_generator::FenceId,
     },
+    Encoder {
+        place: ir::Place,
+    },
     Join {
         join_point_id: JoinPointId,
     },
@@ -1706,13 +1709,15 @@ impl<'program> CodeGen<'program> {
                     );
                 }
                 ir::Node::EncodeDoExternal {
-                    place,
+                    //place,
                     operation,
                     external_function_id,
                     inputs,
                     outputs,
                     encoder
                 } => {
+                    let Some(NodeResult::Encoder{place}) = funclet_scoped_state.get_node_result(*encoder) else { panic!("No encoder"); };
+
                     assert_eq!(*place, ir::Place::Gpu);
                     assert_eq!(
                         funclet
@@ -1836,14 +1841,20 @@ impl<'program> CodeGen<'program> {
                     event,
                     encoded
                 } => {
-                    
+                    funclet_scoped_state.node_results.insert(
+                        current_node_id,
+                        NodeResult::Encoder {
+                            place: *place,
+                        },
+                    );
                 }
                 ir::Node::EncodeCopy {
-                    place,
+                    //place,
                     input,
                     output,
                     encoder,
                 } => {
+                    let Some(NodeResult::Encoder{place}) = funclet_scoped_state.get_node_result(*encoder) else { panic!("No encoder"); };
                     let src_slot_id = funclet_scoped_state.get_node_slot_id(*input).unwrap();
                     let dst_slot_id = funclet_scoped_state.get_node_slot_id(*output).unwrap();
 
@@ -1924,7 +1935,8 @@ impl<'program> CodeGen<'program> {
                         _ => panic!("Unimplemented"),
                     }
                 }
-                ir::Node::Submit { place, event, encoder } => {
+                ir::Node::Submit { event, encoder } => {
+                    let Some(NodeResult::Encoder{place}) = funclet_scoped_state.get_node_result(*encoder) else { panic!("No encoder"); };
                     match place {
                         ir::Place::Gpu => {
                             self.code_generator.flush_submission();
@@ -1944,24 +1956,10 @@ impl<'program> CodeGen<'program> {
                         },
                     );
                 },
-                /*ir::Node::EncodeFence { place, event } => {
-                    let fence_id = self.code_generator.encode_gpu_fence();
-                    funclet_scoped_state.node_results.insert(
-                        current_node_id,
-                        NodeResult::Fence {
-                            place: *place,
-                            fence_id,
-                        },
-                    );
-                }*/
                 ir::Node::SyncFence {
-                    place: synced_place,
                     fence,
                     event
                 } => {
-                    // Only implemented for the local queue for now
-                    assert_eq!(*synced_place, ir::Place::Local);
-
                     if let Some(NodeResult::Fence {
                         place: fenced_place,
                         fence_id,

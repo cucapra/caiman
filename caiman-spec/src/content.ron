@@ -196,7 +196,6 @@
 			// Encodes a computation of the given operation to the queue for the given place
 			name : "EncodeDoExternal",
 			inputs : [
-				(name : "place", kind : Place),
 				(name : "encoder", kind : Operation),
 				(name : "operation", kind : RemoteOperation),
 				(name : "external_function_id", kind : ExternalFunction),
@@ -212,7 +211,6 @@
 			// Currently, the queue must match the place of the output 
 			name : "EncodeCopy",
 			inputs : [
-				(name : "place", kind : Place),
 				(name : "encoder", kind : Operation),
 				(name : "input", kind : Operation),
 				(name : "output", kind : Operation)
@@ -227,10 +225,8 @@
 			// Event encodes a point in the timeline funclet that this submission advances the current timeline to
 			name : "Submit",
 			inputs : [
-				(name : "place", kind : Place),
 				(name : "encoder", kind : Operation),
 				(name : "event", kind : RemoteOperation),
-				//(name : "encoded", kind : Operation, is_array : true), // Resources that were used
 			],
 			output : Single, // a fence
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
@@ -241,10 +237,8 @@
 			// Event encodes a point in the timeline funclet that this synchronization advances the current timeline to
 			name : "SyncFence",
 			inputs : [
-				(name : "place", kind : Place),
 				(name : "fence", kind : Operation),
 				(name : "event", kind : RemoteOperation),
-				//(name : "submitted", kind : Operation, is_array : true), // Resouces that were used in submission
 			],
 			output : None,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
@@ -311,10 +305,9 @@
 
 		// Timeline nodes
 		(
+			// An encoding event effectively splits the coordinator into two parallel processes
 			name : "EncodingEvent",
 			inputs : [
-				(name : "here_place", kind : Place),
-				(name : "there_place", kind : Place),
 				(name : "local_past", kind : Operation),
 			],
 			output : Multiple, // First is the state that will stay local. Second is the state that will be used in encoding.
@@ -326,8 +319,6 @@
 			// local_past is the previous state of the coordinator as known by the coordinator
 			name : "SubmissionEvent",
 			inputs : [
-				(name : "here_place", kind : Place),
-				(name : "there_place", kind : Place),
 				(name : "local_past", kind : Operation),
 			],
 			output : Single,
@@ -340,8 +331,6 @@
 			// remote_local_past is the previous state of the coordinator as known by there_place (a round trip)
 			name : "SynchronizationEvent",
 			inputs : [
-				(name : "here_place", kind : Place),
-				(name : "there_place", kind : Place),
 				(name : "local_past", kind : Operation),
 				(name : "remote_local_past", kind : Operation),
 			],

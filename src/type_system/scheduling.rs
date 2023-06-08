@@ -163,7 +163,7 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
 fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecChecker<'program>, spec_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], output_impl_node_ids : &[ir::NodeId]) -> Result<(), Error> {
     let encoded_node = & timeline_spec_checker.spec_funclet.nodes[spec_node_id];
     match encoded_node {
-        ir::Node::EncodingEvent { here_place, there_place, local_past } => {
+        ir::Node::EncodingEvent { local_past } => {
             assert_eq!(output_impl_node_ids.len(), 1);
             /*match timeline_spec_checker.current_implicit_tag {
                 ir::Tag::Node{node_id : local_past_node_id} => {
@@ -177,7 +177,7 @@ fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecCh
             timeline_spec_checker.transition_state_forwards(*local_past, spec_node_id + 1)?;
             timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id + 2}, ir::Flow::Have);
         }
-        ir::Node::SubmissionEvent { here_place, there_place, local_past } => {
+        ir::Node::SubmissionEvent { local_past } => {
             assert_eq!(input_impl_node_ids.len(), 1);
             assert_eq!(output_impl_node_ids.len(), 1);
 
@@ -190,7 +190,7 @@ fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecCh
             timeline_spec_checker.transition_state_forwards(*local_past, spec_node_id)?;
             timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id}, ir::Flow::Have);
         }
-        ir::Node::SynchronizationEvent { here_place, there_place, local_past, remote_local_past } => {
+        ir::Node::SynchronizationEvent { local_past, remote_local_past } => {
             assert_eq!(input_impl_node_ids.len(), 1);
             assert_eq!(output_impl_node_ids.len(), 0);
 
@@ -510,7 +510,6 @@ impl<'program> FuncletChecker<'program> {
                 self.check_do_output(operation, encoded_funclet, encoded_node, outputs);*/
             }
             ir::Node::EncodeDoExternal {
-                place,
                 operation,
                 external_function_id,
                 inputs,
@@ -522,7 +521,7 @@ impl<'program> FuncletChecker<'program> {
                     operation.funclet_id
                 );
 
-                assert_eq!(*place, ir::Place::Gpu);
+                //assert_eq!(*place, ir::Place::Gpu);
                 
                 advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
                 // To do: Check timeline and spatial
@@ -668,7 +667,6 @@ impl<'program> FuncletChecker<'program> {
                 advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *input, *output).map_err(|e| self.contextualize_error(e))?;
             }
             ir::Node::EncodeCopy {
-                place,
                 input,
                 output,
                 encoder,
@@ -692,20 +690,15 @@ impl<'program> FuncletChecker<'program> {
                     }),
                 );
             }
-            ir::Node::Submit { place, event, encoder } => {
+            ir::Node::Submit { event, encoder } => {
                 assert_eq!(
                     self.timeline_spec.funclet_id_opt.unwrap(),
                     event.funclet_id
                 );
 
-                let encoded_place = if let Some(NodeType::Encoder(Encoder { queue_place })) =
-                    &self.node_types.remove(encoder)
-                {
-                    *queue_place
-                } else {
+                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.remove(encoder) else {
                     panic!("Not an encoder");
                 };
-                assert_eq!(encoded_place, * place);
 
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
                 let ir::Node::SubmissionEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be a submission event") };
@@ -718,12 +711,11 @@ impl<'program> FuncletChecker<'program> {
                 self.node_types.insert(
                     current_node_id,
                     NodeType::Fence(Fence {
-                        queue_place: *place,
+                        queue_place,
                     }),
                 );
             }
             ir::Node::SyncFence {
-                place: synced_place,
                 fence,
                 event,
             } => {
@@ -735,9 +727,6 @@ impl<'program> FuncletChecker<'program> {
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
                 let ir::Node::SynchronizationEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be an synchronization event") };
                 advance_forward_timeline(timeline_spec_checker, event.node_id, &[*fence], &[]).map_err(|e| self.contextualize_error(e))?;
-
-                // Only implemented for the local queue for now
-                assert_eq!(*synced_place, ir::Place::Local);
 
                 let fenced_place = if let Some(NodeType::Fence(Fence { queue_place })) =
                     &self.node_types.remove(fence)
