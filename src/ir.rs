@@ -204,7 +204,6 @@ pub enum Type {
     // Scheduling
     Slot {
         storage_type: ffi::TypeId,
-        //queue_stage: ResourceQueueStage,
         queue_place: Place,
     },
     /*SchedulingJoin {

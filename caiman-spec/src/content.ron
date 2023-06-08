@@ -95,7 +95,6 @@
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "storage_type", kind : StorageType),
-				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),

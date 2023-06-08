@@ -1561,16 +1561,16 @@ impl<'program> CodeGen<'program> {
                 ir::Node::AllocTemporary {
                     place,
                     storage_type,
-                    operation,
+                    //operation,
                 } => {
-                    assert_eq!(
+                    /*assert_eq!(
                         funclet
                             .spec_binding
                             .get_value_spec()
                             .funclet_id_opt
                             .unwrap(),
                         operation.funclet_id
-                    );
+                    );*/
                     // We *could* also do unused temporary elision here, but after writing test
                     // cases I discovered that codegen panics if any slots are unused.
                     let slot_id = placement_state.scheduling_state.insert_hacked_slot(
