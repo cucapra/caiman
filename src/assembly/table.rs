@@ -4,8 +4,8 @@ use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct Table<T>
-    where
-        T: Eq + Hash + Debug + Clone,
+where
+    T: Eq + Hash + Debug + Clone,
 {
     values: HashSet<T>,
     indices: Vec<T>,
@@ -13,8 +13,8 @@ pub struct Table<T>
 
 // a Table is basically a vector with no dupes
 impl<T> Table<T>
-    where
-        T: Eq + Hash + Debug + Clone,
+where
+    T: Eq + Hash + Debug + Clone,
 {
     pub fn new() -> Table<T> {
         Table {

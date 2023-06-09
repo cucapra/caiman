@@ -5,49 +5,13 @@ use crate::assembly::ast::{
 };
 use crate::assembly::explication::context::Context;
 use crate::assembly::explication::util;
+use crate::assembly::explication::util::{reject_hole, todo_hole};
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::stable_vec::StableVec;
 use crate::{assembly, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
-
-fn todo_hole<T>(h: Hole<T>) -> T {
-    match h {
-        Some(v) => v,
-        None => todo!(),
-    }
-}
-
-fn reject_hole<T>(h: Hole<T>) -> T {
-    match h {
-        Some(v) => v,
-        None => panic!("Invalid hole location"),
-    }
-}
-
-fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
-    let mut result = Vec::new();
-    for (index, hole) in v.into_iter().enumerate() {
-        match hole {
-            Some(value) => {
-                result.push((index, value));
-            }
-            None => {}
-        }
-    }
-    result
-}
-
-fn find_filled_hole<T>(h: Hole<Box<[Hole<T>]>>) -> Vec<(usize, T)>
-where
-    T: Clone,
-{
-    match h {
-        Some(v) => find_filled(v.into_vec()),
-        None => Vec::new(),
-    }
-}
 
 pub fn explicate_allocate_temporary(
     place_hole: &Hole<ir::Place>,
@@ -122,8 +86,8 @@ fn explicate_operation(
     output_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
     context: &mut Context,
 ) -> Option<(ir::RemoteNodeId, Box<[ir::NodeId]>, Box<[ir::NodeId]>)> {
-    let known_inputs = find_filled_hole(input_hole.clone());
-    let known_outputs = find_filled_hole(output_hole.clone());
+    let known_inputs = util::find_filled_hole(input_hole.clone());
+    let known_outputs = util::find_filled_hole(output_hole.clone());
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
 
@@ -140,9 +104,7 @@ fn explicate_operation(
         node_name: Some(operation),
     };
 
-    let node = context
-        .node_lookup(&op.funclet_name, &op.node_name)
-        .unwrap();
+    let node = context.get_node(&op.funclet_name, &op.node_name).unwrap();
     let node_arguments = get_node_arguments(&node.node, context);
 
     // lookup the allocation location and add the argument to the inputs
@@ -184,9 +146,7 @@ fn explicate_operation(
         match output {
             Some(n) => outputs.push(context.node_id(&n)),
             None => {
-                let node = context
-                    .node_lookup(&op.funclet_name, &op.node_name)
-                    .unwrap();
+                let node = context.get_node(&op.funclet_name, &op.node_name).unwrap();
                 match node.node {
                     assembly::ast::Node::Constant { .. } => {
                         match context.get_schedule_allocations(

@@ -4,10 +4,10 @@ use crate::assembly::ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
+use crate::assembly::table::Table;
 use crate::ir;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
-use crate::assembly::table::Table;
 
 #[derive(Debug)]
 pub struct Context {
@@ -18,7 +18,7 @@ pub struct Context {
     // optional cause we may not have started traversal
     pub location: LocationNames,
     pub funclet_indices: FuncletIndices,
-    pub function_classes: Table<FunctionClassId>
+    pub function_classes: Table<FunctionClassId>,
 }
 
 #[derive(Debug)]

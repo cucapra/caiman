@@ -105,10 +105,7 @@ pub fn remote_conversion(remote: &ast::RemoteNodeId, context: &Context) -> ir::R
     )
 }
 
-pub fn remote_location_conversion(
-    remote: &LocationNames,
-    context: &Context,
-) -> ir::RemoteNodeId {
+pub fn remote_location_conversion(remote: &LocationNames, context: &Context) -> ir::RemoteNodeId {
     ir::RemoteNodeId {
         funclet_id: context
             .funclet_indices
