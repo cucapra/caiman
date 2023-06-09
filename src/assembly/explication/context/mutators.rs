@@ -1,8 +1,32 @@
 use super::*;
 
 impl<'context> Context<'context> {
-    pub fn next_name(&mut self) -> String {
-        self.meta_data.next_name()
+    pub fn corrections(&mut self) {
+        for declaration in self.program.declarations.iter_mut() {
+            match declaration {
+                ast::Declaration::Funclet(f) => {
+                    let mut index = 0;
+                    for arg in &f.header.args {
+                        f.commands.insert(index, Some(ast::Command::Node(ast::NamedNode {
+                            name: arg.name.clone().unwrap_or(NodeId("".to_string())),
+                            node: ast::Node::Phi { index: Some(index) },
+                        })));
+                        index += 1;
+                    }
+                    for command in f.commands.iter_mut() {
+                        match command {
+                            Some(ast::Command::Node(ast::NamedNode { node, name })) => {
+                                if name.0 == "_" {
+                                    name.0 = self.meta_data.next_name()
+                                }
+                            }
+                            _ => {},
+                        }
+                    };
+                }
+                _ => {}
+            }
+        };
     }
 
     pub fn forcibly_replace_commands(
@@ -61,13 +85,12 @@ impl<'context> Context<'context> {
         })
     }
     fn get_current_schedule_allocation_mut(&mut self, node: &NodeId) -> Option<&mut NodeId> {
-        self.get_current_value_funclet_mut()
-            .as_ref()
+        self.get_current_value_funclet()
             .and_then(|vf| {
                 self.get_schedule_allocations_mut(vf, node)
                     .unwrap()
-                    .get_mut(&mut self.location.funclet_name)
-            })
+                    .get_mut(&self.location.funclet_name)
+        })
     }
     fn get_value_allocation_mut(
         &mut self,

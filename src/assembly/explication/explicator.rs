@@ -13,21 +13,6 @@ use crate::{assembly, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
-pub fn explicate_allocate_temporary(
-    place_hole: &Hole<ir::Place>,
-    storage_type_hole: &Hole<assembly::ast::StorageTypeId>,
-    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
-    context: &mut Context,
-) {
-    let place = todo_hole(place_hole.as_ref());
-    let storage_type = todo_hole(storage_type_hole.as_ref());
-    let operation = todo_hole(operation_hole.as_ref());
-    context.add_allocation(
-        todo_hole(operation.node_name.as_ref()).clone(),
-        context.location.node_name.clone(),
-    );
-}
-
 // try to infer the value operation associated with this schedule operation
 fn infer_operation(
     known_inputs: &Vec<(usize, NodeId)>,
@@ -165,11 +150,22 @@ fn explicate_operation(
         }
     }
 
-    Some((
-        op,
-        inputs,
-        outputs,
-    ))
+    Some((op, inputs, outputs))
+}
+
+pub fn explicate_allocate_temporary(
+    place_hole: &Hole<ir::Place>,
+    storage_type_hole: &Hole<assembly::ast::StorageTypeId>,
+    operation_hole: &Hole<assembly::ast::RemoteNodeId>,
+    context: &mut Context,
+) {
+    let place = todo_hole(place_hole.as_ref());
+    let storage_type = todo_hole(storage_type_hole.as_ref());
+    let operation = todo_hole(operation_hole.as_ref());
+    context.add_allocation(
+        todo_hole(operation.node_name.as_ref()).clone(),
+        context.location.node_name.clone(),
+    );
 }
 
 pub fn explicate_encode_do(
@@ -178,33 +174,18 @@ pub fn explicate_encode_do(
     inputs_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
     outputs_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
     context: &mut Context,
-) -> Option<ir::Node> {
+) {
     let place = todo_hole(place_hole.clone());
     let result = explicate_operation(operation_hole, inputs_hole, outputs_hole, context);
-    // a bit sloppy, but oh well
-    let (operation, inputs, outputs) = match result {
-        None => return None,
-        Some(t) => t,
-    };
-    Some(ir::Node::EncodeDo {
-        place,
-        operation,
-        inputs,
-        outputs,
-    })
 }
 
-pub fn explicate_return(
-    return_values: &Hole<Vec<Hole<NodeId>>>,
-    context: &mut Context,
-) -> Option<ir::TailEdge> {
+pub fn explicate_return(return_values: &Hole<Vec<Hole<NodeId>>>, context: &mut Context) {
     // special case cause a return can be considered unique sorta?
     let mut result = Vec::new();
 
     let value_returns = match context
         .get_current_value_funclet()
-        .as_ref()
-        .and_then(|vf| context.get_tail_edge(vf).as_ref())
+        .and_then(|vf| context.get_tail_edge(vf))
     {
         Some(assembly::ast::TailEdge::Return { return_values }) => {
             Some(return_values.as_ref().unwrap())
@@ -214,16 +195,12 @@ pub fn explicate_return(
 
     for (index, return_value) in reject_hole(return_values.as_ref()).iter().enumerate() {
         match return_value {
-            Some(value) => result.push(context.node_id(value)),
+            Some(value) => result.push(value.clone()),
             None => {
                 let value = reject_hole(value_returns.unwrap().get(index).unwrap().as_ref());
                 let alloc = context.get_current_schedule_allocation(value);
-                result.push(context.node_id(todo_hole(alloc)));
+                result.push(todo_hole(alloc).clone());
             }
         }
     }
-
-    Some(ir::TailEdge::Return {
-        return_values: result.into_boxed_slice(),
-    })
 }

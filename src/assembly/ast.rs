@@ -191,7 +191,7 @@ macro_rules! make_parser_nodes {
 
 with_operations!(make_parser_nodes);
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge {
     Return {
         return_values: Hole<Vec<Hole<NodeId>>>,
@@ -230,7 +230,7 @@ pub enum TailEdge {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tag {
     None,
     Node(RemoteNodeId),
@@ -239,13 +239,13 @@ pub enum Tag {
     Halt(RemoteNodeId),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionClassBinding {
     pub default: bool,
     pub function_class: FunctionClassId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScheduleBinding {
     pub implicit_tags: Option<(Tag, Tag)>,
     pub value: Option<FuncletId>,
@@ -253,21 +253,21 @@ pub struct ScheduleBinding {
     pub spatial: Option<FuncletId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum FuncletBinding {
     ValueBinding(FunctionClassBinding),
     ScheduleBinding(ScheduleBinding),
     None,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FuncletArgument {
     pub name: Option<NodeId>,
     pub typ: TypeId,
     pub tags: Vec<Tag>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FuncletHeader {
     pub name: FuncletId,
     pub args: Vec<FuncletArgument>,
@@ -275,26 +275,26 @@ pub struct FuncletHeader {
     pub binding: FuncletBinding,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NamedNode {
     pub name: NodeId,
     pub node: Node,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Command {
     Node(NamedNode),
     TailEdge(TailEdge),
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
     pub commands: Vec<Hole<Command>>,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum LocalTypeInfo {
     NativeValue {
         storage_type: TypeId,
@@ -324,44 +324,44 @@ pub enum LocalTypeInfo {
     BufferSpace,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LocalType {
     pub name: String,
     pub data: LocalTypeInfo,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TypeDecl {
     FFI(FFIType),
     Local(LocalType),
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Var {
     pub id: usize,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalGPUInfo {
     pub shader_module: String,
     pub entry_point: String,
     pub resource_bindings: Vec<ExternalGpuFunctionResourceBinding>,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ExternalFunctionKind {
     CPUPure,
     CPUEffect,
     GPU(ExternalGPUInfo),
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalArgument {
     pub name: Option<NodeId>,
     pub ffi_type: FFIType,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalFunction {
     pub kind: ExternalFunctionKind,
     pub value_function_binding: FunctionClassBinding,
@@ -371,27 +371,27 @@ pub struct ExternalFunction {
     // Contains pipeline and single render pass state
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Version {
     pub major: usize,
     pub minor: usize,
     pub detailed: usize,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionClass {
     pub name: FunctionClassId,
     pub input_types: Vec<TypeId>,
     pub output_types: Vec<TypeId>,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pipeline {
     pub name: String,
     pub funclet: FuncletId,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Declaration {
     TypeDecl(TypeDecl),
     ExternalFunction(ExternalFunction),
@@ -400,7 +400,7 @@ pub enum Declaration {
     Pipeline(Pipeline),
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Program {
     pub version: Version,
     pub declarations: Vec<Declaration>,

@@ -37,7 +37,7 @@ impl<'context> Context<'context> {
     }
 
     pub fn get_current_schedule_allocation(&self, node: &NodeId) -> Option<&NodeId> {
-        self.get_current_value_funclet().as_ref().and_then(|vf| {
+        self.get_current_value_funclet().and_then(|vf| {
             self.get_schedule_allocations(vf, node)
                 .unwrap()
                 .get(&self.location.funclet_name)
@@ -80,6 +80,18 @@ impl<'context> Context<'context> {
                             return Some(node);
                         }
                     }
+                    _ => {}
+                }
+            }
+            None
+        })
+    }
+
+    pub fn get_tail_edge(&self, funclet_name: &FuncletId) -> Option<&ast::TailEdge> {
+        self.get_funclet(funclet_name).and_then(|f| {
+            for command in &f.commands {
+                match command {
+                    Some(ast::Command::TailEdge(t)) => return Some(t),
                     _ => {}
                 }
             }
