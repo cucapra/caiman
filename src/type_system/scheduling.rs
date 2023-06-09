@@ -443,31 +443,21 @@ impl<'program> FuncletChecker<'program> {
                 self.drop_node(*dropped_node_id);
             }
             ir::Node::LocalDoBuiltin {
-                operation,
+                operation: ir::Quotient::Node{node_id: operation_node_id},
                 inputs,
                 outputs,
             } => {
-                assert_eq!(
-                    self.value_spec.funclet_id_opt.unwrap(),
-                    operation.funclet_id
-                );
-
-                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
+                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), *operation_node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
 
                 // To do: Check timeline and spatial
             }
             ir::Node::LocalDoExternal {
-                operation,
+                operation: ir::Quotient::Node{node_id: operation_node_id},
                 external_function_id,
                 inputs,
                 outputs,
             } => {
-                assert_eq!(
-                    self.value_spec.funclet_id_opt.unwrap(),
-                    operation.funclet_id
-                );
-
-                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
+                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), *operation_node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
                 // To do: Check timeline and spatial
 
                 /*let encoded_funclet = &self.program.funclets[operation.funclet_id];
@@ -522,20 +512,15 @@ impl<'program> FuncletChecker<'program> {
                 self.check_do_output(operation, encoded_funclet, encoded_node, outputs);*/
             }
             ir::Node::EncodeDoExternal {
-                operation,
+                operation: ir::Quotient::Node{node_id: operation_node_id},
                 external_function_id,
                 inputs,
                 outputs,
                 encoder,
             } => {
-                assert_eq!(
-                    self.value_spec.funclet_id_opt.unwrap(),
-                    operation.funclet_id
-                );
-
                 //assert_eq!(*place, ir::Place::Gpu);
                 
-                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), operation.node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
+                advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), *operation_node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
                 // To do: Check timeline and spatial
 
                 /*let encoded_funclet = &self.program.funclets[operation.funclet_id];
@@ -685,15 +670,10 @@ impl<'program> FuncletChecker<'program> {
             } => {
                 advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *input, *output).map_err(|e| self.contextualize_error(e))?;
             }
-            ir::Node::BeginEncoding { place, event, encoded } => {
-                assert_eq!(
-                    self.timeline_spec.funclet_id_opt.unwrap(),
-                    event.funclet_id
-                );
-
+            ir::Node::BeginEncoding { place, event: ir::Quotient::Node{node_id: event_node_id}, encoded } => {
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::EncodingEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be an encoding event") };
-                advance_forward_timeline(timeline_spec_checker, event.node_id, encoded, &[current_node_id]).map_err(|e| self.contextualize_error(e))?;
+                let ir::Node::EncodingEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be an encoding event") };
+                advance_forward_timeline(timeline_spec_checker, *event_node_id, encoded, &[current_node_id]).map_err(|e| self.contextualize_error(e))?;
 
                 self.node_types.insert(
                     current_node_id,
@@ -702,19 +682,14 @@ impl<'program> FuncletChecker<'program> {
                     }),
                 );
             }
-            ir::Node::Submit { event, encoder } => {
-                assert_eq!(
-                    self.timeline_spec.funclet_id_opt.unwrap(),
-                    event.funclet_id
-                );
-
+            ir::Node::Submit { event: ir::Quotient::Node{node_id: event_node_id}, encoder } => {
                 let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.remove(encoder) else {
                     panic!("Not an encoder");
                 };
 
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::SubmissionEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be a submission event") };
-                advance_forward_timeline(timeline_spec_checker, event.node_id, &[*encoder], &[current_node_id]).map_err(|e| self.contextualize_error(e))?;
+                let ir::Node::SubmissionEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be a submission event") };
+                advance_forward_timeline(timeline_spec_checker, *event_node_id, &[*encoder], &[current_node_id]).map_err(|e| self.contextualize_error(e))?;
                 //self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Tag::None, ir::Flow::Have);
                 //let implicit_tag = timeline_spec_checker.current_implicit_tag;
                 //self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, implicit_tag, ir::Flow::Have);
@@ -729,16 +704,11 @@ impl<'program> FuncletChecker<'program> {
             }
             ir::Node::SyncFence {
                 fence,
-                event,
+                event: ir::Quotient::Node{node_id: event_node_id},
             } => {
-                assert_eq!(
-                    self.timeline_spec.funclet_id_opt.unwrap(),
-                    event.funclet_id
-                );
-
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::SynchronizationEvent{..} = & timeline_spec_checker.spec_funclet.nodes[event.node_id] else { panic!("Must be an synchronization event") };
-                advance_forward_timeline(timeline_spec_checker, event.node_id, &[*fence], &[]).map_err(|e| self.contextualize_error(e))?;
+                let ir::Node::SynchronizationEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be an synchronization event") };
+                advance_forward_timeline(timeline_spec_checker, *event_node_id, &[*fence], &[]).map_err(|e| self.contextualize_error(e))?;
 
                 let fenced_place = if let Some(NodeType::Fence(Fence { queue_place })) =
                     &self.node_types.remove(fence)
@@ -930,7 +900,7 @@ impl<'program> FuncletChecker<'program> {
                 self.timeline_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
                 self.spatial_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
             }
-            /*ir::TailEdge::Yield {
+            ir::TailEdge::Yield {
                 external_function_id,
                 yielded_nodes: yielded_node_ids,
                 next_funclet,
@@ -961,7 +931,7 @@ impl<'program> FuncletChecker<'program> {
                 {
                     check_slot_type(& self.program, true_funclet.input_types[argument_index], & node_type);
                 }*/
-            }*/
+            }
             ir::TailEdge::Jump { join, arguments } => {
                 let join_point = &self.node_join_points[join];
 
@@ -985,12 +955,13 @@ impl<'program> FuncletChecker<'program> {
                 self.spatial_spec_checker_opt.as_mut().unwrap().check_jump(*join, arguments).map_err(|e| self.contextualize_error(e))?;
             }
             ir::TailEdge::ScheduleCall {
-                value_operation: value_operation_ref,
+                value_operation,
+                timeline_operation,
+                spatial_operation,
                 callee_funclet_id: callee_scheduling_funclet_id_ref,
                 callee_arguments,
                 continuation_join: continuation_join_node_id,
             } => {
-                let value_operation = *value_operation_ref;
                 let callee_scheduling_funclet_id = *callee_scheduling_funclet_id_ref;
                 let continuation_join_point = &self.node_join_points[continuation_join_node_id];
 
@@ -1001,27 +972,39 @@ impl<'program> FuncletChecker<'program> {
                     panic!("Node at #{} is not a join point", continuation_join_node_id)
                 }
 
-                assert_eq!(value_operation.funclet_id, self.value_funclet_id);
-
                 let callee_funclet = &self.program.funclets[callee_scheduling_funclet_id];
                 assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
-                let value_spec = self.get_funclet_value_spec(callee_funclet);
-				let callee_value_funclet_id = value_spec.funclet_id_opt.unwrap();
-                assert_eq!(value_operation.funclet_id, callee_value_funclet_id);
-				let callee_value_funclet = & self.program.funclets[callee_value_funclet_id];
-				assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
-                let timeline_spec = self.get_funclet_timeline_spec(callee_funclet);
-                let spatial_spec = self.get_funclet_spatial_spec(callee_funclet);
-                if let ir::Node::CallFunctionClass{function_id, arguments} = &callee_value_funclet.nodes[value_operation.node_id] {
-                    self.value_spec_checker_opt.as_mut().unwrap().check_vertical_call(*continuation_join_node_id, callee_arguments, value_spec, arguments, value_operation.node_id).map_err(|e| self.contextualize_error(e))?;
-                }
-                else {
-                    panic!("Not a call")
-                };
+                /*{
+                    let value_spec = self.get_funclet_value_spec(callee_funclet);
+                    let callee_value_funclet_id = value_spec.funclet_id_opt.unwrap();
+                    assert_eq!(self.value_funclet_id, callee_value_funclet_id);
+                    let callee_value_funclet = & self.program.funclets[callee_value_funclet_id];
+                    assert_eq!(callee_value_funclet.kind, ir::FuncletKind::Value);
+                    let spec_checker = self.value_spec_checker_opt.as_mut().unwrap();
+                    let e = match value_operation {
+                        ir::Quotient::Node{node_id: value_operation_node_id} => {
+                            if let ir::Node::CallFunctionClass{function_id, arguments} = &callee_value_funclet.nodes[*value_operation_node_id] {
+                                spec_checker.check_vertical_call(*continuation_join_node_id, callee_arguments, value_spec, arguments, *value_operation_node_id)
+                            }
+                            else {
+                                panic!("Not a call")
+                            }
+                        }
+                        ir::Quotient::None => spec_checker.check_interior_call(*continuation_join_node_id, callee_arguments, value_spec),
+                        _ => panic!(""),
+                    };
+                    e.map_err(|e| self.contextualize_error(e))?;
+                }*/
+
+                let callee_value_spec = self.get_funclet_value_spec(callee_funclet);
+                self.value_spec_checker_opt.as_mut().unwrap().check_call(*value_operation, *continuation_join_node_id, callee_arguments, callee_value_spec).map_err(|e| self.contextualize_error(e))?;
                 
-                self.timeline_spec_checker_opt.as_mut().unwrap().check_interior_call(*continuation_join_node_id, callee_arguments, timeline_spec).map_err(|e| self.contextualize_error(e))?;
-                self.spatial_spec_checker_opt.as_mut().unwrap().check_interior_call(*continuation_join_node_id, callee_arguments, spatial_spec).map_err(|e| self.contextualize_error(e))?;
+                let callee_timeline_spec = self.get_funclet_timeline_spec(callee_funclet);
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_call(*timeline_operation, *continuation_join_node_id, callee_arguments, callee_timeline_spec).map_err(|e| self.contextualize_error(e))?;
+
+                let callee_spatial_spec = self.get_funclet_spatial_spec(callee_funclet);
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_call(*spatial_operation, *continuation_join_node_id, callee_arguments, callee_spatial_spec).map_err(|e| self.contextualize_error(e))?;
 
                 // Step 1: Check current -> callee edge
                 for (argument_index, argument_node_id) in callee_arguments.iter().enumerate() {
@@ -1044,13 +1027,14 @@ impl<'program> FuncletChecker<'program> {
                 }
             }
             ir::TailEdge::ScheduleSelect {
-                value_operation,
+                value_operation: ir::Quotient::Node{node_id: value_operation_node_id},
+                timeline_operation,
+                spatial_operation,
                 condition: condition_slot_node_id,
                 callee_funclet_ids,
                 callee_arguments,
                 continuation_join: continuation_join_node_id,
             } => {
-                assert_eq!(value_operation.funclet_id, self.value_funclet_id);
                 let continuation_join_point = &self.node_join_points[continuation_join_node_id];
 
                 if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
@@ -1070,26 +1054,27 @@ impl<'program> FuncletChecker<'program> {
                 let false_funclet_value_spec = &self.get_funclet_value_spec(false_funclet);
                 let false_funclet_timeline_spec = &self.get_funclet_timeline_spec(false_funclet);
 
-                let current_value_funclet = &self.program.funclets[value_operation.funclet_id];
+                let current_value_funclet = &self.program.funclets[self.value_funclet_id];
                 assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
-                let condition_value_tag = self.value_spec_checker_opt.as_mut().unwrap().scalar_nodes[condition_slot_node_id];
+                //let condition_value_tag = self.value_spec_checker_opt.as_mut().unwrap().scalar_nodes[condition_slot_node_id];
 
                 assert_eq!(
-                    value_operation.funclet_id,
+                    self.value_funclet_id,
                     true_funclet_value_spec.funclet_id_opt.unwrap()
                 );
                 assert_eq!(
-                    value_operation.funclet_id,
+                    self.value_funclet_id,
                     true_funclet_value_spec.funclet_id_opt.unwrap()
                 );
 
                 assert_eq!(callee_arguments.len(), true_funclet.input_types.len());
                 assert_eq!(callee_arguments.len(), false_funclet.input_types.len());
 
-                if let ir::Node::Select{condition, true_case, false_case} = &current_value_funclet.nodes[value_operation.node_id] {
-                    let cast_to_tag = ir::Quotient::Node{node_id: value_operation.node_id};
-                    self.value_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[&[(*true_case, value_operation.node_id)], &[(*false_case, value_operation.node_id)]], &[true_funclet_value_spec, false_funclet_value_spec]).map_err(|e| self.contextualize_error(e))?;
+                if let ir::Node::Select{condition, true_case, false_case} = &current_value_funclet.nodes[*value_operation_node_id] {
+                    let cast_to_tag = ir::Quotient::Node{node_id: *value_operation_node_id};
+                    self.value_spec_checker_opt.as_mut().unwrap().check_node_tag(*condition_slot_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: *condition}, flow: ir::Flow::Have});
+                    self.value_spec_checker_opt.as_mut().unwrap().check_choice(*continuation_join_node_id, callee_arguments, &[&[(*true_case, *value_operation_node_id)], &[(*false_case, *value_operation_node_id)]], &[true_funclet_value_spec, false_funclet_value_spec]).map_err(|e| self.contextualize_error(e))?;
                 }
                 else {
                     panic!("Not a select")

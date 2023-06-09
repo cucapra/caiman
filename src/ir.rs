@@ -37,12 +37,6 @@ pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
 pub type StorageTypeId = ffi::TypeId;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RemoteNodeId {
-    pub funclet_id: FuncletId,
-    pub node_id: NodeId,
-}
-
 macro_rules! lookup_abstract_type {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
 	(Type) => { TypeId };
@@ -54,7 +48,7 @@ macro_rules! lookup_abstract_type {
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
-	(RemoteOperation) => { RemoteNodeId };
+	(RemoteOperation) => { Quotient };
 	(Place) => { Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -254,13 +248,17 @@ pub enum TailEdge {
     // Scheduling only
     // Split value - what will be computed
     ScheduleCall {
-        value_operation: RemoteNodeId,
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
         callee_funclet_id: FuncletId,
         callee_arguments: Box<[NodeId]>,
         continuation_join: NodeId,
     },
     ScheduleSelect {
-        value_operation: RemoteNodeId,
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
         condition: NodeId,
         callee_funclet_ids: Box<[FuncletId]>,
         callee_arguments: Box<[NodeId]>,
@@ -431,21 +429,3 @@ impl Program {
         Default::default()
     }
 }
-
-// Hall of shame but mostly deprecated name
-
-pub type ValueFunction = FunctionClass;
-/*pub type ValueTag = Tag;
-pub type TimelineTag = Tag;
-pub type SpatialTag = Tag;
-
-// Will phase this out, so don't depend on it
-#[derive(Debug, Clone)]
-pub struct SchedulingTagSet {
-    //#[serde(default = "ValueTag::default")]
-    pub value_tag: ValueTag,
-    //#[serde(default = "TimelineTag::default")]
-    pub timeline_tag: TimelineTag,
-    //#[serde(default = "SpatialTag::default")]
-    pub spatial_tag: SpatialTag,
-}*/

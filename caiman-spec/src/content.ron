@@ -63,7 +63,7 @@
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
+			language_set : (functional : true, scheduling: false, timeline : true, spatial : true, intrinsic : false),
 			has_local_side_effect : false
 		),
 		(

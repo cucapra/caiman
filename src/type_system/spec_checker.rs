@@ -299,6 +299,21 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
+	pub fn check_call(&mut self, operation: ir::Quotient, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec) -> Result<(), Error> {
+		match operation {
+			ir::Quotient::Node{node_id} => {
+				if let ir::Node::CallFunctionClass{function_id, arguments} = &self.spec_funclet.nodes[node_id] {
+					self.check_vertical_call(continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec, arguments, node_id)
+				}
+				else {
+					panic!("Not a call")
+				}
+			}
+			ir::Quotient::None => self.check_interior_call(continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec),
+			_ => panic!("Unsupported: {:?}", operation),
+		}
+	}
+
 	pub fn check_choice(&mut self, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], choice_remaps : &[&[(ir::NodeId, ir::NodeId)]], choice_specs : &[&ir::FuncletSpec]) -> Result<(), Error> {
 		let continuation_join = self.join_nodes.remove(& continuation_impl_node_id).unwrap();
 
