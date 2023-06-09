@@ -3,7 +3,7 @@ use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
-use crate::assembly::explication::context::Context;
+use crate::assembly::explication::context::{Context, LocationNames};
 use crate::assembly::explication::util;
 use crate::assembly::explication::util::{reject_hole, todo_hole};
 use crate::assembly::parser;
@@ -85,7 +85,7 @@ fn explicate_operation(
     input_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
     output_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
     context: &mut Context,
-) -> Option<(ir::RemoteNodeId, Box<[ir::NodeId]>, Box<[ir::NodeId]>)> {
+) -> Option<(LocationNames, Vec<NodeId>, Vec<NodeId>)> {
     let known_inputs = util::find_filled_hole(input_hole.clone());
     let known_outputs = util::find_filled_hole(output_hole.clone());
     let mut inputs = Vec::new();
@@ -99,23 +99,23 @@ fn explicate_operation(
             None => todo!("Unfinished path"),
         },
     };
-    let op = assembly::ast::RemoteNodeId {
-        funclet_name: Some(context.get_current_value_funclet().unwrap().clone()),
-        node_name: Some(operation),
+    let op = LocationNames {
+        funclet_name: context.get_current_value_funclet().unwrap().clone(),
+        node_name: operation,
     };
 
     let node = context.get_node(&op.funclet_name, &op.node_name).unwrap();
-    let node_arguments = get_node_arguments(&node.node, context);
+    let node_arguments = get_node_arguments(&node, context);
 
     // lookup the allocation location and add the argument to the inputs
     fn add_to_inputs(
-        op: &assembly::ast::RemoteNodeId,
-        inputs: &mut Vec<usize>,
+        op: &LocationNames,
+        inputs: &mut Vec<NodeId>,
         argument: &NodeId,
         context: &Context,
     ) {
         let alloc_name = context.get_current_schedule_allocation(argument).unwrap();
-        inputs.push(context.node_id(alloc_name))
+        inputs.push(alloc_name.clone())
     }
 
     match input_hole {
@@ -127,7 +127,7 @@ fn explicate_operation(
         Some(input_vec) => {
             for (index, input) in input_vec.iter().enumerate() {
                 match input {
-                    Some(n) => inputs.push(context.node_id(&n)),
+                    Some(n) => inputs.push(n.clone()),
                     None => {
                         let argument = node_arguments.get(index).unwrap();
                         add_to_inputs(&op, &mut inputs, argument, context);
@@ -144,20 +144,17 @@ fn explicate_operation(
 
     for (index, output) in output_vec.iter().enumerate() {
         match output {
-            Some(n) => outputs.push(context.node_id(&n)),
+            Some(n) => outputs.push(n.clone()),
             None => {
                 let node = context.get_node(&op.funclet_name, &op.node_name).unwrap();
-                match node.node {
+                match node {
                     assembly::ast::Node::Constant { .. } => {
-                        match context.get_schedule_allocations(
-                            todo_hole(op.funclet_name.as_ref()),
-                            todo_hole(op.node_name.as_ref()),
-                        ) {
+                        match context.get_schedule_allocations(&op.funclet_name, &op.node_name) {
                             None => todo!("Unfinished path"), // failed to explicate on this pass
                             Some(alloc_map) => {
                                 match alloc_map.get(&context.location.funclet_name) {
                                     None => todo!(),
-                                    Some(alloc_loc) => outputs.push(context.node_id(&alloc_loc)),
+                                    Some(alloc_loc) => outputs.push(alloc_loc.clone()),
                                 }
                             }
                         }
@@ -169,9 +166,9 @@ fn explicate_operation(
     }
 
     Some((
-        util::remote_conversion(&op, context),
-        inputs.into_boxed_slice(),
-        outputs.into_boxed_slice(),
+        op,
+        inputs,
+        outputs,
     ))
 }
 

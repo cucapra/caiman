@@ -1,9 +1,16 @@
 use super::*;
 
 impl<'context> Context<'context> {
-    fn allocation_name(&mut self) -> String {
-        self.meta_data.name_index += 1;
-        format!("${}", self.meta_data.name_index)
+    pub fn next_name(&mut self) -> String {
+        self.meta_data.next_name()
+    }
+
+    pub fn forcibly_replace_commands(
+        &mut self,
+        funclet: &ast::FuncletId,
+        commands: Vec<Hole<ast::Command>>,
+    ) {
+        self.get_funclet_mut(funclet).unwrap().commands = commands;
     }
 
     pub fn add_remote_node(&mut self, funclet: &ast::FuncletId, node: ast::NamedNode) {}
@@ -36,10 +43,6 @@ impl<'context> Context<'context> {
             .get_mut(&schedule_funclet)
             .unwrap()
             .allocate(schedule_node, value_node);
-    }
-
-    pub fn next_name(&mut self) -> String {
-        self.meta_data.next_name()
     }
 }
 

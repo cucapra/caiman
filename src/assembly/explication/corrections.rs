@@ -12,11 +12,15 @@ use crate::{assembly, frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
-fn corrections(context: Context) -> Context {
+// pre-processing function that corrects some stupid details
+// gives names to variable holes, `_`
+// also puts functlet arguments into the funclet
+pub fn correct(context: &mut Context) {
+    let mut funclets_to_update = Vec::new();
     context
-        .program
+        .program()
         .declarations
-        .iter_mut()
+        .iter()
         .map(|declaration| match declaration {
             ast::Declaration::Funclet(f) => {
                 let mut index = 0;
@@ -44,7 +48,11 @@ fn corrections(context: Context) -> Context {
                     };
                     commands.push(new_command);
                 }
+                funclets_to_update.push((&f.header.name, commands))
             }
             _ => {}
         });
+    for (funclet_name, commands) in funclets_to_update.into_iter() {
+        context.forcibly_replace_commands(funclet_name, commands)
+    };
 }
