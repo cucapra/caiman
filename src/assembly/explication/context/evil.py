@@ -15,7 +15,10 @@ def main():
         current_function = ""
         open_count = 0
         started_function = False
+        skip_next = False
         for line in f:
+            if line.strip() == '// SKIP':
+                skip_next = True
             if current_function or re.search(r'\s*pub\s+fn\s+get', line):
                 current_function += line
                 # allow for multiline arguments
@@ -23,7 +26,10 @@ def main():
                 open_count += line.count("{") # completely safe
                 open_count -= line.count("}") # completely legit
                 if not open_count and started_function: # hmhmmm, very good
-                    getters.append(current_function)
+                    if skip_next:
+                        skip_next = False
+                    else:
+                        getters.append(current_function)
                     current_function = ""
                     started_function = False
     
@@ -65,7 +71,7 @@ def main():
         f.write(message + '\n\n')
         f.write('impl<\'context> Context<\'context> {\n')
         for result in results:
-            f.write(result)
+            f.write(result + '\n')
         f.write('}')
 
     print("Update finished")

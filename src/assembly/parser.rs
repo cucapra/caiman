@@ -729,9 +729,9 @@ impl CaimanAssemblyParser {
                 external_ret(output_types),
                 external_body(body)] => {
                     let kind_result = match loc {
-                        (Cpu, true) => Ok(ast::ExternalFunctionKind::CPUPure),
-                        (Cpu, false) => Ok(ast::ExternalFunctionKind::CPUEffect),
-                        (Gpu, false) => {
+                        (ir::Place::Cpu, true) => Ok(ast::ExternalFunctionKind::CPUPure),
+                        (ir::Place::Cpu, false) => Ok(ast::ExternalFunctionKind::CPUEffect),
+                        (ir::Place::Gpu, false) => {
                             reject_hole(body, error.clone())
                             .map(|v| ast::ExternalFunctionKind::GPU(v))
                         }

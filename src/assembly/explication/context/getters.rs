@@ -3,6 +3,7 @@ use super::*;
 // built to use evil.py to generate stuff
 // any function to be generated must be `pub\s+fn` with any whitespace `\s+`
 //   and must start with the word `get`
+// skips any function that has // SKIP above it
 // completely legit programming, I promise
 // note that this only applies to _top level_ functions
 // inner functions are just grabbed as normal
@@ -23,6 +24,19 @@ impl<'context> Context<'context> {
         self.program
     }
 
+    // get what the associated schedule node is allocating
+    pub fn get_value_allocation(&self, funclet: &FuncletId, node: &NodeId) -> Option<&ast::NodeId> {
+        self.schedule_explication_data
+            .get(funclet)
+            .and_then(|f| f.allocations.get(node))
+    }
+
+    pub fn get_current_value_funclet(&self) -> Option<&FuncletId> {
+        self.schedule_explication_data
+            .get(&self.location.funclet_name)
+            .map(|f| &f.value_funclet)
+    }
+
     // get allocations of the associated value node
     pub fn get_schedule_allocations(
         &self,
@@ -36,25 +50,13 @@ impl<'context> Context<'context> {
         })
     }
 
+    // SKIP
     pub fn get_current_schedule_allocation(&self, node: &NodeId) -> Option<&NodeId> {
         self.get_current_value_funclet().and_then(|vf| {
             self.get_schedule_allocations(vf, node)
                 .unwrap()
                 .get(&self.location.funclet_name)
         })
-    }
-
-    // get what the associated schedule node is allocating
-    pub fn get_value_allocation(&self, funclet: &FuncletId, node: &NodeId) -> Option<&ast::NodeId> {
-        self.schedule_explication_data
-            .get(funclet)
-            .and_then(|f| f.allocations.get(node))
-    }
-
-    pub fn get_current_value_funclet(&self) -> Option<&FuncletId> {
-        self.schedule_explication_data
-            .get(&self.location.funclet_name)
-            .map(|f| &f.value_funclet)
     }
 
     pub fn get_funclet(&self, funclet_name: &FuncletId) -> Option<&ast::Funclet> {
