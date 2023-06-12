@@ -26,20 +26,23 @@ value @foo(%0 : i64) -> i64 {
     return %res;
 }
 
-schedule @foo1(%blob : $slot0) -> $slot0 {
-    %0 = alloc-temporary-local-i64 @foo.%x;
-    %t0 = encode-do-local @foo.%x() -> %0;
-    %1 = alloc-temporary-local-i64 @foo.%y;
-    %t1 = encode-do-local @foo.%y() -> %1;
+schedule @foo1() -> [%out : $slot0] {
+    %xloc = alloc-temporary-local-i64 @foo.%x;
+    %yloc = alloc-temporary-local-i64 @foo.%y;
 
-    %2 = alloc-temporary-local-i64 @foo.%n1;
-    %t2 = encode-do-local @foo.%n1_t(%0, %1) -> %2;
-    %3 = alloc-temporary-local-i64 @foo.%n2;
-    %t3 = encode-do-local @foo.%n2_t(%0, %2) -> %3;
+    %n1loc = alloc-temporary-local-i64 @foo.%n1;
+    %n2loc = alloc-temporary-local-i64 @foo.%n2;
+    
+    %resloc = alloc-temporary-local-i64 @foo.%res;
 
-    %4 = alloc-temporary-local-i64 @foo.%res;
-    %t4 = encode-do-local @foo.%res_t(%2, %3) -> %4;
-    return %4;
+    %_ = encode-do-local @foo.%x() -> %xloc;
+    %_ = encode-do-local @foo.%y() -> %yloc;
+    
+    %_ = encode-do-local @foo.%n1_t(%0, %1) -> %n1loc;
+    %_ = encode-do-local @foo.%n2_t(%0, %2) -> %n2loc;
+
+    %_ = encode-do-local @foo.%res_t(%2, %3) -> %resloc;
+    return %resloc;
 }
 
 timeline @time(%e : $event0) -> $event0 {
@@ -49,12 +52,9 @@ timeline @time(%e : $event0) -> $event0 {
 extras {
     @foo1 {
         value : @foo,
-        time : @time,
-        input_slots : {
-            %blob : slot_info()
-        },
+        input_slots : {},
         output_slots : {
-            %blob : slot_info()
+            %out : slot_info()
         },
         input_fences : {},
         output_fences : {},

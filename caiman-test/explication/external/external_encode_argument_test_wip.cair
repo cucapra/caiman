@@ -21,11 +21,11 @@ value @foo() -> i64 {
     return %y;
 }
 
-schedule @bar(%s : $slot0) -> [%out : $slot0] {
+schedule @bar() -> [%out : $slot0] {
     %xloc = alloc-temporary-local-i64 @foo.%x;
     %_ = encode-do-local @foo.%x() -> %xloc;
     %yloc = alloc-temporary-local-i64 @foo.%y;
-    %_ = encode-do-local @foo.%y_t(%xloc) -> %yloc;
+    %_ = encode-do-local @foo.%y_t(?) -> %yloc;
     return %yloc;
 }
 
@@ -36,10 +36,7 @@ timeline @time(%e : $event0) -> $event0 {
 extras {
     @bar {
         value : @foo,
-        time : @time,
-        input_slots : {
-            %s : slot_info()
-        },
+        input_slots : {},
         output_slots : {
             %out : slot_info()
         },

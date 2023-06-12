@@ -1,0 +1,62 @@
+version 0.0.1
+
+types [
+    i64,
+    slot $slot0 {
+        type : i64,
+        stage : ready,
+        place : local,
+    },
+    event $event0 {
+        place : local
+    },
+]
+
+external_cpu @add(i64, i64) -> i64;
+
+value @foo(%0 : i64) -> i64 {
+    %res_t = call @add(%n1, %n2); // 8 + 5 = 13
+    %res = extract %res_t 0;
+    %n2_t = call @add(%x, %n1); // 3 + 5 = 8
+    %n2 = extract %n2_t 0;
+    %n1_t = call @add(%x, %y); // 3 + 2 = 5
+    %n1 = extract %n1_t 0;
+    %x = constant 3i64;
+    %y = constant 2i64;
+    return %res;
+}
+
+schedule @foo1() -> [%out : $slot0] {
+    ???; // we should be able to batch here
+    
+    %_ = encode-do-local @foo.%x() -> ?;
+    %_ = encode-do-local @foo.%y() -> ?;
+
+    %_ = encode-do-local @foo.%n1_t(?, ?) -> ?;
+    %_ = encode-do-local @foo.%n2_t(?, ?) -> ?;
+
+    %_ = encode-do-local @foo.%res_t(??) -> ?;
+    return ?;
+}
+
+timeline @time(%e : $event0) -> $event0 {
+    return %e;
+}
+
+extras {
+    @foo1 {
+        value : @foo,
+        input_slots : {},
+        output_slots : {
+            %out : slot_info()
+        },
+        input_fences : {},
+        output_fences : {},
+        input_buffers : {},
+        output_buffers : {},
+        in_timeline_tag : timeline_tag input @time.%e,
+        out_timeline_tag : timeline_tag input @time.%e,
+    },
+}
+
+pipeline "main" = @foo1;

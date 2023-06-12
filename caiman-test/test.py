@@ -7,6 +7,28 @@ from sys import stderr
 from dataclasses import dataclass
 from shutil import rmtree
 
+# stupid hack to build a test file for each pair of results
+def rust_diff(file1 : Path, file2 : Path):
+    return f"""
+#[test]
+fn compare() -> Result<(), String> {{
+    use file_diff::{{diff_files}};
+    use std::fs::{{File}};
+
+    let mut file1 = match File::open(r##"{file1}"##) {{
+        Ok(f) => f,
+        Err(e) => panic!("{{}}", e),
+    }};
+    let mut file2 = match File::open(r##"{file2}"##) {{
+        Ok(f) => f,
+        Err(e) => panic!("{{}}", e),
+    }};
+
+    crate::expect_returned!(true, Some(diff_files(&mut file1, &mut file2)));
+}}
+    """
+    
+
 def eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
 
@@ -42,10 +64,12 @@ class Compiler:
     def _compiler_path(self) -> Path:
         return self.test_dir / ".." / "target" / "debug" / "caimanc"
 
-    def compile(self, input: Path, output: Path) -> subprocess.CompletedProcess:
+    def compile(self, input: Path, output: Path, explicate_only: bool = False) \
+        -> subprocess.CompletedProcess:
         args = [ self._compiler_path(), 
             "--input", input, 
-            "--output", output ]
+            "--output", output ] \
+            + [ "--explicate_only" ] * explicate_only
         return subprocess.run(args, capture_output=True, encoding="utf8", cwd=input.parent)
 
 @dataclass
@@ -60,6 +84,20 @@ class ProcessStatistics:
     """Total number of files processed."""
     def total(self) -> int:
         return self.compiled + self.failures
+
+def compiler_error(
+        rv: subprocess.CompletedProcess,
+        relativized : Path, 
+        quiet: bool, 
+        ps: ProcessStatistics) -> bool:
+    if (rv.returncode != 0):
+        eprint(f"    {Colorizer.red('fail:')} {relativized}")
+        if not quiet:
+            msg = pad_lines(rv.stderr, f"        {Colorizer.red('|')} ")
+            print(msg, file=stderr)
+        ps.failures += 1
+        return True # return if there was an error
+    return False
 
 # returns num failed, num succeeded
 def process_inputs(
@@ -76,6 +114,35 @@ def process_inputs(
     for input in inputs:
         relativized = input.absolute().relative_to(test_dir)
         output =  test_dir / "src" / (input.stem + ".rs")
+
+        input_str = str(input) # cause I wanna do direct string manipulations
+        if input_str.endswith('test.cair'):
+            baseline_name = input.name[:input.name.find("_")] + '_baseline.cair'
+            baseline = input.parent / baseline_name
+            if baseline.is_file():
+                # we compile here for explication only
+                test_out = output.with_suffix(".txt")
+                rv = compiler.compile(input.absolute(), test_out, True)
+                if compiler_error(rv, relativized, quiet, ps):
+                    continue
+
+                baseline_out = Path(str(output).replace(
+                    'test.rs', 'baseline.txt')) # to explication thing
+                rv = compiler.compile(baseline.absolute(), baseline_out, True)
+                if compiler_error(rv, relativized, quiet, ps):
+                    continue
+
+                eprint(Colorizer.grey(f"    pass: {relativized}"))
+                lf.write(f"mod {input.stem};\n")
+                ps.compiled += 1
+
+                of = output.open(mode='w', encoding="utf8")
+                of.write(rust_diff(test_out, baseline_out))
+                of.close()
+
+                ps.linked += 1
+
+                continue
 
         rv = compiler.compile(input.absolute(), output)
         if (rv.returncode == 0):
