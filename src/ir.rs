@@ -35,6 +35,7 @@ pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
+pub type FunctionClassId = ValueFunctionId;
 pub type StorageTypeId = ffi::TypeId;
 
 macro_rules! lookup_abstract_type {
@@ -233,13 +234,6 @@ pub enum TailEdge {
     Return {
         return_values: Box<[NodeId]>,
     },
-    Yield {
-        external_function_id: ExternalFunctionId,
-        yielded_nodes: Box<[NodeId]>,
-        next_funclet: FuncletId,
-        continuation_join: NodeId,
-        arguments: Box<[NodeId]>,
-    },
     Jump {
         join: NodeId,
         arguments: Box<[NodeId]>,
@@ -262,6 +256,14 @@ pub enum TailEdge {
         condition: NodeId,
         callee_funclet_ids: Box<[FuncletId]>,
         callee_arguments: Box<[NodeId]>,
+        continuation_join: NodeId,
+    },
+    ScheduleCallYield {
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
+        external_function_id: ExternalFunctionId,
+        yielded_nodes: Box<[NodeId]>,
         continuation_join: NodeId,
     },
 

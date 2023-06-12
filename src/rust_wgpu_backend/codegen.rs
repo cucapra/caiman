@@ -2119,12 +2119,13 @@ impl<'program> CodeGen<'program> {
                     continuation_join_point_id_opt: *default_join_point_id_opt,
                 }
             }
-            ir::TailEdge::Yield {
+            ir::TailEdge::ScheduleCallYield {
+                value_operation: _,
+                timeline_operation: _,
+                spatial_operation: _,
                 external_function_id,
                 yielded_nodes,
-                next_funclet: next_funclet_id,
                 continuation_join: continuation_join_node_id,
-                arguments: argument_node_ids,
             } => {
                 let continuation_join_point_id = funclet_scoped_state
                     .move_node_join_point_id(*continuation_join_node_id)
@@ -2142,17 +2143,17 @@ impl<'program> CodeGen<'program> {
                     output_node_results.push(node_result);
                 }
 
-                let mut argument_node_results = Vec::<NodeResult>::new();
+                /*let mut argument_node_results = Vec::<NodeResult>::new();
                 for (argument_index, argument_node_id) in argument_node_ids.iter().enumerate() {
                     let node_result = funclet_scoped_state
                         .move_node_result(*argument_node_id)
                         .unwrap();
                     argument_node_results.push(node_result);
-                }
+                }*/
 
-                let join_funclet = &self.program.funclets[*next_funclet_id];
+                //let join_funclet = &self.program.funclets[*next_funclet_id];
                 //let join_extra = & self.program.scheduling_funclet_extras[next_funclet_id];
-                let join_point_id = placement_state
+                /*let join_point_id = placement_state
                     .join_graph
                     .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
                         value_funclet_id: join_funclet
@@ -2163,11 +2164,11 @@ impl<'program> CodeGen<'program> {
                         scheduling_funclet_id: *next_funclet_id,
                         captures: argument_node_results.into_boxed_slice(),
                         continuation_join_point_id,
-                    }));
+                    }));*/
                 SplitPoint::Yield {
                     external_function_id: *external_function_id,
                     yielded_node_results: output_node_results.into_boxed_slice(),
-                    continuation_join_point_id_opt: Some(join_point_id),
+                    continuation_join_point_id_opt: Some(continuation_join_point_id),
                 }
             }
             /*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>

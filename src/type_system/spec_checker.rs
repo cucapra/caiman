@@ -404,6 +404,26 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
+	pub fn check_join_tags(&self, node_id : ir::NodeId, input_tags : &[ir::Tag], implicit_in_tag : ir::Tag) -> Result<(), Error> {
+		let join = self.join_nodes.get(& node_id).unwrap();
+		//assert_eq!(*scalar, tag);
+		for index in 0 .. join.input_tags.len() {
+			check_tag_compatibility_interior(
+				self.spec_funclet,
+				input_tags[index],
+				join.input_tags[index],
+			).map_err(|e| e.append_message(format!("While checking that join #{} input #{} has tag {:?}", node_id, index, input_tags[index])))?;
+		}
+
+		check_tag_compatibility_interior(
+			self.spec_funclet,
+			implicit_in_tag,
+			join.implicit_tag,
+		).map_err(|e| e.append_message(format!("While checking that join #{} has implicit input tag {:?}", node_id, implicit_in_tag)))?;
+
+		return Ok(());
+	}
+
 	fn transition_tag_forwards(tag : &mut ir::Tag, from_spec_node_id : ir::NodeId, to_spec_node_id : ir::NodeId) -> Result<(), Error> {
 		match tag.quot {
 			ir::Quotient::Node{node_id} if node_id == from_spec_node_id => {

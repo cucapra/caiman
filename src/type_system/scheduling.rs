@@ -94,6 +94,10 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
     }
 }
 
+fn check_slot_storage_type(program: &ir::Program, storage_type_id: ir::ffi::TypeId, node_type: &NodeType) {
+    // To do
+}
+
 fn advance_forward_value_copy<'program>(value_spec_checker : &mut FuncletSpecChecker<'program>, input_impl_node_id : ir::NodeId, output_impl_node_id : ir::NodeId) -> Result<(), Error> {
     let scalar = & value_spec_checker.scalar_nodes[& input_impl_node_id];
     assert!(scalar.flow.is_readable());
@@ -399,6 +403,53 @@ impl<'program> FuncletChecker<'program> {
     /*fn report_if_error<T>(&self, result : Result<T, Error>) -> Result<T, Error> {
         Ok(result?)
     }*/
+
+    fn check_yield_for_spec(&self, external_function_id : ir::ffi::ExternalFunctionId, operation : ir::Quotient, funclet_spec : &ir::FuncletSpec, spec_checker_opt : Option<&FuncletSpecChecker>, yielded_impl_node_ids : &[ir::NodeId], continuation_impl_node_id : ir::NodeId) -> Result<(), Error> {
+        if let ir::Quotient::None = operation {
+            return Ok(());
+        }
+
+        let Some(spec_funclet_id) = funclet_spec.funclet_id_opt else { return Err(Error::Generic{message: String::from("Expected spec funclet id")}); };
+        let spec_funclet = & self.program.funclets[spec_funclet_id];
+        let ir::Quotient::Node{node_id: call_node_id} = operation else { return Err(Error::Generic{message: String::from("Expected operation to be a Node")}); };
+        let ir::Node::CallFunctionClass{function_id, arguments} = & spec_funclet.nodes[call_node_id] else { return Err(Error::Generic{message: String::from("Expected call node")}); };
+        if ! self.program.function_classes[*function_id].external_function_ids.contains(& external_function_id) {
+            return Err(Error::Generic{message: format!("External function #{} does not implement function class #{}", external_function_id, function_id)});
+        }
+
+        let spec_checker = spec_checker_opt.unwrap();
+
+        let ir::ffi::ExternalFunction::CpuEffectfulOperation(effectful_operation) = & self.program.native_interface.external_functions[external_function_id.0] else { panic!("") };
+        assert_eq!(effectful_operation.input_types.len(), arguments.len() + 1);
+        assert_eq!(yielded_impl_node_ids.len(), arguments.len());
+
+        assert!(arguments.len() > 0);
+
+        for index in 0 .. yielded_impl_node_ids.len() {
+            // 0th argument is the implicit
+            let argument_spec_node_id = arguments[index + 1];
+            spec_checker.check_node_tag(yielded_impl_node_ids[index], ir::Tag{quot: ir::Quotient::Node{node_id: argument_spec_node_id}, flow: ir::Flow::Have})?;
+        }
+        spec_checker.check_implicit_tag(ir::Tag{quot: ir::Quotient::Node{node_id: arguments[0]}, flow: ir::Flow::Have})?;
+
+        // Check continuation against outputs
+        let continuation_join_point = &self.node_join_points[&continuation_impl_node_id];
+        assert_eq!(continuation_join_point.input_types.len(), effectful_operation.output_types.len());
+        let mut continuation_input_tags = Vec::<ir::Tag>::new();
+        for index in 0 .. continuation_join_point.input_types.len() {
+            // 0th output is the implicit
+            let extract_node_id = call_node_id + 2 + index;
+            let ir::Node::ExtractResult{node_id, index: argument_index} = & spec_funclet.nodes[extract_node_id] else { return Err(Error::Generic{message: String::from("Expected extract result")}); };
+            assert_eq!(call_node_id, *node_id);
+            assert_eq!(*argument_index, index);
+            continuation_input_tags.push(ir::Tag{quot: ir::Quotient::Node{node_id: extract_node_id}, flow: ir::Flow::Have});
+        }
+
+        // Need to figure out what the implicit tag should be
+        spec_checker_opt.unwrap().check_join_tags(continuation_impl_node_id, continuation_input_tags.as_slice(), ir::Tag{quot: ir::Quotient::Node{node_id: call_node_id + 1}, flow: ir::Flow::Have});
+
+        return Ok(());
+    }
 
     pub fn check_next_node(&mut self, current_node_id: ir::NodeId) -> Result<(), Error> {
         assert_eq!(self.current_node_id, current_node_id);
@@ -879,7 +930,6 @@ impl<'program> FuncletChecker<'program> {
         
         return Ok(());
     }
-
     
     pub fn check_tail_edge(&mut self) -> Result<(), Error> {
         assert_eq!(self.current_node_id, self.scheduling_funclet.nodes.len());
@@ -899,38 +949,6 @@ impl<'program> FuncletChecker<'program> {
                 self.value_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
                 self.timeline_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
                 self.spatial_spec_checker_opt.as_mut().unwrap().check_return(return_values).map_err(|e| self.contextualize_error(e))?;
-            }
-            ir::TailEdge::Yield {
-                external_function_id,
-                yielded_nodes: yielded_node_ids,
-                next_funclet,
-                continuation_join: continuation_join_node_id,
-                arguments: argument_node_ids,
-            } => {
-                // To do: Need pipeline to check yield point types
-                let continuation_join_point = &self.node_join_points[continuation_join_node_id];
-
-                if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_join_node_id)
-                {
-                    // Nothing, for now...
-                } else {
-                    panic!("Node at #{} is not a join point", continuation_join_node_id)
-                }
-
-                for node_id in yielded_node_ids.iter() {
-                    self.node_types.remove(node_id);
-                }
-
-                for argument_node_id in argument_node_ids.iter() {
-                    self.node_types.remove(argument_node_id);
-                }
-
-                /*assert_eq!(true_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
-                assert_eq!(false_funclet.output_types[output_index], continuation_join_point.input_types[output_index]);
-                for (return_index, return_node_id) in return_values.iter().enumerate()
-                {
-                    check_slot_type(& self.program, true_funclet.input_types[argument_index], & node_type);
-                }*/
             }
             ir::TailEdge::Jump { join, arguments } => {
                 let join_point = &self.node_join_points[join];
@@ -1028,8 +1046,8 @@ impl<'program> FuncletChecker<'program> {
             }
             ir::TailEdge::ScheduleSelect {
                 value_operation: ir::Quotient::Node{node_id: value_operation_node_id},
-                timeline_operation,
-                spatial_operation,
+                timeline_operation: ir::Quotient::None,
+                spatial_operation: ir::Quotient::None,
                 condition: condition_slot_node_id,
                 callee_funclet_ids,
                 callee_arguments,
@@ -1113,6 +1131,64 @@ impl<'program> FuncletChecker<'program> {
                         false_funclet.output_types[output_index],
                         continuation_join_point.input_types[output_index]
                     );
+                }
+            }
+            ir::TailEdge::ScheduleCallYield {
+                value_operation,
+                timeline_operation,
+                spatial_operation,
+                external_function_id,
+                yielded_nodes: yielded_impl_node_ids,
+                continuation_join: continuation_impl_node_id,
+            } => {
+                /*let callee_funclet = &self.program.funclets[callee_scheduling_funclet_id];
+                assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
+
+                let callee_value_spec = self.get_funclet_value_spec(callee_funclet);
+                self.value_spec_checker_opt.as_mut().unwrap().check_call(*value_operation, *continuation_join_node_id, yielded_node_ids, callee_value_spec).map_err(|e| self.contextualize_error(e))?;
+                
+                let callee_timeline_spec = self.get_funclet_timeline_spec(callee_funclet);
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_call(*timeline_operation, *continuation_join_node_id, yielded_node_ids, callee_timeline_spec).map_err(|e| self.contextualize_error(e))?;
+
+                let callee_spatial_spec = self.get_funclet_spatial_spec(callee_funclet);
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_call(*spatial_operation, *continuation_join_node_id, yielded_node_ids, callee_spatial_spec).map_err(|e| self.contextualize_error(e))?;*/
+
+                self.check_yield_for_spec(*external_function_id, *value_operation, self.value_spec, self.value_spec_checker_opt.as_ref(), yielded_impl_node_ids, *continuation_impl_node_id).map_err(|e| self.contextualize_error(e))?;
+                self.check_yield_for_spec(*external_function_id, *timeline_operation, self.timeline_spec, self.timeline_spec_checker_opt.as_ref(), yielded_impl_node_ids, *continuation_impl_node_id).map_err(|e| self.contextualize_error(e))?;
+                self.check_yield_for_spec(*external_function_id, *spatial_operation, self.spatial_spec, self.spatial_spec_checker_opt.as_ref(), yielded_impl_node_ids, *continuation_impl_node_id).map_err(|e| self.contextualize_error(e))?;
+
+                let ir::ffi::ExternalFunction::CpuEffectfulOperation(effectful_operation) = & self.program.native_interface.external_functions[external_function_id.0] else { panic!("Not effectful operation"); };
+
+                // Step 1: Check current -> callee edge
+                assert_eq!(effectful_operation.input_types.len(), yielded_impl_node_ids.len());
+                for (argument_index, argument_node_id) in yielded_impl_node_ids.iter().enumerate() {
+                    let node_type = self.node_types.remove(argument_node_id).unwrap();
+                    check_slot_storage_type(
+                        &self.program,
+                        effectful_operation.input_types[argument_index],
+                        &node_type,
+                    );
+                }
+
+                // Check continuation against outputs
+                let continuation_join_point = &self.node_join_points[continuation_impl_node_id];
+                assert_eq!(continuation_join_point.input_types.len(), effectful_operation.output_types.len());
+
+                if let Some(NodeType::JoinPoint) = self.node_types.remove(continuation_impl_node_id)
+                {
+                    // Nothing, for now...
+                } else {
+                    panic!("Node at #{} is not a join point", continuation_impl_node_id)
+                }
+
+                // Step 2: Check callee -> continuation edge
+                for (callee_output_index, callee_output_type) in
+                    effectful_operation.output_types.iter().enumerate()
+                {
+                    /*assert_eq!(
+                        *callee_output_type,
+                        continuation_join_point.input_types[callee_output_index]
+                    );*/
                 }
             }
             _ => panic!("Unimplemented"),
