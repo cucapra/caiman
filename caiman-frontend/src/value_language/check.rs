@@ -14,31 +14,31 @@ pub enum SemanticError
 
 pub type SemanticInfoError = (Info, SemanticError);
 
-fn to_local_error(e: SemanticInfoError) -> LocalError
+pub fn error_semantic_to_local(e: SemanticInfoError) -> LocalError
 {
     LocalError { kind: ErrorKind::Semantic(e.1), location: ErrorLocation::Double(e.0.location) }
 }
 
 pub fn check_program<S: HasInfo, E: HasInfo>(
     program: &ast::Program<S, E>,
-) -> Result<Context, LocalError>
+    ctx: &Context,
+) -> Result<(), LocalError>
 {
-    let mut ctx = Context::new();
     for (metadata, stmt_kind) in program.iter()
     {
         let info = metadata.info();
-        let to_local_with_info = |e| to_local_error((info, e));
+        let to_local_with_info = |e| error_semantic_to_local((info, e));
         use ast::StmtKind::*;
         match stmt_kind
         {
             Let((x, x_type), e) =>
             {
-                let e_inferred_type = typing::type_of_expr(e, &ctx).map_err(to_local_error)?;
+                let e_inferred_type =
+                    typing::type_of_expr(e, &ctx).map_err(error_semantic_to_local)?;
                 typing::expect_type(*x_type, e_inferred_type).map_err(to_local_with_info)?;
-                ctx.add(x, *x_type).map_err(to_local_with_info)?;
             },
             _ => todo!(),
         }
     }
-    Ok(ctx)
+    Ok(())
 }

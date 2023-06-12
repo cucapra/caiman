@@ -1,13 +1,33 @@
 use super::ast;
 use super::typing;
+use super::check;
 use super::typing::Context;
-use crate::error::Info;
-use typing::Type;
+use crate::error::LocalError;
 
 /// Precondition: parsed_prog has been type-checked already.
-pub fn elaborate_program(prog: &ast::ParsedProgram, ctx: &Context) -> ast::TypedProgram
+pub fn elaborate_program(prog: &ast::ParsedProgram) -> Result<ast::TypedProgram, LocalError>
 {
-    prog.iter().map(|stmt| elaborate_stmt(stmt, ctx)).collect()
+    let ctx = build_context(prog)?;
+    check::check_program(prog, &ctx)?;
+    Ok(prog.iter().map(|stmt| elaborate_stmt(stmt, &ctx)).collect())
+}
+
+fn build_context(prog: &ast::ParsedProgram) -> Result<Context, LocalError>
+{
+    let mut ctx = Context::new();
+    use ast::StmtKind::*;
+    for (info, kind) in prog
+    {
+        match kind
+        {
+            Let((x, t), _) =>
+            {
+                ctx.add(x, *t).map_err(|e| check::error_semantic_to_local((*info, e)))?
+            },
+            _ => (),
+        }
+    }
+    Ok(ctx)
 }
 
 fn elaborate_stmt(parsed_stmt: &ast::ParsedStmt, ctx: &Context) -> ast::TypedStmt

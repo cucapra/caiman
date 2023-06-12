@@ -94,18 +94,47 @@ fn add_expr_stmt(
     stmts.len() - 1
 }
 
+fn expr_size(expr: &ast::TypedExpr) -> usize
+{
+    let ((_, _), expr_kind) = expr;
+    match expr_kind {
+        ExprKind::Var(_) => 0,
+        ExprKind::Num(_) => 1,
+        ExprKind::Bool(_) => 1,
+        ExprKind::If(guard, e_true, e_false) => {
+            expr_size(guard) + expr_size(e_true) + expr_size(e_false) + 1
+        },
+        _ => todo!(),
+    }
+}
+
 pub fn value_ast_to_vil(value_ast: &ast::TypedProgram) -> vil::Program
 {
     let mut vil_stmts: Vec<vil::Stmt<usize>> = Vec::new();
     let mut ctx = IndexContext::new();
+
+    // Build index context
+    let mut pc = 0;
     for (_, stmt_kind) in value_ast.iter()
     {
         match stmt_kind
         {
             ast::StmtKind::Let((x, _), e) =>
             {
-                let e_index = add_expr_stmt(e, &mut vil_stmts, ExprPath::new(), x, &ctx);
-                ctx.add(x, e_index);
+                pc += expr_size(e);
+                ctx.add(x, pc);
+            },
+            _ => (),
+        }
+    }
+
+    for (_, stmt_kind) in value_ast.iter()
+    {
+        match stmt_kind
+        {
+            ast::StmtKind::Let((x, _), e) =>
+            {
+                add_expr_stmt(e, &mut vil_stmts, ExprPath::new(), x, &ctx);
             },
             _ => todo!(),
         }

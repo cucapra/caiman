@@ -6,3 +6,4 @@ mod pipeline_value_function_test;
 mod pipeline_1_test;
 mod double_let;
 mod single_let;
+mod var_unordered;

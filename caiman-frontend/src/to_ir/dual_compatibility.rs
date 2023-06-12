@@ -22,6 +22,7 @@ pub fn match_vil_to_scheduling(
 {
     let mut vil_with_index: Vec<(usize, &vil::Stmt<usize>)> =
         vil_program.stmts.iter().enumerate().collect();
+    println!("VIL WITH INDEX: {:?}", vil_with_index);
     let mut matched_stmts: Vec<MatchedScheduleStmt> = Vec::new();
     for schedule_stmt in scheduling_program.iter()
     {
@@ -68,15 +69,18 @@ fn is_compatible(
     full_expr: &FullExpr,
 ) -> bool
 {
+    println!("comp: x is {} subexprs={:?} full={:?} and vil {:?}", x, sub_exprs, full_expr,vil_stmt);
     for i in 0..sub_exprs.len()
     {
         if vil_stmt.path_from_root[i] != sub_exprs[i]
         {
+            println!("PATHFROMROOT");
             return false;
         }
     }
     let same_var = vil_stmt.root_var == x;
     let same_fullexprs = vil::schedulable_of_vil_expr(&vil_stmt.expr) == full_expr.clone();
+    println!("SAMEVAR {}, SAME_FULLEXPRS {}", same_var, same_fullexprs);
     same_var && same_fullexprs
 }
 

@@ -22,8 +22,7 @@ fn run_with_result(filename: &str, stage: Stage) -> Result<StageOutput, error::L
 {
     let parsed_ast = run_parser::parse_file(filename)?;
     if stage == Stage::Parse { return Ok(StageOutput::Parse(parsed_ast)); }
-    let ctx = check::check_program(&parsed_ast)?;
-    let typed_ast = type_elab::elaborate_program(&parsed_ast, &ctx);
+    let typed_ast = type_elab::elaborate_program(&parsed_ast)?;
     Ok(StageOutput::TypeElaborate(typed_ast))
     // Uncomment when another stage is added
     //if stage == Stage::TypeElaborate { return Ok(StageOutput::TypeElaborate(typed_ast)); }
