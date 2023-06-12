@@ -518,18 +518,20 @@ impl<'program> CodeGen<'program> {
         // << removed remappings of dimensions and arguments, since they're only used for codegen >>
 
         // The variable IDs corresponding to the output slots should already exist since this
-        // is strictly called after the header.
-        let output_var_ids: Box<[VarId]> = output_slot_ids
+        // is strictly called after the header, unless one of those output slots was elided.
+        let output_var_ids: Box<[Option<VarId>]> = output_slot_ids
             .iter()
-            .map(|&x| placement_state.get_slot_var_id(x).unwrap())
+            .map(|&x| placement_state.get_slot_var_id(x))
             .collect();
 
         for i in 0..kernel.output_types.len() {
-            placement_state.update_slot_state(
-                output_slot_ids[i],
-                ir::ResourceQueueStage::Encoded,
-                output_var_ids[i],
-            );
+            if let Some(ovi) = output_var_ids[i] {
+                placement_state.update_slot_state(
+                    output_slot_ids[i],
+                    ir::ResourceQueueStage::Encoded,
+                    ovi,
+                );
+            }
         }
     }
     fn encode_do_node_gpu(
@@ -1467,9 +1469,10 @@ impl<'program> CodeGen<'program> {
         let mut funclet_checker =
             type_system::scheduling::FuncletChecker::new(&self.program, funclet);
 
-        let fusion_opportunities =
-            ir::fusion::identify_opportunities(self.program, funclet_id, funclet);
-        //dbg!(&fusion_opportunities);
+        let live_ranges = ir::analysis::live_ranges(funclet);
+        let fusion_info =
+            ir::fusion::FusionInfo::within_funclet(self.program, funclet_id, funclet, &live_ranges);
+        // dbg!(&fusion_info.elided_temps);
 
         if self.print_codegen_debug_info {
             println!(
@@ -1524,7 +1527,8 @@ impl<'program> CodeGen<'program> {
                             .unwrap(),
                         operation.funclet_id
                     );
-
+                    // We *could* also do unused temporary elision here, but after writing test
+                    // cases I discovered that codegen panics if any slots are unused.
                     let slot_id = placement_state.scheduling_state.insert_hacked_slot(
                         *storage_type,
                         *place,
@@ -1538,10 +1542,11 @@ impl<'program> CodeGen<'program> {
                             storage_type: *storage_type,
                         },
                     );
+                    if fusion_info.elided_temps.contains(&current_node_id) {
+                        continue;
+                    }
 
                     // To do: Allocate from buffers for GPU/CPU and assign variable
-                    // TODO: Elide this if the temporary is small enough and *strictly* used
-                    // as an input to a single real kernel dispatch
                     match place {
                         ir::Place::Cpu => (),
                         ir::Place::Local => (),
@@ -1655,7 +1660,7 @@ impl<'program> CodeGen<'program> {
                             );
                         }
                         ir::Place::Gpu => {
-                            let opportunity = fusion_opportunities.iter().find(|schema| {
+                            let opportunity = fusion_info.opportunities.iter().find(|schema| {
                                 schema.bounds.start <= current_node_id
                                     && current_node_id <= schema.bounds.end
                             });

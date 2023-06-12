@@ -230,13 +230,17 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
                 Err(why) => panic!("Couldn't read file: {}", why),
                 Ok(_) => (),
             };
+            let shader_module = match crate::shadergen::ShaderModule::from_wgsl(content.as_str()) {
+                Err(why) => panic!("Couldn't parse as wgsl: {}", why),
+                Ok(sm) => sm
+            };
             ffi::ExternalFunction::GpuKernel(ffi::GpuKernel {
                 name: external.name.clone(),
                 input_types: input_types.into_boxed_slice(),
                 output_types: output_types.into_boxed_slice(),
                 entry_point: binding_info.entry_point.clone(),
                 resource_bindings: resource_bindings.into_boxed_slice(),
-                shader_module_content: ffi::ShaderModuleContent::Wgsl(content),
+                shader_module,
             })
         }
     }

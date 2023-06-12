@@ -345,16 +345,9 @@ impl<'program> CodeGenerator<'program> {
         );
 
         if !self.shader_modules.contains_key(&shader_module_key) {
-            let mut shader_module = match &kernel.shader_module_content {
-                ffi::ShaderModuleContent::Wgsl(text) => {
-                    shadergen::ShaderModule::from_wgsl(text.as_str()).unwrap()
-                }
-                ffi::ShaderModuleContent::Glsl(text) => {
-                    shadergen::ShaderModule::from_glsl(text.as_str()).unwrap()
-                }
-            };
+            // TODO: Is this clone necessary?
             self.shader_modules
-                .insert(shader_module_key.clone(), shader_module);
+                .insert(shader_module_key.clone(), kernel.shader_module.clone());
         }
 
         self.active_external_gpu_function_name = Some(kernel.name.clone());
@@ -593,20 +586,17 @@ impl<'program> CodeGenerator<'program> {
             }
         }
 
-        // HACK: Truly disgusting, we need to fix up the readwrite specifiers on shader bindings
-        // to account for the actual buffer usage pattern
-        let mut module = match &kernel.shader_module_content {
-            ffi::ShaderModuleContent::Wgsl(text) => ShaderModule::from_wgsl(text).unwrap(),
-            ffi::ShaderModuleContent::Glsl(text) => ShaderModule::from_glsl(text).unwrap(),
-        };
-        module.force_writable_bindings(&rw_bindings);
+        // HACK: We need to fix up the readwrite specifiers on shader bindings to account for the
+        // actual buffer usage pattern
+        let mut shader_module = kernel.shader_module.clone();
+        shader_module.force_writable_bindings(&rw_bindings);
         let kernel = ffi::GpuKernel {
             name: kernel.name.clone(),
             input_types: kernel.input_types.clone(),
             output_types: kernel.output_types.clone(),
             entry_point: kernel.entry_point.clone(),
             resource_bindings: kernel.resource_bindings.clone(),
-            shader_module_content: ffi::ShaderModuleContent::Wgsl(module.emit_wgsl()),
+            shader_module,
         };
 
         self.set_active_external_gpu_function(&kernel);

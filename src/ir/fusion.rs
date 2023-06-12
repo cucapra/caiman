@@ -3,8 +3,10 @@ use crate::rust_wgpu_backend::ffi;
 use crate::shadergen::{FuseDescriptor, FuseSource, FusedResource, ShaderModule};
 
 use std::collections::hash_map::{Entry, HashMap};
+use std::collections::HashSet;
 use std::ops::Range;
 
+use super::analysis::LiveRangeMap;
 use super::ffi::GpuKernelResourceBinding;
 
 /// Criteria for automatic fusing:
@@ -37,34 +39,41 @@ struct SlotState {
     input: bool,
     /// Is this type an output? (note: at least one of `input`, `output` must be set)
     output: bool,
+    /// The bindings which this slot was assigned to in the original program
+    sources: Vec<(usize, u32, u32)>,
 }
 
 #[derive(Debug)]
-struct FuseState {
+struct FuseState<'a> {
+    prog: &'a ir::Program,
     start: ir::NodeId,
+    live_ranges: &'a LiveRangeMap,
     workgroup_dimensions: [Option<ir::NodeId>; 3],
     local_size: [u32; 3],
     next_binding: u32,
     /// (shader source, entry point)
-    kernels: Vec<(ShaderModule, String)>,
+    kernels: Vec<(&'a ShaderModule, &'a str)>,
     resources: HashMap<(usize, u32, u32), FusedResource>,
     slots: HashMap<ir::NodeId, SlotState>,
 }
 
-impl FuseState {
-    pub fn new(prog: &ir::Program, start: ir::NodeId, dispatch: DispatchInfo) -> FuseState {
+impl<'a> FuseState<'a> {
+    pub fn new(
+        prog: &'a ir::Program,
+        live_ranges: &'a LiveRangeMap,
+        start: ir::NodeId,
+        dispatch: DispatchInfo,
+    ) -> FuseState<'a> {
         let kernel = prog.native_interface.external_functions[dispatch.id.0]
             .get_gpu_kernel()
             .expect("kernel fusion: not a GPU kernel!");
 
-        let shader_module = match &kernel.shader_module_content {
-            ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
-            ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
-        };
-        let local_size = shader_module.local_size(&kernel.entry_point);
+        let local_size = kernel.shader_module.local_size(&kernel.entry_point);
 
         let mut state = FuseState {
+            prog,
             start,
+            live_ranges,
             workgroup_dimensions: dispatch.workgroup_dimensions,
             local_size,
             next_binding: 0,
@@ -74,7 +83,7 @@ impl FuseState {
         };
 
         // TODO: Shader setup is duplicated here
-        let result = state.fuse(prog, dispatch);
+        let result = state.fuse(dispatch);
         assert!(result);
         return state;
     }
@@ -87,12 +96,15 @@ impl FuseState {
         is_input: bool,
         resource: &ffi::GpuKernelResourceBinding,
     ) {
+        let key = (module_index, resource.group as u32, resource.binding as u32);
+
         let binding = match self.slots.entry(node) {
             Entry::Occupied(mut entry) => {
                 let state = entry.get_mut();
                 assert_eq!(ty, state.ty, "mismatched kernel types");
                 state.input |= is_input;
                 state.output |= !is_input;
+                state.sources.push(key);
                 state.binding
             }
             Entry::Vacant(entry) => {
@@ -103,31 +115,25 @@ impl FuseState {
                     binding,
                     input: is_input,
                     output: !is_input,
+                    sources: vec![key],
                 });
                 binding
             }
         };
-        self.resources.insert(
-            (module_index, resource.group as u32, resource.binding as u32),
-            FusedResource::Binding { group: 0, binding },
-        );
+        self.resources
+            .insert(key, FusedResource::Binding { group: 0, binding });
     }
 
-    pub fn fuse(&mut self, prog: &ir::Program, dispatch: DispatchInfo) -> bool {
+    pub fn fuse(&mut self, dispatch: DispatchInfo) -> bool {
         if self.workgroup_dimensions != dispatch.workgroup_dimensions {
             return false;
         }
 
-        let kernel = prog.native_interface.external_functions[dispatch.id.0]
+        let kernel = self.prog.native_interface.external_functions[dispatch.id.0]
             .get_gpu_kernel()
             .expect("kernel fusion: not a GPU kernel!");
 
-        let shader_module = match &kernel.shader_module_content {
-            ffi::ShaderModuleContent::Wgsl(wgsl) => ShaderModule::from_wgsl(wgsl).unwrap(),
-            ffi::ShaderModuleContent::Glsl(glsl) => ShaderModule::from_glsl(glsl).unwrap(),
-        };
-
-        if self.local_size != shader_module.local_size(&kernel.entry_point) {
+        if self.local_size != kernel.shader_module.local_size(&kernel.entry_point) {
             return false;
         }
 
@@ -160,23 +166,71 @@ impl FuseState {
         // Update the module *if* any dependency chains were involved, or if this is the
         // first module, since otherwise we'd never make any progress.
         if (self.kernels.is_empty() || dependency_chain) {
-            let module = (shader_module, kernel.entry_point.clone());
-            self.kernels.push(module);
+            self.kernels
+                .push((&kernel.shader_module, &kernel.entry_point));
             return true;
         } else {
             return false;
         }
     }
 
+    // TODO: The program arg can be removed once #58 is merged
     pub fn finish(
-        self,
+        mut self,
         end: ir::OperationId,
         funclet_id: ir::FuncletId,
-        ops: &mut Vec<Opportunity>,
+        opportunities: &mut Vec<Opportunity>,
+        elided_temps: &mut HashSet<ir::NodeId>,
     ) {
         if (self.kernels.len() <= 1) {
             // We're not actually fusing anything...
             return;
+        }
+
+        let funclet = &self.prog.funclets[funclet_id];
+
+        let mut inputs = Vec::new();
+        let mut input_types = Vec::new();
+        let mut outputs = Vec::new();
+        let mut output_types = Vec::new();
+        let mut resource_bindings: Vec<GpuKernelResourceBinding> = Vec::new();
+
+        let mut elide_bindings = HashMap::new();
+        // TODO: Correctness of elision logic depends on the assumption that workgroup dimensions
+        // will always be on the local or CPU queue.
+        for (&slot, state) in self.slots.iter() {
+            let mut should_elide = false;
+            if let ir::Node::AllocTemporary {
+                place,
+                storage_type,
+                ..
+            } = funclet.nodes[slot]
+            {
+                let ffi_type = &self.prog.native_interface.types[storage_type.0];
+                let size = ffi_type.estimate_size(&self.prog.native_interface.types);
+
+                // TODO: 64 is an arbitrary size.
+                if (place == ir::Place::Gpu && size <= 64) {
+                    let live_range = self.live_ranges.get(&slot).unwrap();
+                    if self.start <= *live_range.start() && *live_range.end() < end {
+                        should_elide = true;
+                        elided_temps.insert(slot);
+                    }
+                }
+            }
+            for source in state.sources.iter() {
+                let elide_binding = elide_bindings.entry(source).or_insert(true);
+                *elide_binding &= should_elide;
+            }
+        }
+
+        for (key, val) in self.resources.iter_mut() {
+            if *elide_bindings.get(key).unwrap() {
+                if let FusedResource::Binding { group, binding } = *val {
+                    assert_eq!(group, 0);
+                    *val = FusedResource::Global(binding as usize);
+                }
+            }
         }
 
         let sources: Vec<_> = self
@@ -193,16 +247,15 @@ impl FuseState {
         };
         let shader_module = ShaderModule::fuse(desc);
 
-        let mut inputs = Vec::new();
-        let mut input_types = Vec::new();
-        let mut outputs = Vec::new();
-        let mut output_types = Vec::new();
-        let mut resource_bindings: Vec<GpuKernelResourceBinding> = Vec::new();
-
         // Each GPU binding should have at most one input slot and at most one output slot
         // assigned to it. Otherwise we would be merging equivalent inputs or equivalent outputs,
         // which is out-of-scope
         for (&slot, state) in self.slots.iter() {
+            // If this is elided, we'll turn it into a global variable.
+            // We won't even bother adding it to the input/output slots
+            if elided_temps.contains(&slot) {
+                continue;
+            };
             let existing = resource_bindings
                 .iter_mut()
                 .find(|b| b.binding == state.binding as usize);
@@ -238,7 +291,9 @@ impl FuseState {
                 res.output = Some(output_id);
             }
         }
-
+        //dbg!(&elided_temps);
+        //dbg!(&outputs);
+        //dbg!(&inputs);
         let kernel = ffi::GpuKernel {
             // The name doesn't *really* matter, but we can uniquely identify each fused shader
             // by it's scheduling funclet ID and the starting node (fuse sequences are disjoint)
@@ -247,9 +302,9 @@ impl FuseState {
             output_types: output_types.into_boxed_slice(),
             entry_point: "main".to_owned(),
             resource_bindings: resource_bindings.into_boxed_slice(),
-            shader_module_content: ffi::ShaderModuleContent::Wgsl(shader_module.emit_wgsl()),
+            shader_module,
         };
-        ops.push(Opportunity {
+        opportunities.push(Opportunity {
             bounds: self.start..end,
             kernel,
             dimensions: self.workgroup_dimensions,
@@ -296,57 +351,77 @@ impl DispatchInfo {
     }
 }
 
-/// # Panics
-/// Panics if `funclet` is not a scheduling funclet.
-pub fn identify_opportunities(
-    prog: &ir::Program,
-    funclet_id: ir::FuncletId,
-    funclet: &ir::Funclet,
-) -> Vec<Opportunity> {
-    // Nothing goes wrong if we run this on a non-scheduling funclet.
-    // But there is literally zero reason to run this on a non-scheduling funclet, so it's
-    // probably a bug if it ever gets called on one...
-    assert_eq!(ir::FuncletKind::ScheduleExplicit, funclet.kind);
+pub struct FusionInfo {
+    pub opportunities: Vec<Opportunity>,
+    pub elided_temps: HashSet<ir::NodeId>,
+}
 
-    let mut ops = Vec::new();
-    let mut state: Option<FuseState> = None;
+impl FusionInfo {
+    pub fn within_funclet(
+        prog: &ir::Program,
+        funclet_id: ir::FuncletId,
+        funclet: &ir::Funclet,
+        live_ranges: &LiveRangeMap,
+    ) -> Self {
+        // Nothing goes wrong if we run this on a non-scheduling funclet.
+        // But there is literally zero reason to run this on a non-scheduling funclet, so it's
+        // probably a bug if it ever gets called on one...
+        assert_eq!(ir::FuncletKind::ScheduleExplicit, funclet.kind);
 
-    for (id, node) in funclet.nodes.iter().enumerate() {
-        if let ir::Node::None = node {
-            // Always ignore None nodes.
-            continue;
-        }
+        let mut opportunities = Vec::new();
+        let mut elided_temps = HashSet::new();
+        let mut state: Option<FuseState> = None;
 
-        // First: is this even a kernel?
-        if let Some(dispatch) = DispatchInfo::from_node(prog, node) {
-            // Alright, it's a kernel. Are we already fusing?
-            if let Some(fs) = state.as_mut() {
-                // We're already fusing. Can we add this?
-                if fs.fuse(prog, dispatch.clone()) {
-                    // Yes, we can fuse the current node into our existing dispatch!
-                    continue;
+        for (id, node) in funclet.nodes.iter().enumerate() {
+            if let ir::Node::None = node {
+                // Always ignore None nodes.
+                continue;
+            }
+
+            // First: is this even a kernel?
+            if let Some(dispatch) = DispatchInfo::from_node(prog, node) {
+                // Alright, it's a kernel. Are we already fusing?
+                if let Some(fs) = state.as_mut() {
+                    // We're already fusing. Can we add this?
+                    if fs.fuse(dispatch.clone()) {
+                        // Yes, we can fuse the current node into our existing dispatch!
+                        continue;
+                    } else {
+                        // Nope, the current node is incompatible for one reason or another.
+                        // Finish our existing fusion sequence and restart
+                        state.take().unwrap().finish(
+                            id,
+                            funclet_id,
+                            &mut opportunities,
+                            &mut elided_temps,
+                        );
+                        state = Some(FuseState::new(prog, live_ranges, id, dispatch));
+                    }
                 } else {
-                    // Nope, the current node is incompatible for one reason or another.
-                    // Finish our existing fusion sequence and restart
-                    state.take().unwrap().finish(id, funclet_id, &mut ops);
-                    state = Some(FuseState::new(prog, id, dispatch));
+                    // Ok, we're not already fusing. Let's start!
+                    state = Some(FuseState::new(prog, live_ranges, id, dispatch));
                 }
             } else {
-                // Ok, we're not already fusing. Let's start!
-                state = Some(FuseState::new(prog, id, dispatch));
-            }
-        } else {
-            // Alright, it's not a kernel. If we were in the middle of fusing, finish the job.
-            if let Some(fs) = state.take() {
-                fs.finish(id, funclet_id, &mut ops);
+                // Alright, it's not a kernel. If we were in the middle of fusing, finish the job.
+                if let Some(fs) = state.take() {
+                    fs.finish(id, funclet_id, &mut opportunities, &mut elided_temps);
+                }
             }
         }
-    }
 
-    // Handle a fusion sequence which runs right off the end of the funclet
-    if let Some(fs) = state.take() {
-        fs.finish(funclet.nodes.len(), funclet_id, &mut ops);
-    }
+        // Handle a fusion sequence which runs right off the end of the funclet
+        if let Some(fs) = state.take() {
+            fs.finish(
+                funclet.nodes.len(),
+                funclet_id,
+                &mut opportunities,
+                &mut elided_temps,
+            );
+        }
 
-    return ops;
+        return Self {
+            opportunities,
+            elided_temps,
+        };
+    }
 }
