@@ -166,16 +166,6 @@ impl Context {
                     self.funclet_indices
                         .insert(f.header.name.0.clone(), FuncletLocation::Local);
                     let mut node_table = NodeTable::new();
-                    for arg in &f.header.args {
-                        // duplicate work with adding the phi nodes, but probably ok?
-                        // we don't want to own the program here, so here we are
-                        match &arg.name {
-                            None => {}
-                            Some(name) => {
-                                node_table.local.push(name.clone());
-                            }
-                        }
-                    }
                     for command in &f.commands {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
