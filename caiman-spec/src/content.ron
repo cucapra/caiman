@@ -127,7 +127,27 @@
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
 			has_local_side_effect : true
 		),
-
+		(
+			name : "LocalRead",
+			inputs : [
+				(name : "storage_type", kind : StorageType),
+				(name : "source", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "LocalWrite",
+			inputs : [
+				(name : "storage_type", kind : StorageType),
+				(name : "destination", kind : Operation),
+				(name : "source", kind : Operation),
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
 		(
 			// Executes a function and returns the result
 			name : "LocalDoBuiltin",

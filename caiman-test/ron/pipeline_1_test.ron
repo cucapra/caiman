@@ -124,7 +124,7 @@
 			11 : (
 				kind : ScheduleExplicit,
 				input_types : [1],
-				output_types : [1],
+				output_types : [0],
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(0),
@@ -159,8 +159,9 @@
 					Submit(encoder : 6, event : Node(funclet_id : 15, node_id : 4)),
 					SyncFence(fence : 11, event : Node(funclet_id : 15, node_id : 5)),
 					LocalCopy(input : 8, output : 10),
+					LocalRead(source: 10, storage_type: 0),
 				],
-				tail_edge : Return(return_values : [10])
+				tail_edge : Return(return_values : [14])
 			),
 
 			15 : (

@@ -404,6 +404,30 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
+	pub fn check_node_is_current_with_implicit(&self, node_id : ir::NodeId) -> Result<(), Error> {
+		self.check_node_tag(node_id, self.current_implicit_tag)
+	}
+
+	pub fn check_node_is_readable_at_implicit(&self, node_id : ir::NodeId) -> Result<(), Error> {
+		let scalar = self.scalar_nodes.get(& node_id).unwrap();
+		if ! scalar.flow.is_readable() {
+			return Err(Error::Generic{message: format!("Node is not readable")})
+		}
+		let tag = ir::Tag{quot: self.current_implicit_tag.quot, flow: scalar.flow};
+		//assert_eq!(*scalar, tag);
+		check_tag_compatibility_interior(
+			self.spec_funclet,
+			*scalar,
+			tag,
+		).map_err(|e| e.append_message(format!("While checking that node #{} has tag {:?}", node_id, tag)))?;
+
+		return Ok(());
+	}
+
+	pub fn update_node_current_with_implicit(&mut self, node_id : ir::NodeId) {
+		self.update_scalar_node(node_id, self.current_implicit_tag.quot, self.current_implicit_tag.flow)
+	}
+
 	pub fn check_join_tags(&self, node_id : ir::NodeId, input_tags : &[ir::Tag], implicit_in_tag : ir::Tag) -> Result<(), Error> {
 		let join = self.join_nodes.get(& node_id).unwrap();
 		//assert_eq!(*scalar, tag);
@@ -652,6 +676,7 @@ fn check_tag_compatibility_interior(
 	let flow = source_tag.flow;
 
     match (source_tag.quot, destination_tag.quot) {
+        (ir::Quotient::None, ir::Quotient::None) => (),
         (_, ir::Quotient::None) if flow.is_droppable() => (),
         (ir::Quotient::None, _) if flow.is_duplicable() => (),
 		// Input and the first few nodes are equivalent

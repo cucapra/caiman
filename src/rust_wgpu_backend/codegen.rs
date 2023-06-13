@@ -404,6 +404,9 @@ impl<'program> CodeGen<'program> {
 
         let typ = &self.program.types[type_id];
         let ffi_type_id = match typ {
+            ir::Type::NativeValue{storage_type} => {
+                *storage_type
+            }
             ir::Type::Slot {
                 storage_type,
                 //queue_stage: _,
@@ -1622,6 +1625,38 @@ impl<'program> CodeGen<'program> {
 
                     let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
                     let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
+                    /*let mut output_slot_ids = Vec::<SlotId>::new();
+                    let mut outputs = Vec::<ir::NodeId>::new();
+
+                    let (output_count, storage_type) = match encoded_node {
+                        ir::Node::Constant{type_id, ..} => {
+                            let ir::Type::NativeValue{storage_type} = &self.program.types[*type_id] else { panic!("Must be native value") };
+                            (1, *storage_type)
+                        }
+                        ir::Node::Select{true_case, ..} => {
+                            (1, funclet_scoped_state.get_node_result(inputs[1]).unwrap().storage_type().unwrap())
+                        }
+                        _ => panic!("Unsupported")
+                    };
+
+                    for index in 0 .. output_count {
+                        let output_impl_node_id = current_node_id + 1 + index;
+                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
+                            *storage_type,
+                            ir::Place::Local,
+                            //ir::ResourceQueueStage::Bound,
+                        );
+                        funclet_scoped_state.node_results.insert(
+                            output_impl_node_id,
+                            NodeResult::Slot {
+                                slot_id,
+                                queue_place: ir::Place::Local,
+                                storage_type: *storage_type,
+                            },
+                        );
+                        outputs.push(output_impl_node_id);
+                        output_slot_ids.push(slot_id);
+                    }*/
 
                     self.encode_do_node_local_builtin(
                         placement_state,
@@ -1646,6 +1681,27 @@ impl<'program> CodeGen<'program> {
 
                     let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
                     let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
+                    /*let mut outputs = Vec::<ir::NodeId>::new();
+
+                    let external_function = & self.program.native_interface.external_functions[external_function_id.0];
+                    let mut output_slot_ids = Vec::<SlotId>::new();
+                    for (output_index, output_type_id) in external_function.get_output_types().unwrap().iter().enumerate() {
+                        let output_impl_node_id = current_node_id + 1 + output_index;
+                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
+                            *output_type_id,
+                            ir::Place::Local,
+                        );
+                        funclet_scoped_state.node_results.insert(
+                            output_impl_node_id,
+                            NodeResult::Slot {
+                                slot_id,
+                                queue_place: ir::Place::Local,
+                                storage_type: *output_type_id,
+                            },
+                        );
+                        outputs.push(output_impl_node_id);
+                        output_slot_ids.push(slot_id);
+                    }*/
 
                     self.encode_do_node_local_external(
                         placement_state,
@@ -1777,6 +1833,82 @@ impl<'program> CodeGen<'program> {
                         }
                         _ => panic!("Unimplemented"),
                     }
+                }
+                ir::Node::LocalRead {
+                    source,
+                    storage_type,
+                } => {
+                    let src_slot_id = funclet_scoped_state.get_node_slot_id(*source).unwrap();
+
+                    let (src_slot_id, src_place) = if let Some(NodeResult::Slot {
+                        slot_id,
+                        queue_place,
+                        ..
+                    }) =
+                        funclet_scoped_state.get_node_result(*source)
+                    {
+                        (*slot_id, *queue_place)
+                    } else {
+                        panic!("Not a slot")
+                    };
+
+                    let slot_id = placement_state.scheduling_state.insert_hacked_slot(
+                        *storage_type,
+                        ir::Place::Local,
+                    );
+                    funclet_scoped_state.node_results.insert(
+                        current_node_id,
+                        NodeResult::Slot {
+                            slot_id,
+                            queue_place: ir::Place::Local,
+                            storage_type: *storage_type,
+                        },
+                    );
+
+                    let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+                    placement_state.update_slot_state(
+                        slot_id,
+                        src_var_id,
+                    );
+                }
+                ir::Node::LocalWrite {
+                    destination,
+                    storage_type,
+                    source
+                } => {
+                    let src_slot_id = funclet_scoped_state.get_node_slot_id(*source).unwrap();
+                    let dst_slot_id = funclet_scoped_state.get_node_slot_id(*destination).unwrap();
+
+                    let (src_slot_id, src_place) = if let Some(NodeResult::Slot {
+                        slot_id,
+                        queue_place,
+                        ..
+                    }) =
+                        funclet_scoped_state.get_node_result(*source)
+                    {
+                        (*slot_id, *queue_place)
+                    } else {
+                        panic!("Not a slot")
+                    };
+
+                    let (dst_slot_id, dst_place) = if let Some(NodeResult::Slot {
+                        slot_id,
+                        queue_place,
+                        ..
+                    }) =
+                        funclet_scoped_state.get_node_result(*destination)
+                    {
+                        (*slot_id, *queue_place)
+                    } else {
+                        panic!("Not a slot")
+                    };
+
+                    let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
+                    placement_state.update_slot_state(
+                        dst_slot_id,
+                        //ir::ResourceQueueStage::Ready,
+                        src_var_id,
+                    );
                 }
                 ir::Node::BeginEncoding {
                     place,

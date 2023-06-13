@@ -201,13 +201,6 @@ pub enum Type {
         storage_type: ffi::TypeId,
         queue_place: Place,
     },
-    /*SchedulingJoin {
-        input_types : Box<[TypeId]>,
-        value_funclet_id : FuncletId,
-        input_slots : HashMap<usize, SlotInfo>,
-        input_fences : HashMap<usize, FenceInfo>,
-        in_timeline_tag : TimelineTag,
-    },*/
     Fence {
         queue_place: Place,
     },

@@ -5,9 +5,13 @@ use super::spec_checker::*;
 use super::error::Error;
 
 #[derive(Debug)]
+struct LocalVar {
+    storage_type: ir::ffi::TypeId,
+}
+
+#[derive(Debug)]
 struct Slot {
     storage_type: ir::ffi::TypeId,
-    //queue_stage: ir::ResourceQueueStage,
     queue_place: ir::Place,
 }
 
@@ -42,6 +46,7 @@ struct Buffer {
 
 #[derive(Debug)]
 enum NodeType {
+    LocalVar(LocalVar),
     Slot(Slot),
     Encoder(Encoder),
     Fence(Fence),
@@ -52,6 +57,7 @@ enum NodeType {
 impl NodeType {
     fn storage_type(&self) -> Option<ir::ffi::TypeId> {
         match self {
+            NodeType::LocalVar(var) => Some(var.storage_type),
             NodeType::Slot(slot) => Some(slot.storage_type),
             NodeType::Encoder(_) => None,
             NodeType::Fence(_) => None,
@@ -63,6 +69,16 @@ impl NodeType {
 
 fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeType) {
     match &program.types[type_id] {
+        ir::Type::NativeValue{storage_type: storage_type_1} => {
+            if let NodeType::LocalVar(LocalVar {
+                storage_type: storage_type_2,
+            }) = node_type
+            {
+                assert_eq!(*storage_type_1, *storage_type_2);
+            } else {
+                panic!("type id is a native value type, but node is not a local variable");
+            }
+        }
         ir::Type::Slot {
             storage_type: storage_type_2,
             //queue_stage: queue_stage_2,
@@ -465,20 +481,15 @@ impl<'program> FuncletChecker<'program> {
                 // Has no value and can only be overwritten
                 self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::None);
                 // Can be used in encoding
-                self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
-                let spatial_flow = match *place {
-                    // Can be implicitly copied out of creating scope
-                    ir::Place::Local => ir::Flow::Have,
-                    // Can't escape creating scope
-                    ir::Place::Gpu => ir::Flow::Met,
-                    ir::Place::Cpu => ir::Flow::Met,
-                };
-                self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, spatial_flow);
+                self.timeline_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(current_node_id);
+                // Borrowed against the current space and needs to be released before returning
+                let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
+                assert_eq!(spatial_spec_checker.current_implicit_tag.flow, ir::Flow::Have);
+                spatial_spec_checker.update_scalar_node(current_node_id, spatial_spec_checker.current_implicit_tag.quot, ir::Flow::Met);
                 self.node_types.insert(
                     current_node_id,
                     NodeType::Slot(Slot {
                         storage_type: *storage_type,
-                        //queue_stage: ir::ResourceQueueStage::Bound,
                         queue_place: *place,
                     }),
                 );
@@ -498,6 +509,31 @@ impl<'program> FuncletChecker<'program> {
                 inputs,
                 outputs,
             } => {
+                let encoded_node = & self.value_spec_checker_opt.as_ref().unwrap().spec_funclet.nodes[*operation_node_id];
+                /*let (output_count, storage_type) = match encoded_node {
+                    ir::Node::Constant{type_id, ..} => {
+                        let ir::Type::NativeValue{storage_type} = &self.program.types[type_id] else { panic!("Must be native value") };
+                        (1, *storage_type)
+                    }
+                    ir::Node::Select{true_case, ..} => {
+                        (1, self.node_types[& inputs[1]].storage_type().unwrap())
+                    }
+                    _ => panic!("Unsupported")
+                };
+                let mut outputs = Vec::<ir::NodeId>::new();
+                for output_index in 0 .. output_count {
+                    let output_impl_node_id = current_node_id + 1 + output_index;
+                    self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::None);
+                    self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::None);
+                    self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.node_types.insert(
+                        output_impl_node_id,
+                        NodeType::LocalVar(LocalVar {
+                            storage_type,
+                        }),
+                    );
+                    outputs.push(output_impl_node_id);
+                }*/
                 advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), *operation_node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
 
                 // To do: Check timeline and spatial
@@ -508,6 +544,22 @@ impl<'program> FuncletChecker<'program> {
                 inputs,
                 outputs,
             } => {
+                /*let external_function = & self.program.native_interface.external_functions[external_function_id.0];
+                assert_eq!(external_function.get_input_types().map(|x| x.len()), Some(inputs.len()));
+                let mut outputs = Vec::<ir::NodeId>::new();
+                for (output_index, output_type_id) in external_function.get_output_types().unwrap().iter().enumerate() {
+                    let output_impl_node_id = current_node_id + 1 + output_index;
+                    self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::None);
+                    self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::None);
+                    self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.node_types.insert(
+                        output_impl_node_id,
+                        NodeType::LocalVar(LocalVar {
+                            storage_type: *output_type_id,
+                        }),
+                    );
+                    outputs.push(output_impl_node_id);
+                }*/
                 advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), *operation_node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
                 // To do: Check timeline and spatial
 
@@ -707,6 +759,49 @@ impl<'program> FuncletChecker<'program> {
                 }
 
                 self.check_do_output(operation, encoded_funclet, encoded_node, outputs);*/
+            }
+            ir::Node::LocalRead {
+                source,
+                storage_type
+            } => {
+                let NodeType::Slot(Slot{queue_place, ..}) = &self.node_types[source] else { panic!("Must be a slot") };
+                assert_eq!(*queue_place, ir::Place::Local);
+
+                // Input
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_node_is_readable_at_implicit(*source)?;
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_node_is_readable_at_implicit(*source)?;
+                
+                // Output
+                advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *source, current_node_id).map_err(|e| self.contextualize_error(e))?;
+                self.timeline_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(current_node_id);
+                self.spatial_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(current_node_id);
+
+                self.node_types.insert(
+                    current_node_id,
+                    NodeType::LocalVar(LocalVar {
+                        storage_type: *storage_type,
+                    }),
+                );
+            }
+            ir::Node::LocalWrite {
+                destination,
+                storage_type,
+                source
+            } => {
+                let NodeType::LocalVar(LocalVar{..}) = &self.node_types[source] else { panic!("Must be a local var") };
+                let NodeType::Slot(Slot{queue_place, ..}) = &self.node_types[destination] else { panic!("Must be a slot") };
+                assert_eq!(*queue_place, ir::Place::Local);
+
+                // Input
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_node_is_current_with_implicit(*source)?;
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_node_is_current_with_implicit(*source)?;
+
+                // Output
+                advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), *source, *destination).map_err(|e| self.contextualize_error(e))?;
+                self.timeline_spec_checker_opt.as_mut().unwrap().check_node_is_current_with_implicit(*destination)?;
+                self.spatial_spec_checker_opt.as_mut().unwrap().check_node_is_current_with_implicit(*destination)?;
+                self.timeline_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(*destination);
+                self.spatial_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(*destination);
             }
             ir::Node::LocalCopy {
                 input,

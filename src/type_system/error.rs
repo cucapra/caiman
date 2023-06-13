@@ -23,3 +23,14 @@ impl Error
 		}
 	}
 }
+
+pub struct ErrorContext<'scope> {
+	parent_opt : Option<&'scope Self>,
+	contextualize_cb_opt : Option<&'scope dyn Fn(Error) -> Error>
+}
+
+impl<'scope> ErrorContext<'scope> {
+	fn new(parent_opt : Option<&'scope Self>, contextualize_cb_opt : Option<&'scope dyn Fn(Error) -> Error>) -> Self {
+		Self {parent_opt, contextualize_cb_opt}
+	}
+}

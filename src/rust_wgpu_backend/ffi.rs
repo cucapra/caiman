@@ -227,6 +227,24 @@ impl ExternalFunction {
             None
         }
     }
+
+    pub fn get_input_types(&self) -> Option<&[TypeId]> {
+        let types = match self {
+            Self::CpuEffectfulOperation(op) => & op.input_types,
+            Self::CpuPureOperation(op) => & op.input_types,
+            Self::GpuKernel(kernel) => & kernel.input_types,
+        };
+        Some(types)
+    }
+
+    pub fn get_output_types(&self) -> Option<&[TypeId]> {
+        let types = match self {
+            Self::CpuEffectfulOperation(op) => & op.output_types,
+            Self::CpuPureOperation(op) => & op.output_types,
+            Self::GpuKernel(kernel) => & kernel.output_types,
+        };
+        Some(types)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
