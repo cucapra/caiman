@@ -26,11 +26,11 @@ impl Error
 
 pub struct ErrorContext<'scope> {
 	parent_opt : Option<&'scope Self>,
-	contextualize_cb_opt : Option<&'scope dyn Fn(Error) -> Error>
+	contextualize_cb_opt : Option<&'scope dyn Fn(&mut dyn std::fmt::Write) -> Result<(), std::fmt::Error>>
 }
 
 impl<'scope> ErrorContext<'scope> {
-	fn new(parent_opt : Option<&'scope Self>, contextualize_cb_opt : Option<&'scope dyn Fn(Error) -> Error>) -> Self {
+	pub fn new(parent_opt : Option<&'scope Self>, contextualize_cb_opt : Option<&'scope dyn Fn(&mut dyn std::fmt::Write) -> Result<(), std::fmt::Error>>) -> Self {
 		Self {parent_opt, contextualize_cb_opt}
 	}
 }

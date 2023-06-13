@@ -123,7 +123,7 @@
 
 			11 : (
 				kind : ScheduleExplicit,
-				input_types : [1],
+				input_types : [0],
 				output_types : [0],
 				spec_binding : ScheduleExplicit(
 					value : (
@@ -138,8 +138,8 @@
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
+						input_tags : [(quot: Input(index : 0), flow: Have)],
+						output_tags : [(quot: Output(index : 0), flow: Have)],
 						implicit_in_tag : (quot: Input(index : 0), flow: Have),
 						implicit_out_tag : (quot: Output(index : 0), flow: Have)
 					)
@@ -151,14 +151,14 @@
 					AllocTemporary(place : Local, storage_type : 0),
 					LocalDoExternal(operation : Node(funclet_id : 0, node_id : 2), external_function_id : 2, inputs : [0], outputs : [3]),
 					AllocTemporary(place : Gpu, storage_type : 0),
-					BeginEncoding(place : Gpu, event: Node(funclet_id : 15, node_id : 1), encoded: [5]),
-					EncodeCopy(encoder : 6, input : 3, output : 5),
 					AllocTemporary(place : Gpu, storage_type : 0),
-					EncodeDoExternal(encoder : 6, operation : Node(funclet_id : 0, node_id : 4), external_function_id : 0, inputs : [1, 1, 1, 5], outputs : [8]),
+					BeginEncoding(place : Gpu, event: Node(funclet_id : 15, node_id : 1), encoded: [5, 6]),
+					EncodeCopy(encoder : 7, input : 3, output : 5),
+					EncodeDoExternal(encoder : 7, operation : Node(funclet_id : 0, node_id : 4), external_function_id : 0, inputs : [1, 1, 1, 5], outputs : [6]),
 					AllocTemporary(place : Local, storage_type : 0),
-					Submit(encoder : 6, event : Node(funclet_id : 15, node_id : 4)),
+					Submit(encoder : 7, event : Node(funclet_id : 15, node_id : 4)),
 					SyncFence(fence : 11, event : Node(funclet_id : 15, node_id : 5)),
-					LocalCopy(input : 8, output : 10),
+					LocalCopy(input : 6, output : 10),
 					LocalRead(source: 10, storage_type: 0),
 				],
 				tail_edge : Return(return_values : [14])

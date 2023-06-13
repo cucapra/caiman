@@ -962,6 +962,22 @@ impl<'program> CodeGen<'program> {
                 use ir::Type;
 
                 match &self.program.types[*input_type_id] {
+                    ir::Type::NativeValue {
+                        storage_type
+                    } => {
+                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
+                            *storage_type,
+                            ir::Place::Local,
+                        );
+                        placement_state
+                            .slot_variable_ids
+                            .insert(slot_id, argument_variable_ids[index]);
+                        argument_node_results.push(NodeResult::Slot {
+                            slot_id,
+                            queue_place: ir::Place::Local,
+                            storage_type: *storage_type,
+                        });
+                    }
                     ir::Type::Slot {
                         storage_type,
                         //queue_stage,
@@ -1529,6 +1545,8 @@ impl<'program> CodeGen<'program> {
         }
 
         for (current_node_id, node) in funclet.nodes.iter().enumerate() {
+            let node_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While compiling node #{}: {:?}", current_node_id, node) };
+            let node_error_context = type_system::error::ErrorContext::new(None, Some(& node_error_contextualizer ));
             self.code_generator
                 .insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
 
@@ -1539,7 +1557,7 @@ impl<'program> CodeGen<'program> {
                 );
             }
 
-            funclet_checker.check_next_node(current_node_id).expect("");
+            funclet_checker.check_next_node(&node_error_context, current_node_id).expect("");
 
             match node {
                 ir::Node::None => (),
@@ -2224,7 +2242,8 @@ impl<'program> CodeGen<'program> {
             );
         }
 
-        funclet_checker.check_tail_edge().expect("");
+        let tail_error_context = type_system::error::ErrorContext::new(None, Some(& |writer| write!(writer, "While compiling tail edge") ));
+        funclet_checker.check_tail_edge(& tail_error_context).expect("");
 
         self.code_generator
             .insert_comment(format!(" tail edge: {:?}", funclet.tail_edge).as_str());

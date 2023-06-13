@@ -128,7 +128,7 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "LocalRead",
+			name : "LocalRead", // ReadRef
 			inputs : [
 				(name : "storage_type", kind : StorageType),
 				(name : "source", kind : Operation),
@@ -138,7 +138,18 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "LocalWrite",
+			// Produces a ref with a met flow from a local variable
+			name : "BorrowRef",
+			inputs : [
+				(name : "storage_type", kind : StorageType),
+				(name : "source", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "LocalWrite", // WriteRef
 			inputs : [
 				(name : "storage_type", kind : StorageType),
 				(name : "destination", kind : Operation),
@@ -211,6 +222,7 @@
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
+		// To do: BeginEncoding with submitted resources
 		(
 			// Encodes a computation of the given operation to the queue for the given place
 			name : "EncodeDoExternal",

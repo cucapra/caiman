@@ -424,6 +424,23 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
+	pub fn check_node_is_readable_at(&self, node_id : ir::NodeId, reader_tag : ir::Tag) -> Result<(), Error> {
+		let scalar = self.scalar_nodes.get(& node_id).unwrap();
+		if ! scalar.flow.is_readable() {
+			return Err(Error::Generic{message: format!("Node is not readable")})
+		}
+		assert_eq!(reader_tag.flow, ir::Flow::Have);
+		let tag = ir::Tag{quot: reader_tag.quot, flow: scalar.flow};
+		//assert_eq!(*scalar, tag);
+		check_tag_compatibility_interior(
+			self.spec_funclet,
+			*scalar,
+			tag,
+		).map_err(|e| e.append_message(format!("While checking that node #{} has tag {:?}", node_id, tag)))?;
+
+		return Ok(());
+	}
+
 	pub fn update_node_current_with_implicit(&mut self, node_id : ir::NodeId) {
 		self.update_scalar_node(node_id, self.current_implicit_tag.quot, self.current_implicit_tag.flow)
 	}
@@ -680,22 +697,22 @@ fn check_tag_compatibility_interior(
         (_, ir::Quotient::None) if flow.is_droppable() => (),
         (ir::Quotient::None, _) if flow.is_duplicable() => (),
 		// Input and the first few nodes are equivalent
-        ( ir::Quotient::Input { index }, ir::Quotient::Node { node_id: remote_node_id } ) => {
+        ( ir::Quotient::Input { index }, ir::Quotient::Node { node_id: remote_node_id } ) if flow == ir::Flow::Have => {
             if let ir::Node::Phi { index: phi_index } =
                 &current_value_funclet.nodes[remote_node_id]
             {
                 assert_eq!(*phi_index, index);
             } else {
-                panic!("Not a phi");
+                panic!("While checking interior compatibility of {:?} to {:?}: {:?} is not a phi", source_tag, destination_tag, current_value_funclet.nodes[remote_node_id]);
             }
         }
-        ( ir::Quotient::Node { node_id: remote_node_id }, ir::Quotient::Input { index } ) => {
+        ( ir::Quotient::Node { node_id: remote_node_id }, ir::Quotient::Input { index } ) if flow == ir::Flow::Need => {
             if let ir::Node::Phi { index: phi_index } =
                 &current_value_funclet.nodes[remote_node_id]
             {
                 assert_eq!(*phi_index, index);
             } else {
-                panic!("Not a phi");
+                panic!("While checking interior compatibility of {:?} to {:?}: {:?} is not a phi", source_tag, destination_tag, current_value_funclet.nodes[remote_node_id]);
             }
         }
         (ir::Quotient::Node { node_id }, ir::Quotient::Node { node_id: node_id_2 }) => {
