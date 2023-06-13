@@ -303,6 +303,10 @@ impl<'program> FuncletSpecChecker<'program> {
 		match operation {
 			ir::Quotient::Node{node_id} => {
 				if let ir::Node::CallFunctionClass{function_id, arguments} = &self.spec_funclet.nodes[node_id] {
+					match & self.spec_funclet.spec_binding {
+						ir::FuncletSpecBinding::Value{value_function_id_opt: Some(value_function_id)} if *value_function_id == *function_id => {},
+						_ => panic!("Spec funclet does not implement function class #{}", *function_id)
+					}
 					self.check_vertical_call(continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec, arguments, node_id)
 				}
 				else {
