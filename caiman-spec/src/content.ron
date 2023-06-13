@@ -128,7 +128,7 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "LocalRead", // ReadRef
+			name : "ReadRef",
 			inputs : [
 				(name : "storage_type", kind : StorageType),
 				(name : "source", kind : Operation),
@@ -149,7 +149,7 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "LocalWrite", // WriteRef
+			name : "WriteRef",
 			inputs : [
 				(name : "storage_type", kind : StorageType),
 				(name : "destination", kind : Operation),

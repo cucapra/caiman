@@ -191,15 +191,16 @@ pub struct StaticBufferLayout {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type {
+    // Common
     NativeValue {
         storage_type: StorageTypeId,
     },
     //Integer { signed : bool, width : usize },
 
-    // Scheduling
-    Slot {
+    // Scheduling only
+    Ref {
         storage_type: ffi::TypeId,
-        queue_place: Place,
+        storage_place: Place,
     },
     Fence {
         queue_place: Place,
@@ -212,12 +213,10 @@ pub enum Type {
         queue_place: Place,
     },
 
-    // Timeline
-    Event {
-        place: Place,
-    },
+    // Timeline only
+    Event,
 
-    // Space
+    // Space only
     BufferSpace,
 }
 

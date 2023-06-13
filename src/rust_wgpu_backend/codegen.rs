@@ -407,26 +407,26 @@ impl<'program> CodeGen<'program> {
             ir::Type::NativeValue{storage_type} => {
                 *storage_type
             }
-            ir::Type::Slot {
+            ir::Type::Ref {
                 storage_type,
                 //queue_stage: _,
-                queue_place: ir::Place::Cpu,
+                storage_place: ir::Place::Cpu,
             } => {
                 // todo DG: this is probably insufficient
                 *storage_type
             }
-            ir::Type::Slot {
+            ir::Type::Ref {
                 storage_type,
                 //queue_stage: _,
-                queue_place: ir::Place::Local,
+                storage_place: ir::Place::Local,
             } => {
                 // Should eventually be a MutRef
                 *storage_type
             }
-            ir::Type::Slot {
+            ir::Type::Ref {
                 storage_type,
                 //queue_stage: _,
-                queue_place: ir::Place::Gpu,
+                storage_place: ir::Place::Gpu,
             } => {
                 match &self.program.native_interface.types[storage_type.0] {
                     ir::ffi::Type::ErasedLengthArray { element_type } => self
@@ -978,14 +978,14 @@ impl<'program> CodeGen<'program> {
                             storage_type: *storage_type,
                         });
                     }
-                    ir::Type::Slot {
+                    ir::Type::Ref {
                         storage_type,
                         //queue_stage,
-                        queue_place,
+                        storage_place,
                     } => {
                         let slot_id = placement_state.scheduling_state.insert_hacked_slot(
                             *storage_type,
-                            *queue_place,
+                            *storage_place,
                             //*queue_stage,
                         );
                         placement_state
@@ -993,7 +993,7 @@ impl<'program> CodeGen<'program> {
                             .insert(slot_id, argument_variable_ids[index]);
                         argument_node_results.push(NodeResult::Slot {
                             slot_id,
-                            queue_place: *queue_place,
+                            queue_place: *storage_place,
                             storage_type: *storage_type,
                         });
                     }
@@ -1206,26 +1206,25 @@ impl<'program> CodeGen<'program> {
                                     true_funclet.output_types.iter().enumerate()
                                 {
                                     // Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
-                                    let (storage_type, /*queue_stage,*/ queue_place) =
-                                        if let ir::Type::Slot {
+                                    let (storage_type, storage_place) =
+                                        if let ir::Type::Ref {
                                             storage_type,
-                                            //queue_stage,
-                                            queue_place,
+                                            storage_place,
                                         } = &self.program.types[*output_type]
                                         {
-                                            (*storage_type, /**queue_stage,*/ *queue_place)
+                                            (*storage_type, *storage_place)
                                         } else {
                                             panic!("Not a slot")
                                         };
                                     let slot_id = placement_state
                                         .scheduling_state
-                                        .insert_hacked_slot(storage_type, queue_place/*, queue_stage*/);
+                                        .insert_hacked_slot(storage_type, storage_place);
                                     placement_state
                                         .slot_variable_ids
                                         .insert(slot_id, output_var_ids[output_index]);
                                     output_node_results.push(NodeResult::Slot {
                                         slot_id,
-                                        queue_place,
+                                        queue_place: storage_place,
                                         storage_type,
                                     });
                                 }
@@ -1328,9 +1327,8 @@ impl<'program> CodeGen<'program> {
                                     let node_result = match &self.program.types[success_funclet
                                         .input_types[argument_node_results.len() + index]]
                                     {
-                                        ir::Type::Slot {
-                                            //queue_stage,
-                                            queue_place,
+                                        ir::Type::Ref {
+                                            storage_place,
                                             storage_type,
                                         } => {
                                             //
@@ -1354,14 +1352,14 @@ impl<'program> CodeGen<'program> {
                                                 .scheduling_state
                                                 .insert_hacked_slot(
                                                     *storage_type,
-                                                    *queue_place,
+                                                    *storage_place,
                                                     //*queue_stage,
                                                 );
                                             placement_state
                                                 .slot_variable_ids
                                                 .insert(slot_id, var_id);
                                             NodeResult::Slot {
-                                                queue_place: *queue_place,
+                                                queue_place: *storage_place,
                                                 storage_type: *storage_type,
                                                 slot_id,
                                             }
@@ -1383,16 +1381,16 @@ impl<'program> CodeGen<'program> {
                                     success_funclet.output_types.iter().enumerate()
                                 {
                                     match &self.program.types[*output_type] {
-                                        ir::Type::Slot {
+                                        ir::Type::Ref {
                                             storage_type,
                                             //queue_stage,
-                                            queue_place,
+                                            storage_place,
                                         } => {
                                             let slot_id = placement_state
                                                 .scheduling_state
                                                 .insert_hacked_slot(
                                                     *storage_type,
-                                                    *queue_place,
+                                                    *storage_place,
                                                     //*queue_stage,
                                                 );
                                             placement_state
@@ -1400,7 +1398,7 @@ impl<'program> CodeGen<'program> {
                                                 .insert(slot_id, output_var_ids[output_index]);
                                             output_node_results.push(NodeResult::Slot {
                                                 slot_id,
-                                                queue_place: *queue_place,
+                                                queue_place: *storage_place,
                                                 storage_type: *storage_type,
                                             });
                                         }
@@ -1852,7 +1850,7 @@ impl<'program> CodeGen<'program> {
                         _ => panic!("Unimplemented"),
                     }
                 }
-                ir::Node::LocalRead {
+                ir::Node::ReadRef {
                     source,
                     storage_type,
                 } => {
@@ -1889,7 +1887,7 @@ impl<'program> CodeGen<'program> {
                         src_var_id,
                     );
                 }
-                ir::Node::LocalWrite {
+                ir::Node::WriteRef {
                     destination,
                     storage_type,
                     source

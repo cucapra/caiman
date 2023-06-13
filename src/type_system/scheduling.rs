@@ -79,10 +79,10 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
                 panic!("type id is a native value type, but node is not a local variable");
             }
         }
-        ir::Type::Slot {
+        ir::Type::Ref {
             storage_type: storage_type_2,
             //queue_stage: queue_stage_2,
-            queue_place: queue_place_2,
+            storage_place: queue_place_2,
         } => {
             if let NodeType::Slot(Slot {
                 storage_type,
@@ -296,14 +296,14 @@ impl<'program> FuncletChecker<'program> {
                         storage_type: *storage_type,
                     })
                 }
-                ir::Type::Slot {
+                ir::Type::Ref {
                     storage_type,
                     //queue_stage,
-                    queue_place,
+                    storage_place,
                 } => NodeType::Slot(Slot {
                     storage_type: *storage_type,
                     //queue_stage: *queue_stage,
-                    queue_place: *queue_place,
+                    queue_place: *storage_place,
                 }),
                 ir::Type::Fence { queue_place } => NodeType::Fence(Fence {
                     queue_place: *queue_place,
@@ -694,7 +694,7 @@ impl<'program> FuncletChecker<'program> {
 
                 advance_forward_value_do(self.value_spec_checker_opt.as_mut().unwrap(), *operation_node_id, inputs, outputs).map_err(|e| self.contextualize_error(e))?;
             }
-            ir::Node::LocalRead {
+            ir::Node::ReadRef {
                 source,
                 storage_type
             } => {
@@ -717,7 +717,7 @@ impl<'program> FuncletChecker<'program> {
                     }),
                 );
             }
-            ir::Node::LocalWrite {
+            ir::Node::WriteRef {
                 destination,
                 storage_type,
                 source
