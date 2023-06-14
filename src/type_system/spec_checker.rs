@@ -136,14 +136,18 @@ impl<'program> FuncletSpecChecker<'program> {
         for (capture_index, capture_node_id) in capture_node_ids.iter().enumerate() {
             let scalar = & self.scalar_nodes[capture_node_id];
 			
-			assert_eq!(scalar.flow, ir::Flow::Have);
-			assert_eq!(funclet_spec.input_tags[capture_index].flow, ir::Flow::Have);
+			match scalar.flow {
+				ir::Flow::Have => (), // Can borrow
+				ir::Flow::Met => (), // Can duplicate borrow
+				_ => panic!("Capturing {:?} is unsupported", scalar.flow),
+			}
+			assert_eq!(funclet_spec.input_tags[capture_index].flow, scalar.flow);
 
-            check_tag_compatibility_interior(
-                self.spec_funclet,
-                *scalar,
-                funclet_spec.input_tags[capture_index],
-            )?;
+			check_tag_compatibility_interior(
+				self.spec_funclet,
+				*scalar,
+				funclet_spec.input_tags[capture_index],
+			)?;
 
 			let quot = scalar.quot;
 			self.update_scalar_node(*capture_node_id, quot, ir::Flow::Met);
@@ -618,7 +622,7 @@ fn check_tag_compatibility_enter(
 ) -> Result<(), Error>  {
 	assert_eq!(caller_tag.flow, callee_tag.flow);
     match (caller_tag.quot, callee_tag.quot) {
-        (_, ir::Quotient::None) => (),
+        (ir::Quotient::None, ir::Quotient::None) => (),
         (ir::Quotient::Node { node_id }, ir::Quotient::Input { index }) => {
             assert_eq!(input_spec_node_ids[index], node_id);
         }
@@ -640,7 +644,7 @@ fn check_tag_compatibility_exit(
 	assert_eq!(source_tag.flow, ir::Flow::Have);
 	assert_eq!(destination_tag.flow, ir::Flow::Have);
     match (source_tag.quot, destination_tag.quot) {
-        (_, ir::Quotient::None) => (),
+        (ir::Quotient::None, ir::Quotient::None) => (),
         (ir::Quotient::Output {index: output_index}, ir::Quotient::Node { node_id }) => {
             let node = &caller_spec_funclet.nodes[node_id];
             if let ir::Node::ExtractResult {node_id: call_node_id, index} = node {

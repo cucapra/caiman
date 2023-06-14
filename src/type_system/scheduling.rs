@@ -804,26 +804,51 @@ impl<'program> FuncletChecker<'program> {
 
                 assert_eq!(fenced_place, ir::Place::Gpu);
             }
-            /*ir::Node::StaticAllocFromStaticBuffer {
-                buffer: buffer_node_id,
-                place,
-                storage_type,
-                operation,
+            ir::Node::StaticAlloc {
+                spatial_operation,
+                node: impl_node_id,
+                sizes,
+                place
             } => {
                 // Temporary restriction
                 match *place {
-                    ir::Place::Local => panic!("Unimplemented allocating locally"),
+                    ir::Place::Local => panic!("Unimplemented"),
                     _ => {}
                 }
-                let buffer_spatial_tag = self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[buffer_node_id].tag;
-                assert_ne!(buffer_spatial_tag, ir::SpatialTag::None);
+
+                panic!("Unimplemented")
+            }
+            ir::Node::StaticDealloc {
+                spatial_operation,
+                nodes : impl_node_ids,
+                place
+            } => {
+                // Temporary restriction
+                match *place {
+                    ir::Place::Local => panic!("Unimplemented"),
+                    _ => {}
+                }
+                
+                panic!("Unimplemented")
+            }
+            ir::Node::StaticSubAlloc {
+                node: buffer_node_id,
+                place,
+                storage_type,
+            } => {
+                // Temporary restriction
+                match *place {
+                    ir::Place::Local => panic!("Unimplemented"),
+                    _ => {}
+                }
+                let buffer_spatial_tag = self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[buffer_node_id];
+                assert_ne!(buffer_spatial_tag.flow, ir::Flow::Met); // A continuation must own the space
 
                 if let Some(NodeType::Buffer(Buffer {
                     storage_place,
                     static_layout_opt: Some(static_layout),
                 })) = self.node_types.get_mut(buffer_node_id)
                 {
-                    // We might eventually separate storage places and queue places
                     assert_eq!(*storage_place, *place);
                     // To do check alignment compatibility
                     let storage_size = self
@@ -849,21 +874,20 @@ impl<'program> FuncletChecker<'program> {
                     static_layout.alignment_bits =
                         (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;
 
-                    self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::ValueTag::Node { node_id: operation.node_id }, ir::Flow::Have);
-                    self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::TimelineTag::None, ir::Flow::Have);
-                    self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, buffer_spatial_tag, ir::Flow::Have);
+                    self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.timeline_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, buffer_spatial_tag.quot, ir::Flow::Met);
                     self.node_types.insert(
                         current_node_id,
                         NodeType::Slot(Slot {
                             storage_type: *storage_type,
-                            //queue_stage: ir::ResourceQueueStage::Bound,
                             queue_place: *place,
                         }),
                     );
                 } else {
                     panic!("No static buffer at node #{}", buffer_node_id)
                 }
-            }*/
+            }
             ir::Node::DefaultJoin => {
                 let mut input_types = Vec::<ir::TypeId>::new();
                 for (index, type_id) in self.scheduling_funclet.output_types.iter().enumerate() {

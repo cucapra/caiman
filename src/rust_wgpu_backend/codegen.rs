@@ -2062,11 +2062,10 @@ impl<'program> CodeGen<'program> {
                         panic!("Expected fence")
                     }
                 }
-                ir::Node::StaticAllocFromStaticBuffer {
-                    buffer: buffer_node_id,
+                ir::Node::StaticSubAlloc {
+                    node: buffer_node_id,
                     place,
                     storage_type,
-                    operation,
                 } => {
                     match *place {
                         ir::Place::Local => panic!("Unimplemented allocating locally"),
