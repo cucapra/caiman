@@ -12,21 +12,10 @@ function @vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 external-cpu[impl @vadd] extern_vadd;
 
 value[impl default @vadd] vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
-    let new_arr = (new i32 $N).
-    let index = 0u32.
-    let result = (vadd_rec v1 v2 index new_arr).
+    rec := (@vadd v1.tl v2.tl).
+    val := (+ v1.hd v2.hd).
+    result := (if (@empty v1) [] (@append rec val)).
     returns result.
-}
-
-value[impl default @vadd] vadd_rec(
-v1 : array<i32, $N>, 
-v2 : array<i32, $N>, 
-index : u32, 
-result : array<i32, $N>) {
-    let add_result = (set result index (+ (get v1 index) (get v2 index))).
-    let rec_result = (vadd_rec v1 v2 (+ index 1) add_result).
-    let updated = (if (< index $N) rec_result result).
-    returns updated.
 }
 
 slot-cpu arrc : array<i32, $N>;
@@ -43,42 +32,25 @@ schedule vadd2 {
 schedule vadd {
     fn vadd_cpu(v1_slot : arrc, v2_slot : arrc) -> arrc {
         // allocate
-        new_arr_slot <- new_cpu[new_arr](arrc, $N);
-        index_slot <- allocate-cpu index;
+        new_arr_slot <- new_arr(arrc, $N);
         result_slot <- result[vadd_rec_cpu]
-            (v1_slot, v2_slot, index_slot, new_arr_slot);
+            (v1_slot, v2_slot, new_arr_slot);
         return result_slot;
     }
-}
 
-schedule vadd_rec {
-    fn vadd_rec_cpu(v1_slot : arrc, 
+    fn vadd_cpu_rec(
+    v1_slot : arrc, 
     v2_slot : arrc,
-    index_slot: u32c,
     result_slot: arrc) -> arrc {
-        comparison_slot <- alloc-cpu bool;
-        comparison_slot <- updated.$1[lt_cpu](index_slot, $N);
-        updated_slot <- if (comparison_slot) {
-            add_slot <- allocate-cpu u32;
-            right_add_slot <- allocate-cpu u32;
-            add_slot <- add_result.$2.$1[get](v1_slot, index_slot);
-            right_add_slot <- add_result.$2.$2[get](v2_slot, index_slot);
-            add_slot <- add_result.$1[add_cpu](left_add_slot, right_add_slot);
-            add_result_slot <- add_result[set](index_slot, add_slot);
-
-            one_slot <- alloc-cpu rec_result.$3.$2;
-
-            add_index_slot <- rec_result.$2[add_cpu](index_slot, one_slot);
-            rec_result_slot <- rec_result[vadd_rec_cpu](
-                v1_slot,
-                v2_slot,
-                add_index_slot,
-                add_result_slot,
-            );
-            rec_result_slot
+        length_slot <- alloc-cpu u32;
+        zero_slot <- alloc_cpu u32; 
+        length_slot <- length(v1_slot);
+        zero_slot <- const_cpu(0, u32);
+        result_slot <- if (eq_cpu(length_slot, zero_slot)) {
+            // split stuff
         } else {
-            result_slot
-        };
-        return updated_slot;
+            result_slot <- 
+        }
+        return result_slot;
     }
 }
