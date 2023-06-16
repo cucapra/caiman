@@ -4,7 +4,9 @@ use crate::error::Info;
 
 pub type Var = String;
 
-mod value
+pub type Arg<T> = (String, T);
+
+pub mod value
 {
     use super::{Info, Var};
 
@@ -43,63 +45,70 @@ mod value
     pub type Stmt = (Info, StmtKind);
 }
 
-mod scheduling
+pub mod scheduling
 {
-    use super::{Info, Var};
+    use super::{Info, Var, Arg};
 
     #[derive(Clone, Debug)]
-    pub enum Type 
+    pub enum Type
     {
         // Implicitly local and ready!!!
         Slot(Var),
     }
 
     #[derive(Clone, Debug)]
-    pub enum FullSchedulable {
+    pub enum FullSchedulable
+    {
         Primitive,
     }
 
     #[derive(Clone, Debug)]
-    pub struct ScheduledExpr {
-        info: Info,
-        label: Var,
+    pub struct ScheduledExpr
+    {
+        pub info: Info,
+        pub value_var: Var,
         // TODO sub exprs vec in here ?? (see old scheduling AST)
-        full: FullSchedulable,
+        pub full: FullSchedulable,
     }
 
     #[derive(Clone, Debug)]
-    pub enum StmtKind {
-        Let(Var, Box<Stmt>),
+    pub enum StmtKind
+    {
+        Let(Var, ScheduledExpr),
+        // Should we rly return var??? or just like the expr ??? unsure
         Return(Var),
     }
 
     pub type Stmt = (Info, StmtKind);
 
     #[derive(Clone, Debug)]
-    pub struct SchedulingFunclet {
-        info: Info,
-        name: String,
-        input: Vec<Type>,
-        output: Type,
-        timeline_funclet: Option<String>,
-        spatial_funclet: Option<String>,
+    pub struct SchedulingFunclet
+    {
+        pub info: Info,
+        pub name: String,
+        pub input: Vec<Arg<Type>>,
+        pub output: Type,
+        pub timeline_funclet: Option<String>,
+        pub spatial_funclet: Option<String>,
         // TODO: tags?????
-        statements: Vec<Stmt>,
+        pub statements: Vec<Stmt>,
     }
 }
 
-mod timeline {
+pub mod timeline
+{
     use super::{Info, Var};
 
     #[derive(Clone, Debug)]
-    pub enum Type 
+    pub enum Type
     {
         // Implicitly Local
         Event,
     }
 
     #[derive(Clone, Debug)]
-    pub enum StmtKind {
+    pub enum StmtKind
+    {
         Return(Var),
     }
 
@@ -112,19 +121,24 @@ pub enum DeclKind
     ValueFunclet
     {
         name: String,
-        input: Vec<value::Type>,
-        output: value::Type,
+        input: Vec<Arg<value::Type>>,
+        output: (Option<String>, value::Type),
         statements: Vec<value::Stmt>,
     },
-    FunctionClass(Vec<String>),
+    FunctionClass
+    {
+        name: String,
+        functions: Vec<String>,
+    },
     SchedulingImpl
     {
         value_funclet_name: String,
         scheduling_funclets: Vec<scheduling::SchedulingFunclet>,
     },
-    TimelineFunclet {
+    TimelineFunclet
+    {
         name: String,
-        input: Vec<timeline::Type>,
+        input: Vec<Arg<timeline::Type>>,
         output: timeline::Type,
         statements: Vec<timeline::Stmt>,
     },

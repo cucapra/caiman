@@ -1,0 +1,19 @@
+
+schedule foo {
+
+    fn bar() -> &x 
+      at time my_time and space sp
+    {
+        let x_slot := x.Prim;
+        return x_slot;
+    }
+
+    fn bar_two() -> &x at space aaaaaaaa { }
+
+    fn bar_three() -> &x at time bbbbbbb {}
+
+    fn bar_four() -> &x at space j and time jjjjldsfasd {}
+
+    fn bar_five() -> &x {}
+}
+

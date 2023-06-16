@@ -1,0 +1,45 @@
+[
+    (
+        Info {
+            location: (
+                (
+                    1,
+                    0,
+                ),
+                (
+                    3,
+                    2,
+                ),
+            ),
+        },
+        TimelineFunclet {
+            name: "my_time",
+            input: [
+                (
+                    "e",
+                    Event,
+                ),
+            ],
+            output: Event,
+            statements: [
+                (
+                    Info {
+                        location: (
+                            (
+                                2,
+                                5,
+                            ),
+                            (
+                                2,
+                                14,
+                            ),
+                        ),
+                    },
+                    Return(
+                        "e",
+                    ),
+                ),
+            ],
+        },
+    ),
+]

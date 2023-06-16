@@ -1,0 +1,5 @@
+value foo(a: i64, b: bool, c: i32) -> i64 {
+    //let x = 4i64.
+    let x = 4.
+    returns x.
+}

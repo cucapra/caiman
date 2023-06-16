@@ -1,0 +1,23 @@
+[
+    (
+        Info {
+            location: (
+                (
+                    1,
+                    0,
+                ),
+                (
+                    5,
+                    2,
+                ),
+            ),
+        },
+        FunctionClass {
+            name: "my_func_class",
+            functions: [
+                "abcdefg",
+                "hijklmnop",
+            ],
+        },
+    ),
+]

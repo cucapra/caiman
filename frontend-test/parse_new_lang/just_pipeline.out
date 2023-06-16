@@ -1,0 +1,20 @@
+[
+    (
+        Info {
+            location: (
+                (
+                    1,
+                    0,
+                ),
+                (
+                    1,
+                    20,
+                ),
+            ),
+        },
+        Pipeline {
+            name: "main",
+            funclet_to_run: "bar",
+        },
+    ),
+]

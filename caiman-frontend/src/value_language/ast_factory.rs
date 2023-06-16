@@ -35,26 +35,15 @@ impl ASTFactory
                 .as_bytes()
                 .iter()
                 .enumerate()
-                .filter_map(|(idx, b)| {
-                    if *b == b'\n'
-                    {
-                        Some(idx)
-                    }
-                    else
-                    {
-                        None
-                    }
-                })
+                .filter_map(|(idx, b)| if *b == b'\n' { Some(idx) } else { None } )
                 .collect(),
         }
     }
 
     pub fn line_and_column(&self, u: usize) -> (usize, usize)
     {
-        if let Some(b) = self.line_ending_byte_offsets.last()
-        {
-            if u > *b
-            {
+        if let Some(b) = self.line_ending_byte_offsets.last() {
+            if u > *b {
                 panic!("Byte offset too big: {}", u);
             }
         }

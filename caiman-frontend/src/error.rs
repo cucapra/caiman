@@ -1,6 +1,7 @@
 use crate::to_ir::ToIRError;
 use crate::value_language::check::SemanticError;
 use crate::value_language::run_parser::ParsingError;
+use crate::syntax::run_parser::ParsingError as SPE;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug)]
@@ -18,6 +19,7 @@ pub trait HasInfo
 pub enum ErrorKind
 {
     Parsing(ParsingError),
+    SyntaxParsing(SPE),
     Semantic(SemanticError),
     ToIR(ToIRError),
 }
@@ -75,6 +77,7 @@ impl fmt::Display for Error
         match &self.kind
         {
             ErrorKind::Parsing(e) => write!(f, "Parsing Error: {}", e),
+            ErrorKind::SyntaxParsing(e) => write!(f, "Parsing Error: {}", e),
             ErrorKind::Semantic(e) => write!(f, "Semantic Error: {}", e),
             ErrorKind::ToIR(e) => write!(f, "ToIR Error: {}", e),
         }
@@ -101,6 +104,29 @@ impl fmt::Display for ParsingError
         }
     }
 }
+
+// Awful awful awful sorry
+impl fmt::Display for SPE
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        match self
+        {
+            SPE::InvalidToken => write!(f, "Invalid token"),
+            SPE::UnrecognizedToken(tok, expected) =>
+            {
+                write!(f, "Unrecognized token {}, expected one of {}", tok, expected,)
+            },
+            SPE::ExtraToken(tok) => write!(f, "Extra token {}", tok),
+            SPE::EOF(expected) =>
+            {
+                write!(f, "Unexpected EOF, expected one of {}", expected)
+            },
+            SPE::User(e) => write!(f, "User Error: {}", e),
+        }
+    }
+}
+
 
 impl fmt::Display for SemanticError
 {

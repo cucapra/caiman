@@ -1,0 +1,194 @@
+[
+    (
+        Info {
+            location: (
+                (
+                    2,
+                    1,
+                ),
+                (
+                    18,
+                    2,
+                ),
+            ),
+        },
+        SchedulingImpl {
+            value_funclet_name: "foo",
+            scheduling_funclets: [
+                SchedulingFunclet {
+                    info: Info {
+                        location: (
+                            (
+                                4,
+                                5,
+                            ),
+                            (
+                                9,
+                                6,
+                            ),
+                        ),
+                    },
+                    name: "bar",
+                    input: [],
+                    output: Slot(
+                        "x",
+                    ),
+                    timeline_funclet: Some(
+                        "my_time",
+                    ),
+                    spatial_funclet: Some(
+                        "sp",
+                    ),
+                    statements: [
+                        (
+                            Info {
+                                location: (
+                                    (
+                                        7,
+                                        9,
+                                    ),
+                                    (
+                                        7,
+                                        30,
+                                    ),
+                                ),
+                            },
+                            Let(
+                                "x_slot",
+                                ScheduledExpr {
+                                    info: Info {
+                                        location: (
+                                            (
+                                                7,
+                                                23,
+                                            ),
+                                            (
+                                                7,
+                                                29,
+                                            ),
+                                        ),
+                                    },
+                                    value_var: "x",
+                                    full: Primitive,
+                                },
+                            ),
+                        ),
+                        (
+                            Info {
+                                location: (
+                                    (
+                                        8,
+                                        9,
+                                    ),
+                                    (
+                                        8,
+                                        23,
+                                    ),
+                                ),
+                            },
+                            Return(
+                                "x_slot",
+                            ),
+                        ),
+                    ],
+                },
+                SchedulingFunclet {
+                    info: Info {
+                        location: (
+                            (
+                                11,
+                                5,
+                            ),
+                            (
+                                11,
+                                45,
+                            ),
+                        ),
+                    },
+                    name: "bar_two",
+                    input: [],
+                    output: Slot(
+                        "x",
+                    ),
+                    timeline_funclet: None,
+                    spatial_funclet: Some(
+                        "aaaaaaaa",
+                    ),
+                    statements: [],
+                },
+                SchedulingFunclet {
+                    info: Info {
+                        location: (
+                            (
+                                13,
+                                5,
+                            ),
+                            (
+                                13,
+                                44,
+                            ),
+                        ),
+                    },
+                    name: "bar_three",
+                    input: [],
+                    output: Slot(
+                        "x",
+                    ),
+                    timeline_funclet: Some(
+                        "bbbbbbb",
+                    ),
+                    spatial_funclet: None,
+                    statements: [],
+                },
+                SchedulingFunclet {
+                    info: Info {
+                        location: (
+                            (
+                                15,
+                                5,
+                            ),
+                            (
+                                15,
+                                59,
+                            ),
+                        ),
+                    },
+                    name: "bar_four",
+                    input: [],
+                    output: Slot(
+                        "x",
+                    ),
+                    timeline_funclet: Some(
+                        "jjjjldsfasd",
+                    ),
+                    spatial_funclet: Some(
+                        "j",
+                    ),
+                    statements: [],
+                },
+                SchedulingFunclet {
+                    info: Info {
+                        location: (
+                            (
+                                17,
+                                5,
+                            ),
+                            (
+                                17,
+                                27,
+                            ),
+                        ),
+                    },
+                    name: "bar_five",
+                    input: [],
+                    output: Slot(
+                        "x",
+                    ),
+                    timeline_funclet: None,
+                    spatial_funclet: None,
+                    statements: [],
+                },
+            ],
+        },
+    ),
+]

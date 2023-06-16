@@ -117,4 +117,10 @@ fn main()
     sched_parser_config
         .process_file(Path::new("./src/scheduling_language/parser.lalrpop"))
         .unwrap();
+
+    // Make "both parser" normally too
+    let parser_config = lalrpop::Configuration::new();
+    parser_config
+        .process_file(Path::new("./src/syntax/parser.lalrpop"))
+        .unwrap();
 }

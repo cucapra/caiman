@@ -1,0 +1,271 @@
+[
+    (
+        Info {
+            location: (
+                (
+                    3,
+                    1,
+                ),
+                (
+                    7,
+                    2,
+                ),
+            ),
+        },
+        ValueFunclet {
+            name: "foo",
+            input: [],
+            output: (
+                None,
+                Num(
+                    I64,
+                ),
+            ),
+            statements: [
+                (
+                    Info {
+                        location: (
+                            (
+                                5,
+                                5,
+                            ),
+                            (
+                                5,
+                                15,
+                            ),
+                        ),
+                    },
+                    Let(
+                        "x",
+                        (
+                            Info {
+                                location: (
+                                    (
+                                        5,
+                                        13,
+                                    ),
+                                    (
+                                        5,
+                                        14,
+                                    ),
+                                ),
+                            },
+                            Num(
+                                "4",
+                                I64,
+                            ),
+                        ),
+                    ),
+                ),
+                (
+                    Info {
+                        location: (
+                            (
+                                6,
+                                5,
+                            ),
+                            (
+                                6,
+                                15,
+                            ),
+                        ),
+                    },
+                    Returns(
+                        (
+                            Info {
+                                location: (
+                                    (
+                                        6,
+                                        13,
+                                    ),
+                                    (
+                                        6,
+                                        14,
+                                    ),
+                                ),
+                            },
+                            Var(
+                                "x",
+                            ),
+                        ),
+                    ),
+                ),
+            ],
+        },
+    ),
+    (
+        Info {
+            location: (
+                (
+                    15,
+                    1,
+                ),
+                (
+                    15,
+                    33,
+                ),
+            ),
+        },
+        FunctionClass {
+            name: "foo_class",
+            functions: [
+                "foo",
+            ],
+        },
+    ),
+    (
+        Info {
+            location: (
+                (
+                    21,
+                    1,
+                ),
+                (
+                    46,
+                    2,
+                ),
+            ),
+        },
+        SchedulingImpl {
+            value_funclet_name: "foo",
+            scheduling_funclets: [
+                SchedulingFunclet {
+                    info: Info {
+                        location: (
+                            (
+                                36,
+                                5,
+                            ),
+                            (
+                                44,
+                                6,
+                            ),
+                        ),
+                    },
+                    name: "bar",
+                    input: [],
+                    output: Slot(
+                        "x",
+                    ),
+                    timeline_funclet: Some(
+                        "my_time",
+                    ),
+                    spatial_funclet: None,
+                    statements: [
+                        (
+                            Info {
+                                location: (
+                                    (
+                                        42,
+                                        9,
+                                    ),
+                                    (
+                                        42,
+                                        30,
+                                    ),
+                                ),
+                            },
+                            Let(
+                                "x_slot",
+                                ScheduledExpr {
+                                    info: Info {
+                                        location: (
+                                            (
+                                                42,
+                                                23,
+                                            ),
+                                            (
+                                                42,
+                                                29,
+                                            ),
+                                        ),
+                                    },
+                                    value_var: "x",
+                                    full: Primitive,
+                                },
+                            ),
+                        ),
+                        (
+                            Info {
+                                location: (
+                                    (
+                                        43,
+                                        9,
+                                    ),
+                                    (
+                                        43,
+                                        23,
+                                    ),
+                                ),
+                            },
+                            Return(
+                                "x_slot",
+                            ),
+                        ),
+                    ],
+                },
+            ],
+        },
+    ),
+    (
+        Info {
+            location: (
+                (
+                    53,
+                    1,
+                ),
+                (
+                    55,
+                    2,
+                ),
+            ),
+        },
+        TimelineFunclet {
+            name: "my_time",
+            input: [
+                (
+                    "e",
+                    Event,
+                ),
+            ],
+            output: Event,
+            statements: [
+                (
+                    Info {
+                        location: (
+                            (
+                                54,
+                                5,
+                            ),
+                            (
+                                54,
+                                14,
+                            ),
+                        ),
+                    },
+                    Return(
+                        "e",
+                    ),
+                ),
+            ],
+        },
+    ),
+    (
+        Info {
+            location: (
+                (
+                    60,
+                    1,
+                ),
+                (
+                    60,
+                    21,
+                ),
+            ),
+        },
+        Pipeline {
+            name: "main",
+            funclet_to_run: "bar",
+        },
+    ),
+]
