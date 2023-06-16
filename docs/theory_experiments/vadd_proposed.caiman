@@ -11,7 +11,7 @@ function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 
 external-cpu[impl vadd] extern_vadd;
 
-value[impl default vadd] vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
+value[impl default vadd] vadd_imp(v1 : array<i32, $N>, v2 : array<i32, $N>) {
     rec = (vadd (tail v1) (tail v1)).
     val = (+ (head v1) (head v2)).
     result = (if (empty v1) [] (append rec val)).

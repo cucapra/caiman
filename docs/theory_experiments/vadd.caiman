@@ -11,14 +11,14 @@ function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 
 external-cpu[impl vadd] extern_vadd;
 
-value[impl default vadd] vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
+value[impl default vadd] vadd_imp(v1 : array<i32, $N>, v2 : array<i32, $N>) {
     new_arr = (new i32 $N).
     index = 0u32.
     result = (vadd_rec v1 v2 index new_arr).
     returns result.
 }
 
-value[impl default vadd] vadd_rec(
+value vadd_rec(
 v1 : array<i32, $N>, 
 v2 : array<i32, $N>, 
 index : u32, 
