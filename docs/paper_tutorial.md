@@ -35,54 +35,104 @@ This example is (obviously) somewhat synthetic, but having two explicit compute
 chunks is both common with more complicated operations and is helpful when
 illustrating some of the descriptive power provided by Caiman.
 
-To start 
+We start by defining a constant `$N` and the value function for `vadd2`:
+
+```
+const $N 64;
+
+value vadd2(
+v1 : array<i32, $N>, 
+v2 : array<i32, $N>, 
+v3 : array<i32, $N>) -> array<i32, $N> {
+    tmp = (vadd v1 v2).
+    result = (vadd tmp v3).
+    returns result.
+}
+```
+
+Function headers look like a "standard" imperative language, here we take in
+three arguments (arguments must be typed) and provide a return type.  We do need
+to state that this is a `value` function, named `vadd2`.  Arrays in Caiman must
+be fixed-length, though the length can be a compile-time constant like `$N`.
+
+The body of this function is a bit more unusual, as we use a logic-like syntax
+to represent operations.  Value-language statements are unordered, so this
+function body (including the `returns` statement) can be rearranged with no
+change to the semantics.
+
+
 
 # Appendix
 
-mm2.caiman full program:
+vadd2.caiman full program:
 
 ```
 const $N 64;
 
 value vadd2(v1 : array<i32, $N>, v2 : array<i32, $N>, 
 v3 : array<i32, $N>) -> array<i32, $N> {
-    tmp := @vadd(v1, v2).
-    result := @vadd(tmp, v3).
+    tmp = vadd(v1, v2).
+    result = vadd(tmp, v3).
     returns result.
 }
 
-function @vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
+function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 
-external-cpu[impl @vadd] extern_vadd;
+external-cpu[impl vadd] extern_vadd;
 
-value[impl default @vadd] vadd(v1, v2) {
-    rec := (@vadd v1.tl v2.tl).
-    val := (+ v1.hd v2.hd).
-    result := (if (@empty v1) [] (@append rec val)).
+value[impl default vadd] vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
+    rec = (vadd (tail v1) (tail v1)).
+    val = (+ (head v1) (head v2)).
+    result = (if (empty v1) [] (append rec val)).
     returns result.
 }
 
-slot-cpu arrc : array<i32, $N>;
-slot-gpu arrg : array<i32, $N>;
+ref-cpu arrc : array<i32, $N>;
+ref-gpu arrg : array<i32, $N>;
 
-schedule[value $vadd2]
-vadd2_cpu(v1_slot : arrc, v2_slot : arrc, v3_slot : arrc) -> arrc {
-    tmp_slot = $vadd2.tmp[vadd_cpu](v1_slot, v2_slot);
-    result_slot = $vadd2.result[vadd_cpu](tmp_slot, v3_slot);
-    return result_slot;
-}
-
-schedule[value $vadd]
-vadd_cpu(v1_slot : arrc, v2_slot : arrc) -> arrc {
-    result_slot = allocate $result;
-    for (i : indices(v1_slot)) {
-        result_slot[i] = 
+schedule vadd2 {
+    fn vadd2_cpu(v1_ref : arrc, v2_ref : arrc, v3_ref : arrc) -> arrc {
+        let tmp_ref <- vadd_cpu[tmp](v1_ref, v2_ref);
+        let result_ref <- vadd_cpu(tmp_ref, v3_ref);
+        return result_ref;
     }
-    return result_slot;
+}
+
+schedule vadd {
+    fn vadd_cpu(v1_ref : arrc, v2_ref : arrc) -> arrc {
+        // allocate
+        let new_arr_ref <- new_arr(arrc, $N);
+        let result_ref <- result[vadd_rec_cpu]
+            (v1_ref, v2_ref, new_arr_ref);
+        return result_ref;
+    }
+
+    fn vadd_cpu_rec(
+    v1_ref : arrc, 
+    v2_ref : arrc,
+    result_ref: arrc) -> arrc {
+        let length_ref <- alloc-cpu u32;
+        let zero_ref <- alloc_cpu u32; 
+        length_ref <- length(v1_ref);
+        zero_ref <- const_cpu(0, u32);
+        if (eq_cpu(length_ref, zero_ref)) {
+            result_ref <- result_ref; // satisfies the empty list
+        } else {
+            let v1_head;
+            let v2_head;
+            v1_head, v1_ref <- split(v1_ref);
+            v2_head, v2_ref <- split(v2_ref);
+
+            let val_ref = alloc_cpu i32;
+            val_ref <- val[add_cpu](v1_head, v2_head);
+            result_ref <- rec[vadd_cpu_rec](v1_ref, v2_ref, result_ref);
+        }
+        return result_ref;
+    }
 }
 ```
 
-mm2.cair full program:
+vadd2.cair full program:
 
 ```
 ```
