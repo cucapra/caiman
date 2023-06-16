@@ -2,19 +2,19 @@ const $N 64;
 
 value vadd2(v1 : array<i32, $N>, v2 : array<i32, $N>, 
 v3 : array<i32, $N>) -> array<i32, $N> {
-    tmp = @vadd(v1, v2).
-    result = @vadd(tmp, v3).
+    tmp = vadd(v1, v2).
+    result = vadd(tmp, v3).
     returns result.
 }
 
-function @vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
+function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 
-external-cpu[impl @vadd] extern_vadd;
+external-cpu[impl vadd] extern_vadd;
 
-value[impl default @vadd] vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
-    rec = (@vadd (@tail v1) (@tail v1)).
-    val = (+ (@head v1) (@head v2)).
-    result = (if (@empty v1) [] (@append rec val)).
+value[impl default vadd] vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
+    rec = (vadd (tail v1) (tail v1)).
+    val = (+ (head v1) (head v2)).
+    result = (if (empty v1) [] (append rec val)).
     returns result.
 }
 
