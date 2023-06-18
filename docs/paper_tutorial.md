@@ -58,7 +58,7 @@ be fixed-length, though the length can be a compile-time constant like `$N`.
 The body of this function is a bit more unusual, as we use a logic-like syntax
 to represent operations.  Value-language statements are unordered, so this
 function body (including the `returns` statement) can be rearranged with no
-change to the semantics.
+change to the specification.
 
 
 
@@ -71,8 +71,8 @@ const $N 64;
 
 value vadd2(v1 : array<i32, $N>, v2 : array<i32, $N>, 
 v3 : array<i32, $N>) -> array<i32, $N> {
-    tmp = vadd(v1, v2).
-    result = vadd(tmp, v3).
+    tmp = (vadd v1 v2).
+    result = (vadd tmp v3).
     returns result.
 }
 
