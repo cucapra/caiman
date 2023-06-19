@@ -40,9 +40,7 @@ We start by defining a constant `$N` and the value function for `vadd2`:
 ```
 const $N 64;
 
-value vadd2(
-v1 : array<i32, $N>, 
-v2 : array<i32, $N>, 
+value vadd2(v1 : array<i32, $N>, v2 : array<i32, $N>, 
 v3 : array<i32, $N>) -> array<i32, $N> {
     tmp = (vadd v1 v2).
     result = (vadd tmp v3).
@@ -60,7 +58,21 @@ to represent operations.  Value-language statements are unordered, so this
 function body (including the `returns` statement) can be rearranged with no
 change to the specification.
 
+Second, we provide two definitions of vector addition, unified under the
+equivalence class `vadd`
 
+```
+function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
+
+external-cpu[impl vadd] extern_vadd;
+
+value[impl default vadd] local_vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
+    rec = (vadd (tail v1) (tail v1)).
+    val = (+ (head v1) (head v2)).
+    result = (if (empty v1) [] (append rec val)).
+    returns result.
+}
+```
 
 # Appendix
 
@@ -80,7 +92,7 @@ function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 
 external-cpu[impl vadd] extern_vadd;
 
-value[impl default vadd] vadd_imp(v1 : array<i32, $N>, v2 : array<i32, $N>) {
+value[impl default vadd] local_vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
     rec = (vadd (tail v1) (tail v1)).
     val = (+ (head v1) (head v2)).
     result = (if (empty v1) [] (append rec val)).
