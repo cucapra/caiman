@@ -273,6 +273,15 @@ pub enum TailEdge {
         failure_funclet_id: FuncletId,
         continuation_join: NodeId,
     },*/
+
+    // Here for now as a type system debugging tool
+    // Always passes type checking, but fails codegen
+    DebugHole {
+        // Scalar nodes
+        inputs : Box<[NodeId]>,
+        // Continuations
+        //outputs : Box<[NodeId]>
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

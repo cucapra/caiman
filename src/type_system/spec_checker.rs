@@ -1,7 +1,28 @@
 use crate::ir;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::default::Default;
-use super::error::Error;
+use super::error::{Error, ErrorContext};
+//#[macro_use]
+//use super::{error_ifn_eq, };
+
+macro_rules! error_ifn_eq {
+	($ctx:expr, $left:expr, $right:expr $(,)?) => {
+		match (&$left, &$right) {
+			(left_val, right_val) => {
+				if !(*left_val == *right_val) {
+					Result::<(), Error>::Err(assert_failed($ctx, &*left_val, &*right_val))
+				}
+				else {
+					Result::<(), Error>::Ok(())
+				}
+			}
+		}
+	}
+}
+
+fn assert_failed<T : std::fmt::Debug>(error_context : &ErrorContext, a : T, b : T) -> Error {
+	error_context.generic_error(& format!("{:?} != {:?}", a, b))
+}
 
 // Language independent plumbing for type checking
 
@@ -124,10 +145,15 @@ impl<'program> FuncletSpecChecker<'program> {
 		self.join_nodes.insert(node_id, JoinPoint{implicit_tag, input_tags: tags.to_vec().into_boxed_slice()});
 	}
 
-	pub fn join(&mut self, node_id : ir::NodeId, capture_node_ids : &[ir::NodeId], funclet_spec : &ir::FuncletSpec, continuation_node_id : ir::NodeId) -> Result<(), Error> {
+	fn contextualize_error(&self, writer : &mut dyn std::fmt::Write) -> Result<(), std::fmt::Error> {
+		write!(writer, "Checking spec funclet\nSpec {:?}\nSpec Funclet {:?}\nScalar Nodes {:?}\nJoin Nodes {:?}\nImplicit Tag {:?}\n", self.funclet_spec, self.spec_funclet, self.scalar_nodes, self.join_nodes, self.current_implicit_tag)
+	}
+
+	pub fn join(&mut self, error_context : &ErrorContext, node_id : ir::NodeId, capture_node_ids : &[ir::NodeId], funclet_spec : &ir::FuncletSpec, continuation_node_id : ir::NodeId) -> Result<(), Error> {
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
 		
         check_tag_compatibility_interior(
+			error_context,
             self.spec_funclet,
             funclet_spec.implicit_out_tag,
             continuation_join.implicit_tag,
@@ -141,9 +167,10 @@ impl<'program> FuncletSpecChecker<'program> {
 				ir::Flow::Met => (), // Can duplicate borrow
 				_ => panic!("Capturing {:?} is unsupported", scalar.flow),
 			}
-			assert_eq!(funclet_spec.input_tags[capture_index].flow, scalar.flow);
+			assert_eq!(funclet_spec.input_tags[capture_index].flow, scalar.flow, "\n{}", error_context);
 
 			check_tag_compatibility_interior(
+				error_context,
 				self.spec_funclet,
 				*scalar,
 				funclet_spec.input_tags[capture_index],
@@ -155,16 +182,17 @@ impl<'program> FuncletSpecChecker<'program> {
 
 		let mut remaining_input_tags = Vec::<ir::Tag>::new();
         for index in capture_node_ids.len() .. funclet_spec.input_tags.len() {
-			assert_eq!(funclet_spec.input_tags[index].flow, ir::Flow::Have);
+			//assert_eq!(funclet_spec.input_tags[index].flow, ir::Flow::Have, "\n{}", error_context);
 			remaining_input_tags.push(funclet_spec.input_tags[index]);
 		}
 
 		assert_eq!(funclet_spec.output_tags.len(), continuation_join.input_tags.len());
         for index in 0 .. funclet_spec.output_tags.len() {
-			assert_eq!(funclet_spec.output_tags[index].flow, ir::Flow::Have);
-			assert_eq!(continuation_join.input_tags[index].flow, ir::Flow::Have);
+			//assert_eq!(funclet_spec.output_tags[index].flow, ir::Flow::Have, "\n{}", error_context);
+			//assert_eq!(continuation_join.input_tags[index].flow, ir::Flow::Have, "\n{}", error_context);
 
             check_tag_compatibility_interior(
+				error_context,
                 self.spec_funclet,
                 funclet_spec.output_tags[index],
                 continuation_join.input_tags[index],
@@ -180,9 +208,15 @@ impl<'program> FuncletSpecChecker<'program> {
 		self.update_join_node(node_id, & self.funclet_spec.output_tags, self.funclet_spec.implicit_out_tag);
 	}
 
-	pub fn check_jump(&mut self, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId]) -> Result<(), Error> {
+	pub fn check_jump(&mut self, old_error_context : &ErrorContext, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId]) -> Result<(), Error> {
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
+
+		let immutable_self : &Self = self;
+		let error_contextualizer = |writer : &mut std::fmt::Write| { immutable_self.contextualize_error(writer) };
+		let error_context = & ErrorContext::new(Some(old_error_context), Some(& error_contextualizer));
+
         check_tag_compatibility_interior(
+			error_context,
             self.spec_funclet,
             self.current_implicit_tag,
             continuation_join.implicit_tag,
@@ -190,11 +224,14 @@ impl<'program> FuncletSpecChecker<'program> {
 		
 		assert_eq!(argument_node_ids.len(), continuation_join.input_tags.len());
         for index in 0 .. argument_node_ids.len() {
-			let scalar = & self.scalar_nodes[& argument_node_ids[index]];
-			assert_eq!(scalar.flow, ir::Flow::Have);
-			assert_eq!(continuation_join.input_tags[index].flow, ir::Flow::Have);
+			let Some(scalar) = self.scalar_nodes.get(& argument_node_ids[index]) else {
+				panic!("Jump input #{}, impl node #{} has no tag for spec\n{}", index, argument_node_ids[index], error_context)
+			};
+			//assert_eq!(scalar.flow, ir::Flow::Have, "\n{}", error_context);
+			//assert_eq!(continuation_join.input_tags[index].flow, ir::Flow::Have, "\n{}", error_context);
 
             check_tag_compatibility_interior(
+				error_context,
                 self.spec_funclet,
                 *scalar,
                 continuation_join.input_tags[index],
@@ -204,8 +241,12 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
-	pub fn check_return(&mut self, return_value_node_ids : &[ir::NodeId]) -> Result<(), Error> {
+	pub fn check_return(&mut self, old_error_context : &ErrorContext, return_value_node_ids : &[ir::NodeId]) -> Result<(), Error> {
+		let return_error_contextualizer = |writer : &mut std::fmt::Write| { self.contextualize_error(writer) };
+		let return_error_context = ErrorContext::new(Some(old_error_context), Some(& return_error_contextualizer));
+
         check_tag_compatibility_interior(
+			&return_error_context,
             self.spec_funclet,
             self.current_implicit_tag,
             self.funclet_spec.implicit_out_tag,
@@ -218,6 +259,7 @@ impl<'program> FuncletSpecChecker<'program> {
 			assert_eq!(self.funclet_spec.output_tags[index].flow, ir::Flow::Have);
 
             check_tag_compatibility_interior(
+				&return_error_context,
                 self.spec_funclet,
                 *scalar,
                 self.funclet_spec.output_tags[index],
@@ -227,8 +269,9 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
-	pub fn check_interior_call(&mut self, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec) -> Result<(), Error> {
+	pub fn check_interior_call(&mut self, error_context : &ErrorContext, continuation_node_id : ir::NodeId, argument_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec) -> Result<(), Error> {
         check_tag_compatibility_interior(
+			error_context,
             self.spec_funclet,
             self.current_implicit_tag,
             callee_funclet_spec.implicit_in_tag,
@@ -236,6 +279,7 @@ impl<'program> FuncletSpecChecker<'program> {
 
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
         check_tag_compatibility_interior(
+			error_context,
             self.spec_funclet,
             callee_funclet_spec.implicit_out_tag,
             continuation_join.implicit_tag,
@@ -246,6 +290,7 @@ impl<'program> FuncletSpecChecker<'program> {
 			let scalar = & self.scalar_nodes[& argument_node_ids[index]];
 
             check_tag_compatibility_interior(
+				error_context,
                 self.spec_funclet,
                 *scalar,
                 callee_funclet_spec.input_tags[index],
@@ -255,6 +300,7 @@ impl<'program> FuncletSpecChecker<'program> {
 		assert_eq!(continuation_join.input_tags.len(), callee_funclet_spec.output_tags.len());
         for index in 0 .. callee_funclet_spec.output_tags.len() {
             check_tag_compatibility_interior(
+				error_context,
                 self.spec_funclet,
                 callee_funclet_spec.output_tags[index],
                 continuation_join.input_tags[index],
@@ -264,8 +310,9 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
-	pub fn check_vertical_call(&mut self, continuation_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec, output_spec_node_ids : &[ir::NodeId], call_spec_node_id : ir::NodeId) -> Result<(), Error> {
+	pub fn check_vertical_call(&mut self, error_context : &ErrorContext, continuation_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec, output_spec_node_ids : &[ir::NodeId], call_spec_node_id : ir::NodeId) -> Result<(), Error> {
         check_tag_compatibility_enter(
+			error_context,
             output_spec_node_ids,
             self.current_implicit_tag,
             callee_funclet_spec.implicit_in_tag,
@@ -273,6 +320,7 @@ impl<'program> FuncletSpecChecker<'program> {
 
 		let continuation_join = self.join_nodes.remove(& continuation_node_id).unwrap();
         check_tag_compatibility_exit(
+			error_context,
             self.spec_funclet,
 			call_spec_node_id,
             callee_funclet_spec.implicit_out_tag,
@@ -284,6 +332,7 @@ impl<'program> FuncletSpecChecker<'program> {
 			let scalar = & self.scalar_nodes[& input_impl_node_ids[index]];
 
             check_tag_compatibility_enter(
+				error_context,
                 output_spec_node_ids,
                 *scalar,
                 callee_funclet_spec.input_tags[index],
@@ -293,6 +342,7 @@ impl<'program> FuncletSpecChecker<'program> {
 		assert_eq!(continuation_join.input_tags.len(), callee_funclet_spec.output_tags.len());
         for index in 0 .. callee_funclet_spec.output_tags.len() {
             check_tag_compatibility_exit(
+				error_context,
                 self.spec_funclet,
 				call_spec_node_id,
                 callee_funclet_spec.output_tags[index],
@@ -303,26 +353,28 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
-	pub fn check_call(&mut self, operation: ir::Quotient, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec) -> Result<(), Error> {
+	pub fn check_call(&mut self, error_context : &ErrorContext, operation: ir::Quotient, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], callee_funclet_spec : &ir::FuncletSpec) -> Result<(), Error> {
 		match operation {
 			ir::Quotient::Node{node_id} => {
 				if let ir::Node::CallFunctionClass{function_id, arguments} = &self.spec_funclet.nodes[node_id] {
-					match & self.spec_funclet.spec_binding {
+					let Some(callee_spec_funclet_id) = callee_funclet_spec.funclet_id_opt else { panic!("Does not have a spec funclet id") };
+					let callee_spec_funclet = & self.program.funclets[callee_spec_funclet_id];
+					match & callee_spec_funclet.spec_binding {
 						ir::FuncletSpecBinding::Value{value_function_id_opt: Some(value_function_id)} if *value_function_id == *function_id => {},
-						_ => panic!("Spec funclet does not implement function class #{}", *function_id)
+						_ => return Err(error_context.generic_error(& format!("Callee spec funclet #{} does not implement function class #{}", callee_spec_funclet_id, *function_id)))
 					}
-					self.check_vertical_call(continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec, arguments, node_id)
+					self.check_vertical_call(error_context, continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec, arguments, node_id)
 				}
 				else {
 					panic!("Not a call")
 				}
 			}
-			ir::Quotient::None => self.check_interior_call(continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec),
+			ir::Quotient::None => self.check_interior_call(error_context, continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec),
 			_ => panic!("Unsupported: {:?}", operation),
 		}
 	}
 
-	pub fn check_choice(&mut self, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], choice_remaps : &[&[(ir::NodeId, ir::NodeId)]], choice_specs : &[&ir::FuncletSpec]) -> Result<(), Error> {
+	pub fn check_choice(&mut self, error_context : &ErrorContext, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], choice_remaps : &[&[(ir::NodeId, ir::NodeId)]], choice_specs : &[&ir::FuncletSpec]) -> Result<(), Error> {
 		let continuation_join = self.join_nodes.remove(& continuation_impl_node_id).unwrap();
 
 		assert_eq!(choice_remaps.len(), choice_specs.len());
@@ -331,6 +383,7 @@ impl<'program> FuncletSpecChecker<'program> {
 			let choice_remap = choice_remaps[choice_index];
 			// 
 			check_tag_compatibility_interior(
+				error_context,
 				self.spec_funclet,
 				self.current_implicit_tag,
 				choice_spec.implicit_in_tag,
@@ -341,6 +394,7 @@ impl<'program> FuncletSpecChecker<'program> {
 				let scalar = & self.scalar_nodes[& input_impl_node_ids[index]];
 
 				check_tag_compatibility_interior(
+					error_context,
 					self.spec_funclet,
 					*scalar,
 					choice_spec.input_tags[index],
@@ -349,6 +403,7 @@ impl<'program> FuncletSpecChecker<'program> {
 
 			// Continuation gets the unified result
 			check_tag_compatibility_interior_cast(
+				error_context,
 				self.spec_funclet,
 				choice_spec.implicit_out_tag,
 				continuation_join.implicit_tag,
@@ -358,6 +413,7 @@ impl<'program> FuncletSpecChecker<'program> {
 			assert_eq!(continuation_join.input_tags.len(), choice_spec.output_tags.len());
 			for index in 0 .. choice_spec.output_tags.len() {
 				check_tag_compatibility_interior_cast(
+					error_context,
 					self.spec_funclet,
 					choice_spec.output_tags[index],
 					continuation_join.input_tags[index],
@@ -389,21 +445,31 @@ impl<'program> FuncletSpecChecker<'program> {
 		self.scalar_nodes.remove(& impl_node_id);
 	}
 
-	pub fn check_implicit_tag(&self, tag : ir::Tag) -> Result<(), Error>  {
+	pub fn check_implicit_tag(&self, old_error_context : &ErrorContext, tag : ir::Tag) -> Result<(), Error>  {
+		let error_contextualizer = |writer : &mut std::fmt::Write| { self.contextualize_error(writer) };
+		let error_context = & ErrorContext::new(Some(old_error_context), Some(& error_contextualizer));
+
 		//assert_eq!(tag, self.current_implicit_tag);
 		check_tag_compatibility_interior(
+			error_context,
 			self.spec_funclet,
 			self.current_implicit_tag,
 			tag,
-		).map_err(|e| e.append_message(format!("While checking that the implicit tag {:?} is compatible with {:?}", self.current_implicit_tag, tag)))?;
+		)?;//.map_err(|e| e.append_message(format!("While checking that the implicit tag {:?} is compatible with {:?}", self.current_implicit_tag, tag)))?;
 
 		return Ok(());
 	}
 
-	pub fn check_node_tag(&self, node_id : ir::NodeId, tag : ir::Tag) -> Result<(), Error> {
-		let scalar = self.scalar_nodes.get(& node_id).unwrap();
+	pub fn check_node_tag(&self, old_error_context : &ErrorContext, node_id : ir::NodeId, tag : ir::Tag) -> Result<(), Error> {
+		let error_contextualizer = |writer : &mut std::fmt::Write| { self.contextualize_error(writer) };
+		let error_context = & ErrorContext::new(Some(old_error_context), Some(& error_contextualizer));
+
+		let Some(scalar) = self.scalar_nodes.get(& node_id) else {
+			panic!("Impl node #{} has no tag for this spec\n{}", node_id, error_context)
+		};
 		//assert_eq!(*scalar, tag);
 		check_tag_compatibility_interior(
+			error_context,
 			self.spec_funclet,
 			*scalar,
 			tag,
@@ -412,11 +478,11 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
-	pub fn check_node_is_current_with_implicit(&self, node_id : ir::NodeId) -> Result<(), Error> {
-		self.check_node_tag(node_id, self.current_implicit_tag)
+	pub fn check_node_is_current_with_implicit(&self, error_context : &ErrorContext, node_id : ir::NodeId) -> Result<(), Error> {
+		self.check_node_tag(error_context, node_id, self.current_implicit_tag)
 	}
 
-	pub fn check_node_is_readable_at_implicit(&self, node_id : ir::NodeId) -> Result<(), Error> {
+	pub fn check_node_is_readable_at_implicit(&self, error_context : &ErrorContext, node_id : ir::NodeId) -> Result<(), Error> {
 		let scalar = self.scalar_nodes.get(& node_id).unwrap();
 		if ! scalar.flow.is_readable() {
 			return Err(Error::Generic{message: format!("Node is not readable")})
@@ -424,6 +490,7 @@ impl<'program> FuncletSpecChecker<'program> {
 		let tag = ir::Tag{quot: self.current_implicit_tag.quot, flow: scalar.flow};
 		//assert_eq!(*scalar, tag);
 		check_tag_compatibility_interior(
+			error_context,
 			self.spec_funclet,
 			*scalar,
 			tag,
@@ -432,7 +499,7 @@ impl<'program> FuncletSpecChecker<'program> {
 		return Ok(());
 	}
 
-	pub fn check_node_is_readable_at(&self, node_id : ir::NodeId, reader_tag : ir::Tag) -> Result<(), Error> {
+	pub fn check_node_is_readable_at(&self, error_context : &ErrorContext, node_id : ir::NodeId, reader_tag : ir::Tag) -> Result<(), Error> {
 		let scalar = self.scalar_nodes.get(& node_id).unwrap();
 		if ! scalar.flow.is_readable() {
 			return Err(Error::Generic{message: format!("Node is not readable")})
@@ -441,6 +508,7 @@ impl<'program> FuncletSpecChecker<'program> {
 		let tag = ir::Tag{quot: reader_tag.quot, flow: scalar.flow};
 		//assert_eq!(*scalar, tag);
 		check_tag_compatibility_interior(
+			error_context,
 			self.spec_funclet,
 			*scalar,
 			tag,
@@ -453,11 +521,12 @@ impl<'program> FuncletSpecChecker<'program> {
 		self.update_scalar_node(node_id, self.current_implicit_tag.quot, self.current_implicit_tag.flow)
 	}
 
-	pub fn check_join_tags(&self, node_id : ir::NodeId, input_tags : &[ir::Tag], implicit_in_tag : ir::Tag) -> Result<(), Error> {
+	pub fn check_join_tags(&self, error_context : &ErrorContext, node_id : ir::NodeId, input_tags : &[ir::Tag], implicit_in_tag : ir::Tag) -> Result<(), Error> {
 		let join = self.join_nodes.get(& node_id).unwrap();
 		//assert_eq!(*scalar, tag);
 		for index in 0 .. join.input_tags.len() {
 			check_tag_compatibility_interior(
+				error_context,
 				self.spec_funclet,
 				input_tags[index],
 				join.input_tags[index],
@@ -465,6 +534,7 @@ impl<'program> FuncletSpecChecker<'program> {
 		}
 
 		check_tag_compatibility_interior(
+			error_context,
 			self.spec_funclet,
 			implicit_in_tag,
 			join.implicit_tag,
@@ -616,6 +686,7 @@ fn concretize_input_to_internal_tag(tag: ir::Tag) -> ir::Tag {
 }
 
 fn check_tag_compatibility_enter(
+	error_context : &ErrorContext,
     input_spec_node_ids : &[ir::NodeId],
     caller_tag: ir::Tag,
     callee_tag: ir::Tag,
@@ -636,6 +707,7 @@ fn check_tag_compatibility_enter(
 
 // Check value tag in callee (source) scope transfering to caller (destination) scope
 fn check_tag_compatibility_exit(
+	error_context : &ErrorContext,
     caller_spec_funclet: &ir::Funclet,
     caller_spec_node_id: ir::NodeId,
     source_tag: ir::Tag,
@@ -668,6 +740,7 @@ fn check_tag_compatibility_exit(
 }
 
 fn check_tag_compatibility_interior_cast(
+	error_context : &ErrorContext,
     current_spec_funclet: &ir::Funclet,
     source_tag: ir::Tag,
     destination_tag: ir::Tag,
@@ -683,6 +756,7 @@ fn check_tag_compatibility_interior_cast(
 	}
 
     check_tag_compatibility_interior(
+		error_context,
         current_spec_funclet,
         source_tag,
         destination_tag,
@@ -693,6 +767,7 @@ fn check_tag_compatibility_interior_cast(
 
 // Check value tag transition in same scope
 fn check_tag_compatibility_interior(
+	error_context : &ErrorContext,
     current_value_funclet: &ir::Funclet,
     source_tag: ir::Tag,
     destination_tag: ir::Tag
@@ -724,15 +799,16 @@ fn check_tag_compatibility_interior(
             }
         }
         (ir::Quotient::Node { node_id }, ir::Quotient::Node { node_id: node_id_2 }) => {
-            //assert_eq!(node_id, node_id_2);
-			if node_id != node_id_2 {
-				return Err(Error::Generic{message: format!("Tag of node #{} is not compatibile with tag of node #{}", node_id, node_id_2)});
-			}
+            assert_eq!(node_id, node_id_2, "\n{}", error_context);
+			/*if node_id != node_id_2 {
+
+				//return Err(Error::Generic{message: format!("Tag of node #{} is not compatibile with tag of node #{}\n{}", node_id, node_id_2, error_context)});
+			}*/
         }
 		// An output is not necessarily equivalent to a node (there are some monad things going on)
         ( ir::Quotient::Node { node_id }, ir::Quotient::Output { index } ) if flow == ir::Flow::Have => {
             match &current_value_funclet.tail_edge {
-                ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], node_id),
+                ir::TailEdge::Return { return_values } => { error_ifn_eq!(error_context, return_values[index], node_id)?; }
                 _ => panic!("Not a unit"),
             }
         }

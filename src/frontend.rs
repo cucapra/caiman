@@ -62,6 +62,10 @@ pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<Str
     let mut definition = read_definition(input_string, options.compile_mode)?;
     assert_eq!(definition.version, (0, 0, 1));
     ir::validation::validate_program(&definition.program);
+    match crate::type_system::check_program(&definition.program) {
+        Ok(_) => (),
+        Err(error) => panic!("Type checking failed:\n{}", error),
+    }
     let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
     codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
     let output_string = codegen.generate();

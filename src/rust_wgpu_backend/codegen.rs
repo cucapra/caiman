@@ -1543,8 +1543,8 @@ impl<'program> CodeGen<'program> {
         }
 
         for (current_node_id, node) in funclet.nodes.iter().enumerate() {
-            let node_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While compiling node #{}: {:?}", current_node_id, node) };
-            let node_error_context = type_system::error::ErrorContext::new(None, Some(& node_error_contextualizer ));
+            //let node_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While compiling node #{}: {:?}", current_node_id, node) };
+            //let node_error_context = type_system::error::ErrorContext::new(None, Some(& node_error_contextualizer ));
             self.code_generator
                 .insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
 
@@ -1555,7 +1555,7 @@ impl<'program> CodeGen<'program> {
                 );
             }
 
-            funclet_checker.check_next_node(&node_error_context, current_node_id).expect("");
+            //funclet_checker.check_next_node(&node_error_context, current_node_id).expect("");
 
             match node {
                 ir::Node::None => (),
@@ -2239,8 +2239,8 @@ impl<'program> CodeGen<'program> {
             );
         }
 
-        let tail_error_context = type_system::error::ErrorContext::new(None, Some(& |writer| write!(writer, "While compiling tail edge") ));
-        funclet_checker.check_tail_edge(& tail_error_context).expect("");
+        //let tail_error_context = type_system::error::ErrorContext::new(None, Some(& |writer| write!(writer, "While compiling tail edge") ));
+        //funclet_checker.check_tail_edge(& tail_error_context).expect("");
 
         self.code_generator
             .insert_comment(format!(" tail edge: {:?}", funclet.tail_edge).as_str());
