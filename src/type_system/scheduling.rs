@@ -94,7 +94,7 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
                 //assert_eq!(*queue_stage_2, *queue_stage);
                 assert_eq!(*storage_type, *storage_type_2);
             } else {
-                panic!("type id is a slot type, but node is not a slot");
+                panic!("type id is a ref type, but node is not a ref");
             }
         }
         ir::Type::Fence {
@@ -187,7 +187,7 @@ fn advance_forward_value_do<'program>(value_spec_checker : &mut FuncletSpecCheck
 fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecChecker<'program>, error_context : &ErrorContext, spec_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], output_impl_node_ids : &[ir::NodeId]) -> Result<(), Error> {
     let encoded_node = & timeline_spec_checker.spec_funclet.nodes[spec_node_id];
     match encoded_node {
-        ir::Node::EncodingEvent { local_past } => {
+        ir::Node::EncodingEvent { local_past, remote_local_pasts } => {
             assert_eq!(output_impl_node_ids.len(), 1);
             /*match timeline_spec_checker.current_implicit_tag {
                 ir::Tag::Node{node_id : local_past_node_id} => {
@@ -197,9 +197,15 @@ fn advance_forward_timeline<'program>(timeline_spec_checker : &mut FuncletSpecCh
             }*/
             let from_tag = ir::Tag{quot: ir::Quotient::Node{node_id: *local_past}, flow: ir::Flow::Have};
             timeline_spec_checker.check_implicit_tag(error_context, from_tag)?;
-            timeline_spec_checker.transition_state_subset_forwards(input_impl_node_ids, *local_past, spec_node_id + 2)?;
+            let encoded_impl_node_ids = & input_impl_node_ids[remote_local_pasts.len() .. ];
+            let fence_impl_node_ids = & input_impl_node_ids[0 .. remote_local_pasts.len()];
+            let new_encoded_state_spec_node_id = spec_node_id + 2;
+            timeline_spec_checker.transition_state_subset_forwards(encoded_impl_node_ids, *local_past, new_encoded_state_spec_node_id)?;
+            for remote_local_past_spec_node_id in remote_local_pasts.iter() {
+                timeline_spec_checker.transition_state_subset_forwards(encoded_impl_node_ids, *remote_local_past_spec_node_id, new_encoded_state_spec_node_id)?;
+            }
             timeline_spec_checker.transition_state_forwards(*local_past, spec_node_id + 1)?;
-            timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: spec_node_id + 2}, ir::Flow::Have);
+            timeline_spec_checker.update_scalar_node(output_impl_node_ids[0], ir::Quotient::Node{node_id: new_encoded_state_spec_node_id}, ir::Flow::Have);
         }
         ir::Node::SubmissionEvent { local_past } => {
             assert_eq!(input_impl_node_ids.len(), 1);
@@ -442,8 +448,8 @@ impl<'program> FuncletChecker<'program> {
         let spec_checker = spec_checker_opt.unwrap();
 
         let ir::ffi::ExternalFunction::CpuEffectfulOperation(effectful_operation) = & self.program.native_interface.external_functions[external_function_id.0] else { panic!("") };
-        assert_eq!(effectful_operation.input_types.len(), arguments.len() + 1);
-        assert_eq!(yielded_impl_node_ids.len(), arguments.len());
+        assert_eq!(effectful_operation.input_types.len() + 1, arguments.len());
+        assert_eq!(yielded_impl_node_ids.len() + 1, arguments.len());
 
         assert!(arguments.len() > 0);
 
@@ -619,6 +625,10 @@ impl<'program> FuncletChecker<'program> {
                 let encoder_timeline_tag = timeline_spec_checker.scalar_nodes[encoder];
                 let encoder_spatial_tag = spatial_spec_checker.scalar_nodes[encoder];
 
+                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder) else {
+                    panic!("Not an encoder\n{}", error_context);
+                };
+
                 match encoded_node {
                     ir::Node::CallFunctionClass {
                         function_id,
@@ -750,12 +760,20 @@ impl<'program> FuncletChecker<'program> {
                 output,
                 encoder,
             } => {
+                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder) else {
+                    panic!("Not an encoder\n{}", error_context);
+                };
                 advance_forward_value_copy(self.value_spec_checker_opt.as_mut().unwrap(), error_context, *input, *output)?;
+                //??
             }
-            ir::Node::BeginEncoding { place, event: ir::Quotient::Node{node_id: event_node_id}, encoded } => {
+            ir::Node::BeginEncoding { place, event: ir::Quotient::Node{node_id: event_node_id}, encoded, fences } => {
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::EncodingEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be an encoding event") };
-                advance_forward_timeline(timeline_spec_checker, error_context, *event_node_id, encoded, &[current_node_id])?;
+                let ir::Node::EncodingEvent{remote_local_pasts, ..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be an encoding event\n{}", error_context) };
+                assert_eq!(remote_local_pasts.len(), fences.len());
+                let mut input_impl_node_ids = Vec::<ir::NodeId>::new();
+                input_impl_node_ids.extend_from_slice(fences);
+                input_impl_node_ids.extend_from_slice(encoded);
+                advance_forward_timeline(timeline_spec_checker, error_context, *event_node_id, input_impl_node_ids.as_slice(), &[current_node_id])?;
                 //self.timeline_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(current_node_id);
                 self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
                 self.spatial_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(current_node_id);
@@ -769,11 +787,11 @@ impl<'program> FuncletChecker<'program> {
             }
             ir::Node::Submit { event: ir::Quotient::Node{node_id: event_node_id}, encoder } => {
                 let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.remove(encoder) else {
-                    panic!("Not an encoder");
+                    panic!("Not an encoder\n{}", error_context);
                 };
 
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::SubmissionEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be a submission event") };
+                let ir::Node::SubmissionEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be a submission event\n{}", error_context) };
                 advance_forward_timeline(timeline_spec_checker, error_context, *event_node_id, &[*encoder], &[current_node_id])?;
                 self.value_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
                 //let implicit_tag = timeline_spec_checker.current_implicit_tag;

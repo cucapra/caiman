@@ -164,7 +164,7 @@
 					AllocTemporary(place : Gpu, storage_type : 0),
 
 					LocalDoBuiltin(operation : Node(node_id : 1), inputs : [], outputs : [2]),
-					BeginEncoding(place : Gpu, event: Node(node_id : 1), encoded: [3, 4]),
+					BeginEncoding(place : Gpu, event: Node(node_id : 1), encoded: [3, 4], fences : []),
 					EncodeCopy(encoder : 6, input : 0, output : 3),
 					EncodeDoExternal(encoder : 6, operation : Node(node_id : 2), external_function_id : 0, inputs : [2, 2, 2, 3], outputs : [4]),
 					Submit(encoder : 6, event : Node(node_id : 4)),
@@ -242,7 +242,7 @@
 
 				nodes : [
 					Phi(index : 0),
-					EncodingEvent(local_past: 0),
+					EncodingEvent(local_past: 0, remote_local_pasts : []),
 					ExtractResult(node_id: 1, index: 0),
 					ExtractResult(node_id: 1, index: 1),
 					SubmissionEvent(local_past : 3),

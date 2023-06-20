@@ -33,7 +33,7 @@ enum NodeResult {
     },
     Fence {
         place: ir::Place,
-        fence_id: code_generator::FenceId,
+        fence_id: code_generator::VarId,
     },
     Encoder {
         place: ir::Place,
@@ -158,6 +158,7 @@ impl PlacementState {
         match node_result {
             NodeResult::Slot { slot_id, .. } => self.get_slot_var_id(*slot_id),
             NodeResult::Buffer { var_id, .. } => Some(*var_id),
+            NodeResult::Fence { fence_id, .. } => Some(*fence_id),
             _ => None,
         }
     }
@@ -456,6 +457,11 @@ impl<'program> CodeGen<'program> {
             } => self
                 .code_generator
                 .create_ffi_type(ir::ffi::Type::CpuBufferAllocator),
+            ir::Type::Fence {
+                queue_place: ir::Place::Gpu,
+            } => self
+                .code_generator
+                .create_ffi_type(ir::ffi::Type::GpuFence),
             _ => panic!("Not a valid type for referencing from the CPU: {:?}", typ),
         };
 
@@ -903,6 +909,7 @@ impl<'program> CodeGen<'program> {
             match captured_node_result {
                 NodeResult::Slot { .. } => (),
                 NodeResult::Buffer { .. } => (),
+                NodeResult::Fence { .. } => (),
                 _ => panic!("Not yet supported"),
             }
         }
@@ -998,9 +1005,10 @@ impl<'program> CodeGen<'program> {
                         });
                     }
                     ir::Type::Fence { queue_place } => {
-                        panic!("Fences cannot currently cross a rust function boundary")
+                        //panic!("Fences cannot currently cross a rust function boundary");
                         // To do
-                        //argument_node_results.push(NodeResult::Fence{ place : * queue_place, fence_id : });
+                        let fence_id = argument_variable_ids[index];//self.code_generator.convert_var_to_gpu_fence(argument_variable_ids[index]);
+                        argument_node_results.push(NodeResult::Fence{ place : * queue_place, fence_id });
                     }
                     ir::Type::Buffer { storage_place, .. } => {
                         argument_node_results.push(NodeResult::Buffer {
@@ -1929,7 +1937,8 @@ impl<'program> CodeGen<'program> {
                 ir::Node::BeginEncoding {
                     place,
                     event,
-                    encoded
+                    encoded,
+                    fences
                 } => {
                     funclet_scoped_state.node_results.insert(
                         current_node_id,

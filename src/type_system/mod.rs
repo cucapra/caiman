@@ -15,13 +15,13 @@ pub fn check_program(program: & super::ir::Program) -> Result<(), error::Error> 
         let mut funclet_checker = scheduling::FuncletChecker::new(&program, funclet);
 
         for (current_node_id, node) in funclet.nodes.iter().enumerate() {
-            let node_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While compiling node #{}: {:?}", current_node_id, node) };
+            let node_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While type checking node #{}: {:?}", current_node_id, node) };
             let node_error_context = error::ErrorContext::new(Some(& funclet_error_context), Some(& node_error_contextualizer ));
 
             funclet_checker.check_next_node(&node_error_context, current_node_id)?;
 		}
 
-        let tail_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While compiling tail edge: {:?}", funclet.tail_edge) };
+        let tail_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While type checking tail edge: {:?}", funclet.tail_edge) };
         let tail_error_context = error::ErrorContext::new(Some(& funclet_error_context), Some(& tail_error_contextualizer ));
         funclet_checker.check_tail_edge(& tail_error_context)?;
 	}

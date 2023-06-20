@@ -35,7 +35,7 @@ fn looping_pipeline() -> Result<(), String> {
     let instance = looping_pipeline::Instance::new(&mut root_state, &callbacks);
 
     let input_ref = caiman_rt::GpuBufferRef::<i32>::new(&buffer, 0);
-    let mut result = instance.start(&mut join_stack, input_ref);
+    let mut result = instance.start(&mut join_stack, input_ref, None);
     for _ in 0..5 {
         let instance = result.prepare_next();
         result = instance.resume_at_loop(&mut join_stack);

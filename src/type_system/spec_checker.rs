@@ -361,6 +361,7 @@ impl<'program> FuncletSpecChecker<'program> {
 					let callee_spec_funclet = & self.program.funclets[callee_spec_funclet_id];
 					match & callee_spec_funclet.spec_binding {
 						ir::FuncletSpecBinding::Value{value_function_id_opt: Some(value_function_id)} if *value_function_id == *function_id => {},
+						ir::FuncletSpecBinding::Timeline{function_class_id_opt: Some(function_class_id)} if *function_class_id == *function_id => {},
 						_ => return Err(error_context.generic_error(& format!("Callee spec funclet #{} does not implement function class #{}", callee_spec_funclet_id, *function_id)))
 					}
 					self.check_vertical_call(error_context, continuation_impl_node_id, input_impl_node_ids, callee_funclet_spec, arguments, node_id)
@@ -375,6 +376,7 @@ impl<'program> FuncletSpecChecker<'program> {
 	}
 
 	pub fn check_choice(&mut self, error_context : &ErrorContext, continuation_impl_node_id : ir::NodeId, input_impl_node_ids : &[ir::NodeId], choice_remaps : &[&[(ir::NodeId, ir::NodeId)]], choice_specs : &[&ir::FuncletSpec]) -> Result<(), Error> {
+
 		let continuation_join = self.join_nodes.remove(& continuation_impl_node_id).unwrap();
 
 		assert_eq!(choice_remaps.len(), choice_specs.len());
@@ -695,7 +697,7 @@ fn check_tag_compatibility_enter(
     match (caller_tag.quot, callee_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (ir::Quotient::Node { node_id }, ir::Quotient::Input { index }) => {
-            assert_eq!(input_spec_node_ids[index], node_id);
+            assert_eq!(input_spec_node_ids[index], node_id, "{:?} -> {:?}\n{}", caller_tag, callee_tag, error_context);
         }
         _ => return Err(Error::Generic{message: format!(
             "Ill-formed: {:?} to {:?} via enter",
@@ -720,8 +722,8 @@ fn check_tag_compatibility_exit(
         (ir::Quotient::Output {index: output_index}, ir::Quotient::Node { node_id }) => {
             let node = &caller_spec_funclet.nodes[node_id];
             if let ir::Node::ExtractResult {node_id: call_node_id, index} = node {
-                assert_eq!(*index, output_index);
-                assert_eq!(*call_node_id, caller_spec_node_id);
+                assert_eq!(*index, output_index, "{:?} -> {:?}\n{}", source_tag, destination_tag, error_context);
+                assert_eq!(*call_node_id, caller_spec_node_id, "{:?} -> {:?}\n{}", source_tag, destination_tag, error_context);
             }
             else {
                 panic!(
@@ -731,8 +733,9 @@ fn check_tag_compatibility_exit(
             }
         }
         _ => panic!(
-            "Ill-formed: {:?} to {:?}",
-            source_tag, destination_tag
+            "Ill-formed: {:?} to {:?}\n{}",
+            source_tag, destination_tag,
+			error_context
         ),
     };
 
@@ -826,8 +829,8 @@ fn check_tag_compatibility_interior(
             assert_eq!(index, index_2);
         }
         _ => panic!(
-            "Ill-formed: {:?} to {:?}",
-            source_tag, destination_tag
+            "Ill-formed: {:?} to {:?}\n{}",
+            source_tag, destination_tag, error_context
         ),
     }
 

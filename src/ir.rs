@@ -318,6 +318,9 @@ pub enum FuncletSpecBinding {
     Value {
         value_function_id_opt: Option<ValueFunctionId>,
     },
+    Timeline {
+        function_class_id_opt : Option<FunctionClassId>,
+    },
     ScheduleExplicit {
         value: FuncletSpec,
         spatial: FuncletSpec,

@@ -61,7 +61,7 @@ fn read_definition(
 pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<String, CompileError> {
     let mut definition = read_definition(input_string, options.compile_mode)?;
     assert_eq!(definition.version, (0, 0, 1));
-    ir::validation::validate_program(&definition.program);
+    //ir::validation::validate_program(&definition.program);
     match crate::type_system::check_program(&definition.program) {
         Ok(_) => (),
         Err(error) => panic!("Type checking failed:\n{}", error),

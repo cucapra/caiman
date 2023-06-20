@@ -241,6 +241,7 @@
 				(name : "place", kind : Place),
 				(name : "event", kind : RemoteOperation),
 				(name : "encoded", kind : Operation, is_array : true), // Resources that will be used
+				(name : "fences", kind : Operation, is_array : true) // fences of already-submitted resources
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
@@ -364,6 +365,7 @@
 			name : "EncodingEvent",
 			inputs : [
 				(name : "local_past", kind : Operation),
+				(name : "remote_local_pasts", kind : Operation, is_array : true)
 			],
 			output : Multiple, // First is the state that will stay local. Second is the state that will be used in encoding.
 			language_set : (functional : false, scheduling: false, timeline : true, spatial : false, intrinsic : false),

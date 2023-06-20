@@ -52,7 +52,9 @@
 			}
 		),
 		function_classes : {
-			1 : (name : "looping_value_function", input_types : [0], output_types : [0], default_funclet_id : Some(19)),
+			1 : (name : "looping_value_function", input_types : [0], output_types : [0]),
+			2 : (name : "looping_timeline_function", input_types : [2, 2], output_types : [2, 2]),
+			3 : (name : "external_yield", input_types : [2], output_types : [2], external_function_ids : [3]),
 			4 : (input_types : [0], output_types : [0], external_function_ids : [0]),
 			5 : (input_types : [0], output_types : [0], external_function_ids : [1])
 		},
@@ -82,11 +84,12 @@
 				kind : Value,
 				input_types : [0],
 				output_types : [0],
+				spec_binding : Value(value_function_id_opt : Some(1)),
 				nodes : [
 					Phi(index : 0),
-					CallValueFunction(function_id : 5, arguments : [0]),
+					CallFunctionClass(function_id : 5, arguments : [0]),
 					ExtractResult(node_id : 1, index : 0),
-					CallValueFunction(function_id : 1, arguments : [2]),
+					CallFunctionClass(function_id : 1, arguments : [2]),
 					ExtractResult(node_id : 3, index : 0),
 				],
 				tail_edge : Return(return_values : [4])
@@ -94,98 +97,125 @@
 
 			20 : (
 				kind : ScheduleExplicit,
-				input_types : [3],
-				output_types : [3],
+				input_types : [3, 4],
+				output_types : [3, 4],
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(19),
-						input_tags : [Input(funclet_id : 19, index : 0)],
-						output_tags : [Output(funclet_id : 19, index : 0)]
+						input_tags : [(quot: Input(index : 0), flow: Have), (quot: None, flow: Have)],
+						output_tags : [(quot: Output(index : 0), flow: Have), (quot: None, flow: Have)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [Input(funclet_id : 18, index : 0)],
-						output_tags : [Output(funclet_id : 18, index : 0)]
+						input_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)],
+						output_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)]
 					),
 					timeline : (
 						funclet_id_opt : Some(22),
-						input_tags : [Input(index : 0)],
-						output_tags : [None],
-						implicit_in_tag : Input(index : 0),
-						implicit_out_tag : Output(index : 0)
+						input_tags : [(quot: Input(index : 1), flow: Have), (quot: Input(index : 1), flow: Have)],
+						output_tags : [(quot: Output(index : 1), flow: Have), (quot: Output(index : 1), flow: Have)],
+						implicit_in_tag : (quot: Input(index : 0), flow: Have),
+						implicit_out_tag : (quot: Output(index : 0), flow: Have)
 					)
 				),
 				nodes : [
 					Phi(index : 0),
-					BeginEncoding(place : Gpu, event: Node(node_id : 3), encoded : [0]), // Need to continue encoding from submitted
-					EncodeDoExternal(encoder : 1, operation : Node(funclet_id : 19, node_id : 1), external_function_id : 1, inputs : [0], outputs : [0]),
-					Submit(encoder : 1, event : Node(node_id : 4)),
+					Phi(index : 1),
+					BeginEncoding(place : Gpu, event: Node(node_id : 2), encoded : [0], fences : [1]),
+					EncodeDoExternal(encoder : 2, operation : Node(funclet_id : 19, node_id : 1), external_function_id : 1, inputs : [0], outputs : [0]),
+					Submit(encoder : 2, event : Node(node_id : 5)),
 					DefaultJoin,
-					InlineJoin(funclet : 21, captures : [0, 3], continuation : 4),
+					InlineJoin(funclet : 21, captures : [0, 4], continuation : 5),
 				],
-				tail_edge : ScheduleCallYield(value_operation: , timeline_operation: , spatial_operation: , external_function_id : 3, yielded_nodes : [], continuation_join : 5 )
+				tail_edge : ScheduleCallYield(value_operation: None, timeline_operation: Node(node_id: 6), spatial_operation: None, external_function_id : 3, yielded_nodes : [], continuation_join : 6 )
 				//tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [1], continuation_join : 3)
 			),
 
 			21 : (
 				kind : ScheduleExplicit,
-				input_types : [3],
-				output_types : [3],
+				input_types : [3, 4],
+				output_types : [3, 4],
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(19),
-						input_tags : [Node(node_id : 2)],
-						output_tags : [Node(node_id : 4)]
+						input_tags : [(quot: Node(node_id : 2), flow: Have), (quot: None, flow: Have)],
+						output_tags : [(quot: Output(index : 0), flow: Have), (quot: None, flow: Have)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [Node(node_id : 0)],
-						output_tags : [Output(funclet_id : 18, index : 0)]
+						input_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)],
+						output_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)]
 					),
 					timeline : (
 						funclet_id_opt : Some(22),
-						input_tags : [Input(funclet_id : 22, index : 0)],
-						output_tags : [None],
-						implicit_in_tag : Input(funclet_id : 22, index : 0),
-						implicit_out_tag : Output(funclet_id : 22, index : 0)
+						input_tags : [(quot: Node(node_id : 5), flow: Have), (quot: Node(node_id : 5), flow: Have)],
+						output_tags : [(quot: Output(index : 1), flow: Have), (quot: Output(index : 1), flow: Have)],
+						implicit_in_tag : (quot: Node(node_id : 7), flow: Have),
+						implicit_out_tag : (quot: Output(index : 0), flow: Have)
 					)
 				),
 				nodes : [
 					Phi(index : 0),
+					Phi(index : 1),
 					DefaultJoin,
-					//Join(funclet : 23, captures : [], continuation : 1),
+					InlineJoin(funclet : 23, captures : [], continuation : 2),
 				],
-				tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [0], continuation_join : 1)
+				tail_edge : ScheduleCall(value_operation : Node(node_id : 3), timeline_operation : Node(node_id : 8), spatial_operation : None, callee_funclet_id : 20, callee_arguments : [0, 1], continuation_join : 3)
 			),
 
 
 			22 : (
 				kind : Timeline,
-				input_types : [2],
-				output_types : [2],
-
+				input_types : [2, 2],
+				output_types : [2, 2],
+				spec_binding : Timeline(function_class_id_opt: Some(2)),
 				nodes : [
 					Phi(index : 0),
-					EncodingEvent(local_past: 0), // Needs remote_local_past variant for previously encoded
-					ExtractResult(node_id: 1, index: 0),
-					ExtractResult(node_id: 1, index: 1),
-					SubmissionEvent(local_past : 3),
+					Phi(index : 1),
+					EncodingEvent(local_past: 0, remote_local_pasts : [1]), // Needs remote_local_past variant for previously encoded
+					ExtractResult(node_id: 2, index: 0),
+					ExtractResult(node_id: 2, index: 1),
+					SubmissionEvent(local_past : 4),
+					// Yield
+					CallFunctionClass(function_id : 3, arguments : [3]),
+					ExtractResult(node_id: 6, index: 0),
+					// Recurse
+					CallFunctionClass(function_id : 2, arguments : [7, 5]),
+					ExtractResult(node_id: 8, index: 0),
+					ExtractResult(node_id: 8, index: 1),
 				],
-				tail_edge : Return(return_values : [2, 4])
+				tail_edge : Return(return_values : [9, 10])
 			),
 
-			/*23 : (
+			23 : (
 				kind : ScheduleExplicit,
-				input_types : [3],
-				output_types : [3],
-
+				input_types : [3, 4],
+				output_types : [3, 4],
+				spec_binding : ScheduleExplicit(
+					value : (
+						funclet_id_opt : Some(19),
+						input_tags : [(quot: Node(node_id : 4), flow: Have), (quot: None, flow: Have)],
+						output_tags : [(quot: Output(index : 0), flow: Have), (quot: None, flow: Have)]
+					),
+					spatial : (
+						funclet_id_opt : Some(18),
+						input_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)],
+						output_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)]
+					),
+					timeline : (
+						funclet_id_opt : Some(22),
+						input_tags : [(quot: Node(node_id : 10), flow: Have), (quot: Node(node_id : 10), flow: Have)],
+						output_tags : [(quot: Output(index : 1), flow: Have), (quot: Output(index : 1), flow: Have)],
+						implicit_in_tag : (quot: Node(node_id : 9), flow: Have),
+						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+					)
+				),
 				nodes : [
 					Phi(index : 0),
-					DefaultJoin,
-					Join(funclet : 23, captures : [], continuation : 1),
+					Phi(index : 1),
 				],
-				tail_edge : ScheduleCall(value_operation : (funclet_id : 19, node_id : 3), callee_funclet_id : 20, callee_arguments : [0], continuation_join : 2)
-			),*/
+				tail_edge : Return(return_values : [0, 1])
+			),
 
 		},
 		pipelines : [
