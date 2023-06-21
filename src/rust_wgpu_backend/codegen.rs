@@ -309,12 +309,11 @@ impl FuncletScopedState {
         return None;
     }
 
-    fn collect_slots_for_node_ids(&self, node_ids : &[ir::NodeId]) -> Box<[SlotId]> {
+    fn collect_slots_for_node_ids(&self, node_ids: &[ir::NodeId]) -> Box<[SlotId]> {
         let mut slot_ids = Vec::<SlotId>::new();
 
         for &node_id in node_ids.iter() {
-            if let Some(slot_id) = self.get_node_slot_id(node_id)
-            {
+            if let Some(slot_id) = self.get_node_slot_id(node_id) {
                 slot_ids.push(slot_id);
             } else {
                 panic!(
@@ -405,9 +404,7 @@ impl<'program> CodeGen<'program> {
 
         let typ = &self.program.types[type_id];
         let ffi_type_id = match typ {
-            ir::Type::NativeValue{storage_type} => {
-                *storage_type
-            }
+            ir::Type::NativeValue { storage_type } => *storage_type,
             ir::Type::Ref {
                 storage_type,
                 //queue_stage: _,
@@ -459,9 +456,7 @@ impl<'program> CodeGen<'program> {
                 .create_ffi_type(ir::ffi::Type::CpuBufferAllocator),
             ir::Type::Fence {
                 queue_place: ir::Place::Gpu,
-            } => self
-                .code_generator
-                .create_ffi_type(ir::ffi::Type::GpuFence),
+            } => self.code_generator.create_ffi_type(ir::ffi::Type::GpuFence),
             _ => panic!("Not a valid type for referencing from the CPU: {:?}", typ),
         };
 
@@ -478,7 +473,7 @@ impl<'program> CodeGen<'program> {
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         schema: &ir::fusion::Opportunity,
-        external_function_id : ir::ffi::ExternalFunctionId,
+        external_function_id: ir::ffi::ExternalFunctionId,
     ) {
         let node_to_var_map = |(&node_id)| {
             let slot_id = funclet_scoped_state.get_node_slot_id(node_id).unwrap();
@@ -519,7 +514,7 @@ impl<'program> CodeGen<'program> {
         &mut self,
         placement_state: &mut PlacementState,
         value_node: &ir::Node,
-        external_function_id : ir::ffi::ExternalFunctionId,
+        external_function_id: ir::ffi::ExternalFunctionId,
         input_slot_ids: &[SlotId],
         output_slot_ids: &[SlotId],
     ) {
@@ -570,7 +565,7 @@ impl<'program> CodeGen<'program> {
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         node: &ir::Node,
-        external_function_id : ir::ffi::ExternalFunctionId,
+        external_function_id: ir::ffi::ExternalFunctionId,
         input_slot_ids: &[SlotId],
         output_slot_ids: &[SlotId],
     ) {
@@ -580,7 +575,9 @@ impl<'program> CodeGen<'program> {
                 arguments,
                 //dimensions,
             } => {
-                assert!(self.program.function_classes[*function_id].external_function_ids.contains(& external_function_id));
+                assert!(self.program.function_classes[*function_id]
+                    .external_function_ids
+                    .contains(&external_function_id));
 
                 let function =
                     &self.program.native_interface.external_functions[external_function_id.0];
@@ -636,7 +633,7 @@ impl<'program> CodeGen<'program> {
                         //placement_state.scheduling_state.forward_slot(output_slot_id, input_slot_id);
                         let var_id = placement_state.slot_variable_ids[&input_slot_id];
                         assert_eq!(output_slot_id, input_slot_id);
-                       /* let old = placement_state
+                        /* let old = placement_state
                             .slot_variable_ids
                             .insert(output_slot_id, var_id);
                         assert!(old.is_none());*/
@@ -655,8 +652,12 @@ impl<'program> CodeGen<'program> {
                     placement_state.slot_variable_ids[&slot_id]
                 };
 
-                let mut dimension_var_ids =
-                    Vec::from_iter(arguments[..kernel.dimensionality].iter().enumerate().map(dimension_map));
+                let mut dimension_var_ids = Vec::from_iter(
+                    arguments[..kernel.dimensionality]
+                        .iter()
+                        .enumerate()
+                        .map(dimension_map),
+                );
                 if dimension_var_ids.len() < 3 {
                     for i in dimension_var_ids.len()..3 {
                         dimension_var_ids.push(
@@ -666,9 +667,13 @@ impl<'program> CodeGen<'program> {
                     }
                 }
                 let dimension_var_ids = dimension_var_ids.into_boxed_slice();
-                let argument_var_ids =
-                    Vec::from_iter(arguments[kernel.dimensionality..].iter().enumerate().map(argument_map))
-                        .into_boxed_slice();
+                let argument_var_ids = Vec::from_iter(
+                    arguments[kernel.dimensionality..]
+                        .iter()
+                        .enumerate()
+                        .map(argument_map),
+                )
+                .into_boxed_slice();
                 let output_var_ids = output_slot_ids
                     .iter()
                     .map(|x| placement_state.get_slot_var_id(*x).unwrap())
@@ -773,7 +778,7 @@ impl<'program> CodeGen<'program> {
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         node: &ir::Node,
-        external_function_id : ir::ffi::ExternalFunctionId,
+        external_function_id: ir::ffi::ExternalFunctionId,
         input_slot_ids: &[SlotId],
         output_slot_ids: &[SlotId],
         output_slot_node_ids: &[ir::NodeId],
@@ -784,7 +789,9 @@ impl<'program> CodeGen<'program> {
                 function_id,
                 arguments,
             } => {
-                assert!(self.program.function_classes[*function_id].external_function_ids.contains(& external_function_id));
+                assert!(self.program.function_classes[*function_id]
+                    .external_function_ids
+                    .contains(&external_function_id));
 
                 let function =
                     &self.program.native_interface.external_functions[external_function_id.0];
@@ -969,13 +976,10 @@ impl<'program> CodeGen<'program> {
                 use ir::Type;
 
                 match &self.program.types[*input_type_id] {
-                    ir::Type::NativeValue {
-                        storage_type
-                    } => {
-                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
-                            *storage_type,
-                            ir::Place::Local,
-                        );
+                    ir::Type::NativeValue { storage_type } => {
+                        let slot_id = placement_state
+                            .scheduling_state
+                            .insert_hacked_slot(*storage_type, ir::Place::Local);
                         placement_state
                             .slot_variable_ids
                             .insert(slot_id, argument_variable_ids[index]);
@@ -1007,8 +1011,11 @@ impl<'program> CodeGen<'program> {
                     ir::Type::Fence { queue_place } => {
                         //panic!("Fences cannot currently cross a rust function boundary");
                         // To do
-                        let fence_id = argument_variable_ids[index];//self.code_generator.convert_var_to_gpu_fence(argument_variable_ids[index]);
-                        argument_node_results.push(NodeResult::Fence{ place : * queue_place, fence_id });
+                        let fence_id = argument_variable_ids[index]; //self.code_generator.convert_var_to_gpu_fence(argument_variable_ids[index]);
+                        argument_node_results.push(NodeResult::Fence {
+                            place: *queue_place,
+                            fence_id,
+                        });
                     }
                     ir::Type::Buffer { storage_place, .. } => {
                         argument_node_results.push(NodeResult::Buffer {
@@ -1214,16 +1221,16 @@ impl<'program> CodeGen<'program> {
                                     true_funclet.output_types.iter().enumerate()
                                 {
                                     // Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
-                                    let (storage_type, storage_place) =
-                                        if let ir::Type::Ref {
-                                            storage_type,
-                                            storage_place,
-                                        } = &self.program.types[*output_type]
-                                        {
-                                            (*storage_type, *storage_place)
-                                        } else {
-                                            panic!("Not a slot")
-                                        };
+                                    let (storage_type, storage_place) = if let ir::Type::Ref {
+                                        storage_type,
+                                        storage_place,
+                                    } =
+                                        &self.program.types[*output_type]
+                                    {
+                                        (*storage_type, *storage_place)
+                                    } else {
+                                        panic!("Not a slot")
+                                    };
                                     let slot_id = placement_state
                                         .scheduling_state
                                         .insert_hacked_slot(storage_type, storage_place);
@@ -1625,8 +1632,7 @@ impl<'program> CodeGen<'program> {
                                 *storage_type,
                             );
                             placement_state.update_slot_state(
-                                slot_id,
-                                //ir::ResourceQueueStage::Bound,
+                                slot_id, //ir::ResourceQueueStage::Bound,
                                 var_id,
                             );
                         }
@@ -1638,11 +1644,18 @@ impl<'program> CodeGen<'program> {
                     funclet_scoped_state.move_node_result(*dropped_node_id);
                 }
                 ir::Node::LocalDoBuiltin {
-                    operation: ir::Quotient::Node{node_id: operation_node_id},
+                    operation:
+                        ir::Quotient::Node {
+                            node_id: operation_node_id,
+                        },
                     inputs,
                     outputs,
                 } => {
-                    let operation_funclet_id = funclet.spec_binding.get_value_spec().funclet_id_opt.unwrap();
+                    let operation_funclet_id = funclet
+                        .spec_binding
+                        .get_value_spec()
+                        .funclet_id_opt
+                        .unwrap();
 
                     let encoded_funclet = &self.program.funclets[operation_funclet_id];
                     let encoded_node = &encoded_funclet.nodes[*operation_node_id];
@@ -1687,18 +1700,25 @@ impl<'program> CodeGen<'program> {
                         &mut funclet_scoped_state,
                         &mut funclet_checker,
                         encoded_node,
-                        & input_slot_ids,
-                        & output_slot_ids,
+                        &input_slot_ids,
+                        &output_slot_ids,
                         outputs,
                     );
                 }
                 ir::Node::LocalDoExternal {
-                    operation: ir::Quotient::Node{node_id: operation_node_id},
+                    operation:
+                        ir::Quotient::Node {
+                            node_id: operation_node_id,
+                        },
                     external_function_id,
                     inputs,
                     outputs,
                 } => {
-                    let operation_funclet_id = funclet.spec_binding.get_value_spec().funclet_id_opt.unwrap();
+                    let operation_funclet_id = funclet
+                        .spec_binding
+                        .get_value_spec()
+                        .funclet_id_opt
+                        .unwrap();
 
                     let encoded_funclet = &self.program.funclets[operation_funclet_id];
                     let encoded_node = &encoded_funclet.nodes[*operation_node_id];
@@ -1732,23 +1752,30 @@ impl<'program> CodeGen<'program> {
                         &mut funclet_scoped_state,
                         &mut funclet_checker,
                         encoded_node,
-                        * external_function_id,
-                        & input_slot_ids,
-                        & output_slot_ids,
+                        *external_function_id,
+                        &input_slot_ids,
+                        &output_slot_ids,
                         outputs,
                     );
                 }
                 ir::Node::EncodeDoExternal {
-                    operation: ir::Quotient::Node{node_id: operation_node_id},
+                    operation:
+                        ir::Quotient::Node {
+                            node_id: operation_node_id,
+                        },
                     external_function_id,
                     inputs,
                     outputs,
-                    encoder
+                    encoder,
                 } => {
                     let Some(NodeResult::Encoder{place}) = funclet_scoped_state.get_node_result(*encoder) else { panic!("No encoder"); };
 
                     assert_eq!(*place, ir::Place::Gpu);
-                    let operation_funclet_id = funclet.spec_binding.get_value_spec().funclet_id_opt.unwrap();
+                    let operation_funclet_id = funclet
+                        .spec_binding
+                        .get_value_spec()
+                        .funclet_id_opt
+                        .unwrap();
 
                     let encoded_funclet = &self.program.funclets[operation_funclet_id];
                     let encoded_node = &encoded_funclet.nodes[*operation_node_id];
@@ -1798,17 +1825,14 @@ impl<'program> CodeGen<'program> {
                                 &mut funclet_checker,
                                 encoded_node,
                                 *external_function_id,
-                                & input_slot_ids,
-                                & output_slot_ids,
+                                &input_slot_ids,
+                                &output_slot_ids,
                             );
                         }
                         ir::Place::Cpu => panic!("EncodeDoExternal to CPU is unsupported"),
                     }
                 }
-                ir::Node::LocalCopy {
-                    input,
-                    output,
-                } => {
+                ir::Node::LocalCopy { input, output } => {
                     let src_slot_id = funclet_scoped_state.get_node_slot_id(*input).unwrap();
                     let dst_slot_id = funclet_scoped_state.get_node_slot_id(*output).unwrap();
 
@@ -1876,10 +1900,9 @@ impl<'program> CodeGen<'program> {
                         panic!("Not a slot")
                     };
 
-                    let slot_id = placement_state.scheduling_state.insert_hacked_slot(
-                        *storage_type,
-                        ir::Place::Local,
-                    );
+                    let slot_id = placement_state
+                        .scheduling_state
+                        .insert_hacked_slot(*storage_type, ir::Place::Local);
                     funclet_scoped_state.node_results.insert(
                         current_node_id,
                         NodeResult::Slot {
@@ -1890,15 +1913,12 @@ impl<'program> CodeGen<'program> {
                     );
 
                     let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-                    placement_state.update_slot_state(
-                        slot_id,
-                        src_var_id,
-                    );
+                    placement_state.update_slot_state(slot_id, src_var_id);
                 }
                 ir::Node::WriteRef {
                     destination,
                     storage_type,
-                    source
+                    source,
                 } => {
                     let src_slot_id = funclet_scoped_state.get_node_slot_id(*source).unwrap();
                     let dst_slot_id = funclet_scoped_state.get_node_slot_id(*destination).unwrap();
@@ -1938,14 +1958,11 @@ impl<'program> CodeGen<'program> {
                     place,
                     event,
                     encoded,
-                    fences
+                    fences,
                 } => {
-                    funclet_scoped_state.node_results.insert(
-                        current_node_id,
-                        NodeResult::Encoder {
-                            place: *place,
-                        },
-                    );
+                    funclet_scoped_state
+                        .node_results
+                        .insert(current_node_id, NodeResult::Encoder { place: *place });
                 }
                 ir::Node::EncodeCopy {
                     //place,
@@ -2054,11 +2071,8 @@ impl<'program> CodeGen<'program> {
                             fence_id,
                         },
                     );
-                },
-                ir::Node::SyncFence {
-                    fence,
-                    event
-                } => {
+                }
+                ir::Node::SyncFence { fence, event } => {
                     if let Some(NodeResult::Fence {
                         place: fenced_place,
                         fence_id,
@@ -2311,17 +2325,17 @@ impl<'program> CodeGen<'program> {
                 //let join_funclet = &self.program.funclets[*next_funclet_id];
                 //let join_extra = & self.program.scheduling_funclet_extras[next_funclet_id];
                 /*let join_point_id = placement_state
-                    .join_graph
-                    .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
-                        value_funclet_id: join_funclet
-                            .spec_binding
-                            .get_value_spec()
-                            .funclet_id_opt
-                            .unwrap(),
-                        scheduling_funclet_id: *next_funclet_id,
-                        captures: argument_node_results.into_boxed_slice(),
-                        continuation_join_point_id,
-                    }));*/
+                .join_graph
+                .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
+                    value_funclet_id: join_funclet
+                        .spec_binding
+                        .get_value_spec()
+                        .funclet_id_opt
+                        .unwrap(),
+                    scheduling_funclet_id: *next_funclet_id,
+                    captures: argument_node_results.into_boxed_slice(),
+                    continuation_join_point_id,
+                }));*/
                 SplitPoint::Yield {
                     external_function_id: *external_function_id,
                     yielded_node_results: output_node_results.into_boxed_slice(),
@@ -2448,7 +2462,8 @@ impl<'program> CodeGen<'program> {
                 //let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
                 //let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
 
-                let current_value_funclet = &self.program.funclets[funclet_scoped_state.value_funclet_id];
+                let current_value_funclet =
+                    &self.program.funclets[funclet_scoped_state.value_funclet_id];
                 assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
 
                 assert_eq!(callee_arguments.len(), true_funclet.input_types.len());

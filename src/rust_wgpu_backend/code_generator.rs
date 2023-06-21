@@ -47,7 +47,7 @@ pub struct YieldPoint {
 #[derive(Debug, Default)]
 struct SubmissionQueue {
     //most_recently_synchronized_submission_id : Option<SubmissionId>,
-    last_submission_id_opt : Option<SubmissionId>,
+    last_submission_id_opt: Option<SubmissionId>,
     next_submission_id: SubmissionId,
     next_fence_id: FenceId,
 }
@@ -221,7 +221,7 @@ pub struct CodeGenerator<'program> {
     active_yield_point_ids: HashSet<ffi::ExternalFunctionId>,
     dispatcher_id_generator: IdGenerator,
     active_dispatchers: HashMap<Box<[ffi::TypeId]>, Dispatcher>,
-    gpu_fence_type : Option<ffi::TypeId>
+    gpu_fence_type: Option<ffi::TypeId>,
 }
 
 impl<'program> CodeGenerator<'program> {
@@ -257,7 +257,7 @@ impl<'program> CodeGenerator<'program> {
             active_yield_point_ids: HashSet::new(),
             dispatcher_id_generator: IdGenerator::new(),
             active_dispatchers: HashMap::new(),
-            gpu_fence_type : None,
+            gpu_fence_type: None,
         };
 
         code_generator.gpu_fence_type = Some(code_generator.create_ffi_type(ffi::Type::GpuFence));
@@ -697,14 +697,17 @@ impl<'program> CodeGenerator<'program> {
             &mut active_submission_encoding_state,
         );
 
-
         let submission_id = self.submission_queue.next_submission_id;
-        
+
         if let Some(submission_encoding_state) = active_submission_encoding_state {
             if submission_encoding_state.command_buffer_ids.len() > 0 {
                 //self.code_writer
                 //    .write("instance.state.get_queue_mut().submit([".to_string());
-                write!(self.code_writer, "let submission_index_{} = instance.state.get_queue_mut().submit([", submission_id.0);
+                write!(
+                    self.code_writer,
+                    "let submission_index_{} = instance.state.get_queue_mut().submit([",
+                    submission_id.0
+                );
                 for &command_buffer_id in submission_encoding_state.command_buffer_ids.iter() {
                     self.code_writer
                         .write(format!("command_buffer_{}, ", command_buffer_id.0));
@@ -756,8 +759,15 @@ impl<'program> CodeGenerator<'program> {
         // TODO: This is probably the wrong way to do this...
         // In essence, I just tried to carry over the old async-focused code into the new WGPU
         // callback-focused model.
-        let recv_var_id = self.variable_tracker.create_fence(self.gpu_fence_type.unwrap());
-        write!(self.code_writer, "let {} = Some(submission_index_{});\n", self.variable_tracker.get_var_name(recv_var_id), self.submission_queue.last_submission_id_opt.unwrap().0);
+        let recv_var_id = self
+            .variable_tracker
+            .create_fence(self.gpu_fence_type.unwrap());
+        write!(
+            self.code_writer,
+            "let {} = Some(submission_index_{});\n",
+            self.variable_tracker.get_var_name(recv_var_id),
+            self.submission_queue.last_submission_id_opt.unwrap().0
+        );
         //self.code_writer.write(format!("let (future_var_send_{}, {}) = futures::channel::oneshot::channel::<()>();\n", fence_id.0, self.variable_tracker.get_var_name(recv_var_id)));
         //self.code_writer.write(format!("instance.state.get_queue_mut().on_submitted_work_done(|| future_var_send_{}.send(()).unwrap());\n", fence_id.0));
         recv_var_id

@@ -125,7 +125,7 @@ pub enum Flow {
     None, // Does not transform, can only be discarded and not read
     Have, // Transforms forwards with state changes
     Need, // Transforms backwards with state changes
-    Met // Have has met Need and associated state will not change, but can still be read
+    Met,  // Have has met Need and associated state will not change, but can still be read
 }
 
 // Met is a zero value that cannot be discarded or duplicated
@@ -135,51 +135,54 @@ pub enum Flow {
 
 impl Flow {
     pub fn is_droppable(&self) -> bool {
-		match self {
-			Self::None => true,
-			Self::Have => true,
-			Self::Need => false,
-			Self::Met => false,
-		}
+        match self {
+            Self::None => true,
+            Self::Have => true,
+            Self::Need => false,
+            Self::Met => false,
+        }
     }
 
     pub fn is_duplicable(&self) -> bool {
-		match self {
-			Self::None => false,
-			Self::Have => false,
-			Self::Need => true,
-			Self::Met => false,
-		}
+        match self {
+            Self::None => false,
+            Self::Have => false,
+            Self::Need => true,
+            Self::Met => false,
+        }
     }
 
     pub fn is_readable(&self) -> bool {
-		match self {
-			Self::None => false,
-			Self::Have => true,
-			Self::Need => false,
-			Self::Met => true,
-		}
+        match self {
+            Self::None => false,
+            Self::Have => true,
+            Self::Need => false,
+            Self::Met => true,
+        }
     }
 
     pub fn is_neutral(&self) -> bool {
-		match self {
-			Self::None => true,
-			Self::Have => false,
-			Self::Need => false,
-			Self::Met => true,
-		}
+        match self {
+            Self::None => true,
+            Self::Have => false,
+            Self::Need => false,
+            Self::Met => true,
+        }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tag {
-    pub quot : Quotient, // What a given value maps to in a specification
-    pub flow : Flow, // How this value transforms relative to the specification
+    pub quot: Quotient, // What a given value maps to in a specification
+    pub flow: Flow,     // How this value transforms relative to the specification
 }
 
 impl Tag {
     fn default() -> Self {
-        Self{quot : Quotient::None, flow : Flow::Have }
+        Self {
+            quot: Quotient::None,
+            flow: Flow::Have,
+        }
     }
 }
 
@@ -273,15 +276,14 @@ pub enum TailEdge {
         failure_funclet_id: FuncletId,
         continuation_join: NodeId,
     },*/
-
     // Here for now as a type system debugging tool
     // Always passes type checking, but fails codegen
     DebugHole {
         // Scalar nodes
-        inputs : Box<[NodeId]>,
+        inputs: Box<[NodeId]>,
         // Continuations
         //outputs : Box<[NodeId]>
-    }
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -319,7 +321,7 @@ pub enum FuncletSpecBinding {
         value_function_id_opt: Option<ValueFunctionId>,
     },
     Timeline {
-        function_class_id_opt : Option<FunctionClassId>,
+        function_class_id_opt: Option<FunctionClassId>,
     },
     ScheduleExplicit {
         value: FuncletSpec,

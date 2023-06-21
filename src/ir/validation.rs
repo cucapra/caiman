@@ -68,8 +68,7 @@ fn validate_funclet_common(program: &ir::Program, funclet: &ir::Funclet) {
     }
 }
 
-pub fn validate_timeline_funclet(program: &ir::Program, funclet: &ir::Funclet) {
-}
+pub fn validate_timeline_funclet(program: &ir::Program, funclet: &ir::Funclet) {}
 
 /*pub fn validate_timeline_funclet(program: &ir::Program, funclet: &ir::Funclet) {
     // A timeline funclet records the synchronization events as known by the coordinator (local)

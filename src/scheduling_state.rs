@@ -161,7 +161,6 @@ impl SchedulingState {
             if slot.queue_place != queue_place {
                 continue;
             }
-
         }
 
         SubmissionId(self.submissions.add(Submission {
@@ -196,13 +195,9 @@ impl SchedulingState {
         let slot = &mut self.slots[slot_id.0];
     }
 
-    pub fn forward_slot(&mut self, destination_slot_id: SlotId, source_slot_id: SlotId) {
-        
-    }
+    pub fn forward_slot(&mut self, destination_slot_id: SlotId, source_slot_id: SlotId) {}
 
-    pub fn advance_queue_stage(&mut self, slot_id: SlotId/*, to: ir::ResourceQueueStage*/) {
-        
-    }
+    pub fn advance_queue_stage(&mut self, slot_id: SlotId /*, to: ir::ResourceQueueStage*/) {}
 
     fn get_local_time(&self) -> LogicalTimestamp {
         self.place_states[&ir::Place::Local].timestamp

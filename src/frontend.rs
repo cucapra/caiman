@@ -40,7 +40,9 @@ fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
 
 #[cfg(not(feature = "assembly"))]
 fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
-    Result::Err(CompileError{message : String::from("Assembly is unsupported in this build")})
+    Result::Err(CompileError {
+        message: String::from("Assembly is unsupported in this build"),
+    })
 }
 
 fn read_definition(
