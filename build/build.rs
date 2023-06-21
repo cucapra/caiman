@@ -10,6 +10,7 @@ fn operation_language(operation: &spec::Operation) -> &'static str {
         operation.language_set.spatial,
     ) {
         (true, true, true, true) => "mixed",
+        (true, false, true, true) => "spec",
         (true, false, false, false) => "functional",
         (false, true, false, false) => "scheduling",
         (false, false, true, false) => "timeline",

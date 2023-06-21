@@ -68,7 +68,9 @@ fn validate_funclet_common(program: &ir::Program, funclet: &ir::Funclet) {
     }
 }
 
-pub fn validate_timeline_funclet(program: &ir::Program, funclet: &ir::Funclet) {
+pub fn validate_timeline_funclet(program: &ir::Program, funclet: &ir::Funclet) {}
+
+/*pub fn validate_timeline_funclet(program: &ir::Program, funclet: &ir::Funclet) {
     // A timeline funclet records the synchronization events as known by the coordinator (local)
 
     for (input_index, input_type) in funclet.input_types.iter().enumerate() {
@@ -168,7 +170,7 @@ pub fn validate_timeline_funclet(program: &ir::Program, funclet: &ir::Funclet) {
         }
         _ => panic!("Tail edge of a timeline funclet must be a return!"),
     }
-}
+}*/
 
 pub fn validate_spatial_funclet(program: &ir::Program, funclet: &ir::Funclet) {
     // To do once splitting is a feature we support

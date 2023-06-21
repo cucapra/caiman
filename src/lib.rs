@@ -4,6 +4,7 @@ extern crate core;
 
 #[macro_use]
 mod operations;
+#[cfg(feature = "assembly")]
 mod assembly;
 mod id_generator;
 mod ir;

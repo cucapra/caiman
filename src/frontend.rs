@@ -33,24 +33,34 @@ impl std::fmt::Display for CompileError {
     }
 }
 
+#[cfg(feature = "assembly")]
+fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
+    let program = crate::assembly::parser::parse(input_string);
+
+    match program {
+        Err(why) => Err(CompileError {
+            message: format!("Parse error: {}", why),
+        }),
+        Ok(v) => Ok(crate::assembly::lowering_pass::lower(v)),
+    }
+}
+
+#[cfg(not(feature = "assembly"))]
+fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
+    Result::Err(CompileError {
+        message: String::from("Assembly is unsupported in this build"),
+    })
+}
+
 fn read_definition(
     input_string: &str,
     compile_mode: CompileMode,
 ) -> Result<Definition, CompileError> {
     match compile_mode {
-        CompileMode::Assembly => {
-            let program = crate::assembly::parser::parse(input_string);
-
-            match program {
-                Err(why) => Err(CompileError {
-                    message: format!("Parse error: {}", why),
-                }),
-                Ok(v) => Ok(crate::assembly::lowering_pass::lower(v)),
-            }
-        }
+        CompileMode::Assembly => read_assembly(input_string),
         CompileMode::RON => match ron::from_str(&input_string) {
             Err(why) => Err(CompileError {
-                message: format!("Parse error: {}", why),
+                message: format!("Parse error at {}: {}", why.position, why),
             }),
             Ok(v) => Ok(v),
         },
@@ -60,7 +70,11 @@ fn read_definition(
 pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<String, CompileError> {
     let mut definition = read_definition(input_string, options.compile_mode)?;
     assert_eq!(definition.version, (0, 0, 2));
-    ir::validation::validate_program(&definition.program);
+    //ir::validation::validate_program(&definition.program);
+    match crate::type_system::check_program(&definition.program) {
+        Ok(_) => (),
+        Err(error) => panic!("Type checking failed:\n{}", error),
+    }
     let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
     codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
     let output_string = codegen.generate();
