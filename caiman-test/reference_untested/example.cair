@@ -79,7 +79,7 @@ value[impl @simple] %j(%abc : i64) -> [i64] {
 schedule[value $val = %foo] %bar<none, none>(%0 : %slot0) -> [%out : %slot0] {
     %x = alloc-temporary-local-i64 %foo.%1;
     %y = unbound-slot-local-i64 %foo.%1;
-    %2 = encode-do-local %foo.%1() -> %x;
+    %2 = encode-do-local %bar %foo.%1() -> %x;
     %3 = drop %0;
     %4 = alloc-local-i64 %0 %foo.%1;
     %5 = encode-copy-cpu %2 %4;

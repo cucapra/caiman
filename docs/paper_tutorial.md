@@ -66,7 +66,7 @@ equivalence class `vadd`:
 ```
 function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 
-external-cpu[impl vadd] extern_vadd;
+external-cpu[impl vadd] vadd_extern;
 
 value[impl default vadd] local_vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
     rec = (vadd (tail v1) (tail v1)).
@@ -86,7 +86,7 @@ function, which is why `vadd2` calls `vadd` and not `vadd_local` (indeed, the
 value function alone is not aware of the distinction between a local and
 external function).
 
-Second, the external function `extern_vadd` is declared to live on the CPU, and
+Second, the external function `vadd_extern` is declared to live on the CPU, and
 has the same argument types as the equivalence class `vadd`, which it
 implements.  Finally, the local value function `local_vadd` is also declared to
 be a member of that equivalence class.
@@ -118,23 +118,23 @@ declarative value functions:
 
 ```
 schedule vadd2 {
-    fn extern_vadd2(
+    fn vadd2_extern(
     v1_ref : &array_cpu<i32, $N>, 
     v2_ref : &array_cpu<i32, $N>, 
     v3_ref : &array_cpu<i32, $N>) -> &array_cpu<i32, $N> {
-        let tmp_ref <- extern_vadd[tmp](v1_ref, v2_ref);
-        let result_ref <- extern_vadd[result](tmp_ref, v3_ref);
+        let tmp_ref <- vadd_extern[tmp](v1_ref, v2_ref);
+        let result_ref <- vadd_extern[result](tmp_ref, v3_ref);
         return result_ref;
     }
 }
 ```
 
-The syntactic boilerplate pieces are formally non-interesting.  We create a schedule block,
-indicating that the member schedules are implementing the schedule `vadd2`.  We
-define our function `vadd2_cpu` with three `array_cpu` arguments and the same
-size return type (note that the syntax `_cpu` is a convention and not
-meaningful; the declaration of the `array_cpu` type is not shown here for space
-reasons).
+The syntactic boilerplate pieces are formally non-interesting.  We create a
+schedule block, indicating that the member schedules are implementing the
+schedule `vadd2`.  We define our function `vadd2_cpu` with three `array_cpu`
+arguments and the same size return type (note that the syntax `_cpu` is a
+convention and not meaningful; the declaration of the `array_cpu` type is not
+shown here for space reasons).
 
 The body of this schedule is fairly straightforward imperative code.  There are,
 however, a few details of note.  First, the use of `<-` is meant to emphasize
@@ -147,31 +147,52 @@ functions, but we will see calls to local schedule functions as well), with
 references as arguments, since the data lives on the cpu rather than in the
 local schedule function.
 
-There is an alternative way of writing this schedule that is important to use as
-a framework for writing Caiman code.  The amount of detail in the schedule
-leaves quite a lot to be desired, as it seems in an example like this that most
-information could be inferred from the value function.  This is indeed the case,
-as we can write the schedule instead as follows:
+## Scheduling VAdd
+
+In our implementation of `vadd2_extern`, we relied on a completely external
+definition for vector addition, namely `vadd_extern`.  While this is valid
+Caiman code, it is not ideal for providing the decomposability that makes the
+Caiman typechecker powerful.  
+
+To be able to reason about `vadd` with the Caiman typechecker (and thus have the
+ability to control heterogeneity and synchronizing properties), we should
+instead call a Caiman scheduling function.  Fortunately, such a function
+definition need not be at all more complicated than the external definition,
+outside of some slightly differing boilerplate:
 
 ```
 schedule vadd2 {
-    fn vadd2_cpu(
-    v1_ref : &array_cpu<i32, $N>, 
-    v2_ref : &array_cpu<i32, $N>, 
-    v3_ref : &array_cpu<i32, $N>) -> &array_cpu<i32, $N> {
+    fn vadd_cpu(v1_ref : &array<i32, $n>, 
+    v2_ref : &array<i32, $n>) -> &array<i32, $n> {
         ???;
     }
 }
 ```
 
 This definition, consisting only of `???`, provides a complete valid Caiman
-schedule for `vadd2`.  `???` is a precise syntactic construction in Caiman
+schedule for `vadd_cpu`.  `???` is a precise syntactic construction in Caiman
 schedules, indicating a hole which the compiler may replace with any number of
 scheduling instructions (including potentially creating a new schedule
 function).  This replacement, called explication, will be discussed in more
-detail in the explication section of the paper.
+detail in the explication section of the paper.  For reference, the compiled
+result of explicating this schedule can be found in the appendix.
 
+While this function can be explicated and run, the point of using Caiman is that
+now we can decompose this `???` that we just defined, allowing us to specify the
+body of this function beyond trusting the compiler to work it out.  This will
+allow for the performance exploration introduced earlier, but for now, let's
+break down this particular function more explicitly.
 
+To break down the explication into concrete code, we start by allocating an
+array to store the result of adding `v1_ref` and `v2_ref`:
+
+```
+let new_arr_ref <- new_arr(&array<i32, $n>, $N);
+```
+
+Since we don't want to allocate each level of recursion, now we need to provide
+some trickery (with the help of the caiman typechecker).  In particular, while
+the value function type definition for `vadd` uses a fairly standard 
 
 # Appendix
 
@@ -189,7 +210,7 @@ v3 : array<i32, $N>) -> array<i32, $N> {
 
 function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
 
-external-cpu[impl vadd] extern_vadd;
+external-cpu[impl vadd] vadd_extern;
 
 value[impl default vadd] local_vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
     rec = (vadd (tail v1) (tail v1)).
@@ -199,6 +220,15 @@ value[impl default vadd] local_vadd(v1 : array<i32, $N>, v2 : array<i32, $N>) {
 }
 
 schedule vadd2 {
+    fn vadd2_extern(
+    v1_ref : &array<i32, $N>, 
+    v2_ref : &array<i32, $N>, 
+    v3_ref : &array<i32, $N>) -> &array<i32, $N> {
+        let tmp_ref <- vadd_extern[tmp](v1_ref, v2_ref);
+        let result_ref <- vadd_extern(tmp_ref, v3_ref);
+        return result_ref;
+    }
+
     fn vadd2_cpu(
     v1_ref : &array<i32, $N>, 
     v2_ref : &array<i32, $N>, 
@@ -210,18 +240,19 @@ schedule vadd2 {
 }
 
 schedule vadd {
-    fn vadd_cpu(v1_ref : arrc, v2_ref : arrc) -> arrc {
+    fn vadd_cpu(v1_ref : &array<i32, $n>, 
+    v2_ref : &array<i32, $n>) -> &array<i32, $n> {
         // allocate
-        let new_arr_ref <- new_arr(arrc, $N);
+        let new_arr_ref <- new_arr(&array<i32, $n>, $N);
         let result_ref <- result[vadd_rec_cpu]
             (v1_ref, v2_ref, new_arr_ref);
         return result_ref;
     }
 
     fn vadd_cpu_rec(
-    v1_ref : arrc, 
-    v2_ref : arrc,
-    result_ref: arrc) -> arrc {
+    v1_ref : &array<i32, $n>, 
+    v2_ref : &array<i32, $n>,
+    result_ref: &array<i32, $n>) -> &array<i32, $n> {
         let length_ref <- alloc-cpu u32;
         let zero_ref <- alloc_cpu u32; 
         length_ref <- length(v1_ref);
