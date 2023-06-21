@@ -15,6 +15,3 @@ mod rust_wgpu_backend;
 mod scheduling_state;
 mod shadergen;
 mod type_system;
-#[macro_use]
-#[cfg(feature = "assembly")]
-mod assembly_ast;

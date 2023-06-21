@@ -1,137 +1,132 @@
-version 0.0.1
+version 0.0.2
 
-// ---
+type f32;
+type f64;
+type u8;
+type u16;
+type u32;
+type u64;
+type usize;
+type i8;
+type i16;
+type i32;
+type i64;
+type array<i32, 2>;
+type erased_length_array<u32>;
+type tuple<f32, u8>;
+type const_ref<u64>;
+type mut_ref<const_ref<u64>>;
+type const_slice<array<i32, 2>>;
+type mut_slice<i32>;
+type gpu_buffer_ref<i32>;
+type gpu_buffer_slice<i32>;
+type gpu_buffer_allocator;
+type cpu_buffer_allocator;
+type cpu_buffer_ref<i64>;
 
-types [
-    f32,f64,u8,u16,u32,u64,usize,i8,i16,i32,i64,array<i32, 2>,erased_length_array<u32>,
-    tuple<f32, u8>,const_ref<u64>,mut_ref<const_ref<u64>>,const_slice<array<i32, 2>>,mut_slice<i32>,
-    gpu_buffer_ref<i32>,gpu_buffer_slice<i32>,gpu_buffer_allocator,cpu_buffer_allocator,cpu_buffer_ref<i64>,
-    native_value $native_i64 {
-        type : i64,
-    },
-    slot $slot0 {
-        type : i64,
-        stage : ready,
-        place : local,
-    },
-    fence $fence0 {
-        place : cpu
-    },
-    buffer $buffer0 {
-        place : gpu,
-        static_layout_opt : {
-            alignment_bits : 4,
-            byte_size : 8
-        },
-    },
-    event $event0 {
-        place : local
-    },
-    // naming is dumb, but the parser is sad if I have both buffer and buffer_space as keywords here
-    space_buffer $buffer_space0 {} // note that {} is required, even though it's empty here
-]
+native_value %native_i64 : i64;
+slot %slot0 : i64-ready-local;
+fence %fence0 : cpu;
+buffer %buffer0 : gpu<alignment_bits = 4, byte_size = 8>;
+event %event0 : local;
+scheduling_join %scheduling_join0;
+buffer_space %buffer_space0;
 
-// ---
+function @simple(i64) -> i64;
 
-external_cpu @do_thing_on_cpu(i64) -> i64;
+external-cpu-pure[impl @simple] %do_pure_thing_on_cpu(i64) -> i64;
+external-cpu[impl @simple] %do_thing_on_cpu(i64) -> i64;
 // the path is required, and is relative to where you run this thing at the moment (unfortunately)
-external_gpu @do_thing_on_gpu(%x : i64) -> [%out : i64] : "caiman-test/reference_untested/example.comp"
+external-gpu[impl @simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
 {
+    // I dunno if this is worth cleaning up, probably not
+    path : "caiman-test/reference_untested/example.comp",
+    entry : "main",
     resource {
         group : 0,
         binding : 0,
-        input : %x,
+        input : %x
     },
     resource {
         group : 0,
         binding : 1,
-        output : %out,
+        output : %out
     }
 }
 
-value @foo(%test : i32) -> [%out : i32] {
+function @simple_32(i32) -> i32;
+
+value[impl @simple_32] %foo(%test : i32) -> [%out : i32] {
     %1 = constant 4i64;
-    %3 = constant-unsigned 4u64;
     %2 = extract %1 0;
     %4 = call @simple(%1);
-    %5 = select %1 %2 %3;
-    %6 = call @do_thing_on_cpu(%1);
-    %x = call @do_thing_on_gpu<%1>(%1);
+    %5 = select %1 %2 %4;
+    %6 = call @simple(%1);
+    %_ = call @simple<%1>(%1);
     return %1;
 }
 
-value @y(%abc : i64) -> [%out : i64] {
+value[impl @simple] %y(%abc : i64) -> [%out : i64] {
     // pretty clunky tbh
-    yield 0 [%abc] @foo %abc [%abc, %abc];
+    yield %abc [%abc] %foo %abc [%abc, %abc];
 }
 
-value @j(%abc : i64) -> [i64] {
+value[impl @simple] %j(%abc : i64) -> [i64] {
     jump %abc [%abc, %abc];
 }
 
-schedule @bar(%0 : $slot0) -> [%out : $slot0] {
-    %x = alloc-temporary-local-i64 @foo.%1;
-    %2 = encode-do-local @foo.%1() -> %x;
-    %1 = create-local-i64 @foo.%x; // unbound slot
+// can syntactically be empty, even though this is meaningless
+schedule[value $val = %foo] %bar<none, none>(%0 : %slot0) -> [%out : %slot0] {
+    %x = alloc-temporary-local-i64 %foo.%1;
+    %y = unbound-slot-local-i64 %foo.%1;
+    %2 = encode-do-local %foo.%1() -> %x;
     %3 = drop %0;
-    %4 = alloc-local-i64 %0 @foo.%1;
+    %4 = alloc-local-i64 %0 %foo.%1;
     %5 = encode-copy-cpu %2 %4;
-    %6 = submit-cpu @foo.%1;
-    %7 = encode-fence-cpu @foo.%3;
-    %8 = sync-fence-cpu %7 @foo.%2;
-    %9 = inline-join @foo [] %5;
-    %10 = serialized-join @foo [] %5;
+    %6 = submit-cpu %foo.%1;
+    %7 = encode-fence-cpu %foo.%3;
+    %8 = sync-fence-cpu %7 %foo.%2;
+    %9 = inline-join %foo [] %5;
+    %10 = serialized-join %foo [] %5;
     %11 = default-join;
     return %x;
 }
 
-schedule @scall(%abc : i64) -> [%out : i64] {
+schedule[value $val = %foo, spatial $space = %space]
+%scall<none, none>
+(%abc : input
+($val.%x) %slot0)
+-> [%out : output($val.%y) %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
-    schedule-call @j.%abc @foo [%abc, %abc] %abc;
+    schedule-call %j.%abc %foo [%abc, %abc] %abc;
 }
 
-schedule @sselect(%abc : i64) -> i64 {
-    // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
-    schedule-select @y.%abc %abc [@foo, @j] [%abc, %abc] %abc;
+// value, timeline, spatial order is mandatory (though you can freely omit one of course)
+schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
+%sselect<input($time.%e), output($time.%e)>
+(%abc : input($time.%e) halt($val.%x) %slot0)
+-> input($time.%e) output($val.%x) %slot0 {
+    schedule-select %y.%abc %abc [%foo, %j] [%abc, %abc] %abc;
 }
 
-schedule @dalloc(%abc : i64) -> [%out : i64] {
-    // pretty clunky tbh -- note that `none` literally means `none`
-    dynamic-alloc %abc [] [%abc, none, %abc] @foo @j %abc;
+schedule[value $val = %foo, timeline $time = %time]
+%dalloc<halt($time.%e), node($time.%e)>
+(%abc : input($space.%bs) %event0)
+-> [%out : node($space.%bs) %buffer0] {
+    // pretty clunky tbh -- note that `none` literally means `None`
+    dynamic-alloc %abc [] [%abc, none, ?] %foo %j %abc;
 }
 
-timeline @time(%e : $event0) -> [%event_out : $event0] {
+timeline %time(%e : %event0) -> [%event_out : %event0] {
     %1 = submission-cpu->gpu %e;
     %2 = sync-cpu->gpu %e %1;
     return %e;
 }
 
-spatial @space(%b : $buffer_space0) -> [%iout : i64] {
+spatial %space(%b : %buffer_space0) -> [%iout : i64] {
+    %1 = separated-linear-space-cpu %b;
+    %2 = merged-linear-space-cpu [%b, %1];
     return %b;
 }
 
-value_function @simple(i64) -> i64 : [@foo];
-
-// ---
-
-extras {
-    @bar {
-        value : @foo,
-        input_slots : {
-            %0 : slot_info(value_tag input @foo.%test)
-        },
-        output_slots : {
-            %out : slot_info()
-        },
-        input_fences : {%0:fence_info(timeline_tag none)},
-        output_fences : {},
-        input_buffers : {%0:buffer_info(spatial_tag output @foo.%test)},
-        output_buffers : {},
-        in_timeline_tag : timeline_tag input @time.%e,
-        out_timeline_tag : timeline_tag input @time.%e,
-    },
-}
-
-// ---
-
-pipeline "pipeline_trivial" = @bar;
+pipeline "pipeline_trivial" = %bar;

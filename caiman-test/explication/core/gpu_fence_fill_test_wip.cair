@@ -28,9 +28,7 @@ types [
     space_buffer $buffer_space {},
 ]
 
-external_cpu @flatten(i64) -> i32;
-
-external_gpu @trivial(%x : i32) -> [%out : i32] : "src/gpu_external.comp"
+external_gpu @trivial(%x : i32) -> [%out : i32] : "C:\Users\d-gei\caiman\caiman-test\basics\gpu_external.wgsl"
 {
     resource {
         group : 0,
@@ -45,26 +43,25 @@ external_gpu @trivial(%x : i32) -> [%out : i32] : "src/gpu_external.comp"
 }
 
 value @foo(%x : i32) -> i32 {
-    %y = call @trivial(%x);
-    %z = extract %y 0;
-    return %z;
+    %y_t = call @trivial(%x);
+    %y = extract %y_t 0;
+    return %y;
 }
 
 timeline @foo_time(%e : $event0) -> $event0 {
-    %sub1 = submission-local->gpu %e;
-    %sync1 = sync-local->gpu %sub1 %sub1;
-    return %sync1;
+    %sub = submission-local->gpu %e;
+    %sync = sync-local->gpu %sub %sub;
+    return %sync;
 }
 
-schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> $slot_gpu {
-    %0 = alloc-gpu-i32 %in_buff @foo.%x;
-    %1 = encode-copy-gpu %s %0;
-    %2 = alloc-gpu-i32 %out_buff @foo.%z;
-    %3 = encode-do-gpu @foo.%y(%0) -> %2;
-    %4 = submit-gpu @foo_time.%sub1;
-    %5 = encode-fence-gpu @foo_time.%sub1;
-    %6 = sync-fence-local %5 @foo_time.%sync1;
-    return %2;
+schedule @foo_main(%s : $slot_local, %in_buff : $buffer_gpu, %out_buff : $buffer_gpu) -> [%out : $slot_gpu] {
+    %xloc = alloc-gpu-i32 %in_buff @foo.%x;
+    %_ = encode-copy-gpu %s %xloc;
+    %yloc = alloc-gpu-i32 %out_buff @foo.%y;
+    %_ = encode-do-gpu @foo.%y(%xloc) -> %yloc;
+    %_ = submit-gpu @foo_time.%sub;
+    ???;
+    return %yloc;
 }
 
 spatial @foo_space(%bs : $buffer_space) -> $buffer_space {
@@ -78,7 +75,7 @@ extras {
             %s : slot_info(value_tag input @foo.%x)
         },
         output_slots : {
-            %s : slot_info(value_tag output @foo.%x, spatial_tag output @foo_space.%bs)
+            %out : slot_info(value_tag output @foo.%x, spatial_tag output @foo_space.%bs)
         },
         input_fences : {},
         output_fences : {},
@@ -89,5 +86,3 @@ extras {
         out_timeline_tag : timeline_tag output @foo_time.%e,
     },
 }
-
-pipeline "main" = @foo_main;

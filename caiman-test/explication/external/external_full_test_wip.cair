@@ -14,34 +14,27 @@ types [
 
 external_cpu @op(i64) -> i64;
 
-value @foo(%0 : i64) -> i64 {
-    %z = extract %y 0;
-    %y = call @op(%x);
+value @foo() -> i64 {
     %x = constant 2i64;
-    return %z;
+    %y_t = call @op(%x);
+    %y = extract %y_t 0;
+    return %y;
 }
 
-schedule @bar(%blob : $slot0) -> $slot0 {
-    %0 = alloc-temporary-local-i64 @foo.%x;
-    %1 = encode-do-local @foo.%x() -> %0;
-    %2 = alloc-temporary-local-i64 @foo.%z;
-    %3 = encode-do-local @foo.%y(%0) -> %2;
-    return %2;
+schedule @bar() -> [%out : $slot0] {
+    ???;
 }
 
 timeline @time(%e : $event0) -> $event0 {
-    return %e;
+    ???;
 }
 
 extras {
     @bar {
         value : @foo,
-        time : @time,
-        input_slots : {
-            %blob : slot_info()
-        },
+        input_slots : {},
         output_slots : {
-            %blob : slot_info()
+            %out : slot_info()
         },
         input_fences : {},
         output_fences : {},

@@ -35,7 +35,14 @@ impl std::fmt::Display for CompileError {
 
 #[cfg(feature = "assembly")]
 fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
-    crate::assembly::parser::parse(input_string)
+    let program = crate::assembly::parser::parse(input_string);
+
+    match program {
+        Err(why) => Err(CompileError {
+            message: format!("Parse error: {}", why),
+        }),
+        Ok(v) => Ok(crate::assembly::lowering_pass::lower(v)),
+    }
 }
 
 #[cfg(not(feature = "assembly"))]
@@ -62,7 +69,7 @@ fn read_definition(
 
 pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<String, CompileError> {
     let mut definition = read_definition(input_string, options.compile_mode)?;
-    assert_eq!(definition.version, (0, 0, 1));
+    assert_eq!(definition.version, (0, 0, 2));
     //ir::validation::validate_program(&definition.program);
     match crate::type_system::check_program(&definition.program) {
         Ok(_) => (),
@@ -80,7 +87,7 @@ pub fn explicate_caiman(
 ) -> Result<String, CompileError> {
     let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
     let mut definition = read_definition(input_string, options.compile_mode)?;
-    assert_eq!(definition.version, (0, 0, 1));
+    assert_eq!(definition.version, (0, 0, 2));
     let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
     Ok(output_string_result.unwrap())
 }

@@ -1,0 +1,33 @@
+version 0.0.2
+
+type i64;
+slot %slot0 : i64-ready-local;
+event %event0 : local;
+
+function @op(i64) -> i64;
+function @main() -> i64;
+
+external-cpu-pure[impl default @op] %op(i64) -> i64;
+
+value[impl default @main] %foo() -> i64 {
+    %x = constant 2i64;
+    %y_t = call @op(%x);
+    %y = extract %y_t 0;
+    return %y;
+}
+
+schedule[value $val = %foo, timeline $time = %time]
+%bar<input($time.%e), output($time.%e)>() ->
+[%out : %slot0] {
+    %xloc = alloc-temporary-local-i64 %foo.%x;
+    %_ = encode-do-local %foo.%x() -> %xloc;
+    %yloc = alloc-temporary-local-i64 %foo.%y;
+    %_ = encode-do-local %foo.%y_t(%xloc) -> %yloc;
+    return %yloc;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+pipeline "main" = %bar;
