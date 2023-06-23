@@ -190,9 +190,34 @@ array to store the result of adding `v1_ref` and `v2_ref`:
 let new_arr_ref <- new_arr(&array<i32, $n>, $N);
 ```
 
-Since we don't want to allocate each level of recursion, now we need to provide
-some trickery (with the help of the caiman typechecker).  In particular, while
-the value function type definition for `vadd` uses a fairly standard 
+Since we don't want to allocate for each level of recursion, now we need to
+perform some trickery (with the help of the caiman typechecker).  In particular,
+while the value function type definition for `vadd` uses a fairly standard
+declarative approach to constructing a list (recursing to the base and building
+the list piece-by-piece), the caiman type system allows us to rewrite this
+concretely in a more imperative style, specifically by reversing the memory
+operation to split rather than allocate.
+
+What this looks like in practice is through calling a recursive helper function:
+
+```
+let result_ref <- result[vadd_rec_cpu]
+    (v1_ref, v2_ref, new_arr_ref);
+return result_ref;
+```
+
+Now we will declare this helper function, which is also within the `schedule`
+block for `vadd` (information needed for helping the typechecker ensure we did
+the operation we promised we would do):
+
+```
+fn vadd_cpu_rec(
+v1_ref : &array<i32, $n>, 
+v2_ref : &array<i32, $n>,
+result_ref: &array<i32, $n>) -> &array<i32, $n> {
+    ???;
+}
+```
 
 # Appendix
 
