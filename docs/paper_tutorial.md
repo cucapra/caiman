@@ -207,8 +207,8 @@ return result_ref;
 ```
 
 Now we will declare this helper function, which is also within the `schedule`
-block for `vadd` (information needed for helping the typechecker ensure we did
-the operation we promised we would do):
+block for `vadd` (which gives information needed for helping the typechecker
+ensure we did the operation we promised we would do):
 
 ```
 fn vadd_cpu_rec(
@@ -218,6 +218,72 @@ result_ref: &array<i32, $n>) -> &array<i32, $n> {
     ???;
 }
 ```
+
+## Scheduling Control Flow
+
+Decomposing this function is somewhat more difficult than decomposing the
+scheduling setup from earlier.  We need to provide both control flow (for
+termination), and the recursive call itself, all satisfying the constraints
+given by the higher-level specification.
+
+Fortunately we can liberally use explication to help with ignoring the details
+and focusing on the "interesting" pieces of this function.  We start by stating
+that the `result_ref` value we passed in is written in each branch:
+
+```
+// the ... is not real syntax
+// it is just included for space reasons
+fn ... {
+    ???; // initial allocations
+    if (eq_cpu(?, ?)) {
+        result_ref <- result_ref;
+    } else {
+        ???; // setup the recursion
+        result_ref <- rec[vadd_cpu_rec](?, ?, ?);
+    }
+    return result_ref;
+}
+```
+
+There are two notably unusual details in this updated code.  First is that we
+use `?` rather than `???` in calls to functions here.  What `?` means to the
+scheduler is that only a single value can be provided (hence why we need
+multiple `?` for each call), but that value can come from an earlier explicated
+block.
+
+Second is the line `result_ref <- result_ref`.  This line is not strictly
+necessary, but is meant to highlight the connection between this scheduling code
+and the associated value language specification.  The intent communicated here
+is that `result_ref` will be an empty list under the equality condition deduced,
+and so assigning `result_ref` to itself resolves the specification requirement
+for returning the empty list in the base case.
+
+As before, the explicator can fill in the rest, and the structure of the program
+follows immediately from the specification, but there is one more detail that
+bears specific mention.  Specifically, when we setup the recursion, we need some
+way to reason about the head and tail of the allocated list separately while
+still respecting the memory layout of our scheduling program:
+
+```
+else {
+    let v1_head, v1_tail <- split(v1_ref);
+    let v2_head, v2_tail <- split(v2_ref);
+
+    // use head+tail
+    ???;
+    result_ref <- rec[vadd_cpu_rec](?, ?, ?);
+}
+```
+
+In this updated code, `split` is a core Caiman function that takes in a
+reference, consumes it, and returns the reference to the first element and a
+reference to the remaining list.  This reference-splitting behavior is
+necessarily unsafe in the Caiman type system, and so `split` is written as a
+provided core operation within the language.
+
+A detail to observe here is that the call to `rec` will be deduced by the
+explicator to use `v1_tail` and `v2_tail` (indeed, there's no other reference we
+could use), despite the use of `?` in the call.
 
 # Appendix
 
@@ -285,14 +351,12 @@ schedule vadd {
         if (eq_cpu(length_ref, zero_ref)) {
             result_ref <- result_ref; // satisfies the empty list
         } else {
-            let v1_head;
-            let v2_head;
-            v1_head, v1_ref <- split(v1_ref);
-            v2_head, v2_ref <- split(v2_ref);
+            let v1_head, v1_tail <- split(v1_ref);
+            let v2_head, v2_tail <- split(v2_ref);
 
             let val_ref = alloc_cpu i32;
             val_ref <- val[add_cpu](v1_head, v2_head);
-            result_ref <- rec[vadd_cpu_rec](v1_ref, v2_ref, result_ref);
+            result_ref <- rec[vadd_cpu_rec](v1_tail, v2_tail, result_ref);
         }
         return result_ref;
     }

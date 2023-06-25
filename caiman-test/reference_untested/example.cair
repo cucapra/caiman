@@ -98,7 +98,7 @@ schedule[value $val = %foo, spatial $space = %space]
 ($val.%x) %slot0)
 -> [%out : output($val.%y) %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
-    schedule-call %j.%abc %foo [%abc, %abc] %abc;
+    
 }
 
 // value, timeline, spatial order is mandatory (though you can freely omit one of course)
