@@ -47,6 +47,7 @@ pub struct YieldPoint {
 #[derive(Debug, Default)]
 struct SubmissionQueue {
     //most_recently_synchronized_submission_id : Option<SubmissionId>,
+    last_submission_id_opt: Option<SubmissionId>,
     next_submission_id: SubmissionId,
     next_fence_id: FenceId,
 }
@@ -55,6 +56,7 @@ struct SubmissionQueue {
 enum VariableKind {
     Dead,
     Buffer,
+    Fence,
     LocalData,
 }
 
@@ -92,6 +94,11 @@ impl VariableTracker {
 
     fn create_buffer(&mut self, type_id: ffi::TypeId) -> VarId {
         let id = self.create(VariableKind::Buffer, type_id);
+        id
+    }
+
+    fn create_fence(&mut self, type_id: ffi::TypeId) -> VarId {
+        let id = self.create(VariableKind::Fence, type_id);
         id
     }
 
@@ -214,6 +221,7 @@ pub struct CodeGenerator<'program> {
     active_yield_point_ids: HashSet<ffi::ExternalFunctionId>,
     dispatcher_id_generator: IdGenerator,
     active_dispatchers: HashMap<Box<[ffi::TypeId]>, Dispatcher>,
+    gpu_fence_type: Option<ffi::TypeId>,
 }
 
 impl<'program> CodeGenerator<'program> {
@@ -249,7 +257,10 @@ impl<'program> CodeGenerator<'program> {
             active_yield_point_ids: HashSet::new(),
             dispatcher_id_generator: IdGenerator::new(),
             active_dispatchers: HashMap::new(),
+            gpu_fence_type: None,
         };
+
+        code_generator.gpu_fence_type = Some(code_generator.create_ffi_type(ffi::Type::GpuFence));
 
         let type_ids = code_generator
             .native_interface
@@ -592,6 +603,7 @@ impl<'program> CodeGenerator<'program> {
         shader_module.force_writable_bindings(&rw_bindings);
         let kernel = ffi::GpuKernel {
             name: kernel.name.clone(),
+            dimensionality: kernel.dimensionality,
             input_types: kernel.input_types.clone(),
             output_types: kernel.output_types.clone(),
             entry_point: kernel.entry_point.clone(),
@@ -685,10 +697,17 @@ impl<'program> CodeGenerator<'program> {
             &mut active_submission_encoding_state,
         );
 
+        let submission_id = self.submission_queue.next_submission_id;
+
         if let Some(submission_encoding_state) = active_submission_encoding_state {
             if submission_encoding_state.command_buffer_ids.len() > 0 {
-                self.code_writer
-                    .write("instance.state.get_queue_mut().submit([".to_string());
+                //self.code_writer
+                //    .write("instance.state.get_queue_mut().submit([".to_string());
+                write!(
+                    self.code_writer,
+                    "let submission_index_{} = instance.state.get_queue_mut().submit([",
+                    submission_id.0
+                );
                 for &command_buffer_id in submission_encoding_state.command_buffer_ids.iter() {
                     self.code_writer
                         .write(format!("command_buffer_{}, ", command_buffer_id.0));
@@ -709,8 +728,8 @@ impl<'program> CodeGenerator<'program> {
         }
 
         //self.active_submission_encoding_state = None;
-        let submission_id = self.submission_queue.next_submission_id;
         self.submission_queue.next_submission_id.0 += 1;
+        self.submission_queue.last_submission_id_opt = Some(submission_id);
 
         //self.code_writer.write(format!("let future_var_{} = instance.state.get_queue_mut().on_submitted_work_done();\n", submission_id.0));
 
@@ -726,25 +745,43 @@ impl<'program> CodeGenerator<'program> {
         //self.code_writer.write("futures::executor::block_on(queue.on_submitted_work_done());\n".to_string());
     }
 
-    pub fn encode_gpu_fence(&mut self) -> FenceId {
+    /*pub fn convert_var_to_gpu_fence(&mut self, var_id : VarId) -> FenceId {
+        let fence_id = self.submission_queue.next_fence_id;
+        self.submission_queue.next_fence_id.0 += 1;
+
+        self.code_writer.write(format!("let future_var_recv_{} : caiman_rt::GpuFence = {};\n", fence_id.0, self.variable_tracker.get_var_name(var_id)));
+        return fence_id;
+    }*/
+
+    pub fn encode_gpu_fence(&mut self) -> VarId {
         let fence_id = self.submission_queue.next_fence_id;
         self.submission_queue.next_fence_id.0 += 1;
         // TODO: This is probably the wrong way to do this...
         // In essence, I just tried to carry over the old async-focused code into the new WGPU
         // callback-focused model.
-        self.code_writer.write(format!("let (future_var_send_{0}, future_var_recv_{0}) = futures::channel::oneshot::channel::<()>();\n", fence_id.0));
-        self.code_writer.write(format!("instance.state.get_queue_mut().on_submitted_work_done(|| future_var_send_{}.send(()).unwrap());\n", fence_id.0));
-        fence_id
+        let recv_var_id = self
+            .variable_tracker
+            .create_fence(self.gpu_fence_type.unwrap());
+        write!(
+            self.code_writer,
+            "let {} = Some(submission_index_{});\n",
+            self.variable_tracker.get_var_name(recv_var_id),
+            self.submission_queue.last_submission_id_opt.unwrap().0
+        );
+        //self.code_writer.write(format!("let (future_var_send_{}, {}) = futures::channel::oneshot::channel::<()>();\n", fence_id.0, self.variable_tracker.get_var_name(recv_var_id)));
+        //self.code_writer.write(format!("instance.state.get_queue_mut().on_submitted_work_done(|| future_var_send_{}.send(()).unwrap());\n", fence_id.0));
+        recv_var_id
     }
 
-    pub fn sync_gpu_fence(&mut self, fence_id: FenceId) {
-        self.code_writer.write(format!(
+    pub fn sync_gpu_fence(&mut self, recv_var_id: VarId) {
+        write!(self.code_writer, "instance.state.get_device_mut().poll(if let Some(id) = {} {{ wgpu::Maintain::WaitForSubmissionIndex(id) }} else {{ wgpu::Maintain::Wait }});\n", self.variable_tracker.get_var_name(recv_var_id));
+        /*self.code_writer.write(format!(
             "instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"
         ));
         self.code_writer.write(format!(
-            "futures::executor::block_on(future_var_recv_{});\n",
-            fence_id.0
-        ));
+            "futures::executor::block_on({});\n",
+            self.variable_tracker.get_var_name(recv_var_id)
+        ));*/
     }
 
     pub fn insert_comment(&mut self, comment_string: &str) {
@@ -1625,6 +1662,7 @@ impl<'program> CodeGenerator<'program> {
             ffi::Type::GpuBufferSlice { element_type } => (),
             ffi::Type::GpuBufferAllocator => (),
             ffi::Type::CpuBufferAllocator => (),
+            ffi::Type::GpuFence => (),
             /*ffi::Type::Slot { value_type, queue_stage, queue_place } =>
             {
                 write!(self.type_code_writer, "pub type type_{} = {};\n", type_id, self.get_type_name(* value_type));
@@ -1681,6 +1719,7 @@ impl<'program> CodeGenerator<'program> {
                 self.get_type_name(*element_type)
             ),
             ffi::Type::GpuBufferAllocator => format!("caiman_rt::GpuBufferAllocator<'callee>"),
+            ffi::Type::GpuFence => format!("caiman_rt::GpuFence"),
             /*ffi::Type::SchedulingJoin { input_types, output_types, extra } =>
             {
                 let mut output_string = String::new();

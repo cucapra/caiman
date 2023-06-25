@@ -31,7 +31,13 @@ caiman-rt = { path = "caiman-rt" }
 caiman-test = { path = "caiman-test" }
 
 [features]
+default = [
+    #"assembly",
+    "build-binary"
+]
 build-binary = [ "clap" ]
+assembly = []
+fusion = []
 
 [lib]
 name = "caiman"

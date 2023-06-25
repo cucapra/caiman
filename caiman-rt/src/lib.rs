@@ -2,6 +2,9 @@
 pub extern crate bytemuck;
 pub extern crate wgpu;
 
+// None = waits on whole queue
+pub type GpuFence = Option<wgpu::SubmissionIndex>;
+
 pub trait State {
     fn get_device_mut(&mut self) -> &mut wgpu::Device;
     fn get_queue_mut(&mut self) -> &mut wgpu::Queue;

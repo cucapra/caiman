@@ -10,6 +10,7 @@ use crate::stable_vec::StableVec;
 pub use crate::rust_wgpu_backend::ffi;
 
 pub mod analysis;
+#[cfg(feature = "fusion")]
 pub mod fusion;
 pub mod validation;
 
@@ -18,16 +19,6 @@ pub enum Place {
     Local,
     Cpu,
     Gpu,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ResourceQueueStage {
-    Unbound,
-    Bound,
-    Encoded,
-    Submitted,
-    Ready,
-    Dead,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -44,13 +35,8 @@ pub type OperationId = NodeId;
 pub type TypeId = usize;
 pub type PlaceId = usize;
 pub type ValueFunctionId = usize;
+pub type FunctionClassId = ValueFunctionId;
 pub type StorageTypeId = ffi::TypeId;
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RemoteNodeId {
-    pub funclet_id: FuncletId,
-    pub node_id: NodeId,
-}
 
 macro_rules! lookup_abstract_type {
 	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
@@ -63,7 +49,7 @@ macro_rules! lookup_abstract_type {
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { ValueFunctionId };
 	(Operation) => { OperationId };
-	(RemoteOperation) => { RemoteNodeId };
+	(RemoteOperation) => { Quotient };
 	(Place) => { Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -119,17 +105,84 @@ macro_rules! make_nodes {
 with_operations!(make_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Tag {
+pub enum Quotient {
     None,
     Node { node_id: usize },
     Input { index: usize },
     Output { index: usize },
-    Halt { index: usize },
+}
+
+impl Quotient {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+// positive = have, negative = need, neutral = paired
+// Encodes the "sign" of the data (this can be made more formal categorically as the interaction of adjunction pairs with a chirality structure)
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Flow {
+    None, // Does not transform, can only be discarded and not read
+    Have, // Transforms forwards with state changes
+    Need, // Transforms backwards with state changes
+    Met,  // Have has met Need and associated state will not change, but can still be read
+}
+
+// Met is a zero value that cannot be discarded or duplicated
+// None is a zero value that can only be discarded or duplicated
+// Have is a nonzero (owning) value that can only be read and discarded
+// Need is a nonzero (owning) value that can only be written and duplicated
+
+impl Flow {
+    pub fn is_droppable(&self) -> bool {
+        match self {
+            Self::None => true,
+            Self::Have => true,
+            Self::Need => false,
+            Self::Met => false,
+        }
+    }
+
+    pub fn is_duplicable(&self) -> bool {
+        match self {
+            Self::None => false,
+            Self::Have => false,
+            Self::Need => true,
+            Self::Met => false,
+        }
+    }
+
+    pub fn is_readable(&self) -> bool {
+        match self {
+            Self::None => false,
+            Self::Have => true,
+            Self::Need => false,
+            Self::Met => true,
+        }
+    }
+
+    pub fn is_neutral(&self) -> bool {
+        match self {
+            Self::None => true,
+            Self::Have => false,
+            Self::Need => false,
+            Self::Met => true,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Tag {
+    pub quot: Quotient, // What a given value maps to in a specification
+    pub flow: Flow,     // How this value transforms relative to the specification
 }
 
 impl Tag {
     fn default() -> Self {
-        Self::None
+        Self {
+            quot: Quotient::None,
+            flow: Flow::Have,
+        }
     }
 }
 
@@ -141,23 +194,18 @@ pub struct StaticBufferLayout {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type {
+    // Common
     NativeValue {
         storage_type: StorageTypeId,
     },
+
+    // Value only
     //Integer { signed : bool, width : usize },
 
-    // Scheduling
-    Slot {
+    // Scheduling only
+    Ref {
         storage_type: ffi::TypeId,
-        queue_stage: ResourceQueueStage,
-        queue_place: Place,
-    },
-    SchedulingJoin {
-        /*input_types : Box<[TypeId]>,
-        value_funclet_id : FuncletId,
-        input_slots : HashMap<usize, SlotInfo>,
-        input_fences : HashMap<usize, FenceInfo>,
-        in_timeline_tag : TimelineTag,*/
+        storage_place: Place,
     },
     Fence {
         queue_place: Place,
@@ -166,13 +214,14 @@ pub enum Type {
         storage_place: Place,
         static_layout_opt: Option<StaticBufferLayout>,
     },
-
-    // Timeline
-    Event {
-        place: Place,
+    Encoder {
+        queue_place: Place,
     },
 
-    // Space
+    // Timeline only
+    Event,
+
+    // Space only
     BufferSpace,
 }
 
@@ -182,13 +231,6 @@ pub enum TailEdge {
     Return {
         return_values: Box<[NodeId]>,
     },
-    Yield {
-        external_function_id: ExternalFunctionId,
-        yielded_nodes: Box<[NodeId]>,
-        next_funclet: FuncletId,
-        continuation_join: NodeId,
-        arguments: Box<[NodeId]>,
-    },
     Jump {
         join: NodeId,
         arguments: Box<[NodeId]>,
@@ -197,16 +239,28 @@ pub enum TailEdge {
     // Scheduling only
     // Split value - what will be computed
     ScheduleCall {
-        value_operation: RemoteNodeId,
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
         callee_funclet_id: FuncletId,
         callee_arguments: Box<[NodeId]>,
         continuation_join: NodeId,
     },
     ScheduleSelect {
-        value_operation: RemoteNodeId,
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
         condition: NodeId,
         callee_funclet_ids: Box<[FuncletId]>,
         callee_arguments: Box<[NodeId]>,
+        continuation_join: NodeId,
+    },
+    ScheduleCallYield {
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
+        external_function_id: ExternalFunctionId,
+        yielded_nodes: Box<[NodeId]>,
         continuation_join: NodeId,
     },
 
@@ -214,13 +268,21 @@ pub enum TailEdge {
     // SyncFence { fence : NodeId, immediate_funclet : FuncletId, deferred_funclet : FuncletId, arguments : Box<[NodeId]>, continuation_join : NodeId },
 
     // Split space - where the computation will be observed
-    DynamicAllocFromBuffer {
+    /*DynamicAllocFromBuffer {
         buffer: NodeId,
         arguments: Box<[NodeId]>,
         dynamic_allocation_size_slots: Box<[Option<NodeId>]>,
         success_funclet_id: FuncletId,
         failure_funclet_id: FuncletId,
         continuation_join: NodeId,
+    },*/
+    // Here for now as a type system debugging tool
+    // Always passes type checking, but fails codegen
+    DebugHole {
+        // Scalar nodes
+        inputs: Box<[NodeId]>,
+        // Continuations
+        //outputs : Box<[NodeId]>
     },
 }
 
@@ -243,7 +305,9 @@ impl FuncletKind {
 pub struct FuncletSpec {
     pub funclet_id_opt: Option<FuncletId>,
     pub input_tags: Box<[Tag]>,
+    //pub input_flows : Box<[Flow]>,
     pub output_tags: Box<[Tag]>,
+    //pub output_flows : Box<[Flow]>,
     #[serde(default = "Tag::default")]
     pub implicit_in_tag: Tag,
     #[serde(default = "Tag::default")]
@@ -255,6 +319,9 @@ pub enum FuncletSpecBinding {
     None,
     Value {
         value_function_id_opt: Option<ValueFunctionId>,
+    },
+    Timeline {
+        function_class_id_opt: Option<FunctionClassId>,
     },
     ScheduleExplicit {
         value: FuncletSpec,
@@ -333,13 +400,16 @@ fn ordered_map<'a, T>(map: &HashMap<usize, T>) -> Vec<(&usize, &T)> {
 // A schedule can substitute a call to it for an implementation iff that implementation is associated with the function class
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionClass {
+    #[serde(default)]
     pub name_opt: Option<String>,
     pub input_types: Box<[TypeId]>,
     pub output_types: Box<[TypeId]>,
     // A hint about what funclet the explicator can use to instantiate this class
     // This doesn't need to exist for caiman to compile if everything is already explicit
+    #[serde(default)]
     pub default_funclet_id: Option<FuncletId>,
     // The external functions that implement this function
+    #[serde(default)]
     pub external_function_ids: BTreeSet<ExternalFunctionId>,
 }
 
@@ -368,22 +438,4 @@ impl Program {
     pub fn new() -> Self {
         Default::default()
     }
-}
-
-// Hall of shame but mostly deprecated name
-
-pub type ValueFunction = FunctionClass;
-pub type ValueTag = Tag;
-pub type TimelineTag = Tag;
-pub type SpatialTag = Tag;
-
-// Will phase this out, so don't depend on it
-#[derive(Debug, Clone)]
-pub struct SchedulingTagSet {
-    //#[serde(default = "ValueTag::default")]
-    pub value_tag: ValueTag,
-    //#[serde(default = "TimelineTag::default")]
-    pub timeline_tag: TimelineTag,
-    //#[serde(default = "SpatialTag::default")]
-    pub spatial_tag: SpatialTag,
 }
