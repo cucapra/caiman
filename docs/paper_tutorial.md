@@ -32,7 +32,7 @@ int* vadd2(int[N] v1, int[N] v2, int[N] v3) {
 ```
 
 This example is (obviously) somewhat synthetic, but having two explicit compute
-chunks is both common with more complicated operations and is helpful when
+chunks are both common with more complicated operations and is helpful when
 illustrating some of the descriptive power provided by Caiman.
 
 We start by defining a constant `$N` and the value function for `vadd2`:
@@ -136,7 +136,7 @@ arguments and the same size return type (note that the syntax `_cpu` is a
 convention and not meaningful; the declaration of the `array_cpu` type is not
 shown here for space reasons).
 
-The body of this schedule is fairly straightforward imperative code.  There are,
+The body of this schedule is straightforward imperative code.  There are,
 however, a few details of note.  First, the use of `<-` is meant to emphasize
 the imperative nature of the schedule (compared to the declarative `=` used in
 the value function).  Second, each operation is associated with a value function
@@ -181,7 +181,7 @@ While this function can be explicated and run, the point of using Caiman is that
 now we can decompose this `???` that we just defined, allowing us to specify the
 body of this function beyond trusting the compiler to work it out.  This will
 allow for the performance exploration introduced earlier, but for now, let's
-break down this particular function more explicitly.
+break down this function more explicitly.
 
 To break down the explication into concrete code, we start by allocating an
 array to store the result of adding `v1_ref` and `v2_ref`:
@@ -192,7 +192,7 @@ let new_arr_ref <- new_arr(&array<i32, $n>, $N);
 
 Since we don't want to allocate for each level of recursion, now we need to
 perform some trickery (with the help of the caiman typechecker).  In particular,
-while the value function type definition for `vadd` uses a fairly standard
+while the value function type definition for `vadd` uses a standard
 declarative approach to constructing a list (recursing to the base and building
 the list piece-by-piece), the caiman type system allows us to rewrite this
 concretely in a more imperative style, specifically by reversing the memory
@@ -226,7 +226,7 @@ scheduling setup from earlier.  We need to provide both control flow (for
 termination), and the recursive call itself, all satisfying the constraints
 given by the higher-level specification.
 
-Fortunately we can liberally use explication to help with ignoring the details
+Fortunately, we can liberally use explication to help with ignoring the details
 and focusing on the "interesting" pieces of this function.  We start by stating
 that the `result_ref` value we passed in is written in each branch:
 
