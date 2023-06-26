@@ -94,7 +94,8 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     %10 = serialized-join %foo [%y, %z] %5;
     %11 = default-join;
     [%_, %_, %_] = promise-captures 5 %x;
-    [%_] = fulfill-captures %x [%y, %z] [%3]
+    [%_] = fulfill-captures %x [%y, %z] [%3];
+    ???;
     return %x;
 }
 
@@ -122,7 +123,7 @@ schedule[value $val = %foo, timeline $time = %time]
 %syield<halt($time.%e)-have, node($time.%e)-need>
 (%abc : input($space.%bs)-none %event0)
 -> [%out : node($space.%bs) %buffer0] {
-    schedule-call-yield %abc %bar[value input(%foo.%x)-have,
+    schedule-call-yield %bar[value input(%foo.%x)-have,
         timeline output(%time.%e)-need,
         spatial none-met](%abc, %abc) %abc;
 }
