@@ -1,5 +1,9 @@
 version 0.0.2
 
+// is meant to parse, not to compile/run
+// just a reference/test for syntax parsing
+// the complete set of nodes parsable and all that
+
 type f32;
 type f64;
 type u8;
@@ -60,72 +64,85 @@ value[impl @simple_32] %foo(%test : i32) -> [%out : i32] {
     %1 = constant 4i64;
     %2 = extract %1 0;
     %4 = call @simple(%1);
-    %5 = select %1 %2 %4;
-    %6 = call @simple(%1);
-    %_ = call @simple<%1>(%1);
-    return %1;
+    [%5, %6] = select %1 %2 %4;
+    return [%1, %2];
 }
 
-value[impl @simple] %y(%abc : i64) -> [%out : i64] {
-    // pretty clunky tbh
-    yield %abc [%abc] %foo %abc [%abc, %abc];
-}
-
-value[impl @simple] %j(%abc : i64) -> [i64] {
+value[impl @simple] %y(%abc : i64) -> [i64] {
     jump %abc [%abc, %abc];
 }
 
 // can syntactically be empty, even though this is meaningless
-schedule[value $val = %foo] %bar<none, none>(%0 : %slot0) -> [%out : %slot0] {
-    %x = alloc-temporary-local-i64 %foo.%1;
-    %y = unbound-slot-local-i64 %foo.%1;
-    %2 = encode-do-local %bar %foo.%1() -> %x;
-    %3 = drop %0;
-    %4 = alloc-local-i64 %0 %foo.%1;
-    %5 = encode-copy-cpu %2 %4;
-    %6 = submit-cpu %foo.%1;
-    %7 = encode-fence-cpu %foo.%3;
-    %8 = sync-fence-cpu %7 %foo.%2;
-    %9 = inline-join %foo [] %5;
-    %10 = serialized-join %foo [] %5;
+schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0] {
+    %x = alloc-temporary local i64 %foo.%1;
+    drop %0;
+    %y = static-sub-alloc local i64 %foo.%1;
+    [%4, %_] = static-alloc local %0 [1, 2] %foo.%1;
+    %z = static-dealloc local %space.%0 [%x, %4];
+    %_ = read-ref i64 %x;
+    %_ = borrow-ref i64 %x;
+    write-ref i64 %x -> %4;
+    local-do-builtin %foo.%1(%x, %3) -> [%4, %0];
+    local-do-external %do_pure_thing_on_cpu %foo.%1(%x, %3) -> [%4, %0];
+    local-copy %x %3;
+    %_ = begin-encoding local %foo.%1 [%x, %3] [%4, %0];
+    encode-do %x %do_pure_thing_on_cpu %foo.%1() -> %x;
+    encode-copy cpu %x %y;
+    %6 = submit cpu %foo.%1;
+    sync-fence-cpu %7 %foo.%2;
+    %9 = inline-join %foo [%x, %y] %5;
+    %10 = serialized-join %foo [%y, %z] %5;
     %11 = default-join;
+    [%_, %_, %_] = promise-captures 5 %x;
+    [%_] = fulfill-captures %x [%y, %z] [%3]
     return %x;
 }
 
 schedule[value $val = %foo, spatial $space = %space]
-%scall<none, none>
-(%abc : input
-($val.%x) %slot0)
--> [%out : output($val.%y) %slot0] {
+%scall<none-have, none-met>
+(%abc : input($val.%x)-have %slot0)
+-> [%out : output($val.%y)-met %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
-    
+    schedule-call %bar[value input(%foo.%x)-have,
+        timeline output(%time.%e)-need,
+        spatial none-met](%abc, %abc) %abc;
 }
 
 // value, timeline, spatial order is mandatory (though you can freely omit one of course)
 schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
-%sselect<input($time.%e), output($time.%e)>
-(%abc : input($time.%e) halt($val.%x) %slot0)
+%sselect<input($time.%e)-met, output($time.%e)-have>
+(%abc : input($time.%e)-met halt($val.%x)-have %slot0)
 -> input($time.%e) output($val.%x) %slot0 {
-    schedule-select %y.%abc %abc [%foo, %j] [%abc, %abc] %abc;
+    schedule-select %abc %bar[value input(%foo.%x)-have,
+        timeline output(%time.%e)-need,
+        spatial none-met](%abc, %abc) %abc;
 }
 
 schedule[value $val = %foo, timeline $time = %time]
-%dalloc<halt($time.%e), node($time.%e)>
-(%abc : input($space.%bs) %event0)
+%syield<halt($time.%e)-have, node($time.%e)-need>
+(%abc : input($space.%bs)-none %event0)
 -> [%out : node($space.%bs) %buffer0] {
-    // pretty clunky tbh -- note that `none` literally means `None`
-    dynamic-alloc %abc [] [%abc, none, ?] %foo %j %abc;
+    schedule-call-yield %abc %bar[value input(%foo.%x)-have,
+        timeline output(%time.%e)-need,
+        spatial none-met](%abc, %abc) %abc;
+}
+
+schedule[value $val = %foo, timeline $time = %time]
+%debugtest<halt($time.%e)-have, node($time.%e)-need>
+(%abc : input($space.%bs)-none %event0)
+-> [%out : node($space.%bs) %buffer0] {
+    debug-hole [%abc, %abc]
 }
 
 timeline %time(%e : %event0) -> [%event_out : %event0] {
-    %1 = submission-cpu->gpu %e;
-    %2 = sync-cpu->gpu %e %1;
+    [%x, %y] = encoding-event %e [%e, %e];
+    %1 = submission-event %x;
+    %2 = synchronization-event %e %x;
     return %e;
 }
 
 spatial %space(%b : %buffer_space0) -> [%iout : i64] {
-    %1 = separated-linear-space-cpu %b;
-    %2 = merged-linear-space-cpu [%b, %1];
+    [%1, %2, %3] = separated-buffer-space cpu 3 %b;
     return %b;
 }
 
