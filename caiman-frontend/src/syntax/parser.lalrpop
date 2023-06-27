@@ -9,6 +9,7 @@ match {
 
   // Keywords (omitting things with symbols in here is ok for some reason)
   "value", "function", "class", "schedule", "fn", "timeline", "pipeline",
+      "extern",
   "let", "returns", "return",
   "i32", "i64", "bool", "Event",
   "at", "and", "space", "time",
@@ -48,6 +49,10 @@ Decl: Decl = {
     <@R> => astf.timeline_funclet(<>),
 
     <@L> "pipeline" <Id> "=" <Id> ";" <@R> => astf.pipeline(<>),
+
+    <@L> 
+    "extern" <Id> ":" "(" <CommaList<ValueType>> ")" "->" <ValueType> ";"
+    <@R> => astf.extern_cpu(<>),
 }
 
 // VALUE LANGUAGE SECTION
@@ -72,6 +77,7 @@ ValueExpr: value::Expr = {
     <@L> <Id> <@R>                                   => astf.value_var(<>),
     <@L> <Bool> <@R>                                 => astf.value_bool(<>),
     <@L> <ValueNumber> <@R>                          => astf.value_number(<>),
+    <@L> "(" <Id> <ValueExpr+> ")" <@R>              => astf.value_app(<>),
     "(" <ValueExpr> ")",
 }
 
@@ -131,6 +137,8 @@ TimeStmt: timeline::Stmt = {
     <@L> "return" <Id> ";" <@R> => astf.time_return(<>),
 }
 
+
+// MISC
 
 Arg<T>: Arg<T> = { <i: Id> ":" <t: T> => (i, t) }
 

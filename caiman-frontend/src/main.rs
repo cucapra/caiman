@@ -6,6 +6,7 @@ use caiman::assembly::ast as asm;
 use caiman_frontend::error;
 use caiman_frontend::scheduling_language;
 use caiman_frontend::to_ir;
+use caiman_frontend::to_ir_new;
 use caiman_frontend::value_language;
 use caiman_frontend::syntax;
 use clap::Parser;
@@ -76,7 +77,7 @@ fn main()
     let args = Arguments::parse();
 
     if args.new_lang {
-        compile_new_lang(args.filename, args.parse);
+        compile_new_lang(args);
         return;
     }
 
@@ -123,9 +124,23 @@ fn main()
     }
 }
 
-fn compile_new_lang(filename: String, parse: bool) 
+fn compile_new_lang(args: Arguments) 
 {
-    syntax::compile::run(filename, parse);
+    match syntax::compile::parse(args.filename) {
+        Err(e) => println!("{}", e),
+        Ok(ast) => {
+            if args.parse {
+                println!("{:#?}", ast);
+            } else {
+                let program = to_ir_new::frontend_to_asm(ast);
+                if args.run {
+                    explicate_and_execute(args.output, program);
+                } else {
+                    println!("{:#?}", program);
+                }
+            }
+        },
+    }
 }
 
 fn explicate_and_execute(output: Option<String>, program: asm::Program)

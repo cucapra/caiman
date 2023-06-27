@@ -65,6 +65,8 @@ impl ASTFactory
     factory!(value::Expr, value_bool(b: bool) => value::ExprKind::Bool(b));
     factory!(value::Expr, 
         value_number(n: (String, value::NumberType)) => value::ExprKind::Num(n.0, n.1));
+    factory!(value::Expr, value_app(f: String, es: Vec<value::Expr>) 
+        => value::ExprKind::App(f, es));
 
     // FUNCTION CLASS
     factory!(Decl, function_class(name: String, functions: Vec<String>) 
@@ -141,4 +143,8 @@ impl ASTFactory
     // PIPELINE
     factory!(Decl, pipeline(name: String, funclet_to_run: String) => 
         DeclKind::Pipeline { name, funclet_to_run });
+
+    // EXTERN CPU
+    factory!(Decl, extern_cpu(name: String, input: Vec<value::Type>, output: value::Type)
+        => DeclKind::ExternCPU { name, input, output });
 }

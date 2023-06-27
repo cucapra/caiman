@@ -30,6 +30,8 @@ pub mod value
         Var(Var),
         Num(String, NumberType),
         Bool(bool),
+        // TODO function literal allowed instead of having to use a var?
+        App(String, Vec<Expr>),
         // TODO: many more :D
     }
 
@@ -148,6 +150,12 @@ pub enum DeclKind
     {
         name: String,
         funclet_to_run: String,
+    },
+    ExternCPU
+    {
+        name: String,
+        input: Vec<value::Type>,
+        output: value::Type,
     },
 }
 
