@@ -1,12 +1,15 @@
 use pest::iterators::{Pair, Pairs};
+// uncomment to test raw parsing
+// use pest::Parser;
+// use pest_derive::Parser;
 use pest_consume::{match_nodes, Error, Parser};
-use std::cell::RefCell;
-use std::collections::HashMap;
 
 #[derive(Parser)]
 #[grammar = "src/assembly/caimanir.pest"]
 struct CaimanAssemblyParser;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use crate::{assembly, frontend, ir};
 use assembly::ast;
 use ast::Hole;
@@ -208,15 +211,15 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn function_name(input: Node) -> ParseResult<String> {
+    fn function_class_name(input: Node) -> ParseResult<String> {
         Ok(match_nodes!(input.into_children();
             [id(s)] => s,
         ))
     }
 
-    fn function_name_sep(input: Node) -> ParseResult<String> {
+    fn function_class_name_sep(input: Node) -> ParseResult<String> {
         Ok(match_nodes!(input.into_children();
-            [function_name(name)] => name
+            [function_class_name(name)] => name
         ))
     }
 
@@ -250,7 +253,7 @@ impl CaimanAssemblyParser {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
 
-    fn funclet_loc(input: Node) -> ParseResult<RemoteNodeId> {
+    fn remote(input: Node) -> ParseResult<RemoteNodeId> {
         Ok(match_nodes!(input.into_children();
             [name(funclet_name), name(node_name)] => ast::RemoteNodeId {
                 funclet_name: Some(FuncletId(funclet_name)),
@@ -259,13 +262,13 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn funclet_loc_sep(input: Node) -> ParseResult<RemoteNodeId> {
+    fn remote_sep(input: Node) -> ParseResult<RemoteNodeId> {
         Ok(match_nodes!(input.into_children();
-            [funclet_loc(t)] => t
+            [remote(t)] => t
         ))
     }
 
-    fn funclet_loc_hole(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
+    fn remote_hole(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
             [name_hole(funclet_name), name_hole(node_name)] => Some(ast::RemoteNodeId {
                 funclet_name: funclet_name.map(|s| FuncletId(s)),
@@ -275,7 +278,13 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn meta_funclet_loc_inner(input: Node) -> ParseResult<RemoteNodeId> {
+    fn remote_hole_sep(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
+        Ok(match_nodes!(input.into_children();
+            [remote_hole(t)] => t
+        ))
+    }
+
+    fn meta_remote_inner(input: Node) -> ParseResult<RemoteNodeId> {
         let error = input.error("Unknown meta name");
         let meta_map = input
             .user_data()
@@ -296,10 +305,10 @@ impl CaimanAssemblyParser {
         )
     }
 
-    fn meta_funclet_loc(input: Node) -> ParseResult<RemoteNodeId> {
+    fn meta_remote(input: Node) -> ParseResult<RemoteNodeId> {
         Ok(match_nodes!(input.into_children();
-            [funclet_loc(f)] => f,
-            [meta_funclet_loc_inner(f)] => f
+            [remote(f)] => f,
+            [meta_remote_inner(f)] => f
         ))
     }
 
@@ -339,8 +348,8 @@ impl CaimanAssemblyParser {
         input: Node,
     ) -> ParseResult<Box<dyn Fn(ast::FFIType) -> ast::FFIType>> {
         fn box_up<F>(f: &'static F) -> Box<dyn Fn(ast::FFIType) -> ast::FFIType>
-        where
-            F: Fn(Box<ast::FFIType>) -> ast::FFIType,
+            where
+                F: Fn(Box<ast::FFIType>) -> ast::FFIType,
         {
             Box::new(move |x| f(Box::new(x)))
         }
@@ -427,34 +436,11 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn stage(input: Node) -> ParseResult<ir::ResourceQueueStage> {
-        input
-            .as_str()
-            .parse::<String>()
-            .map_err(|e| input.error(e))
-            .and_then(|s| match s.as_str() {
-                "unbound" => Ok(ir::ResourceQueueStage::Unbound),
-                "bound" => Ok(ir::ResourceQueueStage::Bound),
-                "encoded" => Ok(ir::ResourceQueueStage::Encoded),
-                "submitted" => Ok(ir::ResourceQueueStage::Submitted),
-                "ready" => Ok(ir::ResourceQueueStage::Ready),
-                "dead" => Ok(ir::ResourceQueueStage::Dead),
-                _ => Err(input.error(unexpected(s))),
-            })
-    }
-
-    fn stage_hole(input: Node) -> ParseResult<Hole<ir::ResourceQueueStage>> {
-        Ok(match_nodes!(input.into_children();
-            [stage(stage)] => Some(stage),
-            [hole] => None
-        ))
-    }
-
     // weirdly, this seems like the best way to do this with pest_consume for now?
     fn tag_op(input: Node) -> ParseResult<Box<dyn Fn(ast::RemoteNodeId) -> ast::Tag>> {
         fn box_up<F>(f: &'static F) -> Box<dyn Fn(ast::RemoteNodeId) -> ast::Tag>
-        where
-            F: Fn(ast::RemoteNodeId) -> ast::Tag,
+            where
+                F: Fn(ast::RemoteNodeId) -> ast::Tag,
         {
             Box::new(move |x| f(x))
         }
@@ -475,7 +461,7 @@ impl CaimanAssemblyParser {
     fn tag(input: Node) -> ParseResult<ast::Tag> {
         Ok(match_nodes!(input.into_children();
             [none] => ast::Tag::None,
-            [tag_op(op), meta_funclet_loc(loc)] => op(loc),
+            [tag_op(op), meta_remote(loc)] => op(loc),
         ))
     }
 
@@ -609,8 +595,8 @@ impl CaimanAssemblyParser {
 
     fn impl_box(input: Node) -> ParseResult<(bool, FunctionClassId)> {
         Ok(match_nodes!(input.into_children();
-            [impl_sep, function_name(name)] => (false, FunctionClassId(name)),
-            [impl_sep, default, function_name(name)] => (true, FunctionClassId(name))
+            [impl_sep, function_class_name(name)] => (false, FunctionClassId(name)),
+            [impl_sep, default, function_class_name(name)] => (true, FunctionClassId(name))
         ))
     }
 
@@ -767,7 +753,7 @@ impl CaimanAssemblyParser {
 
     fn function_class(input: Node) -> ParseResult<ast::FunctionClass> {
         match_nodes!(input.into_children();
-            [function_class_sep, function_name(name),
+            [function_class_sep, function_class_name(name),
             function_class_args(input_types), function_class_ret(output_types)] =>
                 Ok(ast::FunctionClass {
                     name: FunctionClassId(name),
@@ -1106,7 +1092,7 @@ impl CaimanAssemblyParser {
 
     fn schedule_call_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
-            [join_sep, funclet_loc_hole(value_operation), name_hole(callee_funclet_id),
+            [join_sep, remote_hole(value_operation), name_hole(callee_funclet_id),
                 node_box(callee_arguments), name_hole(continuation_join)] =>
                 ast::TailEdge::ScheduleCall {
                     value_operation,
@@ -1120,7 +1106,7 @@ impl CaimanAssemblyParser {
     fn schedule_select_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
             [schedule_select_sep,
-                funclet_loc_hole(value_operation),
+                remote_hole(value_operation),
                 name_hole(condition),
                 node_box(callee_funclet_ids),
                 node_box(callee_arguments),
@@ -1211,7 +1197,7 @@ impl CaimanAssemblyParser {
     fn call_node(input: Node) -> ParseResult<ast::Node> {
         // will split apart later
         Ok(match_nodes!(input.into_children();
-            [call_sep, function_name(external_function_id), node_call(arguments)] =>
+            [call_sep, function_class_name(external_function_id), node_call(arguments)] =>
                 ast::Node::CallValueFunction {
                     function_id: Some(FunctionClassId(external_function_id)),
                     arguments
@@ -1231,7 +1217,7 @@ impl CaimanAssemblyParser {
     fn alloc_temporary_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
             [place_hole(place), type_hole(storage_type),
-                funclet_loc_hole(operation)] => ast::Node::AllocTemporary {
+                remote_hole(operation)] => ast::Node::AllocTemporary {
                 place,
                 storage_type,
                 operation
@@ -1241,7 +1227,7 @@ impl CaimanAssemblyParser {
     fn unbound_slot_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
             [place_hole(place), type_hole(storage_type),
-                funclet_loc_hole(operation)] => ast::Node::UnboundSlot {
+                remote_hole(operation)] => ast::Node::UnboundSlot {
                 place,
                 storage_type,
                 operation
@@ -1264,7 +1250,7 @@ impl CaimanAssemblyParser {
     fn alloc_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
             [alloc_sep((place, storage_type)), name_hole(buffer),
-                funclet_loc_hole(operation)] => ast::Node::StaticAllocFromStaticBuffer {
+                remote_hole(operation)] => ast::Node::StaticAllocFromStaticBuffer {
                 buffer: buffer.map(|s| NodeId(s)),
                 place,
                 storage_type,
@@ -1280,7 +1266,7 @@ impl CaimanAssemblyParser {
 
     fn encode_do_call(input: Node) -> ParseResult<(Hole<RemoteNodeId>, Hole<Vec<Hole<NodeId>>>)> {
         Ok(match_nodes!(input.into_children();
-            [funclet_loc_hole(fnloc), node_call(args)] => (fnloc, args),
+            [remote_hole(fnloc), node_call(args)] => (fnloc, args),
             [hole] => (None, None)
         ))
     }
@@ -1321,7 +1307,7 @@ impl CaimanAssemblyParser {
 
     fn submit_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-            [place_hole(place), funclet_loc_hole(event)] => ast::Node::Submit {
+            [place_hole(place), remote_hole(event)] => ast::Node::Submit {
                 place,
                 event
         }))
@@ -1329,7 +1315,7 @@ impl CaimanAssemblyParser {
 
     fn encode_fence_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
-            [place_hole(place), funclet_loc_hole(event)] => ast::Node::EncodeFence {
+            [place_hole(place), remote_hole(event)] => ast::Node::EncodeFence {
                 place,
                 event
         }))
@@ -1344,7 +1330,7 @@ impl CaimanAssemblyParser {
     fn sync_fence_node(input: Node) -> ParseResult<ast::Node> {
         Ok(match_nodes!(input.into_children();
             [sync_fence_sep(place), name_hole_sep(fence),
-                funclet_loc_hole(event)] => ast::Node::SyncFence {
+                remote_hole(event)] => ast::Node::SyncFence {
                 place,
                 fence: fence.map(|s| NodeId(s)),
                 event
@@ -1488,6 +1474,7 @@ pub fn parse(code: &str) -> ParseResult<ast::Program> {
     let user_data = UserData {
         binding_info: RefCell::new(None),
     };
+    // CaimanAssemblyParser::parse(Rule::program, code);
     let parsed = CaimanAssemblyParser::parse_with_userdata(Rule::program, code, user_data)?;
     CaimanAssemblyParser::program(parsed.single()?)
 }

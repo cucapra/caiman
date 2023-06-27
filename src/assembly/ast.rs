@@ -303,7 +303,6 @@ pub enum LocalTypeInfo {
     // Scheduling
     Slot {
         storage_type: TypeId,
-        queue_stage: ir::ResourceQueueStage,
         queue_place: ir::Place,
     },
     SchedulingJoin {},
