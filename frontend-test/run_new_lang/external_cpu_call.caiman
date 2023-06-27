@@ -1,0 +1,30 @@
+extern compute : (i64, i64) -> i64;
+
+function class comput { compute }
+
+value foo() -> i64 {
+    let x = 4. 
+    let z = 10. 
+    let y = (comput x z).
+    returns y.
+}
+
+function class foo_class { foo }
+
+schedule foo {
+    fn bar() -> &y 
+      at time my_time
+    {
+        let x_slot := x.Prim;
+        let z_slot := z.Prim;
+        let y_slot := y.Prim;
+        return y_slot;
+    }
+
+}
+
+timeline my_time(e : Event) -> Event {
+    return e;
+}
+
+pipeline main = bar;

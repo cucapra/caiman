@@ -1,0 +1,60 @@
+// One let statement
+
+value foo() -> i64 {
+    // Forgoing type annotations for the "4i64" type of syntax 
+    let x = 4. // i64.
+    returns x.
+}
+
+// By default foo will live in its own equivalence class
+// (called foo) as will any value funclet. We can then explicitly
+// define an equivalence class instead if we wanna unify multiple VFs.
+//
+// Below code does nothing because it's never called and foo has its default 
+// function class but I wanted to show off the syntax :D
+function class foo_class { foo }
+
+// like Rust impl
+// it's like this because you can make multiple schedules 
+// for foo
+
+schedule foo {
+
+  // Below: you would put `and space _` if a spatial funclet was 
+  // needed, and you could do then in either order like `at space sp and
+  // time tm` would be ok
+  // If you wanted timeline to be in it but implicit you would do....
+  //   `at time ?` ??? idk maybe that's crazy
+
+  // Here we name input and output slot types with the variable it
+  // corresponds to in the value language!!! Also the & means "slot" 
+  // for now
+
+  // TODO: what the heck do I do with the time.e input output tags?
+  // Just gonna make them optional for now
+
+    fn bar() -> &x 
+      at time my_time
+    {
+        // Does x_slot need to be named and returned? 
+        // The type is already &x so we should be able to find
+        // where x is scheduled and then return it right?
+        let x_slot := x.Prim;
+        return x_slot;
+    }
+
+}
+
+// The below Events are local, idk if that will need to be specified in the 
+// future.
+// In many cases the timeline below or other trivial timelines are used
+// so hopefully this won't be needed. But I'll put it here just in case!
+
+timeline my_time(e : Event) -> Event {
+    return e;
+}
+
+// Make sure the pipeline's name (in this case main) is the same as the one 
+// being called in this program's corresponding Rust file 
+
+pipeline main = bar;

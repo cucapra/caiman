@@ -1,0 +1,18 @@
+extern foo : (i64, bool, i32) -> i64;
+
+extern bar : (i64) -> i64;
+
+
+// Should maybe specify "CPU" here
+// Def need to specify if the function is pure or not at some later point!!
+
+extern baz : (i64, i64, i64) -> i64;
+
+value apply_bar_to_five_and_other_great_things() -> i64 {
+    let y = (baz 6 7 x).
+    let x = (bar 5).
+    returns y.
+}
+
+
+

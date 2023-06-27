@@ -85,8 +85,10 @@ class FrontendCompiler:
         return self.test_dir / ".." / "target" / "debug" / "caiman-frontend"
 
     def compile(self, input: Path, output: Path) -> subprocess.CompletedProcess:
-        input = input.with_suffix("")
+        # Below line was a relic of the "two-langs" situation
+        #input = input.with_suffix("")
         args = [ self._compiler_path(), 
+            "--new-lang",
             "--run",
             "--output", output,
             input ] 
@@ -136,7 +138,7 @@ def process_inputs(
         inputs = chain(
                 test_dir.rglob("*test.cair"), 
                 test_dir.rglob("*test.ron"),
-                test_dir.rglob("*.cavl"),
+                test_dir.rglob("*.caiman"),
         )
     for input in inputs:
         relativized = input.absolute().relative_to(test_dir)
@@ -171,7 +173,7 @@ def process_inputs(
 
                 continue
 
-        input_compiler = frontend_compiler if input_str.endswith(".cavl") else compiler
+        input_compiler = frontend_compiler if input_str.endswith(".caiman") else compiler
         rv = input_compiler.compile(input.absolute(), output)
 
         if (rv.returncode == 0):
