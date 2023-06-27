@@ -88,8 +88,10 @@ schedule @fusion_elide_sched(
     %d_gpu = alloc-temporary-gpu-f32 @fusion.%d;
     %_ = encode-copy-gpu %d_local %d_gpu;
 
-    // These three allocations should be elided via static analysis
     %ab_gpu = alloc-temporary-gpu-f32 @fusion.%ab;
+    // This allocation should be elided via static analysis
+    // We could elide ab_gpu too in theory, but in practice it won't be a part of the fused
+    // kernel due to the "contiguous dependency chain" requirement.
     %cd_gpu = alloc-temporary-gpu-f32 @fusion.%cd;
     %ab_cd_gpu = alloc-temporary-gpu-f32 @fusion.%ab_cd;
 

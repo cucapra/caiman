@@ -1,44 +1,24 @@
-version 0.0.1
+version 0.0.2
 
-types [
-    i64,
-    slot $slot0 {
-        type : i64,
-        stage : ready,
-        place : local,
-    },
-    event $event0 {
-        place : local
-    },
-]
+type i64;
+slot %slot0 : i64-ready-local;
+event %event0 : local;
 
-value @foo() -> i64 {
+function @main() -> i64;
+
+value[impl default @main] %foo() -> i64 {
     %x = constant 4i64;
     return %x;
 }
 
-schedule @bar() -> [%out : $slot0] {
+schedule[value $val = %foo, timeline $time = %time]
+%bar<input($time.%e), output($time.%e)>() ->
+[%out : %slot0] {
     ???;
 }
 
-timeline @time(%e : $event0) -> $event0 {
+timeline %time(%e : %event0) -> %event0 {
     return %e;
 }
 
-extras {
-    @bar {
-        value : @foo,
-        input_slots : {},
-        output_slots : {
-            %out : slot_info()
-        },
-        input_fences : {},
-        output_fences : {},
-        input_buffers : {},
-        output_buffers : {},
-        in_timeline_tag : timeline_tag input @time.%e,
-        out_timeline_tag : timeline_tag input @time.%e,
-    },
-}
-
-pipeline "main" = @bar;
+pipeline "main" = %bar;
