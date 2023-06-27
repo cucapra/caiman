@@ -29,7 +29,7 @@ type cpu_buffer_allocator;
 type cpu_buffer_ref<i64>;
 
 native_value %native_i64 : i64;
-slot %slot0 : i64-ready-local;
+slot %slot0 : i64-local;
 fence %fence0 : cpu;
 buffer %buffer0 : gpu<alignment_bits = 4, byte_size = 8>;
 event %event0 : local;
@@ -74,7 +74,7 @@ value[impl @simple] %y(%abc : i64) -> [i64] {
 
 // can syntactically be empty, even though this is meaningless
 schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0] {
-    %x = alloc-temporary local i64 %foo.%1;
+    %x = alloc-temporary local i64;
     drop %0;
     %y = static-sub-alloc local i64 %foo.%1;
     [%4, %_] = static-alloc local %0 [1, 2] %foo.%1;
@@ -89,7 +89,7 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     encode-do %x %do_pure_thing_on_cpu %foo.%1() -> %x;
     encode-copy cpu %x %y;
     %6 = submit cpu %foo.%1;
-    sync-fence-cpu %7 %foo.%2;
+    sync-fence cpu %7 %foo.%2;
     %9 = inline-join %foo [%x, %y] %5;
     %10 = serialized-join %foo [%y, %z] %5;
     %11 = default-join;
