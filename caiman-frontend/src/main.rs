@@ -4,11 +4,11 @@ use std::path::Path;
 
 use caiman::assembly::ast as asm;
 use caiman_frontend::error;
-use caiman_frontend::scheduling_language;
+/*use caiman_frontend::scheduling_language;
 use caiman_frontend::to_ir;
-use caiman_frontend::to_ir_new;
-use caiman_frontend::value_language;
+use caiman_frontend::value_language;*/
 use caiman_frontend::syntax;
+use caiman_frontend::to_ir_new;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -41,7 +41,7 @@ struct Arguments
     run: bool,
 }
 
-fn value_language_stage(args: &Arguments) -> value_language::compiler::Stage
+/*fn value_language_stage(args: &Arguments) -> value_language::compiler::Stage
 {
     use value_language::compiler::Stage::*;
     let last = Parse;
@@ -63,7 +63,7 @@ fn scheduling_language_stage(args: &Arguments) -> scheduling_language::compiler:
     } else {
         last
     }
-}
+}*/
 
 fn filenames(filename: &str) -> (String, String)
 {
@@ -80,7 +80,10 @@ fn main()
         compile_new_lang(args);
         return;
     }
-
+    else {
+        panic!("Old lang is currently broken :(");
+    }
+/*
     let vl_stage = value_language_stage(&args);
     let sl_stage = scheduling_language_stage(&args);
     if args.value_language_only {
@@ -122,6 +125,7 @@ fn main()
             },
         }
     }
+*/
 }
 
 fn compile_new_lang(args: Arguments) 

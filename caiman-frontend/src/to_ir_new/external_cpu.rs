@@ -35,7 +35,7 @@ fn lower_cpu_extern(
         _ => panic!("Value type is non-FFI somehow"),
     };
 
-    let function_class = function_class_ctx.get(name).unwrap_or(asm::FuncletId(name.to_string()));
+    let function_class = function_class_ctx.get(name).unwrap_or(asm::FunctionClassId(name.to_string()));
 
     asm::ExternalFunction {
         kind: asm::ExternalFunctionKind::CPUPure,

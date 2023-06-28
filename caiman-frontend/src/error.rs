@@ -1,6 +1,6 @@
-use crate::to_ir::ToIRError;
-use crate::value_language::check::SemanticError;
-use crate::value_language::run_parser::ParsingError;
+//use crate::to_ir::ToIRError;
+//use crate::value_language::check::SemanticError;
+//use crate::value_language::run_parser::ParsingError;
 use crate::syntax::run_parser::ParsingError as SPE;
 use std::fmt;
 
@@ -18,10 +18,10 @@ pub trait HasInfo
 
 pub enum ErrorKind
 {
-    Parsing(ParsingError),
+    //Parsing(ParsingError),
     SyntaxParsing(SPE),
-    Semantic(SemanticError),
-    ToIR(ToIRError),
+    //Semantic(SemanticError),
+    //ToIR(ToIRError),
 }
 
 pub enum ErrorLocation
@@ -76,15 +76,15 @@ impl fmt::Display for Error
         }
         match &self.kind
         {
-            ErrorKind::Parsing(e) => write!(f, "Parsing Error: {}", e),
+            //ErrorKind::Parsing(e) => write!(f, "Parsing Error: {}", e),
             ErrorKind::SyntaxParsing(e) => write!(f, "Parsing Error: {}", e),
-            ErrorKind::Semantic(e) => write!(f, "Semantic Error: {}", e),
-            ErrorKind::ToIR(e) => write!(f, "ToIR Error: {}", e),
+            //ErrorKind::Semantic(e) => write!(f, "Semantic Error: {}", e),
+            //ErrorKind::ToIR(e) => write!(f, "ToIR Error: {}", e),
         }
     }
 }
 
-impl fmt::Display for ParsingError
+/*impl fmt::Display for ParsingError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
@@ -103,7 +103,7 @@ impl fmt::Display for ParsingError
             ParsingError::User(e) => write!(f, "User Error: {}", e),
         }
     }
-}
+}*/
 
 // Awful awful awful sorry
 impl fmt::Display for SPE
@@ -127,7 +127,7 @@ impl fmt::Display for SPE
     }
 }
 
-
+/*
 impl fmt::Display for SemanticError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
@@ -175,4 +175,4 @@ impl fmt::Display for ToIRError
             },
         }
     }
-}
+}*/

@@ -33,6 +33,7 @@ pub fn frontend_to_asm(program: ast::Program) -> asm::Program
     typing_ctx.add_value_funclet_types(&asm_value_funclets);
 
     let asm_scheduling_funclets = scheduling_funclets::lower_scheduling_funclets(
+        &function_class_ctx,
         &mut typing_ctx,
         &asm_value_funclets,
         &program,

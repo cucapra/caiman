@@ -1,17 +1,18 @@
 use super::funclet_util::make_asm_funclet;
 use super::funclet_util::vf_node_with_name;
-//use super::function_classes::FunctionClassContext;
+use super::function_classes::FunctionClassContext;
+use super::typing;
 use super::typing::TypingContext;
 use super::value_funclets::ValueFunclet;
-use super::typing;
 use crate::syntax::ast;
+use crate::to_ir_new::label;
 use caiman::assembly::ast as asm;
 use caiman::ir;
 
 pub struct ASMSchedulingFunclet(pub asm::Funclet);
 
 pub fn lower_scheduling_funclets(
-    //function_class_ctx: &FunctionClassContext, XXX is this needed?
+    function_class_ctx: &FunctionClassContext,
     typing_ctx: &mut TypingContext,
     value_funclets: &Vec<ValueFunclet>,
     program: &ast::Program,
@@ -32,7 +33,12 @@ pub fn lower_scheduling_funclets(
                     });
 
                 for sf in scheduling_funclets.iter() {
-                    let sf_lowered = lower_scheduling_funclet(typing_ctx, value_funclet, sf);
+                    let sf_lowered = lower_scheduling_funclet(
+                        function_class_ctx,
+                        typing_ctx,
+                        value_funclet,
+                        sf,
+                    );
                     asm_scheduling_funclets.push(sf_lowered);
                 }
             },
@@ -43,12 +49,19 @@ pub fn lower_scheduling_funclets(
     asm_scheduling_funclets
 }
 
+struct Operation
+{
+    value_funclet_name: Option<asm::FuncletId>,
+    base_node: Option<asm::NodeId>,
+    kind: ast::scheduling::FullSchedulable,
+}
+
 enum SchedulingNodeCombo
 {
     LocalValue
     {
         place: Option<ir::Place>,
-        operation: Option<asm::RemoteNodeId>,
+        operation: Option<Operation>,
         storage_type: Option<asm::TypeId>,
     },
 }
@@ -59,15 +72,42 @@ impl SchedulingNodeCombo
     {
         match self {
             SchedulingNodeCombo::LocalValue { place, operation, storage_type } => {
+                let make_rmi =
+                    |funclet_name, node_name| Some(asm::RemoteNodeId { funclet_name, node_name });
+                let (alloc_temp_operation, encode_do_operation, encode_do_input) =
+                    if let Some(op) = operation {
+                        match op.kind {
+                            ast::scheduling::FullSchedulable::Primitive => {
+                                let both_op = make_rmi(op.value_funclet_name, op.base_node);
+                                (both_op.clone(), both_op, Some(vec![]))
+                            },
+                            ast::scheduling::FullSchedulable::Call(locs) => {
+                                let call_node =
+                                    op.base_node.as_ref().map(|n| label::label_call_node(n));
+                                let ato = make_rmi(op.value_funclet_name.clone(), op.base_node);
+                                let edo = make_rmi(op.value_funclet_name, call_node);
+                                let inputs =
+                                    locs.into_iter().map(|s| Some(asm::NodeId(s))).collect();
+                                (ato, edo, Some(inputs))
+                            },
+                        }
+                    } else {
+                        (None, None, None)
+                    };
+
                 let alloc_temp_name = asm::NodeId(name.to_string());
                 let encode_do_name = asm::NodeId(name.to_string() + "_ENCODEDO");
+
                 let encode_do_node = asm::Node::EncodeDo {
                     place: place.clone(),
-                    operation: operation.clone(),
-                    inputs: Some(Vec::new()), // TODO: What goes here ??????
+                    operation: encode_do_operation,
+                    inputs: encode_do_input,
                     outputs: Some(vec![Some(alloc_temp_name.clone())]),
                 };
+
+                let operation = alloc_temp_operation;
                 let alloc_temp_node = asm::Node::AllocTemporary { place, operation, storage_type };
+
                 let alloc_temp_nn =
                     Some(asm::NamedNode { name: alloc_temp_name, node: alloc_temp_node });
                 let encode_do_nn =
@@ -81,6 +121,7 @@ impl SchedulingNodeCombo
 fn schedule_expr_to_node_combo(
     expr: &ast::scheduling::ScheduledExpr,
     funclet_being_scheduled: &ValueFunclet,
+    function_class_ctx: &FunctionClassContext,
 ) -> SchedulingNodeCombo
 {
     // TODO obviously hole-able stuff should be possible here (that would be a case where search
@@ -90,15 +131,18 @@ fn schedule_expr_to_node_combo(
             panic!("Scheduling an unknown variable {} at {:?}", expr.value_var, expr.info)
         });
     let place = Some(ir::Place::Local);
-    let operation = Some(asm::RemoteNodeId {
-        funclet_name: Some(funclet_being_scheduled.0.header.name.clone()),
-        node_name: Some(vf_node.name.clone()),
+    let operation = Some(Operation {
+        value_funclet_name: Some(funclet_being_scheduled.0.header.name.clone()),
+        base_node: Some(vf_node.name.clone()),
+        kind: expr.full.clone(),
     });
-    let storage_type = Some(typing::type_of_asm_node(&vf_node.node));
+    let storage_type =
+        typing::type_of_asm_node(&vf_node.node, funclet_being_scheduled, function_class_ctx);
     SchedulingNodeCombo::LocalValue { place, operation, storage_type }
 }
 
 fn lower_scheduling_funclet(
+    function_class_ctx: &FunctionClassContext,
     typing_ctx: &mut TypingContext,
     funclet_being_scheduled: &ValueFunclet,
     scheduling_funclet: &ast::scheduling::SchedulingFunclet,
@@ -109,7 +153,8 @@ fn lower_scheduling_funclet(
     for (_stmt_info, stmt_kind) in scheduling_funclet.statements.iter() {
         match stmt_kind {
             ast::scheduling::StmtKind::Let(x, e) => {
-                let combo = schedule_expr_to_node_combo(e, funclet_being_scheduled);
+                let combo =
+                    schedule_expr_to_node_combo(e, funclet_being_scheduled, function_class_ctx);
                 let mut combo_vec = combo.to_named_nodes(x);
                 nodes.append(&mut combo_vec);
             },
@@ -121,9 +166,8 @@ fn lower_scheduling_funclet(
 
     let tail_edge = asm::TailEdge::Return { return_values: Some(vec![returned_variable]) };
 
-   
     let mut convert_type = |typ: &ast::scheduling::Type| match typing_ctx
-        .convert_and_add_scheduling_type(typ.clone(), funclet_being_scheduled)
+        .convert_and_add_scheduling_type(typ.clone(), funclet_being_scheduled, function_class_ctx)
     {
         Err(why) => panic!("Error at {:?}: {}", scheduling_funclet.info, why),
         Ok(s) => asm::TypeId::Local(s),

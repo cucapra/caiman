@@ -35,24 +35,34 @@ enum ExprTranslation
     NewExpr
     {
         name: asm::NodeId,
+        pre_output: Vec<asm::NamedNode>,
         output: asm::Node,
+        post_output: Vec<asm::NamedNode>,
         sub_exprs: Vec<ExprTranslation>,
     },
     NodeLink(asm::NodeId),
 }
 
-impl ExprTranslation {
-    fn to_named_nodes(self) -> Vec<Option<asm::NamedNode>> {
-        if let ExprTranslation::NewExpr { name, output, sub_exprs} = self {
+impl ExprTranslation
+{
+    fn to_named_nodes(self) -> Vec<Option<asm::NamedNode>>
+    {
+        if let ExprTranslation::NewExpr { name, pre_output, output, post_output, sub_exprs } = self
+        {
             let mut nns: Vec<Option<asm::NamedNode>> = Vec::new();
             for sub_expr in sub_exprs.into_iter() {
                 let mut sub_expr_nns = sub_expr.to_named_nodes();
                 nns.append(&mut sub_expr_nns);
             }
+            let mut pre_opts = pre_output.into_iter().map(|nn| Some(nn)).collect();
+            let mut post_opts = post_output.into_iter().map(|nn| Some(nn)).collect();
+            nns.append(&mut pre_opts);
             nns.push(Some(asm::NamedNode { name, node: output }));
+            nns.append(&mut post_opts);
             nns
+        } else {
+            vec![]
         }
-        else { vec![] }
     }
 }
 
@@ -60,10 +70,12 @@ fn make_constant_node(name: asm::NodeId, typ: ast::value::Type, value: String) -
 {
     ExprTranslation::NewExpr {
         name,
+        pre_output: vec![],
         output: asm::Node::Constant {
             value: Some(value),
             type_id: Some(typing::convert_value_type(typ)),
         },
+        post_output: vec![],
         sub_exprs: vec![],
     }
 }
@@ -88,16 +100,27 @@ fn translate_expr(expr: &ast::value::Expr, label: NodeLabel) -> ExprTranslation
                 let label = NodeLabel::Name(format!("{}_subexp{}", name.0, i));
                 let et = translate_expr(e, label);
                 sub_expr_ids.push(match &et {
-                    ExprTranslation::NewExpr { name, output: _, sub_exprs: _ } => name.clone(),
+                    ExprTranslation::NewExpr { name, .. } => name.clone(),
                     ExprTranslation::NodeLink(id) => id.clone(),
                 });
                 sub_exprs.push(et);
             }
-            let output = asm::Node::CallExternalCpu {
-                external_function_id: Some(asm::ExternalFunctionId(f.clone())),
+            let function_call = asm::Node::CallValueFunction {
+                function_id: Some(asm::FunctionClassId(f.clone())),
                 arguments: Some(sub_expr_ids.into_iter().map(|n| Some(n)).collect()),
             };
-            ExprTranslation::NewExpr { name, output, sub_exprs, }
+            let fcall_node_name = label::label_call_node(&name);
+            let extract_result = asm::Node::ExtractResult {
+                node_id: Some(fcall_node_name.clone()),
+                index: Some(0),
+            };
+            ExprTranslation::NewExpr {
+                name,
+                pre_output: vec![asm::NamedNode { name: fcall_node_name, node: function_call }],
+                output: extract_result,
+                post_output: vec![],
+                sub_exprs,
+            }
         },
     }
 }
@@ -137,7 +160,8 @@ fn lower_value_funclet(
 
     let tail_edge = asm::TailEdge::Return { return_values: Some(vec![returned_variable]) };
 
-    let function_class = function_class_ctx.get(name).unwrap_or(asm::FuncletId(name.to_string()));
+    let function_class =
+        function_class_ctx.get(name).unwrap_or(asm::FunctionClassId(name.to_string()));
     let header = asm::FuncletHeader {
         name: asm::FuncletId(name.to_string()),
         args: input

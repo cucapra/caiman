@@ -138,7 +138,7 @@ def process_inputs(
         inputs = chain(
                 test_dir.rglob("*test.cair"), 
                 test_dir.rglob("*test.ron"),
-                test_dir.rglob("*.caiman"),
+                test_dir.rglob("*test.caiman"),
         )
     for input in inputs:
         relativized = input.absolute().relative_to(test_dir)

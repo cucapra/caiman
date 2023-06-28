@@ -1,7 +1,7 @@
 use super::funclet_util;
+use super::function_classes::FunctionClassContext;
 use super::label;
 use super::value_funclets::ValueFunclet;
-use crate::error::Info;
 use crate::syntax::ast;
 use caiman::assembly::ast as asm;
 use caiman::ir;
@@ -15,10 +15,33 @@ pub fn convert_value_type(vt: ast::value::Type) -> asm::TypeId
     })
 }
 
-pub fn type_of_asm_node(node: &asm::Node) -> asm::TypeId
+pub fn type_of_asm_node(
+    node: &asm::Node,
+    funclet_being_scheduled: &ValueFunclet,
+    function_class_ctx: &FunctionClassContext,
+) -> Option<asm::TypeId>
 {
     match node {
-        asm::Node::Constant { value: _, type_id: Some(t) } => t.clone(),
+        asm::Node::Constant { value: _, type_id: Some(t) } => Some(t.clone()),
+        asm::Node::CallValueFunction { function_id: Some(f_id), .. } => {
+            match function_class_ctx.type_of(&f_id.0) {
+                None => panic!("Cannot find external function type for {}", f_id),
+                Some((_inputs, outputs)) => {
+                    // TODO multiple outputs???
+                    Some(outputs[0].clone())
+                },
+            }
+        },
+        asm::Node::ExtractResult { node_id, index: _ } => {
+            node_id.as_ref().and_then(|node_id| {
+                match funclet_util::vf_node_with_name(funclet_being_scheduled, &node_id.0) {
+                    Some(asm::NamedNode { name: _, node }) => {
+                        type_of_asm_node(node, funclet_being_scheduled, function_class_ctx)
+                    },
+                    _ => None,
+                }
+            })
+        },
         _ => panic!("Typing of node {:?} is either unknowable or unimplemented", node),
     }
 }
@@ -110,14 +133,19 @@ impl TypingContext
         &mut self,
         st: ast::scheduling::Type,
         value_funclet: &ValueFunclet,
+        function_class_ctx: &FunctionClassContext,
     ) -> Result<String, String>
     {
         match st {
             ast::scheduling::Type::Slot(x) => {
                 let x_node = funclet_util::vf_node_with_name(value_funclet, &x)
                     .ok_or_else(|| format!("Unknown variable {}", x))?;
-                let x_type = type_of_asm_node(&x_node.node);
-                Ok(self.add_slot(x_type, ir::Place::Local, ir::ResourceQueueStage::Ready))
+                match type_of_asm_node(&x_node.node, value_funclet, function_class_ctx) {
+                    Some(x_type) => {
+                        Ok(self.add_slot(x_type, ir::Place::Local, ir::ResourceQueueStage::Ready))
+                    },
+                    None => Err(format!("FFI type for slot {} not given", x)),
+                }
             },
         }
     }

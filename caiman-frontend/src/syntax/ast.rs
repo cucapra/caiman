@@ -62,6 +62,11 @@ pub mod scheduling
     pub enum FullSchedulable
     {
         Primitive,
+        // XXX do we want the programmer to have to specify the vars used even though it can
+        // likely be inferred??? Will keep it this way for now. In any case I imagine Dietrich 
+        // would want me to keep it this way and then they can infer it if the programmer uses
+        // the currently-unimplemented ? expression
+        Call(Vec<String>),
     }
 
     #[derive(Clone, Debug)]

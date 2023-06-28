@@ -13,7 +13,7 @@ match {
   "let", "returns", "return",
   "i32", "i64", "bool", "Event",
   "at", "and", "space", "time",
-  "Prim",
+  "Prim", "Call",
 
 
   r"\s*" => { }, // Whitespace
@@ -125,6 +125,7 @@ SchExpr: scheduling::ScheduledExpr = {
 
 SchFull: scheduling::FullSchedulable = {
     "Prim" => scheduling::FullSchedulable::Primitive,
+    "Call" "(" <CommaList<Id>> ")" => scheduling::FullSchedulable::Call(<>),
 }
 
 // TIMELINE FUNCLET SECTION
