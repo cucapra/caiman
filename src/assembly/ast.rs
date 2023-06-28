@@ -231,12 +231,18 @@ pub enum TailEdge {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Tag {
+pub enum Quotient {
     None,
     Node(RemoteNodeId),
     Input(RemoteNodeId),
     Output(RemoteNodeId),
     Halt(RemoteNodeId),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Tag {
+    pub quot: Quotient, // What a given value maps to in a specification
+    pub flow: ir::Flow, // How this value transforms relative to the specification
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -301,11 +307,10 @@ pub enum LocalTypeInfo {
     },
 
     // Scheduling
-    Slot {
+    Ref {
         storage_type: TypeId,
         queue_place: ir::Place,
     },
-    SchedulingJoin {},
     Fence {
         queue_place: ir::Place,
     },
@@ -313,11 +318,12 @@ pub enum LocalTypeInfo {
         storage_place: ir::Place,
         static_layout_opt: Option<ir::StaticBufferLayout>,
     },
+    Encoder {
+        queue_place: ir::Place,
+    },
 
     // Timeline
-    Event {
-        place: ir::Place,
-    },
+    Event,
 
     // Space
     BufferSpace,

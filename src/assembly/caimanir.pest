@@ -81,18 +81,18 @@ ffi_type_decl = ${ "type" ~ sep ~ ffi_type }
 
 name_type_separator = !{ name ~ ":" ~ "" }
 native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ typ }
-slot_decl = ${ "slot" ~ sep ~ name_type_separator ~ typ ~ "-" ~ place }
+ref_decl = ${ "ref" ~ sep ~ name_type_separator ~ typ ~ "-" ~ place }
 fence_decl = ${ "fence" ~ sep ~ name_type_separator ~ place }
 buffer_alignment_decl = !{ name ~ ":" ~ place ~ "<"
     ~ "alignment_bits" ~ "=" ~ n ~ "," ~ "byte_size" ~ "=" ~ n ~ ">" }
 
-buffer_decl = ${ "buffer" ~ sep ~ buffer_alignment_decl}
-event_decl = ${ "event" ~ sep ~ name_type_separator ~ place }
-scheduling_join_decl = ${ "scheduling_join" ~ sep ~ name }
+buffer_decl = ${ "buffer" ~ sep ~ buffer_alignment_decl }
+encoder_decl = ${ "encoder" ~ sep ~ name }
+event_decl = ${ "event" ~ sep ~ name }
 buffer_space_decl = ${ "buffer_space" ~ sep ~ name }
 
-type_decl = { (ffi_type_decl | native_value_decl | slot_decl | fence_decl | buffer_alignment_decl
-    | buffer_decl | event_decl | scheduling_join_decl | buffer_space_decl) ~ ";" }
+type_decl = { (ffi_type_decl | native_value_decl | ref_decl | fence_decl | buffer_alignment_decl
+    | buffer_decl | encoder_decl | event_decl | buffer_space_decl) ~ ";" }
 
 // Funclets
 
@@ -271,12 +271,6 @@ submission_event_sep = { "submission-event" ~ sep }
 submission_event_node = ${ assign ~ submission_event_sep ~ name }
 synchronization_event_sep = ${ "synchronization-event" ~ sep }
 synchronization_event_node = { assign ~ synchronization_event_sep ~ name_sep ~ name }
-
-/*
-    [%x, %y] = encoding-event %e [%e, %e];
-    %1 = submission-event %x;
-    %2 = synchronization-event %e %x;
-*/
 
 //    spatial
 

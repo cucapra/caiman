@@ -29,11 +29,11 @@ type cpu_buffer_allocator;
 type cpu_buffer_ref<i64>;
 
 native_value %native_i64 : i64;
-slot %slot0 : i64-local;
+ref %slot0 : i64-local;
 fence %fence0 : cpu;
 buffer %buffer0 : gpu<alignment_bits = 4, byte_size = 8>;
-event %event0 : local;
-scheduling_join %scheduling_join0;
+encoder %encoder0 : gpu;
+event %event0;
 buffer_space %buffer_space0;
 
 function @simple(i64) -> i64;
