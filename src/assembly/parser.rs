@@ -92,6 +92,9 @@ impl CaimanAssemblyParser {
     fn function_class_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
+    fn encoder_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
     fn return_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
@@ -638,7 +641,7 @@ impl CaimanAssemblyParser {
 
     fn encoder_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name(name), place(queue_place)] => ast::TypeDecl::Local(ast::LocalType {
+            [encoder_sep, name(name), place(queue_place)] => ast::TypeDecl::Local(ast::LocalType {
                 name,
                 data: ast::LocalTypeInfo::Encoder { queue_place }
             })
@@ -1241,7 +1244,7 @@ impl CaimanAssemblyParser {
                     spatial_operation,
                     condition: condition.map(|s| NodeId(s)),
                     callee_funclet_ids: callee_funclet_ids.map(
-                        |v| v.iter().map(
+                        |v| v.into_iter().map(
                             |name| name.map(
                                 |s| FuncletId(s.0)
                             )
@@ -1648,7 +1651,7 @@ impl CaimanAssemblyParser {
                     name: ast::NodeName::None,
                     node: ast::Node::SynchronizationEvent {
                         local_past: Some(NodeId(local_past)),
-                        remote_local_past: Some(NodeId(local_past))
+                        remote_local_past: Some(NodeId(remote_local_past))
                     }
                 }
         ))

@@ -90,7 +90,8 @@ buffer_alignment_decl = !{ name ~ ":" ~ place ~ "<"
     ~ "alignment_bits" ~ "=" ~ n ~ "," ~ "byte_size" ~ "=" ~ n ~ ">" }
 
 buffer_decl = ${ "buffer" ~ sep ~ buffer_alignment_decl }
-encoder_decl = ${ "encoder" ~ sep ~ name }
+encoder_sep = ${"encoder" ~ sep}
+encoder_decl = {  encoder_sep ~ name ~ ":" ~ place }
 event_decl = ${ "event" ~ sep ~ name }
 buffer_space_decl = ${ "buffer_space" ~ sep ~ name }
 
@@ -183,7 +184,7 @@ schedule_args = { (schedule_arg ~ ("," ~ schedule_arg)*)? }
 schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
 schedule_header = { name ~ "<" ~ meta_tag ~ "," ~ meta_tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
 
-schedule_command = { name ~ "=" ~ schedule_node | tail_edge | node_hole }
+schedule_command = { schedule_node | tail_edge | node_hole }
 schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
@@ -197,11 +198,11 @@ jump_sep = @{ "jump" ~ sep }
 jump_node = { jump_sep ~ name_hole ~ name_box_single }
 
 schedule_call_sep = @{ "schedule-call" ~ sep }
-schedule_call_node = { schedule_call_sep ~ name_hole_sep ~ triple_box ~ name_call ~ name_hole }
+schedule_call_node = { schedule_call_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
 schedule_select_sep = @{ "schedule-select" ~ sep }
 schedule_select_node = { schedule_select_sep ~ name_hole_sep ~ name_box_single ~ triple_box ~ name_call ~ name_hole }
 schedule_yield_sep = @{ "schedule-call-yield" ~ sep }
-schedule_yield_node = { schedule_select_sep ~ name_hole_sep ~ triple_box ~ name_call ~ name_hole }
+schedule_yield_node = { schedule_yield_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
 
 tail_edge = { return_node | jump_node | debug_hole_node |
     schedule_call_node | schedule_select_node | schedule_yield_node }
@@ -212,7 +213,7 @@ tail_edge = { return_node | jump_node | debug_hole_node |
 
 // we can syntactically disallow holes to a (limited) extent here, so might as well
 constant_value = @{ ASCII_DIGIT+ }
-constant_node = ${ assign ~ "constant" ~ sep ~ constant_value ~ ffi_type }
+constant_node = ${ assign ~ sep? ~ "constant" ~ sep ~ constant_value ~ ffi_type }
 extract_sep = @{ "extract" ~ sep }
 extract_node = { assign ~ extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }
@@ -223,7 +224,7 @@ select_node = { assign_list ~ select_sep ~ name_sep ~ name_sep ~ name }
 //     scheduling
 
 alloc_temporary_sep = ${ "alloc-temporary" ~ sep }
-alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ type_hole_sep }
+alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ type_hole }
 drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
@@ -240,9 +241,9 @@ write_sep = ${ "write-ref" ~ sep }
 write_node = { write_sep ~ type_hole_sep ~ name_hole ~ "->" ~ name_hole }
 
 local_do_builtin_sep = ${ "local-do-builtin" ~ sep }
-local_do_builtin_node = { local_do_builtin_sep ~ remote_hole_sep ~ name_call ~ "->" ~ name_box }
+local_do_builtin_node = { local_do_builtin_sep ~ remote_hole ~ name_call ~ "->" ~ name_box }
 local_do_external_sep = ${ "local-do-external" ~ sep }
-local_do_external_node = { local_do_external_sep ~ name_hole_sep ~ remote_hole_sep ~ name_call ~ "->" ~ name_box }
+local_do_external_node = { local_do_external_sep ~ name_hole_sep ~ remote_hole ~ name_call ~ "->" ~ name_box }
 local_copy_sep = ${ "local-copy" ~ sep }
 local_copy_node = { local_copy_sep ~ name_hole ~ "->" ~ name_hole }
 begin_encoding_sep = ${ "begin-encoding" ~ sep }
@@ -251,21 +252,21 @@ begin_encoding_node = { assign ~ begin_encoding_sep ~ place_hole_sep ~ remote_ho
 encode_do_sep = ${ "encode-do" ~ sep }
 encode_do_node = { encode_do_sep ~ name_hole_sep ~ name_hole_sep ~ remote_hole ~ name_call ~ "->" ~ name_hole }
 encode_copy_sep = ${ "encode-copy" ~ sep }
-encode_copy_node = { encode_copy_sep ~ name_hole_sep ~ name_hole ~ "->" ~ name_hole }
+encode_copy_node = { encode_copy_sep ~ place_hole_sep ~ name_hole ~ "->" ~ name_hole }
 submit_sep = ${ "submit" ~ sep }
 submit_node = { assign ~ submit_sep ~ place_hole_sep ~ remote_hole }
 sync_fence_sep = ${ "sync-fence" ~ sep }
-sync_fence_node = { sync_fence_sep ~ name_hole_sep ~ remote_hole }
+sync_fence_node = { sync_fence_sep ~ place_hole_sep ~ name_hole_sep ~ remote_hole }
 
 inline_join_sep = ${ "inline-join" ~ sep }
 inline_join_node = { assign ~ inline_join_sep ~ name_hole_sep ~ name_box ~ name_hole }
 serialized_join_sep = ${ "serialized-join" ~ sep }
 serialized_join_node = { assign ~ serialized_join_sep ~ name_hole_sep ~ name_box ~ name_hole }
-default_join_node = { assign ~ "default_join" }
+default_join_node = { assign ~ "default-join" }
 promise_captures_sep = ${ "promise-captures" ~ sep }
 promise_captures_node = { assign_list ~ promise_captures_sep ~ n ~ name_hole }
 fulfill_captures_sep = ${ "fulfill-captures" ~ sep }
-fulfill_captures_node = { assign ~ fulfill_captures_sep ~ name_hole_sep ~ name_box ~ name_box }
+fulfill_captures_node = { assign_list ~ fulfill_captures_sep ~ name_hole_sep ~ name_box ~ name_box }
 
 //     timeline
 
@@ -279,13 +280,13 @@ synchronization_event_node = { assign ~ synchronization_event_sep ~ name_sep ~ n
 //    spatial
 
 separated_buffer_space_sep = ${ "separated-buffer-space" ~ sep }
-separated_buffer_space_node = { assign_list ~ separated_buffer_space_sep ~ n_sep ~ name }
+separated_buffer_space_node = { assign_list ~ separated_buffer_space_sep ~ place_sep ~ n_sep ~ name }
 
 //   nodes
 
 value_node = { constant_node | extract_node | call_node | select_node }
 
-schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_sep
+schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_node
     | static_alloc_node | static_dealloc_node | read_node | borrow_node | write_node
     | local_do_builtin_node | local_do_external_node | local_copy_node | begin_encoding_node
     | encode_do_node | encode_copy_node | submit_node | sync_fence_node

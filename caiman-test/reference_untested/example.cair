@@ -87,7 +87,7 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     local-copy %x -> %3;
     %_ = begin-encoding local %foo.%1 [%x, %3] [%4, %0];
     encode-do %x %do_pure_thing_on_cpu %foo.%1() -> %x;
-    encode-copy cpu %x %y;
+    encode-copy cpu %x -> %y;
     %6 = submit cpu %foo.%1;
     sync-fence cpu %7 %foo.%2;
     %9 = inline-join %foo [%x, %y] %5;
@@ -104,35 +104,35 @@ schedule[value $val = %foo, spatial $space = %space]
 (%abc : input($val.%x)-have %slot0)
 -> [%out : output($val.%y)-met %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
-    schedule-call %bar[value input(%foo.%x)-have,
-        timeline output(%time.%e)-need,
-        spatial none-met](%abc, %abc) %abc;
+    schedule-call %bar[value input(%foo.%x),
+        timeline output(%time.%e),
+        spatial none](%abc, %abc) %abc;
 }
 
 // value, timeline, spatial order is mandatory (though you can freely omit one of course)
 schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 %sselect<input($time.%e)-met, output($time.%e)-have>
 (%abc : input($time.%e)-met halt($val.%x)-have %slot0)
--> input($time.%e) output($val.%x) %slot0 {
-    schedule-select %abc %bar[value input(%foo.%x)-have,
-        timeline output(%time.%e)-need,
-        spatial none-met](%abc, %abc) %abc;
+-> input($time.%e)-met output($val.%x)-none %slot0 {
+    schedule-select %abc %bar[value input(%foo.%x),
+        timeline output(%time.%e),
+        spatial none](%abc, %abc) %abc;
 }
 
 schedule[value $val = %foo, timeline $time = %time]
 %syield<halt($time.%e)-have, node($time.%e)-need>
 (%abc : input($space.%bs)-none %event0)
--> [%out : node($space.%bs) %buffer0] {
-    schedule-call-yield %bar[value input(%foo.%x)-have,
-        timeline output(%time.%e)-need,
-        spatial none-met](%abc, %abc) %abc;
+-> [%out : node($space.%bs)-need %buffer0] {
+    schedule-call-yield %bar[value input(%foo.%x),
+        timeline output(%time.%e),
+        spatial none](%abc, %abc) %abc;
 }
 
 schedule[value $val = %foo, timeline $time = %time]
-%debugtest<halt($time.%e)-have, node($time.%e)-need>
+%debugtest<halt($time.%e)-have, node($time.%e)-none>
 (%abc : input($space.%bs)-none %event0)
--> [%out : node($space.%bs) %buffer0] {
-    debug-hole [%abc, %abc]
+-> [%out : node($space.%bs)-need %buffer0] {
+    debug-hole [%abc, %abc];
 }
 
 timeline %time(%e : %event0) -> [%event_out : %event0] {
