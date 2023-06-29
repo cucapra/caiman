@@ -41,7 +41,7 @@ fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
         Err(why) => Err(CompileError {
             message: format!("Parse error: {}", why),
         }),
-        Ok(v) => todo!()//Ok(crate::assembly::lowering_pass::lower(v)),
+        Ok(v) => todo!(), //Ok(crate::assembly::lowering_pass::lower(v)),
     }
 }
 
