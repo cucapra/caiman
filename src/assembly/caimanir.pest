@@ -200,7 +200,7 @@ jump_node = { jump_sep ~ name_hole ~ name_box_single }
 schedule_call_sep = @{ "schedule-call" ~ sep }
 schedule_call_node = { schedule_call_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
 schedule_select_sep = @{ "schedule-select" ~ sep }
-schedule_select_node = { schedule_select_sep ~ name_hole_sep ~ name_box_single ~ triple_box ~ name_call ~ name_hole }
+schedule_select_node = { schedule_select_sep ~ name_hole ~ name_box ~ triple_box ~ name_call ~ name_hole }
 schedule_yield_sep = @{ "schedule-call-yield" ~ sep }
 schedule_yield_node = { schedule_yield_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
 
@@ -250,13 +250,13 @@ begin_encoding_sep = ${ "begin-encoding" ~ sep }
 begin_encoding_node = { assign ~ begin_encoding_sep ~ place_hole_sep ~ remote_hole ~ name_box ~ name_box }
 
 encode_do_sep = ${ "encode-do" ~ sep }
-encode_do_node = { encode_do_sep ~ name_hole_sep ~ name_hole_sep ~ remote_hole ~ name_call ~ "->" ~ name_hole }
+encode_do_node = { encode_do_sep ~ name_hole_sep ~ name_hole_sep ~ remote_hole ~ name_call ~ "->" ~ name_box_single }
 encode_copy_sep = ${ "encode-copy" ~ sep }
-encode_copy_node = { encode_copy_sep ~ place_hole_sep ~ name_hole ~ "->" ~ name_hole }
+encode_copy_node = { encode_copy_sep ~ name_hole_sep ~ name_hole ~ "->" ~ name_hole }
 submit_sep = ${ "submit" ~ sep }
-submit_node = { assign ~ submit_sep ~ place_hole_sep ~ remote_hole }
+submit_node = { assign ~ submit_sep ~ name_hole_sep ~ remote_hole }
 sync_fence_sep = ${ "sync-fence" ~ sep }
-sync_fence_node = { sync_fence_sep ~ place_hole_sep ~ name_hole_sep ~ remote_hole }
+sync_fence_node = { sync_fence_sep ~ name_hole_sep ~ remote_hole }
 
 inline_join_sep = ${ "inline-join" ~ sep }
 inline_join_node = { assign ~ inline_join_sep ~ name_hole_sep ~ name_box ~ name_hole }

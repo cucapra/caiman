@@ -87,9 +87,10 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     local-copy %x -> %3;
     %_ = begin-encoding local %foo.%1 [%x, %3] [%4, %0];
     encode-do %x %do_pure_thing_on_cpu %foo.%1() -> %x;
-    encode-copy cpu %x -> %y;
-    %6 = submit cpu %foo.%1;
-    sync-fence cpu %7 %foo.%2;
+    encode-do %x %do_pure_thing_on_cpu %foo.%1() -> [%x, %y];
+    encode-copy %z %x -> %y;
+    %6 = submit %x %foo.%1;
+    sync-fence %y %foo.%2;
     %9 = inline-join %foo [%x, %y] %5;
     %10 = serialized-join %foo [%y, %z] %5;
     %11 = default-join;
@@ -114,21 +115,21 @@ schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 %sselect<input($time.%e)-met, output($time.%e)-have>
 (%abc : input($time.%e)-met halt($val.%x)-have %slot0)
 -> input($time.%e)-met output($val.%x)-none %slot0 {
-    schedule-select %abc %bar[value input(%foo.%x),
+    schedule-select %abc [%bar, %scall][value input(%foo.%x),
         timeline output(%time.%e),
         spatial none](%abc, %abc) %abc;
 }
 
 schedule[value $val = %foo, timeline $time = %time]
 %syield<halt($time.%e)-have, node($time.%e)-need>
-(%abc : input($space.%bs)-none %event0)
--> [%out : node($space.%bs)-need %buffer0] {
+(%abc : input($time.%bs)-none %event0)
+-> [%out : node($time.%bs)-need %buffer0] {
     schedule-call-yield %bar[value input(%foo.%x),
         timeline output(%time.%e),
         spatial none](%abc, %abc) %abc;
 }
 
-schedule[value $val = %foo, timeline $time = %time]
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %debugtest<halt($time.%e)-have, node($time.%e)-none>
 (%abc : input($space.%bs)-none %event0)
 -> [%out : node($space.%bs)-need %buffer0] {

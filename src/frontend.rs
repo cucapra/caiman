@@ -37,6 +37,7 @@ impl std::fmt::Display for CompileError {
 fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
     let program = crate::assembly::parser::parse(input_string);
 
+    dbg!(&program);
     match program {
         Err(why) => Err(CompileError {
             message: format!("Parse error: {}", why),
