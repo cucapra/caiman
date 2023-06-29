@@ -76,7 +76,7 @@ value[impl @simple] %y(%abc : i64) -> [i64] {
 schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0] {
     %x = alloc-temporary local i64;
     drop %0;
-    %y = static-sub-alloc local i64 %foo.%1;
+    %y = static-sub-alloc local i64 %x;
     [%4, %_] = static-alloc local %0 [1, 2] %foo.%1;
     %z = static-dealloc local %space.%0 [%x, %4];
     %_ = read-ref i64 %x;
@@ -84,7 +84,7 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     write-ref i64 %x -> %4;
     local-do-builtin %foo.%1(%x, %3) -> [%4, %0];
     local-do-external %do_pure_thing_on_cpu %foo.%1(%x, %3) -> [%4, %0];
-    local-copy %x %3;
+    local-copy %x -> %3;
     %_ = begin-encoding local %foo.%1 [%x, %3] [%4, %0];
     encode-do %x %do_pure_thing_on_cpu %foo.%1() -> %x;
     encode-copy cpu %x %y;

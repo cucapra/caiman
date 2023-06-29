@@ -193,39 +193,49 @@ with_operations!(make_parser_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge {
+    // Here for now as a type system debugging tool
+    // Always passes type checking, but fails codegen
+    DebugHole {
+        // Scalar nodes
+        inputs: Vec<NodeId>,
+        // Continuations
+        //outputs : Box<[NodeId]>
+    },
+
+    // Common?
     Return {
         return_values: Hole<Vec<Hole<NodeId>>>,
     },
-    Yield {
-        external_function_id: Hole<ExternalFunctionId>,
-        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
-        next_funclet: Hole<FuncletId>,
-        continuation_join: Hole<NodeId>,
-        arguments: Hole<Vec<Hole<NodeId>>>,
-    },
     Jump {
-        join: Hole<FuncletId>,
+        join: Hole<NodeId>,
         arguments: Hole<Vec<Hole<NodeId>>>,
     },
+
+    // Scheduling only
+    // Split value - what will be computed
     ScheduleCall {
-        value_operation: Hole<RemoteNodeId>,
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
         callee_funclet_id: Hole<FuncletId>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
-        value_operation: Hole<RemoteNodeId>,
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
         condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
-    DynamicAllocFromBuffer {
-        buffer: Hole<NodeId>,
-        arguments: Hole<Vec<Hole<NodeId>>>,
-        dynamic_allocation_size_slots: Hole<Vec<Hole<Option<NodeId>>>>,
-        success_funclet_id: Hole<FuncletId>,
-        failure_funclet_id: Hole<FuncletId>,
+    ScheduleCallYield {
+        value_operation: Quotient,
+        timeline_operation: Quotient,
+        spatial_operation: Quotient,
+        external_function_id: Hole<ExternalFunctionId>,
+        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
 }
@@ -282,8 +292,15 @@ pub struct FuncletHeader {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum NodeName {
+    None,
+    Name(NodeId),
+    Names(Vec<NodeId>)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NamedNode {
-    pub name: NodeId,
+    pub name: NodeName,
     pub node: Node,
 }
 
