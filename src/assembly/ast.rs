@@ -295,7 +295,7 @@ pub struct FuncletHeader {
 pub enum NodeName {
     None,
     Name(NodeId),
-    Names(Vec<NodeId>)
+    Names(Vec<NodeId>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
