@@ -64,7 +64,7 @@ value[impl @simple_32] %foo(%test : i32) -> [%out : i32] {
     %1 = constant 4i64;
     %2 = extract %1 0;
     %4 = call @simple(%1);
-    [%5, %6] = select %1 %2 %4;
+    %5 = select %1 %2 %4;
     return [%1, %2];
 }
 
@@ -77,7 +77,7 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     %x = alloc-temporary local i64;
     drop %0;
     %y = static-sub-alloc local i64 %x;
-    [%4, %_] = static-alloc local %0 [1, 2] input(%1);
+    %4 = static-alloc local %0 [1, 2] input(%1);
     %z = static-dealloc local node(%5) [%x, %4];
     %_ = read-ref i64 %x;
     %_ = borrow-ref i64 %x;
@@ -94,8 +94,8 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     %9 = inline-join %foo [%x, %y] %5;
     %10 = serialized-join %foo [%y, %z] %5;
     %11 = default-join;
-    [%_, %_, %_] = promise-captures 5 %x;
-    [%_] = fulfill-captures %x [%y, %z] [%3];
+    %_ = promise-captures 5 %x;
+    %_ = fulfill-captures %x [%y, %z] [%3];
     ???;
     return %x;
 }
@@ -137,14 +137,14 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 }
 
 timeline %time(%e : %event0) -> [%event_out : %event0] {
-    [%x, %y] = encoding-event %e [%e, %e];
-    %1 = submission-event %x;
+    %x = encoding-event %e [%e, %e];
+    %y = submission-event %x;
     %2 = synchronization-event %e %x;
     return %e;
 }
 
 spatial %space(%b : %buffer_space0) -> [%iout : i64] {
-    [%1, %2, %3] = separated-buffer-space cpu 3 %b;
+    %_ = separated-buffer-space cpu 3 %b;
     return %b;
 }
 

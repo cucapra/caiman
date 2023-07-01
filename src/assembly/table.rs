@@ -2,6 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
 
+// Data structure specifically for lowering, intended to go "both ways"
+// So you can go from values to indices or the other way around
+// Mostly used as the opposite of a StableVec, going from value to index
+
 #[derive(Debug)]
 pub struct Table<T>
 where

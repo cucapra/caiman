@@ -624,7 +624,7 @@ impl CaimanAssemblyParser {
     fn encoder_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
             [encoder_sep, name(name), place(queue_place)] => ast::TypeDecl::Local(ast::LocalType {
-                name,
+                name: name,
                 data: ast::LocalTypeInfo::Encoder { queue_place }
             })
         ))
@@ -633,7 +633,7 @@ impl CaimanAssemblyParser {
     fn event_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
             [name(name)] => ast::TypeDecl::Local(ast::LocalType {
-                name,
+                name: name,
                 data: ast::LocalTypeInfo::Event {}
             })
         ))
@@ -642,7 +642,7 @@ impl CaimanAssemblyParser {
     fn buffer_space_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
             [name(name)] => ast::TypeDecl::Local(ast::LocalType {
-                name,
+                name: name,
                 data: ast::LocalTypeInfo::BufferSpace {}
             })
         ))
@@ -701,15 +701,9 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn assign(input: Node) -> ParseResult<ast::NodeName> {
+    fn assign(input: Node) -> ParseResult<ast::NodeId> {
         Ok(match_nodes!(input.into_children();
-            [name(name)] => ast::NodeName::Name(NodeId(name))
-        ))
-    }
-
-    fn assign_list(input: Node) -> ParseResult<ast::NodeName> {
-        Ok(match_nodes!(input.into_children();
-            [name_list(names)] => ast::NodeName::Names(names),
+            [name(name)] => NodeId(name)
         ))
     }
 
@@ -1259,7 +1253,7 @@ impl CaimanAssemblyParser {
     fn constant_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), constant_value(value), ffi_type(type_id)] => ast::NamedNode {
-                name,
+                name: Some(name),
                 node: ast::Node::Constant {
                     value: Some(value),
                     type_id: Some(ast::TypeId::FFI(type_id))
@@ -1271,7 +1265,7 @@ impl CaimanAssemblyParser {
     fn extract_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), extract_sep, name(node_id), n(index)] => ast::NamedNode {
-                name,
+                name: Some(name),
                 node: ast::Node::ExtractResult {
                     node_id: Some(NodeId(node_id)),
                     index: Some(index)
@@ -1285,7 +1279,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), call_sep, function_class_name(external_function_id),
                 name_call(arguments)] => ast::NamedNode {
-                name,
+                name: Some(name),
                     node: ast::Node::CallFunctionClass {
                         function_id: Some(FunctionClassId(external_function_id)),
                         arguments
@@ -1296,9 +1290,9 @@ impl CaimanAssemblyParser {
 
     fn select_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign_list(names), select_sep, name_sep(condition),
+            [assign(name), select_sep, name_sep(condition),
                 name_sep(true_case), name(false_case)] => ast::NamedNode {
-                    name: names,
+                    name: Some(name),
                     node: ast::Node::Select {
                         condition: Some(NodeId(condition)),
                         true_case: Some(NodeId(true_case)),
@@ -1312,7 +1306,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), alloc_temporary_sep, place_hole_sep(place),
                 type_hole(storage_type)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::AllocTemporary {
                         place,
                         storage_type
@@ -1324,7 +1318,7 @@ impl CaimanAssemblyParser {
     fn drop_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [name_hole(node)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::Drop {
                         node: node.map(|s| NodeId(s))
                     }
@@ -1336,7 +1330,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
                 type_hole_sep(storage_type), name_hole(node)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::StaticSubAlloc {
                         node: node.map(|s| NodeId(s)),
                         place,
@@ -1348,9 +1342,9 @@ impl CaimanAssemblyParser {
 
     fn static_alloc_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign_list(names), static_alloc_sep, place_hole_sep(place),
+            [assign(name), static_alloc_sep, place_hole_sep(place),
                 name_hole(node), n_list(sizes), quotient_hole(spatial_operation)] => ast::NamedNode {
-                    name: names,
+                    name: Some(name),
                     node: ast::Node::StaticAlloc {
                         node: node.map(|s| NodeId(s)),
                         place,
@@ -1365,7 +1359,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
                 quotient_hole(spatial_operation), name_box(nodes)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::StaticDealloc {
                         nodes,
                         place,
@@ -1379,7 +1373,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), read_sep, type_hole_sep(storage_type),
                 name_hole(source)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::ReadRef {
                         source: source.map(|s| NodeId(s)),
                         storage_type
@@ -1392,7 +1386,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), borrow_sep, type_hole_sep(storage_type),
                 name_hole(source)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::BorrowRef {
                         source: source.map(|s| NodeId(s)),
                         storage_type
@@ -1405,7 +1399,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [write_sep, type_hole_sep(storage_type),
                 name_hole(source), name_hole(destination)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::WriteRef {
                         storage_type,
                         source: source.map(|s| NodeId(s)),
@@ -1419,7 +1413,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [local_do_builtin_sep, quotient_hole(operation),
                 name_call(inputs), name_box(outputs)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::LocalDoBuiltin {
                         operation,
                         inputs,
@@ -1434,7 +1428,7 @@ impl CaimanAssemblyParser {
             [local_do_external_sep, name_hole_sep(external_function_id),
                 quotient_hole(operation), name_call(inputs),
                 name_box(outputs)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::LocalDoExternal {
                         external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
                         operation,
@@ -1448,7 +1442,7 @@ impl CaimanAssemblyParser {
     fn local_copy_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [local_copy_sep, name_hole(input), name_hole(output)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::LocalCopy {
                         input: input.map(|s| NodeId(s)),
                         output: output.map(|s| NodeId(s))
@@ -1461,7 +1455,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), begin_encoding_sep, place_hole_sep(place),
                 quotient_hole(event), name_box(encoded), name_box(fences)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::BeginEncoding {
                         place,
                         event,
@@ -1477,7 +1471,7 @@ impl CaimanAssemblyParser {
             [encode_do_sep, name_hole_sep(encoder), name_hole_sep(external_function_id),
                 quotient_hole(operation), name_call(inputs),
                 name_box_single(outputs)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::EncodeDoExternal {
                         encoder: encoder.map(|s| NodeId(s)),
                         external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
@@ -1493,7 +1487,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [encode_copy_sep, name_hole_sep(encoder), name_hole(input),
                 name_hole(output)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::EncodeCopy {
                         encoder: encoder.map(|s| NodeId(s)),
                         input: input.map(|s| NodeId(s)),
@@ -1507,7 +1501,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), submit_sep, name_hole_sep(encoder),
                 quotient_hole(event)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::Submit {
                         encoder: encoder.map(|s| NodeId(s)),
                         event
@@ -1519,7 +1513,7 @@ impl CaimanAssemblyParser {
     fn sync_fence_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [sync_fence_sep, name_hole_sep(fence), quotient_hole(event)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::SyncFence {
                         fence: fence.map(|s| NodeId(s)),
                         event
@@ -1532,7 +1526,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), inline_join_sep, name_hole_sep(funclet), name_box(captures),
                 name_hole(continuation)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::InlineJoin {
                         funclet: funclet.map(|s| FuncletId(s)),
                         captures,
@@ -1546,7 +1540,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), serialized_join_sep, name_hole_sep(funclet),
                 name_box(captures), name_hole(continuation)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::SerializedJoin {
                         funclet: funclet.map(|s| FuncletId(s)),
                         captures,
@@ -1559,7 +1553,7 @@ impl CaimanAssemblyParser {
     fn default_join_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name)] => ast::NamedNode {
-                    name,
+                    name: Some(name),
                     node: ast::Node::DefaultJoin{}
                 }
         ))
@@ -1567,9 +1561,9 @@ impl CaimanAssemblyParser {
 
     fn promise_captures_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign_list(names), promise_captures_sep, n(count),
+            [assign(name), promise_captures_sep, n(count),
                 name_hole(continuation)] => ast::NamedNode {
-                    name: names,
+                    name: Some(name),
                     node: ast::Node::PromiseCaptures {
                         count: Some(count),
                         continuation: continuation.map(|s| NodeId(s))
@@ -1580,9 +1574,9 @@ impl CaimanAssemblyParser {
 
     fn fulfill_captures_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign_list(names), fulfill_captures_sep, name_hole_sep(continuation),
+            [assign(name), fulfill_captures_sep, name_hole_sep(continuation),
                 name_box(haves), name_box(needs)] => ast::NamedNode {
-                    name: names,
+                    name: Some(name),
                     node: ast::Node::FulfillCaptures {
                         continuation: continuation.map(|s| NodeId(s)),
                         haves,
@@ -1594,9 +1588,9 @@ impl CaimanAssemblyParser {
 
     fn encoding_event_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign_list(names), encoding_event_sep, name_sep(local_past),
+            [assign(name), encoding_event_sep, name_sep(local_past),
                 name_box(remote_local_pasts)] => ast::NamedNode {
-                    name: names,
+                    name: Some(name),
                     node: ast::Node::EncodingEvent {
                         local_past: Some(NodeId(local_past)),
                         remote_local_pasts
@@ -1608,7 +1602,7 @@ impl CaimanAssemblyParser {
     fn submission_event_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submission_event_sep, name(local_past)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::SubmissionEvent {
                         local_past: Some(NodeId(local_past))
                     }
@@ -1620,7 +1614,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), submission_event_sep, name_sep(local_past),
                 name(remote_local_past)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: None,
                     node: ast::Node::SynchronizationEvent {
                         local_past: Some(NodeId(local_past)),
                         remote_local_past: Some(NodeId(remote_local_past))
@@ -1631,9 +1625,9 @@ impl CaimanAssemblyParser {
 
     fn separated_buffer_space_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign_list(names), separated_buffer_space_sep,
+            [assign(name), separated_buffer_space_sep,
                 n_sep(count), name(space)] => ast::NamedNode {
-                    name: ast::NodeName::None,
+                    name: Some(name),
                     node: ast::Node::SeparatedBufferSpaces {
                         count: Some(count),
                         space: Some(NodeId(space))

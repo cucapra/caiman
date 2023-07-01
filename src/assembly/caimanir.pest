@@ -108,7 +108,6 @@ name_box_single = { name_box | name_hole }
 name_call = !{ ("(" ~ name_hole_elements ~ ")" | hole ) }
 
 assign = !{ name ~ "=" }
-assign_list = { name_list ~ "=" }
 n_elements = !{ (n ~ ("," ~ n)*)? }
 n_list = { n | "[" ~ n_elements ~ "]" }
 
@@ -214,7 +213,7 @@ extract_node = { assign ~ extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }
 call_node = { assign ~ call_sep ~ function_class_name ~ name_call }
 select_sep = @{ "select" ~ sep }
-select_node = { assign_list ~ select_sep ~ name_sep ~ name_sep ~ name }
+select_node = { assign ~ select_sep ~ name_sep ~ name_sep ~ name }
 
 //     scheduling
 
@@ -224,7 +223,7 @@ drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
 static_alloc_sep = ${ "static-alloc" ~ sep }
-static_alloc_node = { assign_list ~ static_alloc_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
+static_alloc_node = { assign ~ static_alloc_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
 static_dealloc_sep = ${ "static-dealloc" ~ sep }
 static_dealloc_node = { assign ~ static_dealloc_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
 
@@ -259,14 +258,14 @@ serialized_join_sep = ${ "serialized-join" ~ sep }
 serialized_join_node = { assign ~ serialized_join_sep ~ name_hole_sep ~ name_box ~ name_hole }
 default_join_node = { assign ~ "default-join" }
 promise_captures_sep = ${ "promise-captures" ~ sep }
-promise_captures_node = { assign_list ~ promise_captures_sep ~ n ~ name_hole }
+promise_captures_node = { assign ~ promise_captures_sep ~ n ~ name_hole }
 fulfill_captures_sep = ${ "fulfill-captures" ~ sep }
-fulfill_captures_node = { assign_list ~ fulfill_captures_sep ~ name_hole_sep ~ name_box ~ name_box }
+fulfill_captures_node = { assign ~ fulfill_captures_sep ~ name_hole_sep ~ name_box ~ name_box }
 
 //     timeline
 
 encoding_event_sep = ${ "encoding-event" ~ sep }
-encoding_event_node = { assign_list ~ encoding_event_sep ~ name_sep ~ name_box }
+encoding_event_node = { assign ~ encoding_event_sep ~ name_sep ~ name_box }
 submission_event_sep = ${ "submission-event" ~ sep }
 submission_event_node = { assign ~ submission_event_sep ~ name }
 synchronization_event_sep = ${ "synchronization-event" ~ sep }
@@ -275,7 +274,7 @@ synchronization_event_node = { assign ~ synchronization_event_sep ~ name_sep ~ n
 //    spatial
 
 separated_buffer_space_sep = ${ "separated-buffer-space" ~ sep }
-separated_buffer_space_node = { assign_list ~ separated_buffer_space_sep ~ place_sep ~ n_sep ~ name }
+separated_buffer_space_node = { assign ~ separated_buffer_space_sep ~ place_sep ~ n_sep ~ name }
 
 //   nodes
 

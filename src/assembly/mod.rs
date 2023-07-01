@@ -8,5 +8,4 @@ pub mod ast;
 mod context;
 #[cfg(feature = "assembly")]
 mod explication;
-#[cfg(feature = "temp")]
 mod table;

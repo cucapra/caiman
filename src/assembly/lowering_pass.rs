@@ -1011,7 +1011,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
 
 pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
-    explication::explicate(&mut program);
+    // explication::explicate(&mut program);
     let mut context = Context::new(&program);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),

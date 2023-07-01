@@ -4,21 +4,21 @@ use crate::assembly::ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
-use crate::stable_vec::StableVec;
+use crate::assembly::table::Table;
 use crate::ir;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct Context {
-    pub ffi_type_table: StableVec<FFIType>,
-    pub local_type_table: StableVec<String>,
+    pub ffi_type_table: Table<FFIType>,
+    pub local_type_table: Table<String>,
     pub variable_map: HashMap<FuncletId, NodeTable>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
     pub location: LocationNames,
     pub funclet_indices: FuncletIndices,
-    pub function_classes: StableVec<FunctionClassId>,
+    pub function_classes: Table<FunctionClassId>,
 }
 
 #[derive(Debug)]
@@ -31,8 +31,8 @@ pub struct LocationNames {
 #[derive(Debug)]
 pub struct NodeTable {
     // local names and return names such as [%out : i64] or whatever
-    pub local: StableVec<NodeId>,
-    pub returns: StableVec<NodeId>,
+    pub local: Table<NodeId>,
+    pub returns: Table<NodeId>,
 }
 
 #[derive(Debug, Clone)]
@@ -72,8 +72,8 @@ pub struct FuncletInformation {
 
 #[derive(Debug)]
 pub struct FuncletIndices {
-    external_funclet_table: StableVec<ExternalFunctionId>,
-    local_funclet_table: StableVec<FuncletId>,
+    external_funclet_table: Table<ExternalFunctionId>,
+    local_funclet_table: Table<FuncletId>,
     funclet_kind_map: HashMap<String, FuncletLocation>,
 }
 
@@ -89,8 +89,8 @@ impl LocationNames {
 impl NodeTable {
     pub fn new() -> NodeTable {
         NodeTable {
-            local: StableVec::new(),
-            returns: StableVec::new(),
+            local: Table::new(),
+            returns: Table::new(),
         }
     }
 }
@@ -98,8 +98,8 @@ impl NodeTable {
 impl FuncletIndices {
     pub fn new() -> FuncletIndices {
         FuncletIndices {
-            external_funclet_table: StableVec::new(),
-            local_funclet_table: StableVec::new(),
+            external_funclet_table: Table::new(),
+            local_funclet_table: Table::new(),
             funclet_kind_map: HashMap::new(),
         }
     }
@@ -141,10 +141,10 @@ impl FuncletIndices {
 impl Context {
     pub fn new(program: &ast::Program) -> Context {
         let mut context = Context {
-            ffi_type_table: StableVec::new(),
-            local_type_table: StableVec::new(),
+            ffi_type_table: Table::new(),
+            local_type_table: Table::new(),
             funclet_indices: FuncletIndices::new(),
-            function_classes: StableVec::new(),
+            function_classes: Table::new(),
             variable_map: HashMap::new(),
             location: LocationNames::new(),
         };
@@ -273,18 +273,6 @@ impl Context {
         {
             Some(v) => v,
             None => panic!("Unknown return name {:?} in funclet {:?}", var, &funclet),
-        }
-    }
-
-    pub fn remote_id(&self, funclet: &FuncletId, var: &NodeId) -> ir::RemoteNodeId {
-        ir::RemoteNodeId {
-            funclet_id: self
-                .funclet_indices
-                .local_funclet_table
-                .get(funclet)
-                .unwrap()
-                .clone(),
-            node_id: self.remote_node_id(funclet, var),
         }
     }
 }
