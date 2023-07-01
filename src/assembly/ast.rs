@@ -111,10 +111,26 @@ pub struct ExternalGpuFunctionResourceBinding {
     pub output: Option<NodeId>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// keeping this idea around for the frontent, easier to reason about for tags
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
-    pub funclet_name: Hole<FuncletId>,
-    pub node_name: Hole<NodeId>,
+    pub funclet: Hole<FuncletId>,
+    pub node: Hole<NodeId>
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Quotient {
+    None,
+    Node(Hole<RemoteNodeId>),
+    Input(Hole<RemoteNodeId>),
+    Output(Hole<RemoteNodeId>),
+    Halt(Hole<RemoteNodeId>),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Tag {
+    pub quot: Quotient, // What a given value maps to in a specification
+    pub flow: ir::Flow, // How this value transforms relative to the specification
 }
 
 // Super Jank, but whatever
@@ -130,7 +146,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { FunctionClassId };
 	(Operation) => { NodeId };
-	(RemoteOperation) => { RemoteNodeId };
+	(RemoteOperation) => { Quotient };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -240,21 +256,6 @@ pub enum TailEdge {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Quotient {
-    None,
-    Node(RemoteNodeId),
-    Input(RemoteNodeId),
-    Output(RemoteNodeId),
-    Halt(RemoteNodeId),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Tag {
-    pub quot: Quotient, // What a given value maps to in a specification
-    pub flow: ir::Flow, // How this value transforms relative to the specification
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionClassBinding {
     pub default: bool,
@@ -264,6 +265,7 @@ pub struct FunctionClassBinding {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScheduleBinding {
     pub implicit_tags: Option<(Tag, Tag)>,
+    // map from the name to the associated funclet id
     pub value: Option<FuncletId>,
     pub timeline: Option<FuncletId>,
     pub spatial: Option<FuncletId>,

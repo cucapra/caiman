@@ -37,12 +37,12 @@ impl std::fmt::Display for CompileError {
 fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
     let program = crate::assembly::parser::parse(input_string);
 
-    dbg!(&program);
     match program {
         Err(why) => Err(CompileError {
             message: format!("Parse error: {}", why),
         }),
-        Ok(v) => Ok(crate::assembly::lowering_pass::lower(v)),
+        Ok(_) => todo!()
+        // Ok(v) => Ok(crate::assembly::lowering_pass::lower(v)),
     }
 }
 

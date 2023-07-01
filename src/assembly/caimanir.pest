@@ -32,12 +32,6 @@ name_hole = { name | hole }
 name_hole_sep = ${ name_hole ~ sep }
 meta_name = ${ "$" ~ (id | throwaway) }
 meta_name_sep = ${ meta_name ~ sep }
-remote = ${ name ~ "." ~ name }
-remote_sep = ${ remote ~ sep }
-remote_hole = { name_hole ~ "." ~ name_hole | hole }
-remote_hole_sep = ${ remote_hole ~ sep }
-meta_remote_inner = ${ meta_name ~ "." ~ name }
-meta_remote = { remote | meta_remote_inner }
 
 //    ffi_types
 ffi_type_base = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
@@ -66,7 +60,10 @@ place_hole = { place | hole }
 place_hole_sep = ${ place_hole ~ sep }
 
 quotient_name = { "node" | "input" | "output" | "halt" }
-quotient = !{ quotient_name ~ "(" ~ remote ~ ")" | none }
+quotient = !{ quotient_name ~ "(" ~ name ~ ")" | none }
+quotient_hole = !{ quotient_name ~ "(" ~ name_hole ~ ")" | hole | none }
+
+meta_remote = { meta_name ~ "." ~ name }
 meta_quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" | none }
 flow = { "none" | "have" | "met" | "need" }
 tag = ${ quotient ~ "-" ~ flow | none }
@@ -104,8 +101,6 @@ type_decl = { (ffi_type_decl | native_value_decl | ref_decl | fence_decl | buffe
 
 name_elements = !{ (name ~ ("," ~ name)*)? }
 name_list = !{ "[" ~ name_elements ~ "]" | name }
-remote_elements = !{ (remote ~ ("," ~ remote)*)? }
-remote_list = !{ "[" ~ remote_elements ~ "]" | remote }
 
 name_hole_elements = !{ (name_hole ~ ("," ~ name_hole)*)? }
 name_box = !{ "[" ~ name_hole_elements ~ "]" | hole }
@@ -229,9 +224,9 @@ drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
 static_alloc_sep = ${ "static-alloc" ~ sep }
-static_alloc_node = { assign_list ~ static_alloc_sep ~ place_hole_sep ~ name_hole ~ n_list ~ remote_hole }
+static_alloc_node = { assign_list ~ static_alloc_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
 static_dealloc_sep = ${ "static-dealloc" ~ sep }
-static_dealloc_node = { assign ~ static_dealloc_sep ~ place_hole_sep ~ remote_hole_sep ~ name_box }
+static_dealloc_node = { assign ~ static_dealloc_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
 
 read_sep = ${ "read-ref" ~ sep }
 read_node = { assign ~ read_sep ~ type_hole_sep ~ name_hole }
@@ -241,22 +236,22 @@ write_sep = ${ "write-ref" ~ sep }
 write_node = { write_sep ~ type_hole_sep ~ name_hole ~ "->" ~ name_hole }
 
 local_do_builtin_sep = ${ "local-do-builtin" ~ sep }
-local_do_builtin_node = { local_do_builtin_sep ~ remote_hole ~ name_call ~ "->" ~ name_box }
+local_do_builtin_node = { local_do_builtin_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box }
 local_do_external_sep = ${ "local-do-external" ~ sep }
-local_do_external_node = { local_do_external_sep ~ name_hole_sep ~ remote_hole ~ name_call ~ "->" ~ name_box }
+local_do_external_node = { local_do_external_sep ~ name_hole_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box }
 local_copy_sep = ${ "local-copy" ~ sep }
 local_copy_node = { local_copy_sep ~ name_hole ~ "->" ~ name_hole }
 begin_encoding_sep = ${ "begin-encoding" ~ sep }
-begin_encoding_node = { assign ~ begin_encoding_sep ~ place_hole_sep ~ remote_hole ~ name_box ~ name_box }
+begin_encoding_node = { assign ~ begin_encoding_sep ~ place_hole_sep ~ quotient_hole ~ name_box ~ name_box }
 
 encode_do_sep = ${ "encode-do" ~ sep }
-encode_do_node = { encode_do_sep ~ name_hole_sep ~ name_hole_sep ~ remote_hole ~ name_call ~ "->" ~ name_box_single }
+encode_do_node = { encode_do_sep ~ name_hole_sep ~ name_hole_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box_single }
 encode_copy_sep = ${ "encode-copy" ~ sep }
 encode_copy_node = { encode_copy_sep ~ name_hole_sep ~ name_hole ~ "->" ~ name_hole }
 submit_sep = ${ "submit" ~ sep }
-submit_node = { assign ~ submit_sep ~ name_hole_sep ~ remote_hole }
+submit_node = { assign ~ submit_sep ~ name_hole_sep ~ quotient_hole }
 sync_fence_sep = ${ "sync-fence" ~ sep }
-sync_fence_node = { sync_fence_sep ~ name_hole_sep ~ remote_hole }
+sync_fence_node = { sync_fence_sep ~ name_hole_sep ~ quotient_hole }
 
 inline_join_sep = ${ "inline-join" ~ sep }
 inline_join_node = { assign ~ inline_join_sep ~ name_hole_sep ~ name_box ~ name_hole }

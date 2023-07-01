@@ -299,38 +299,7 @@ impl CaimanAssemblyParser {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
 
-    fn remote(input: Node) -> ParseResult<RemoteNodeId> {
-        Ok(match_nodes!(input.into_children();
-            [name(funclet_name), name(node_name)] => ast::RemoteNodeId {
-                funclet_name: Some(FuncletId(funclet_name)),
-                node_name: Some(NodeId(node_name))
-            }
-        ))
-    }
-
-    fn remote_sep(input: Node) -> ParseResult<RemoteNodeId> {
-        Ok(match_nodes!(input.into_children();
-            [remote(t)] => t
-        ))
-    }
-
-    fn remote_hole(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
-        Ok(match_nodes!(input.into_children();
-            [name_hole(funclet_name), name_hole(node_name)] => Some(ast::RemoteNodeId {
-                funclet_name: funclet_name.map(|s| FuncletId(s)),
-                node_name: node_name.map(|s| NodeId(s))
-            }),
-            [hole] => None
-        ))
-    }
-
-    fn remote_hole_sep(input: Node) -> ParseResult<Hole<RemoteNodeId>> {
-        Ok(match_nodes!(input.into_children();
-            [remote_hole(t)] => t
-        ))
-    }
-
-    fn meta_remote_inner(input: Node) -> ParseResult<RemoteNodeId> {
+    fn meta_remote(input: Node) -> ParseResult<RemoteNodeId> {
         let error = input.error("Unknown meta name");
         let meta_map = input
             .user_data()
@@ -340,22 +309,15 @@ impl CaimanAssemblyParser {
             .unwrap()
             .meta_map;
         match_nodes!(input.into_children();
-            [meta_name(meta_name), name(node_name)] =>
+            [meta_name(meta_name), name(node)] =>
                 match meta_map.get(&meta_name) {
-                        Some(funclet_name) => Ok(ast::RemoteNodeId {
-                            funclet_name: Some(funclet_name.clone()),
-                            node_name: Some(NodeId(node_name))
+                        Some(funclet) => Ok(ast::RemoteNodeId {
+                            funclet: Some(funclet.clone()),
+                            node: Some(NodeId(node))
                         }),
                         None => Err(error)
                 }
         )
-    }
-
-    fn meta_remote(input: Node) -> ParseResult<RemoteNodeId> {
-        Ok(match_nodes!(input.into_children();
-            [remote(f)] => f,
-            [meta_remote_inner(f)] => f
-        ))
     }
 
     fn ffi_type_base(input: Node) -> ParseResult<ast::FFIType> {
@@ -491,10 +453,10 @@ impl CaimanAssemblyParser {
     }
 
     // weirdly, this seems like the best way to do this with pest_consume for now?
-    fn quotient_name(input: Node) -> ParseResult<Box<dyn Fn(ast::RemoteNodeId) -> ast::Quotient>> {
-        fn box_up<F>(f: &'static F) -> Box<dyn Fn(ast::RemoteNodeId) -> ast::Quotient>
+    fn quotient_name(input: Node) -> ParseResult<Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>> {
+        fn box_up<F>(f: &'static F) -> Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>
         where
-            F: Fn(ast::RemoteNodeId) -> ast::Quotient,
+            F: Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient,
         {
             Box::new(move |x| f(x))
         }
@@ -515,14 +477,34 @@ impl CaimanAssemblyParser {
     fn quotient(input: Node) -> ParseResult<ast::Quotient> {
         Ok(match_nodes!(input.into_children();
             [none] => ast::Quotient::None,
-            [quotient_name(quot), remote(loc)] => quot(loc),
+            [quotient_name(quot), name(node)] => {
+                let remote = RemoteNodeId {
+                    funclet: None,
+                    node: Some(NodeId(node))
+                };
+                quot(Some(remote))
+            },
+        ))
+    }
+
+    fn quotient_hole(input: Node) -> ParseResult<Hole<ast::Quotient>> {
+        Ok(match_nodes!(input.into_children();
+            [hole] => None,
+            [none] => Some(ast::Quotient::None),
+            [quotient_name(quot), name_hole(node)] => {
+                let remote = RemoteNodeId {
+                    funclet: None,
+                    node: node.map(|s| NodeId(s))
+                };
+                Some(quot(Some(remote)))
+            },
         ))
     }
 
     fn meta_quotient(input: Node) -> ParseResult<ast::Quotient> {
         Ok(match_nodes!(input.into_children();
             [none] => ast::Quotient::None,
-            [quotient_name(quot), meta_remote(loc)] => quot(loc),
+            [quotient_name(quot), meta_remote(loc)] => quot(Some(loc)),
         ))
     }
 
@@ -689,19 +671,6 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [name_elements(names)] => names,
             [name(name)] => vec![NodeId(name)]
-        ))
-    }
-
-    fn remote_elements(input: Node) -> ParseResult<Vec<ast::RemoteNodeId>> {
-        Ok(match_nodes!(input.into_children();
-               [remote(remotes)..] => remotes.collect()
-        ))
-    }
-
-    fn remote_list(input: Node) -> ParseResult<Vec<ast::RemoteNodeId>> {
-        Ok(match_nodes!(input.into_children();
-            [remote_elements(remotes)] => remotes,
-            [remote(remote)] => vec![remote]
         ))
     }
 
@@ -1380,7 +1349,7 @@ impl CaimanAssemblyParser {
     fn static_alloc_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign_list(names), static_alloc_sep, place_hole_sep(place),
-                name_hole(node), n_list(sizes), remote_hole(spatial_operation)] => ast::NamedNode {
+                name_hole(node), n_list(sizes), quotient_hole(spatial_operation)] => ast::NamedNode {
                     name: names,
                     node: ast::Node::StaticAlloc {
                         node: node.map(|s| NodeId(s)),
@@ -1395,7 +1364,7 @@ impl CaimanAssemblyParser {
     fn static_dealloc_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
-                remote_hole_sep(spatial_operation), name_box(nodes)] => ast::NamedNode {
+                quotient_hole(spatial_operation), name_box(nodes)] => ast::NamedNode {
                     name,
                     node: ast::Node::StaticDealloc {
                         nodes,
@@ -1448,7 +1417,7 @@ impl CaimanAssemblyParser {
 
     fn local_do_builtin_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [local_do_builtin_sep, remote_hole(operation),
+            [local_do_builtin_sep, quotient_hole(operation),
                 name_call(inputs), name_box(outputs)] => ast::NamedNode {
                     name: ast::NodeName::None,
                     node: ast::Node::LocalDoBuiltin {
@@ -1463,7 +1432,7 @@ impl CaimanAssemblyParser {
     fn local_do_external_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [local_do_external_sep, name_hole_sep(external_function_id),
-                remote_hole(operation), name_call(inputs),
+                quotient_hole(operation), name_call(inputs),
                 name_box(outputs)] => ast::NamedNode {
                     name: ast::NodeName::None,
                     node: ast::Node::LocalDoExternal {
@@ -1491,7 +1460,7 @@ impl CaimanAssemblyParser {
     fn begin_encoding_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), begin_encoding_sep, place_hole_sep(place),
-                remote_hole(event), name_box(encoded), name_box(fences)] => ast::NamedNode {
+                quotient_hole(event), name_box(encoded), name_box(fences)] => ast::NamedNode {
                     name,
                     node: ast::Node::BeginEncoding {
                         place,
@@ -1506,7 +1475,7 @@ impl CaimanAssemblyParser {
     fn encode_do_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [encode_do_sep, name_hole_sep(encoder), name_hole_sep(external_function_id),
-                remote_hole(operation), name_call(inputs),
+                quotient_hole(operation), name_call(inputs),
                 name_box_single(outputs)] => ast::NamedNode {
                     name: ast::NodeName::None,
                     node: ast::Node::EncodeDoExternal {
@@ -1537,7 +1506,7 @@ impl CaimanAssemblyParser {
     fn submit_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submit_sep, name_hole_sep(encoder),
-                remote_hole(event)] => ast::NamedNode {
+                quotient_hole(event)] => ast::NamedNode {
                     name,
                     node: ast::Node::Submit {
                         encoder: encoder.map(|s| NodeId(s)),
@@ -1549,7 +1518,7 @@ impl CaimanAssemblyParser {
 
     fn sync_fence_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [sync_fence_sep, name_hole_sep(fence), remote_hole(event)] => ast::NamedNode {
+            [sync_fence_sep, name_hole_sep(fence), quotient_hole(event)] => ast::NamedNode {
                     name: ast::NodeName::None,
                     node: ast::Node::SyncFence {
                         fence: fence.map(|s| NodeId(s)),
