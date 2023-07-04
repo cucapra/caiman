@@ -67,6 +67,8 @@ impl ASTFactory
         value_number(n: (String, value::NumberType)) => value::ExprKind::Num(n.0, n.1));
     factory!(value::Expr, value_app(f: String, es: Vec<value::Expr>) 
         => value::ExprKind::App(f, es));
+    factory!(value::Expr, value_bop(b: value::Binop, e1: value::Expr, e2: value::Expr)
+        => value::ExprKind::Binop(b, Box::new(e1), Box::new(e2)));
 
     // FUNCTION CLASS
     factory!(Decl, function_class(name: String, functions: Vec<String>) 

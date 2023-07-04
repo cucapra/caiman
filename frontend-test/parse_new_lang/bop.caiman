@@ -1,0 +1,5 @@
+value foo() -> i64 {
+  let x = 5.
+  let y = (+ x 7).
+  returns y.
+}

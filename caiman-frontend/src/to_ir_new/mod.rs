@@ -6,11 +6,12 @@ mod funclet_util;
 mod function_classes;
 mod label;
 mod pipelines;
-mod scheduling_funclets;
-mod timeline_funclets;
 mod typing;
 mod value_funclets;
+mod scheduling_funclets;
+mod timeline_funclets;
 mod external_cpu;
+mod binops;
 
 macro_rules! to_decl {
     ($v : expr, $kind : ident) => {
@@ -21,11 +22,12 @@ macro_rules! to_decl {
     };
 }
 
-pub fn frontend_to_asm(program: ast::Program) -> asm::Program
+pub fn frontend_to_asm(mut program: ast::Program) -> asm::Program
 {
     let mut typing_ctx = typing::TypingContext::new();
 
-    let (asm_function_classes, function_class_ctx) = function_classes::make(&program);
+    let (mut asm_function_classes, mut function_class_ctx) = function_classes::make(&program);
+    binops::externalize_binops(&mut program, &mut asm_function_classes, &mut function_class_ctx);
 
     let asm_external_cpus = external_cpu::lower_cpu_externs(&function_class_ctx, &program);
 

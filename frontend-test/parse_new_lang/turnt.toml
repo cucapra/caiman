@@ -1,1 +1,2 @@
-command = "../../target/debug/caiman-frontend --new-lang --parse {filename}"
+#command = "../../target/debug/caiman-frontend --new-lang --parse {filename}"
+command = "../../target/debug/caiman-frontend --new-lang {filename}"

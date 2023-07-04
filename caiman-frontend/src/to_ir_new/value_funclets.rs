@@ -82,7 +82,7 @@ fn make_constant_node(name: asm::NodeId, typ: ast::value::Type, value: String) -
 
 fn translate_expr(expr: &ast::value::Expr, label: NodeLabel) -> ExprTranslation
 {
-    let (_info, kind) = expr;
+    let (info, kind) = expr;
     let name = match label {
         NodeLabel::Name(x) => label::label_node(&x),
         NodeLabel::StmtIndex(i) => label::label_node(&format!("stmt{}", i)),
@@ -121,6 +121,9 @@ fn translate_expr(expr: &ast::value::Expr, label: NodeLabel) -> ExprTranslation
                 post_output: vec![],
                 sub_exprs,
             }
+        },
+        Binop(bop, _, _) => {
+            panic!("At {:?}: Binary operator {:?} was not reduced to external function", info, bop)
         },
     }
 }

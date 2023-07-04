@@ -10,18 +10,24 @@ pub mod value
 {
     use super::{Info, Var};
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum NumberType
     {
         I32,
         I64,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Type
     {
         Num(NumberType),
         Bool,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum Binop
+    {
+        Plus,
     }
 
     #[derive(Clone, Debug)]
@@ -32,7 +38,14 @@ pub mod value
         Bool(bool),
         // TODO function literal allowed instead of having to use a var?
         App(String, Vec<Expr>),
+        Binop(Binop, Box<Expr>, Box<Expr>),
         // TODO: many more :D
+    }
+
+    impl Default for ExprKind {
+        fn default() -> Self {
+            Self::Bool(false)
+        }
     }
 
     pub type Expr = (Info, ExprKind);

@@ -23,6 +23,18 @@ impl FunctionClassContext
     {
         self.type_map.get(fc_name)
     }
+
+    pub fn add_type(
+        &mut self, 
+        fc_name: &str, 
+        input: Vec<asm::TypeId>,
+        output: Vec<asm::TypeId>,
+    ) 
+    {
+        if self.type_map.insert(fc_name.to_string(), (input, output)).is_some() {
+            panic!("Multiple typings inserted for {}", fc_name)
+        }
+    }
 }
 
 pub fn make(program: &ast::Program) -> (Vec<asm::FunctionClass>, FunctionClassContext)
@@ -38,12 +50,13 @@ pub fn make(program: &ast::Program) -> (Vec<asm::FunctionClass>, FunctionClassCo
         })
         .collect();
 
-    // TODO: add to function classes vector below all the "default" function classes that should
-    // be made if none are declared for a value funclet
-
     let mut funclet_fc_map: HashMap<String, String> = HashMap::new();
     let mut type_map: TypeMap = HashMap::new();
     let mut function_classes: Vec<asm::FunctionClass> = Vec::new();
+
+    // TODO: add to function classes vector all the "default" function classes that should
+    // be made if none are declared for a value funclet/extern
+
     for (name, functions) in ast_function_classes.into_iter() {
         for funclet_name in functions.iter() {
             let was_duplicate_insert =

@@ -11,6 +11,12 @@ pub struct Info
     pub location: ((usize, usize), (usize, usize)),
 }
 
+impl Default for Info {
+    fn default() -> Self {
+        Self { location: ((0,0), (0,0)) }
+    }
+}
+
 pub trait HasInfo
 {
     fn info(&self) -> Info;

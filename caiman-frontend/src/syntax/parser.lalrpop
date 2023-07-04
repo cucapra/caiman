@@ -14,6 +14,7 @@ match {
   "i32", "i64", "bool", "Event",
   "at", "and", "space", "time",
   "Prim", "Call",
+  "+",
 
 
   r"\s*" => { }, // Whitespace
@@ -74,11 +75,16 @@ ValueStmt: value::Stmt = {
 }
 
 ValueExpr: value::Expr = {
-    <@L> <Id> <@R>                                   => astf.value_var(<>),
-    <@L> <Bool> <@R>                                 => astf.value_bool(<>),
-    <@L> <ValueNumber> <@R>                          => astf.value_number(<>),
-    <@L> "(" <Id> <ValueExpr+> ")" <@R>              => astf.value_app(<>),
+    <@L> <Id> <@R>                                    => astf.value_var(<>),
+    <@L> <Bool> <@R>                                  => astf.value_bool(<>),
+    <@L> <ValueNumber> <@R>                           => astf.value_number(<>),
+    <@L> "(" <Id> <ValueExpr+> ")" <@R>               => astf.value_app(<>),
+    <@L> "(" <Binop> <ValueExpr> <ValueExpr> ")" <@R> => astf.value_bop(<>),
     "(" <ValueExpr> ")",
+}
+
+Binop: value::Binop = {
+    "+" => value::Binop::Plus,
 }
 
 Bool: bool = {
