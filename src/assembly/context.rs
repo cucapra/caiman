@@ -36,13 +36,6 @@ pub struct NodeTable {
 }
 
 #[derive(Debug, Clone)]
-pub enum FuncletLocation {
-    Local,
-    ExternalCpu, // todo: fix later
-    ExternalGpu,
-}
-
-#[derive(Debug, Clone)]
 pub enum LocalFFI {
     FFI(usize),
     Local(usize),
@@ -66,7 +59,7 @@ impl LocalFFI {
 }
 
 pub struct FuncletInformation {
-    location: FuncletLocation,
+    location: ir::Place,
     index: usize,
 }
 
@@ -74,7 +67,7 @@ pub struct FuncletInformation {
 pub struct FuncletIndices {
     external_funclet_table: Table<ExternalFunctionId>,
     local_funclet_table: Table<FuncletId>,
-    funclet_kind_map: HashMap<String, FuncletLocation>,
+    funclet_kind_map: HashMap<String, ir::Place>,
 }
 
 impl LocationNames {
@@ -104,13 +97,13 @@ impl FuncletIndices {
         }
     }
 
-    pub fn insert(&mut self, name: String, location: FuncletLocation) {
+    pub fn insert(&mut self, name: String, location: ir::Place) {
         match location {
-            FuncletLocation::Local => self.local_funclet_table.push(FuncletId(name.clone())),
-            FuncletLocation::ExternalCpu => self
+            ir::Place::Local => self.local_funclet_table.push(FuncletId(name.clone())),
+            ir::Place::Cpu => self
                 .external_funclet_table
                 .push(ExternalFunctionId(name.clone())),
-            FuncletLocation::ExternalGpu => self
+            ir::Place::Gpu => self
                 .external_funclet_table
                 .push(ExternalFunctionId(name.clone())),
         }
@@ -121,20 +114,27 @@ impl FuncletIndices {
         self.local_funclet_table.get(name)
     }
 
-    pub fn get_loc(&self, name: &String) -> Option<&FuncletLocation> {
+    pub fn get_loc(&self, name: &String) -> Option<&ir::Place> {
         self.funclet_kind_map.get(name)
     }
 
     pub fn get_funclet(&self, name: &String) -> Option<usize> {
         self.funclet_kind_map.get(name).and_then(|x| match x {
-            FuncletLocation::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
-            FuncletLocation::ExternalCpu => self
+            ir::Place::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
+            ir::Place::Cpu => self
                 .external_funclet_table
                 .get(&ExternalFunctionId(name.clone())),
-            FuncletLocation::ExternalGpu => self
+            ir::Place::Gpu => self
                 .external_funclet_table
                 .get(&ExternalFunctionId(name.clone())),
         })
+    }
+
+    pub fn require_funclet(&self, name: &String) -> usize {
+        match self.get_funclet(name) {
+            Some(f) => f,
+            None => panic!("Unknown funclet name {}", name)
+        }
     }
 }
 
@@ -164,7 +164,7 @@ impl Context {
                 },
                 ast::Declaration::Funclet(f) => {
                     self.funclet_indices
-                        .insert(f.header.name.0.clone(), FuncletLocation::Local);
+                        .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut node_table = NodeTable::new();
                     for command in &f.commands {
                         match command {
@@ -172,7 +172,10 @@ impl Context {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
-                                node_table.local.push(name.clone());
+                                match name {
+                                    None => { node_table.local.dummy_push() }
+                                    Some(v) => { node_table.local.push(v.clone()) }
+                                }
                             }
                             _ => {}
                         }
@@ -189,9 +192,9 @@ impl Context {
                 }
                 ast::Declaration::ExternalFunction(f) => {
                     let location = match f.kind {
-                        ast::ExternalFunctionKind::CPUPure => FuncletLocation::ExternalCpu,
-                        ast::ExternalFunctionKind::CPUEffect => FuncletLocation::ExternalCpu,
-                        ast::ExternalFunctionKind::GPU(_) => FuncletLocation::ExternalGpu,
+                        ast::ExternalFunctionKind::CPUPure => ir::Place::Cpu,
+                        ast::ExternalFunctionKind::CPUEffect => ir::Place::Cpu,
+                        ast::ExternalFunctionKind::GPU(_) => ir::Place::Gpu,
                     };
                     self.funclet_indices.insert(f.name.clone(), location);
                 }

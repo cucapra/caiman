@@ -125,8 +125,9 @@ external_resource = { "resource" ~ "{" ~ external_group ~ "," ~ external_binding
 
 external_path = { "path" ~ ":" ~ str }
 external_entry_point = { "entry" ~ ":" ~ str }
+external_dimensionality = { "dimensionality" ~ ":" ~ n }
 // gonna make order matter for parser simplicity
-external_body = { ";" | "{" ~ external_path ~ "," ~ external_entry_point
+external_body = { ";" | "{" ~ external_path ~ "," ~ external_entry_point ~ "," ~ external_dimensionality
     ~ ("," ~ external_resource)* ~ ","? ~ "}" }
 external_arg = { (name ~ ":")? ~ ffi_type }
 external_args = { (external_arg ~ ("," ~ external_arg)*)? }

@@ -12,7 +12,7 @@ where
     T: Eq + Hash + Debug + Clone,
 {
     values: HashSet<T>,
-    indices: Vec<T>,
+    indices: Vec<Option<T>>,
 }
 
 // a Table is basically a vector with no dupes
@@ -31,9 +31,9 @@ where
         self.values.contains(val)
     }
 
-    pub fn dummy_push(&mut self, val: T) {
+    pub fn dummy_push(&mut self) {
         // Add unnamed element for indexing
-        self.indices.push(val);
+        self.indices.push(None);
     }
 
     pub fn push(&mut self, val: T) {
@@ -44,7 +44,7 @@ where
     }
 
     pub fn try_push(&mut self, val: T) -> bool {
-        self.indices.push(val.clone());
+        self.indices.push(Some(val.clone()));
         self.values.insert(val)
     }
 
@@ -53,14 +53,17 @@ where
             panic!("Duplicate add of {:?}", val)
         }
         self.values.insert(val.clone());
-        self.indices.insert(index, val);
+        self.indices.insert(index, Some(val));
     }
 
     pub fn get(&self, val: &T) -> Option<usize> {
         // no need to actually check the Hashset, that's just to avoid dupes
         for item in itertools::enumerate(&self.indices) {
-            if item.1 == val {
-                return Some(item.0);
+            match item.1 {
+                None => {}
+                Some(v) => if v == val {
+                    return Some(item.0);
+                }
             }
         }
         return None;
@@ -74,7 +77,7 @@ where
         if index >= self.indices.len() {
             None
         } else {
-            Some(&self.indices[index])
+            self.indices[index].as_ref()
         }
     }
 

@@ -112,7 +112,7 @@ pub enum Quotient {
     Output { index: usize },
 }
 
-impl Quotient {
+impl Default for Quotient {
     fn default() -> Self {
         Self::None
     }
@@ -177,7 +177,7 @@ pub struct Tag {
     pub flow: Flow,     // How this value transforms relative to the specification
 }
 
-impl Tag {
+impl Default for Tag {
     fn default() -> Self {
         Self {
             quot: Quotient::None,

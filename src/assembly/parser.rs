@@ -469,7 +469,6 @@ impl CaimanAssemblyParser {
                 "node" => Ok(box_up(&ast::Quotient::Node)),
                 "input" => Ok(box_up(&ast::Quotient::Input)),
                 "output" => Ok(box_up(&ast::Quotient::Output)),
-                "halt" => Ok(box_up(&ast::Quotient::Halt)),
                 _ => Err(input.error(unexpected(s))),
             })
     }
@@ -578,12 +577,12 @@ impl CaimanAssemblyParser {
 
     fn ref_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name), typ(storage_type), place(queue_place)] =>
+            [name_type_separator(name), typ(storage_type), place(storage_place)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::Ref {
                         storage_type,
-                        queue_place
+                        storage_place
                 }
             })
         ))
@@ -763,6 +762,12 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn external_dimensionality(input: Node) -> ParseResult<usize> {
+        Ok(match_nodes!(input.into_children();
+            [n(n)] => n
+        ))
+    }
+
     fn external_resource(input: Node) -> ParseResult<ast::ExternalGpuFunctionResourceBinding> {
         // this is dumb, but easier than cleaning it up
         Ok(match_nodes!(input.into_children();
@@ -794,10 +799,12 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [external_path(shader_module),
                 external_entry_point(entry_point),
+                external_dimensionality(dimensionality),
                 external_resource(resources)..] =>
                 Some(ast::ExternalGPUInfo {
                     shader_module,
                     entry_point,
+                    dimensionality,
                     resource_bindings: resources.collect()
                 }),
             [] => None

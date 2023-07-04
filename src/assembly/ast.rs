@@ -124,7 +124,6 @@ pub enum Quotient {
     Node(Hole<RemoteNodeId>),
     Input(Hole<RemoteNodeId>),
     Output(Hole<RemoteNodeId>),
-    Halt(Hole<RemoteNodeId>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -321,7 +320,7 @@ pub enum LocalTypeInfo {
     // Scheduling
     Ref {
         storage_type: TypeId,
-        queue_place: ir::Place,
+        storage_place: ir::Place,
     },
     Fence {
         queue_place: ir::Place,
@@ -362,6 +361,7 @@ pub struct Var {
 pub struct ExternalGPUInfo {
     pub shader_module: String,
     pub entry_point: String,
+    pub dimensionality: usize,
     pub resource_bindings: Vec<ExternalGpuFunctionResourceBinding>,
 }
 

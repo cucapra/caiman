@@ -46,6 +46,7 @@ external-gpu[impl @simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
     // I dunno if this is worth cleaning up, probably not
     path : "caiman-test/reference_untested/example.comp",
     entry : "main",
+    dimensionality : 2,
     resource {
         group : 0,
         binding : 0,
