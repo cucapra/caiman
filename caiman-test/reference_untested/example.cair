@@ -114,7 +114,7 @@ schedule[value $val = %foo, spatial $space = %space]
 // value, timeline, spatial order is mandatory (though you can freely omit one of course)
 schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 %sselect<input($time.%e)-met, output($time.%e)-have>
-(%abc : input($time.%e)-met halt($val.%x)-have %slot0)
+(%abc : input($time.%e)-met input($val.%x)-have %slot0)
 -> input($time.%e)-met output($val.%x)-none %slot0 {
     schedule-select %abc [%bar, %scall][value input(%x),
         timeline output(%e),
@@ -122,7 +122,7 @@ schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 }
 
 schedule[value $val = %foo, timeline $time = %time]
-%syield<halt($time.%e)-have, node($time.%e)-need>
+%syield<input($time.%e)-have, node($time.%e)-need>
 (%abc : input($time.%bs)-none %event0)
 -> [%out : node($time.%bs)-need %buffer0] {
     schedule-call-yield %bar[value input(%x),
@@ -131,7 +131,7 @@ schedule[value $val = %foo, timeline $time = %time]
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%debugtest<halt($time.%e)-have, node($time.%e)-none>
+%debugtest<input($time.%e)-have, node($time.%e)-none>
 (%abc : input($space.%bs)-none %event0)
 -> [%out : node($space.%bs)-need %buffer0] {
     debug-hole [%abc, %abc];

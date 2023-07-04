@@ -3,7 +3,7 @@ use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::context::Context;
 use crate::assembly::context::LocationNames;
-// use crate::assembly::explication;
+use crate::assembly::explication;
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::{assembly, frontend, ir};
@@ -231,7 +231,7 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
 
             // Very silly
             let input_path = Path::new(&binding_info.shader_module);
-            assert!(binding_info.shader_module.ends_with(".wgsl"));
+            let extension = input_path.extension().unwrap();
             let mut input_file = match File::open(&input_path) {
                 Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
                 Ok(file) => file,
@@ -241,9 +241,21 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
                 Err(why) => panic!("Couldn't read file: {}", why),
                 Ok(_) => (),
             };
-            let shader_module = match crate::shadergen::ShaderModule::from_wgsl(content.as_str()) {
-                Err(why) => panic!("Couldn't parse as wgsl: {}", why),
-                Ok(sm) => sm,
+            let shader_module = if extension == "comp" {
+                match crate::shadergen::ShaderModule::from_glsl(content.as_str()) {
+                    Err(why) => panic!("Couldn't parse as glsl: {}", why),
+                    Ok(sm) => sm,
+                }
+            } else if extension == "wgsl" {
+                match crate::shadergen::ShaderModule::from_wgsl(content.as_str()) {
+                    Err(why) => panic!("Couldn't parse as glsl: {}", why),
+                    Ok(sm) => sm,
+                }
+            } else {
+                panic!(
+                    "Unsupported extension for filename {:?}, .wgsl or .comp expected",
+                    input_path
+                )
             };
             ffi::ExternalFunction::GpuKernel(ffi::GpuKernel {
                 name: external.name.clone(),
@@ -1028,7 +1040,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
 
 pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
-    // explication::explicate(&mut program);
+    explication::explicate(&mut program);
     let mut context = Context::new(&program);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),

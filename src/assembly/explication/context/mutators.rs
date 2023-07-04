@@ -10,7 +10,7 @@ impl<'context> Context<'context> {
                         f.commands.insert(
                             index,
                             Some(ast::Command::Node(ast::NamedNode {
-                                name: arg.name.clone().unwrap_or(NodeId("".to_string())),
+                                name: None,
                                 node: ast::Node::Phi { index: Some(index) },
                             })),
                         );
@@ -19,8 +19,13 @@ impl<'context> Context<'context> {
                     for command in f.commands.iter_mut() {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
-                                if name.0 == "_" {
-                                    name.0 = self.meta_data.next_name()
+                                match name {
+                                    None => {}
+                                    Some(n) => {
+                                        if n.0 == "_" {
+                                            n.0 = self.meta_data.next_name()
+                                        }
+                                    }
                                 }
                             }
                             _ => {}
@@ -141,8 +146,11 @@ impl<'context> Context<'context> {
             for command in &mut f.commands {
                 match command {
                     Some(ast::Command::Node(ast::NamedNode { name, node })) => {
-                        if name == node_name {
-                            return Some(node);
+                        match name {
+                            None => {}
+                            Some(n) => if n == node_name {
+                                return Some(node);
+                            }
                         }
                     }
                     _ => {}

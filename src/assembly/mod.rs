@@ -6,6 +6,6 @@ pub mod ast;
 
 // #[cfg(feature = "assembly")]
 mod context;
-#[cfg(feature = "assembly")]
+// #[cfg(feature = "assembly")]
 mod explication;
 mod table;

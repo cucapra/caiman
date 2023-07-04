@@ -78,8 +78,11 @@ impl<'context> Context<'context> {
             for command in &f.commands {
                 match command {
                     Some(ast::Command::Node(ast::NamedNode { name, node })) => {
-                        if name == node_name {
-                            return Some(node);
+                        match name {
+                            None => {}
+                            Some(n) => if n == node_name {
+                                return Some(node);
+                            }
                         }
                     }
                     _ => {}
