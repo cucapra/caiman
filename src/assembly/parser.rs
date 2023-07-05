@@ -1419,7 +1419,7 @@ impl CaimanAssemblyParser {
     fn local_do_builtin_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [local_do_builtin_sep, quotient_hole(operation),
-                name_call(inputs), name_box(outputs)] => ast::NamedNode {
+                name_call(inputs), name_box_single(outputs)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::LocalDoBuiltin {
                         operation,
@@ -1434,7 +1434,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [local_do_external_sep, name_hole_sep(external_function_id),
                 quotient_hole(operation), name_call(inputs),
-                name_box(outputs)] => ast::NamedNode {
+                name_box_single(outputs)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::LocalDoExternal {
                         external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),

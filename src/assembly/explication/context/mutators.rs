@@ -4,6 +4,7 @@ impl<'context> Context<'context> {
     pub fn corrections(&mut self) {
         for declaration in self.program.declarations.iter_mut() {
             match declaration {
+                // add phi nodes
                 ast::Declaration::Funclet(f) => {
                     let mut index = 0;
                     for arg in &f.header.args {
@@ -17,6 +18,9 @@ impl<'context> Context<'context> {
                         index += 1;
                     }
                     for command in f.commands.iter_mut() {
+                        // rewrite constants to have native values
+
+                        // rename "_" nodes
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 match name {
@@ -26,7 +30,7 @@ impl<'context> Context<'context> {
                                             n.0 = self.meta_data.next_name()
                                         }
                                     }
-                                }
+                                };
                             }
                             _ => {}
                         }
@@ -145,14 +149,14 @@ impl<'context> Context<'context> {
         self.get_funclet_mut(funclet_name).and_then(|f| {
             for command in &mut f.commands {
                 match command {
-                    Some(ast::Command::Node(ast::NamedNode { name, node })) => {
-                        match name {
-                            None => {}
-                            Some(n) => if n == node_name {
+                    Some(ast::Command::Node(ast::NamedNode { name, node })) => match name {
+                        None => {}
+                        Some(n) => {
+                            if n == node_name {
                                 return Some(node);
                             }
                         }
-                    }
+                    },
                     _ => {}
                 }
             }

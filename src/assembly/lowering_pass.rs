@@ -111,16 +111,23 @@ fn ir_version(version: &ast::Version, _: &mut Context) -> (u32, u32, u32) {
 }
 
 pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient {
+    fn get_node(remote_id: &ast::RemoteNodeId, context: &Context) -> usize {
+        let node_id = reject_hole(remote_id.node.as_ref());
+        match remote_id.funclet.as_ref() {
+            None => context.value_node_id(node_id),
+            Some(fnid) => context.remote_node_id(fnid, node_id),
+        }
+    }
     match quot {
         ast::Quotient::None => ir::Quotient::None,
         ast::Quotient::Node(r) => ir::Quotient::Node {
-            node_id: context.node_id(reject_hole(reject_hole(r.as_ref()).node.as_ref())),
+            node_id: get_node(reject_hole(r.as_ref()), context),
         },
         ast::Quotient::Input(r) => ir::Quotient::Input {
-            index: context.node_id(reject_hole(reject_hole(r.as_ref()).node.as_ref())),
+            index: get_node(reject_hole(r.as_ref()), context),
         },
         ast::Quotient::Output(r) => ir::Quotient::Output {
-            index: context.node_id(reject_hole(reject_hole(r.as_ref()).node.as_ref())),
+            index: get_node(reject_hole(r.as_ref()), context),
         },
     }
 }
@@ -342,20 +349,24 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         ast::Node::Constant { value, type_id } => {
             let unwrapped_value = reject_hole(value.clone());
             let unwrapped_type = reject_hole(type_id.clone());
+            let mut ffi_type = None;
             let parsed_value = match &unwrapped_type {
-                ast::TypeId::Local(_) => {
+                ast::TypeId::Local(name) => {
                     panic!("Cannot have a local type constant {:?}", type_id)
                 }
-                ast::TypeId::FFI(t) => match t {
-                    FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
-                    FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
-                    FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
-                    _ => panic!("Unsupported constant type {:?}", type_id),
-                },
+                ast::TypeId::FFI(t) => {
+                    ffi_type = Some(t);
+                    match t {
+                        FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
+                        FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
+                        FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
+                        _ => panic!("Unsupported constant type {:?}", type_id),
+                    }
+                }
             };
             ir::Node::Constant {
                 value: parsed_value,
-                type_id: context.loc_type_id(&unwrapped_type),
+                type_id: context.native_type_id(ffi_type.unwrap()),
             }
         }
         ast::Node::CallFunctionClass {
@@ -720,6 +731,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
     }
 }
 
+// updates the location in the context value funclet
 fn ir_schedule_binding(
     funclet_header: &ast::FuncletHeader,
     implicit_tags: &Option<(ast::Tag, ast::Tag)>,
@@ -766,6 +778,13 @@ fn ir_schedule_binding(
             };
         }
         result
+    }
+
+    // first thing is update the context
+
+    match value {
+        None => {}
+        Some(fnid) => context.location.value_name = Some(fnid.clone()),
     }
 
     // probably a better way to do this, but whatever
@@ -898,6 +917,8 @@ fn ir_spec_binding(
 
 fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     context.location.funclet_name = funclet.header.name.clone();
+    // note that this is stateful, updates the value_funclet in context potentially
+    let spec_binding = ir_spec_binding(&funclet.header, context);
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
@@ -914,7 +935,7 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     for command in &funclet.commands {
         match command.as_ref().unwrap() {
             ast::Command::Node(node) => {
-                context.location.node_name = reject_hole(node.name.as_ref()).clone();
+                context.location.node_name = node.name.clone();
                 nodes.push(ir_node(&node, context));
             }
             ast::Command::TailEdge(tail) => {
@@ -928,7 +949,7 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
 
     ir::Funclet {
         kind: funclet.kind.clone(),
-        spec_binding: ir_spec_binding(&funclet.header, context),
+        spec_binding,
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         nodes: nodes.into_boxed_slice(),
@@ -1022,6 +1043,9 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
             }
             ast::Declaration::Funclet(f) => {
                 funclets.add(ir_funclet(f, context));
+                // stateful name update to help with debugging in case we use an old value name
+                // also nice for error messages maybe?
+                context.location.value_name = None;
             }
             ast::Declaration::Pipeline(p) => {
                 pipelines.push(ir_pipeline(p, context));

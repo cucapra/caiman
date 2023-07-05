@@ -236,13 +236,13 @@ write_sep = ${ "write-ref" ~ sep }
 write_node = { write_sep ~ type_hole_sep ~ name_hole ~ "->" ~ name_hole }
 
 local_do_builtin_sep = ${ "local-do-builtin" ~ sep }
-local_do_builtin_node = { local_do_builtin_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box }
+local_do_builtin_node = { local_do_builtin_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box_single }
 local_do_external_sep = ${ "local-do-external" ~ sep }
-local_do_external_node = { local_do_external_sep ~ name_hole_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box }
+local_do_external_node = { local_do_external_sep ~ name_hole_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box_single }
 local_copy_sep = ${ "local-copy" ~ sep }
 local_copy_node = { local_copy_sep ~ name_hole ~ "->" ~ name_hole }
 begin_encoding_sep = ${ "begin-encoding" ~ sep }
-begin_encoding_node = { assign ~ begin_encoding_sep ~ place_hole_sep ~ quotient_hole ~ name_box ~ name_box }
+begin_encoding_node = { assign ~ begin_encoding_sep ~ place_hole_sep ~ quotient_hole ~ name_box ~ name_box_single }
 
 encode_do_sep = ${ "encode-do" ~ sep }
 encode_do_node = { encode_do_sep ~ name_hole_sep ~ name_hole_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box_single }

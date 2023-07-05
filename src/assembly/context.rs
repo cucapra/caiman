@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 pub struct Context {
     pub ffi_type_table: Table<FFIType>,
     pub local_type_table: Table<String>,
+    pub native_type_map: Table<ast::FFIType>,
     pub variable_map: HashMap<FuncletId, NodeTable>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
@@ -23,9 +24,9 @@ pub struct Context {
 
 #[derive(Debug)]
 pub struct LocationNames {
-    // a bit confusing, but unwrapping holes is annoying
+    pub value_name: Option<FuncletId>,
     pub funclet_name: FuncletId,
-    pub node_name: NodeId,
+    pub node_name: Option<NodeId>,
 }
 
 #[derive(Debug)]
@@ -73,8 +74,9 @@ pub struct FuncletIndices {
 impl LocationNames {
     pub fn new() -> LocationNames {
         LocationNames {
+            value_name: None,
             funclet_name: FuncletId("".to_string()),
-            node_name: NodeId("".to_string()),
+            node_name: None,
         }
     }
 }
@@ -133,7 +135,7 @@ impl FuncletIndices {
     pub fn require_funclet(&self, name: &String) -> usize {
         match self.get_funclet(name) {
             Some(f) => f,
-            None => panic!("Unknown funclet name {}", name)
+            None => panic!("Unknown funclet name {}", name),
         }
     }
 }
@@ -143,6 +145,7 @@ impl Context {
         let mut context = Context {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
+            native_type_map: Table::new(),
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             variable_map: HashMap::new(),
@@ -160,12 +163,33 @@ impl Context {
             match declaration {
                 ast::Declaration::TypeDecl(typ) => match typ {
                     ast::TypeDecl::FFI(t) => self.ffi_type_table.push(t.clone()),
-                    ast::TypeDecl::Local(t) => self.local_type_table.push(t.name.clone()),
+                    ast::TypeDecl::Local(t) => {
+                        // get native value types
+                        self.local_type_table.push(t.name.clone());
+                        match &t.data {
+                            ast::LocalTypeInfo::NativeValue { storage_type } => {
+                                match storage_type {
+                                    ast::TypeId::FFI(ffi) => {
+                                        self.native_type_map.push(ffi.clone());
+                                    }
+                                    _ => { self.native_type_map.dummy_push() }
+                                }
+                            }
+                            _ => { self.native_type_map.dummy_push() }
+                        }
+                    }
                 },
                 ast::Declaration::Funclet(f) => {
                     self.funclet_indices
                         .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut node_table = NodeTable::new();
+                    // added because phi nodes themselves are unnamed
+                    for arg in &f.header.args {
+                        match &arg.name {
+                            None => node_table.local.dummy_push(),
+                            Some(v) => node_table.local.push(v.clone()),
+                        }
+                    }
                     for command in &f.commands {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
@@ -173,8 +197,8 @@ impl Context {
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
                                 match name {
-                                    None => { node_table.local.dummy_push() }
-                                    Some(v) => { node_table.local.push(v.clone()) }
+                                    None => node_table.local.dummy_push(),
+                                    Some(v) => node_table.local.push(v.clone()),
                                 }
                             }
                             _ => {}
@@ -210,6 +234,13 @@ impl Context {
         match self.ffi_type_table.get_index(name) {
             Some(i) => i,
             None => panic!("Un-indexed FFI type {:?}", name),
+        }
+    }
+
+    pub fn native_type_id(&self, typ: &ast::FFIType) -> usize {
+        match self.native_type_map.get(typ) {
+            Some(i) => i,
+            None => panic!("FFI type {:?} has no associated native type", typ),
         }
     }
 
@@ -262,6 +293,23 @@ impl Context {
         match self.variable_map.get(funclet).unwrap().local.get_index(var) {
             Some(v) => v,
             None => panic!("Unknown variable name {:?} in funclet {:?}", var, &funclet),
+        }
+    }
+
+    pub fn value_node_id(&self, var: &NodeId) -> usize {
+        let value_funclet = self.location.value_name.clone().unwrap();
+        match self
+            .variable_map
+            .get(&value_funclet)
+            .unwrap()
+            .local
+            .get_index(var)
+        {
+            Some(v) => v,
+            None => panic!(
+                "Unknown variable name {:?} in funclet {:?}",
+                var, &value_funclet
+            ),
         }
     }
 
