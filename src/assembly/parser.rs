@@ -1259,11 +1259,11 @@ impl CaimanAssemblyParser {
 
     fn constant_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), constant_value(value), ffi_type(type_id)] => ast::NamedNode {
+            [assign(name), name_sep(type_id), constant_value(value)] => ast::NamedNode {
                 name: Some(name),
                 node: ast::Node::Constant {
                     value: Some(value),
-                    type_id: Some(ast::TypeId::FFI(type_id))
+                    type_id: Some(ast::TypeId::Local(type_id))
                 }
             }
         ))

@@ -208,7 +208,7 @@ tail_edge = { return_node | jump_node | debug_hole_node |
 
 // we can syntactically disallow holes to a (limited) extent here, so might as well
 constant_value = @{ ASCII_DIGIT+ }
-constant_node = ${ assign ~ sep? ~ "constant" ~ sep ~ constant_value ~ ffi_type }
+constant_node = ${ assign ~ sep? ~ "constant" ~ sep ~ name_sep ~ constant_value }
 extract_sep = @{ "extract" ~ sep }
 extract_node = { assign ~ extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }

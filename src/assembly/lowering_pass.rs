@@ -349,24 +349,21 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         ast::Node::Constant { value, type_id } => {
             let unwrapped_value = reject_hole(value.clone());
             let unwrapped_type = reject_hole(type_id.clone());
-            let mut ffi_type = None;
             let parsed_value = match &unwrapped_type {
-                ast::TypeId::Local(name) => {
-                    panic!("Cannot have a local type constant {:?}", type_id)
-                }
-                ast::TypeId::FFI(t) => {
-                    ffi_type = Some(t);
-                    match t {
+                ast::TypeId::Local(name) => match context.native_type_map.get(name) {
+                    None => panic!("{:?} must have a direct FFI storage type", type_id),
+                    Some(t) => match t {
                         FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
                         FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
                         FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
                         _ => panic!("Unsupported constant type {:?}", type_id),
-                    }
-                }
+                    },
+                },
+                ast::TypeId::FFI(_) => panic!("Cannot directly type a constant with an ffi type"),
             };
             ir::Node::Constant {
                 value: parsed_value,
-                type_id: context.native_type_id(ffi_type.unwrap()),
+                type_id: context.loc_type_id(&unwrapped_type),
             }
         }
         ast::Node::CallFunctionClass {

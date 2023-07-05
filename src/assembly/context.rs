@@ -13,7 +13,8 @@ use std::collections::{HashMap, HashSet};
 pub struct Context {
     pub ffi_type_table: Table<FFIType>,
     pub local_type_table: Table<String>,
-    pub native_type_map: Table<ast::FFIType>,
+    // cause we need to know the storage value of the native value
+    pub native_type_map: HashMap<String, FFIType>,
     pub variable_map: HashMap<FuncletId, NodeTable>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
@@ -145,7 +146,7 @@ impl Context {
         let mut context = Context {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
-            native_type_map: Table::new(),
+            native_type_map: HashMap::new(),
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             variable_map: HashMap::new(),
@@ -167,15 +168,14 @@ impl Context {
                         // get native value types
                         self.local_type_table.push(t.name.clone());
                         match &t.data {
-                            ast::LocalTypeInfo::NativeValue { storage_type } => {
-                                match storage_type {
-                                    ast::TypeId::FFI(ffi) => {
-                                        self.native_type_map.push(ffi.clone());
-                                    }
-                                    _ => { self.native_type_map.dummy_push() }
+                            ast::LocalTypeInfo::NativeValue { storage_type } => match storage_type
+                            {
+                                ast::TypeId::FFI(f) => {
+                                    self.native_type_map.insert(t.name.clone(), f.clone());
                                 }
-                            }
-                            _ => { self.native_type_map.dummy_push() }
+                                _ => {}
+                            },
+                            _ => {}
                         }
                     }
                 },
@@ -234,13 +234,6 @@ impl Context {
         match self.ffi_type_table.get_index(name) {
             Some(i) => i,
             None => panic!("Un-indexed FFI type {:?}", name),
-        }
-    }
-
-    pub fn native_type_id(&self, typ: &ast::FFIType) -> usize {
-        match self.native_type_map.get(typ) {
-            Some(i) => i,
-            None => panic!("FFI type {:?} has no associated native type", typ),
         }
     }
 

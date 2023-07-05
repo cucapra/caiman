@@ -62,7 +62,7 @@ external-gpu[impl @simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
 function @simple_32(i32) -> i32;
 
 value[impl @simple_32] %foo(%test : i32) -> [%out : i32] {
-    %1 = constant 4i64;
+    %1 = constant %native_i64 4;
     %2 = extract %1 0;
     %4 = call @simple(%1);
     %5 = select %1 %2 %4;

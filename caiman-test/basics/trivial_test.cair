@@ -1,7 +1,6 @@
 version 0.0.2
 
 type i64;
-ref %i64l : i64-local;
 event %event0;
 buffer_space %buffspace;
 native_value %ni64 : i64;
@@ -9,7 +8,7 @@ native_value %ni64 : i64;
 function @main() -> i64;
 
 value[impl default @main] %foo() -> i64 {
-    %x = constant 4i64;
+    %x = constant %ni64 4;
     return %x;
 }
 
