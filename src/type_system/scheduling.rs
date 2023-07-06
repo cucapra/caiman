@@ -78,7 +78,6 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
             {
                 assert_eq!(*storage_type_1, *storage_type_2);
             } else {
-                dbg!(&node_type);
                 panic!("type id is a native value type, but node is not a local variable");
             }
         }
