@@ -229,7 +229,7 @@ static_dealloc_sep = ${ "static-dealloc" ~ sep }
 static_dealloc_node = { assign ~ static_dealloc_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
 
 read_sep = ${ "read-ref" ~ sep }
-read_node = { assign ~ read_sep ~ type_hole_sep ~ name_hole }
+read_node = { assign ~ read_sep ~ ffi_type_sep ~ name_hole }
 borrow_sep = ${ "borrow-ref" ~ sep }
 borrow_node = { assign ~ borrow_sep ~ type_hole_sep ~ name_hole }
 write_sep = ${ "write-ref" ~ sep }

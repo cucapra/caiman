@@ -343,6 +343,12 @@ impl CaimanAssemblyParser {
             })
     }
 
+    fn ffi_type_sep(input: Node) -> ParseResult<ast::FFIType> {
+        Ok(match_nodes!(input.into_children();
+            [ffi_type(f)] => f
+        ))
+    }
+
     fn ffi_array_parameters(input: Node) -> ParseResult<ast::FFIType> {
         Ok(match_nodes!(input.into_children();
             [ffi_type(element_type), n(length)] => ast::FFIType::Array {
@@ -1378,12 +1384,12 @@ impl CaimanAssemblyParser {
 
     fn read_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), read_sep, type_hole_sep(storage_type),
+            [assign(name), read_sep, ffi_type_sep(storage_type),
                 name_hole(source)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::ReadRef {
                         source: source.map(|s| NodeId(s)),
-                        storage_type
+                        storage_type: Some(ast::TypeId::FFI(storage_type))
                     }
                 }
         ))

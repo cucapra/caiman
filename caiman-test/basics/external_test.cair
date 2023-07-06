@@ -23,9 +23,9 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %x_ref = alloc-temporary local i64;
     %y_ref = alloc-temporary local i64;
     local-do-builtin node(%x)() -> %x_ref;
-    %x_val = read-ref %ni64 %x_ref;
-    local-do-external %op node(%y_t)(%x_val) -> %y_ref;
-    return %y_ref;
+    local-do-external %op node(%y_t)(%x_ref) -> %y_ref;
+    %result = read-ref i64 %y_ref;
+    return %result;
 }
 
 timeline %time(%e : %event0) -> %event0 {
