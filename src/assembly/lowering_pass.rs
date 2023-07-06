@@ -976,21 +976,36 @@ fn ir_function_class(
         match declaration {
             ast::Declaration::Funclet(f) => match &f.header.binding {
                 ast::FuncletBinding::ValueBinding(binding) => {
-                    let current_id = context
-                        .funclet_indices
-                        .get_funclet(&f.header.name.0)
-                        .unwrap();
-                    if binding.default {
-                        default_funclet_id = match default_funclet_id {
-                            None => Some(current_id),
-                            Some(_) => {
-                                panic!("Duplicate default ids for {:?}", function.name.clone())
+                    if binding.function_class == function.name {
+                        let current_id = context
+                            .funclet_indices
+                            .get_funclet(&f.header.name.0)
+                            .unwrap();
+                        if binding.default {
+                            default_funclet_id = match default_funclet_id {
+                                None => Some(current_id),
+                                Some(_) => {
+                                    panic!("Duplicate default ids for {:?}", function.name.clone())
+                                }
                             }
                         }
                     }
                 }
                 _ => {}
             },
+            ast::Declaration::ExternalFunction(f) => {
+                if f.value_function_binding.function_class == function.name {
+                    if f.value_function_binding.default {
+                        panic!(
+                            "{:?} uses default, which is unsupported for external functions",
+                            f.name
+                        )
+                    }
+                    external_function_ids.insert(ffi::ExternalFunctionId(
+                        context.funclet_indices.get_funclet(&f.name).unwrap(),
+                    ));
+                }
+            }
             _ => {}
         }
     }
