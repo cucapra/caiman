@@ -459,7 +459,9 @@ impl CaimanAssemblyParser {
     }
 
     // weirdly, this seems like the best way to do this with pest_consume for now?
-    fn quotient_name(input: Node) -> ParseResult<Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>> {
+    fn quotient_name(
+        input: Node,
+    ) -> ParseResult<Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>> {
         fn box_up<F>(f: &'static F) -> Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>
         where
             F: Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient,
@@ -1467,7 +1469,8 @@ impl CaimanAssemblyParser {
     fn begin_encoding_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), begin_encoding_sep, place_hole_sep(place),
-                quotient_hole(event), name_box(encoded), name_box(fences)] => ast::NamedNode {
+                quotient_hole(event), name_box(encoded),
+                name_box_single(fences)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::BeginEncoding {
                         place,

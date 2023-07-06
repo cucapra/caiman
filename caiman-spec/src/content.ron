@@ -131,7 +131,7 @@
 			inputs : [
 				(name : "spatial_operation", kind : RemoteOperation),
 				(name : "node", kind : Operation),
-					(name : "sizes", kind : Index, is_array: true),
+				(name : "sizes", kind : Index, is_array: true),
 				(name : "place", kind : Place),
 			],
 			output : Multiple,
