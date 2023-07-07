@@ -113,10 +113,8 @@ fn ir_version(version: &ast::Version, _: &mut Context) -> (u32, u32, u32) {
 pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient {
     fn get_node(remote_id: &ast::RemoteNodeId, context: &Context) -> usize {
         let node_id = reject_hole(remote_id.node.as_ref());
-        match remote_id.funclet.as_ref() {
-            None => context.value_node_id(node_id),
-            Some(fnid) => context.remote_node_id(fnid, node_id),
-        }
+        let funclet_id = reject_hole(remote_id.funclet.as_ref());
+        context.remote_node_id(funclet_id, node_id)
     }
     match quot {
         ast::Quotient::None => ir::Quotient::None,
@@ -236,10 +234,10 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
                 ));
             }
 
-            // Very silly
             let input_path = Path::new(&binding_info.shader_module);
+            let program_path = Path::new(&context.path);
             let extension = input_path.extension().unwrap();
-            let mut input_file = match File::open(&input_path) {
+            let mut input_file = match File::open(program_path.join(input_path)) {
                 Err(why) => panic!("Couldn't open {}: {}", input_path.display(), why),
                 Ok(file) => file,
             };
@@ -777,13 +775,6 @@ fn ir_schedule_binding(
         result
     }
 
-    // first thing is update the context
-
-    match value {
-        None => {}
-        Some(fnid) => context.location.value_name = Some(fnid.clone()),
-    }
-
     // probably a better way to do this, but whatever
     let mut value_in = Default::default();
     let mut value_out = Default::default();
@@ -930,7 +921,7 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     }
 
     for command in &funclet.commands {
-        match command.as_ref().unwrap() {
+        match reject_hole(command.as_ref()) {
             ast::Command::Node(node) => {
                 context.location.node_name = node.name.clone();
                 nodes.push(ir_node(&node, context));
@@ -1055,9 +1046,6 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
             }
             ast::Declaration::Funclet(f) => {
                 funclets.add(ir_funclet(f, context));
-                // stateful name update to help with debugging in case we use an old value name
-                // also nice for error messages maybe?
-                context.location.value_name = None;
             }
             ast::Declaration::Pipeline(p) => {
                 pipelines.push(ir_pipeline(p, context));
@@ -1078,6 +1066,7 @@ pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
     explication::explicate(&mut program);
     let mut context = Context::new(&program);
+    dbg!(&context);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
         program: ir_program(&program, &mut context),

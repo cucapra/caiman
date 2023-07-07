@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct Context {
+    pub path: String,
     pub ffi_type_table: Table<FFIType>,
     pub local_type_table: Table<String>,
     // cause we need to know the storage value of the native value
@@ -25,7 +26,6 @@ pub struct Context {
 
 #[derive(Debug)]
 pub struct LocationNames {
-    pub value_name: Option<FuncletId>,
     pub funclet_name: FuncletId,
     pub node_name: Option<NodeId>,
 }
@@ -75,7 +75,6 @@ pub struct FuncletIndices {
 impl LocationNames {
     pub fn new() -> LocationNames {
         LocationNames {
-            value_name: None,
             funclet_name: FuncletId("".to_string()),
             node_name: None,
         }
@@ -144,6 +143,7 @@ impl FuncletIndices {
 impl Context {
     pub fn new(program: &ast::Program) -> Context {
         let mut context = Context {
+            path: "".to_string(),
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
             native_type_map: HashMap::new(),
@@ -160,6 +160,7 @@ impl Context {
     // We only do this once and assume the invariants are maintained by construction
     // Note that a context without this makes little sense, so we can't build an "empty context"
     fn setup_context(&mut self, program: &ast::Program) {
+        self.path = program.path.clone();
         for declaration in &program.declarations {
             match declaration {
                 ast::Declaration::TypeDecl(typ) => match typ {
@@ -286,23 +287,6 @@ impl Context {
         match self.variable_map.get(funclet).unwrap().local.get_index(var) {
             Some(v) => v,
             None => panic!("Unknown variable name {:?} in funclet {:?}", var, &funclet),
-        }
-    }
-
-    pub fn value_node_id(&self, var: &NodeId) -> usize {
-        let value_funclet = self.location.value_name.clone().unwrap();
-        match self
-            .variable_map
-            .get(&value_funclet)
-            .unwrap()
-            .local
-            .get_index(var)
-        {
-            Some(v) => v,
-            None => panic!(
-                "Unknown variable name {:?} in funclet {:?}",
-                var, &value_funclet
-            ),
         }
     }
 

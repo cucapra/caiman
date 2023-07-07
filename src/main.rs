@@ -3,7 +3,7 @@ extern crate clap;
 use clap::{App, Arg};
 
 use caiman::frontend;
-use caiman::frontend::{CompileMode, CompileOptions};
+use caiman::frontend::{CompileMode, CompileOptions, CompileData};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -86,15 +86,22 @@ fn main() {
     };
 
     let input_string = std::fs::read_to_string(&args.input).expect("couldn't read input");
+    let compile_info = CompileData {
+        path: match args.input.parent() {
+            None => "".to_string(),
+            Some(s) => s.to_str().unwrap().to_string(),
+        },
+        input_string,
+    };
     let options = CompileOptions {
         print_codegen_debug_info: args.print_codegen_debug_info,
         compile_mode,
     };
 
     let result = if args.explicate_only {
-        frontend::explicate_caiman(&input_string, options)
+        frontend::explicate_caiman(compile_info, options)
     } else {
-        frontend::compile_caiman(&input_string, options)
+        frontend::compile_caiman(compile_info, options)
     };
 
     let output_string = result.expect("compiler error");

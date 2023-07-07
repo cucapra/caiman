@@ -111,7 +111,7 @@ pub struct ExternalGpuFunctionResourceBinding {
     pub output: Option<NodeId>,
 }
 
-// keeping this idea around for the frontent, easier to reason about for tags
+// keeping this idea around for the frontend, easier to reason about for tags
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
     pub funclet: Hole<FuncletId>,
@@ -419,6 +419,8 @@ pub enum Declaration {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Program {
+    // need the path to open locally from this program file
+    pub path: String,
     pub version: Version,
     pub declarations: Vec<Declaration>,
 }

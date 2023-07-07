@@ -1045,9 +1045,8 @@ impl CaimanAssemblyParser {
 
     fn timeline_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [name(name), timeline_node(node)] => Some(ast::Command::Node(node)),
+            [timeline_node(node)] => Some(ast::Command::Node(node)),
             [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
-            [node_hole] => None
         ))
     }
 
@@ -1063,9 +1062,8 @@ impl CaimanAssemblyParser {
 
     fn spatial_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [name(name), spatial_node(node)] => Some(ast::Command::Node(node)),
+            [spatial_node(node)] => Some(ast::Command::Node(node)),
             [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
-            [node_hole] => None
         ))
     }
 
@@ -1618,7 +1616,7 @@ impl CaimanAssemblyParser {
     fn submission_event_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submission_event_sep, name(local_past)] => ast::NamedNode {
-                    name: None,
+                    name: Some(name),
                     node: ast::Node::SubmissionEvent {
                         local_past: Some(NodeId(local_past))
                     }
@@ -1630,7 +1628,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), submission_event_sep, name_sep(local_past),
                 name(remote_local_past)] => ast::NamedNode {
-                    name: None,
+                    name: Some(name),
                     node: ast::Node::SynchronizationEvent {
                         local_past: Some(NodeId(local_past)),
                         remote_local_past: Some(NodeId(remote_local_past))
@@ -1713,6 +1711,7 @@ impl CaimanAssemblyParser {
     fn program(input: Node) -> ParseResult<ast::Program> {
         Ok(match_nodes!(input.into_children();
             [version(version), declaration(declarations).., EOI] => ast::Program {
+                path: "".to_string(),
                 version,
                 declarations: declarations.collect()
             }
@@ -1720,12 +1719,17 @@ impl CaimanAssemblyParser {
     }
 }
 
-pub fn parse(code: &str) -> ParseResult<ast::Program> {
+pub fn parse(path: &str, code: &str) -> ParseResult<ast::Program> {
     // necessary to have an empty user data for checking stuff
     let user_data = UserData {
         binding_info: RefCell::new(None),
     };
     // CaimanAssemblyParser::parse(Rule::program, code);
     let parsed = CaimanAssemblyParser::parse_with_userdata(Rule::program, code, user_data)?;
-    CaimanAssemblyParser::program(parsed.single()?)
+    let mut result = CaimanAssemblyParser::program(parsed.single()?);
+    match &mut result {
+        Ok(ref mut program) => { program.path = path.to_string(); }
+        _ => {}
+    };
+    result
 }
