@@ -554,13 +554,6 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn meta_quotient(input: Node) -> ParseResult<ast::Quotient> {
-        Ok(match_nodes!(input.into_children();
-            [none] => ast::Quotient::None,
-            [quotient_name(quot), meta_remote(loc)] => quot(Some(loc)),
-        ))
-    }
-
     fn flow(input: Node) -> ParseResult<ir::Flow> {
         input
             .as_str()
