@@ -73,25 +73,37 @@ value[impl @simple] %y(%abc : i64) -> [i64] {
     jump %abc [%abc, %abc];
 }
 
+timeline %time(%e : %event0) -> [%event_out : %event0] {
+    %x = encoding-event %e [%e, %e];
+    %y = submission-event %x;
+    %2 = synchronization-event %e %x;
+    return %e;
+}
+
+spatial %space(%b : %buffer_space0) -> [%iout : i64] {
+    %_ = separated-buffer-space cpu 3 %b;
+    return %b;
+}
+
 // can syntactically be empty, even though this is meaningless
 schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0] {
     %x = alloc-temporary local i64;
     drop %0;
     %y = static-sub-alloc local i64 %x;
     %4 = static-alloc local %0 [1, 2] input(%1);
-    %z = static-dealloc local node(%5) [%x, %4];
+    %z = static-dealloc local node(%foo.%5) [%x, %4];
     %_ = read-ref i64 %x;
     %_ = borrow-ref i64 %x;
     write-ref i64 %x -> %4;
     local-do-builtin none(%x, %3) -> [%4, %0];
     local-do-external %do_pure_thing_on_cpu output(?)(%x, %3) -> [%4, %0];
     local-copy %x -> %3;
-    %_ = begin-encoding local node(?)[%x, %3] [%4, %0];
-    encode-do %x %do_pure_thing_on_cpu input(%2)() -> %x;
-    encode-do %x %do_pure_thing_on_cpu input(%4)() -> [%x, %y];
+    %_ = begin-encoding local node(?.?)[%x, %3] [%4, %0];
+    encode-do %x %do_pure_thing_on_cpu input(?.%2)() -> %x;
+    encode-do %x %do_pure_thing_on_cpu input(%foo.?)() -> [%x, %y];
     encode-copy %z %x -> %y;
-    %6 = submit %x output(%1);
-    sync-fence %y output(%1);
+    %6 = submit %x output(?);
+    sync-fence %y output(?);
     %9 = inline-join %foo [%x, %y] %5;
     %10 = serialized-join %foo [%y, %z] %5;
     %11 = default-join;
@@ -106,8 +118,8 @@ schedule[value $val = %foo, spatial $space = %space]
 (%abc : input($val.%x)-have %slot0)
 -> [%out : output($val.%y)-met %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
-    schedule-call %bar[value input(%x),
-        timeline output(%e),
+    schedule-call %bar[value input(?),
+        timeline output(?),
         spatial none](%abc, %abc) %abc;
 }
 
@@ -116,8 +128,8 @@ schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 %sselect<input($time.%e)-met, output($time.%e)-have>
 (%abc : input($time.%e)-met input($val.%x)-have %slot0)
 -> input($time.%e)-met output($val.%x)-none %slot0 {
-    schedule-select %abc [%bar, %scall][value input(%x),
-        timeline output(%e),
+    schedule-select %abc [%bar, %scall][value input(?),
+        timeline output(?),
         spatial none](%abc, %abc) %abc;
 }
 
@@ -125,8 +137,8 @@ schedule[value $val = %foo, timeline $time = %time]
 %syield<input($time.%e)-have, node($time.%e)-need>
 (%abc : input($time.%bs)-none %event0)
 -> [%out : node($time.%bs)-need %buffer0] {
-    schedule-call-yield %bar[value input(%x),
-        timeline output(%e),
+    schedule-call-yield %bar[value input(%foo.%x),
+        timeline output(%time.%e),
         spatial none](%abc, %abc) %abc;
 }
 
@@ -135,18 +147,6 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 (%abc : input($space.%bs)-none %event0)
 -> [%out : node($space.%bs)-need %buffer0] {
     debug-hole [%abc, %abc];
-}
-
-timeline %time(%e : %event0) -> [%event_out : %event0] {
-    %x = encoding-event %e [%e, %e];
-    %y = submission-event %x;
-    %2 = synchronization-event %e %x;
-    return %e;
-}
-
-spatial %space(%b : %buffer_space0) -> [%iout : i64] {
-    %_ = separated-buffer-space cpu 3 %b;
-    return %b;
 }
 
 pipeline "pipeline_trivial" = %bar;

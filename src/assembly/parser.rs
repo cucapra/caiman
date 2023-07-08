@@ -295,6 +295,19 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn meta_name_hole(input: Node) -> ParseResult<Hole<String>> {
+        Ok(match_nodes!(input.into_children();
+            [meta_name(name)] => Some(name),
+            [hole] => None
+        ))
+    }
+
+    fn meta_name_hole_sep(input: Node) -> ParseResult<Hole<String>> {
+        Ok(match_nodes!(input.into_children();
+            [meta_name_hole(name)] => name
+        ))
+    }
+
     fn throwaway(input: Node) -> ParseResult<String> {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
@@ -317,6 +330,39 @@ impl CaimanAssemblyParser {
                         }),
                         None => Err(error)
                 }
+        )
+    }
+
+    fn meta_remote_hole(input: Node) -> ParseResult<RemoteNodeId> {
+        let error = input.error("Unknown meta name");
+        let meta_map = input
+            .user_data()
+            .binding_info
+            .borrow()
+            .clone()
+            .unwrap()
+            .meta_map;
+        match_nodes!(input.into_children();
+            // there's a way to make this pretty, but I'm stupid
+            [meta_name_hole(meta_name_hole), name_hole(name_hole)] =>
+                match meta_name_hole {
+                    None => Ok(ast::RemoteNodeId {
+                                funclet: None,
+                                node: name_hole.map(|s| NodeId(s))
+                            }),
+                    Some(meta_name) =>
+                        match meta_map.get(&meta_name) {
+                                Some(funclet) => Ok(ast::RemoteNodeId {
+                                    funclet: Some(funclet.clone()),
+                                    node: name_hole.map(|s| NodeId(s))
+                                }),
+                                None => Err(error)
+                        }
+                },
+            [hole] => Ok(ast::RemoteNodeId {
+                funclet: None,
+                node: None
+            })
         )
     }
 

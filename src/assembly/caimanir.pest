@@ -32,6 +32,8 @@ name_hole = { name | hole }
 name_hole_sep = ${ name_hole ~ sep }
 meta_name = ${ "$" ~ (id | throwaway) }
 meta_name_sep = ${ meta_name ~ sep }
+meta_name_hole = { meta_name | hole }
+meta_name_hole_sep = ${ meta_name_hole ~ sep }
 
 //    ffi_types
 ffi_type_base = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
@@ -59,15 +61,13 @@ place_sep = ${ place ~ sep }
 place_hole = { place | hole }
 place_hole_sep = ${ place_hole ~ sep }
 
-quotient_name = { "node" | "input" | "output" | "halt" }
-quotient = !{ quotient_name ~ "(" ~ name ~ ")" | none }
-quotient_hole = !{ quotient_name ~ "(" ~ name_hole ~ ")" | hole | none }
-
 meta_remote = { meta_name ~ "." ~ name }
-meta_quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" | none }
+meta_remote_hole = { meta_name_hole ~ "." ~ name_hole | hole }
+quotient_name = { "node" | "input" | "output" | "halt" }
+quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" | none }
+quotient_hole = !{ quotient_name ~ "(" ~ meta_name_hole ~ ")" | hole | none }
 flow = { "none" | "have" | "met" | "need" }
 tag = ${ quotient ~ "-" ~ flow | none }
-meta_tag = ${ meta_quotient ~ "-" ~ flow | none }
 
 // Program
 
@@ -173,11 +173,11 @@ timeline_funclet = { funclet_header ~ "{" ~ (timeline_command ~ ";")* ~ "}" }
 spatial_command = { spatial_node | tail_edge }
 spatial_funclet = { funclet_header ~ "{" ~ (spatial_command ~ ";")* ~ "}" }
 
-schedule_typ = ${ (meta_tag ~ sep)* ~ typ }
+schedule_typ = ${ (tag ~ sep)* ~ typ }
 schedule_arg = { (name ~ ":")? ~ schedule_typ }
 schedule_args = { (schedule_arg ~ ("," ~ schedule_arg)*)? }
 schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
-schedule_header = { name ~ "<" ~ meta_tag ~ "," ~ meta_tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
+schedule_header = { name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
 
 schedule_command = { schedule_node | tail_edge | node_hole }
 schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
