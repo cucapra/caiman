@@ -42,7 +42,7 @@ impl std::fmt::Display for CompileError {
 // #[cfg(feature = "assembly")]
 fn read_assembly(compile_data: CompileData) -> Result<Definition, CompileError> {
     let program = crate::assembly::parser::parse(&compile_data.path, &compile_data.input_string);
-    dbg!(&program);
+    // dbg!(&program);
     match program {
         Err(why) => Err(CompileError {
             message: format!("Parse error: {}", why),
@@ -77,7 +77,7 @@ fn read_definition(
 pub fn compile_caiman(compile_data: CompileData, options: CompileOptions)
                       -> Result<String, CompileError> {
     let mut definition = read_definition(compile_data, options.compile_mode)?;
-    // dbg!(&definition);
+    dbg!(&definition);
     assert_eq!(definition.version, (0, 0, 2));
     //ir::validation::validate_program(&definition.program);
     match crate::type_system::check_program(&definition.program) {

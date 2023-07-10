@@ -1,33 +1,39 @@
 version 0.0.2
 
 type i64;
-slot %slot0 : i64-ready-local;
-event %event0 : local;
+event %event0;
+buffer_space %buffspace;
+native_value %ni64 : i64;
 
 function @op(i64) -> i64;
 function @main() -> i64;
 
-external-cpu-pure[impl default @op] %op(i64) -> i64;
+external-cpu-pure[impl @op] %op(i64) -> i64;
 
 value[impl default @main] %foo() -> i64 {
     return %y;
-    %y_t = call @op(%x);
     %y = extract %y_t 0;
-    %x = constant 2i64;
+    %y_t = call @op(%x);
+    %x = constant %ni64 2;
 }
 
-schedule[value $val = %foo, timeline $time = %time]
-%bar<input($time.%e), output($time.%e)>() ->
-[%out : %slot0] {
-    %xloc = alloc-temporary-local-i64 %foo.%x;
-    %_ = encode-do-local %foo.%x() -> %xloc;
-    %yloc = alloc-temporary-local-i64 %foo.%y;
-    %_ = encode-do-local %foo.%y_t(%xloc) -> %yloc;
-    return %yloc;
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%bar<input($time.%e)-have, output($time.%e)-have>() ->
+[%out : %ni64] {
+    %x_ref = alloc-temporary local i64;
+    %y_ref = alloc-temporary local i64;
+    local-do-builtin node($val.%x)() -> %x_ref;
+    local-do-external %op node($val.%y_t)(%x_ref) -> %y_ref;
+    %result = read-ref i64 %y_ref;
+    return %result;
 }
 
 timeline %time(%e : %event0) -> %event0 {
     return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
 }
 
 pipeline "main" = %bar;

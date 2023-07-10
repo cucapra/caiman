@@ -65,7 +65,7 @@ meta_remote = { meta_name ~ "." ~ name }
 meta_remote_hole = { meta_name_hole ~ "." ~ name_hole | hole }
 quotient_name = { "node" | "input" | "output" | "halt" }
 quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" | none }
-quotient_hole = !{ quotient_name ~ "(" ~ meta_name_hole ~ ")" | hole | none }
+quotient_hole = !{ quotient_name ~ "(" ~ meta_remote_hole ~ ")" | hole | none }
 flow = { "none" | "have" | "met" | "need" }
 tag = ${ quotient ~ "-" ~ flow | none }
 
@@ -184,7 +184,8 @@ schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
 
-triple_box = { "[" ~ value_sep ~ quotient ~ "," ~ timeline_sep ~ quotient ~ "," ~ spatial_sep ~ quotient ~ "]" }
+triple_box = { "[" ~ value_sep ~ quotient_hole ~ "," ~
+timeline_sep ~ quotient_hole ~ "," ~ spatial_sep ~ quotient_hole ~ "]" }
 
 debug_hole_node = @{ "debug-hole" ~ sep ~ name_list }
 return_sep = @{ "return" ~ sep }
@@ -204,17 +205,34 @@ tail_edge = { return_node | jump_node | debug_hole_node |
 
 //    commands
 
+//     general
+
+extract_sep = @{ "extract" ~ sep }
+extract_node = { assign ~ extract_sep ~ name ~ n }
+
 //     value
 
 // we can syntactically disallow holes to a (limited) extent here, so might as well
 constant_value = @{ ASCII_DIGIT+ }
 constant_node = ${ assign ~ sep? ~ "constant" ~ sep ~ name_sep ~ constant_value }
-extract_sep = @{ "extract" ~ sep }
-extract_node = { assign ~ extract_sep ~ name ~ n }
 call_sep = @{ "call" ~ sep }
 call_node = { assign ~ call_sep ~ function_class_name ~ name_call }
 select_sep = @{ "select" ~ sep }
 select_node = { assign ~ select_sep ~ name_sep ~ name_sep ~ name }
+
+//     timeline
+
+encoding_event_sep = ${ "encoding-event" ~ sep }
+encoding_event_node = { assign ~ encoding_event_sep ~ name_sep ~ name_box }
+submission_event_sep = ${ "submission-event" ~ sep }
+submission_event_node = { assign ~ submission_event_sep ~ name }
+synchronization_event_sep = ${ "synchronization-event" ~ sep }
+synchronization_event_node = { assign ~ synchronization_event_sep ~ name_sep ~ name }
+
+//    spatial
+
+separated_buffer_space_sep = ${ "separated-buffer-space" ~ sep }
+separated_buffer_space_node = { assign ~ separated_buffer_space_sep ~ n_sep ~ name }
 
 //     scheduling
 
@@ -263,23 +281,13 @@ promise_captures_node = { assign ~ promise_captures_sep ~ n ~ name_hole }
 fulfill_captures_sep = ${ "fulfill-captures" ~ sep }
 fulfill_captures_node = { assign ~ fulfill_captures_sep ~ name_hole_sep ~ name_box ~ name_box }
 
-//     timeline
-
-encoding_event_sep = ${ "encoding-event" ~ sep }
-encoding_event_node = { assign ~ encoding_event_sep ~ name_sep ~ name_box }
-submission_event_sep = ${ "submission-event" ~ sep }
-submission_event_node = { assign ~ submission_event_sep ~ name }
-synchronization_event_sep = ${ "synchronization-event" ~ sep }
-synchronization_event_node = { assign ~ synchronization_event_sep ~ name_sep ~ name }
-
-//    spatial
-
-separated_buffer_space_sep = ${ "separated-buffer-space" ~ sep }
-separated_buffer_space_node = { assign ~ separated_buffer_space_sep ~ place_sep ~ n_sep ~ name }
-
 //   nodes
 
 value_node = { constant_node | extract_node | call_node | select_node }
+
+timeline_node = { extract_node | encoding_event_node | submission_event_node | synchronization_event_node }
+
+spatial_node = { extract_node | separated_buffer_space_node }
 
 schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_node
     | static_alloc_node | static_dealloc_node | read_node | borrow_node | write_node
@@ -287,10 +295,6 @@ schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_node
     | encode_do_node | encode_copy_node | submit_node | sync_fence_node
     | inline_join_node | serialized_join_node | default_join_node
     | promise_captures_node | fulfill_captures_node }
-
-timeline_node = { encoding_event_node | submission_event_node | synchronization_event_node }
-
-spatial_node = { separated_buffer_space_node }
 
 // Pipelines
 

@@ -44,7 +44,7 @@ external-cpu[impl @simple] %do_thing_on_cpu(i64) -> i64;
 external-gpu[impl @simple] %do_thing_on_gpu(%x : i64) -> [%out : i64]
 {
     // I dunno if this is worth cleaning up, probably not
-    path : "caiman-test/reference_untested/example.comp",
+    path : "example.comp",
     entry : "main",
     dimensionality : 2,
     resource {
@@ -81,7 +81,7 @@ timeline %time(%e : %event0) -> [%event_out : %event0] {
 }
 
 spatial %space(%b : %buffer_space0) -> [%iout : i64] {
-    %_ = separated-buffer-space cpu 3 %b;
+    %_ = separated-buffer-space 3 %b;
     return %b;
 }
 
@@ -90,8 +90,8 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     %x = alloc-temporary local i64;
     drop %0;
     %y = static-sub-alloc local i64 %x;
-    %4 = static-alloc local %0 [1, 2] input(%1);
-    %z = static-dealloc local node(%foo.%5) [%x, %4];
+    %4 = static-alloc local %0 [1, 2] input(?);
+    %z = static-dealloc local node($val.%5) [%x, %4];
     %_ = read-ref i64 %x;
     %_ = borrow-ref i64 %x;
     write-ref i64 %x -> %4;
@@ -100,7 +100,7 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     local-copy %x -> %3;
     %_ = begin-encoding local node(?.?)[%x, %3] [%4, %0];
     encode-do %x %do_pure_thing_on_cpu input(?.%2)() -> %x;
-    encode-do %x %do_pure_thing_on_cpu input(%foo.?)() -> [%x, %y];
+    encode-do %x %do_pure_thing_on_cpu input($val.?)() -> [%x, %y];
     encode-copy %z %x -> %y;
     %6 = submit %x output(?);
     sync-fence %y output(?);
@@ -137,8 +137,8 @@ schedule[value $val = %foo, timeline $time = %time]
 %syield<input($time.%e)-have, node($time.%e)-need>
 (%abc : input($time.%bs)-none %event0)
 -> [%out : node($time.%bs)-need %buffer0] {
-    schedule-call-yield %bar[value input(%foo.%x),
-        timeline output(%time.%e),
+    schedule-call-yield %bar[value input($val.%x),
+        timeline output($time.%e),
         spatial none](%abc, %abc) %abc;
 }
 

@@ -11,7 +11,7 @@ impl<'context> Context<'context> {
                         f.commands.insert(
                             index,
                             Some(ast::Command::Node(ast::NamedNode {
-                                name: None,
+                                name: arg.name.clone(),
                                 node: ast::Node::Phi { index: Some(index) },
                             })),
                         );

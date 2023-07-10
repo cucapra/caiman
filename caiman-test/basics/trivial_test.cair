@@ -16,7 +16,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %bar<input($time.%e)-have, output($time.%e)-have>() ->
 [%out : %ni64] {
     %x_ref = alloc-temporary local i64;
-    local-do-builtin node(%x)() -> %x_ref;
+    local-do-builtin node($val.%x)() -> %x_ref;
     %result = read-ref i64 %x_ref;
     return %result;
 }

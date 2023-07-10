@@ -185,12 +185,6 @@ impl Context {
                         .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut node_table = NodeTable::new();
                     // added because phi nodes themselves are unnamed
-                    for arg in &f.header.args {
-                        match &arg.name {
-                            None => node_table.local.dummy_push(),
-                            Some(v) => node_table.local.push(v.clone()),
-                        }
-                    }
                     for command in &f.commands {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {

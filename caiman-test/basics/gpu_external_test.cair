@@ -1,6 +1,7 @@
 version 0.0.2
 
 type i32;
+native_value %i32n : i32;
 ref %i32l : i32-local;
 ref %i32g : i32-gpu;
 event %event0;
@@ -28,14 +29,18 @@ external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
 }
 
 value[impl @foo] %foo(%x : i32) -> i32 {
-    %y_t = call @simple(%x);
+    %c = constant %i32n 1;
+    %y_t = call @simple(%c, %c, %c, %x);
     %y = extract %y_t 0;
     return %y;
 }
 
 timeline %foo_time(%e : %event0) -> %event0 {
-    %sub = submission-event %e;
-    %snc = synchronization-event %sub %sub;
+    %enc = encoding-event %e [];
+    %enc1 = extract %enc 0;
+    %enc2 = extract %enc 1;
+    %sub = submission-event %enc2;
+    %snc = synchronization-event %enc1 %sub;
     return %snc;
 }
 
@@ -48,15 +53,17 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
 (%x_loc : node($val.%x)-have %i32l,
 %in_buff : input($space.%bs)-have %buffer_gpu,
 %out_buff : output($space.%bs)-have %buffer_gpu)
--> [%out : output($val.%x)-have output($space.%bs)-have %i32g] {
+-> [%out : %i32n] {
+    %c_loc = alloc-temporary local i32;
     %x_gpu = alloc-temporary gpu i32;
     %y_gpu = alloc-temporary gpu i32;
     %y_loc = alloc-temporary local i32;
-    %enc = begin-encoding gpu node(%sub)[%x_gpu, %y_gpu] [];
+    local-do-builtin node($val.%c)() -> %c_loc;
+    %enc = begin-encoding gpu node($time.%enc) [%x_gpu, %y_gpu] [];
     encode-copy %enc %x_loc -> %x_gpu;
-    encode-do %enc %simple node(%y_t)(%x_gpu) -> %y_gpu;
-    %fnc = submit %enc node(%sub);
-    sync-fence %fnc node(%snc);
+    encode-do %enc %simple node($val.%y_t)(%c_loc, %c_loc, %c_loc, %x_gpu) -> %y_gpu;
+    %fnc = submit %enc node($time.%sub);
+    sync-fence %fnc node($time.%snc);
     local-copy %y_gpu -> %y_loc;
     %result = read-ref i32 %y_loc;
     return %result;

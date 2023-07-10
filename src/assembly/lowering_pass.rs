@@ -1,6 +1,7 @@
 use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
+use crate::assembly::ast::NodeId;
 use crate::assembly::context::Context;
 use crate::assembly::context::LocationNames;
 use crate::assembly::explication;
@@ -656,9 +657,9 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
             callee_arguments,
             continuation_join,
         } => ir::TailEdge::ScheduleCall {
-            value_operation: ir_quotient_node(value_operation, context),
-            timeline_operation: ir_quotient_node(timeline_operation, context),
-            spatial_operation: ir_quotient_node(spatial_operation, context),
+            value_operation: ir_quotient_node(reject_hole(value_operation.as_ref()), context),
+            timeline_operation: ir_quotient_node(reject_hole(timeline_operation.as_ref()), context),
+            spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
             callee_funclet_id: context
                 .funclet_indices
                 .get_funclet(&reject_hole(callee_funclet_id.as_ref()).0)
@@ -679,9 +680,9 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
             callee_arguments,
             continuation_join,
         } => ir::TailEdge::ScheduleSelect {
-            value_operation: ir_quotient_node(value_operation, context),
-            timeline_operation: ir_quotient_node(timeline_operation, context),
-            spatial_operation: ir_quotient_node(spatial_operation, context),
+            value_operation: ir_quotient_node(reject_hole(value_operation.as_ref()), context),
+            timeline_operation: ir_quotient_node(reject_hole(timeline_operation.as_ref()), context),
+            spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
             condition: context.node_id(reject_hole(condition.as_ref())),
             callee_funclet_ids: reject_hole(callee_funclet_ids.as_ref())
                 .iter()
@@ -707,9 +708,9 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
             yielded_nodes,
             continuation_join,
         } => ir::TailEdge::ScheduleCallYield {
-            value_operation: ir_quotient_node(value_operation, context),
-            timeline_operation: ir_quotient_node(timeline_operation, context),
-            spatial_operation: ir_quotient_node(spatial_operation, context),
+            value_operation: ir_quotient_node(reject_hole(value_operation.as_ref()), context),
+            timeline_operation: ir_quotient_node(reject_hole(timeline_operation.as_ref()), context),
+            spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
             external_function_id: ffi::ExternalFunctionId(
                 context
                     .funclet_indices
@@ -1066,7 +1067,7 @@ pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
     explication::explicate(&mut program);
     let mut context = Context::new(&program);
-    dbg!(&context);
+    // dbg!(&context);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
         program: ir_program(&program, &mut context),
