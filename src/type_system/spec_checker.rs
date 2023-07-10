@@ -179,6 +179,8 @@ impl<'program> FuncletSpecChecker<'program> {
         )?;
 
         for (capture_index, capture_node_id) in capture_node_ids.iter().enumerate() {
+            // dbg!(&capture_node_id);
+            // dbg!(&self.scalar_nodes);
             let scalar = &self.scalar_nodes[capture_node_id];
 
             match scalar.flow {
@@ -1010,9 +1012,6 @@ fn check_tag_compatibility_interior(
 ) -> Result<(), Error> {
     assert_eq!(source_tag.flow, destination_tag.flow);
     let flow = source_tag.flow;
-
-    dbg!(&source_tag);
-    dbg!(&destination_tag);
     match (source_tag.quot, destination_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (_, ir::Quotient::None) if flow.is_droppable() => (),

@@ -77,7 +77,7 @@ fn read_definition(
 pub fn compile_caiman(compile_data: CompileData, options: CompileOptions)
                       -> Result<String, CompileError> {
     let mut definition = read_definition(compile_data, options.compile_mode)?;
-    dbg!(&definition);
+    // dbg!(&definition);
     assert_eq!(definition.version, (0, 0, 2));
     //ir::validation::validate_program(&definition.program);
     match crate::type_system::check_program(&definition.program) {

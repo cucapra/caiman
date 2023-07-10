@@ -1,0 +1,68 @@
+version 0.0.2
+
+type i64;
+ref %i64l : i64-local;
+event %event0;
+buffer_space %buffspace;
+native_value %ni64 : i64;
+
+function @main() -> i64;
+
+value[impl default @main] %foo() -> i64 {
+    %x = constant %ni64 0;
+    %y = constant %ni64 1;
+    %z = constant %ni64 2;
+    %r = select %x %y %z;
+    return %r;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_main<input($time.%e)-have, output($time.%e)-have>() ->
+[%out : %ni64] {
+    %x_loc = alloc-temporary local i64;
+    local-do-builtin node($val.%x)() -> %x_loc;
+
+    %r_ref = alloc-temporary local i64;
+    %r_loc = static-alloc local %r_loc ;
+    %djoin = default-join;
+    %join = inline-join %foo_ret [%r_loc] %djoin;
+
+    schedule-select %x_loc [%foo_left, %foo_right]
+        [value node($val.%r), timeline none, spatial none]
+        (%r_loc) %join;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_left<input($time.%e)-have, output($time.%e)-have>() ->
+[%out : %ni64] {
+    %y_loc = alloc-temporary local i64;
+    local-do-builtin node($val.%y)() -> %y_loc;
+    %y_val = read-ref i64 %y_loc;
+    return %y_val;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_right<input($time.%e)-have, output($time.%e)-have>() ->
+[%out : %ni64] {
+    %z_loc = alloc-temporary local i64;
+    local-do-builtin node($val.%z)() -> %z_loc;
+    %z_val = read-ref i64 %z_loc;
+    return %z_val;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_ret<input($time.%e)-have, output($time.%e)-have>
+(%r_loc : input($time.%e)-have %i64l) -> [%out : %ni64] {
+    %r_val = read-ref i64 %r_loc;
+    return %r_val;
+}
+
+pipeline "main" = %foo_main;

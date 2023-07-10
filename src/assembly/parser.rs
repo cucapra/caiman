@@ -81,10 +81,12 @@ impl CaimanAssemblyParser {
         unreachable!()
     }
     fn none(_input: Node) -> ParseResult<()> {
-        unreachable!()
+        // make empty rather than unreachable cause it's an option
+        Ok(())
     }
     fn hole(_input: Node) -> ParseResult<()> {
-        unreachable!()
+        // make empty rather than unreachable cause it's an option
+        Ok(())
     }
     fn node_hole(_input: Node) -> ParseResult<()> {
         unreachable!()
@@ -542,8 +544,8 @@ impl CaimanAssemblyParser {
 
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::Quotient>> {
         Ok(match_nodes!(input.into_children();
-            [hole] => None,
-            [none] => Some(ast::Quotient::None),
+            [hole(hole)] => None,
+            [none(none)] => Some(ast::Quotient::None),
             [quotient_name(quot), meta_remote_hole(remote)] => {
                 Some(quot(Some(remote)))
             },
