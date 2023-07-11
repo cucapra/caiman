@@ -1010,7 +1010,7 @@ fn check_tag_compatibility_interior(
 ) -> Result<(), Error> {
     assert_eq!(source_tag.flow, destination_tag.flow);
     let flow = source_tag.flow;
-    
+
     match (source_tag.quot, destination_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (_, ir::Quotient::None) if flow.is_droppable() => (),
