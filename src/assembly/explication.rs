@@ -5,6 +5,8 @@ mod util;
 use crate::assembly::ast;
 use context::Context;
 
+fn explicate_nodes(context: &mut Context) {}
+
 // it's probably best to do the lowering pass like this,
 //   and simply guarantee there won't be any holes left over
 // alternatively we could use macros to lift the holes from the ast?
