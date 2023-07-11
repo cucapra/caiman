@@ -86,8 +86,10 @@ impl SchedulingNodeCombo
                                     op.base_node.as_ref().map(|n| label::label_call_node(n));
                                 let ato = make_rmi(op.value_funclet_name.clone(), op.base_node);
                                 let edo = make_rmi(op.value_funclet_name, call_node);
-                                let inputs =
-                                    locs.into_iter().map(|s| Some(asm::NodeId(s))).collect();
+                                let inputs = locs
+                                    .into_iter()
+                                    .map(|a| a.to_option_move().map(|s| asm::NodeId(s)))
+                                    .collect();
                                 (ato, edo, Some(inputs))
                             },
                         }
@@ -119,26 +121,62 @@ impl SchedulingNodeCombo
 }
 
 fn schedule_expr_to_node_combo(
-    expr: &ast::scheduling::ScheduledExpr,
+    expr: &ast::scheduling::Expr,
     funclet_being_scheduled: &ValueFunclet,
     function_class_ctx: &FunctionClassContext,
-) -> SchedulingNodeCombo
+) -> Option<SchedulingNodeCombo>
 {
+    let (info, kind) = expr;
+    let (value_var, full) = match kind {
+        ast::scheduling::Hole::Filled(ast::scheduling::ExprKind::Simple { value_var, full }) => {
+            (value_var, full)
+        },
+        _ => return None,
+    };
+
     // TODO obviously hole-able stuff should be possible here (that would be a case where search
     // for var fails)
-    let vf_node =
-        vf_node_with_name(funclet_being_scheduled, &expr.value_var).unwrap_or_else(|| {
-            panic!("Scheduling an unknown variable {} at {:?}", expr.value_var, expr.info)
-        });
+    let vf_node = vf_node_with_name(funclet_being_scheduled, &value_var)
+        .unwrap_or_else(|| panic!("Scheduling an unknown variable {} at {:?}", value_var, info));
     let place = Some(ir::Place::Local);
     let operation = Some(Operation {
         value_funclet_name: Some(funclet_being_scheduled.0.header.name.clone()),
         base_node: Some(vf_node.name.clone()),
-        kind: expr.full.clone(),
+        kind: full.clone(),
     });
     let storage_type =
         typing::type_of_asm_node(&vf_node.node, funclet_being_scheduled, function_class_ctx);
-    SchedulingNodeCombo::LocalValue { place, operation, storage_type }
+    Some(SchedulingNodeCombo::LocalValue { place, operation, storage_type })
+}
+
+fn schedule_stmt_kind(
+    nodes: &mut Vec<Option<asm::NamedNode>>,
+    returned_variable: &mut Option<asm::NodeId>,
+    funclet_being_scheduled: &ValueFunclet,
+    function_class_ctx: &FunctionClassContext,
+    stmt: &ast::scheduling::Stmt,
+)
+{
+    let (_info, stmt_kind) = stmt;
+    let filled_stmt_kind = if let ast::scheduling::Hole::Filled(filled_stmt_kind) = stmt_kind {
+        filled_stmt_kind
+    } else {
+        nodes.push(None);
+        return;
+    };
+
+    match filled_stmt_kind {
+        ast::scheduling::StmtKind::Let(x, e) => {
+            if let Some(combo) =
+                schedule_expr_to_node_combo(e, funclet_being_scheduled, function_class_ctx)
+            {
+                let mut combo_vec = combo.to_named_nodes(x);
+                nodes.append(&mut combo_vec);
+            } else {
+            }
+        },
+        ast::scheduling::StmtKind::Return(x) => *returned_variable = Some(asm::NodeId(x.clone())),
+    }
 }
 
 fn lower_scheduling_funclet(
@@ -150,18 +188,14 @@ fn lower_scheduling_funclet(
 {
     let mut returned_variable = None;
     let mut nodes: Vec<Option<asm::NamedNode>> = Vec::new();
-    for (_stmt_info, stmt_kind) in scheduling_funclet.statements.iter() {
-        match stmt_kind {
-            ast::scheduling::StmtKind::Let(x, e) => {
-                let combo =
-                    schedule_expr_to_node_combo(e, funclet_being_scheduled, function_class_ctx);
-                let mut combo_vec = combo.to_named_nodes(x);
-                nodes.append(&mut combo_vec);
-            },
-            ast::scheduling::StmtKind::Return(x) => {
-                returned_variable = Some(asm::NodeId(x.clone()))
-            },
-        }
+    for stmt in scheduling_funclet.statements.iter() {
+        schedule_stmt_kind(
+            &mut nodes,
+            &mut returned_variable,
+            funclet_being_scheduled,
+            function_class_ctx,
+            stmt,
+        )
     }
 
     let tail_edge = asm::TailEdge::Return { return_values: Some(vec![returned_variable]) };

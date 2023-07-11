@@ -109,26 +109,18 @@ impl ASTFactory
         }
     }
 
-    factory!(scheduling::Stmt, 
-        sch_let(x: String, se: scheduling::ScheduledExpr) => scheduling::StmtKind::Let(x, se));
-    factory!(scheduling::Stmt, 
-        sch_return(x: String) => scheduling::StmtKind::Return(x));
+    factory!(scheduling::Stmt, sch_let(x: String, se: scheduling::Expr) 
+        => scheduling::fill(scheduling::StmtKind::Let(x, se)));
 
-    pub fn sch_expr(
-        &self,
-        l : usize, 
-        value_var: String,
-        full: scheduling::FullSchedulable,
-        r : usize,
-    ) -> scheduling::ScheduledExpr
-    {
-        scheduling::ScheduledExpr 
-        {
-            info: self.info(l, r),
-            value_var,
-            full,
-        }
-    }
+    factory!(scheduling::Stmt, sch_return(x: String) 
+        => scheduling::fill(scheduling::StmtKind::Return(x)));
+
+    factory!(scheduling::Stmt, sch_vacant_stmt() => scheduling::Hole::Vacant);
+
+    factory!(scheduling::Expr, sch_expr(value_var: String, full: scheduling::FullSchedulable) 
+        => scheduling::fill(scheduling::ExprKind::Simple { value_var, full }));
+
+    factory!(scheduling::Expr, sch_vacant_expr() => scheduling::Hole::Vacant);
 
     // TIMELINE
     factory!(

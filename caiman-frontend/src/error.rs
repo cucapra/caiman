@@ -11,10 +11,9 @@ pub struct Info
     pub location: ((usize, usize), (usize, usize)),
 }
 
-impl Default for Info {
-    fn default() -> Self {
-        Self { location: ((0,0), (0,0)) }
-    }
+impl Default for Info
+{
+    fn default() -> Self { Self { location: ((0, 0), (0, 0)) } }
 }
 
 pub trait HasInfo
@@ -68,20 +67,16 @@ impl fmt::Display for Error
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
-        match self.location
-        {
-            ErrorLocation::Single(l, c) =>
-            {
+        match self.location {
+            ErrorLocation::Single(l, c) => {
                 write!(f, "At {}:{}:{}, \n  ", self.filename, l, c)?;
             },
-            ErrorLocation::Double(info) =>
-            {
+            ErrorLocation::Double(info) => {
                 let ((l, c), _) = info;
                 write!(f, "At {}:{}:{}, \n  ", self.filename, l, c)?;
             },
         }
-        match &self.kind
-        {
+        match &self.kind {
             //ErrorKind::Parsing(e) => write!(f, "Parsing Error: {}", e),
             ErrorKind::SyntaxParsing(e) => write!(f, "Parsing Error: {}", e),
             //ErrorKind::Semantic(e) => write!(f, "Semantic Error: {}", e),
@@ -116,16 +111,13 @@ impl fmt::Display for SPE
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
-        match self
-        {
+        match self {
             SPE::InvalidToken => write!(f, "Invalid token"),
-            SPE::UnrecognizedToken(tok, expected) =>
-            {
+            SPE::UnrecognizedToken(tok, expected) => {
                 write!(f, "Unrecognized token {}, expected one of {}", tok, expected,)
             },
             SPE::ExtraToken(tok) => write!(f, "Extra token {}", tok),
-            SPE::EOF(expected) =>
-            {
+            SPE::EOF(expected) => {
                 write!(f, "Unexpected EOF, expected one of {}", expected)
             },
             SPE::User(e) => write!(f, "User Error: {}", e),

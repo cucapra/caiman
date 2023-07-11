@@ -1,0 +1,13 @@
+schedule foo {
+
+    fn bar() -> &x 
+      at time tttttt
+    {
+        let x_slot := x.Prim;
+        let y_slot := ?;
+        ???;
+        let call := asdf.Call(?, ?, hiiii);
+        return call;
+    }
+
+}

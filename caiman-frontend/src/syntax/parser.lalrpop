@@ -123,15 +123,17 @@ SchType: scheduling::Type = {
 SchStmt: scheduling::Stmt = {
     <@L> "let" <Id> ":=" <SchExpr> ";" <@R>     => astf.sch_let(<>),
     <@L> "return" <Id> ";" <@R>                 => astf.sch_return(<>),
+    <@L> "???" ";" <@R>                         => astf.sch_vacant_stmt(<>),
 }
 
-SchExpr: scheduling::ScheduledExpr = {
-    <@L> <Id> "." <SchFull> <@R> => astf.sch_expr(<>),
+SchExpr: scheduling::Expr = {
+    <@L> <Id> "." <SchFull> <@R>                => astf.sch_expr(<>),
+    <@L> "?" <@R>                               => astf.sch_vacant_expr(<>),
 }
 
 SchFull: scheduling::FullSchedulable = {
     "Prim" => scheduling::FullSchedulable::Primitive,
-    "Call" "(" <CommaList<Id>> ")" => scheduling::FullSchedulable::Call(<>),
+    "Call" "(" <CommaList<Hole<Id>>> ")" => scheduling::FullSchedulable::Call(<>),
 }
 
 // TIMELINE FUNCLET SECTION
@@ -160,4 +162,9 @@ CommaList<T>: Vec<T> = {
             v
         },
     }
+}
+
+Hole<T>: scheduling::Hole<T> = {
+    <t: T> => scheduling::fill(t),
+    "?" => scheduling::Hole::Vacant,
 }

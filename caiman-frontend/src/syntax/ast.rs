@@ -42,10 +42,9 @@ pub mod value
         // TODO: many more :D
     }
 
-    impl Default for ExprKind {
-        fn default() -> Self {
-            Self::Bool(false)
-        }
+    impl Default for ExprKind
+    {
+        fn default() -> Self { Self::Bool(false) }
     }
 
     pub type Expr = (Info, ExprKind);
@@ -62,7 +61,38 @@ pub mod value
 
 pub mod scheduling
 {
-    use super::{Info, Var, Arg};
+    use super::{Arg, Info, Var};
+
+    // Literally just option but don't want to get them confused
+    #[derive(Clone, Debug)]
+    pub enum Hole<T> 
+    {
+        Filled(T),
+        Vacant,
+    }
+
+    impl<T> Hole<T> {
+        pub fn to_option_move(self) -> Option<T>
+        {
+            match self {
+                Hole::Filled(t) => Some(t),
+                Hole::Vacant => None,
+            }
+        }
+
+        pub fn to_option(&self) -> Option<&T>
+        {
+            match self {
+                Hole::Filled(t) => Some(t),
+                Hole::Vacant => None,
+            }
+        }
+    }
+
+    pub fn fill<T>(t: T) -> Hole<T>
+    {
+        Hole::Filled(t)
+    }
 
     #[derive(Clone, Debug)]
     pub enum Type
@@ -76,30 +106,34 @@ pub mod scheduling
     {
         Primitive,
         // XXX do we want the programmer to have to specify the vars used even though it can
-        // likely be inferred??? Will keep it this way for now. In any case I imagine Dietrich 
+        // likely be inferred??? Will keep it this way for now. In any case I imagine Dietrich
         // would want me to keep it this way and then they can infer it if the programmer uses
         // the currently-unimplemented ? expression
-        Call(Vec<String>),
+        Call(Vec<Hole<Var>>),
     }
 
     #[derive(Clone, Debug)]
-    pub struct ScheduledExpr
+    pub enum ExprKind
     {
-        pub info: Info,
-        pub value_var: Var,
-        // TODO sub exprs vec in here ?? (see old scheduling AST)
-        pub full: FullSchedulable,
+        Simple
+        {
+            value_var: Var,
+            // TODO sub exprs vec in here ?? (see old scheduling AST)
+            full: FullSchedulable,
+        },
     }
+
+    pub type Expr = (Info, Hole<ExprKind>);
 
     #[derive(Clone, Debug)]
     pub enum StmtKind
     {
-        Let(Var, ScheduledExpr),
+        Let(Var, Expr),
         // Should we rly return var??? or just like the expr ??? unsure
         Return(Var),
     }
 
-    pub type Stmt = (Info, StmtKind);
+    pub type Stmt = (Info, Hole<StmtKind>);
 
     #[derive(Clone, Debug)]
     pub struct SchedulingFunclet
