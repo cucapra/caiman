@@ -493,7 +493,6 @@ impl<'program> FuncletSpecChecker<'program> {
         let continuation_join = self.join_nodes.remove(&continuation_impl_node_id).unwrap();
 
         assert_eq!(choice_remaps.len(), choice_specs.len());
-        
         for choice_index in 0..choice_specs.len() {
             let choice_spec = &choice_specs[choice_index];
             let choice_remap = choice_remaps[choice_index];
@@ -1011,6 +1010,7 @@ fn check_tag_compatibility_interior(
 ) -> Result<(), Error> {
     assert_eq!(source_tag.flow, destination_tag.flow);
     let flow = source_tag.flow;
+    
     match (source_tag.quot, destination_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (_, ir::Quotient::None) if flow.is_droppable() => (),
