@@ -115,7 +115,7 @@ pub struct ExternalGpuFunctionResourceBinding {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
     pub funclet: Hole<FuncletId>,
-    pub node: Hole<NodeId>
+    pub node: Hole<NodeId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]

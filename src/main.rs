@@ -3,7 +3,7 @@ extern crate clap;
 use clap::{App, Arg};
 
 use caiman::frontend;
-use caiman::frontend::{CompileMode, CompileOptions, CompileData};
+use caiman::frontend::{CompileData, CompileMode, CompileOptions};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

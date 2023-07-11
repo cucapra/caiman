@@ -61,8 +61,10 @@ where
         for item in itertools::enumerate(&self.indices) {
             match item.1 {
                 None => {}
-                Some(v) => if v == val {
-                    return Some(item.0);
+                Some(v) => {
+                    if v == val {
+                        return Some(item.0);
+                    }
                 }
             }
         }

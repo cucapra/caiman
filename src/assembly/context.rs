@@ -169,13 +169,14 @@ impl Context {
                         // get native value types
                         self.local_type_table.push(t.name.clone());
                         match &t.data {
-                            ast::LocalTypeInfo::NativeValue { storage_type } => match storage_type
-                            {
-                                ast::TypeId::FFI(f) => {
-                                    self.native_type_map.insert(t.name.clone(), f.clone());
+                            ast::LocalTypeInfo::NativeValue { storage_type } => {
+                                match storage_type {
+                                    ast::TypeId::FFI(f) => {
+                                        self.native_type_map.insert(t.name.clone(), f.clone());
+                                    }
+                                    _ => {}
                                 }
-                                _ => {}
-                            },
+                            }
                             _ => {}
                         }
                     }

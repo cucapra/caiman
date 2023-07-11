@@ -77,14 +77,14 @@ impl<'context> Context<'context> {
         self.get_funclet(funclet_name).and_then(|f| {
             for command in &f.commands {
                 match command {
-                    Some(ast::Command::Node(ast::NamedNode { name, node })) => {
-                        match name {
-                            None => {}
-                            Some(n) => if n == node_name {
+                    Some(ast::Command::Node(ast::NamedNode { name, node })) => match name {
+                        None => {}
+                        Some(n) => {
+                            if n == node_name {
                                 return Some(node);
                             }
                         }
-                    }
+                    },
                     _ => {}
                 }
             }

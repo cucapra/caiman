@@ -1189,9 +1189,13 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn triple_box(input: Node) -> ParseResult<(Hole<ast::Quotient>,
-                                               Hole<ast::Quotient>,
-                                               Hole<ast::Quotient>)> {
+    fn triple_box(
+        input: Node,
+    ) -> ParseResult<(
+        Hole<ast::Quotient>,
+        Hole<ast::Quotient>,
+        Hole<ast::Quotient>,
+    )> {
         Ok(match_nodes!(input.into_children();
             [value_sep, quotient_hole(vq),
                 timeline_sep, quotient_hole(tq),
@@ -1762,7 +1766,9 @@ pub fn parse(path: &str, code: &str) -> ParseResult<ast::Program> {
     let parsed = CaimanAssemblyParser::parse_with_userdata(Rule::program, code, user_data)?;
     let mut result = CaimanAssemblyParser::program(parsed.single()?);
     match &mut result {
-        Ok(ref mut program) => { program.path = path.to_string(); }
+        Ok(ref mut program) => {
+            program.path = path.to_string();
+        }
         _ => {}
     };
     result

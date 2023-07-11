@@ -19,7 +19,7 @@ pub enum CompileMode {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct CompileData {
     pub path: String,
-    pub input_string: String
+    pub input_string: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -74,8 +74,10 @@ fn read_definition(
     }
 }
 
-pub fn compile_caiman(compile_data: CompileData, options: CompileOptions)
-                      -> Result<String, CompileError> {
+pub fn compile_caiman(
+    compile_data: CompileData,
+    options: CompileOptions,
+) -> Result<String, CompileError> {
     let mut definition = read_definition(compile_data, options.compile_mode)?;
     // dbg!(&definition);
     assert_eq!(definition.version, (0, 0, 2));
