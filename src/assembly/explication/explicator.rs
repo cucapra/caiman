@@ -58,8 +58,8 @@ fn get_node_arguments(node: &assembly::ast::Node, context: &Context) -> Vec<Node
 
 fn explicate_operation(
     operation_hole: &Hole<assembly::ast::RemoteNodeId>,
-    input_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
-    output_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
+    input_hole: &Hole<Vec<Hole<assembly::ast::NodeId>>>,
+    output_hole: &Hole<Vec<Hole<assembly::ast::NodeId>>>,
     context: &mut Context,
 ) -> Option<(LocationNames, Vec<NodeId>, Vec<NodeId>)> {
     let known_inputs = util::find_filled_hole(input_hole.clone());
@@ -114,7 +114,7 @@ fn explicate_operation(
     };
 
     let output_vec = match output_hole {
-        Some(v) => v.clone().into_vec(),
+        Some(v) => v.clone(),
         None => vec![None; 5],
     };
 
@@ -162,8 +162,8 @@ pub fn explicate_allocate_temporary(
 pub fn explicate_encode_do(
     place_hole: &Hole<ir::Place>,
     operation_hole: &Hole<assembly::ast::RemoteNodeId>,
-    inputs_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
-    outputs_hole: &Hole<Box<[Hole<assembly::ast::NodeId>]>>,
+    inputs_hole: &Hole<Box<Vec<assembly::ast::NodeId>>>,
+    outputs_hole: &Hole<Box<Vec<assembly::ast::NodeId>>>,
     context: &mut Context,
 ) {
     let place = todo_hole(place_hole.clone());

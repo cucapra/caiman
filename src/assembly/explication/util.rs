@@ -39,7 +39,7 @@ pub fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
     result
 }
 
-pub fn find_filled_hole<T>(h: Hole<Box<[Hole<T>]>>) -> Vec<(usize, T)>
+pub fn find_filled_hole<T>(h: Hole<Vec<Hole<T>>>) -> Vec<(usize, T)>
 where
     T: Clone,
 {

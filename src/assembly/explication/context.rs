@@ -1,6 +1,7 @@
 pub mod data_impls;
 pub mod getters;
 pub mod mutators;
+pub mod static_getters;
 
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
