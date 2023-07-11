@@ -267,7 +267,7 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
                 name: external.name.clone(),
                 input_types: input_types.into_boxed_slice(),
                 output_types: output_types.into_boxed_slice(),
-                dimensionality: 0,
+                dimensionality: binding_info.dimensionality,
                 entry_point: binding_info.entry_point.clone(),
                 resource_bindings: resource_bindings.into_boxed_slice(),
                 shader_module,

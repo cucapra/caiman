@@ -50,9 +50,7 @@ spatial %foo_space(%bs : %buff_space) -> %buff_space {
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<input($time.%e)-have, output($time.%e)-have>
-(%x_loc : node($val.%x)-have %i32l,
-%in_buff : input($space.%bs)-have %buffer_gpu,
-%out_buff : output($space.%bs)-have %buffer_gpu)
+(%x_loc : node($val.%x)-have %i32l)
 -> [%out : %i32n] {
     %c_loc = alloc-temporary local i32;
     %x_gpu = alloc-temporary gpu i32;
