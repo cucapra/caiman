@@ -1,26 +1,32 @@
 version 0.0.2
 
 type i64;
-slot %slot0 : i64-ready-local;
-event %event0 : local;
+event %event0;
+buffer_space %buffspace;
+native_value %ni64 : i64;
 
 function @main() -> i64;
 
 value[impl default @main] %foo() -> i64 {
-    %x = constant 4i64;
+    %x = constant %ni64 4;
     return %x;
-}
-
-schedule[value $val = %foo, timeline $time = %time]
-%bar<input($time.%e), output($time.%e)>() ->
-[%out : %slot0] {
-    %x_loc = alloc-temporary-local-i64 %foo.%x;
-    %_ = encode-do-local %foo.%x() -> %x_loc;
-    return %x_loc;
 }
 
 timeline %time(%e : %event0) -> %event0 {
     return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%bar<none-have, none-have>() ->
+[%out : %ni64] {
+    %x_ref = alloc-temporary local i64;
+    local-do-builtin node($val.%x)() -> %x_ref;
+    %result = read-ref i64 %x_ref;
+    return %result;
 }
 
 pipeline "main" = %bar;
