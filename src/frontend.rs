@@ -17,6 +17,12 @@ pub enum CompileMode {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+pub struct CompileData {
+    pub path: String,
+    pub input_string: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct CompileOptions {
     pub print_codegen_debug_info: bool,
     pub compile_mode: CompileMode,
@@ -33,32 +39,33 @@ impl std::fmt::Display for CompileError {
     }
 }
 
-#[cfg(feature = "assembly")]
-fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
-    let program = crate::assembly::parser::parse(input_string);
-
+// #[cfg(feature = "assembly")]
+fn read_assembly(compile_data: CompileData) -> Result<Definition, CompileError> {
+    let program = crate::assembly::parser::parse(&compile_data.path, &compile_data.input_string);
+    // dbg!(&program);
     match program {
         Err(why) => Err(CompileError {
             message: format!("Parse error: {}", why),
         }),
+        // Ok(_) => todo!()
         Ok(v) => Ok(crate::assembly::lowering_pass::lower(v)),
     }
 }
 
-#[cfg(not(feature = "assembly"))]
-fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
-    Result::Err(CompileError {
-        message: String::from("Assembly is unsupported in this build"),
-    })
-}
+// #[cfg(not(feature = "assembly"))]
+// fn read_assembly(input_string: &str) -> Result<Definition, CompileError> {
+//     Result::Err(CompileError {
+//         message: String::from("Assembly is unsupported in this build"),
+//     })
+// }
 
 fn read_definition(
-    input_string: &str,
+    compile_data: CompileData,
     compile_mode: CompileMode,
 ) -> Result<Definition, CompileError> {
     match compile_mode {
-        CompileMode::Assembly => read_assembly(input_string),
-        CompileMode::RON => match ron::from_str(&input_string) {
+        CompileMode::Assembly => read_assembly(compile_data),
+        CompileMode::RON => match ron::from_str(&compile_data.input_string) {
             Err(why) => Err(CompileError {
                 message: format!("Parse error at {}: {}", why.position, why),
             }),
@@ -67,8 +74,12 @@ fn read_definition(
     }
 }
 
-pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<String, CompileError> {
-    let mut definition = read_definition(input_string, options.compile_mode)?;
+pub fn compile_caiman(
+    compile_data: CompileData,
+    options: CompileOptions,
+) -> Result<String, CompileError> {
+    let mut definition = read_definition(compile_data, options.compile_mode)?;
+    // dbg!(&definition);
     assert_eq!(definition.version, (0, 0, 2));
     //ir::validation::validate_program(&definition.program);
     match crate::type_system::check_program(&definition.program) {
@@ -82,11 +93,11 @@ pub fn compile_caiman(input_string: &str, options: CompileOptions) -> Result<Str
 }
 
 pub fn explicate_caiman(
-    input_string: &str,
+    compile_data: CompileData,
     options: CompileOptions,
 ) -> Result<String, CompileError> {
     let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
-    let mut definition = read_definition(input_string, options.compile_mode)?;
+    let mut definition = read_definition(compile_data, options.compile_mode)?;
     assert_eq!(definition.version, (0, 0, 2));
     let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
     Ok(output_string_result.unwrap())

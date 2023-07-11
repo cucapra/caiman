@@ -111,10 +111,25 @@ pub struct ExternalGpuFunctionResourceBinding {
     pub output: Option<NodeId>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// keeping this idea around for the frontend, easier to reason about for tags
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
-    pub funclet_name: Hole<FuncletId>,
-    pub node_name: Hole<NodeId>,
+    pub funclet: Hole<FuncletId>,
+    pub node: Hole<NodeId>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Quotient {
+    None,
+    Node(Hole<RemoteNodeId>),
+    Input(Hole<RemoteNodeId>),
+    Output(Hole<RemoteNodeId>),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Tag {
+    pub quot: Quotient, // What a given value maps to in a specification
+    pub flow: ir::Flow, // How this value transforms relative to the specification
 }
 
 // Super Jank, but whatever
@@ -130,7 +145,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { FunctionClassId };
 	(Operation) => { NodeId };
-	(RemoteOperation) => { RemoteNodeId };
+	(RemoteOperation) => { Quotient };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -193,50 +208,51 @@ with_operations!(make_parser_nodes);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge {
+    // Here for now as a type system debugging tool
+    // Always passes type checking, but fails codegen
+    DebugHole {
+        // Scalar nodes
+        inputs: Vec<NodeId>,
+        // Continuations
+        //outputs : Box<[NodeId]>
+    },
+
+    // Common?
     Return {
         return_values: Hole<Vec<Hole<NodeId>>>,
     },
-    Yield {
-        external_function_id: Hole<ExternalFunctionId>,
-        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
-        next_funclet: Hole<FuncletId>,
-        continuation_join: Hole<NodeId>,
-        arguments: Hole<Vec<Hole<NodeId>>>,
-    },
     Jump {
-        join: Hole<FuncletId>,
+        join: Hole<NodeId>,
         arguments: Hole<Vec<Hole<NodeId>>>,
     },
+
+    // Scheduling only
+    // Split value - what will be computed
     ScheduleCall {
-        value_operation: Hole<RemoteNodeId>,
+        value_operation: Hole<Quotient>,
+        timeline_operation: Hole<Quotient>,
+        spatial_operation: Hole<Quotient>,
         callee_funclet_id: Hole<FuncletId>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
-        value_operation: Hole<RemoteNodeId>,
+        value_operation: Hole<Quotient>,
+        timeline_operation: Hole<Quotient>,
+        spatial_operation: Hole<Quotient>,
         condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
-    DynamicAllocFromBuffer {
-        buffer: Hole<NodeId>,
-        arguments: Hole<Vec<Hole<NodeId>>>,
-        dynamic_allocation_size_slots: Hole<Vec<Hole<Option<NodeId>>>>,
-        success_funclet_id: Hole<FuncletId>,
-        failure_funclet_id: Hole<FuncletId>,
+    ScheduleCallYield {
+        value_operation: Hole<Quotient>,
+        timeline_operation: Hole<Quotient>,
+        spatial_operation: Hole<Quotient>,
+        external_function_id: Hole<ExternalFunctionId>,
+        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Tag {
-    None,
-    Node(RemoteNodeId),
-    Input(RemoteNodeId),
-    Output(RemoteNodeId),
-    Halt(RemoteNodeId),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -248,6 +264,7 @@ pub struct FunctionClassBinding {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScheduleBinding {
     pub implicit_tags: Option<(Tag, Tag)>,
+    // map from the name to the associated funclet id
     pub value: Option<FuncletId>,
     pub timeline: Option<FuncletId>,
     pub spatial: Option<FuncletId>,
@@ -277,7 +294,7 @@ pub struct FuncletHeader {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NamedNode {
-    pub name: NodeId,
+    pub name: Option<NodeId>,
     pub node: Node,
 }
 
@@ -301,12 +318,10 @@ pub enum LocalTypeInfo {
     },
 
     // Scheduling
-    Slot {
+    Ref {
         storage_type: TypeId,
-        queue_stage: ir::ResourceQueueStage,
-        queue_place: ir::Place,
+        storage_place: ir::Place,
     },
-    SchedulingJoin {},
     Fence {
         queue_place: ir::Place,
     },
@@ -314,11 +329,12 @@ pub enum LocalTypeInfo {
         storage_place: ir::Place,
         static_layout_opt: Option<ir::StaticBufferLayout>,
     },
+    Encoder {
+        queue_place: ir::Place,
+    },
 
     // Timeline
-    Event {
-        place: ir::Place,
-    },
+    Event,
 
     // Space
     BufferSpace,
@@ -345,6 +361,7 @@ pub struct Var {
 pub struct ExternalGPUInfo {
     pub shader_module: String,
     pub entry_point: String,
+    pub dimensionality: usize,
     pub resource_bindings: Vec<ExternalGpuFunctionResourceBinding>,
 }
 
@@ -402,6 +419,8 @@ pub enum Declaration {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Program {
+    // need the path to open locally from this program file
+    pub path: String,
     pub version: Version,
     pub declarations: Vec<Declaration>,
 }

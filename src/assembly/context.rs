@@ -11,8 +11,11 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct Context {
+    pub path: String,
     pub ffi_type_table: Table<FFIType>,
     pub local_type_table: Table<String>,
+    // cause we need to know the storage value of the native value
+    pub native_type_map: HashMap<String, FFIType>,
     pub variable_map: HashMap<FuncletId, NodeTable>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
@@ -23,9 +26,8 @@ pub struct Context {
 
 #[derive(Debug)]
 pub struct LocationNames {
-    // a bit confusing, but unwrapping holes is annoying
     pub funclet_name: FuncletId,
-    pub node_name: NodeId,
+    pub node_name: Option<NodeId>,
 }
 
 #[derive(Debug)]
@@ -33,13 +35,6 @@ pub struct NodeTable {
     // local names and return names such as [%out : i64] or whatever
     pub local: Table<NodeId>,
     pub returns: Table<NodeId>,
-}
-
-#[derive(Debug, Clone)]
-pub enum FuncletLocation {
-    Local,
-    ExternalCpu, // todo: fix later
-    ExternalGpu,
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +61,7 @@ impl LocalFFI {
 }
 
 pub struct FuncletInformation {
-    location: FuncletLocation,
+    location: ir::Place,
     index: usize,
 }
 
@@ -74,14 +69,14 @@ pub struct FuncletInformation {
 pub struct FuncletIndices {
     external_funclet_table: Table<ExternalFunctionId>,
     local_funclet_table: Table<FuncletId>,
-    funclet_kind_map: HashMap<String, FuncletLocation>,
+    funclet_kind_map: HashMap<String, ir::Place>,
 }
 
 impl LocationNames {
     pub fn new() -> LocationNames {
         LocationNames {
             funclet_name: FuncletId("".to_string()),
-            node_name: NodeId("".to_string()),
+            node_name: None,
         }
     }
 }
@@ -104,13 +99,13 @@ impl FuncletIndices {
         }
     }
 
-    pub fn insert(&mut self, name: String, location: FuncletLocation) {
+    pub fn insert(&mut self, name: String, location: ir::Place) {
         match location {
-            FuncletLocation::Local => self.local_funclet_table.push(FuncletId(name.clone())),
-            FuncletLocation::ExternalCpu => self
+            ir::Place::Local => self.local_funclet_table.push(FuncletId(name.clone())),
+            ir::Place::Cpu => self
                 .external_funclet_table
                 .push(ExternalFunctionId(name.clone())),
-            FuncletLocation::ExternalGpu => self
+            ir::Place::Gpu => self
                 .external_funclet_table
                 .push(ExternalFunctionId(name.clone())),
         }
@@ -121,28 +116,37 @@ impl FuncletIndices {
         self.local_funclet_table.get(name)
     }
 
-    pub fn get_loc(&self, name: &String) -> Option<&FuncletLocation> {
+    pub fn get_loc(&self, name: &String) -> Option<&ir::Place> {
         self.funclet_kind_map.get(name)
     }
 
     pub fn get_funclet(&self, name: &String) -> Option<usize> {
         self.funclet_kind_map.get(name).and_then(|x| match x {
-            FuncletLocation::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
-            FuncletLocation::ExternalCpu => self
+            ir::Place::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
+            ir::Place::Cpu => self
                 .external_funclet_table
                 .get(&ExternalFunctionId(name.clone())),
-            FuncletLocation::ExternalGpu => self
+            ir::Place::Gpu => self
                 .external_funclet_table
                 .get(&ExternalFunctionId(name.clone())),
         })
+    }
+
+    pub fn require_funclet(&self, name: &String) -> usize {
+        match self.get_funclet(name) {
+            Some(f) => f,
+            None => panic!("Unknown funclet name {}", name),
+        }
     }
 }
 
 impl Context {
     pub fn new(program: &ast::Program) -> Context {
         let mut context = Context {
+            path: "".to_string(),
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
+            native_type_map: HashMap::new(),
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             variable_map: HashMap::new(),
@@ -156,23 +160,42 @@ impl Context {
     // We only do this once and assume the invariants are maintained by construction
     // Note that a context without this makes little sense, so we can't build an "empty context"
     fn setup_context(&mut self, program: &ast::Program) {
+        self.path = program.path.clone();
         for declaration in &program.declarations {
             match declaration {
                 ast::Declaration::TypeDecl(typ) => match typ {
                     ast::TypeDecl::FFI(t) => self.ffi_type_table.push(t.clone()),
-                    ast::TypeDecl::Local(t) => self.local_type_table.push(t.name.clone()),
+                    ast::TypeDecl::Local(t) => {
+                        // get native value types
+                        self.local_type_table.push(t.name.clone());
+                        match &t.data {
+                            ast::LocalTypeInfo::NativeValue { storage_type } => {
+                                match storage_type {
+                                    ast::TypeId::FFI(f) => {
+                                        self.native_type_map.insert(t.name.clone(), f.clone());
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                 },
                 ast::Declaration::Funclet(f) => {
                     self.funclet_indices
-                        .insert(f.header.name.0.clone(), FuncletLocation::Local);
+                        .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut node_table = NodeTable::new();
+                    // added because phi nodes themselves are unnamed
                     for command in &f.commands {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
-                                node_table.local.push(name.clone());
+                                match name {
+                                    None => node_table.local.dummy_push(),
+                                    Some(v) => node_table.local.push(v.clone()),
+                                }
                             }
                             _ => {}
                         }
@@ -189,9 +212,9 @@ impl Context {
                 }
                 ast::Declaration::ExternalFunction(f) => {
                     let location = match f.kind {
-                        ast::ExternalFunctionKind::CPUPure => FuncletLocation::ExternalCpu,
-                        ast::ExternalFunctionKind::CPUEffect => FuncletLocation::ExternalCpu,
-                        ast::ExternalFunctionKind::GPU(_) => FuncletLocation::ExternalGpu,
+                        ast::ExternalFunctionKind::CPUPure => ir::Place::Cpu,
+                        ast::ExternalFunctionKind::CPUEffect => ir::Place::Cpu,
+                        ast::ExternalFunctionKind::GPU(_) => ir::Place::Gpu,
                     };
                     self.funclet_indices.insert(f.name.clone(), location);
                 }
@@ -273,18 +296,6 @@ impl Context {
         {
             Some(v) => v,
             None => panic!("Unknown return name {:?} in funclet {:?}", var, &funclet),
-        }
-    }
-
-    pub fn remote_id(&self, funclet: &FuncletId, var: &NodeId) -> ir::RemoteNodeId {
-        ir::RemoteNodeId {
-            funclet_id: self
-                .funclet_indices
-                .local_funclet_table
-                .get(funclet)
-                .unwrap()
-                .clone(),
-            node_id: self.remote_node_id(funclet, var),
         }
     }
 }
