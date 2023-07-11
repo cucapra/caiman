@@ -8,10 +8,8 @@ pub enum FunctionalExprNodeKind {
     Phi,
     ExtractResult,
     Constant,
-    CallValueFunction,
+    CallFunctionClass,
     Select,
-    CallExternalCpu,
-    CallExternalGpuCompute,
 }
 
 impl FunctionalExprNodeKind {
@@ -20,10 +18,8 @@ impl FunctionalExprNodeKind {
             Phi => ir::Node::Phi {index: std::mem::take(&mut v[0]).unwrap_usize(), },
             ExtractResult => ir::Node::ExtractResult {node_id: std::mem::take(&mut v[0]).unwrap_usize(), index: std::mem::take(&mut v[1]).unwrap_usize(), },
             Constant => ir::Node::Constant {value: std::mem::take(&mut v[0]).unwrap_irconstant(), type_id: std::mem::take(&mut v[1]).unwrap_usize(), },
-            CallValueFunction => ir::Node::CallValueFunction {function_id: std::mem::take(&mut v[0]).unwrap_usize(), arguments: std::mem::take(&mut v[1]).unwrap_usize_slice(), },
+            CallFunctionClass => ir::Node::CallFunctionClass {function_id: std::mem::take(&mut v[0]).unwrap_usize(), arguments: std::mem::take(&mut v[1]).unwrap_usize_slice(), },
             Select => ir::Node::Select {condition: std::mem::take(&mut v[0]).unwrap_usize(), true_case: std::mem::take(&mut v[1]).unwrap_usize(), false_case: std::mem::take(&mut v[2]).unwrap_usize(), },
-            CallExternalCpu => ir::Node::CallExternalCpu {external_function_id: std::mem::take(&mut v[0]).unwrap_externalfunction(), arguments: std::mem::take(&mut v[1]).unwrap_usize_slice(), },
-            CallExternalGpuCompute => ir::Node::CallExternalGpuCompute {external_function_id: std::mem::take(&mut v[0]).unwrap_externalfunction(), dimensions: std::mem::take(&mut v[1]).unwrap_usize_slice(), arguments: std::mem::take(&mut v[2]).unwrap_usize_slice(), },
         }
     }
 

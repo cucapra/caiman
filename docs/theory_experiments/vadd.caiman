@@ -1,0 +1,81 @@
+const $N 64;
+
+value vadd2(v1 : array<i32, $N>, v2 : array<i32, $N>, 
+v3 : array<i32, $N>) -> array<i32, $N> {
+    tmp = vadd(v1, v2).
+    result = vadd(tmp, v3).
+    returns result.
+}
+
+function vadd(array<i32, $N>, array<i32, $N>) -> array<i32, $N>;
+
+external-cpu[impl vadd] extern_vadd;
+
+value[impl default vadd] vadd_imp(v1 : array<i32, $N>, v2 : array<i32, $N>) {
+    new_arr = (new i32 $N).
+    index = 0u32.
+    result = (vadd_rec v1 v2 index new_arr).
+    returns result.
+}
+
+value vadd_rec(
+v1 : array<i32, $N>, 
+v2 : array<i32, $N>, 
+index : u32, 
+result : array<i32, $N>) {
+    add_result = (set result index (+ (get v1 index) (get v2 index))).
+    rec_result = (vadd_rec v1 v2 (+ index 1) add_result).
+    updated = (if (< index $N) rec_result result).
+    returns updated.
+}
+
+ref-cpu arrc : array<i32, $N>;
+ref-gpu arrg : array<i32, $N>;
+
+schedule vadd2 {
+    fn vadd2_cpu(v1_ref : arrc, v2_ref : arrc, v3_ref : arrc) -> arrc {
+        let tmp_ref <- vadd_cpu[tmp](v1_ref, v2_ref);
+        let result_ref <- vadd_cpu[result](tmp_ref, v3_ref);
+        return result_ref;
+    }
+}
+
+schedule vadd {
+    fn vadd_cpu(v1_ref : arrc, v2_ref : arrc) -> arrc {
+        // allocate
+        let new_arr_ref <- new_cpu[new_arr](arrc, $N);
+        let index_ref <- allocate-cpu index;
+        let result_ref <- result[vadd_rec_cpu]
+            (v1_ref, v2_ref, index_ref, new_arr_ref);
+        return result_ref;
+    }
+}
+
+schedule vadd_rec {
+    fn vadd_rec_cpu(v1_ref : arrc, 
+    v2_ref : arrc,
+    index_ref: u32c,
+    result_ref: arrc) -> arrc {
+        let comparison_ref <- alloc-cpu bool;
+        comparison_ref <- updated.$1[lt_cpu](index_ref, $N);
+        if (comparison_ref) {
+            let add_ref <- allocate-cpu u32;
+            let right_add_ref <- allocate-cpu u32;
+            add_ref <- add_result.$2.$1[get](v1_ref, index_ref);
+            right_add_ref <- add_result.$2.$2[get](v2_ref, index_ref);
+            add_ref <- add_result.$1[add_cpu](left_add_ref, right_add_ref);
+            let add_result_ref <- add_result[set](index_ref, add_ref);
+
+            let one_ref <- alloc-cpu rec_result.$3.$2;
+
+            let add_index_ref <- rec_result.$2[add_cpu](index_ref, one_ref);
+            result_ref <- rec_result[vadd_rec_cpu] (
+                v1_ref,
+                v2_ref,
+                add_index_ref,
+                result_ref,
+            );
+        }
+        return result_ref;
+    }
+}

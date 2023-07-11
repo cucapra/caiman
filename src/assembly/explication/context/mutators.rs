@@ -4,24 +4,33 @@ impl<'context> Context<'context> {
     pub fn corrections(&mut self) {
         for declaration in self.program.declarations.iter_mut() {
             match declaration {
+                // add phi nodes
                 ast::Declaration::Funclet(f) => {
                     let mut index = 0;
                     for arg in &f.header.args {
                         f.commands.insert(
                             index,
                             Some(ast::Command::Node(ast::NamedNode {
-                                name: arg.name.clone().unwrap_or(NodeId("".to_string())),
+                                name: arg.name.clone(),
                                 node: ast::Node::Phi { index: Some(index) },
                             })),
                         );
                         index += 1;
                     }
                     for command in f.commands.iter_mut() {
+                        // rewrite constants to have native values
+
+                        // rename "_" nodes
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
-                                if name.0 == "_" {
-                                    name.0 = self.meta_data.next_name()
-                                }
+                                match name {
+                                    None => {}
+                                    Some(n) => {
+                                        if n.0 == "_" {
+                                            n.0 = self.meta_data.next_name()
+                                        }
+                                    }
+                                };
                             }
                             _ => {}
                         }
@@ -140,11 +149,14 @@ impl<'context> Context<'context> {
         self.get_funclet_mut(funclet_name).and_then(|f| {
             for command in &mut f.commands {
                 match command {
-                    Some(ast::Command::Node(ast::NamedNode { name, node })) => {
-                        if name == node_name {
-                            return Some(node);
+                    Some(ast::Command::Node(ast::NamedNode { name, node })) => match name {
+                        None => {}
+                        Some(n) => {
+                            if n == node_name {
+                                return Some(node);
+                            }
                         }
-                    }
+                    },
                     _ => {}
                 }
             }

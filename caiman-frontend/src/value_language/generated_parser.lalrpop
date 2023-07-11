@@ -119,8 +119,6 @@ IRNodeE: spec::nodes::FunctionalExprNodeKind = {
 "IR::Phi" => spec::nodes::FunctionalExprNodeKind::Phi,
 "IR::ExtractResult" => spec::nodes::FunctionalExprNodeKind::ExtractResult,
 "IR::Constant" => spec::nodes::FunctionalExprNodeKind::Constant,
-"IR::CallValueFunction" => spec::nodes::FunctionalExprNodeKind::CallValueFunction,
+"IR::CallFunctionClass" => spec::nodes::FunctionalExprNodeKind::CallFunctionClass,
 "IR::Select" => spec::nodes::FunctionalExprNodeKind::Select,
-"IR::CallExternalCpu" => spec::nodes::FunctionalExprNodeKind::CallExternalCpu,
-"IR::CallExternalGpuCompute" => spec::nodes::FunctionalExprNodeKind::CallExternalGpuCompute,
 }

@@ -42,7 +42,7 @@
 		// Functional-only nodes
 		(
 			// Represents a constant
-			// For EncodeDo: Is a value operation with no inputs and one output
+			// For (Local/Encode)Do: Is a value operation with no inputs and one output
 			name : "Constant",
 			inputs : [
 				(name : "value", kind : Immediate),
@@ -55,15 +55,15 @@
 		(
 			// Represents a function call with multiple arguments and multiple returns
 			// Does not invoke a funclet directly
-			// Instead, it represents a call to any funclet that is a member of the given equivalence class
+			// Instead, it represents a call to any funclet or external function that is a member of the given equivalence class
 			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
-			name : "CallValueFunction",
+			name : "CallFunctionClass",
 			inputs : [
 				(name : "function_id", kind : ValueFunction),
 				(name : "arguments", kind : Operation, is_array : true)
 			],
 			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : false),
+			language_set : (functional : true, scheduling: false, timeline : true, spatial : true, intrinsic : false),
 			has_local_side_effect : false
 		),
 		(
@@ -83,38 +83,6 @@
 			has_local_side_effect : false
 		),
 
-		// Intrinsic nodes
-		// Exposes functionality that should be used with caution to implement other functionality
-		// These break the illusion that the value language doesn't know about cpu vs gpu
-		// It's intended that these are used as part of an ffi and then hidden via indirection through function equivalence classes
-		(
-			// Invokes an external cpu function with multiple arguments and multiple returns (encoded as a tuple on the host code side)
-			// Doesn't (yet) implement mutable in-out arguments (unbound slots with forwarding) so all outputs must be value types
-			// For EncodeDo: Is a value operation where each input slot corresponds to a single argument node and each output corresponds to a single field of the output tuple
-			name : "CallExternalCpu",
-			inputs : [
-				(name : "external_function_id", kind : ExternalFunction),
-				(name : "arguments", kind : Operation, is_array : true)
-			],
-			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
-			has_local_side_effect : false
-		),
-		(
-			// Invokes an external gpu compute kernel with multiple arguments, multiple returns, and up to 3 dimensions
-			// For EncodeDo: Is a value operation where the first 0-3 input slots are the corresponding dimensions
-			// Each of the remaining input slots corresponds to a single argument node and each output corresponds to a single field of the output tuple
-			name : "CallExternalGpuCompute",
-			inputs : [
-				(name : "external_function_id", kind : ExternalFunction),
-				(name : "dimensions", kind : Operation, is_array : true),
-				(name : "arguments", kind : Operation, is_array : true)
-			],
-			output : Multiple,
-			language_set : (functional : true, scheduling: false, timeline : false, spatial : false, intrinsic : true),
-			has_local_side_effect : false
-		),
-
 		// These are convenience instructions that rely on codegen doing some questionable magic
 		// Don't expect these to be predictable
 		// It's possible for them to do the worst thing possible that is still legal without knowing the future
@@ -127,7 +95,6 @@
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "storage_type", kind : StorageType),
-				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
@@ -136,22 +103,7 @@
 
 		// State management
 		(
-			// Creates a slot in the unbound state that has no associated memory (yet)
-			// May be used as the associated forwarding target of an operation that consumes an input slot
-			// Has no space yet so cannot be captured (caiman doesn't check this yet).
-			name : "UnboundSlot",
-			inputs : [
-				(name : "place", kind : Place),
-				(name : "storage_type", kind : StorageType),
-				(name : "operation", kind : RemoteOperation),
-				//(name : "space", kind : RemoteOperation),
-			],
-			output : Single,
-			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : true
-		),
-		(
-			// Consumes resources with no pending operation (not in the encoded or submitted state)
+			// Consumes resources with no pending operation (must have flow of "none" or "have")
 			name : "Drop",
 			inputs : [
 				(name : "node", kind : Operation)
@@ -161,18 +113,100 @@
 			has_local_side_effect : true
 		),
 		(
-			// Allocates a slot from a specific buffer
-			// Such inherit their space from the buffer, and may be captured and returned, but all resources of a space msut be captured or returned together
-			// (caiman does not check this yet)
-			name : "StaticAllocFromStaticBuffer",
+			// Suballocates from a static layout buffer
+			// The buffer must have a Met flow (it must be owned by a continuation) and will shrink after the call
+			// All suballocations will also have a Met flow
+			name : "StaticSubAlloc",
 			inputs : [
-				(name : "buffer", kind : Operation),
+				(name : "node", kind : Operation),
 				(name : "place", kind : Place),
 				(name : "storage_type", kind : StorageType),
-				(name : "operation", kind : RemoteOperation)
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "StaticAlloc",
+			inputs : [
+				(name : "spatial_operation", kind : RemoteOperation),
+				(name : "node", kind : Operation),
+				(name : "sizes", kind : Index, is_array: true),
+				(name : "place", kind : Place),
+			],
+			output : Multiple,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			name : "StaticDealloc",
+			inputs : [
+				(name : "spatial_operation", kind : RemoteOperation),
+				(name : "nodes", kind : Operation, is_array: true),
+				(name : "place", kind : Place),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),
+			has_local_side_effect : true
+		),
+		(
+			// Produces a local variable from a reference
+			name : "ReadRef",
+			inputs : [
+				(name : "storage_type", kind : StorageType),
+				(name : "source", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			// Produces a ref with a met flow from a local variable
+			name : "BorrowRef",
+			inputs : [
+				(name : "storage_type", kind : StorageType),
+				(name : "source", kind : Operation),
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			// Writes from a local variable to a reference
+			name : "WriteRef",
+			inputs : [
+				(name : "storage_type", kind : StorageType),
+				(name : "destination", kind : Operation),
+				(name : "source", kind : Operation),
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			// Executes a function and returns the result
+			name : "LocalDoBuiltin",
+			inputs : [
+				(name : "operation", kind : RemoteOperation),
+				(name : "inputs", kind : Operation, is_array : true),
+				(name : "outputs", kind : Operation, is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+
+		(
+			// Executes a pure function and returns the result
+			name : "LocalDoExternal",
+			inputs : [
+				(name : "operation", kind : RemoteOperation),
+				(name : "external_function_id", kind : ExternalFunction),
+				(name : "inputs", kind : Operation, is_array : true),
+				(name : "outputs", kind : Operation, is_array : true)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
 
@@ -189,13 +223,38 @@
 			has_local_side_effect : true
 		),*/
 
+		(
+			name : "LocalCopy",
+			inputs : [
+				(name : "input", kind : Operation),
+				(name : "output", kind : Operation)
+			],
+			output : None,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+
 		// These are your basic scheduling instructions for manipulating command buffer submissions to queues
 		(
-			// Encodes a computation of the given operation to the queue for the given place
-			name : "EncodeDo",
+			name : "BeginEncoding",
 			inputs : [
 				(name : "place", kind : Place),
+				(name : "event", kind : RemoteOperation),
+				(name : "encoded", kind : Operation, is_array : true), // Resources that will be used
+				(name : "fences", kind : Operation, is_array : true) // fences of already-submitted resources
+			],
+			output : Single,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		// To do: BeginEncoding with submitted resources
+		(
+			// Encodes a computation of the given operation to the queue for the given place
+			name : "EncodeDoExternal",
+			inputs : [
+				(name : "encoder", kind : Operation),
 				(name : "operation", kind : RemoteOperation),
+				(name : "external_function_id", kind : ExternalFunction),
 				(name : "inputs", kind : Operation, is_array : true),
 				(name : "outputs", kind : Operation, is_array : true)
 			],
@@ -208,7 +267,7 @@
 			// Currently, the queue must match the place of the output 
 			name : "EncodeCopy",
 			inputs : [
-				(name : "place", kind : Place),
+				(name : "encoder", kind : Operation),
 				(name : "input", kind : Operation),
 				(name : "output", kind : Operation)
 			],
@@ -222,23 +281,10 @@
 			// Event encodes a point in the timeline funclet that this submission advances the current timeline to
 			name : "Submit",
 			inputs : [
-				(name : "place", kind : Place),
-				(name : "event", kind : RemoteOperation)
+				(name : "encoder", kind : Operation),
+				(name : "event", kind : RemoteOperation),
 			],
-			output : None,
-			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
-			has_local_side_effect : true
-		),
-		(
-			// Creates a fence that will be signalled when the given place completes the most recently submitted command
-			// Currently, can only be created for the gpu
-			// Event encodes a point in the timeline funclet that this fence observes
-			name : "EncodeFence",
-			inputs : [
-				(name : "place", kind : Place),
-				(name : "event", kind : RemoteOperation)
-			],
-			output : Single,
+			output : Single, // a fence
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
@@ -247,9 +293,8 @@
 			// Event encodes a point in the timeline funclet that this synchronization advances the current timeline to
 			name : "SyncFence",
 			inputs : [
-				(name : "place", kind : Place),
 				(name : "fence", kind : Operation),
-				(name : "event", kind : RemoteOperation)
+				(name : "event", kind : RemoteOperation),
 			],
 			output : None,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
@@ -292,15 +337,45 @@
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
 			has_local_side_effect : true
 		),
+		(
+			name : "PromiseCaptures",
+			inputs : [
+				(name : "count", kind : Index),
+				(name : "continuation", kind : Operation),
+			],
+			output : Multiple,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
+		(
+			name : "FulfillCaptures",
+			inputs : [
+				(name : "continuation", kind : Operation),
+				(name : "haves", kind : Operation, is_array : true),
+				(name : "needs", kind : Operation, is_array : true),
+			],
+			output : Multiple,
+			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : false),
+			has_local_side_effect : true
+		),
 
 		// Timeline nodes
+		(
+			// An encoding event effectively splits the coordinator into two parallel processes
+			name : "EncodingEvent",
+			inputs : [
+				(name : "local_past", kind : Operation),
+				(name : "remote_local_pasts", kind : Operation, is_array : true)
+			],
+			output : Multiple, // First is the state that will stay local. Second is the state that will be used in encoding.
+			language_set : (functional : false, scheduling: false, timeline : true, spatial : false, intrinsic : false),
+			has_local_side_effect : false
+		),
 		(
 			// Represents the state of the coordinator (at here_place) after a submission to there_place
 			// local_past is the previous state of the coordinator as known by the coordinator
 			name : "SubmissionEvent",
 			inputs : [
-				(name : "here_place", kind : Place),
-				(name : "there_place", kind : Place),
 				(name : "local_past", kind : Operation),
 			],
 			output : Single,
@@ -313,8 +388,6 @@
 			// remote_local_past is the previous state of the coordinator as known by there_place (a round trip)
 			name : "SynchronizationEvent",
 			inputs : [
-				(name : "here_place", kind : Place),
-				(name : "there_place", kind : Place),
 				(name : "local_past", kind : Operation),
 				(name : "remote_local_past", kind : Operation),
 			],
@@ -323,26 +396,26 @@
 			has_local_side_effect : false
 		),
 
-		// Space nodes (ignore for now)
+		// Space nodes
 		(
-			name : "SeparatedLinearSpace",
+			// Separates a space into n spaces, where n is the count
+			name : "SeparatedBufferSpaces",
 			inputs : [
-				(name : "place", kind : Place),
+				(name : "count", kind : Index),
 				(name : "space", kind : Operation),
 			],
 			output : Multiple,
 			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
 			has_local_side_effect : false
 		),
+	],
+	/*terminators : [
 		(
-			name : "MergedLinearSpace",
+			name : "Return",
 			inputs : [
-				(name : "place", kind : Place),
-				(name : "spaces", kind : Operation, is_array : true),
+				(name : "return_values", kind : Operation, is_array : true),
 			],
-			output : Multiple,
-			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
-			has_local_side_effect : false
+			language_set : (functional : true, scheduling: true, timeline : true, spatial : true, intrinsic : true),
 		),
-	]
+	]*/
 )

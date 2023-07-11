@@ -73,5 +73,5 @@ fn main() {
     let slice =
         unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
     let final_value: i32 = i32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);
-    println!("{}", final_value);
+    crate::expect_returned!(13, Some(final_value));
 }
