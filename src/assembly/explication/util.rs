@@ -44,7 +44,7 @@ where
     T: Clone,
 {
     match h {
-        Some(v) => find_filled(v.into_vec()),
+        Some(v) => find_filled(v),
         None => Vec::new(),
     }
 }

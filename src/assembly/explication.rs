@@ -17,7 +17,9 @@ fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) {
             ast::Node::ReadRef { .. } => {}
             ast::Node::BorrowRef { .. } => {}
             ast::Node::WriteRef { .. } => {}
-            ast::Node::LocalDoBuiltin { .. } => {}
+            ast::Node::LocalDoBuiltin { operation, inputs, outputs } => {
+
+            }
             ast::Node::LocalDoExternal { .. } => {}
             ast::Node::LocalCopy { .. } => {}
             ast::Node::BeginEncoding { .. } => {}
@@ -50,4 +52,6 @@ fn explicate_funclets(context: &mut Context) {
 pub fn explicate(mut program: &mut ast::Program) {
     let mut context = Context::new(&mut program);
     context.corrections();
+    context.initialize(); // setup the context with initial "raw" information
+    explicate_funclets(&mut context);
 }

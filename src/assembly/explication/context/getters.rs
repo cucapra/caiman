@@ -10,16 +10,6 @@ use super::*;
 // note that I assume `->` is on the same line as the return type and `{`
 
 impl<'context> Context<'context> {
-    pub fn new(program: &'context mut ast::Program) -> Context<'context> {
-        Context {
-            program,
-            location: LocationNames::new(),
-            value_explication_data: HashMap::new(),
-            schedule_explication_data: HashMap::new(),
-            meta_data: MetaData::new(),
-        }
-    }
-
     pub fn program(&self) -> &ast::Program {
         self.program
     }

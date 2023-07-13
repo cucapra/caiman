@@ -7,7 +7,7 @@ use super::*;
 impl<'context> Context<'context> {
     pub fn static_schedule_funclet_ids(&self) -> Vec<ast::FuncletId> {
         let mut result = Vec::new();
-        for declaration in self.program.declarations {
+        for declaration in &self.program.declarations {
             match declaration {
                 ast::Declaration::Funclet(f) => {
                     match f.kind {

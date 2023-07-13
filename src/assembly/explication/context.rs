@@ -2,6 +2,7 @@ pub mod data_impls;
 pub mod getters;
 pub mod mutators;
 pub mod static_getters;
+pub mod initializers;
 
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
@@ -12,9 +13,10 @@ use crate::assembly::ast::{
 use crate::assembly::table::Table;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
+use crate::ir;
 
 pub struct Context<'context> {
-    pub location: LocationNames,
+    pub location: ast::RemoteNodeId,
 
     // holds the full program "as we go"
     program: &'context mut ast::Program,
@@ -28,50 +30,51 @@ pub struct Context<'context> {
 }
 
 #[derive(Debug)]
-pub struct LocationNames {
-    // a bit confusing, but unwrapping holes is annoying
-    pub funclet_name: FuncletId,
-    pub node_name: NodeId,
-}
-
-#[derive(Debug)]
-struct ValueFuncletConnections {
+struct ScheduleFuncletConnections {
     // stores connections of what refers to this value funclet
     schedule_funclets: Vec<FuncletId>,
-    timeline_funclets: Vec<FuncletId>,
-    spatial_funclets: Vec<FuncletId>,
 }
 
 #[derive(Debug)]
-struct ValueExplicationInformation {
+struct NodeExplicationInformation {
     // explication locations are in the scheduling world
     // maps from this node to the places it's been allocated on
     scheduled_allocations: HashMap<FuncletId, NodeId>,
 
-    // indicates whether this operation has been written yet
-    // used primarily to add operations when needed
-    written: bool,
+    // indicates which operations were scheduled on this node (if any)
+    scheduled_operations: HashMap<FuncletId, NodeId>,
 }
 
 #[derive(Debug)]
-struct ValueFuncletData {
-    pub connections: ValueFuncletConnections,
+struct SpecFuncletData {
+    pub connections: ScheduleFuncletConnections,
 
     // information about allocated value elements
-    explication_information: HashMap<NodeId, ValueExplicationInformation>,
+    explication_information: HashMap<NodeId, NodeExplicationInformation>,
 
-    // map from call index to output name for each call
+    // map from call index to output name for each call (if appropriate)
     call_outputs: HashMap<NodeId, HashMap<usize, NodeId>>,
 }
 
 #[derive(Debug)]
+struct NodeAllocations {
+    // map from location to established allocations
+    known_allocations: HashMap<ir::Place, NodeId>
+}
+
+#[derive(Debug)]
 struct ScheduleFuncletData {
-    // associated value funclet
+    // associated specification funclets
     value_funclet: FuncletId,
-    // map from the variables available to which node they are allocated
-    allocations: HashMap<NodeId, NodeId>,
-    // list of explication holes found, by index
-    explication_holes: Vec<usize>,
+    timeline_funclet: FuncletId,
+    spatial_funclet: FuncletId,
+
+    // map from the spec variables to information about their allocations
+    allocations: HashMap<NodeId, NodeAllocations>,
+
+    // list of explication holes found, by name
+    // note that explication holes are named in corrections
+    explication_holes: Vec<NodeId>,
 }
 
 #[derive(Debug)]

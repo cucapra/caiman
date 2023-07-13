@@ -10,30 +10,19 @@ impl<'context> Context<'context> {
                     for arg in &f.header.args {
                         f.commands.insert(
                             index,
-                            Some(ast::Command::Node(ast::NamedNode {
+                            ast::NamedCommand {
                                 name: arg.name.clone(),
-                                node: ast::Node::Phi { index: Some(index) },
-                            })),
+                                command: ast::Command::Node(ast::Node::Phi { index: Some(index) }),
+                            },
                         );
                         index += 1;
                     }
                     for command in f.commands.iter_mut() {
-                        // rewrite constants to have native values
-
-                        // rename "_" nodes
-                        match command {
-                            Some(ast::Command::Node(ast::NamedNode { node, name })) => {
-                                match name {
-                                    None => {}
-                                    Some(n) => {
-                                        if n.0 == "_" {
-                                            n.0 = self.meta_data.next_name()
-                                        }
-                                    }
-                                };
-                            }
-                            _ => {}
-                        }
+                        // give names to none-nodes
+                        command.name = match &command.name {
+                            None => Some(NodeId(self.meta_data.next_name())),
+                            n => n
+                        };
                     }
                 }
                 _ => {}

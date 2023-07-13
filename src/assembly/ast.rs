@@ -293,22 +293,23 @@ pub struct FuncletHeader {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct NamedNode {
-    pub name: Option<NodeId>,
-    pub node: Node,
+pub enum Command {
+    Hole,
+    Node(Node),
+    TailEdge(TailEdge)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Command {
-    Node(NamedNode),
-    TailEdge(TailEdge),
+pub struct NamedCommand {
+    pub name: Option<NodeId>,
+    pub command: Command
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
-    pub commands: Vec<Hole<Command>>,
+    pub commands: Vec<NamedCommand>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
