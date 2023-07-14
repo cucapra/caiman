@@ -118,6 +118,15 @@ pub struct RemoteNodeId {
     pub node: Hole<NodeId>,
 }
 
+impl Default for RemoteNodeId {
+    fn default() -> RemoteNodeId {
+        RemoteNodeId {
+            funclet: None,
+            node: None
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Quotient {
     None,

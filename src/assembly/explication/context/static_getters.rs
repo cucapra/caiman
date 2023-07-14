@@ -38,4 +38,12 @@ impl<'context> Context<'context> {
         };
         result
     }
+
+    pub fn location_funclet(&self) -> &FuncletId {
+        self.location.funclet.as_ref().unwrap()
+    }
+
+    pub fn location_node(&self) -> &NodeId {
+        self.location.node.as_ref().unwrap()
+    }
 }

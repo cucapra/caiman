@@ -23,7 +23,7 @@ impl<'context> Context<'context> {
 
     pub fn get_current_value_funclet(&self) -> Option<&FuncletId> {
         self.schedule_explication_data
-            .get(&self.location.funclet_name)
+            .get(&self.location.funclet.as_ref().unwrap())
             .map(|f| &f.value_funclet)
     }
 
@@ -45,7 +45,7 @@ impl<'context> Context<'context> {
         self.get_current_value_funclet().and_then(|vf| {
             self.get_schedule_allocations(vf, node)
                 .unwrap()
-                .get(&self.location.funclet_name)
+                .get(&self.location.funclet.as_ref().unwrap())
         })
     }
 
@@ -66,16 +66,18 @@ impl<'context> Context<'context> {
     pub fn get_node(&self, funclet_name: &FuncletId, node_name: &NodeId) -> Option<&ast::Node> {
         self.get_funclet(funclet_name).and_then(|f| {
             for command in &f.commands {
-                match command {
-                    Some(ast::Command::Node(ast::NamedNode { name, node })) => match name {
-                        None => {}
-                        Some(n) => {
-                            if n == node_name {
-                                return Some(node);
+                match &command.name {
+                    None => {}
+                    Some(n) => {
+                        if n == node_name {
+                            match &command.command {
+                                ast::Command::Node(node) => {
+                                    return Some(node);
+                                }
+                                _ => unreachable!("Attempting to treat {} as a node", n.0)
                             }
                         }
-                    },
-                    _ => {}
+                    }
                 }
             }
             None
@@ -85,9 +87,16 @@ impl<'context> Context<'context> {
     pub fn get_tail_edge(&self, funclet_name: &FuncletId) -> Option<&ast::TailEdge> {
         self.get_funclet(funclet_name).and_then(|f| {
             for command in &f.commands {
-                match command {
-                    Some(ast::Command::TailEdge(t)) => return Some(t),
-                    _ => {}
+                match &command.name {
+                    None => {}
+                    Some(n) => {
+                        match &command.command {
+                            ast::Command::TailEdge(edge) => {
+                                return Some(edge);
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
             None

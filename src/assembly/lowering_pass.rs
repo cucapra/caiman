@@ -335,8 +335,8 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<ir::
     }
 }
 
-fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
-    match &node.node {
+fn ir_node(node: &ast::Node, context: &mut Context) -> ir::Node {
+    match &node {
         ast::Node::None => ir::Node::None,
         ast::Node::Phi { index } => ir::Node::Phi {
             index: reject_hole(index.as_ref()).clone(),
@@ -922,9 +922,9 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     }
 
     for command in &funclet.commands {
-        match reject_hole(command.as_ref()) {
+        context.location.node_name = command.name.clone();
+        match &command.command {
             ast::Command::Node(node) => {
-                context.location.node_name = node.name.clone();
                 nodes.push(ir_node(&node, context));
             }
             ast::Command::TailEdge(tail) => {
@@ -932,6 +932,9 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
                     panic!("More than one tail edge in {:?}", funclet.header.name);
                 }
                 tail_edge = Some(ir_tail_edge(tail, context));
+            }
+            ast::Command::Hole => {
+                // do nothing, command holes aren't removed before lowering
             }
         }
     }

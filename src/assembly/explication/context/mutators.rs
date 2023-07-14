@@ -33,17 +33,9 @@ impl<'context> Context<'context> {
     pub fn forcibly_replace_commands(
         &mut self,
         funclet: &ast::FuncletId,
-        commands: Vec<Hole<ast::Command>>,
+        commands: Vec<ast::NamedCommand>,
     ) {
         self.get_funclet_mut(funclet).unwrap().commands = commands;
-    }
-
-    pub fn add_remote_node(&mut self, funclet: &ast::FuncletId, node: ast::NamedNode) {}
-
-    pub fn add_node(&mut self, node: ast::NamedNode) {
-        match node {
-            _ => {}
-        }
     }
 
     pub fn add_allocation(&mut self, value_node: NodeId, schedule_node: NodeId) {

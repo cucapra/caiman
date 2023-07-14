@@ -29,25 +29,30 @@ pub struct Context<'context> {
     meta_data: MetaData,
 }
 
-#[derive(Debug)]
-struct ScheduleFuncletConnections {
-    // stores connections of what refers to this value funclet
-    schedule_funclets: Vec<FuncletId>,
+// information needed to recover a particular allocation
+#[derive(Debug, Hash, Eq, PartialEq)]
+struct AllocationInfo {
+    schedule_funclet: FuncletId,
+    place: ir::Place,
 }
 
 #[derive(Debug)]
 struct NodeExplicationInformation {
     // explication locations are in the scheduling world
     // maps from this node to the places it's been allocated on
-    scheduled_allocations: HashMap<FuncletId, NodeId>,
+    scheduled_allocations: HashMap<AllocationInfo, NodeId>,
 
-    // indicates which operations were scheduled on this node (if any)
-    scheduled_operations: HashMap<FuncletId, NodeId>,
+    // indicates which operations were scheduled on this node in the given funclet (if any)
+    scheduled_operations: HashMap<FuncletId, Vec<NodeId>>,
+
+    // tracks each use of this node, either in allocations of operations
+    operative_locations: HashSet<FuncletId>,
 }
 
 #[derive(Debug)]
 struct SpecFuncletData {
-    pub connections: ScheduleFuncletConnections,
+    // stores connections of what refers to this value funclet
+    connections: Vec<FuncletId>,
 
     // information about allocated value elements
     explication_information: HashMap<NodeId, NodeExplicationInformation>,
@@ -57,20 +62,14 @@ struct SpecFuncletData {
 }
 
 #[derive(Debug)]
-struct NodeAllocations {
-    // map from location to established allocations
-    known_allocations: HashMap<ir::Place, NodeId>
-}
-
-#[derive(Debug)]
 struct ScheduleFuncletData {
     // associated specification funclets
     value_funclet: FuncletId,
     timeline_funclet: FuncletId,
     spatial_funclet: FuncletId,
 
-    // map from the spec variables to information about their allocations
-    allocations: HashMap<NodeId, NodeAllocations>,
+    // map from the schedule variables to information about their allocations
+    allocations: HashMap<NodeId, RemoteNodeId>,
 
     // list of explication holes found, by name
     // note that explication holes are named in corrections

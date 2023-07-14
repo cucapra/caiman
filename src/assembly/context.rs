@@ -185,20 +185,10 @@ impl Context {
                     self.funclet_indices
                         .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut node_table = NodeTable::new();
-                    // added because phi nodes themselves are unnamed
                     for command in &f.commands {
-                        match command {
-                            Some(ast::Command::Node(ast::NamedNode { node, name })) => {
-                                // a bit sketchy, but if we only correct this here, we should be ok
-                                // basically we never rebuild the context
-                                // and these names only matter for this context anyway
-                                match name {
-                                    None => node_table.local.dummy_push(),
-                                    Some(v) => node_table.local.push(v.clone()),
-                                }
-                            }
-                            _ => {}
-                        }
+                        // assume that each node has a name at this point,
+                        //   re: explication corrections
+                        node_table.local.push(command.name.clone().unwrap());
                     }
                     for ret_arg in &f.header.ret {
                         match &ret_arg.name {

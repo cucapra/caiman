@@ -4,7 +4,7 @@ impl<'context> Context<'context> {
     pub fn new(program: &'context mut ast::Program) -> Context<'context> {
         Context {
             program,
-            location: RemoteNodeId::new(),
+            location: Default::default(),
             value_explication_data: HashMap::new(),
             schedule_explication_data: HashMap::new(),
             meta_data: MetaData::new(),
