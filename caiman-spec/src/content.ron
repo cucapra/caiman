@@ -127,7 +127,9 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "StaticAlloc",
+			// node is the allocator
+			// 
+			name : "StaticSplit",
 			inputs : [
 				(name : "spatial_operation", kind : RemoteOperation),
 				(name : "node", kind : Operation),
@@ -139,10 +141,11 @@
 			has_local_side_effect : true
 		),
 		(
-			name : "StaticDealloc",
+			name : "StaticMerge",
 			inputs : [
+				// nodes are the allocator + allocations (the output of the StaticAlloc)
 				(name : "spatial_operation", kind : RemoteOperation),
-				(name : "nodes", kind : Operation, is_array: true),
+				(name : "nodes", kind : Operation, is_array: true), // assumes nodes have the same type they were allocated with
 				(name : "place", kind : Place),
 			],
 			output : Single,
@@ -398,13 +401,13 @@
 
 		// Space nodes
 		(
-			// Separates a space into n spaces, where n is the count
+			// Separates a space into n + 1 spaces, where n is count
 			name : "SeparatedBufferSpaces",
 			inputs : [
 				(name : "count", kind : Index),
 				(name : "space", kind : Operation),
 			],
-			output : Multiple,
+			output : Multiple, // last element is the new buffer
 			language_set : (functional : false, scheduling: false, timeline : false, spatial : true, intrinsic : false),
 			has_local_side_effect : false
 		),

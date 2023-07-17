@@ -44,6 +44,62 @@ struct Buffer {
     static_layout_opt: Option<ir::StaticBufferLayout>,
 }
 
+impl Buffer {
+    fn alloc_static(&mut self, native_interface : & ir::ffi::NativeInterface, error_context : & ErrorContext, storage_type : ir::StorageTypeId) -> Result<(), Error> {
+        let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
+        /*// To do check alignment compatibility
+        let storage_size = native_interface
+            .calculate_type_byte_size(storage_type);
+        let alignment_bits = native_interface
+            .calculate_type_alignment_bits(storage_type);
+        let starting_alignment_offset = 1usize << static_layout.alignment_bits;
+        let additional_alignment_offset =
+            if alignment_bits > static_layout.alignment_bits {
+                let alignment_offset = 1usize << alignment_bits;
+                alignment_offset - starting_alignment_offset
+            } else {
+                0usize
+            };
+        let total_byte_size = storage_size + additional_alignment_offset;
+
+        assert!(static_layout.byte_size >= total_byte_size);
+        static_layout.byte_size -= total_byte_size;
+        static_layout.alignment_bits =
+            (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;*/
+        
+        static_layout.alloc_static(native_interface, storage_type);
+        
+        return Ok(());
+    }
+
+    fn split_static(&mut self, native_interface : & ir::ffi::NativeInterface, error_context : & ErrorContext, size : usize) -> Result<ir::StaticBufferLayout, Error> {
+        let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
+
+        /*let predecessor_static_layout = ir::StaticBufferLayout{byte_size : size, alignment_bits : static_layout.alignment_bits};
+
+        assert!(static_layout.byte_size >= size);
+        static_layout.byte_size -= size;
+        let starting_alignment_offset = 1usize << static_layout.alignment_bits;
+        static_layout.alignment_bits =
+            (size + starting_alignment_offset).trailing_zeros() as usize;*/
+        
+        let predecessor_static_layout = static_layout.split_static(native_interface, size);
+
+        return Ok(predecessor_static_layout);
+    }
+
+    fn merge_static_left(&mut self, native_interface : & ir::ffi::NativeInterface, error_context : & ErrorContext, predecessor_static_layout : ir::StaticBufferLayout) -> Result<(), Error> {
+        let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
+
+        //static_layout.byte_size += predecessor_static_layout.byte_size;
+        //static_layout.alignment_bits = predecessor_static_layout.alignment_bits;
+
+        static_layout.merge_static_left(native_interface, predecessor_static_layout);
+        
+        return Ok(());
+    }
+}
+
 #[derive(Debug)]
 enum NodeType {
     LocalVar(LocalVar),
@@ -1242,9 +1298,9 @@ impl<'program> FuncletChecker<'program> {
 
                 assert_eq!(fenced_place, ir::Place::Gpu);
             }
-            ir::Node::StaticAlloc {
-                spatial_operation,
-                node: impl_node_id,
+            ir::Node::StaticSplit {
+                spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                node: buffer_impl_node_id,
                 sizes,
                 place,
             } => {
@@ -1254,7 +1310,235 @@ impl<'program> FuncletChecker<'program> {
                     _ => {}
                 }
 
-                panic!("Unimplemented")
+                let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
+                let ir::Node::SeparatedBufferSpaces{count: space_count, space: space_spec_node_id} = & spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id] else {
+                    panic!("Must be a separated space\n{}", error_context)
+                };
+
+                self.spatial_spec_checker_opt
+                .as_mut()
+                .unwrap()
+                .check_node_tag(error_context, *buffer_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: *space_spec_node_id}, flow: ir::Flow::Have});
+
+                let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                assert_eq!(buffer.storage_place, *place);
+
+                assert_eq!(sizes.len(), *space_count);
+
+                let output_count = sizes.len() + 1;
+
+                for (i, size) in sizes.iter().enumerate() {
+                    let offset = 1 + i;
+                    let output_impl_node_id = current_node_id + offset;
+
+                    let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                    let new_static_layout = buffer.split_static(&self.program.native_interface, error_context, *size).unwrap();
+
+                    self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(
+                            output_impl_node_id,
+                            ir::Quotient::Node{node_id: *spatial_spec_node_id + offset},
+                            ir::Flow::Have,
+                        );
+                    self.node_types.insert(
+                        output_impl_node_id,
+                        NodeType::Buffer(Buffer {
+                            storage_place : * place,
+                            static_layout_opt : Some(new_static_layout)
+                        }),
+                    );
+                }
+
+                {
+                    let offset = 1 + sizes.len();
+
+                    self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(*buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(*buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(
+                            *buffer_impl_node_id,
+                            ir::Quotient::Node{node_id: *spatial_spec_node_id + offset},
+                            ir::Flow::Have,
+                        );
+                }
+            }
+            ir::Node::StaticMerge {
+                spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                nodes: impl_node_ids,
+                place,
+            } => {
+                // Temporary restriction
+                match *place {
+                    ir::Place::Local => panic!("Unimplemented"),
+                    _ => {}
+                }
+
+                assert!(impl_node_ids.len() > 0);
+
+                let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
+                let ir::Node::SeparatedBufferSpaces{count: space_count, space: space_spec_node_id} = & spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id] else {
+                    panic!("Must be a separated space\n{}", error_context)
+                };
+
+                let buffer_impl_node_id = impl_node_ids[impl_node_ids.len() - 1];
+                self.spatial_spec_checker_opt
+                .as_mut()
+                .unwrap()
+                .check_node_tag(error_context, buffer_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: *space_spec_node_id + impl_node_ids.len()}, flow: ir::Flow::Have});
+
+                // Deallocate in reverse order
+                for i in (0 .. (impl_node_ids.len() - 1)).rev() {
+                    let offset = 1 + i;
+                    let impl_node_id = impl_node_ids[i];
+
+                    let Some(NodeType::Buffer(Buffer {
+                        storage_place,
+                        static_layout_opt : Some(predecessor_static_layout)
+                    })) = self.node_types.remove(& impl_node_id) else {
+                        panic!("{}", error_context)
+                    };
+
+                    assert_eq!(storage_place, *place);
+
+                    let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(& buffer_impl_node_id) else { panic!("{}", error_context); };
+                    buffer.merge_static_left(&self.program.native_interface, error_context, predecessor_static_layout)?;
+
+                    assert!(self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .can_drop_node(impl_node_id));
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .check_node_tag(error_context, impl_node_id, ir::Tag{quot: ir::Quotient::None, flow: ir::Flow::Have});
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .check_node_tag(
+                            error_context,
+                            impl_node_id,
+                            ir::Tag{quot: ir::Quotient::Node{node_id: *spatial_spec_node_id + offset}, flow: ir::Flow::Have}
+                        );
+                }
+
+                {
+                    self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(
+                            buffer_impl_node_id,
+                            ir::Quotient::Node{node_id: *spatial_spec_node_id},
+                            ir::Flow::Have,
+                        );
+                }
+            }
+            /*ir::Node::StaticAlloc {
+                spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                node: buffer_impl_node_id,
+                storage_types,
+                place,
+            } => {
+                // Temporary restriction
+                match *place {
+                    ir::Place::Local => panic!("Unimplemented"),
+                    _ => {}
+                }
+
+                let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
+                let ir::Node::SeparatedBufferSpaces{count: space_count, space: space_spec_node_id} = & spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id] else {
+                    panic!("Must be a separated space\n{}", error_context)
+                };
+
+                self.spatial_spec_checker_opt
+                .as_mut()
+                .unwrap()
+                .check_node_tag(error_context, *buffer_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: *space_spec_node_id}, flow: ir::Flow::Have});
+
+                let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                assert_eq!(buffer.storage_place, *place);
+
+                assert_eq!(storage_types.len(), *space_count);
+
+                let output_count = storage_types.len() + 1;
+
+                for (i, storage_type) in storage_types.iter().enumerate() {
+                    let offset = 1 + i;
+                    let output_impl_node_id = current_node_id + offset;
+
+                    let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                    buffer.alloc_static(&self.program.native_interface, error_context, *storage_type)?;
+
+                    self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(
+                            output_impl_node_id,
+                            ir::Quotient::Node{node_id: *spatial_spec_node_id + offset},
+                            ir::Flow::Have,
+                        );
+                    self.node_types.insert(
+                        output_impl_node_id,
+                        NodeType::Slot(Slot {
+                            storage_type: *storage_type,
+                            queue_place: *place,
+                        }),
+                    );
+                }
+
+                {
+                    let offset = 1 + storage_types.len();
+
+                    self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(*buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(*buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(
+                            *buffer_impl_node_id,
+                            ir::Quotient::Node{node_id: *spatial_spec_node_id + offset},
+                            ir::Flow::Have,
+                        );
+                }
             }
             ir::Node::StaticDealloc {
                 spatial_operation,
@@ -1267,8 +1551,73 @@ impl<'program> FuncletChecker<'program> {
                     _ => {}
                 }
 
+                assert!(impl_node_ids.len() > 0);
+
+                let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
+                let ir::Node::SeparatedBufferSpaces{count: space_count, space: space_spec_node_id} = & spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id] else {
+                    panic!("Must be a separated space\n{}", error_context)
+                };
+
+                let buffer_impl_node_id = impl_node_ids[impl_node_ids.len() - 1];
+                self.spatial_spec_checker_opt
+                .as_mut()
+                .unwrap()
+                .check_node_tag(error_context, buffer_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: *space_spec_node_id + impl_node_ids.len()}, flow: ir::Flow::Have});
+
+                // Deallocate in reverse order
+                for i in (0 .. (impl_node_ids.len() - 1)).rev() {
+                    let offset = 1 + i;
+                    let impl_node_id = impl_node_ids[i];
+
+                    let Some(NodeType::Slot(Slot {
+                        storage_type,
+                        queue_place,
+                    })) = self.node_types.remove(impl_node_id);
+
+                    assert_eq!(*queue_place, *place);
+
+                    let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                    buffer.dealloc_static(&self.program.native_interface, error_context, *storage_type)?;
+
+                    assert!(self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .can_drop_node(impl_node_id));
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .check_node_tag(impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .check_node_tag(
+                            impl_node_id,
+                            ir::Quotient::Node{node_id: *spatial_spec_node_id + offset},
+                            ir::Flow::Have,
+                        );
+                }
+
+                {
+                    self.value_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.timeline_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                    self.spatial_spec_checker_opt
+                        .as_mut()
+                        .unwrap()
+                        .update_scalar_node(
+                            buffer_impl_node_id,
+                            ir::Quotient::Node{node_id: *spatial_spec_node_id},
+                            ir::Flow::Have,
+                        );
+                }
+
                 panic!("Unimplemented")
-            }
+            }*/
             ir::Node::StaticSubAlloc {
                 node: buffer_node_id,
                 place,
@@ -1279,39 +1628,15 @@ impl<'program> FuncletChecker<'program> {
                     ir::Place::Local => panic!("Unimplemented"),
                     _ => {}
                 }
+
                 let buffer_spatial_tag =
                     self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[buffer_node_id];
                 assert_ne!(buffer_spatial_tag.flow, ir::Flow::Met); // A continuation must own the space
 
-                if let Some(NodeType::Buffer(Buffer {
-                    storage_place,
-                    static_layout_opt: Some(static_layout),
-                })) = self.node_types.get_mut(buffer_node_id)
+                if let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_node_id)
                 {
-                    assert_eq!(*storage_place, *place);
-                    // To do check alignment compatibility
-                    let storage_size = self
-                        .program
-                        .native_interface
-                        .calculate_type_byte_size(*storage_type);
-                    let alignment_bits = self
-                        .program
-                        .native_interface
-                        .calculate_type_alignment_bits(*storage_type);
-                    let starting_alignment_offset = 1usize << static_layout.alignment_bits;
-                    let additional_alignment_offset =
-                        if alignment_bits > static_layout.alignment_bits {
-                            let alignment_offset = 1usize << alignment_bits;
-                            alignment_offset - starting_alignment_offset
-                        } else {
-                            0usize
-                        };
-                    let total_byte_size = storage_size + additional_alignment_offset;
-
-                    assert!(static_layout.byte_size >= total_byte_size);
-                    static_layout.byte_size -= total_byte_size;
-                    static_layout.alignment_bits =
-                        (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;
+                    assert_eq!(buffer.storage_place, *place);
+                    buffer.alloc_static(&self.program.native_interface, error_context, *storage_type)?;
 
                     self.value_spec_checker_opt
                         .as_mut()

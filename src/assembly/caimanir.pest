@@ -241,10 +241,10 @@ alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ type_ho
 drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
-static_alloc_sep = ${ "static-alloc" ~ sep }
-static_alloc_node = { assign ~ static_alloc_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
-static_dealloc_sep = ${ "static-dealloc" ~ sep }
-static_dealloc_node = { assign ~ static_dealloc_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
+static_split_sep = ${ "static-split" ~ sep }
+static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
+static_merge_sep = ${ "static-merge" ~ sep }
+static_merge_node = { assign ~ static_merge_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
 
 read_sep = ${ "read-ref" ~ sep }
 read_node = { assign ~ read_sep ~ ffi_type_sep ~ name_hole }
@@ -290,7 +290,7 @@ timeline_node = { extract_node | encoding_event_node | submission_event_node | s
 spatial_node = { extract_node | separated_buffer_space_node }
 
 schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_node
-    | static_alloc_node | static_dealloc_node | read_node | borrow_node | write_node
+    | static_split_node | static_merge_node | read_node | borrow_node | write_node
     | local_do_builtin_node | local_do_external_node | local_copy_node | begin_encoding_node
     | encode_do_node | encode_copy_node | submit_node | sync_fence_node
     | inline_join_node | serialized_join_node | default_join_node

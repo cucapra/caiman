@@ -411,12 +411,12 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
             place: reject_hole(place.as_ref()).clone(),
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
         },
-        ast::Node::StaticAlloc {
+        ast::Node::StaticSplit {
             spatial_operation,
             node,
             sizes,
             place,
-        } => ir::Node::StaticAlloc {
+        } => ir::Node::StaticSplit {
             spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
             node: context.node_id(reject_hole(node.as_ref())),
             sizes: reject_hole(sizes.as_ref())
@@ -425,11 +425,11 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
                 .collect(),
             place: reject_hole(place.as_ref()).clone(),
         },
-        ast::Node::StaticDealloc {
+        ast::Node::StaticMerge {
             spatial_operation,
             nodes,
             place,
-        } => ir::Node::StaticDealloc {
+        } => ir::Node::StaticMerge {
             spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
             nodes: reject_hole(nodes.as_ref())
                 .iter()

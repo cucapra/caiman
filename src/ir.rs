@@ -192,6 +192,48 @@ pub struct StaticBufferLayout {
     pub byte_size: usize,
 }
 
+impl StaticBufferLayout
+{
+    pub fn alloc_static(&mut self, native_interface : & ffi::NativeInterface, storage_type : StorageTypeId) {
+        // To do check alignment compatibility
+        let storage_size = native_interface
+            .calculate_type_byte_size(storage_type);
+        let alignment_bits = native_interface
+            .calculate_type_alignment_bits(storage_type);
+        let starting_alignment_offset = 1usize << self.alignment_bits;
+        let additional_alignment_offset =
+            if alignment_bits > self.alignment_bits {
+                let alignment_offset = 1usize << alignment_bits;
+                alignment_offset - starting_alignment_offset
+            } else {
+                0usize
+            };
+        let total_byte_size = storage_size + additional_alignment_offset;
+
+        assert!(self.byte_size >= total_byte_size);
+        self.byte_size -= total_byte_size;
+        self.alignment_bits =
+            (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;
+    }
+
+    pub fn split_static(&mut self, native_interface : & ffi::NativeInterface, size : usize) -> Self {
+        let predecessor_static_layout = Self{byte_size : size, alignment_bits : self.alignment_bits};
+
+        assert!(self.byte_size >= size);
+        self.byte_size -= size;
+        let starting_alignment_offset = 1usize << self.alignment_bits;
+        self.alignment_bits =
+            (size + starting_alignment_offset).trailing_zeros() as usize;
+
+        return predecessor_static_layout;
+    }
+
+    pub fn merge_static_left(&mut self, native_interface : & ffi::NativeInterface, predecessor_static_layout : Self) {
+        self.byte_size += predecessor_static_layout.byte_size;
+        self.alignment_bits = predecessor_static_layout.alignment_bits;
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type {
     // Common

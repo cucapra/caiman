@@ -43,6 +43,7 @@ enum NodeResult {
     },
     Buffer {
         storage_place: ir::Place,
+        static_layout_opt : Option<ir::StaticBufferLayout>,
         var_id: VarId,
     },
 }
@@ -1017,9 +1018,10 @@ impl<'program> CodeGen<'program> {
                             fence_id,
                         });
                     }
-                    ir::Type::Buffer { storage_place, .. } => {
+                    ir::Type::Buffer { storage_place, static_layout_opt, .. } => {
                         argument_node_results.push(NodeResult::Buffer {
                             storage_place: *storage_place,
+                            static_layout_opt : * static_layout_opt,
                             var_id: argument_variable_ids[index],
                         });
                     }
@@ -2085,6 +2087,45 @@ impl<'program> CodeGen<'program> {
                         panic!("Expected fence")
                     }
                 }
+                ir::Node::StaticSplit{
+                    spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                    node: buffer_impl_node_id,
+                    sizes,
+                    place } => {
+                    for (i, size) in sizes.iter().enumerate()
+                    {
+                        let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_impl_node_id).unwrap() else { panic!("") };
+                        let predecessor_layout = static_layout.split_static(&self.program.native_interface, sizes[i]);
+                        /*funclet_scoped_state.node_results.insert(
+                            current_node_id,
+                            NodeResult::Buffer {
+                                var_id: ,
+                                static_layout_opt: Some(predecessor_layout),
+                                storage_place: *place,
+                            },
+                        );*/
+                    }
+                    /*funclet_scoped_state.node_results.insert(
+                        current_node_id,
+                        NodeResult::Buffer {
+                            var_id: ,
+                            static_layout_opt: Some(predecessor_layout),
+                            storage_place: *place,
+                        },
+                    );*/
+                }
+                ir::Node::StaticMerge{
+                    spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                    nodes: impl_node_ids,
+                    place } => {
+                    let buffer_node_id = impl_node_ids[impl_node_ids.len() - 1];
+                    for i in (0 .. (impl_node_ids.len() - 1)).rev()
+                    {
+                        let NodeResult::Buffer{static_layout_opt: Some(predecessor_static_layout), ..} = funclet_scoped_state.move_node_result(impl_node_ids[i]).unwrap() else { panic!("") };
+                        let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_node_id).unwrap() else { panic!("") };
+                        static_layout.merge_static_left(&self.program.native_interface, predecessor_static_layout);
+                    }
+                }
                 ir::Node::StaticSubAlloc {
                     node: buffer_node_id,
                     place,
@@ -2098,10 +2139,17 @@ impl<'program> CodeGen<'program> {
                     if let Some(NodeResult::Buffer {
                         var_id,
                         storage_place,
+                        static_layout_opt,
                         ..
                     }) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
                     {
                         assert_eq!(*storage_place, *place);
+                        if let Some(static_layout) = static_layout_opt
+                        {
+                            //let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_node_id).unwrap() else { panic!("") };
+                            static_layout.alloc_static(&self.program.native_interface, *storage_type);
+                        }
+
                         let allocation_var_id = self
                             .code_generator
                             .build_buffer_suballocate_ref(*var_id, *storage_type);

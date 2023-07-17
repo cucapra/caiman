@@ -2,10 +2,10 @@ use super::error::{Error, ErrorContext};
 use crate::ir;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::default::Default;
-//#[macro_use]
-//use super::{error_ifn_eq, };
+#[macro_use]
+use crate::type_system::error::{error_ifn_eq, };
 
-macro_rules! error_ifn_eq {
+/*macro_rules! error_ifn_eq {
     ($ctx:expr, $left:expr, $right:expr $(,)?) => {
         match (&$left, &$right) {
             (left_val, right_val) => {
@@ -17,7 +17,7 @@ macro_rules! error_ifn_eq {
             }
         }
     };
-}
+}*/
 
 fn assert_failed<T: std::fmt::Debug>(error_context: &ErrorContext, a: T, b: T) -> Error {
     error_context.generic_error(&format!("{:?} != {:?}", a, b))
@@ -597,80 +597,87 @@ impl<'program> FuncletSpecChecker<'program> {
 			panic!("Impl node #{} has no tag for this spec\n{}", node_id, error_context)
 		};
         //assert_eq!(*scalar, tag);
-        check_tag_compatibility_interior(error_context, self.spec_funclet, *scalar, tag).map_err(
+        check_tag_compatibility_interior(error_context, self.spec_funclet, *scalar, tag)?;
+        /* .map_err(
             |e| {
                 e.append_message(format!(
                     "While checking that node #{} has tag {:?}",
                     node_id, tag
                 ))
             },
-        )?;
+        )?;*/
 
         return Ok(());
     }
 
     pub fn check_node_is_current_with_implicit(
         &self,
-        error_context: &ErrorContext,
+        old_error_context: &ErrorContext,
         node_id: ir::NodeId,
     ) -> Result<(), Error> {
+        let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
+        let error_context =
+            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+
         self.check_node_tag(error_context, node_id, self.current_implicit_tag)
     }
 
     pub fn check_node_is_readable_at_implicit(
         &self,
-        error_context: &ErrorContext,
+        old_error_context: &ErrorContext,
         node_id: ir::NodeId,
     ) -> Result<(), Error> {
+        let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
+        let error_context =
+            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        
         let scalar = self.scalar_nodes.get(&node_id).unwrap();
-        if !scalar.flow.is_readable() {
-            return Err(Error::Generic {
-                message: format!("Node is not readable"),
-            });
-        }
+        assert!(scalar.flow.is_readable(), "{}", error_context);
         let tag = ir::Tag {
             quot: self.current_implicit_tag.quot,
             flow: scalar.flow,
         };
         //assert_eq!(*scalar, tag);
-        check_tag_compatibility_interior(error_context, self.spec_funclet, *scalar, tag).map_err(
+        check_tag_compatibility_interior(error_context, self.spec_funclet, *scalar, tag)?;
+        /*.map_err(
             |e| {
                 e.append_message(format!(
                     "While checking that node #{} has tag {:?}",
                     node_id, tag
                 ))
             },
-        )?;
+        )?;*/
 
         return Ok(());
     }
 
     pub fn check_node_is_readable_at(
         &self,
-        error_context: &ErrorContext,
+        old_error_context: &ErrorContext,
         node_id: ir::NodeId,
         reader_tag: ir::Tag,
     ) -> Result<(), Error> {
+        let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
+        let error_context =
+            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        
         let scalar = self.scalar_nodes.get(&node_id).unwrap();
-        if !scalar.flow.is_readable() {
-            return Err(Error::Generic {
-                message: format!("Node is not readable"),
-            });
-        }
-        assert_eq!(reader_tag.flow, ir::Flow::Have);
+        assert!(scalar.flow.is_readable(), "{}", error_context);
+        assert_eq!(reader_tag.flow, ir::Flow::Have, "{}", error_context);
         let tag = ir::Tag {
             quot: reader_tag.quot,
             flow: scalar.flow,
         };
         //assert_eq!(*scalar, tag);
-        check_tag_compatibility_interior(error_context, self.spec_funclet, *scalar, tag).map_err(
+        check_tag_compatibility_interior(error_context, self.spec_funclet, *scalar, tag)?;
+        /*.map_err(
             |e| {
                 e.append_message(format!(
                     "While checking that node #{} has tag {:?}",
                     node_id, tag
                 ))
             },
-        )?;
+        )?;*/
 
         return Ok(());
     }
@@ -685,11 +692,15 @@ impl<'program> FuncletSpecChecker<'program> {
 
     pub fn check_join_tags(
         &self,
-        error_context: &ErrorContext,
+        old_error_context: &ErrorContext,
         node_id: ir::NodeId,
         input_tags: &[ir::Tag],
         implicit_in_tag: ir::Tag,
     ) -> Result<(), Error> {
+        let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
+        let error_context =
+            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        
         let join = self.join_nodes.get(&node_id).unwrap();
         //assert_eq!(*scalar, tag);
         for index in 0..join.input_tags.len() {
@@ -698,13 +709,13 @@ impl<'program> FuncletSpecChecker<'program> {
                 self.spec_funclet,
                 input_tags[index],
                 join.input_tags[index],
-            )
-            .map_err(|e| {
+            )?;
+            /*.map_err(|e| {
                 e.append_message(format!(
                     "While checking that join #{} input #{} has tag {:?}",
                     node_id, index, input_tags[index]
                 ))
-            })?;
+            })?;*/
         }
 
         check_tag_compatibility_interior(
@@ -712,13 +723,13 @@ impl<'program> FuncletSpecChecker<'program> {
             self.spec_funclet,
             implicit_in_tag,
             join.implicit_tag,
-        )
-        .map_err(|e| {
+        )?;
+        /*.map_err(|e| {
             e.append_message(format!(
                 "While checking that join #{} has implicit input tag {:?}",
                 node_id, implicit_in_tag
             ))
-        })?;
+        })?;*/
 
         return Ok(());
     }
@@ -902,9 +913,10 @@ fn check_tag_compatibility_enter(
             );
         }
         _ => {
-            return Err(Error::Generic {
+            panic!("Ill-formed: {:?} to {:?} via enter\n{}", caller_tag, callee_tag, error_context)
+            /*return Err(Error::Generic {
                 message: format!("Ill-formed: {:?} to {:?} via enter", caller_tag, callee_tag),
-            })
+            })*/
         }
     }
     return Ok(());
@@ -918,8 +930,8 @@ fn check_tag_compatibility_exit(
     source_tag: ir::Tag,
     destination_tag: ir::Tag,
 ) -> Result<(), Error> {
-    assert_eq!(source_tag.flow, ir::Flow::Have);
-    assert_eq!(destination_tag.flow, ir::Flow::Have);
+    assert_eq!(source_tag.flow, ir::Flow::Have, "{}", error_context);
+    assert_eq!(destination_tag.flow, ir::Flow::Have, "{}", error_context);
     match (source_tag.quot, destination_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (
@@ -946,8 +958,9 @@ fn check_tag_compatibility_exit(
                 );
             } else {
                 panic!(
-                    "Target operation is not a result extraction: #{:?} {:?}",
-                    node_id, node
+                    "Target operation is not a result extraction: #{:?} {:?}\n{}",
+                    node_id, node,
+                    error_context
                 );
             }
         }
@@ -1027,8 +1040,9 @@ fn check_tag_compatibility_interior(
                 assert_eq!(*phi_index, index);
             } else {
                 panic!(
-                    "While checking interior compatibility of {:?} to {:?}: {:?} is not a phi",
-                    source_tag, destination_tag, current_value_funclet.nodes[remote_node_id]
+                    "While checking interior compatibility of {:?} to {:?}: {:?} is not a phi\n{}",
+                    source_tag, destination_tag, current_value_funclet.nodes[remote_node_id],
+                    error_context
                 );
             }
         }
@@ -1043,8 +1057,9 @@ fn check_tag_compatibility_interior(
                 assert_eq!(*phi_index, index);
             } else {
                 panic!(
-                    "While checking interior compatibility of {:?} to {:?}: {:?} is not a phi",
-                    source_tag, destination_tag, current_value_funclet.nodes[remote_node_id]
+                    "While checking interior compatibility of {:?} to {:?}: {:?} is not a phi\n{}",
+                    source_tag, destination_tag, current_value_funclet.nodes[remote_node_id],
+                    error_context
                 );
             }
         }
@@ -1061,9 +1076,10 @@ fn check_tag_compatibility_interior(
         {
             match &current_value_funclet.tail_edge {
                 ir::TailEdge::Return { return_values } => {
-                    error_ifn_eq!(error_context, return_values[index], node_id)?;
+                    //error_ifn_eq!(error_context, return_values[index], node_id)?;
+                    assert_eq!(return_values[index], node_id, "{}", error_context);
                 }
-                _ => panic!("Not a unit"),
+                _ => panic!("Not a unit\n{}", error_context),
             }
         }
         (ir::Quotient::Output { index }, ir::Quotient::Node { node_id })
@@ -1071,7 +1087,7 @@ fn check_tag_compatibility_interior(
         {
             match &current_value_funclet.tail_edge {
                 ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], node_id),
-                _ => panic!("Not a unit"),
+                _ => panic!("Not a unit\n{}", error_context),
             }
         }
         (ir::Quotient::Output { index }, ir::Quotient::Output { index: index_2 }) => {

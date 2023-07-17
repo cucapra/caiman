@@ -127,10 +127,10 @@ impl CaimanAssemblyParser {
     fn static_sub_alloc_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
-    fn static_alloc_sep(_input: Node) -> ParseResult<()> {
+    fn static_split_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
-    fn static_dealloc_sep(_input: Node) -> ParseResult<()> {
+    fn static_merge_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
     fn read_sep(_input: Node) -> ParseResult<()> {
@@ -1439,12 +1439,12 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn static_alloc_node(input: Node) -> ParseResult<ast::NamedNode> {
+    fn static_split_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), static_alloc_sep, place_hole_sep(place),
+            [assign(name), static_split_sep, place_hole_sep(place),
                 name_hole(node), n_list(sizes), quotient_hole(spatial_operation)] => ast::NamedNode {
                     name: Some(name),
-                    node: ast::Node::StaticAlloc {
+                    node: ast::Node::StaticSplit {
                         node: node.map(|s| NodeId(s)),
                         place,
                         sizes,
@@ -1454,12 +1454,12 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn static_dealloc_node(input: Node) -> ParseResult<ast::NamedNode> {
+    fn static_merge_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
                 quotient_hole(spatial_operation), name_box(nodes)] => ast::NamedNode {
                     name: Some(name),
-                    node: ast::Node::StaticDealloc {
+                    node: ast::Node::StaticMerge {
                         nodes,
                         place,
                         spatial_operation
@@ -1717,8 +1717,8 @@ impl CaimanAssemblyParser {
             [alloc_temporary_node(n)] => n,
             [drop_node(n)] => n,
             [static_sub_alloc_node(n)] => n,
-            [static_alloc_node(n)] => n,
-            [static_dealloc_node(n)] => n,
+            [static_split_node(n)] => n,
+            [static_merge_node(n)] => n,
             [read_node(n)] => n,
             [borrow_node(n)] => n,
             [write_node(n)] => n,
