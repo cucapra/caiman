@@ -26,14 +26,9 @@ impl<'context> Context<'context> {
     pub fn static_node_ids(&self, funclet : &ast::FuncletId) -> Vec<ast::NodeId> {
         let mut result = Vec::new();
         for command in &self.get_funclet(funclet).unwrap().commands {
-            match command {
-                Some(ast::Command::Node(named)) => {
-                    match &named.name {
-                        None => {},
-                        Some(name) => { result.push(name.clone()); }
-                    }
-                },
-                _ => {}
+            match &command.name {
+                None => {},
+                Some(name) => { result.push(name.clone()); }
             }
         };
         result

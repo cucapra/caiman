@@ -53,5 +53,5 @@ pub fn explicate(mut program: &mut ast::Program) {
     let mut context = Context::new(&mut program);
     context.corrections();
     context.initialize(); // setup the context with initial "raw" information
-    explicate_funclets(&mut context);
+    // explicate_funclets(&mut context);
 }

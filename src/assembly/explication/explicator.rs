@@ -5,6 +5,7 @@ use crate::assembly::ast::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId, TypeId,
 };
 use crate::assembly::explication::context::Context;
+use crate::assembly::explication::context::AllocationInfo;
 use crate::assembly::explication::util;
 use crate::assembly::explication::util::{reject_hole, todo_hole};
 use crate::assembly::parser;
@@ -19,11 +20,11 @@ fn infer_operation(
     known_inputs: &Vec<(usize, NodeId)>,
     known_outputs: &Vec<(usize, NodeId)>,
     context: &mut Context,
-) -> Option<assembly::ast::NodeId> {
+) -> Option<assembly::ast::RemoteNodeId> {
     // ignoring inputs for now due to being syntactically disallowed
     known_outputs.get(0).and_then(|output| {
         context
-            .get_value_allocation(&context.location.funclet_name, &output.1)
+            .get_value_allocation(context.location_funclet(), &output.1)
             .map(|name| name.clone())
     })
 }
@@ -75,7 +76,7 @@ fn explicate_operation(
     let operation = match operation_hole {
         Some(op) => reject_hole(op.node.as_ref()).clone(),
         None => match infer_operation(&known_inputs, &known_outputs, context) {
-            Some(op) => op,
+            Some(op) => op.node.unwrap(),
             None => todo!("Unfinished path"),
         },
     };
@@ -83,7 +84,8 @@ fn explicate_operation(
         funclet: Some(context.get_current_value_funclet().unwrap().clone()),
         node: Some(operation),
     };
-    let op = ast::Quotient::Node(Some(remote.clone()));
+    let qop = ast::Quotient::Node(Some(remote.clone()));
+    let op = remote.clone();
 
     let node = context.get_node(&remote.funclet.unwrap(), &remote.node.unwrap()).unwrap();
     let node_arguments = get_node_arguments(&node, context);
@@ -102,7 +104,7 @@ fn explicate_operation(
     match input_hole {
         None => {
             for argument in node_arguments.iter() {
-                add_to_inputs(&op, &mut inputs, argument, context);
+                add_to_inputs(&qop, &mut inputs, argument, context);
             }
         }
         Some(input_vec) => {
@@ -111,7 +113,7 @@ fn explicate_operation(
                     Some(n) => inputs.push(n.clone()),
                     None => {
                         let argument = node_arguments.get(index).unwrap();
-                        add_to_inputs(&op, &mut inputs, argument, context);
+                        add_to_inputs(&qop, &mut inputs, argument, context);
                     }
                 }
             }
@@ -127,13 +129,16 @@ fn explicate_operation(
         match output {
             Some(n) => outputs.push(n.clone()),
             None => {
-                let node = context.get_node(&op.funclet, &op.node).unwrap();
+                let node = context.get_node(&op.funclet.as_ref().unwrap(), &op.node.as_ref().unwrap()).unwrap();
                 match node {
                     assembly::ast::Node::Constant { .. } => {
-                        match context.get_schedule_allocations(&op.funclet, &op.node) {
+                        match context.get_schedule_allocations(&op.funclet.as_ref().unwrap(), &op.node.as_ref().unwrap()) {
                             None => todo!("Unfinished path"), // failed to explicate on this pass
                             Some(alloc_map) => {
-                                match alloc_map.get(&context.location.funclet_name) {
+                                match alloc_map.get(&AllocationInfo {
+                                    schedule_funclet: context.location_funclet().clone(),
+                                    place: ir::Place::Gpu, // make actually correct
+                                }) {
                                     None => todo!(),
                                     Some(alloc_loc) => outputs.push(alloc_loc.clone()),
                                 }
@@ -146,7 +151,7 @@ fn explicate_operation(
         }
     }
 
-    (op, inputs, outputs)
+    (qop, inputs, outputs)
 }
 
 // pub fn explicate_allocate_temporary(
@@ -174,8 +179,8 @@ pub fn explicate_local_do_builtin(
         explicate_operation(operation_hole, inputs_hole, outputs_hole, context);
     ast::Node::LocalDoBuiltin {
         operation: Some(operation),
-        inputs: Some(inputs.iter().map(|s| Some(s)).collect()),
-        outputs: Some(outputs.iter().map(|s| Some(s)).collect()),
+        inputs: Some(inputs.iter().map(|s| Some(s.clone())).collect()),
+        outputs: Some(outputs.iter().map(|s| Some(s.clone())).collect()),
     }
 }
 

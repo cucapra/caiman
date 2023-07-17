@@ -15,7 +15,11 @@ impl<'context> Context<'context> {
     }
 
     // get what the associated schedule node is allocating
-    pub fn get_value_allocation(&self, funclet: &FuncletId, node: &NodeId) -> Option<&ast::NodeId> {
+    pub fn get_value_allocation(
+        &self,
+        funclet: &FuncletId,
+        node: &NodeId,
+    ) -> Option<&ast::RemoteNodeId> {
         self.schedule_explication_data
             .get(funclet)
             .and_then(|f| f.allocations.get(node))
@@ -32,7 +36,7 @@ impl<'context> Context<'context> {
         &self,
         funclet: &FuncletId,
         node: &NodeId,
-    ) -> Option<&HashMap<FuncletId, NodeId>> {
+    ) -> Option<&HashMap<AllocationInfo, NodeId>> {
         self.value_explication_data.get(funclet).and_then(|f| {
             f.explication_information
                 .get(node)
@@ -41,11 +45,17 @@ impl<'context> Context<'context> {
     }
 
     // SKIP
-    pub fn get_current_schedule_allocation(&self, node: &NodeId) -> Option<&NodeId> {
+    pub fn get_current_schedule_allocation(
+        &self,
+        node: &NodeId,
+    ) -> Option<&NodeId> {
         self.get_current_value_funclet().and_then(|vf| {
             self.get_schedule_allocations(vf, node)
                 .unwrap()
-                .get(&self.location.funclet.as_ref().unwrap())
+                .get(&AllocationInfo {
+                    schedule_funclet: self.location_funclet().clone(),
+                    place: ir::Place::Gpu, // todo: make actually correct
+                })
         })
     }
 
@@ -74,7 +84,7 @@ impl<'context> Context<'context> {
                                 ast::Command::Node(node) => {
                                     return Some(node);
                                 }
-                                _ => unreachable!("Attempting to treat {} as a node", n.0)
+                                _ => unreachable!("Attempting to treat {} as a node", n.0),
                             }
                         }
                     }
@@ -89,14 +99,12 @@ impl<'context> Context<'context> {
             for command in &f.commands {
                 match &command.name {
                     None => {}
-                    Some(n) => {
-                        match &command.command {
-                            ast::Command::TailEdge(edge) => {
-                                return Some(edge);
-                            }
-                            _ => {}
+                    Some(n) => match &command.command {
+                        ast::Command::TailEdge(edge) => {
+                            return Some(edge);
                         }
-                    }
+                        _ => {}
+                    },
                 }
             }
             None

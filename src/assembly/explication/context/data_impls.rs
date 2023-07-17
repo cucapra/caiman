@@ -36,7 +36,7 @@ impl SpecFuncletData {
             call_outputs: HashMap::new(),
         }
     }
-    fn allocate(
+    pub fn allocate(
         &mut self,
         value_node: NodeId,
         schedule_funclet: FuncletId,
@@ -47,7 +47,13 @@ impl SpecFuncletData {
             .entry(value_node)
             .or_insert(NodeExplicationInformation::new())
             .scheduled_allocations
-            .insert(schedule_funclet, schedule_node);
+            .insert(
+                AllocationInfo {
+                    schedule_funclet,
+                    place,
+                },
+                schedule_node,
+            );
     }
 }
 

@@ -1,9 +1,10 @@
 version 0.0.2
 
-type i64;
+type i32;
+type array<i32>;
 event %event0;
 buffer_space %buffspace;
-native_value %ni64 : i64;
+native_value %ni32 : i32;
 
 function @add(i64, i64) -> i64;
 function @main() -> i64;

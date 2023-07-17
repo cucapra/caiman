@@ -22,7 +22,7 @@ pub struct Context<'context> {
     program: &'context mut ast::Program,
 
     // information found about a given value funclet
-    value_explication_data: HashMap<FuncletId, ValueFuncletData>,
+    value_explication_data: HashMap<FuncletId, SpecFuncletData>,
     // information found about a given schedule funclet
     schedule_explication_data: HashMap<FuncletId, ScheduleFuncletData>,
 
@@ -31,9 +31,9 @@ pub struct Context<'context> {
 
 // information needed to recover a particular allocation
 #[derive(Debug, Hash, Eq, PartialEq)]
-struct AllocationInfo {
-    schedule_funclet: FuncletId,
-    place: ir::Place,
+pub struct AllocationInfo {
+    pub schedule_funclet: FuncletId,
+    pub place: ir::Place,
 }
 
 #[derive(Debug)]
