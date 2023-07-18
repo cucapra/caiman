@@ -38,9 +38,9 @@ meta_name_hole_sep = ${ meta_name_hole ~ sep }
 //    ffi_types
 ffi_type_base = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
                       "i16" | "i32" | "i64" | "gpu_buffer_allocator" | "cpu_buffer_allocator" }
-ffi_array_parameters = { "<" ~ ffi_type ~ "," ~ n ~ ">" }
+ffi_array_parameters = { "<" ~ ffi_type ~ ("," ~ n)? ~ ">" }
 ffi_tuple_parameters = { "<" ~ ffi_type ~ ("," ~ ffi_type)* ~ ">" } // must have at least one field
-ffi_parameterized_ref_name = { "erased_length_array" | "const_ref" |
+ffi_parameterized_ref_name = { "const_ref" |
     "mut_ref" | "const_slice" | "mut_slice" | "gpu_buffer_ref" | "gpu_buffer_slice" |
     "cpu_buffer_ref" }
 
@@ -149,12 +149,7 @@ value_sep = @{ "value" ~ sep }
 timeline_sep = @{ "timeline" ~ sep }
 spatial_sep = @{ "spatial" ~ sep }
 
-schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
-schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
-
-funclet = { "value" ~ impl_box ~ value_funclet | "schedule" ~ schedule_box ~ schedule_funclet |
+funclet = { "value" ~ impl_box ~ value_funclet | "schedule" ~ schedule_funclet |
     timeline_sep ~ timeline_funclet | spatial_sep ~ spatial_funclet }
 
 //   header setup
@@ -173,14 +168,23 @@ timeline_funclet = { funclet_header ~ "{" ~ (timeline_command ~ ";")* ~ "}" }
 spatial_command = { spatial_node | tail_edge }
 spatial_funclet = { funclet_header ~ "{" ~ (spatial_command ~ ";")* ~ "}" }
 
+schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
+schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
+schedule_implicit = { "<" ~ tag ~ "," ~ tag ~ ">" }
+
 schedule_typ = ${ (tag ~ sep)* ~ typ }
 schedule_arg = { (name ~ ":")? ~ schedule_typ }
 schedule_args = { (schedule_arg ~ ("," ~ schedule_arg)*)? }
 schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
-schedule_header = { name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
+schedule_header = { schedule_box ~ schedule_implicit ~
+    name ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
 
 schedule_command = { schedule_node | tail_edge | node_hole }
-schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
+// make its own block to help the parser structure
+schedule_commands = { "{" ~ (schedule_command ~ ";")* ~ "}" }
+schedule_funclet = { schedule_header ~ schedule_commands }
 
 //   tail edges
 

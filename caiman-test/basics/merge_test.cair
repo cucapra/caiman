@@ -30,9 +30,10 @@ spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_main<input($time.%e)-have, output($time.%e)-have>() ->
-[%out : %ni64] {
+schedule
+[value $val = %foo, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%foo_main() -> [%out : %ni64] {
     %x_loc = alloc-temporary local i64;
     %y_loc = alloc-temporary local i64;
     %n1_loc = alloc-temporary local i64;

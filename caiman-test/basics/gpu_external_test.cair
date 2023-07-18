@@ -48,10 +48,10 @@ spatial %foo_space(%bs : %buff_space) -> %buff_space {
     return %bs;
 }
 
-schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
-%foo_main<input($time.%e)-have, output($time.%e)-have>
-(%x_loc : node($val.%x)-have %i32l)
--> [%out : %i32n] {
+schedule
+[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
+<input($time.%e)-have, output($time.%e)-have>
+%foo_main(%x_loc : node($val.%x)-have %i32l) -> [%out : %i32n] {
     %c_loc = alloc-temporary local i32;
     %x_gpu = alloc-temporary gpu i32;
     %y_gpu = alloc-temporary gpu i32;
