@@ -18,7 +18,7 @@ impl<'context> Context<'context> {
                         index += 1;
                     }
                     for command in f.commands.iter_mut() {
-                        // give names to none-nodes
+                        // give names to unnamed things (even tail edges, just in case)
                         command.name = match &command.name {
                             None => Some(NodeId(self.meta_data.next_name())),
                             n => n.clone()

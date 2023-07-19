@@ -956,13 +956,24 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn schedule_box(input: Node)
-    -> ParseResult<(ParseBindingInfo, Option<FuncletId>, Option<FuncletId>, Option<FuncletId>)> {
+    fn schedule_box(
+        input: Node,
+    ) -> ParseResult<(
+        ParseBindingInfo,
+        Option<FuncletId>,
+        Option<FuncletId>,
+        Option<FuncletId>,
+    )> {
         fn build_parse_info(
             val: Option<(String, String)>,
             time: Option<(String, String)>,
             space: Option<(String, String)>,
-        ) -> (ParseBindingInfo, Option<FuncletId>, Option<FuncletId>, Option<FuncletId>) {
+        ) -> (
+            ParseBindingInfo,
+            Option<FuncletId>,
+            Option<FuncletId>,
+            Option<FuncletId>,
+        ) {
             fn unpack_pair(
                 meta_map: &mut HashMap<String, FuncletId>,
                 pair: Option<(String, String)>,
@@ -980,7 +991,7 @@ impl CaimanAssemblyParser {
             let value = unpack_pair(&mut meta_map, val);
             let timeline = unpack_pair(&mut meta_map, time);
             let spatial = unpack_pair(&mut meta_map, space);
-            (ParseBindingInfo { meta_map, }, value, timeline, spatial)
+            (ParseBindingInfo { meta_map }, value, timeline, spatial)
         }
         Ok(match_nodes!(input.into_children();
             [schedule_box_value(val), schedule_box_timeline(time),
@@ -1160,17 +1171,30 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn schedule_header_parameterized(
+        input: Node,
+    ) -> ParseResult<(
+        (ast::Tag, ast::Tag),
+        String,
+        Vec<ast::FuncletArgument>,
+        Vec<ast::FuncletArgument>,
+    )> {
+        Ok(match_nodes!(input.into_children();
+            [schedule_implicit(tags), name(name), schedule_args(args), schedule_return(ret)] =>
+                (tags, name, args, ret)
+        ))
+    }
+
     fn schedule_header(input: Node) -> ParseResult<(ParseBindingInfo, ast::FuncletHeader)> {
         // requires that UserData be setup properly
         // unwrap with a panic cause this is an internal error if it happens
         match_nodes!(input.into_children();
-            [schedule_implicit((itag, otag)), schedule_box((binding, value, timeline, spatial)),
-            name(name), mut schedule_args, mut schedule_return] => {
-                *schedule_args.user_data().binding_info.borrow_mut() = Some(binding.clone());
-                let args_res = CaimanAssemblyParser::schedule_args(schedule_args);
-                *schedule_return.user_data().binding_info.borrow_mut() = Some(binding.clone());
-                let ret_res = CaimanAssemblyParser::schedule_return(schedule_return);
-                args_res.and_then(|args| ret_res.map(|ret|
+            [schedule_box((binding, value, timeline, spatial)), mut schedule_header_parameterized] => {
+                *schedule_header_parameterized.user_data().binding_info.borrow_mut() =
+                    Some(binding.clone());
+                let parameterized = CaimanAssemblyParser::schedule_header_parameterized
+                    (schedule_header_parameterized);
+                parameterized.map(|((itag, otag), name, args, ret)|
                     (binding, ast::FuncletHeader {
                         name: FuncletId(name),
                         args,
@@ -1182,7 +1206,7 @@ impl CaimanAssemblyParser {
                             spatial
                         })
                     })
-                ))
+                )
             }
         )
     }

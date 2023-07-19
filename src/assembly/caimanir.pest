@@ -178,8 +178,9 @@ schedule_typ = ${ (tag ~ sep)* ~ typ }
 schedule_arg = { (name ~ ":")? ~ schedule_typ }
 schedule_args = { (schedule_arg ~ ("," ~ schedule_arg)*)? }
 schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
-schedule_header = { schedule_box ~ schedule_implicit ~
-    name ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
+schedule_header_parameterized = { schedule_implicit ~ name ~
+    "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
+schedule_header = { schedule_box ~ schedule_header_parameterized }
 
 schedule_command = { schedule_node | tail_edge | node_hole }
 // make its own block to help the parser structure

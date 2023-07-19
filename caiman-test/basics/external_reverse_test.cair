@@ -17,8 +17,9 @@ value[impl default @main] %foo() -> i64 {
     %x = constant %ni64 2;
 }
 
-schedule<none-have, none-have>
+schedule
 [value $val = %foo, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
 %bar() -> [%out : %ni64] {
     %x_ref = alloc-temporary local i64;
     %y_ref = alloc-temporary local i64;

@@ -188,7 +188,13 @@ impl Context {
                     for command in &f.commands {
                         // assume that each node has a name at this point,
                         //   re: explication corrections
-                        node_table.local.push(command.name.clone().unwrap());
+                        match command.command {
+                            ast::Command::Node(_) => {
+                                node_table.local.push(command.name.clone().unwrap());
+                            }
+                            ast::Command::TailEdge(_) => {} // don't add tail edges
+                            ast::Command::Hole => { unreachable!("unimplemented hole"); }
+                        }
                     }
                     for ret_arg in &f.header.ret {
                         match &ret_arg.name {
