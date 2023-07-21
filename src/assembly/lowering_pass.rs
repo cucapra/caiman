@@ -1015,14 +1015,16 @@ fn ir_function_class(
 }
 
 fn ir_pipeline(pipeline: &ast::Pipeline, context: &mut Context) -> ir::Pipeline {
-    ir::Pipeline {
-        name: pipeline.name.clone(),
-        entry_funclet: context
-            .funclet_indices
-            .get_funclet(&pipeline.funclet.0)
-            .unwrap()
-            .clone(),
-        effect_id_opt: None,
+    match context.funclet_indices.get_funclet(&pipeline.funclet.0) {
+        Some(entry_funclet) => ir::Pipeline {
+            name: pipeline.name.clone(),
+            entry_funclet: entry_funclet.clone(),
+            effect_id_opt: None,
+        },
+        None => panic!(
+            "Unknown funclet name {} in pipeline {}",
+            &pipeline.funclet.0, &pipeline.name
+        ),
     }
 }
 

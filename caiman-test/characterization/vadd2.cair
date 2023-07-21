@@ -17,7 +17,7 @@ function @prepend(i32, array<i32>) -> array<i32>;
 function @vadd(array<i32>, array<i32>, u32) -> array<i32>;
 function @vadd2(array<i32>, array<i32>, array<i32>, u32) -> array<i32>;
 
-external-cpu-pure[impl @add] %iadd(i32, i32) -> i32;
+external-cpu-pure[impl @iadd] %iadd(i32, i32) -> i32;
 external-cpu-pure[impl @empty] %empty() -> array<i32>;
 external-cpu-pure[impl @split] %split(array<i32>) -> [i32, array<i32>];
 external-cpu-pure[impl @prepend] %prepend(i32, array<i32>) -> array<i32>;
@@ -34,11 +34,11 @@ value[impl default @vadd] %vadd(
     %v2_head = extract %v2_head_tail_t 0;
     %v2_tail = extract %v2_head_tail_t 1;
 
-    %added_t = call @add(%v1_head, %v2_head);
+    %added_t = call @iadd(%v1_head, %v2_head);
     %added = extract %added_t 0;
 
     %neg1 = constant %ni32 -1;
-    %length_m1_t = call @add(%length, %neg1);
+    %length_m1_t = call @iadd(%length, %neg1);
     %length_m1 = extract %length_m1_t 0;
     %rec_t = call @vadd(%v1_tail, %v2_tail, %length_m1);
     %rec = extract %rec_t 0;
@@ -53,7 +53,7 @@ value[impl default @vadd] %vadd(
     return %result;
 }
 
-value[impl default @vadd] %vadd2(
+value[impl default @vadd2] %vadd2(
 %v1: array<i32>,
 %v2: array<i32>,
 %v3: array<i32>,
@@ -79,7 +79,7 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
     %djoin = default-join;
     %join = inline-join %vadd_ret [] %djoin;
 
-    schedule-select %length [%vadd_rec_case, %vadd_base_case]
+    schedule-select %length_loc [%vadd_rec_case, %vadd_base_case]
         [value node($val.%result), timeline none, spatial none]
         (%v1_loc, %v2_loc, %length_loc) %join;
 }
@@ -87,7 +87,44 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 <none-have, none-have>
 %vadd_rec_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
+    %v1_head_loc = alloc-temporary local array<i32>;
+    %v1_tail_loc = alloc-temporary local array<i32>;
+    %v2_head_loc = alloc-temporary local array<i32>;
+    %v2_tail_loc = alloc-temporary local array<i32>;
+    %added_loc = alloc-temporary local i32;
+    %neg1_loc = alloc-temporary local i32;
+    %length_m1_loc = alloc-temporary local i32;
 
+    local-do-builtin node($val.%neg1)() -> %neg1_loc;
+    local-do-external %iadd node($val.%length_m1)(%length_loc, %neg1_loc) -> %length_m1_loc;
+
+    local-do-external %split node($val.%v1_head_tail_t)(%v1_loc) -> [%v1_head_loc, %v1_tail_loc];
+    local-do-external %split node($val.%v2_head_tail_t)(%v2_loc) -> [%v2_head_loc, %v2_tail_loc];
+    local-do-external %iadd node($val.%added)(%v1_head_loc, %v2_head_loc) -> %added_loc;
+
+    %added_val = read-ref i32 %added_loc;
+
+    %djoin = default-join;
+    %join = inline-join %vadd_rec_prepend [%added_val] %djoin;
+
+    %v1_tail_val = read-ref array<i32> %v1_tail_loc;
+    %v2_tail_val = read-ref array<i32> %v2_tail_loc;
+    %length_m1_val = read-ref u32 %length_m1_loc;
+
+    schedule-call %vadd_main[value node($val.%rec_t), timeline none, spatial none]
+        (%v1_tail_val, %v2_tail_val, %length_m1_val) %join;
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_rec_prepend(
+%added_loc : node($val.%added)-have %ni32,
+%rec_loc : node($val.%rec)-have %na32)
+-> %na32 {
+    %built_loc = alloc-temporary local array<i32>;
+    local-do-external %prepend node($val.%built_t)(%added_loc, %rec_loc) -> %built_loc;
+    %built_val = read-ref array<i32> %built_loc;
+    return %built_val;
 }
 
 schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
@@ -95,14 +132,14 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 %vadd_base_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
     %empty_loc = alloc-temporary local array<i32>;
     local-do-external %empty node($val.%empty)() -> %empty_loc;
-    %empty_val = read-ref %empty_loc;
+    %empty_val = read-ref array<i32> %empty_loc;
     return %empty_val;
 }
 
 schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 <none-have, none-have>
 %vadd_ret(%result_loc : %na32) -> %na32 {
-    return %result_loc
+    return %result_loc;
 }
 
-pipeline "main" = %foo_main;
+pipeline "main" = %vadd_main;
