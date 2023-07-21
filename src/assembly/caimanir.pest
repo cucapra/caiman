@@ -218,7 +218,7 @@ extract_node = { assign ~ extract_sep ~ name ~ n }
 //     value
 
 // we can syntactically disallow holes to a (limited) extent here, so might as well
-constant_value = @{ ASCII_DIGIT+ }
+constant_value = @{ "-"? ~ n }
 constant_node = ${ assign ~ sep? ~ "constant" ~ sep ~ name_sep ~ constant_value }
 call_sep = @{ "call" ~ sep }
 call_node = { assign ~ call_sep ~ function_class_name ~ name_call }

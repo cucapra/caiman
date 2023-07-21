@@ -26,9 +26,6 @@ value[impl default @vadd] %vadd(
 %v1: array<i32>,
 %v2: array<i32>,
 %length: u32) -> array<i32> {
-    %empty_t = call @empty();
-    %empty = extract %empty_t 0;
-
     %v1_head_tail_t = call @split(%v1);
     %v1_head = extract %v1_head_tail_t 0;
     %v1_tail = extract %v1_head_tail_t 1;
@@ -48,6 +45,9 @@ value[impl default @vadd] %vadd(
 
     %built_t = call @prepend(%added, %rec);
     %built = extract %built_t 0;
+
+    %empty_t = call @empty();
+    %empty = extract %empty_t 0;
 
     %result = select %length %built %empty;
     return %result;
@@ -73,30 +73,36 @@ spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule<none-have, none-have>
-[value $val = %vadd, timeline $time = %time, spatial $space = %space]
-%vadd_main(%v1l : %na32, %v2l : %na32, length : %ni32) -> %na32 {
-    %x_loc = alloc-temporary local i64;
-    %y_loc = alloc-temporary local i64;
-    %n1_loc = alloc-temporary local i64;
-    %n2_loc = alloc-temporary local i64;
-    %res_loc = alloc-temporary local i64;
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_main(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
+    %djoin = default-join;
+    %join = inline-join %vadd_ret [] %djoin;
 
-    local-do-builtin node($val.%x)() -> %x_loc;
-    local-do-builtin node($val.%y)() -> %y_loc;
-
-    local-do-external %add node($val.%n1_t)(%x_loc, %y_loc) -> %n1_loc;
-    local-do-external %add node($val.%n2_t)(%x_loc, %n1_loc) -> %n2_loc;
-    local-do-external %add node($val.%res_t)(%n1_loc, %n2_loc) -> %res_loc;
-    
-    %res_val = read-ref i64 %res_loc;
-    return %res_val;
+    schedule-select %length [%vadd_rec_case, %vadd_base_case]
+        [value node($val.%result), timeline none, spatial none]
+        (%v1_loc, %v2_loc, %length_loc) %join;
 }
 
-schedule<none-have, none-have>
-[value $val = %vadd, timeline $time = %time, spatial $space = %space]
-%vadd_main() -> %na32 {
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_rec_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
 
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_base_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
+    %empty_loc = alloc-temporary local array<i32>;
+    local-do-external %empty node($val.%empty)() -> %empty_loc;
+    %empty_val = read-ref %empty_loc;
+    return %empty_val;
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_ret(%result_loc : %na32) -> %na32 {
+    return %result_loc
 }
 
 pipeline "main" = %foo_main;
