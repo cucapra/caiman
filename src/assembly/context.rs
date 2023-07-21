@@ -193,7 +193,9 @@ impl Context {
                                 node_table.local.push(command.name.clone().unwrap());
                             }
                             ast::Command::TailEdge(_) => {} // don't add tail edges
-                            ast::Command::Hole => { unreachable!("unimplemented hole"); }
+                            ast::Command::Hole => {
+                                unreachable!("unimplemented hole");
+                            }
                         }
                     }
                     for ret_arg in &f.header.ret {

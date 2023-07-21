@@ -15,7 +15,5 @@ impl<'context> Context<'context> {
         self.initialize_allocations();
     }
 
-    fn initialize_allocations(&mut self) {
-
-    }
+    fn initialize_allocations(&mut self) {}
 }

@@ -1,8 +1,8 @@
 pub mod data_impls;
 pub mod getters;
+pub mod initializers;
 pub mod mutators;
 pub mod static_getters;
-pub mod initializers;
 
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
@@ -11,9 +11,9 @@ use crate::assembly::ast::{
     TypeId,
 };
 use crate::assembly::table::Table;
+use crate::ir;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
-use crate::ir;
 
 pub struct Context<'context> {
     pub location: ast::RemoteNodeId,

@@ -45,10 +45,7 @@ impl<'context> Context<'context> {
     }
 
     // SKIP
-    pub fn get_current_schedule_allocation(
-        &self,
-        node: &NodeId,
-    ) -> Option<&NodeId> {
+    pub fn get_current_schedule_allocation(&self, node: &NodeId) -> Option<&NodeId> {
         self.get_current_value_funclet().and_then(|vf| {
             self.get_schedule_allocations(vf, node)
                 .unwrap()

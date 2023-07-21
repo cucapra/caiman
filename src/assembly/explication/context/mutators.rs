@@ -21,7 +21,7 @@ impl<'context> Context<'context> {
                         // give names to unnamed things (even tail edges, just in case)
                         command.name = match &command.name {
                             None => Some(NodeId(self.meta_data.next_name())),
-                            n => n.clone()
+                            n => n.clone(),
                         };
                     }
                 }
@@ -80,7 +80,11 @@ impl<'context> Context<'context> {
 // THIS AND THE FOLLOWING CODE IS GENERATED WITH evil.py, DO NOT TOUCH
 
 impl<'context> Context<'context> {
-    fn get_value_allocation_mut(&mut self, funclet: &FuncletId, node: &NodeId) -> Option<&mut ast::RemoteNodeId> {
+    fn get_value_allocation_mut(
+        &mut self,
+        funclet: &FuncletId,
+        node: &NodeId,
+    ) -> Option<&mut ast::RemoteNodeId> {
         self.schedule_explication_data
             .get_mut(funclet)
             .and_then(|f| f.allocations.get_mut(node))
@@ -106,7 +110,11 @@ impl<'context> Context<'context> {
         None
     }
 
-    fn get_node_mut(&mut self, funclet_name: &FuncletId, node_name: &NodeId) -> Option<&mut ast::Node> {
+    fn get_node_mut(
+        &mut self,
+        funclet_name: &FuncletId,
+        node_name: &NodeId,
+    ) -> Option<&mut ast::Node> {
         self.get_funclet_mut(funclet_name).and_then(|f| {
             for command in &mut f.commands {
                 match &mut command.name {
@@ -117,7 +125,7 @@ impl<'context> Context<'context> {
                                 ast::Command::Node(node) => {
                                     return Some(node);
                                 }
-                                _ => unreachable!("Attempting to treat {} as a node", n.0)
+                                _ => unreachable!("Attempting to treat {} as a node", n.0),
                             }
                         }
                     }
@@ -132,18 +140,15 @@ impl<'context> Context<'context> {
             for command in &mut f.commands {
                 match &mut command.name {
                     None => {}
-                    Some(n) => {
-                        match &mut command.command {
-                            ast::Command::TailEdge(edge) => {
-                                return Some(edge);
-                            }
-                            _ => {}
+                    Some(n) => match &mut command.command {
+                        ast::Command::TailEdge(edge) => {
+                            return Some(edge);
                         }
-                    }
+                        _ => {}
+                    },
                 }
             }
             None
         })
     }
-
 }

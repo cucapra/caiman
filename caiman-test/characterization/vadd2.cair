@@ -75,7 +75,10 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 <none-have, none-have>
-%vadd_main(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
+%vadd_main(
+%v1_loc : %na32,
+%v2_loc : %na32,
+%length_loc : node($val.%length)-have %ni32) -> %na32 {
     %djoin = default-join;
     %join = inline-join %vadd_ret [] %djoin;
 
@@ -86,7 +89,8 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 <none-have, none-have>
-%vadd_rec_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
+%vadd_rec_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32)
+-> [node($val.%result)-have %na32] {
     %v1_head_loc = alloc-temporary local array<i32>;
     %v1_tail_loc = alloc-temporary local array<i32>;
     %v2_head_loc = alloc-temporary local array<i32>;
@@ -96,7 +100,7 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
     %length_m1_loc = alloc-temporary local i32;
 
     local-do-builtin node($val.%neg1)() -> %neg1_loc;
-    local-do-external %iadd node($val.%length_m1)(%length_loc, %neg1_loc) -> %length_m1_loc;
+    local-do-external %iadd node($val.%length_m1_t)(%length_loc, %neg1_loc) -> %length_m1_loc;
 
     local-do-external %split node($val.%v1_head_tail_t)(%v1_loc) -> [%v1_head_loc, %v1_tail_loc];
     local-do-external %split node($val.%v2_head_tail_t)(%v2_loc) -> [%v2_head_loc, %v2_tail_loc];
@@ -120,7 +124,7 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 %vadd_rec_prepend(
 %added_loc : node($val.%added)-have %ni32,
 %rec_loc : node($val.%rec)-have %na32)
--> %na32 {
+-> [node($val.%result)-have %na32] {
     %built_loc = alloc-temporary local array<i32>;
     local-do-external %prepend node($val.%built_t)(%added_loc, %rec_loc) -> %built_loc;
     %built_val = read-ref array<i32> %built_loc;
@@ -129,7 +133,8 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 <none-have, none-have>
-%vadd_base_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32) -> %na32 {
+%vadd_base_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32)
+-> [node($val.%result)-have %na32] {
     %empty_loc = alloc-temporary local array<i32>;
     local-do-external %empty node($val.%empty)() -> %empty_loc;
     %empty_val = read-ref array<i32> %empty_loc;
@@ -138,7 +143,7 @@ schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
 <none-have, none-have>
-%vadd_ret(%result_loc : %na32) -> %na32 {
+%vadd_ret(%result_loc : node($val.%result)-have %na32) -> %na32 {
     return %result_loc;
 }
 

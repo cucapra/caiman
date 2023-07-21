@@ -122,7 +122,7 @@ impl Default for RemoteNodeId {
     fn default() -> RemoteNodeId {
         RemoteNodeId {
             funclet: None,
-            node: None
+            node: None,
         }
     }
 }
@@ -305,13 +305,13 @@ pub struct FuncletHeader {
 pub enum Command {
     Hole,
     Node(Node),
-    TailEdge(TailEdge)
+    TailEdge(TailEdge),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NamedCommand {
     pub name: Option<NodeId>,
-    pub command: Command
+    pub command: Command,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -4,8 +4,8 @@ use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId, TypeId,
 };
-use crate::assembly::explication::context::Context;
 use crate::assembly::explication::context::AllocationInfo;
+use crate::assembly::explication::context::Context;
 use crate::assembly::explication::util;
 use crate::assembly::explication::util::{reject_hole, todo_hole};
 use crate::assembly::parser;
@@ -39,7 +39,7 @@ fn get_node_arguments(node: &assembly::ast::Node, context: &Context) -> Vec<Node
     match node {
         assembly::ast::Node::Phi { .. } => {
             panic!("Encode-do of a phi node isn't defined")
-        },
+        }
         assembly::ast::Node::Constant { .. } => Vec::new(),
         assembly::ast::Node::ExtractResult { .. } => {
             panic!("Encode-do of an extraction isn't defined")
@@ -87,7 +87,9 @@ fn explicate_operation(
     let qop = ast::Quotient::Node(Some(remote.clone()));
     let op = remote.clone();
 
-    let node = context.get_node(&remote.funclet.unwrap(), &remote.node.unwrap()).unwrap();
+    let node = context
+        .get_node(&remote.funclet.unwrap(), &remote.node.unwrap())
+        .unwrap();
     let node_arguments = get_node_arguments(&node, context);
 
     // lookup the allocation location and add the argument to the inputs
@@ -129,10 +131,15 @@ fn explicate_operation(
         match output {
             Some(n) => outputs.push(n.clone()),
             None => {
-                let node = context.get_node(&op.funclet.as_ref().unwrap(), &op.node.as_ref().unwrap()).unwrap();
+                let node = context
+                    .get_node(&op.funclet.as_ref().unwrap(), &op.node.as_ref().unwrap())
+                    .unwrap();
                 match node {
                     assembly::ast::Node::Constant { .. } => {
-                        match context.get_schedule_allocations(&op.funclet.as_ref().unwrap(), &op.node.as_ref().unwrap()) {
+                        match context.get_schedule_allocations(
+                            &op.funclet.as_ref().unwrap(),
+                            &op.node.as_ref().unwrap(),
+                        ) {
                             None => todo!("Unfinished path"), // failed to explicate on this pass
                             Some(alloc_map) => {
                                 match alloc_map.get(&AllocationInfo {
