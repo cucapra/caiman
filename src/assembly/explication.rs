@@ -1,6 +1,7 @@
 mod context;
 mod explicator;
 mod util;
+mod specification_reader;
 
 use crate::assembly::ast;
 use crate::assembly::explication::util::reject_hole;
