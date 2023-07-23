@@ -115,6 +115,9 @@ pub enum Type {
     CpuBufferRef {
         element_type: TypeId,
     },
+    CpuBufferSlice {
+        element_type: TypeId,
+    },
     GpuFence,
 }
 

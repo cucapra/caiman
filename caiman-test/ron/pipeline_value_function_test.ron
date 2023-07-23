@@ -166,12 +166,13 @@
 					LocalDoBuiltin(operation : Node(node_id : 1), inputs : [], outputs : [2]),
 					BeginEncoding(place : Gpu, event: Node(node_id : 1), encoded: [3, 4], fences : []),
 					EncodeCopy(encoder : 6, input : 0, output : 3),
-					EncodeDoExternal(encoder : 6, operation : Node(node_id : 2), external_function_id : 0, inputs : [2, 2, 2, 3], outputs : [4]),
+					ReadRef(source : 2, storage_type : 0),
+					EncodeDoExternal(encoder : 6, operation : Node(node_id : 2), external_function_id : 0, inputs : [8, 8, 8, 3], outputs : [4]),
 					Submit(encoder : 6, event : Node(node_id : 4)),
 
 					InlineJoin(funclet : 16, captures : [], continuation : 1),
 				],
-				tail_edge : Jump(join : 10, arguments : [4, 9])
+				tail_edge : Jump(join : 11, arguments : [4, 10])
 				//tail_edge : DebugHole(inputs : [0])
 			),
 

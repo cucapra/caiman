@@ -876,6 +876,16 @@ impl<'program> FuncletChecker<'program> {
                 )?;
 
                 for (input_index, input_impl_node_id) in inputs.iter().enumerate() {
+                    /*let node_type : &NodeType = self.node_types.get(input_impl_node_id).unwrap();
+                    match external_function {
+                        ExternalFunction::CpuPureOperation{ .. } => {
+                            match node_type {
+                                NodeType::LocalVar{ .. } => (),
+                                _ => panic!("Inputs to a CPU pure operation must be ", )
+                            }
+                        }
+                    }*/
+                    
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
@@ -993,6 +1003,10 @@ impl<'program> FuncletChecker<'program> {
                         for (input_index, input_impl_node_id) in
                             inputs[0..kernel.dimensionality].iter().enumerate()
                         {
+                            let Some(NodeType::LocalVar{ .. }) = self.node_types.get(input_impl_node_id)
+                            else {
+                                panic!("Dimension arguments to a GPU compute dispatch must be NativeValue and not Refs\n{}", error_context);
+                            };
                             value_spec_checker.check_node_is_readable_at_implicit(
                                 error_context,
                                 *input_impl_node_id,
@@ -1826,13 +1840,14 @@ impl<'program> FuncletChecker<'program> {
                     .check_return(error_context, return_values)?;
             }
             ir::TailEdge::Jump { join, arguments } => {
-                let join_point = &self.node_join_points[join];
 
                 if let Some(NodeType::JoinPoint) = self.node_types.remove(join) {
                     // Nothing, for now...
                 } else {
-                    panic!("Node at #{} is not a join point", join)
+                    panic!("Node at #{} is not a join point\n{}", join, error_context)
                 }
+
+                let join_point = &self.node_join_points[join];
 
                 for (argument_index, argument_node_id) in arguments.iter().enumerate() {
                     let node_type = self.node_types.remove(argument_node_id).unwrap();

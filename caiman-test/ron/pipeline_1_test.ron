@@ -154,14 +154,15 @@
 					AllocTemporary(place : Gpu, storage_type : 0),
 					BeginEncoding(place : Gpu, event: Node(node_id : 1), encoded: [5, 6], fences : []),
 					EncodeCopy(encoder : 7, input : 3, output : 5),
-					EncodeDoExternal(encoder : 7, operation : Node(node_id : 4), external_function_id : 0, inputs : [1, 1, 1, 5], outputs : [6]),
+					ReadRef(source : 1, storage_type : 0),
+					EncodeDoExternal(encoder : 7, operation : Node(node_id : 4), external_function_id : 0, inputs : [9, 9, 9, 5], outputs : [6]),
 					AllocTemporary(place : Local, storage_type : 0),
 					Submit(encoder : 7, event : Node(node_id : 4)),
-					SyncFence(fence : 11, event : Node(node_id : 5)),
-					LocalCopy(input : 6, output : 10),
-					ReadRef(source: 10, storage_type: 0),
+					SyncFence(fence : 12, event : Node(node_id : 5)),
+					LocalCopy(input : 6, output : 11),
+					ReadRef(source: 11, storage_type: 0),
 				],
-				tail_edge : Return(return_values : [14])
+				tail_edge : Return(return_values : [15])
 			),
 
 			15 : (

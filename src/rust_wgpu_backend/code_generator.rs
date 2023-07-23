@@ -1,4 +1,3 @@
-use super::codegen::PlacementState;
 use super::ffi;
 use crate::id_generator::IdGenerator;
 use crate::ir;
@@ -309,29 +308,8 @@ impl<'program> CodeGenerator<'program> {
         self.active_shader_module_key = Some(shader_module_key);
     }
 
-    fn compute_written_buffers(
-        &self,
-        placement_state: &PlacementState,
-        resource_bindings: &[ffi::GpuKernelResourceBinding],
-        output_vars: &[VarId],
-    ) -> HashSet<ir::NodeId> {
-        // If a buffer allocator ID is in the set, that buffer allocator's buffers are written to
-        let mut any_writes = HashSet::new();
-
-        for resource_binding in resource_bindings.iter() {
-            if let Some(&out_index) = resource_binding.output.as_ref() {
-                let out_var = output_vars[out_index];
-                if let Some(out_buf) = placement_state.get_var_buffer_id(out_var) {
-                    any_writes.insert(out_buf);
-                }
-            }
-        }
-        return any_writes;
-    }
-
     fn set_active_bindings(
         &mut self,
-        placement_state: &PlacementState,
         kernel: &ffi::GpuKernel,
         argument_vars: &[VarId],
         output_vars: &[VarId],
@@ -345,8 +323,6 @@ impl<'program> CodeGenerator<'program> {
         let mut output_binding_map = std::collections::BTreeMap::<usize, usize>::new();
         let mut input_binding_map = std::collections::BTreeMap::<usize, usize>::new();
 
-        let any_writes =
-            self.compute_written_buffers(placement_state, &kernel.resource_bindings, output_vars);
         for resource_binding in kernel.resource_bindings.iter() {
             assert_eq!(resource_binding.group, 0);
 
@@ -354,17 +330,11 @@ impl<'program> CodeGenerator<'program> {
             if let Some(input) = resource_binding.input {
                 input_binding_map.insert(input, resource_binding.binding);
                 let in_var = argument_vars[input];
-                if let Some(in_buf) = placement_state.get_var_buffer_id(in_var) {
-                    rw_override |= any_writes.contains(&in_buf);
-                }
             }
 
             if let Some(output) = resource_binding.output {
                 output_binding_map.insert(output, resource_binding.binding);
                 let out_var = output_vars[output];
-                if let Some(out_buf) = placement_state.get_var_buffer_id(out_var) {
-                    rw_override |= any_writes.contains(&out_buf);
-                }
             }
 
             bindings.insert(
@@ -476,16 +446,13 @@ impl<'program> CodeGenerator<'program> {
 
     fn generate_compute_dispatch(
         &mut self,
-        placement_state: &PlacementState,
         kernel: &ffi::GpuKernel,
         dimension_vars: &[VarId; 3],
         argument_vars: &[VarId],
         output_vars: &[VarId],
     ) {
-        let any_writes =
-            self.compute_written_buffers(placement_state, &kernel.resource_bindings, output_vars);
         let mut rw_bindings = HashSet::new();
-        for rb in kernel.resource_bindings.iter() {
+        /*for rb in kernel.resource_bindings.iter() {
             if let Some(input) = rb.input {
                 let in_var = argument_vars[input];
                 if let Some(in_buf) = placement_state.get_var_buffer_id(in_var) {
@@ -497,7 +464,7 @@ impl<'program> CodeGenerator<'program> {
             if let Some(output) = rb.output {
                 rw_bindings.insert((0u32, rb.binding as u32));
             }
-        }
+        }*/
 
         // HACK: We need to fix up the readwrite specifiers on shader bindings to account for the
         // actual buffer usage pattern
@@ -514,7 +481,7 @@ impl<'program> CodeGenerator<'program> {
         };
 
         self.set_active_external_gpu_function(&kernel);
-        self.set_active_bindings(placement_state, &kernel, argument_vars, output_vars);
+        self.set_active_bindings(&kernel, argument_vars, output_vars);
 
         self.begin_command_encoding();
 
@@ -1508,7 +1475,7 @@ impl<'program> CodeGenerator<'program> {
         offset_var_id: VarId,
         type_id: ffi::TypeId,
     ) -> VarId {
-        let variable_id = self.variable_tracker.create_local_data(type_id);
+        let variable_id = self.variable_tracker.create_local_data(panic!("Need type"));
         let type_binding_info = self.get_type_binding_info(type_id);
         let type_name = self.get_type_name(type_id);
         write!(
@@ -1525,9 +1492,9 @@ impl<'program> CodeGenerator<'program> {
     pub fn build_buffer_suballocate_ref(
         &mut self,
         buffer_allocator_var_id: VarId,
-        type_id: ffi::TypeId,
+        type_id: ffi::TypeId
     ) -> VarId {
-        let variable_id = self.variable_tracker.create_local_data(type_id);
+        let variable_id = self.variable_tracker.create_local_data(panic!("Need type"));
         let type_binding_info = self.get_type_binding_info(type_id);
         let type_name = self.get_type_name(type_id);
         write!(
@@ -1546,7 +1513,7 @@ impl<'program> CodeGenerator<'program> {
         type_id: ffi::TypeId,
         count_var_id: VarId,
     ) -> VarId {
-        let variable_id = self.variable_tracker.create_local_data(type_id);
+        let variable_id = self.variable_tracker.create_local_data(panic!("Need type"));
         let type_binding_info = self.get_type_binding_info(type_id);
         let type_name = self.get_type_name(type_id);
         write!(
@@ -1563,7 +1530,7 @@ impl<'program> CodeGenerator<'program> {
     pub fn build_test_suballocate_many(
         &mut self,
         buffer_allocator_var_id: VarId,
-        type_id_and_count_var_id_pairs: &[(ffi::TypeId, Option<VarId>)],
+        type_id_and_count_var_id_pairs: &[(ffi::TypeId, Option<VarId>)]
     ) -> VarId {
         let mut layouts_string = String::from("");
         let mut element_counts_string = String::from("");
@@ -1697,13 +1664,41 @@ impl<'program> CodeGenerator<'program> {
             _ => panic!("type {:?} not yet supported", var_type),
         }
     }
+
+    fn local_ref_content_as_le_bytes(&self, var: VarId) -> String {
+        use ffi::Type::*;
+        let var_name = self.variable_tracker.get_var_name(var);
+        let var_type_id = self.variable_tracker.get_type_id(var);
+        let var_type = self.native_interface.types.get(var_type_id.0).unwrap();
+        let data_type_id = match var_type {
+            ConstRef { element_type } => * element_type,
+            MutRef { element_type } => * element_type,
+            _ => panic!("type {:?} not yet supported", var_type),
+        };
+        let data_type = self.native_interface.types.get(data_type_id.0).unwrap();
+
+        // TODO: This should really be expanded to encompass all types, but I'm
+        // doing the bare minimum to get this working
+        match data_type {
+            F32 | F64 | U8 | U16 | U32 | U64 | USize | I8 | I16 | I32 | I64 => {
+                return format!("&{}.to_le_bytes()", var_name)
+            }
+            Array {
+                element_type,
+                length,
+            } => return format!("bytemuck::cast_slice(&{})", var_name),
+            _ => panic!("type {:?} not yet supported", var_type),
+        }
+    }
+
+
     pub fn encode_copy_buffer_from_local_data(
         &mut self,
         destination_var: VarId,
         source_var: VarId,
     ) {
         let buffer_view_var_name = self.variable_tracker.get_var_name(destination_var);
-        let source_bytes = self.local_as_le_bytes(source_var);
+        let source_bytes = self.local_ref_content_as_le_bytes(source_var);
         self.code_writer.write(format!(
             "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, {});\n",
             buffer_view_var_name, buffer_view_var_name, source_bytes
@@ -1730,7 +1725,7 @@ impl<'program> CodeGenerator<'program> {
         let variable_id = self.variable_tracker.generate();
         let type_binding_info = self.get_type_binding_info(type_id);
         let buffer_view_var_name = self.variable_tracker.get_var_name(variable_id);
-        let data_bytes = self.local_as_le_bytes(data_var);
+        let data_bytes = self.local_ref_content_as_le_bytes(data_var);
         self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
         self.code_writer.write(format!(
             "instance.state.get_queue_mut().write_buffer(& {}.buffer, {}.base_address, {} );\n",
@@ -1777,18 +1772,44 @@ impl<'program> CodeGenerator<'program> {
 
     pub fn build_compute_dispatch_with_outputs(
         &mut self,
-        placement_state: &PlacementState,
         kernel: &ffi::GpuKernel,
         dimension_vars: &[VarId; 3],
         argument_vars: &[VarId],
         output_vars: &[VarId],
     ) {
         self.generate_compute_dispatch(
-            placement_state,
             kernel,
             dimension_vars,
             argument_vars,
             output_vars,
         );
+    }
+
+    pub fn build_alloc_temp_local_ref(&mut self, type_id : ffi::TypeId) -> VarId {
+        let variable_id = self.variable_tracker.create_local_data(type_id);
+        let temp_var_id = self.variable_tracker.generate();
+        //let type_binding_info = self.get_type_binding_info(type_id);
+        let type_name = self.get_type_name(type_id);
+        write!(self.code_writer, "let mut {} : {} = std::default::Default::default();\n", self.variable_tracker.get_var_name(temp_var_id), type_name);
+        write!(self.code_writer, "let {} = &mut {};\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(temp_var_id));
+        variable_id
+    }
+
+    pub fn build_write_local_ref(&mut self, dst_ref_var_id : VarId, src_var_id : VarId) {
+        write!(self.code_writer, "* {} = {};\n", self.variable_tracker.get_var_name(dst_ref_var_id), self.variable_tracker.get_var_name(src_var_id));
+    }
+
+    pub fn build_read_local_ref(&mut self, src_ref_var_id : VarId, type_id : ffi::TypeId) -> VarId {
+        let variable_id = self.variable_tracker.create_local_data(type_id);
+        let type_name = self.get_type_name(type_id);
+        write!(self.code_writer, "let {} = * {};\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(src_ref_var_id));
+        variable_id
+    }
+
+    pub fn build_borrow_local_ref(&mut self, src_var_id : VarId, type_id : ffi::TypeId) -> VarId {
+        let variable_id = self.variable_tracker.create_local_data(type_id);
+        let type_name = self.get_type_name(type_id);
+        write!(self.code_writer, "let {} = & {};\n", self.variable_tracker.get_var_name(variable_id), self.variable_tracker.get_var_name(src_var_id));
+        variable_id
     }
 }
