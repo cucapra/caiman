@@ -1,35 +1,6 @@
 use super::*;
 
 impl<'context> Context<'context> {
-    pub fn corrections(&mut self) {
-        for declaration in self.program.declarations.iter_mut() {
-            match declaration {
-                // add phi nodes
-                ast::Declaration::Funclet(f) => {
-                    let mut index = 0;
-                    for arg in &f.header.args {
-                        f.commands.insert(
-                            index,
-                            ast::NamedCommand {
-                                name: arg.name.clone(),
-                                command: ast::Command::Node(ast::Node::Phi { index: Some(index) }),
-                            },
-                        );
-                        index += 1;
-                    }
-                    for command in f.commands.iter_mut() {
-                        // give names to unnamed things (even tail edges, just in case)
-                        command.name = match &command.name {
-                            None => Some(NodeId(self.meta_data.next_name())),
-                            n => n.clone(),
-                        };
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
     // pub fn forcibly_replace_commands(
     //     &mut self,
     //     funclet: &ast::FuncletId,

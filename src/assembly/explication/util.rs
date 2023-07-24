@@ -26,6 +26,13 @@ pub fn reject_hole<T>(h: Hole<T>) -> T {
     }
 }
 
+pub fn reject_hole_clone<T>(node: &Hole<T>) -> T
+where
+    T: Clone,
+{
+    reject_hole(node.as_ref()).clone()
+}
+
 pub fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
     let mut result = Vec::new();
     for (index, hole) in v.into_iter().enumerate() {

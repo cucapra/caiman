@@ -45,13 +45,19 @@ struct NodeExplicationInformation {
     // indicates which operations were scheduled on this node in the given funclet (if any)
     scheduled_operations: HashMap<FuncletId, Vec<NodeId>>,
 
-    // tracks each use of this node, either in allocations of operations
+    // tracks each use of this node, either in allocations or operations
     operative_locations: HashSet<FuncletId>,
 }
 
 #[derive(Debug)]
 struct SpecFuncletData {
-    // stores connections of what refers to this value funclet
+    // map of node dependencies for scheduling
+    node_dependencies: HashMap<NodeId, Vec<NodeId>>,
+
+    // tailedge dependencies for scheduling
+    tail_dependencies: Vec<NodeId>,
+
+    // stores connections of which schedules refer to this value funclet
     connections: Vec<FuncletId>,
 
     // information about allocated value elements
@@ -71,7 +77,7 @@ struct ScheduleFuncletData {
     // map from the schedule variables to information about their allocations
     allocations: HashMap<NodeId, RemoteNodeId>,
 
-    // list of explication holes found, by name
+    // most recent explication holes found when constructing the associated value funclet
     // note that explication holes are named in corrections
     explication_holes: Vec<NodeId>,
 }
