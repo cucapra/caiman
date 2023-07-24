@@ -563,10 +563,15 @@ impl<'program> CodeGen<'program> {
                 true_case,
                 false_case,
             } => {
+                let true_case_storage_type = funclet_scoped_state.get_node_result(* true_case).map(|x| x.get_storage_type()).flatten();
+                let false_case_storage_type = funclet_scoped_state.get_node_result(* false_case).map(|x| x.get_storage_type()).flatten();
+                assert!(true_case_storage_type.is_some());
+                assert_eq!(true_case_storage_type, false_case_storage_type);
+
                 let variable_id = self.code_generator.build_select_hack(
                     input_slot_ids[0],
                     input_slot_ids[1],
-                    input_slot_ids[2],
+                    input_slot_ids[2]
                 );
 
                 self.code_generator.build_write_local_ref(output_slot_ids[0], variable_id);
@@ -1492,14 +1497,15 @@ impl<'program> CodeGen<'program> {
                     let src_slot_id = funclet_scoped_state.get_node_var_id(*input).unwrap();
                     let dst_slot_id = funclet_scoped_state.get_node_var_id(*output).unwrap();
 
-                    let (src_slot_id, src_place) = if let Some(NodeResult::Ref {
+                    let (src_slot_id, src_place, src_type) = if let Some(NodeResult::Ref {
                         var_id,
                         storage_place,
+                        storage_type,
                         ..
                     }) =
                         funclet_scoped_state.get_node_result(*input)
                     {
-                        (*var_id, *storage_place)
+                        (*var_id, *storage_place, *storage_type)
                     } else {
                         panic!("Not a slot")
                     };
@@ -1516,6 +1522,9 @@ impl<'program> CodeGen<'program> {
                     } else {
                         panic!("Not a slot")
                     };
+
+                    assert_eq!(dst_type, src_type);
+
                     match (ir::Place::Local, dst_place, src_place) {
                         (ir::Place::Local, ir::Place::Local, ir::Place::Local) => {
                             let temp_var_id = self.code_generator.build_read_local_ref(src_slot_id, dst_type);
@@ -1524,7 +1533,7 @@ impl<'program> CodeGen<'program> {
                         (ir::Place::Local, ir::Place::Local, ir::Place::Gpu) => {
                             let temp_var_id = self
                                 .code_generator
-                                .encode_clone_local_data_from_buffer(src_slot_id);
+                                .encode_clone_local_data_from_buffer(src_slot_id, dst_type);
                             self.code_generator.build_write_local_ref(dst_slot_id, temp_var_id);
                         }
                         _ => panic!("Unimplemented"),
@@ -1613,29 +1622,33 @@ impl<'program> CodeGen<'program> {
                     let src_slot_id = funclet_scoped_state.get_node_var_id(*input).unwrap();
                     let dst_slot_id = funclet_scoped_state.get_node_var_id(*output).unwrap();
 
-                    let (src_slot_id, src_place) = if let Some(NodeResult::Ref {
+                    let (src_slot_id, src_place, src_storage_type) = if let Some(NodeResult::Ref {
                         var_id,
                         storage_place,
+                        storage_type,
                         ..
                     }) =
                         funclet_scoped_state.get_node_result(*input)
                     {
-                        (*var_id, *storage_place)
+                        (*var_id, *storage_place, *storage_type)
                     } else {
                         panic!("Not a slot")
                     };
 
-                    let (dst_slot_id, dst_place) = if let Some(NodeResult::Ref {
+                    let (dst_slot_id, dst_place, dst_storage_type) = if let Some(NodeResult::Ref {
                         var_id,
                         storage_place,
+                        storage_type,
                         ..
                     }) =
                         funclet_scoped_state.get_node_result(*output)
                     {
-                        (*var_id, *storage_place)
+                        (*var_id, *storage_place, *storage_type)
                     } else {
                         panic!("Not a slot")
                     };
+
+                    assert_eq!(src_storage_type, dst_storage_type);
 
                     match (*place, dst_place, src_place) {
                         /*(ir::Place::Cpu, ir::Place::Cpu, ir::Place::Local) => {
@@ -1668,11 +1681,11 @@ impl<'program> CodeGen<'program> {
                         }*/
                         (ir::Place::Gpu, ir::Place::Gpu, ir::Place::Local) => {
                             self.code_generator
-                                .encode_copy_buffer_from_local_data(dst_slot_id, src_slot_id);
+                                .encode_copy_buffer_from_local_data(dst_slot_id, src_slot_id, src_storage_type);
                         }
                         (ir::Place::Gpu, ir::Place::Gpu, ir::Place::Gpu) => {
                             self.code_generator
-                                .encode_copy_buffer_from_buffer(dst_slot_id, src_slot_id);
+                                .encode_copy_buffer_from_buffer(dst_slot_id, src_slot_id, src_storage_type);
                         }
                         _ => panic!("Unimplemented"),
                     }
