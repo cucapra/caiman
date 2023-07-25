@@ -6,6 +6,59 @@ use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
 //use bitflags::bitflags;
 use crate::stable_vec::StableVec;
+use bitflags::bitflags;
+
+/*bitflags! {
+    //Copy, Clone, PartialEq, Eq, Hash
+    #[derive(Serialize, Deserialize)]
+    pub struct BufferFlags : u32 {
+        const MAP_READ = 0b1;
+        const MAP_WRITE = 0b10;
+        const COPY_SRC = 0b100;
+        const COPY_DST = 0b1000;
+        const STORAGE = 0b10000000;
+    }
+}*/
+
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BufferFlags {
+    #[serde(default)]
+    pub map_read : bool,
+    #[serde(default)]
+    pub map_write : bool,
+    #[serde(default)]
+    pub copy_src : bool,
+    #[serde(default)]
+    pub copy_dst : bool,
+    #[serde(default)]
+    pub storage : bool,
+    #[serde(default)]
+    pub uniform : bool,
+}
+
+impl BufferFlags {
+    pub fn new() -> Self {
+        Self {
+            map_read : false,
+            map_write : false,
+            copy_src : false,
+            copy_dst : false,
+            storage : false,
+            uniform : false
+        }
+    }
+
+    pub fn or(&self, other : &Self) -> Self {
+        Self {
+            map_read : self.map_read | other.map_read,
+            map_write : self.map_write | other.map_write,
+            copy_src : self.copy_src | other.copy_src,
+            copy_dst : self.copy_dst | other.copy_dst,
+            storage : self.storage | other.storage,
+            uniform : self.uniform | other.uniform
+        }
+    }
+}
 
 pub use crate::rust_wgpu_backend::ffi;
 
@@ -53,6 +106,7 @@ macro_rules! lookup_abstract_type {
 	(Place) => { Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
+    (BufferFlags) => { BufferFlags };
 }
 
 macro_rules! map_refs {
@@ -248,6 +302,7 @@ pub enum Type {
     Ref {
         storage_type: ffi::TypeId,
         storage_place: Place,
+        buffer_flags : BufferFlags
     },
     Fence {
         queue_place: Place,
@@ -255,6 +310,7 @@ pub enum Type {
     Buffer {
         storage_place: Place,
         static_layout_opt: Option<StaticBufferLayout>,
+        flags : BufferFlags
     },
     Encoder {
         queue_place: Place,

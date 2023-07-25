@@ -358,7 +358,7 @@ impl<'program> CodeGen<'program> {
         let typ = &self.program.types[type_id];
         let ffi_type_id = match typ {
             ir::Type::NativeValue { storage_type } => *storage_type,
-            ir::Type::Ref { storage_type, storage_place, } => {
+            ir::Type::Ref { storage_type, storage_place, buffer_flags } => {
                 let is_dynamically_sized = match &self.program.native_interface.types[storage_type.0] {
                     ir::ffi::Type::ErasedLengthArray { element_type } => true,
                     _ => false,
@@ -781,6 +781,7 @@ impl<'program> CodeGen<'program> {
                         storage_type,
                         //queue_stage,
                         storage_place,
+                        buffer_flags,
                     } => {
                         argument_node_results.push(NodeResult::Ref {
                             var_id: argument_variable_ids[index],
@@ -1075,6 +1076,7 @@ impl<'program> CodeGen<'program> {
                                         ir::Type::Ref {
                                             storage_place,
                                             storage_type,
+                                            buffer_flags
                                         } => {
                                             //
                                             let var_id = if let Some(slot_id) = slot_id_opt {
@@ -1103,6 +1105,7 @@ impl<'program> CodeGen<'program> {
                                         ir::Type::Buffer {
                                             storage_place,
                                             static_layout_opt,
+                                            flags
                                         } => {
                                             panic!("To do")
                                             //NodeResult::Buffer{var_id}
@@ -1120,6 +1123,7 @@ impl<'program> CodeGen<'program> {
                                         ir::Type::Ref {
                                             storage_type,
                                             storage_place,
+                                            buffer_flags,
                                         } => {
                                             output_node_results.push(NodeResult::Ref {
                                                 var_id: output_var_ids[output_index],
@@ -1303,6 +1307,7 @@ impl<'program> CodeGen<'program> {
                 ir::Node::AllocTemporary {
                     place,
                     storage_type,
+                    buffer_flags
                 } => {
                     match place {
                         ir::Place::Cpu => panic!("Unimplemented"),
@@ -1320,7 +1325,7 @@ impl<'program> CodeGen<'program> {
                         }
                         ir::Place::Gpu => {
                             let buffer_var_id =
-                                self.code_generator.build_create_buffer(*storage_type);
+                                self.code_generator.build_create_buffer(*storage_type, *buffer_flags);
                             let offset_var_id = self
                                 .code_generator
                                 .build_constant_unsigned_integer(0, self.default_u64_ffi_type_id);

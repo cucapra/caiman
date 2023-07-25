@@ -60,6 +60,9 @@ place = @{ "local" | "cpu" | "gpu" }
 place_sep = ${ place ~ sep }
 place_hole = { place | hole }
 place_hole_sep = ${ place_hole ~ sep }
+buffer_flag = @{ "map_read" | "map_write" | "copy_src" | "copy_dst" | "storage" | "unform" }
+buffer_flags_elements = !{ (buffer_flag ~ ("," ~ buffer_flag)*)? }
+buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
 meta_remote = { meta_name ~ "." ~ name }
 meta_remote_hole = { meta_name_hole ~ "." ~ name_hole | hole }
@@ -81,9 +84,10 @@ ffi_type_decl = ${ "type" ~ sep ~ ffi_type }
 
 name_type_separator = !{ name ~ ":" ~ "" }
 native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ typ }
-ref_decl = ${ "ref" ~ sep ~ name_type_separator ~ typ ~ "-" ~ place }
+ref_decl = ${ "ref" ~ sep ~ name_type_separator ~ typ ~ "-" ~ place ~ "<" ~ "flags" ~ "=" ~ buffer_flags ~ ">" }
 fence_decl = ${ "fence" ~ sep ~ name_type_separator ~ place }
 buffer_alignment_decl = !{ name ~ ":" ~ place ~ "<"
+    ~ "flags" ~ "=" ~ buffer_flags ~ ","
     ~ "alignment_bits" ~ "=" ~ n ~ "," ~ "byte_size" ~ "=" ~ n ~ ">" }
 
 buffer_decl = ${ "buffer" ~ sep ~ buffer_alignment_decl }
@@ -237,7 +241,7 @@ separated_buffer_space_node = { assign ~ separated_buffer_space_sep ~ n_sep ~ na
 //     scheduling
 
 alloc_temporary_sep = ${ "alloc-temporary" ~ sep }
-alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ type_hole }
+alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole ~ "<" ~ "flags" ~ "=" ~ buffer_flags ~ ">" ~ sep ~ type_hole }
 drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }

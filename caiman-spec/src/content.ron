@@ -90,11 +90,11 @@
 			// Temporarily allocates memory to create a slot in the bound state in the given place of the given storage type and for the given operation
 			// The allocated slot has no space, so it cannot leave the scope it is created in and cannot be captured (caiman doesn't check this yet)
 			// Is intended that caiman does static analysis to preallocate enough memory to hold the stack of temporaries
-			// This is feasible since caiman forbids infinitely nested schedule calls without yielding back to the host
 			name : "AllocTemporary",
 			inputs : [
 				(name : "place", kind : Place),
 				(name : "storage_type", kind : StorageType),
+				(name : "buffer_flags", kind : BufferFlags),
 			],
 			output : Single,
 			language_set : (functional : false, scheduling: true, timeline : false, spatial : false, intrinsic : true),

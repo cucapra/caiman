@@ -60,12 +60,12 @@
 		},
 		types : {
 			0 : NativeValue(storage_type : 0),
-			1 : Ref(storage_type : 0, storage_place : Local ),
+			1 : Ref(storage_type : 0, storage_place : Local, buffer_flags : BufferFlags()),
 			2 : Event,
-			3 : Ref(storage_type : 0, storage_place : Gpu ),
+			3 : Ref(storage_type : 0, storage_place : Gpu, buffer_flags : BufferFlags(storage : true) ),
 			4 : Fence( queue_place : Gpu ),
-			5 : Ref(storage_type : 0, storage_place : Gpu ),
-			6 : Buffer(storage_place : Gpu, static_layout_opt : Some((alignment_bits : 0, byte_size : 4096)) ),
+			5 : Ref(storage_type : 0, storage_place : Gpu, buffer_flags : BufferFlags() ),
+			6 : Buffer(storage_place : Gpu, static_layout_opt : Some((alignment_bits : 0, byte_size : 4096)), flags : BufferFlags() ),
 			7 : BufferSpace,
 		},
 		funclets : {

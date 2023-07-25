@@ -105,10 +105,10 @@ pub enum Type {
         element_type: TypeId,
     },
     GpuBufferRef {
-        element_type: TypeId,
+        element_type: TypeId
     },
     GpuBufferSlice {
-        element_type: TypeId,
+        element_type: TypeId
     },
     GpuBufferAllocator,
     CpuBufferAllocator,

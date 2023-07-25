@@ -13,6 +13,7 @@ struct LocalVar {
 struct Slot {
     storage_type: ir::ffi::TypeId,
     queue_place: ir::Place,
+    buffer_flags : ir::BufferFlags
 }
 
 #[derive(Debug)]
@@ -42,6 +43,7 @@ struct JoinPoint {
 struct Buffer {
     storage_place: ir::Place,
     static_layout_opt: Option<ir::StaticBufferLayout>,
+    buffer_flags : ir::BufferFlags
 }
 
 impl Buffer {
@@ -123,7 +125,7 @@ impl NodeType {
     }
 }
 
-fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeType) {
+fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeType, error_context : &ErrorContext) {
     match &program.types[type_id] {
         ir::Type::NativeValue {
             storage_type: storage_type_1,
@@ -132,39 +134,42 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
                 storage_type: storage_type_2,
             }) = node_type
             {
-                assert_eq!(*storage_type_1, *storage_type_2);
+                assert_eq!(*storage_type_1, *storage_type_2, "\n{}", error_context);
             } else {
-                panic!("type id is a native value type, but node is not a local variable");
+                panic!("type id is a native value type, but node is not a local variable\n{}", error_context);
             }
         }
         ir::Type::Ref {
             storage_type: storage_type_2,
             //queue_stage: queue_stage_2,
             storage_place: queue_place_2,
+            buffer_flags: buffer_flags_2
         } => {
             if let NodeType::Slot(Slot {
                 storage_type,
                 //queue_stage,
                 queue_place,
+                buffer_flags
             }) = node_type
             {
-                assert_eq!(*queue_place_2, *queue_place);
+                assert_eq!(*queue_place_2, *queue_place, "\n{}", error_context);
                 //assert_eq!(*queue_stage_2, *queue_stage);
-                assert_eq!(*storage_type, *storage_type_2);
+                assert_eq!(*storage_type, *storage_type_2, "\n{}", error_context);
+                assert_eq!(*buffer_flags, *buffer_flags_2, "\n{}", error_context);
             } else {
-                panic!("type id is a ref type, but node is not a ref");
+                panic!("type id is a ref type, but node is not a ref\n{}", error_context);
             }
         }
         ir::Type::Fence {
             queue_place: queue_place_2,
         } => {
             if let NodeType::Fence(Fence { queue_place }) = node_type {
-                assert_eq!(*queue_place_2, *queue_place);
+                assert_eq!(*queue_place_2, *queue_place, "\n{}", error_context);
             } else {
-                panic!("type id is a fence type, but node is not a fence");
+                panic!("type id is a fence type, but node is not a fence\n{}", error_context);
             }
         }
-        _ => panic!("Not a slot type"),
+        _ => panic!("Unimplemented"),
     }
 }
 
@@ -486,10 +491,12 @@ impl<'program> FuncletChecker<'program> {
                     storage_type,
                     //queue_stage,
                     storage_place,
+                    buffer_flags
                 } => NodeType::Slot(Slot {
                     storage_type: *storage_type,
                     //queue_stage: *queue_stage,
                     queue_place: *storage_place,
+                    buffer_flags: *buffer_flags
                 }),
                 ir::Type::Fence { queue_place } => NodeType::Fence(Fence {
                     queue_place: *queue_place,
@@ -497,9 +504,11 @@ impl<'program> FuncletChecker<'program> {
                 ir::Type::Buffer {
                     storage_place,
                     static_layout_opt,
+                    flags
                 } => NodeType::Buffer(Buffer {
                     storage_place: *storage_place,
                     static_layout_opt: *static_layout_opt,
+                    buffer_flags: *flags
                 }),
                 _ => panic!("Not a legal argument type for a scheduling funclet"),
             };
@@ -756,6 +765,7 @@ impl<'program> FuncletChecker<'program> {
             ir::Node::AllocTemporary {
                 place,
                 storage_type,
+                buffer_flags
             } => {
                 // Has no value and can only be overwritten
                 self.value_spec_checker_opt
@@ -783,6 +793,7 @@ impl<'program> FuncletChecker<'program> {
                     NodeType::Slot(Slot {
                         storage_type: *storage_type,
                         queue_place: *place,
+                        buffer_flags : *buffer_flags
                     }),
                 );
             }
@@ -975,7 +986,7 @@ impl<'program> FuncletChecker<'program> {
                 let encoder_spatial_tag = spatial_spec_checker.scalar_nodes[encoder];
 
                 let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder) else {
-                    panic!("Not an encoder\n{}", error_context);
+                    panic!("Node #{} is not an encoder\n{}", encoder, error_context);
                 };
 
                 match encoded_node {
@@ -1027,11 +1038,17 @@ impl<'program> FuncletChecker<'program> {
                             inputs[kernel.dimensionality..].iter().enumerate()
                         {
                             assert_eq!(
-                                self.node_types[&inputs[kernel.dimensionality + input_index]]
+                                self.node_types[input_impl_node_id]
                                     .storage_type()
                                     .unwrap(),
                                 kernel.input_types[input_index]
                             );
+
+                            let NodeType::Slot(Slot{queue_place: ir::Place::Gpu, buffer_flags, ..}) = self.node_types.get(input_impl_node_id).as_ref().unwrap() else {
+                                panic!("Non-dimensionality arguments to encode_do of a GPU kernel must be GPU refs (offending argument to encode_do: #{} which is node #{})\n{}", input_index, input_impl_node_id, error_context)
+                            };
+
+                            assert!(buffer_flags.storage || buffer_flags.uniform, "Argument #{} to encode_do is marked as neither a storage nor uniform buffer (maps to node #{})\n{}", input_index, input_impl_node_id, error_context);
 
                             //value_spec_checker.check_node_is_readable_at(*input_impl_node_id, encoder_value_tag)?;
                             timeline_spec_checker.check_node_is_readable_at(
@@ -1049,8 +1066,8 @@ impl<'program> FuncletChecker<'program> {
                                 kernel.output_of_forwarding_input(input_index)
                             {
                                 // Must be the same location
-                                assert_eq!(outputs[forwarded_output_index], inputs[input_index]);
-                                forwarding_input_scheduling_node_ids.insert(inputs[input_index]);
+                                assert_eq!(outputs[forwarded_output_index], *input_impl_node_id);
+                                forwarding_input_scheduling_node_ids.insert(*input_impl_node_id);
                                 forwarded_output_scheduling_node_ids
                                     .insert(outputs[forwarded_output_index]);
                             }
@@ -1096,7 +1113,7 @@ impl<'program> FuncletChecker<'program> {
                 source,
                 storage_type,
             } => {
-                let NodeType::Slot(Slot{queue_place, ..}) = &self.node_types[source] else { panic!("Must be a slot") };
+                let NodeType::Slot(Slot{queue_place, buffer_flags, ..}) = &self.node_types[source] else { panic!("Must be a slot") };
                 assert_eq!(*queue_place, ir::Place::Local);
 
                 // Input
@@ -1138,7 +1155,7 @@ impl<'program> FuncletChecker<'program> {
                 source,
             } => {
                 let NodeType::LocalVar(LocalVar{..}) = &self.node_types[source] else { panic!("Must be a local var") };
-                let NodeType::Slot(Slot{queue_place, ..}) = &self.node_types[destination] else { panic!("Must be a slot") };
+                let NodeType::Slot(Slot{queue_place, buffer_flags, ..}) = &self.node_types[destination] else { panic!("Must be a slot") };
                 assert_eq!(*queue_place, ir::Place::Local);
 
                 // Input
@@ -1168,6 +1185,16 @@ impl<'program> FuncletChecker<'program> {
                     .check_node_is_readable_at_implicit(error_context, *destination)?;
             }
             ir::Node::LocalCopy { input, output } => {
+
+                let Some(NodeType::Slot(Slot { buffer_flags: input_buffer_flags, .. })) = self.node_types.get(input) else {
+                    panic!("Source of local_copy (node #{}) is not a ref \n{}", input, error_context);
+                };
+                let Some(NodeType::Slot(Slot { buffer_flags: output_buffer_flags, .. })) = self.node_types.get(output) else {
+                    panic!("Destination of local_copy (node #{}) is not a ref \n{}", output, error_context);
+                };
+                assert!(input_buffer_flags.map_read, "Source of local_copy (node #{}) must be marked with map_read\n{}", input, error_context);
+                assert!(output_buffer_flags.map_write, "Destination of local_copy (node #{}) must be marked with map_write\n{}", output, error_context);
+
                 advance_forward_value_copy(
                     self.value_spec_checker_opt.as_mut().unwrap(),
                     error_context,
@@ -1199,6 +1226,15 @@ impl<'program> FuncletChecker<'program> {
                 let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder) else {
                     panic!("Not an encoder\n{}", error_context);
                 };
+                let Some(NodeType::Slot(Slot { buffer_flags: input_buffer_flags, .. })) = self.node_types.get(input) else {
+                    panic!("Source of encode_copy (node #{}) is not a ref \n{}", input, error_context);
+                };
+                let Some(NodeType::Slot(Slot { buffer_flags: output_buffer_flags, .. })) = self.node_types.get(output) else {
+                    panic!("Destination of encode_copy (node #{}) is not a ref \n{}", output, error_context);
+                };
+                assert!(input_buffer_flags.copy_src, "Source of encode_copy (node #{}) must be marked with copy_src\n{}", input, error_context);
+                assert!(output_buffer_flags.copy_dst, "Destination of encode_copy (node #{}) must be marked with copy_dst\n{}", output, error_context);
+                
                 advance_forward_value_copy(
                     self.value_spec_checker_opt.as_mut().unwrap(),
                     error_context,
@@ -1346,6 +1382,7 @@ impl<'program> FuncletChecker<'program> {
                     let output_impl_node_id = current_node_id + offset;
 
                     let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                    let buffer_flags = buffer.buffer_flags;
                     let new_static_layout = buffer.split_static(&self.program.native_interface, error_context, *size).unwrap();
 
                     self.value_spec_checker_opt
@@ -1368,7 +1405,8 @@ impl<'program> FuncletChecker<'program> {
                         output_impl_node_id,
                         NodeType::Buffer(Buffer {
                             storage_place : * place,
-                            static_layout_opt : Some(new_static_layout)
+                            static_layout_opt : Some(new_static_layout),
+                            buffer_flags
                         }),
                     );
                 }
@@ -1425,7 +1463,8 @@ impl<'program> FuncletChecker<'program> {
 
                     let Some(NodeType::Buffer(Buffer {
                         storage_place,
-                        static_layout_opt : Some(predecessor_static_layout)
+                        static_layout_opt : Some(predecessor_static_layout),
+                        buffer_flags
                     })) = self.node_types.remove(& impl_node_id) else {
                         panic!("{}", error_context)
                     };
@@ -1433,6 +1472,7 @@ impl<'program> FuncletChecker<'program> {
                     assert_eq!(storage_place, *place);
 
                     let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(& buffer_impl_node_id) else { panic!("{}", error_context); };
+                    assert_eq!(buffer_flags, buffer.buffer_flags);
                     buffer.merge_static_left(&self.program.native_interface, error_context, predecessor_static_layout)?;
 
                     assert!(self.value_spec_checker_opt
@@ -1650,6 +1690,7 @@ impl<'program> FuncletChecker<'program> {
                 if let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_node_id)
                 {
                     assert_eq!(buffer.storage_place, *place);
+                    let buffer_flags = buffer.buffer_flags;
                     buffer.alloc_static(&self.program.native_interface, error_context, *storage_type)?;
 
                     self.value_spec_checker_opt
@@ -1673,6 +1714,7 @@ impl<'program> FuncletChecker<'program> {
                         NodeType::Slot(Slot {
                             storage_type: *storage_type,
                             queue_place: *place,
+                            buffer_flags
                         }),
                     );
                 } else {
@@ -1760,6 +1802,7 @@ impl<'program> FuncletChecker<'program> {
                 &self.program,
                 join_funclet.input_types[capture_index],
                 &node_type,
+                error_context
             );
         }
 
@@ -1823,6 +1866,7 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         self.scheduling_funclet.output_types[return_index],
                         &node_type,
+                        error_context
                     );
                 }
 
@@ -1855,6 +1899,7 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         join_point.input_types[argument_index],
                         &node_type,
+                        error_context
                     );
                 }
 
@@ -1953,6 +1998,7 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         callee_funclet.input_types[argument_index],
                         &node_type,
+                        error_context
                     );
                 }
 
@@ -2076,11 +2122,13 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         true_funclet.input_types[argument_index],
                         &node_type,
+                        error_context
                     );
                     check_slot_type(
                         &self.program,
                         false_funclet.input_types[argument_index],
                         &node_type,
+                        error_context
                     );
                 }
 

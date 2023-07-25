@@ -510,6 +510,34 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children(); [place_hole(t)] => t))
     }
 
+    fn buffer_flag(input: Node) -> ParseResult<ir::BufferFlags> {
+        input
+            .as_str()
+            .parse::<String>()
+            .map_err(|e| input.error(e))
+            .and_then(|s| match s.as_str() {
+                "map_read" => Ok(ir::BufferFlags{map_read: true, .. Default::default()}),
+                "map_write" => Ok(ir::BufferFlags{map_write: true, .. Default::default()}),
+                "copy_src" => Ok(ir::BufferFlags{copy_src: true, .. Default::default()}),
+                "copy_dst" => Ok(ir::BufferFlags{copy_dst: true, .. Default::default()}),
+                "storage" => Ok(ir::BufferFlags{storage: true, .. Default::default()}),
+                "uniform" => Ok(ir::BufferFlags{uniform: true, .. Default::default()}),
+                _ => unimplemented!(),
+            })
+    }
+
+    fn buffer_flags_elements(input: Node) -> ParseResult<ir::BufferFlags> {
+        Ok(match_nodes!(input.into_children();
+            [buffer_flag(flags)..] => flags.fold(ir::BufferFlags::new(), |flags, new_flags| (flags.or(& new_flags))),
+        ))
+    }
+
+    fn buffer_flags(input: Node) -> ParseResult<ir::BufferFlags> {
+        Ok(match_nodes!(input.into_children();
+            [buffer_flags_elements(flags)] => flags
+        ))
+    }
+
     // weirdly, this seems like the best way to do this with pest_consume for now?
     fn quotient_name(
         input: Node,
@@ -615,12 +643,13 @@ impl CaimanAssemblyParser {
 
     fn ref_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name), typ(storage_type), place(storage_place)] =>
+            [name_type_separator(name), typ(storage_type), place(storage_place), buffer_flags(buffer_flags)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::Ref {
                         storage_type,
-                        storage_place
+                        storage_place,
+                        buffer_flags
                 }
             })
         ))
@@ -638,7 +667,7 @@ impl CaimanAssemblyParser {
 
     fn buffer_alignment_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name(name), place(storage_place), n(alignment_bits), n(byte_size)] =>
+            [name(name), place(storage_place), buffer_flags(flags), n(alignment_bits), n(byte_size)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::Buffer {
@@ -646,7 +675,8 @@ impl CaimanAssemblyParser {
                         static_layout_opt: Some(ir::StaticBufferLayout {
                             alignment_bits,
                             byte_size
-                        })
+                        }),
+                        flags
                     }
                 })
         ))
@@ -1404,11 +1434,13 @@ impl CaimanAssemblyParser {
     fn alloc_temporary_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), alloc_temporary_sep, place_hole_sep(place),
+                buffer_flags(buffer_flags),
                 type_hole(storage_type)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::AllocTemporary {
                         place,
-                        storage_type
+                        buffer_flags: Some(buffer_flags),
+                        storage_type,
                     }
                 }
         ))

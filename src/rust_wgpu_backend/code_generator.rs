@@ -1460,11 +1460,31 @@ impl<'program> CodeGenerator<'program> {
         output_variables.into_boxed_slice()
     }
 
-    pub fn build_create_buffer(&mut self, type_id: ffi::TypeId) -> VarId {
+    pub fn build_create_buffer(&mut self, type_id: ffi::TypeId, buffer_flags : ir::BufferFlags) -> VarId {
         let variable_id = self.variable_tracker.create_buffer(Some(type_id));
         let type_binding_info = self.get_type_binding_info(type_id);
         let type_name = self.get_type_name(type_id);
-        self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
+        write!(self.code_writer, "let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage: wgpu::BufferUsages::empty()", self.variable_tracker.get_var_name(variable_id), type_binding_info.size);
+        if buffer_flags.map_read {
+            write!(self.code_writer, " | wgpu::BufferUsages::MAP_READ");
+        }
+        if buffer_flags.map_write {
+            write!(self.code_writer, " | wgpu::BufferUsages::MAP_WRITE");
+        }
+        if buffer_flags.copy_src {
+            write!(self.code_writer, " | wgpu::BufferUsages::COPY_SRC");
+        }
+        if buffer_flags.copy_dst {
+            write!(self.code_writer, " | wgpu::BufferUsages::COPY_DST");
+        }
+        if buffer_flags.storage {
+            write!(self.code_writer, " | wgpu::BufferUsages::STORAGE");
+        }
+        if buffer_flags.uniform {
+            write!(self.code_writer, " | wgpu::BufferUsages::UNIFORM");
+        }
+        write!(self.code_writer, ", mapped_at_creation : false}});\n");
+        //self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
         variable_id
     }
 
@@ -1721,7 +1741,7 @@ impl<'program> CodeGenerator<'program> {
         self.enqueue_command_buffer(command_buffer_id);
     }
 
-    fn build_create_buffer_with_data(&mut self, data_var: VarId, type_id: ffi::TypeId) -> VarId {
+    /*fn build_create_buffer_with_data(&mut self, data_var: VarId, type_id: ffi::TypeId, buffer_flags : ir::BufferFlags) -> VarId {
         let variable_id = self.variable_tracker.generate();
         let type_binding_info = self.get_type_binding_info(type_id);
         let buffer_view_var_name = self.variable_tracker.get_var_name(variable_id);
@@ -1732,12 +1752,13 @@ impl<'program> CodeGenerator<'program> {
             buffer_view_var_name, buffer_view_var_name, data_bytes
         ));
         variable_id
-    }
+    }*/
 
-    fn build_create_buffer_with_buffer_data(
+    /*fn build_create_buffer_with_buffer_data(
         &mut self,
         data_var: VarId,
         type_id: ffi::TypeId,
+        buffer_flags : ir::BufferFlags
     ) -> VarId {
         let variable_id = self.variable_tracker.generate();
         let type_binding_info = self.get_type_binding_info(type_id);
@@ -1768,7 +1789,7 @@ impl<'program> CodeGenerator<'program> {
         write!(self.code_writer, "}}\n");
 
         variable_id
-    }
+    }*/
 
     pub fn build_compute_dispatch_with_outputs(
         &mut self,
