@@ -11,7 +11,7 @@ use super::*;
 
 impl<'context> Context<'context> {
     pub fn program(&self) -> &ast::Program {
-        self.program
+        &self.program
     }
 
     // get what the associated schedule node is allocating

@@ -15,11 +15,12 @@ use crate::ir;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug)]
 pub struct Context<'context> {
     pub location: ast::RemoteNodeId,
 
     // holds the full program "as we go"
-    program: &'context mut ast::Program,
+    program: DebugIgnore<&'context mut ast::Program>,
 
     // information found about a given value funclet
     spec_explication_data: HashMap<FuncletId, SpecFuncletData>,

@@ -4,7 +4,7 @@ use crate::assembly::explication::util::*;
 impl<'context> Context<'context> {
     pub fn new(program: &'context mut ast::Program) -> Context<'context> {
         let mut context = Context {
-            program,
+            program: DebugIgnore(program),
             location: Default::default(),
             spec_explication_data: HashMap::new(),
             schedule_explication_data: HashMap::new(),
@@ -114,6 +114,9 @@ impl<'context> Context<'context> {
 
     fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
         let dependencies = match node {
+            ast::Node::Phi { index } => {
+                vec![]
+            }
             ast::Node::ExtractResult { node_id, index } => {
                 vec![reject_hole_clone(node_id)]
             }
