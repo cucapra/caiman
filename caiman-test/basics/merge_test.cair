@@ -33,11 +33,11 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_main<input($time.%e)-have, output($time.%e)-have>() ->
 [%out : %ni64] {
-    %x_loc = alloc-temporary local i64;
-    %y_loc = alloc-temporary local i64;
-    %n1_loc = alloc-temporary local i64;
-    %n2_loc = alloc-temporary local i64;
-    %res_loc = alloc-temporary local i64;
+    %x_loc = alloc-temporary local [] i64;
+    %y_loc = alloc-temporary local [] i64;
+    %n1_loc = alloc-temporary local [] i64;
+    %n2_loc = alloc-temporary local [] i64;
+    %res_loc = alloc-temporary local [] i64;
 
     local-do-builtin node($val.%x)() -> %x_loc;
     local-do-builtin node($val.%y)() -> %y_loc;

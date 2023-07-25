@@ -241,7 +241,7 @@ separated_buffer_space_node = { assign ~ separated_buffer_space_sep ~ n_sep ~ na
 //     scheduling
 
 alloc_temporary_sep = ${ "alloc-temporary" ~ sep }
-alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole ~ "<" ~ "flags" ~ "=" ~ buffer_flags ~ ">" ~ sep ~ type_hole }
+alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ buffer_flags ~ type_hole }
 drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
