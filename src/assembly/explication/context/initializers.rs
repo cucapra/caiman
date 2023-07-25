@@ -217,7 +217,7 @@ impl<'context> Context<'context> {
                             value_funclet,
                             timeline_funclet,
                             spatial_funclet,
-                            allocations: Default::default(),
+                            type_instantiations: Default::default(),
                             explication_holes: vec![],
                         },
                     );

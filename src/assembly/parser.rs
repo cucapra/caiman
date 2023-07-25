@@ -394,6 +394,12 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn ffi_type_hole_sep(input: Node) -> ParseResult<Hole<ast::FFIType>> {
+        Ok(match_nodes!(input.into_children();
+            [ffi_type_hole(f)] => f
+        ))
+    }
+
     fn ffi_array_parameters(input: Node) -> ParseResult<ast::FFIType> {
         Ok(match_nodes!(input.into_children();
             [ffi_type(element_type)] => ast::FFIType::ErasedLengthArray(
@@ -456,6 +462,13 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [ffi_type_base(t)] => t,
             [ffi_parameterized_type(t)] => t
+        ))
+    }
+
+    fn ffi_type_hole(input: Node) -> ParseResult<Hole<ast::FFIType>> {
+        Ok(match_nodes!(input.into_children();
+            [ffi_type(f)] => Some(f),
+            [hole] => None
         ))
     }
 
@@ -1520,11 +1533,11 @@ impl CaimanAssemblyParser {
 
     fn read_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), read_sep, ffi_type_sep(storage_type),
+            [assign(name), read_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source)] => (Some(name),
                     ast::Node::ReadRef {
                         source: source.map(|s| NodeId(s)),
-                        storage_type: Some(ast::TypeId::FFI(storage_type))
+                        storage_type: storage_type.map(|t| ast::TypeId::FFI(t))
                     }
                 )
         ))
