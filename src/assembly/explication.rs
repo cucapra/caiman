@@ -1,7 +1,6 @@
 mod context;
 mod explicator;
 mod util;
-mod specification_reader;
 
 use crate::assembly::ast;
 use crate::assembly::explication::util::reject_hole;
@@ -9,7 +8,7 @@ use context::Context;
 
 fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) {
     for node in context.static_node_ids(funclet) {
-        match reject_hole(context.get_node(funclet, &node)) {
+        match context.get_node(funclet, &node) {
             ast::Node::AllocTemporary { .. } => {}
             ast::Node::Drop { .. } => {}
             ast::Node::StaticSubAlloc { .. } => {}
@@ -54,7 +53,4 @@ fn explicate_funclets(context: &mut Context) {
 //   but debugging explication is gonna be even harder without names...
 pub fn explicate(mut program: &mut ast::Program) {
     let mut context = Context::new(&mut program);
-    context.corrections();
-    context.initialize(); // setup the context with initial "raw" information
-                          // explicate_funclets(&mut context);
 }

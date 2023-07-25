@@ -88,8 +88,7 @@ fn explicate_operation(
     let op = remote.clone();
 
     let node = context
-        .get_node(&remote.funclet.unwrap(), &remote.node.unwrap())
-        .unwrap();
+        .get_node(&remote.funclet.unwrap(), &remote.node.unwrap());
     let node_arguments = get_node_arguments(&node, context);
 
     // lookup the allocation location and add the argument to the inputs
@@ -132,8 +131,7 @@ fn explicate_operation(
             Some(n) => outputs.push(n.clone()),
             None => {
                 let node = context
-                    .get_node(&op.funclet.as_ref().unwrap(), &op.node.as_ref().unwrap())
-                    .unwrap();
+                    .get_node(&op.funclet.as_ref().unwrap(), &op.node.as_ref().unwrap());
                 match node {
                     assembly::ast::Node::Constant { .. } => {
                         match context.get_schedule_allocations(

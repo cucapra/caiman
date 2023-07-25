@@ -41,8 +41,6 @@ def main():
         arg_end = getter.find(")")
         arguments = getter[:arg_end]
         rest = getter[arg_end:]
-        # make the function public
-        arguments = re.sub(r'pub\s+fn', r'fn', arguments)
         # rename the function with `_mut`
         arguments = re.sub(r'get(\S*?)(\s*?)\(', r'get\1_mut\2(', arguments)
         # &self is the only mutable argument

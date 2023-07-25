@@ -6,7 +6,7 @@ impl<'context> Context<'context> {
         let mut context = Context {
             program,
             location: Default::default(),
-            value_explication_data: HashMap::new(),
+            spec_explication_data: HashMap::new(),
             schedule_explication_data: HashMap::new(),
             meta_data: MetaData::new(),
         };
@@ -49,54 +49,70 @@ impl<'context> Context<'context> {
     }
 
     fn initialize_declarations(&mut self) {
-        for declaration in &self.program.declarations {
+        let mut spec_funclets = Vec::new();
+        let mut schedule_funclets = Vec::new();
+        for declaration in &mut self.program.declarations {
             match declaration {
-                ast::Declaration::TypeDecl(_) => {}
-                ast::Declaration::ExternalFunction(_) => {}
-                ast::Declaration::FunctionClass(_) => {}
-                ast::Declaration::Funclet(funclet) => self.initialize_funclet_info(funclet),
-                ast::Declaration::Pipeline(_) => {}
+                ast::Declaration::Funclet(funclet) => {
+                    let name = funclet.header.name.clone();
+                    match &funclet.kind {
+                        ir::FuncletKind::Value => {
+                            spec_funclets.push(name);
+                        }
+                        ir::FuncletKind::Timeline => {
+                            spec_funclets.push(name);
+                        }
+                        ir::FuncletKind::Spatial => {
+                            spec_funclets.push(name);
+                        }
+                        ir::FuncletKind::ScheduleExplicit => {
+                            schedule_funclets.push(name);
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
+        }
+        for spec_funclet in spec_funclets {
+            self.initialize_spec_funclet_info(spec_funclet);
+        }
+        for schedule_funclet in schedule_funclets {
+            self.initialize_schedule_funclet_info(schedule_funclet);
         }
     }
 
-    fn initialize_funclet_info(&mut self, funclet: &ast::Funclet) {
-        match &funclet.kind {
-            ir::FuncletKind::Value => self.initialize_spec_funclet_info(&funclet.commands),
-            ir::FuncletKind::Timeline => self.initialize_spec_funclet_info(&funclet.commands),
-            ir::FuncletKind::Spatial => self.initialize_spec_funclet_info(&funclet.commands),
-            ir::FuncletKind::ScheduleExplicit => {}
-            ir::FuncletKind::Unknown => {}
-        };
-    }
-
-    fn initialize_spec_funclet_info(&mut self, commands: &Vec<ast::NamedCommand>) {
+    fn initialize_spec_funclet_info(&mut self, funclet_name: ast::FuncletId) {
+        let funclet = self.get_funclet_mut(&funclet_name);
         let mut node_dependencies = HashMap::new();
         let mut tail_dependencies = Vec::new();
-        for command in commands {
+        for command in &funclet.commands {
             match &command.command {
                 ast::Command::Hole => {}
                 ast::Command::Node(node) => {
                     node_dependencies.insert(
                         reject_hole_clone(&command.name),
-                        Context::initialize_node_deps(node),
+                        Context::identify_node_deps(node),
                     );
                 }
                 ast::Command::TailEdge(edge) => {
-                    tail_dependencies = Context::initialize_tailedge_deps(edge);
+                    tail_dependencies = Context::identify_tailedge_deps(edge);
                 }
             }
         }
-        let spec_funclet_data = SpecFuncletData {
-            node_dependencies,
-            tail_dependencies,
-            connections: vec![],
-            explication_information: Default::default(),
-            call_outputs: Default::default(),
-        };
+        self.spec_explication_data.insert(
+            funclet_name,
+            SpecFuncletData {
+                node_dependencies,
+                tail_dependencies,
+                connections: vec![],
+                explication_information: Default::default(),
+                call_outputs: Default::default(),
+            },
+        );
     }
 
-    fn initialize_node_deps(node: &ast::Node) -> Vec<NodeId> {
+    fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
         let dependencies = match node {
             ast::Node::ExtractResult { node_id, index } => {
                 vec![reject_hole_clone(node_id)]
@@ -153,7 +169,7 @@ impl<'context> Context<'context> {
         dependencies
     }
 
-    fn initialize_tailedge_deps(edge: &ast::TailEdge) -> Vec<NodeId> {
+    fn identify_tailedge_deps(edge: &ast::TailEdge) -> Vec<NodeId> {
         let dependencies = match edge {
             ast::TailEdge::DebugHole { inputs } => inputs.iter().map(|n| n.clone()).collect(),
             ast::TailEdge::Return { return_values } => reject_hole(return_values.as_ref())
@@ -175,5 +191,39 @@ impl<'context> Context<'context> {
         dependencies
     }
 
-    fn initialize_allocations(&mut self) {}
+    fn initialize_schedule_funclet_info(&mut self, funclet_name: ast::FuncletId) {
+        let funclet = self.get_funclet_mut(&funclet_name);
+        match &funclet.kind {
+            ir::FuncletKind::ScheduleExplicit => match &funclet.header.binding {
+                ast::FuncletBinding::ScheduleBinding(binding) => {
+                    let value_funclet = reject_hole_clone(&binding.value);
+                    let timeline_funclet = reject_hole_clone(&binding.timeline);
+                    let spatial_funclet = reject_hole_clone(&binding.spatial);
+                    self.get_spec_info_mut(&value_funclet)
+                        .connections
+                        .push(funclet_name.clone());
+                    self.get_spec_info_mut(&timeline_funclet)
+                        .connections
+                        .push(funclet_name.clone());
+                    self.get_spec_info_mut(&spatial_funclet)
+                        .connections
+                        .push(funclet_name.clone());
+                    self.schedule_explication_data.insert(
+                        funclet_name,
+                        ScheduleFuncletData {
+                            value_funclet,
+                            timeline_funclet,
+                            spatial_funclet,
+                            allocations: Default::default(),
+                            explication_holes: vec![],
+                        },
+                    );
+                }
+                _ => {
+                    unreachable!("Expected schedule binding for {:?}", funclet);
+                }
+            },
+            _ => {}
+        }
+    }
 }

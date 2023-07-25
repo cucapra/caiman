@@ -22,7 +22,7 @@ pub struct Context<'context> {
     program: &'context mut ast::Program,
 
     // information found about a given value funclet
-    value_explication_data: HashMap<FuncletId, SpecFuncletData>,
+    spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
     // information found about a given schedule funclet
     schedule_explication_data: HashMap<FuncletId, ScheduleFuncletData>,
 
@@ -77,9 +77,11 @@ struct ScheduleFuncletData {
     // map from the schedule variables to information about their allocations
     allocations: HashMap<NodeId, RemoteNodeId>,
 
-    // most recent explication holes found when constructing the associated value funclet
+    // most recent scoped explication holes found when constructing the associated value funclet
     // note that explication holes are named in corrections
-    explication_holes: Vec<NodeId>,
+    // note also that explication holes are ordered by scope, so this should be popped
+    //   whenever you leave the current scope if there's a hole available in that scope
+    explication_holes: Vec<(FuncletId, NodeId)>,
 }
 
 #[derive(Debug)]

@@ -1,6 +1,13 @@
 use super::*;
 
 impl<'context> Context<'context> {
+    pub fn get_spec_info_mut(&mut self, funclet: &FuncletId) -> &mut SpecFuncletData {
+        match self.spec_explication_data.get_mut(funclet) {
+            Some(data) => data,
+            None => { panic!("Unknown specification functlet {:?}", funclet); }
+        }
+    }
+
     // pub fn forcibly_replace_commands(
     //     &mut self,
     //     funclet: &ast::FuncletId,
@@ -51,7 +58,7 @@ impl<'context> Context<'context> {
 // THIS AND THE FOLLOWING CODE IS GENERATED WITH evil.py, DO NOT TOUCH
 
 impl<'context> Context<'context> {
-    fn get_value_allocation_mut(
+    pub fn get_value_allocation_mut(
         &mut self,
         funclet: &FuncletId,
         node: &NodeId,
@@ -61,65 +68,70 @@ impl<'context> Context<'context> {
             .and_then(|f| f.allocations.get_mut(node))
     }
 
-    fn get_current_value_funclet_mut(&mut self) -> Option<&mut FuncletId> {
+    pub fn get_current_value_funclet_mut(&mut self) -> Option<&mut FuncletId> {
         self.schedule_explication_data
             .get_mut(&mut self.location.funclet.as_ref().unwrap())
             .map(|f| &mut f.value_funclet)
     }
 
-    fn get_funclet_mut(&mut self, funclet_name: &FuncletId) -> Option<&mut ast::Funclet> {
+    pub fn get_schedule_allocations_mut(
+        &mut self,
+        funclet: &FuncletId,
+        node: &NodeId,
+    ) -> Option<&mut HashMap<AllocationInfo, NodeId>> {
+        self.spec_explication_data.get_mut(funclet).and_then(|f| {
+            f.explication_information
+                .get_mut(node)
+                .map(|n| &mut n.scheduled_allocations)
+        })
+    }
+
+    pub fn get_funclet_mut(&mut self, funclet_name: &FuncletId) -> &mut ast::Funclet {
         for declaration in &mut self.program.declarations {
             match declaration {
                 ast::Declaration::Funclet(f) => {
                     if &mut f.header.name == funclet_name {
-                        return Some(f);
+                        return f;
                     }
                 }
                 _ => {}
             }
         }
-        None
+        panic!("Unknown funclet {:?}", funclet_name);
     }
 
-    fn get_node_mut(
-        &mut self,
-        funclet_name: &FuncletId,
-        node_name: &NodeId,
-    ) -> Option<&mut ast::Node> {
-        self.get_funclet_mut(funclet_name).and_then(|f| {
-            for command in &mut f.commands {
-                match &mut command.name {
-                    None => {}
-                    Some(n) => {
-                        if n == node_name {
-                            match &mut command.command {
-                                ast::Command::Node(node) => {
-                                    return Some(node);
-                                }
-                                _ => unreachable!("Attempting to treat {} as a node", n.0),
+    pub fn get_node_mut(&mut self, funclet_name: &FuncletId, node_name: &NodeId) -> &mut ast::Node {
+        for command in &mut self.get_funclet_mut(funclet_name).commands {
+            match &mut command.name {
+                None => {}
+                Some(n) => {
+                    if n == node_name {
+                        match &mut command.command {
+                            ast::Command::Node(node) => {
+                                return node;
                             }
+                            _ => unreachable!("Attempting to treat {} as a node", n.0),
                         }
                     }
                 }
             }
-            None
-        })
+        }
+        panic!("Unknown node {:?} in funclet {:?}", node_name, funclet_name);
     }
 
-    fn get_tail_edge_mut(&mut self, funclet_name: &FuncletId) -> Option<&mut ast::TailEdge> {
-        self.get_funclet_mut(funclet_name).and_then(|f| {
-            for command in &mut f.commands {
-                match &mut command.name {
-                    None => {}
-                    Some(n) => match &mut command.command {
-                        ast::Command::TailEdge(edge) => {
-                            return Some(edge);
-                        }
-                        _ => {}
-                    },
-                }
+    pub fn get_tail_edge_mut(&mut self, funclet_name: &FuncletId) -> Option<&mut ast::TailEdge> {
+        for command in &mut self.get_funclet_mut(funclet_name).commands {
+            match &mut command.name {
+                None => {}
+                Some(n) => match &mut command.command {
+                    ast::Command::TailEdge(edge) => {
+                        return Some(edge);
+                    }
+                    _ => {}
+                },
             }
-            None
-        })
+        }
+        None
     }
+
 }

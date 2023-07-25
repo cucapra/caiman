@@ -37,7 +37,7 @@ impl<'context> Context<'context> {
         funclet: &FuncletId,
         node: &NodeId,
     ) -> Option<&HashMap<AllocationInfo, NodeId>> {
-        self.value_explication_data.get(funclet).and_then(|f| {
+        self.spec_explication_data.get(funclet).and_then(|f| {
             f.explication_information
                 .get(node)
                 .map(|n| &n.scheduled_allocations)
@@ -56,55 +56,51 @@ impl<'context> Context<'context> {
         })
     }
 
-    pub fn get_funclet(&self, funclet_name: &FuncletId) -> Option<&ast::Funclet> {
+    pub fn get_funclet(&self, funclet_name: &FuncletId) -> &ast::Funclet {
         for declaration in &self.program.declarations {
             match declaration {
                 ast::Declaration::Funclet(f) => {
                     if &f.header.name == funclet_name {
-                        return Some(f);
+                        return f;
                     }
                 }
                 _ => {}
             }
         }
-        None
+        panic!("Unknown funclet {:?}", funclet_name);
     }
 
-    pub fn get_node(&self, funclet_name: &FuncletId, node_name: &NodeId) -> Option<&ast::Node> {
-        self.get_funclet(funclet_name).and_then(|f| {
-            for command in &f.commands {
-                match &command.name {
-                    None => {}
-                    Some(n) => {
-                        if n == node_name {
-                            match &command.command {
-                                ast::Command::Node(node) => {
-                                    return Some(node);
-                                }
-                                _ => unreachable!("Attempting to treat {} as a node", n.0),
+    pub fn get_node(&self, funclet_name: &FuncletId, node_name: &NodeId) -> &ast::Node {
+        for command in &self.get_funclet(funclet_name).commands {
+            match &command.name {
+                None => {}
+                Some(n) => {
+                    if n == node_name {
+                        match &command.command {
+                            ast::Command::Node(node) => {
+                                return node;
                             }
+                            _ => unreachable!("Attempting to treat {} as a node", n.0),
                         }
                     }
                 }
             }
-            None
-        })
+        }
+        panic!("Unknown node {:?} in funclet {:?}", node_name, funclet_name);
     }
 
     pub fn get_tail_edge(&self, funclet_name: &FuncletId) -> Option<&ast::TailEdge> {
-        self.get_funclet(funclet_name).and_then(|f| {
-            for command in &f.commands {
-                match &command.name {
-                    None => {}
-                    Some(n) => match &command.command {
-                        ast::Command::TailEdge(edge) => {
-                            return Some(edge);
-                        }
-                        _ => {}
-                    },
-                }
+        for command in &self.get_funclet(funclet_name).commands {
+            match &command.name {
+                None => {}
+                Some(n) => match &command.command {
+                    ast::Command::TailEdge(edge) => {
+                        return Some(edge);
+                    }
+                    _ => {}
+                },
             }
-            None
-        })
+        }
+        None
     }
 }

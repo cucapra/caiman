@@ -29,13 +29,6 @@ impl NodeExplicationInformation {
 }
 
 impl SpecFuncletData {
-    pub fn new() -> SpecFuncletData {
-        SpecFuncletData {
-            connections: Vec::new(),
-            explication_information: HashMap::new(),
-            call_outputs: HashMap::new(),
-        }
-    }
     pub fn allocate(
         &mut self,
         value_node: NodeId,
@@ -58,19 +51,6 @@ impl SpecFuncletData {
 }
 
 impl ScheduleFuncletData {
-    pub fn new(
-        value_funclet: FuncletId,
-        timeline_funclet: FuncletId,
-        spatial_funclet: FuncletId,
-    ) -> ScheduleFuncletData {
-        ScheduleFuncletData {
-            value_funclet,
-            timeline_funclet,
-            spatial_funclet,
-            allocations: HashMap::new(),
-            explication_holes: Vec::new(),
-        }
-    }
     fn allocate(&mut self, node: NodeId, location: RemoteNodeId) {
         let result = self.allocations.insert(node, location);
         assert!(result.is_none());
