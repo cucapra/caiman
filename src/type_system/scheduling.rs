@@ -13,7 +13,7 @@ struct LocalVar {
 struct Slot {
     storage_type: ir::ffi::TypeId,
     queue_place: ir::Place,
-    buffer_flags : ir::BufferFlags
+    buffer_flags: ir::BufferFlags,
 }
 
 #[derive(Debug)]
@@ -43,11 +43,16 @@ struct JoinPoint {
 struct Buffer {
     storage_place: ir::Place,
     static_layout_opt: Option<ir::StaticBufferLayout>,
-    buffer_flags : ir::BufferFlags
+    buffer_flags: ir::BufferFlags,
 }
 
 impl Buffer {
-    fn alloc_static(&mut self, native_interface : & ir::ffi::NativeInterface, error_context : & ErrorContext, storage_type : ir::StorageTypeId) -> Result<(), Error> {
+    fn alloc_static(
+        &mut self,
+        native_interface: &ir::ffi::NativeInterface,
+        error_context: &ErrorContext,
+        storage_type: ir::StorageTypeId,
+    ) -> Result<(), Error> {
         let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
         /*// To do check alignment compatibility
         let storage_size = native_interface
@@ -68,13 +73,18 @@ impl Buffer {
         static_layout.byte_size -= total_byte_size;
         static_layout.alignment_bits =
             (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;*/
-        
+
         static_layout.alloc_static(native_interface, storage_type);
-        
+
         return Ok(());
     }
 
-    fn split_static(&mut self, native_interface : & ir::ffi::NativeInterface, error_context : & ErrorContext, size : usize) -> Result<ir::StaticBufferLayout, Error> {
+    fn split_static(
+        &mut self,
+        native_interface: &ir::ffi::NativeInterface,
+        error_context: &ErrorContext,
+        size: usize,
+    ) -> Result<ir::StaticBufferLayout, Error> {
         let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
 
         /*let predecessor_static_layout = ir::StaticBufferLayout{byte_size : size, alignment_bits : static_layout.alignment_bits};
@@ -84,20 +94,25 @@ impl Buffer {
         let starting_alignment_offset = 1usize << static_layout.alignment_bits;
         static_layout.alignment_bits =
             (size + starting_alignment_offset).trailing_zeros() as usize;*/
-        
+
         let predecessor_static_layout = static_layout.split_static(native_interface, size);
 
         return Ok(predecessor_static_layout);
     }
 
-    fn merge_static_left(&mut self, native_interface : & ir::ffi::NativeInterface, error_context : & ErrorContext, predecessor_static_layout : ir::StaticBufferLayout) -> Result<(), Error> {
+    fn merge_static_left(
+        &mut self,
+        native_interface: &ir::ffi::NativeInterface,
+        error_context: &ErrorContext,
+        predecessor_static_layout: ir::StaticBufferLayout,
+    ) -> Result<(), Error> {
         let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
 
         //static_layout.byte_size += predecessor_static_layout.byte_size;
         //static_layout.alignment_bits = predecessor_static_layout.alignment_bits;
 
         static_layout.merge_static_left(native_interface, predecessor_static_layout);
-        
+
         return Ok(());
     }
 }
@@ -125,7 +140,12 @@ impl NodeType {
     }
 }
 
-fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeType, error_context : &ErrorContext) {
+fn check_slot_type(
+    program: &ir::Program,
+    type_id: ir::TypeId,
+    node_type: &NodeType,
+    error_context: &ErrorContext,
+) {
     match &program.types[type_id] {
         ir::Type::NativeValue {
             storage_type: storage_type_1,
@@ -136,20 +156,23 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
             {
                 assert_eq!(*storage_type_1, *storage_type_2, "\n{}", error_context);
             } else {
-                panic!("type id is a native value type, but node is not a local variable\n{}", error_context);
+                panic!(
+                    "type id is a native value type, but node is not a local variable\n{}",
+                    error_context
+                );
             }
         }
         ir::Type::Ref {
             storage_type: storage_type_2,
             //queue_stage: queue_stage_2,
             storage_place: queue_place_2,
-            buffer_flags: buffer_flags_2
+            buffer_flags: buffer_flags_2,
         } => {
             if let NodeType::Slot(Slot {
                 storage_type,
                 //queue_stage,
                 queue_place,
-                buffer_flags
+                buffer_flags,
             }) = node_type
             {
                 assert_eq!(*queue_place_2, *queue_place, "\n{}", error_context);
@@ -157,7 +180,10 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
                 assert_eq!(*storage_type, *storage_type_2, "\n{}", error_context);
                 assert_eq!(*buffer_flags, *buffer_flags_2, "\n{}", error_context);
             } else {
-                panic!("type id is a ref type, but node is not a ref\n{}", error_context);
+                panic!(
+                    "type id is a ref type, but node is not a ref\n{}",
+                    error_context
+                );
             }
         }
         ir::Type::Fence {
@@ -166,7 +192,10 @@ fn check_slot_type(program: &ir::Program, type_id: ir::TypeId, node_type: &NodeT
             if let NodeType::Fence(Fence { queue_place }) = node_type {
                 assert_eq!(*queue_place_2, *queue_place, "\n{}", error_context);
             } else {
-                panic!("type id is a fence type, but node is not a fence\n{}", error_context);
+                panic!(
+                    "type id is a fence type, but node is not a fence\n{}",
+                    error_context
+                );
             }
         }
         _ => panic!("Unimplemented"),
@@ -491,12 +520,12 @@ impl<'program> FuncletChecker<'program> {
                     storage_type,
                     //queue_stage,
                     storage_place,
-                    buffer_flags
+                    buffer_flags,
                 } => NodeType::Slot(Slot {
                     storage_type: *storage_type,
                     //queue_stage: *queue_stage,
                     queue_place: *storage_place,
-                    buffer_flags: *buffer_flags
+                    buffer_flags: *buffer_flags,
                 }),
                 ir::Type::Fence { queue_place } => NodeType::Fence(Fence {
                     queue_place: *queue_place,
@@ -504,11 +533,11 @@ impl<'program> FuncletChecker<'program> {
                 ir::Type::Buffer {
                     storage_place,
                     static_layout_opt,
-                    flags
+                    flags,
                 } => NodeType::Buffer(Buffer {
                     storage_place: *storage_place,
                     static_layout_opt: *static_layout_opt,
-                    buffer_flags: *flags
+                    buffer_flags: *flags,
                 }),
                 _ => panic!("Not a legal argument type for a scheduling funclet"),
             };
@@ -765,7 +794,7 @@ impl<'program> FuncletChecker<'program> {
             ir::Node::AllocTemporary {
                 place,
                 storage_type,
-                buffer_flags
+                buffer_flags,
             } => {
                 // Has no value and can only be overwritten
                 self.value_spec_checker_opt
@@ -793,7 +822,7 @@ impl<'program> FuncletChecker<'program> {
                     NodeType::Slot(Slot {
                         storage_type: *storage_type,
                         queue_place: *place,
-                        buffer_flags : *buffer_flags
+                        buffer_flags: *buffer_flags,
                     }),
                 );
             }
@@ -896,7 +925,7 @@ impl<'program> FuncletChecker<'program> {
                             }
                         }
                     }*/
-                    
+
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
@@ -1038,9 +1067,7 @@ impl<'program> FuncletChecker<'program> {
                             inputs[kernel.dimensionality..].iter().enumerate()
                         {
                             assert_eq!(
-                                self.node_types[input_impl_node_id]
-                                    .storage_type()
-                                    .unwrap(),
+                                self.node_types[input_impl_node_id].storage_type().unwrap(),
                                 kernel.input_types[input_index]
                             );
 
@@ -1185,15 +1212,22 @@ impl<'program> FuncletChecker<'program> {
                     .check_node_is_readable_at_implicit(error_context, *destination)?;
             }
             ir::Node::LocalCopy { input, output } => {
-
                 let Some(NodeType::Slot(Slot { buffer_flags: input_buffer_flags, .. })) = self.node_types.get(input) else {
                     panic!("Source of local_copy (node #{}) is not a ref \n{}", input, error_context);
                 };
                 let Some(NodeType::Slot(Slot { buffer_flags: output_buffer_flags, .. })) = self.node_types.get(output) else {
                     panic!("Destination of local_copy (node #{}) is not a ref \n{}", output, error_context);
                 };
-                assert!(input_buffer_flags.map_read, "Source of local_copy (node #{}) must be marked with map_read\n{}", input, error_context);
-                assert!(output_buffer_flags.map_write, "Destination of local_copy (node #{}) must be marked with map_write\n{}", output, error_context);
+                assert!(
+                    input_buffer_flags.map_read,
+                    "Source of local_copy (node #{}) must be marked with map_read\n{}",
+                    input, error_context
+                );
+                assert!(
+                    output_buffer_flags.map_write,
+                    "Destination of local_copy (node #{}) must be marked with map_write\n{}",
+                    output, error_context
+                );
 
                 advance_forward_value_copy(
                     self.value_spec_checker_opt.as_mut().unwrap(),
@@ -1232,9 +1266,17 @@ impl<'program> FuncletChecker<'program> {
                 let Some(NodeType::Slot(Slot { buffer_flags: output_buffer_flags, .. })) = self.node_types.get(output) else {
                     panic!("Destination of encode_copy (node #{}) is not a ref \n{}", output, error_context);
                 };
-                assert!(input_buffer_flags.copy_src, "Source of encode_copy (node #{}) must be marked with copy_src\n{}", input, error_context);
-                assert!(output_buffer_flags.copy_dst, "Destination of encode_copy (node #{}) must be marked with copy_dst\n{}", output, error_context);
-                
+                assert!(
+                    input_buffer_flags.copy_src,
+                    "Source of encode_copy (node #{}) must be marked with copy_src\n{}",
+                    input, error_context
+                );
+                assert!(
+                    output_buffer_flags.copy_dst,
+                    "Destination of encode_copy (node #{}) must be marked with copy_dst\n{}",
+                    output, error_context
+                );
+
                 advance_forward_value_copy(
                     self.value_spec_checker_opt.as_mut().unwrap(),
                     error_context,
@@ -1349,7 +1391,10 @@ impl<'program> FuncletChecker<'program> {
                 assert_eq!(fenced_place, ir::Place::Gpu);
             }
             ir::Node::StaticSplit {
-                spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                spatial_operation:
+                    ir::Quotient::Node {
+                        node_id: spatial_spec_node_id,
+                    },
                 node: buffer_impl_node_id,
                 sizes,
                 place,
@@ -1366,9 +1411,18 @@ impl<'program> FuncletChecker<'program> {
                 };
 
                 self.spatial_spec_checker_opt
-                .as_mut()
-                .unwrap()
-                .check_node_tag(error_context, *buffer_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: *space_spec_node_id}, flow: ir::Flow::Have});
+                    .as_mut()
+                    .unwrap()
+                    .check_node_tag(
+                        error_context,
+                        *buffer_impl_node_id,
+                        ir::Tag {
+                            quot: ir::Quotient::Node {
+                                node_id: *space_spec_node_id,
+                            },
+                            flow: ir::Flow::Have,
+                        },
+                    );
 
                 let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
                 assert_eq!(buffer.storage_place, *place);
@@ -1383,30 +1437,42 @@ impl<'program> FuncletChecker<'program> {
 
                     let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
                     let buffer_flags = buffer.buffer_flags;
-                    let new_static_layout = buffer.split_static(&self.program.native_interface, error_context, *size).unwrap();
+                    let new_static_layout = buffer
+                        .split_static(&self.program.native_interface, error_context, *size)
+                        .unwrap();
 
                     self.value_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(
+                            output_impl_node_id,
+                            ir::Quotient::None,
+                            ir::Flow::Have,
+                        );
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(output_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(
+                            output_impl_node_id,
+                            ir::Quotient::None,
+                            ir::Flow::Have,
+                        );
                     self.spatial_spec_checker_opt
                         .as_mut()
                         .unwrap()
                         .update_scalar_node(
                             output_impl_node_id,
-                            ir::Quotient::Node{node_id: *spatial_spec_node_id + offset},
+                            ir::Quotient::Node {
+                                node_id: *spatial_spec_node_id + offset,
+                            },
                             ir::Flow::Have,
                         );
                     self.node_types.insert(
                         output_impl_node_id,
                         NodeType::Buffer(Buffer {
-                            storage_place : * place,
-                            static_layout_opt : Some(new_static_layout),
-                            buffer_flags
+                            storage_place: *place,
+                            static_layout_opt: Some(new_static_layout),
+                            buffer_flags,
                         }),
                     );
                 }
@@ -1417,23 +1483,36 @@ impl<'program> FuncletChecker<'program> {
                     self.value_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(*buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(
+                            *buffer_impl_node_id,
+                            ir::Quotient::None,
+                            ir::Flow::Have,
+                        );
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(*buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(
+                            *buffer_impl_node_id,
+                            ir::Quotient::None,
+                            ir::Flow::Have,
+                        );
                     self.spatial_spec_checker_opt
                         .as_mut()
                         .unwrap()
                         .update_scalar_node(
                             *buffer_impl_node_id,
-                            ir::Quotient::Node{node_id: *spatial_spec_node_id + offset},
+                            ir::Quotient::Node {
+                                node_id: *spatial_spec_node_id + offset,
+                            },
                             ir::Flow::Have,
                         );
                 }
             }
             ir::Node::StaticMerge {
-                spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                spatial_operation:
+                    ir::Quotient::Node {
+                        node_id: spatial_spec_node_id,
+                    },
                 nodes: impl_node_ids,
                 place,
             } => {
@@ -1452,12 +1531,21 @@ impl<'program> FuncletChecker<'program> {
 
                 let buffer_impl_node_id = impl_node_ids[impl_node_ids.len() - 1];
                 self.spatial_spec_checker_opt
-                .as_mut()
-                .unwrap()
-                .check_node_tag(error_context, buffer_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: *space_spec_node_id + impl_node_ids.len()}, flow: ir::Flow::Have});
+                    .as_mut()
+                    .unwrap()
+                    .check_node_tag(
+                        error_context,
+                        buffer_impl_node_id,
+                        ir::Tag {
+                            quot: ir::Quotient::Node {
+                                node_id: *space_spec_node_id + impl_node_ids.len(),
+                            },
+                            flow: ir::Flow::Have,
+                        },
+                    );
 
                 // Deallocate in reverse order
-                for i in (0 .. (impl_node_ids.len() - 1)).rev() {
+                for i in (0..(impl_node_ids.len() - 1)).rev() {
                     let offset = 1 + i;
                     let impl_node_id = impl_node_ids[i];
 
@@ -1473,23 +1561,40 @@ impl<'program> FuncletChecker<'program> {
 
                     let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(& buffer_impl_node_id) else { panic!("{}", error_context); };
                     assert_eq!(buffer_flags, buffer.buffer_flags);
-                    buffer.merge_static_left(&self.program.native_interface, error_context, predecessor_static_layout)?;
+                    buffer.merge_static_left(
+                        &self.program.native_interface,
+                        error_context,
+                        predecessor_static_layout,
+                    )?;
 
-                    assert!(self.value_spec_checker_opt
+                    assert!(self
+                        .value_spec_checker_opt
                         .as_mut()
                         .unwrap()
                         .can_drop_node(impl_node_id));
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .check_node_tag(error_context, impl_node_id, ir::Tag{quot: ir::Quotient::None, flow: ir::Flow::Have});
+                        .check_node_tag(
+                            error_context,
+                            impl_node_id,
+                            ir::Tag {
+                                quot: ir::Quotient::None,
+                                flow: ir::Flow::Have,
+                            },
+                        );
                     self.spatial_spec_checker_opt
                         .as_mut()
                         .unwrap()
                         .check_node_tag(
                             error_context,
                             impl_node_id,
-                            ir::Tag{quot: ir::Quotient::Node{node_id: *spatial_spec_node_id + offset}, flow: ir::Flow::Have}
+                            ir::Tag {
+                                quot: ir::Quotient::Node {
+                                    node_id: *spatial_spec_node_id + offset,
+                                },
+                                flow: ir::Flow::Have,
+                            },
                         );
                 }
 
@@ -1497,17 +1602,27 @@ impl<'program> FuncletChecker<'program> {
                     self.value_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(
+                            buffer_impl_node_id,
+                            ir::Quotient::None,
+                            ir::Flow::Have,
+                        );
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(buffer_impl_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(
+                            buffer_impl_node_id,
+                            ir::Quotient::None,
+                            ir::Flow::Have,
+                        );
                     self.spatial_spec_checker_opt
                         .as_mut()
                         .unwrap()
                         .update_scalar_node(
                             buffer_impl_node_id,
-                            ir::Quotient::Node{node_id: *spatial_spec_node_id},
+                            ir::Quotient::Node {
+                                node_id: *spatial_spec_node_id,
+                            },
                             ir::Flow::Have,
                         );
                 }
@@ -1687,11 +1802,14 @@ impl<'program> FuncletChecker<'program> {
                     self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[buffer_node_id];
                 assert_ne!(buffer_spatial_tag.flow, ir::Flow::Met); // A continuation must own the space
 
-                if let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_node_id)
-                {
+                if let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_node_id) {
                     assert_eq!(buffer.storage_place, *place);
                     let buffer_flags = buffer.buffer_flags;
-                    buffer.alloc_static(&self.program.native_interface, error_context, *storage_type)?;
+                    buffer.alloc_static(
+                        &self.program.native_interface,
+                        error_context,
+                        *storage_type,
+                    )?;
 
                     self.value_spec_checker_opt
                         .as_mut()
@@ -1714,7 +1832,7 @@ impl<'program> FuncletChecker<'program> {
                         NodeType::Slot(Slot {
                             storage_type: *storage_type,
                             queue_place: *place,
-                            buffer_flags
+                            buffer_flags,
                         }),
                     );
                 } else {
@@ -1802,7 +1920,7 @@ impl<'program> FuncletChecker<'program> {
                 &self.program,
                 join_funclet.input_types[capture_index],
                 &node_type,
-                error_context
+                error_context,
             );
         }
 
@@ -1866,7 +1984,7 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         self.scheduling_funclet.output_types[return_index],
                         &node_type,
-                        error_context
+                        error_context,
                     );
                 }
 
@@ -1884,7 +2002,6 @@ impl<'program> FuncletChecker<'program> {
                     .check_return(error_context, return_values)?;
             }
             ir::TailEdge::Jump { join, arguments } => {
-
                 if let Some(NodeType::JoinPoint) = self.node_types.remove(join) {
                     // Nothing, for now...
                 } else {
@@ -1899,7 +2016,7 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         join_point.input_types[argument_index],
                         &node_type,
-                        error_context
+                        error_context,
                     );
                 }
 
@@ -1998,7 +2115,7 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         callee_funclet.input_types[argument_index],
                         &node_type,
-                        error_context
+                        error_context,
                     );
                 }
 
@@ -2122,13 +2239,13 @@ impl<'program> FuncletChecker<'program> {
                         &self.program,
                         true_funclet.input_types[argument_index],
                         &node_type,
-                        error_context
+                        error_context,
                     );
                     check_slot_type(
                         &self.program,
                         false_funclet.input_types[argument_index],
                         &node_type,
-                        error_context
+                        error_context,
                     );
                 }
 

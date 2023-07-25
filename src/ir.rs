@@ -23,39 +23,39 @@ use bitflags::bitflags;
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BufferFlags {
     #[serde(default)]
-    pub map_read : bool,
+    pub map_read: bool,
     #[serde(default)]
-    pub map_write : bool,
+    pub map_write: bool,
     #[serde(default)]
-    pub copy_src : bool,
+    pub copy_src: bool,
     #[serde(default)]
-    pub copy_dst : bool,
+    pub copy_dst: bool,
     #[serde(default)]
-    pub storage : bool,
+    pub storage: bool,
     #[serde(default)]
-    pub uniform : bool,
+    pub uniform: bool,
 }
 
 impl BufferFlags {
     pub fn new() -> Self {
         Self {
-            map_read : false,
-            map_write : false,
-            copy_src : false,
-            copy_dst : false,
-            storage : false,
-            uniform : false
+            map_read: false,
+            map_write: false,
+            copy_src: false,
+            copy_dst: false,
+            storage: false,
+            uniform: false,
         }
     }
 
-    pub fn or(&self, other : &Self) -> Self {
+    pub fn or(&self, other: &Self) -> Self {
         Self {
-            map_read : self.map_read | other.map_read,
-            map_write : self.map_write | other.map_write,
-            copy_src : self.copy_src | other.copy_src,
-            copy_dst : self.copy_dst | other.copy_dst,
-            storage : self.storage | other.storage,
-            uniform : self.uniform | other.uniform
+            map_read: self.map_read | other.map_read,
+            map_write: self.map_write | other.map_write,
+            copy_src: self.copy_src | other.copy_src,
+            copy_dst: self.copy_dst | other.copy_dst,
+            storage: self.storage | other.storage,
+            uniform: self.uniform | other.uniform,
         }
     }
 }
@@ -246,22 +246,22 @@ pub struct StaticBufferLayout {
     pub byte_size: usize,
 }
 
-impl StaticBufferLayout
-{
-    pub fn alloc_static(&mut self, native_interface : & ffi::NativeInterface, storage_type : StorageTypeId) {
+impl StaticBufferLayout {
+    pub fn alloc_static(
+        &mut self,
+        native_interface: &ffi::NativeInterface,
+        storage_type: StorageTypeId,
+    ) {
         // To do check alignment compatibility
-        let storage_size = native_interface
-            .calculate_type_byte_size(storage_type);
-        let alignment_bits = native_interface
-            .calculate_type_alignment_bits(storage_type);
+        let storage_size = native_interface.calculate_type_byte_size(storage_type);
+        let alignment_bits = native_interface.calculate_type_alignment_bits(storage_type);
         let starting_alignment_offset = 1usize << self.alignment_bits;
-        let additional_alignment_offset =
-            if alignment_bits > self.alignment_bits {
-                let alignment_offset = 1usize << alignment_bits;
-                alignment_offset - starting_alignment_offset
-            } else {
-                0usize
-            };
+        let additional_alignment_offset = if alignment_bits > self.alignment_bits {
+            let alignment_offset = 1usize << alignment_bits;
+            alignment_offset - starting_alignment_offset
+        } else {
+            0usize
+        };
         let total_byte_size = storage_size + additional_alignment_offset;
 
         assert!(self.byte_size >= total_byte_size);
@@ -270,19 +270,25 @@ impl StaticBufferLayout
             (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;
     }
 
-    pub fn split_static(&mut self, native_interface : & ffi::NativeInterface, size : usize) -> Self {
-        let predecessor_static_layout = Self{byte_size : size, alignment_bits : self.alignment_bits};
+    pub fn split_static(&mut self, native_interface: &ffi::NativeInterface, size: usize) -> Self {
+        let predecessor_static_layout = Self {
+            byte_size: size,
+            alignment_bits: self.alignment_bits,
+        };
 
         assert!(self.byte_size >= size);
         self.byte_size -= size;
         let starting_alignment_offset = 1usize << self.alignment_bits;
-        self.alignment_bits =
-            (size + starting_alignment_offset).trailing_zeros() as usize;
+        self.alignment_bits = (size + starting_alignment_offset).trailing_zeros() as usize;
 
         return predecessor_static_layout;
     }
 
-    pub fn merge_static_left(&mut self, native_interface : & ffi::NativeInterface, predecessor_static_layout : Self) {
+    pub fn merge_static_left(
+        &mut self,
+        native_interface: &ffi::NativeInterface,
+        predecessor_static_layout: Self,
+    ) {
         self.byte_size += predecessor_static_layout.byte_size;
         self.alignment_bits = predecessor_static_layout.alignment_bits;
     }
@@ -302,7 +308,7 @@ pub enum Type {
     Ref {
         storage_type: ffi::TypeId,
         storage_place: Place,
-        buffer_flags : BufferFlags
+        buffer_flags: BufferFlags,
     },
     Fence {
         queue_place: Place,
@@ -310,7 +316,7 @@ pub enum Type {
     Buffer {
         storage_place: Place,
         static_layout_opt: Option<StaticBufferLayout>,
-        flags : BufferFlags
+        flags: BufferFlags,
     },
     Encoder {
         queue_place: Place,

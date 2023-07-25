@@ -322,7 +322,7 @@ pub enum LocalTypeInfo {
     Ref {
         storage_type: TypeId,
         storage_place: ir::Place,
-        buffer_flags: ir::BufferFlags
+        buffer_flags: ir::BufferFlags,
     },
     Fence {
         queue_place: ir::Place,
@@ -330,7 +330,7 @@ pub enum LocalTypeInfo {
     Buffer {
         storage_place: ir::Place,
         static_layout_opt: Option<ir::StaticBufferLayout>,
-        flags: ir::BufferFlags
+        flags: ir::BufferFlags,
     },
     Encoder {
         queue_place: ir::Place,

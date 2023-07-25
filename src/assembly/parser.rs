@@ -516,12 +516,30 @@ impl CaimanAssemblyParser {
             .parse::<String>()
             .map_err(|e| input.error(e))
             .and_then(|s| match s.as_str() {
-                "map_read" => Ok(ir::BufferFlags{map_read: true, .. Default::default()}),
-                "map_write" => Ok(ir::BufferFlags{map_write: true, .. Default::default()}),
-                "copy_src" => Ok(ir::BufferFlags{copy_src: true, .. Default::default()}),
-                "copy_dst" => Ok(ir::BufferFlags{copy_dst: true, .. Default::default()}),
-                "storage" => Ok(ir::BufferFlags{storage: true, .. Default::default()}),
-                "uniform" => Ok(ir::BufferFlags{uniform: true, .. Default::default()}),
+                "map_read" => Ok(ir::BufferFlags {
+                    map_read: true,
+                    ..Default::default()
+                }),
+                "map_write" => Ok(ir::BufferFlags {
+                    map_write: true,
+                    ..Default::default()
+                }),
+                "copy_src" => Ok(ir::BufferFlags {
+                    copy_src: true,
+                    ..Default::default()
+                }),
+                "copy_dst" => Ok(ir::BufferFlags {
+                    copy_dst: true,
+                    ..Default::default()
+                }),
+                "storage" => Ok(ir::BufferFlags {
+                    storage: true,
+                    ..Default::default()
+                }),
+                "uniform" => Ok(ir::BufferFlags {
+                    uniform: true,
+                    ..Default::default()
+                }),
                 _ => unimplemented!(),
             })
     }

@@ -105,10 +105,10 @@ pub enum Type {
         element_type: TypeId,
     },
     GpuBufferRef {
-        element_type: TypeId
+        element_type: TypeId,
     },
     GpuBufferSlice {
-        element_type: TypeId
+        element_type: TypeId,
     },
     GpuBufferAllocator,
     CpuBufferAllocator,
@@ -150,15 +150,15 @@ impl Type {
 
     pub fn get_ref_pointee_type_id(&self) -> Option<TypeId> {
         let element_type = match self {
-            Self::ConstRef { element_type } => * element_type,
-            Self::MutRef { element_type } => * element_type,
-            Self::ConstSlice { element_type } => * element_type,
-            Self::MutSlice { element_type } => * element_type,
-            Self::GpuBufferRef { element_type } => * element_type,
-            Self::GpuBufferSlice { element_type } => * element_type,
-            _ => return None
+            Self::ConstRef { element_type } => *element_type,
+            Self::MutRef { element_type } => *element_type,
+            Self::ConstSlice { element_type } => *element_type,
+            Self::MutSlice { element_type } => *element_type,
+            Self::GpuBufferRef { element_type } => *element_type,
+            Self::GpuBufferSlice { element_type } => *element_type,
+            _ => return None,
         };
-        
+
         return Some(element_type);
     }
 }

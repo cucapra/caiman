@@ -42,7 +42,7 @@ enum NodeResult {
     },
     Buffer {
         storage_place: ir::Place,
-        static_layout_opt : Option<ir::StaticBufferLayout>,
+        static_layout_opt: Option<ir::StaticBufferLayout>,
         var_id: VarId,
     },
 }
@@ -50,21 +50,21 @@ enum NodeResult {
 impl NodeResult {
     fn get_var_id(&self) -> Option<VarId> {
         match self {
-            NodeResult::LocalValue { var_id, .. } => Some(* var_id),
-            NodeResult::Ref { var_id, .. } => Some(* var_id),
+            NodeResult::LocalValue { var_id, .. } => Some(*var_id),
+            NodeResult::Ref { var_id, .. } => Some(*var_id),
             NodeResult::Buffer { var_id, .. } => Some(*var_id),
             NodeResult::Fence { fence_id, .. } => Some(*fence_id),
-            _ => None
+            _ => None,
         }
     }
 
     fn get_storage_type(&self) -> Option<ir::StorageTypeId> {
         match self {
-            NodeResult::LocalValue { storage_type, .. } => Some(* storage_type),
-            NodeResult::Ref { storage_type, .. } => Some(* storage_type),
-            _ => None
+            NodeResult::LocalValue { storage_type, .. } => Some(*storage_type),
+            NodeResult::Ref { storage_type, .. } => Some(*storage_type),
+            _ => None,
         }
-    } 
+    }
 
     fn collect_vars(node_results: &[NodeResult]) -> Box<[VarId]> {
         let mut var_ids = Vec::<VarId>::new();
@@ -234,7 +234,10 @@ impl FuncletScopedState {
     }
 
     fn get_node_var_id(&self, node_id: ir::NodeId) -> Option<VarId> {
-        self.node_results.get(&node_id).map(|x| x.get_var_id()).flatten()
+        self.node_results
+            .get(&node_id)
+            .map(|x| x.get_var_id())
+            .flatten()
     }
 
     fn get_node_join_point_id(&self, node_id: ir::NodeId) -> Option<JoinPointId> {
@@ -316,7 +319,7 @@ impl PipelineContext {
     fn new() -> Self {
         Self {
             pending_funclet_ids: Default::default(),
-            join_graph : JoinGraph::new(),
+            join_graph: JoinGraph::new(),
         }
     }
 }
@@ -358,19 +361,36 @@ impl<'program> CodeGen<'program> {
         let typ = &self.program.types[type_id];
         let ffi_type_id = match typ {
             ir::Type::NativeValue { storage_type } => *storage_type,
-            ir::Type::Ref { storage_type, storage_place, buffer_flags } => {
-                let is_dynamically_sized = match &self.program.native_interface.types[storage_type.0] {
-                    ir::ffi::Type::ErasedLengthArray { element_type } => true,
-                    _ => false,
-                };
+            ir::Type::Ref {
+                storage_type,
+                storage_place,
+                buffer_flags,
+            } => {
+                let is_dynamically_sized =
+                    match &self.program.native_interface.types[storage_type.0] {
+                        ir::ffi::Type::ErasedLengthArray { element_type } => true,
+                        _ => false,
+                    };
 
                 let typ = match (storage_place, is_dynamically_sized) {
-                    (ir::Place::Local, true) => ir::ffi::Type::MutSlice { element_type: *storage_type },
-                    (ir::Place::Local, false) => ir::ffi::Type::MutRef { element_type: *storage_type },
-                    (ir::Place::Cpu, true) => ir::ffi::Type::CpuBufferSlice { element_type: *storage_type },
-                    (ir::Place::Cpu, false) => ir::ffi::Type::CpuBufferRef { element_type: *storage_type },
-                    (ir::Place::Gpu, true) => ir::ffi::Type::GpuBufferSlice { element_type: *storage_type },
-                    (ir::Place::Gpu, false) => ir::ffi::Type::GpuBufferRef { element_type: *storage_type },
+                    (ir::Place::Local, true) => ir::ffi::Type::MutSlice {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Local, false) => ir::ffi::Type::MutRef {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Cpu, true) => ir::ffi::Type::CpuBufferSlice {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Cpu, false) => ir::ffi::Type::CpuBufferRef {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Gpu, true) => ir::ffi::Type::GpuBufferSlice {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Gpu, false) => ir::ffi::Type::GpuBufferRef {
+                        element_type: *storage_type,
+                    },
                 };
 
                 self.code_generator.create_ffi_type(typ)
@@ -481,12 +501,8 @@ impl<'program> CodeGen<'program> {
                 use std::convert::TryInto;
                 use std::iter::FromIterator;
                 //use core::slice::SlicePattern;
-                let dimension_map = |(index, x)| {
-                    input_slot_ids[index]
-                };
-                let argument_map = |(index, x)| {
-                    input_slot_ids[kernel.dimensionality + index]
-                };
+                let dimension_map = |(index, x)| input_slot_ids[index];
+                let argument_map = |(index, x)| input_slot_ids[kernel.dimensionality + index];
 
                 let mut dimension_var_ids = Vec::from_iter(
                     arguments[..kernel.dimensionality]
@@ -510,10 +526,7 @@ impl<'program> CodeGen<'program> {
                         .map(argument_map),
                 )
                 .into_boxed_slice();
-                let output_var_ids = output_slot_ids
-                    .iter()
-                    .map(|x| *x)
-                    .collect::<Box<[VarId]>>();
+                let output_var_ids = output_slot_ids.iter().map(|x| *x).collect::<Box<[VarId]>>();
 
                 let dimensions_slice: &[VarId] = &dimension_var_ids;
                 self.code_generator.build_compute_dispatch_with_outputs(
@@ -541,8 +554,12 @@ impl<'program> CodeGen<'program> {
         // To do: Do something about the value
         match node {
             ir::Node::Constant { value, type_id } => {
-                let storage_type_id = funclet_scoped_state.get_node_result(output_slot_node_ids[0]).unwrap().get_storage_type().unwrap();
-                
+                let storage_type_id = funclet_scoped_state
+                    .get_node_result(output_slot_node_ids[0])
+                    .unwrap()
+                    .get_storage_type()
+                    .unwrap();
+
                 let variable_id = match value {
                     ir::Constant::I64(value) => self
                         .code_generator
@@ -556,25 +573,33 @@ impl<'program> CodeGen<'program> {
                 };
                 check_storage_type_implements_value_type(&self.program, storage_type_id, *type_id);
 
-                self.code_generator.build_write_local_ref(output_slot_ids[0], variable_id);
+                self.code_generator
+                    .build_write_local_ref(output_slot_ids[0], variable_id);
             }
             ir::Node::Select {
                 condition,
                 true_case,
                 false_case,
             } => {
-                let true_case_storage_type = funclet_scoped_state.get_node_result(* true_case).map(|x| x.get_storage_type()).flatten();
-                let false_case_storage_type = funclet_scoped_state.get_node_result(* false_case).map(|x| x.get_storage_type()).flatten();
+                let true_case_storage_type = funclet_scoped_state
+                    .get_node_result(*true_case)
+                    .map(|x| x.get_storage_type())
+                    .flatten();
+                let false_case_storage_type = funclet_scoped_state
+                    .get_node_result(*false_case)
+                    .map(|x| x.get_storage_type())
+                    .flatten();
                 assert!(true_case_storage_type.is_some());
                 assert_eq!(true_case_storage_type, false_case_storage_type);
 
                 let variable_id = self.code_generator.build_select_hack(
                     input_slot_ids[0],
                     input_slot_ids[1],
-                    input_slot_ids[2]
+                    input_slot_ids[2],
                 );
 
-                self.code_generator.build_write_local_ref(output_slot_ids[0], variable_id);
+                self.code_generator
+                    .build_write_local_ref(output_slot_ids[0], variable_id);
             }
             _ => panic!("Cannot be scheduled as local builtin"),
         }
@@ -606,17 +631,20 @@ impl<'program> CodeGen<'program> {
 
                 use std::iter::FromIterator;
 
-                let argument_var_ids =
-                    Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| {
-                        input_slot_ids[index]
-                    }))
-                    .into_boxed_slice();
+                let argument_var_ids = Vec::from_iter(
+                    arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, x)| input_slot_ids[index]),
+                )
+                .into_boxed_slice();
                 let raw_outputs = self
                     .code_generator
                     .build_external_cpu_function_call(external_function_id, &argument_var_ids);
 
                 for (index, output_type_id) in cpu_operation.output_types.iter().enumerate() {
-                    self.code_generator.build_write_local_ref(output_slot_ids[index], raw_outputs[index]);
+                    self.code_generator
+                        .build_write_local_ref(output_slot_ids[index], raw_outputs[index]);
                 }
             }
             _ => panic!("Cannot be scheduled as local external"),
@@ -697,11 +725,7 @@ impl<'program> CodeGen<'program> {
         path.into_boxed_slice()
     }
 
-    fn build_push_serialized_join(
-        &mut self,
-        funclet_id: ir::FuncletId,
-        captures: &[NodeResult],
-    ) {
+    fn build_push_serialized_join(&mut self, funclet_id: ir::FuncletId, captures: &[NodeResult]) {
         let mut input_storage_types = Vec::<ir::ffi::TypeId>::new();
         let mut output_storage_types = Vec::<ir::ffi::TypeId>::new();
         let mut capture_var_ids = Vec::<VarId>::new();
@@ -798,10 +822,14 @@ impl<'program> CodeGen<'program> {
                             fence_id,
                         });
                     }
-                    ir::Type::Buffer { storage_place, static_layout_opt, .. } => {
+                    ir::Type::Buffer {
+                        storage_place,
+                        static_layout_opt,
+                        ..
+                    } => {
                         argument_node_results.push(NodeResult::Buffer {
                             storage_place: *storage_place,
-                            static_layout_opt : * static_layout_opt,
+                            static_layout_opt: *static_layout_opt,
                             var_id: argument_variable_ids[index],
                         });
                     }
@@ -818,11 +846,12 @@ impl<'program> CodeGen<'program> {
                 .funclet_id_opt
                 .unwrap();
             let join_point_id =
-                pipeline_context.join_graph
-                .create(JoinPoint::RootJoinPoint(RootJoinPoint {
-                    value_funclet_id,
-                    input_types,
-                }));
+                pipeline_context
+                    .join_graph
+                    .create(JoinPoint::RootJoinPoint(RootJoinPoint {
+                        value_funclet_id,
+                        input_types,
+                    }));
             Option::<JoinPointId>::Some(join_point_id)
         };
 
@@ -874,7 +903,9 @@ impl<'program> CodeGen<'program> {
                                         simple_join_point.scheduling_funclet_id,
                                         &simple_join_point.captures,
                                     );
-                                    pipeline_context.pending_funclet_ids.push(simple_join_point.scheduling_funclet_id);
+                                    pipeline_context
+                                        .pending_funclet_ids
+                                        .push(simple_join_point.scheduling_funclet_id);
                                 }
                                 JoinPoint::SerializedJoinPoint(_) => break 'serialization_loop,
                                 _ => panic!(
@@ -971,16 +1002,18 @@ impl<'program> CodeGen<'program> {
                                                 storage_type: *storage_type,
                                             }
                                         }
-                                        ir::Type::Ref { storage_type, storage_place, .. } => {
-                                            NodeResult::Ref {
-                                                var_id: output_var_ids[output_index],
-                                                storage_place: *storage_place,
-                                                storage_type: *storage_type,
-                                            }
-                                        }
-                                        _ => panic!("Incorrect type")
+                                        ir::Type::Ref {
+                                            storage_type,
+                                            storage_place,
+                                            ..
+                                        } => NodeResult::Ref {
+                                            var_id: output_var_ids[output_index],
+                                            storage_place: *storage_place,
+                                            storage_type: *storage_type,
+                                        },
+                                        _ => panic!("Incorrect type"),
                                     };
-                                    
+
                                     output_node_results.push(node_result);
                                 }
                                 current_funclet_id_opt = Some(true_funclet_id);
@@ -998,9 +1031,10 @@ impl<'program> CodeGen<'program> {
                                 false_funclet_id,
                                 continuation_join_point_id_opt,
                             } => {
-                                self.code_generator.end_if_begin_else(
-                                    & NodeResult::collect_vars(&current_output_node_results)
-                                );
+                                self.code_generator
+                                    .end_if_begin_else(&NodeResult::collect_vars(
+                                        &current_output_node_results,
+                                    ));
                                 current_funclet_id_opt = Some(false_funclet_id);
                                 current_output_node_results = branch_input_node_results;
                                 traversal_state_stack.push(TraversalState::SelectEnd {
@@ -1012,9 +1046,9 @@ impl<'program> CodeGen<'program> {
                                 output_node_results,
                                 continuation_join_point_id_opt,
                             } => {
-                                self.code_generator.end_else(
-                                    & NodeResult::collect_vars(&current_output_node_results)
-                                );
+                                self.code_generator.end_else(&NodeResult::collect_vars(
+                                    &current_output_node_results,
+                                ));
                                 default_join_point_id_opt = continuation_join_point_id_opt;
                                 current_output_node_results = output_node_results;
                             }
@@ -1043,7 +1077,7 @@ impl<'program> CodeGen<'program> {
                                                         success_funclet.input_types
                                                             [argument_node_results.len() + index],
                                                     ),
-                                                    slot_id_opt.map(|slot_id| { slot_id }),
+                                                    slot_id_opt.map(|slot_id| slot_id),
                                                 )
                                             })
                                             .collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
@@ -1076,7 +1110,7 @@ impl<'program> CodeGen<'program> {
                                         ir::Type::Ref {
                                             storage_place,
                                             storage_type,
-                                            buffer_flags
+                                            buffer_flags,
                                         } => {
                                             //
                                             let var_id = if let Some(slot_id) = slot_id_opt {
@@ -1092,10 +1126,10 @@ impl<'program> CodeGen<'program> {
                                             } else {
                                                 self.code_generator.build_buffer_suballocate_ref(
                                                     buffer_var_id,
-                                                    *storage_type
+                                                    *storage_type,
                                                 )
                                             };
-                                            
+
                                             NodeResult::Ref {
                                                 storage_place: *storage_place,
                                                 storage_type: *storage_type,
@@ -1105,7 +1139,7 @@ impl<'program> CodeGen<'program> {
                                         ir::Type::Buffer {
                                             storage_place,
                                             static_layout_opt,
-                                            flags
+                                            flags,
                                         } => {
                                             panic!("To do")
                                             //NodeResult::Buffer{var_id}
@@ -1151,9 +1185,10 @@ impl<'program> CodeGen<'program> {
                                 argument_node_results,
                                 continuation_join_point_id_opt,
                             } => {
-                                self.code_generator.end_if_begin_else(
-                                    & NodeResult::collect_vars(&current_output_node_results)
-                                );
+                                self.code_generator
+                                    .end_if_begin_else(&NodeResult::collect_vars(
+                                        &current_output_node_results,
+                                    ));
                                 current_funclet_id_opt = Some(failure_funclet_id);
                                 current_output_node_results = argument_node_results;
                                 traversal_state_stack.push(TraversalState::SelectEnd {
@@ -1165,9 +1200,9 @@ impl<'program> CodeGen<'program> {
                                 output_node_results,
                                 continuation_join_point_id_opt,
                             } => {
-                                self.code_generator.end_else(
-                                    & NodeResult::collect_vars(&current_output_node_results)
-                                );
+                                self.code_generator.end_else(&NodeResult::collect_vars(
+                                    &current_output_node_results,
+                                ));
                                 default_join_point_id_opt = continuation_join_point_id_opt;
                                 current_output_node_results = output_node_results;
                             }
@@ -1183,7 +1218,8 @@ impl<'program> CodeGen<'program> {
 
                     match &join_point {
                         JoinPoint::RootJoinPoint(_) => {
-                            let return_var_ids = NodeResult::collect_vars(&current_output_node_results);
+                            let return_var_ids =
+                                NodeResult::collect_vars(&current_output_node_results);
                             self.code_generator.build_return(&return_var_ids);
                         }
                         JoinPoint::SimpleJoinPoint(simple_join_point) => {
@@ -1198,7 +1234,8 @@ impl<'program> CodeGen<'program> {
                         }
                         JoinPoint::SerializedJoinPoint(serialized_join_point) => {
                             //panic!("Need to insert jump here");
-                            let argument_var_ids = NodeResult::collect_vars(&current_output_node_results);
+                            let argument_var_ids =
+                                NodeResult::collect_vars(&current_output_node_results);
                             self.code_generator
                                 .build_indirect_stack_jump_to_popped_serialized_join(
                                     &argument_var_ids,
@@ -1226,21 +1263,32 @@ impl<'program> CodeGen<'program> {
         self.code_generator.end_funclet();
     }
 
-    fn collect_local_inputs(&mut self, funclet_scoped_state : &FuncletScopedState, inputs : &[ir::NodeId]) -> Box<[VarId]> {
+    fn collect_local_inputs(
+        &mut self,
+        funclet_scoped_state: &FuncletScopedState,
+        inputs: &[ir::NodeId],
+    ) -> Box<[VarId]> {
         let mut input_var_ids = Vec::<VarId>::new();
         for input in inputs.iter() {
             let node_result = funclet_scoped_state.get_node_result(*input).unwrap();
             match node_result {
-                NodeResult::LocalValue { storage_type, var_id, .. } => {
-                    input_var_ids.push(self.code_generator.build_borrow_local_ref(* var_id, * storage_type));
+                NodeResult::LocalValue {
+                    storage_type,
+                    var_id,
+                    ..
+                } => {
+                    input_var_ids.push(
+                        self.code_generator
+                            .build_borrow_local_ref(*var_id, *storage_type),
+                    );
                 }
                 NodeResult::Ref { var_id, .. } => {
-                    input_var_ids.push(* var_id);
+                    input_var_ids.push(*var_id);
                 }
-                _ => panic!("Unsupported")
+                _ => panic!("Unsupported"),
             }
         }
-        
+
         return input_var_ids.into_boxed_slice();
     }
 
@@ -1250,8 +1298,7 @@ impl<'program> CodeGen<'program> {
         argument_node_results: &[NodeResult],
         pipeline_context: &mut PipelineContext,
         default_join_point_id_opt: &mut Option<JoinPointId>,
-    ) -> SplitPoint
-    {
+    ) -> SplitPoint {
         let funclet = &self.program.funclets[funclet_id];
         assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
 
@@ -1299,53 +1346,56 @@ impl<'program> CodeGen<'program> {
                     // Extracts must appear directly after the call (so that node order reflects scheduling order)
                     assert_eq!(current_node_id, *node_id + (*index as usize));
 
-                    match & funclet_scoped_state.node_results[node_id]
-					{
-						_ => panic!("Funclet #{} at node #{} {:?}: Node #{} does not have multiple returns", funclet_id, current_node_id, node, node_id)
-					}
+                    match &funclet_scoped_state.node_results[node_id] {
+                        _ => panic!(
+                            "Funclet #{} at node #{} {:?}: Node #{} does not have multiple returns",
+                            funclet_id, current_node_id, node, node_id
+                        ),
+                    }
                 }
                 ir::Node::AllocTemporary {
                     place,
                     storage_type,
-                    buffer_flags
-                } => {
-                    match place {
-                        ir::Place::Cpu => panic!("Unimplemented"),
-                        ir::Place::Local => {
-                            let var_id = self.code_generator.build_alloc_temp_local_ref(*storage_type);
+                    buffer_flags,
+                } => match place {
+                    ir::Place::Cpu => panic!("Unimplemented"),
+                    ir::Place::Local => {
+                        let var_id = self
+                            .code_generator
+                            .build_alloc_temp_local_ref(*storage_type);
 
-                            funclet_scoped_state.node_results.insert(
-                                current_node_id,
-                                NodeResult::Ref {
-                                    var_id,
-                                    storage_place: *place,
-                                    storage_type: *storage_type,
-                                },
-                            );
-                        }
-                        ir::Place::Gpu => {
-                            let buffer_var_id =
-                                self.code_generator.build_create_buffer(*storage_type, *buffer_flags);
-                            let offset_var_id = self
-                                .code_generator
-                                .build_constant_unsigned_integer(0, self.default_u64_ffi_type_id);
-                            let var_id = self.code_generator.build_buffer_ref(
-                                buffer_var_id,
-                                offset_var_id,
-                                *storage_type,
-                            );
-
-                            funclet_scoped_state.node_results.insert(
-                                current_node_id,
-                                NodeResult::Ref {
-                                    var_id,
-                                    storage_place: *place,
-                                    storage_type: *storage_type,
-                                },
-                            );
-                        }
+                        funclet_scoped_state.node_results.insert(
+                            current_node_id,
+                            NodeResult::Ref {
+                                var_id,
+                                storage_place: *place,
+                                storage_type: *storage_type,
+                            },
+                        );
                     }
-                }
+                    ir::Place::Gpu => {
+                        let buffer_var_id = self
+                            .code_generator
+                            .build_create_buffer(*storage_type, *buffer_flags);
+                        let offset_var_id = self
+                            .code_generator
+                            .build_constant_unsigned_integer(0, self.default_u64_ffi_type_id);
+                        let var_id = self.code_generator.build_buffer_ref(
+                            buffer_var_id,
+                            offset_var_id,
+                            *storage_type,
+                        );
+
+                        funclet_scoped_state.node_results.insert(
+                            current_node_id,
+                            NodeResult::Ref {
+                                var_id,
+                                storage_place: *place,
+                                storage_type: *storage_type,
+                            },
+                        );
+                    }
+                },
                 ir::Node::Drop {
                     node: dropped_node_id,
                 } => {
@@ -1532,14 +1582,18 @@ impl<'program> CodeGen<'program> {
 
                     match (ir::Place::Local, dst_place, src_place) {
                         (ir::Place::Local, ir::Place::Local, ir::Place::Local) => {
-                            let temp_var_id = self.code_generator.build_read_local_ref(src_slot_id, dst_type);
-                            self.code_generator.build_write_local_ref(dst_slot_id, temp_var_id);
+                            let temp_var_id = self
+                                .code_generator
+                                .build_read_local_ref(src_slot_id, dst_type);
+                            self.code_generator
+                                .build_write_local_ref(dst_slot_id, temp_var_id);
                         }
                         (ir::Place::Local, ir::Place::Local, ir::Place::Gpu) => {
                             let temp_var_id = self
                                 .code_generator
                                 .encode_clone_local_data_from_buffer(src_slot_id, dst_type);
-                            self.code_generator.build_write_local_ref(dst_slot_id, temp_var_id);
+                            self.code_generator
+                                .build_write_local_ref(dst_slot_id, temp_var_id);
                         }
                         _ => panic!("Unimplemented"),
                     }
@@ -1565,7 +1619,9 @@ impl<'program> CodeGen<'program> {
                     assert_eq!(src_place, ir::Place::Local);
 
                     //panic!("To do: Implement slices");
-                    let var_id = self.code_generator.build_read_local_ref(src_slot_id, *storage_type);
+                    let var_id = self
+                        .code_generator
+                        .build_read_local_ref(src_slot_id, *storage_type);
                     funclet_scoped_state.node_results.insert(
                         current_node_id,
                         NodeResult::LocalValue {
@@ -1579,16 +1635,14 @@ impl<'program> CodeGen<'program> {
                     storage_type,
                     source,
                 } => {
-                    let (src_slot_id, src_place) = if let Some(NodeResult::LocalValue {
-                        var_id,
-                        ..
-                    }) =
-                        funclet_scoped_state.get_node_result(*source)
-                    {
-                        (*var_id, ir::Place::Local)
-                    } else {
-                        panic!("Not a slot")
-                    };
+                    let (src_slot_id, src_place) =
+                        if let Some(NodeResult::LocalValue { var_id, .. }) =
+                            funclet_scoped_state.get_node_result(*source)
+                        {
+                            (*var_id, ir::Place::Local)
+                        } else {
+                            panic!("Not a slot")
+                        };
 
                     let (dst_slot_id, dst_place) = if let Some(NodeResult::Ref {
                         var_id,
@@ -1606,7 +1660,8 @@ impl<'program> CodeGen<'program> {
                     assert_eq!(dst_place, ir::Place::Local);
 
                     panic!("To do: Implement slices");
-                    self.code_generator.build_write_local_ref(dst_slot_id, src_slot_id);
+                    self.code_generator
+                        .build_write_local_ref(dst_slot_id, src_slot_id);
                 }
                 ir::Node::BeginEncoding {
                     place,
@@ -1627,31 +1682,31 @@ impl<'program> CodeGen<'program> {
                     let src_slot_id = funclet_scoped_state.get_node_var_id(*input).unwrap();
                     let dst_slot_id = funclet_scoped_state.get_node_var_id(*output).unwrap();
 
-                    let (src_slot_id, src_place, src_storage_type) = if let Some(NodeResult::Ref {
-                        var_id,
-                        storage_place,
-                        storage_type,
-                        ..
-                    }) =
-                        funclet_scoped_state.get_node_result(*input)
-                    {
-                        (*var_id, *storage_place, *storage_type)
-                    } else {
-                        panic!("Not a slot")
-                    };
+                    let (src_slot_id, src_place, src_storage_type) =
+                        if let Some(NodeResult::Ref {
+                            var_id,
+                            storage_place,
+                            storage_type,
+                            ..
+                        }) = funclet_scoped_state.get_node_result(*input)
+                        {
+                            (*var_id, *storage_place, *storage_type)
+                        } else {
+                            panic!("Not a slot")
+                        };
 
-                    let (dst_slot_id, dst_place, dst_storage_type) = if let Some(NodeResult::Ref {
-                        var_id,
-                        storage_place,
-                        storage_type,
-                        ..
-                    }) =
-                        funclet_scoped_state.get_node_result(*output)
-                    {
-                        (*var_id, *storage_place, *storage_type)
-                    } else {
-                        panic!("Not a slot")
-                    };
+                    let (dst_slot_id, dst_place, dst_storage_type) =
+                        if let Some(NodeResult::Ref {
+                            var_id,
+                            storage_place,
+                            storage_type,
+                            ..
+                        }) = funclet_scoped_state.get_node_result(*output)
+                        {
+                            (*var_id, *storage_place, *storage_type)
+                        } else {
+                            panic!("Not a slot")
+                        };
 
                     assert_eq!(src_storage_type, dst_storage_type);
 
@@ -1685,12 +1740,18 @@ impl<'program> CodeGen<'program> {
                             );
                         }*/
                         (ir::Place::Gpu, ir::Place::Gpu, ir::Place::Local) => {
-                            self.code_generator
-                                .encode_copy_buffer_from_local_data(dst_slot_id, src_slot_id, src_storage_type);
+                            self.code_generator.encode_copy_buffer_from_local_data(
+                                dst_slot_id,
+                                src_slot_id,
+                                src_storage_type,
+                            );
                         }
                         (ir::Place::Gpu, ir::Place::Gpu, ir::Place::Gpu) => {
-                            self.code_generator
-                                .encode_copy_buffer_from_buffer(dst_slot_id, src_slot_id, src_storage_type);
+                            self.code_generator.encode_copy_buffer_from_buffer(
+                                dst_slot_id,
+                                src_slot_id,
+                                src_storage_type,
+                            );
                         }
                         _ => panic!("Unimplemented"),
                     }
@@ -1729,15 +1790,19 @@ impl<'program> CodeGen<'program> {
                         panic!("Expected fence")
                     }
                 }
-                ir::Node::StaticSplit{
-                    spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                ir::Node::StaticSplit {
+                    spatial_operation:
+                        ir::Quotient::Node {
+                            node_id: spatial_spec_node_id,
+                        },
                     node: buffer_impl_node_id,
                     sizes,
-                    place } => {
-                    for (i, size) in sizes.iter().enumerate()
-                    {
+                    place,
+                } => {
+                    for (i, size) in sizes.iter().enumerate() {
                         let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_impl_node_id).unwrap() else { panic!("") };
-                        let predecessor_layout = static_layout.split_static(&self.program.native_interface, sizes[i]);
+                        let predecessor_layout =
+                            static_layout.split_static(&self.program.native_interface, sizes[i]);
                         /*funclet_scoped_state.node_results.insert(
                             current_node_id,
                             NodeResult::Buffer {
@@ -1756,16 +1821,22 @@ impl<'program> CodeGen<'program> {
                         },
                     );*/
                 }
-                ir::Node::StaticMerge{
-                    spatial_operation: ir::Quotient::Node{node_id: spatial_spec_node_id},
+                ir::Node::StaticMerge {
+                    spatial_operation:
+                        ir::Quotient::Node {
+                            node_id: spatial_spec_node_id,
+                        },
                     nodes: impl_node_ids,
-                    place } => {
+                    place,
+                } => {
                     let buffer_node_id = impl_node_ids[impl_node_ids.len() - 1];
-                    for i in (0 .. (impl_node_ids.len() - 1)).rev()
-                    {
+                    for i in (0..(impl_node_ids.len() - 1)).rev() {
                         let NodeResult::Buffer{static_layout_opt: Some(predecessor_static_layout), ..} = funclet_scoped_state.move_node_result(impl_node_ids[i]).unwrap() else { panic!("") };
                         let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_node_id).unwrap() else { panic!("") };
-                        static_layout.merge_static_left(&self.program.native_interface, predecessor_static_layout);
+                        static_layout.merge_static_left(
+                            &self.program.native_interface,
+                            predecessor_static_layout,
+                        );
                     }
                 }
                 ir::Node::StaticSubAlloc {
@@ -1786,10 +1857,10 @@ impl<'program> CodeGen<'program> {
                     }) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
                     {
                         assert_eq!(*storage_place, *place);
-                        if let Some(static_layout) = static_layout_opt
-                        {
+                        if let Some(static_layout) = static_layout_opt {
                             //let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_node_id).unwrap() else { panic!("") };
-                            static_layout.alloc_static(&self.program.native_interface, *storage_type);
+                            static_layout
+                                .alloc_static(&self.program.native_interface, *storage_type);
                         }
 
                         let allocation_var_id = self
@@ -1904,10 +1975,7 @@ impl<'program> CodeGen<'program> {
                         .join_graph
                         .get_join(continuation_join_point_id);
 
-                    self.build_push_serialized_join(
-                        *funclet_id,
-                        captured_node_results.as_slice(),
-                    );
+                    self.build_push_serialized_join(*funclet_id, captured_node_results.as_slice());
                     pipeline_context.pending_funclet_ids.push(*funclet_id);
 
                     let join_point_id =

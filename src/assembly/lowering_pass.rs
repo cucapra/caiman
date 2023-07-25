@@ -310,11 +310,11 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<ir::
                 ast::LocalTypeInfo::Ref {
                     storage_type,
                     storage_place,
-                    buffer_flags
+                    buffer_flags,
                 } => ir::Type::Ref {
                     storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
                     storage_place: storage_place.clone(),
-                    buffer_flags: buffer_flags.clone()
+                    buffer_flags: buffer_flags.clone(),
                 },
                 ast::LocalTypeInfo::Fence { queue_place } => ir::Type::Fence {
                     queue_place: queue_place.clone(),
@@ -322,11 +322,11 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<ir::
                 ast::LocalTypeInfo::Buffer {
                     storage_place,
                     static_layout_opt,
-                    flags
+                    flags,
                 } => ir::Type::Buffer {
                     storage_place: storage_place.clone(),
                     static_layout_opt: static_layout_opt.clone(),
-                    flags : flags.clone()
+                    flags: flags.clone(),
                 },
                 ast::LocalTypeInfo::Encoder { queue_place } => ir::Type::Encoder {
                     queue_place: queue_place.clone(),
@@ -399,11 +399,11 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         ast::Node::AllocTemporary {
             place,
             storage_type,
-            buffer_flags
+            buffer_flags,
         } => ir::Node::AllocTemporary {
             place: reject_hole(place.clone()),
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-            buffer_flags : reject_hole(*buffer_flags)
+            buffer_flags: reject_hole(*buffer_flags),
         },
         ast::Node::Drop { node } => ir::Node::Drop {
             node: context.node_id(reject_hole(node.as_ref())),

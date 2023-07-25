@@ -41,7 +41,7 @@ pub enum OperationInputKind {
     Funclet,
     RemoteOperation,
     StorageType,
-    BufferFlags
+    BufferFlags,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
