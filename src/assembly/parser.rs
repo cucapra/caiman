@@ -575,13 +575,13 @@ impl CaimanAssemblyParser {
                 "node" => Ok(box_up(&ast::Quotient::Node)),
                 "input" => Ok(box_up(&ast::Quotient::Input)),
                 "output" => Ok(box_up(&ast::Quotient::Output)),
+                "none" => Ok(box_up(&ast::Quotient::None)),
                 _ => Err(input.error(unexpected(s))),
             })
     }
 
     fn quotient(input: Node) -> ParseResult<ast::Quotient> {
         Ok(match_nodes!(input.into_children();
-            [none] => ast::Quotient::None,
             [quotient_name(quot), meta_remote(remote)] => {
                 quot(Some(remote))
             },
@@ -591,7 +591,6 @@ impl CaimanAssemblyParser {
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::Quotient>> {
         Ok(match_nodes!(input.into_children();
             [hole(hole)] => None,
-            [none(none)] => Some(ast::Quotient::None),
             [quotient_name(quot), meta_remote_hole(remote)] => {
                 Some(quot(Some(remote)))
             },
@@ -614,7 +613,6 @@ impl CaimanAssemblyParser {
 
     fn tag(input: Node) -> ParseResult<ast::Tag> {
         Ok(match_nodes!(input.into_children();
-            [none] => ast::Tag { quot : ast::Quotient::None, flow : ir::Flow::None},
             [quotient(quot), flow(flow)] => ast::Tag { quot, flow }
         ))
     }

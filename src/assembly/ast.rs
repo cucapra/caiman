@@ -120,7 +120,7 @@ pub struct RemoteNodeId {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Quotient {
-    None,
+    None(Hole<RemoteNodeId>),
     Node(Hole<RemoteNodeId>),
     Input(Hole<RemoteNodeId>),
     Output(Hole<RemoteNodeId>),

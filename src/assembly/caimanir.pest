@@ -66,11 +66,11 @@ buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
 meta_remote = { meta_name ~ "." ~ name }
 meta_remote_hole = { meta_name_hole ~ "." ~ name_hole | hole }
-quotient_name = { "node" | "input" | "output" | "halt" }
-quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" | none }
-quotient_hole = !{ quotient_name ~ "(" ~ meta_remote_hole ~ ")" | hole | none }
+quotient_name = { "node" | "input" | "output" | "halt" | "none" }
+quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" }
+quotient_hole = !{ quotient_name ~ "(" ~ meta_remote_hole ~ ")" | hole }
 flow = { "none" | "have" | "met" | "need" }
-tag = ${ quotient ~ "-" ~ flow | none }
+tag = ${ quotient ~ "-" ~ flow }
 
 // Program
 

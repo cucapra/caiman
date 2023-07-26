@@ -484,16 +484,19 @@ impl<'program> FuncletChecker<'program> {
                 program,
                 value_funclet,
                 value_spec,
+                "Value"
             )),
             timeline_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
                 &program.funclets[timeline_spec.funclet_id_opt.unwrap()],
                 timeline_spec,
+                "Timeline"
             )),
             spatial_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
                 &program.funclets[spatial_spec.funclet_id_opt.unwrap()],
                 spatial_spec,
+                "Spatial"
             )),
             node_join_points: HashMap::new(),
             node_types: HashMap::new(),
@@ -1839,6 +1842,12 @@ impl<'program> FuncletChecker<'program> {
                     panic!("No static buffer at node #{}", buffer_node_id)
                 }
             }
+            /*ir::Node::PromiseCaptures => {
+
+            }
+            ir::Node::FulfillCaptures => {
+
+            }*/
             ir::Node::DefaultJoin => {
                 let mut input_types = Vec::<ir::TypeId>::new();
                 for (index, type_id) in self.scheduling_funclet.output_types.iter().enumerate() {

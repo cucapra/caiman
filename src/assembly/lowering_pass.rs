@@ -118,7 +118,7 @@ pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient
         context.remote_node_id(funclet_id, node_id)
     }
     match quot {
-        ast::Quotient::None => ir::Quotient::None,
+        ast::Quotient::None(_) => ir::Quotient::None,
         ast::Quotient::Node(r) => ir::Quotient::Node {
             node_id: get_node(reject_hole(r.as_ref()), context),
         },
@@ -140,7 +140,7 @@ fn ir_tag(tag: &ast::Tag, context: &mut Context) -> ir::Tag {
 
 fn quotient_funclet(quot: &ast::Quotient, context: &mut Context) -> Option<ast::FuncletId> {
     match quot {
-        ast::Quotient::None => None,
+        ast::Quotient::None(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
         ast::Quotient::Node(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
         ast::Quotient::Input(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
         ast::Quotient::Output(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
@@ -765,7 +765,7 @@ fn ir_schedule_binding(
             let new_tag = ir_tag(tag, context);
             let data = quotient_funclet(&tag.quot, context);
             match data {
-                None => {}
+                None => panic!("Tag must have a funclet id associated with it: {:?}", tag),
                 Some(fnid) => {
                     if fnid == value.clone().unwrap_or(ast::FuncletId("".to_string())) {
                         result.value = new_tag;
