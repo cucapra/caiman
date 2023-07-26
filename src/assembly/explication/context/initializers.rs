@@ -8,6 +8,7 @@ impl<'context> Context<'context> {
             location: Default::default(),
             spec_explication_data: HashMap::new(),
             schedule_explication_data: HashMap::new(),
+            scopes: Vec::new(),
             meta_data: MetaData::new(),
         };
         context.initialize();
@@ -106,8 +107,6 @@ impl<'context> Context<'context> {
                 node_dependencies,
                 tail_dependencies,
                 connections: vec![],
-                explication_information: Default::default(),
-                call_outputs: Default::default(),
             },
         );
     }
@@ -218,7 +217,6 @@ impl<'context> Context<'context> {
                             timeline_funclet,
                             spatial_funclet,
                             type_instantiations: Default::default(),
-                            explication_holes: vec![],
                         },
                     );
                 }

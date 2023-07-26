@@ -1,8 +1,9 @@
 pub mod data_impls;
 pub mod getters;
 pub mod initializers;
-pub mod mutators;
+mod internal_mutators;
 pub mod static_getters;
+pub mod mutators;
 
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
@@ -45,6 +46,17 @@ struct SpecFuncletData {
 
     // stores connections of which schedules refer to this value funclet
     connections: Vec<FuncletId>,
+}
+
+#[derive(Debug)]
+struct ScheduleFuncletData {
+    // associated specification funclets
+    value_funclet: FuncletId,
+    timeline_funclet: FuncletId,
+    spatial_funclet: FuncletId,
+
+    // map from the scheduled allocations to what they are instantiating (if known)
+    type_instantiations: HashMap<NodeId, RemoteNodeId>,
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"
@@ -92,6 +104,7 @@ struct OperationInfo {
 struct ScheduleScopeData {
     // structure to manage the explication information for the current scope
     // the rule is more-to-less specific, then go up to the next scope out
+    funclet_name: FuncletId,
 
     // map from location information to an instantiation (if one exists)
     instantiations: HashMap<ScheduledInstantiationInfo, NodeId>,
@@ -108,18 +121,6 @@ struct ScheduleScopeData {
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections
     explication_hole: Option<NodeId>
-}
-
-// this information
-#[derive(Debug)]
-struct ScheduleFuncletData {
-    // associated specification funclets
-    value_funclet: FuncletId,
-    timeline_funclet: FuncletId,
-    spatial_funclet: FuncletId,
-
-    // map from the scheduled allocations to what they are instantiating (if known)
-    type_instantiations: HashMap<NodeId, RemoteNodeId>,
 }
 
 #[derive(Debug)]

@@ -55,7 +55,7 @@ def main():
 
     mutators = []
     message = "// THIS AND THE FOLLOWING CODE IS GENERATED WITH evil.py, DO NOT TOUCH"
-    with open("mutators.rs", 'r') as f:
+    with open("internal_mutators.rs", 'r') as f:
         for line in f:
             if line.strip() == message:
                 break
@@ -63,7 +63,7 @@ def main():
     
     print("Read mutators file")
 
-    with open("mutators.rs", 'w') as f:
+    with open("internal_mutators.rs", 'w') as f:
         for line in mutators:
             f.write(line)
         f.write(message + '\n\n')
