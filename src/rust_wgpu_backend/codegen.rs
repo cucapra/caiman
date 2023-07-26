@@ -765,6 +765,118 @@ impl<'program> CodeGen<'program> {
         );
     }
 
+    fn process_current_funclet(&mut self, current_funclet_id : ir::FuncletId, current_output_node_results : Box<[NodeResult]>, pipeline_context: &mut PipelineContext, traversal_state_stack : &mut Vec<TraversalState>, default_join_point_id_opt : &mut Option<JoinPointId>) -> Option<Box<[NodeResult]>> {
+        let split_point = self.compile_scheduling_funclet(
+            current_funclet_id,
+            &current_output_node_results,
+            pipeline_context,
+            default_join_point_id_opt,
+        );
+
+        //println!("Split point: {:?}", split_point);
+        match split_point {
+            SplitPoint::Next {
+                return_node_results,
+                continuation_join_point_id_opt,
+            } => {
+                *default_join_point_id_opt = continuation_join_point_id_opt;
+                return Some(return_node_results);
+            }
+            SplitPoint::Yield {
+                external_function_id,
+                yielded_node_results,
+                mut continuation_join_point_id_opt,
+            } => {
+                let path_join_point_ids = self.collect_join_graph_path(
+                    &mut pipeline_context.join_graph,
+                    traversal_state_stack.as_slice(),
+                    continuation_join_point_id_opt,
+                );
+                //println!("Serializing join points: {:?} from root: {:?}", path_join_point_ids, continuation_join_point_id_opt);
+                //panic!("Serialized?");
+
+                let mut join_point_offset_vars = HashMap::<JoinPointId, VarId>::new();
+
+                'serialization_loop: for &join_point_id in path_join_point_ids.iter().rev()
+                {
+                    let join_point = pipeline_context.join_graph.get_join(join_point_id);
+
+                    match join_point {
+                        JoinPoint::RootJoinPoint(_) => (),
+                        JoinPoint::SimpleJoinPoint(simple_join_point) => {
+                            self.build_push_serialized_join(
+                                simple_join_point.scheduling_funclet_id,
+                                &simple_join_point.captures,
+                            );
+                            pipeline_context
+                                .pending_funclet_ids
+                                .push(simple_join_point.scheduling_funclet_id);
+                        }
+                        JoinPoint::SerializedJoinPoint(_) => break 'serialization_loop,
+                        _ => panic!(
+                            "Jump to invalid join point #{:?}: {:?}",
+                            join_point_id, join_point
+                        ),
+                    }
+                    //pipeline_context.pending_funclet_ids.push();
+                }
+
+                let mut yielded_var_ids = Vec::<VarId>::new();
+                for node_result in yielded_node_results.iter() {
+                    let var_id = node_result.get_var_id().unwrap();
+                    yielded_var_ids.push(var_id);
+                }
+
+                self.code_generator
+                    .build_yield(external_function_id, yielded_var_ids.as_slice());
+
+                // To do: Technically, we should insert a join point that recursively forces a split of the funclet once branches merge.
+                // Should probably fix this by adding a new type of ir::Node::Join instead of inserting here and sifting upwards.
+
+                //panic!("Not yet implemented");
+                //current_funclet_id_opt = None;
+                *default_join_point_id_opt = None;
+                return None;
+            }
+            SplitPoint::Select {
+                return_node_results,
+                condition_slot_id,
+                true_funclet_id,
+                false_funclet_id,
+                continuation_join_point_id_opt,
+            } => {
+                assert!(default_join_point_id_opt.is_none());
+                traversal_state_stack.push(TraversalState::SelectIf {
+                    branch_input_node_results: return_node_results,
+                    condition_slot_id,
+                    true_funclet_id,
+                    false_funclet_id,
+                    continuation_join_point_id_opt,
+                });
+                return None;
+            }
+            SplitPoint::DynAlloc {
+                buffer_node_result,
+                success_funclet_id,
+                failure_funclet_id,
+                argument_node_results,
+                dynamic_allocation_size_slot_ids,
+                continuation_join_point_id_opt,
+            } => {
+                assert!(default_join_point_id_opt.is_none());
+                traversal_state_stack.push(TraversalState::DynAllocIf {
+                    buffer_node_result,
+                    success_funclet_id,
+                    failure_funclet_id,
+                    argument_node_results,
+                    dynamic_allocation_size_slot_ids,
+                    continuation_join_point_id_opt,
+                });
+                return None;
+            }
+        }
+    }
+
     fn compile_externally_visible_scheduling_funclet(
         &mut self,
         funclet_id: ir::FuncletId,
@@ -857,120 +969,15 @@ impl<'program> CodeGen<'program> {
 
         let mut traversal_state_stack = Vec::<TraversalState>::new();
 
-        let mut current_output_node_results = argument_node_results.into_boxed_slice();
+        let mut current_output_node_results_opt = Some(argument_node_results.into_boxed_slice());
         let mut current_funclet_id_opt = Some(funclet_id);
 
         while current_funclet_id_opt.is_some() {
             while let Some(current_funclet_id) = current_funclet_id_opt {
-                let split_point = self.compile_scheduling_funclet(
-                    current_funclet_id,
-                    &current_output_node_results,
-                    pipeline_context,
-                    &mut default_join_point_id_opt,
-                );
-                //println!("Split point: {:?}", split_point);
-                current_output_node_results = match split_point {
-                    SplitPoint::Next {
-                        return_node_results,
-                        continuation_join_point_id_opt,
-                    } => {
-                        default_join_point_id_opt = continuation_join_point_id_opt;
-                        return_node_results
-                    }
-                    SplitPoint::Yield {
-                        external_function_id,
-                        yielded_node_results,
-                        mut continuation_join_point_id_opt,
-                    } => {
-                        let path_join_point_ids = self.collect_join_graph_path(
-                            &mut pipeline_context.join_graph,
-                            traversal_state_stack.as_slice(),
-                            continuation_join_point_id_opt,
-                        );
-                        //println!("Serializing join points: {:?} from root: {:?}", path_join_point_ids, continuation_join_point_id_opt);
-                        //panic!("Serialized?");
+                current_funclet_id_opt = None;
+                current_output_node_results_opt = self.process_current_funclet(current_funclet_id, current_output_node_results_opt.unwrap(), pipeline_context, &mut traversal_state_stack, &mut default_join_point_id_opt);
 
-                        let mut join_point_offset_vars = HashMap::<JoinPointId, VarId>::new();
-
-                        'serialization_loop: for &join_point_id in path_join_point_ids.iter().rev()
-                        {
-                            let join_point = pipeline_context.join_graph.get_join(join_point_id);
-
-                            match join_point {
-                                JoinPoint::RootJoinPoint(_) => (),
-                                JoinPoint::SimpleJoinPoint(simple_join_point) => {
-                                    self.build_push_serialized_join(
-                                        simple_join_point.scheduling_funclet_id,
-                                        &simple_join_point.captures,
-                                    );
-                                    pipeline_context
-                                        .pending_funclet_ids
-                                        .push(simple_join_point.scheduling_funclet_id);
-                                }
-                                JoinPoint::SerializedJoinPoint(_) => break 'serialization_loop,
-                                _ => panic!(
-                                    "Jump to invalid join point #{:?}: {:?}",
-                                    join_point_id, join_point
-                                ),
-                            }
-                            //pipeline_context.pending_funclet_ids.push();
-                        }
-
-                        let mut yielded_var_ids = Vec::<VarId>::new();
-                        for node_result in yielded_node_results.iter() {
-                            let var_id = node_result.get_var_id().unwrap();
-                            yielded_var_ids.push(var_id);
-                        }
-
-                        self.code_generator
-                            .build_yield(external_function_id, yielded_var_ids.as_slice());
-
-                        // To do: Technically, we should insert a join point that recursively forces a split of the funclet once branches merge.
-                        // Should probably fix this by adding a new type of ir::Node::Join instead of inserting here and sifting upwards.
-
-                        //panic!("Not yet implemented");
-                        current_funclet_id_opt = None;
-                        default_join_point_id_opt = None;
-                        vec![].into_boxed_slice()
-                    }
-                    SplitPoint::Select {
-                        return_node_results,
-                        condition_slot_id,
-                        true_funclet_id,
-                        false_funclet_id,
-                        continuation_join_point_id_opt,
-                    } => {
-                        assert!(default_join_point_id_opt.is_none());
-                        traversal_state_stack.push(TraversalState::SelectIf {
-                            branch_input_node_results: return_node_results,
-                            condition_slot_id,
-                            true_funclet_id,
-                            false_funclet_id,
-                            continuation_join_point_id_opt,
-                        });
-                        vec![].into_boxed_slice()
-                    }
-                    SplitPoint::DynAlloc {
-                        buffer_node_result,
-                        success_funclet_id,
-                        failure_funclet_id,
-                        argument_node_results,
-                        dynamic_allocation_size_slot_ids,
-                        continuation_join_point_id_opt,
-                    } => {
-                        assert!(default_join_point_id_opt.is_none());
-                        traversal_state_stack.push(TraversalState::DynAllocIf {
-                            buffer_node_result,
-                            success_funclet_id,
-                            failure_funclet_id,
-                            argument_node_results,
-                            dynamic_allocation_size_slot_ids,
-                            continuation_join_point_id_opt,
-                        });
-                        vec![].into_boxed_slice()
-                    }
-                };
-
+                // Nothing to run next
                 if default_join_point_id_opt.is_none() {
                     while let Some(traversal_state) = traversal_state_stack.pop() {
                         match traversal_state {
@@ -1017,7 +1024,7 @@ impl<'program> CodeGen<'program> {
                                     output_node_results.push(node_result);
                                 }
                                 current_funclet_id_opt = Some(true_funclet_id);
-                                current_output_node_results = branch_input_node_results.clone();
+                                current_output_node_results_opt = Some(branch_input_node_results.clone());
                                 traversal_state_stack.push(TraversalState::SelectElse {
                                     output_node_results: output_node_results.into_boxed_slice(),
                                     branch_input_node_results,
@@ -1033,10 +1040,10 @@ impl<'program> CodeGen<'program> {
                             } => {
                                 self.code_generator
                                     .end_if_begin_else(&NodeResult::collect_vars(
-                                        &current_output_node_results,
+                                        current_output_node_results_opt.as_ref().unwrap(),
                                     ));
                                 current_funclet_id_opt = Some(false_funclet_id);
-                                current_output_node_results = branch_input_node_results;
+                                current_output_node_results_opt = Some(branch_input_node_results);
                                 traversal_state_stack.push(TraversalState::SelectEnd {
                                     output_node_results,
                                     continuation_join_point_id_opt,
@@ -1047,10 +1054,10 @@ impl<'program> CodeGen<'program> {
                                 continuation_join_point_id_opt,
                             } => {
                                 self.code_generator.end_else(&NodeResult::collect_vars(
-                                    &current_output_node_results,
+                                    current_output_node_results_opt.as_ref().unwrap(),
                                 ));
                                 default_join_point_id_opt = continuation_join_point_id_opt;
-                                current_output_node_results = output_node_results;
+                                current_output_node_results_opt = Some(output_node_results);
                             }
                             TraversalState::DynAllocIf {
                                 buffer_node_result,
@@ -1170,8 +1177,8 @@ impl<'program> CodeGen<'program> {
                                 }
 
                                 current_funclet_id_opt = Some(success_funclet_id);
-                                current_output_node_results =
-                                    success_argument_node_results.into_boxed_slice();
+                                current_output_node_results_opt =
+                                    Some(success_argument_node_results.into_boxed_slice());
                                 traversal_state_stack.push(TraversalState::DynAllocElse {
                                     output_node_results: output_node_results.into_boxed_slice(),
                                     argument_node_results,
@@ -1187,10 +1194,10 @@ impl<'program> CodeGen<'program> {
                             } => {
                                 self.code_generator
                                     .end_if_begin_else(&NodeResult::collect_vars(
-                                        &current_output_node_results,
+                                        current_output_node_results_opt.as_ref().unwrap(),
                                     ));
                                 current_funclet_id_opt = Some(failure_funclet_id);
-                                current_output_node_results = argument_node_results;
+                                current_output_node_results_opt = Some(argument_node_results);
                                 traversal_state_stack.push(TraversalState::SelectEnd {
                                     output_node_results,
                                     continuation_join_point_id_opt,
@@ -1201,59 +1208,60 @@ impl<'program> CodeGen<'program> {
                                 continuation_join_point_id_opt,
                             } => {
                                 self.code_generator.end_else(&NodeResult::collect_vars(
-                                    &current_output_node_results,
+                                    current_output_node_results_opt.as_ref().unwrap(),
                                 ));
                                 default_join_point_id_opt = continuation_join_point_id_opt;
-                                current_output_node_results = output_node_results;
+                                current_output_node_results_opt = Some(output_node_results);
                             }
                         }
                     }
                 }
 
-                current_funclet_id_opt = None;
-                if let Some(join_point_id) = default_join_point_id_opt {
-                    default_join_point_id_opt = None;
-                    let join_point = pipeline_context.join_graph.move_join(join_point_id);
-                    println!("Continuing to {:?} {:?}", join_point_id, join_point);
+                if current_funclet_id_opt.is_none() {
+                    if let Some(join_point_id) = default_join_point_id_opt {
+                        default_join_point_id_opt = None;
+                        let join_point = pipeline_context.join_graph.move_join(join_point_id);
+                        println!("Continuing to {:?} {:?}", join_point_id, join_point);
 
-                    match &join_point {
-                        JoinPoint::RootJoinPoint(_) => {
-                            let return_var_ids =
-                                NodeResult::collect_vars(&current_output_node_results);
-                            self.code_generator.build_return(&return_var_ids);
-                        }
-                        JoinPoint::SimpleJoinPoint(simple_join_point) => {
-                            let mut input_node_results = Vec::<NodeResult>::new();
-                            input_node_results.extend_from_slice(&simple_join_point.captures);
-                            input_node_results.extend_from_slice(&current_output_node_results);
+                        match &join_point {
+                            JoinPoint::RootJoinPoint(_) => {
+                                let return_var_ids =
+                                    NodeResult::collect_vars(current_output_node_results_opt.as_ref().unwrap());
+                                self.code_generator.build_return(&return_var_ids);
+                            }
+                            JoinPoint::SimpleJoinPoint(simple_join_point) => {
+                                let mut input_node_results = Vec::<NodeResult>::new();
+                                input_node_results.extend_from_slice(&simple_join_point.captures);
+                                input_node_results.extend_from_slice(current_output_node_results_opt.as_ref().unwrap());
 
-                            current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
-                            default_join_point_id_opt =
-                                Some(simple_join_point.continuation_join_point_id);
-                            current_output_node_results = input_node_results.into_boxed_slice();
+                                current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
+                                default_join_point_id_opt =
+                                    Some(simple_join_point.continuation_join_point_id);
+                                current_output_node_results_opt = Some(input_node_results.into_boxed_slice());
+                            }
+                            JoinPoint::SerializedJoinPoint(serialized_join_point) => {
+                                //panic!("Need to insert jump here");
+                                let argument_var_ids =
+                                    NodeResult::collect_vars(current_output_node_results_opt.as_ref().unwrap());
+                                self.code_generator
+                                    .build_indirect_stack_jump_to_popped_serialized_join(
+                                        &argument_var_ids,
+                                        &serialized_join_point.argument_ffi_types,
+                                    );
+                            }
+                            _ => panic!(
+                                "Jump to invalid join point #{:?}: {:?}",
+                                join_point_id, join_point
+                            ),
                         }
-                        JoinPoint::SerializedJoinPoint(serialized_join_point) => {
-                            //panic!("Need to insert jump here");
-                            let argument_var_ids =
-                                NodeResult::collect_vars(&current_output_node_results);
-                            self.code_generator
-                                .build_indirect_stack_jump_to_popped_serialized_join(
-                                    &argument_var_ids,
-                                    &serialized_join_point.argument_ffi_types,
-                                );
-                        }
-                        _ => panic!(
-                            "Jump to invalid join point #{:?}: {:?}",
-                            join_point_id, join_point
-                        ),
+
+                        println!(
+                            "{:?} {:?} {:?}",
+                            current_funclet_id_opt,
+                            default_join_point_id_opt,
+                            current_output_node_results_opt
+                        );
                     }
-
-                    println!(
-                        "{:?} {:?} {:?}",
-                        current_funclet_id_opt,
-                        default_join_point_id_opt,
-                        current_output_node_results
-                    );
                 }
             }
 

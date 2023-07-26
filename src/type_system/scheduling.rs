@@ -2166,8 +2166,10 @@ impl<'program> FuncletChecker<'program> {
                 let false_funclet = &self.program.funclets[false_funclet_id];
                 let true_funclet_value_spec = &self.get_funclet_value_spec(true_funclet);
                 let true_funclet_timeline_spec = &self.get_funclet_timeline_spec(true_funclet);
+                let true_funclet_spatial_spec = &self.get_funclet_spatial_spec(true_funclet);
                 let false_funclet_value_spec = &self.get_funclet_value_spec(false_funclet);
                 let false_funclet_timeline_spec = &self.get_funclet_timeline_spec(false_funclet);
+                let false_funclet_spatial_spec = &self.get_funclet_spatial_spec(false_funclet);
 
                 let current_value_funclet = &self.program.funclets[self.value_funclet_id];
                 assert_eq!(current_value_funclet.kind, ir::FuncletKind::Value);
@@ -2229,7 +2231,7 @@ impl<'program> FuncletChecker<'program> {
                         *continuation_join_node_id,
                         callee_arguments,
                         &[&[], &[]],
-                        &[true_funclet_value_spec, false_funclet_value_spec],
+                        &[true_funclet_timeline_spec, false_funclet_timeline_spec],
                     )?;
                 self.spatial_spec_checker_opt
                     .as_mut()
@@ -2239,7 +2241,7 @@ impl<'program> FuncletChecker<'program> {
                         *continuation_join_node_id,
                         callee_arguments,
                         &[&[], &[]],
-                        &[true_funclet_value_spec, false_funclet_value_spec],
+                        &[true_funclet_spatial_spec, false_funclet_spatial_spec],
                     )?;
 
                 for (argument_index, argument_node_id) in callee_arguments.iter().enumerate() {

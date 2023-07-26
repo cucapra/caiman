@@ -514,7 +514,13 @@ impl<'program> FuncletSpecChecker<'program> {
 
         let captured_context = self.capture_error_context();
         let error_contextualizer =
-            |writer: &mut std::fmt::Write| captured_context.contextualize_error(writer);
+            |writer: &mut std::fmt::Write| {
+                write!(writer, "Checking choice with\n\tContinuation node #{}\n", continuation_impl_node_id)?;
+                write!(writer, "\tInput nodes {:?}\n", input_impl_node_ids)?;
+                write!(writer, "\tRemaps {:?}\n", choice_remaps)?;
+                write!(writer, "\tSpecs {:?}\n", choice_specs)?;
+                captured_context.contextualize_error(writer)
+            };
         let error_context =
             &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
 
