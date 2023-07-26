@@ -50,7 +50,7 @@ pub struct FuncletSpecChecker<'program> {
     join_nodes: HashMap<ir::NodeId, JoinPoint>,
     //current_node_id: ir::NodeId,
     pub current_implicit_tag: ir::Tag,
-    pub language_string : &'static str
+    pub language_string: &'static str,
 }
 
 //{tags : &[ir::Tag], flows : &[ir::Flow], implicit_tag : ir::Tag, stage : bool},
@@ -108,13 +108,11 @@ impl Snapshot {
 
 }*/
 
-struct CapturedErrorContext
-{
-    message : String
+struct CapturedErrorContext {
+    message: String,
 }
 
-impl CapturedErrorContext
-{
+impl CapturedErrorContext {
     fn contextualize_error(&self, writer: &mut dyn std::fmt::Write) -> Result<(), std::fmt::Error> {
         write!(writer, "{}", self.message)
     }
@@ -125,7 +123,7 @@ impl<'program> FuncletSpecChecker<'program> {
         program: &'program ir::Program,
         spec_funclet: &'program ir::Funclet,
         funclet_spec: &'program ir::FuncletSpec,
-        language_string : &'static str
+        language_string: &'static str,
     ) -> Self {
         let mut state = Self {
             program,
@@ -135,7 +133,7 @@ impl<'program> FuncletSpecChecker<'program> {
             join_nodes: HashMap::new(),
             //current_node_id: 0,
             current_implicit_tag: funclet_spec.implicit_in_tag,
-            language_string
+            language_string,
         };
         state.initialize();
         state
@@ -177,7 +175,7 @@ impl<'program> FuncletSpecChecker<'program> {
     fn capture_error_context(&self) -> CapturedErrorContext {
         let mut message = String::from("");
         self.contextualize_error(&mut message).unwrap();
-        CapturedErrorContext{message}
+        CapturedErrorContext { message }
     }
 
     pub fn join(
@@ -456,7 +454,7 @@ impl<'program> FuncletSpecChecker<'program> {
             |writer: &mut std::fmt::Write| captured_context.contextualize_error(writer);
         let error_context =
             &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
-        
+
         match operation {
             ir::Quotient::Node { node_id } => {
                 if let ir::Node::CallFunctionClass {
@@ -513,14 +511,17 @@ impl<'program> FuncletSpecChecker<'program> {
         let continuation_join = self.join_nodes.remove(&continuation_impl_node_id).unwrap();
 
         let captured_context = self.capture_error_context();
-        let error_contextualizer =
-            |writer: &mut std::fmt::Write| {
-                write!(writer, "Checking choice with\n\tContinuation node #{}\n", continuation_impl_node_id)?;
-                write!(writer, "\tInput nodes {:?}\n", input_impl_node_ids)?;
-                write!(writer, "\tRemaps {:?}\n", choice_remaps)?;
-                write!(writer, "\tSpecs {:?}\n", choice_specs)?;
-                captured_context.contextualize_error(writer)
-            };
+        let error_contextualizer = |writer: &mut std::fmt::Write| {
+            write!(
+                writer,
+                "Checking choice with\n\tContinuation node #{}\n",
+                continuation_impl_node_id
+            )?;
+            write!(writer, "\tInput nodes {:?}\n", input_impl_node_ids)?;
+            write!(writer, "\tRemaps {:?}\n", choice_remaps)?;
+            write!(writer, "\tSpecs {:?}\n", choice_specs)?;
+            captured_context.contextualize_error(writer)
+        };
         let error_context =
             &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
 

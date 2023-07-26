@@ -765,7 +765,14 @@ impl<'program> CodeGen<'program> {
         );
     }
 
-    fn process_current_funclet(&mut self, current_funclet_id : ir::FuncletId, current_output_node_results : Box<[NodeResult]>, pipeline_context: &mut PipelineContext, traversal_state_stack : &mut Vec<TraversalState>, default_join_point_id_opt : &mut Option<JoinPointId>) -> Option<Box<[NodeResult]>> {
+    fn process_current_funclet(
+        &mut self,
+        current_funclet_id: ir::FuncletId,
+        current_output_node_results: Box<[NodeResult]>,
+        pipeline_context: &mut PipelineContext,
+        traversal_state_stack: &mut Vec<TraversalState>,
+        default_join_point_id_opt: &mut Option<JoinPointId>,
+    ) -> Option<Box<[NodeResult]>> {
         let split_point = self.compile_scheduling_funclet(
             current_funclet_id,
             &current_output_node_results,
@@ -797,8 +804,7 @@ impl<'program> CodeGen<'program> {
 
                 let mut join_point_offset_vars = HashMap::<JoinPointId, VarId>::new();
 
-                'serialization_loop: for &join_point_id in path_join_point_ids.iter().rev()
-                {
+                'serialization_loop: for &join_point_id in path_join_point_ids.iter().rev() {
                     let join_point = pipeline_context.join_graph.get_join(join_point_id);
 
                     match join_point {
@@ -877,7 +883,13 @@ impl<'program> CodeGen<'program> {
         }
     }
 
-    fn process_traversal_stack(&mut self, current_output_node_results_opt : &mut Option<Box<[NodeResult]>>, pipeline_context: &mut PipelineContext, traversal_state_stack : &mut Vec<TraversalState>, default_join_point_id_opt : &mut Option<JoinPointId>) -> Option<ir::FuncletId> {
+    fn process_traversal_stack(
+        &mut self,
+        current_output_node_results_opt: &mut Option<Box<[NodeResult]>>,
+        pipeline_context: &mut PipelineContext,
+        traversal_state_stack: &mut Vec<TraversalState>,
+        default_join_point_id_opt: &mut Option<JoinPointId>,
+    ) -> Option<ir::FuncletId> {
         let mut current_funclet_id_opt = Option::<ir::FuncletId>::None;
 
         while let Some(traversal_state) = traversal_state_stack.pop() {
@@ -899,17 +911,14 @@ impl<'program> CodeGen<'program> {
                         .code_generator
                         .begin_if_else(condition_var_id, &output_types);
                     let mut output_node_results = Vec::<NodeResult>::new();
-                    for (output_index, output_type) in
-                        true_funclet.output_types.iter().enumerate()
+                    for (output_index, output_type) in true_funclet.output_types.iter().enumerate()
                     {
                         // Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
                         let node_result = match &self.program.types[*output_type] {
-                            ir::Type::NativeValue { storage_type, .. } => {
-                                NodeResult::LocalValue {
-                                    var_id: output_var_ids[output_index],
-                                    storage_type: *storage_type,
-                                }
-                            }
+                            ir::Type::NativeValue { storage_type, .. } => NodeResult::LocalValue {
+                                var_id: output_var_ids[output_index],
+                                storage_type: *storage_type,
+                            },
                             ir::Type::Ref {
                                 storage_type,
                                 storage_place,
@@ -970,33 +979,32 @@ impl<'program> CodeGen<'program> {
                 } => {
                     let success_funclet = &self.program.funclets[success_funclet_id];
 
-                    let (buffer_var_id, condition_var_id) =
-                        if let NodeResult::Buffer {
-                            var_id: buffer_var_id,
-                            ..
-                        } = buffer_node_result
-                        {
-                            let pairs = dynamic_allocation_size_slot_ids
-                                .iter()
-                                .enumerate()
-                                .map(|(index, slot_id_opt)| {
-                                    (
-                                        self.get_cpu_useable_type(
-                                            success_funclet.input_types
-                                                [argument_node_results.len() + index],
-                                        ),
-                                        slot_id_opt.map(|slot_id| slot_id),
-                                    )
-                                })
-                                .collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
-                            (
-                                buffer_var_id,
-                                self.code_generator
-                                    .build_test_suballocate_many(buffer_var_id, &pairs),
-                            )
-                        } else {
-                            panic!("Not a buffer")
-                        };
+                    let (buffer_var_id, condition_var_id) = if let NodeResult::Buffer {
+                        var_id: buffer_var_id,
+                        ..
+                    } = buffer_node_result
+                    {
+                        let pairs = dynamic_allocation_size_slot_ids
+                            .iter()
+                            .enumerate()
+                            .map(|(index, slot_id_opt)| {
+                                (
+                                    self.get_cpu_useable_type(
+                                        success_funclet.input_types
+                                            [argument_node_results.len() + index],
+                                    ),
+                                    slot_id_opt.map(|slot_id| slot_id),
+                                )
+                            })
+                            .collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
+                        (
+                            buffer_var_id,
+                            self.code_generator
+                                .build_test_suballocate_many(buffer_var_id, &pairs),
+                        )
+                    } else {
+                        panic!("Not a buffer")
+                    };
 
                     let output_types = success_funclet
                         .output_types
@@ -1007,13 +1015,11 @@ impl<'program> CodeGen<'program> {
                         .code_generator
                         .begin_if_else(condition_var_id, &output_types);
                     let mut success_argument_node_results = Vec::<NodeResult>::new();
-                    success_argument_node_results
-                        .extend_from_slice(&argument_node_results);
-                    for (index, slot_id_opt) in
-                        dynamic_allocation_size_slot_ids.iter().enumerate()
+                    success_argument_node_results.extend_from_slice(&argument_node_results);
+                    for (index, slot_id_opt) in dynamic_allocation_size_slot_ids.iter().enumerate()
                     {
-                        let node_result = match &self.program.types[success_funclet
-                            .input_types[argument_node_results.len() + index]]
+                        let node_result = match &self.program.types
+                            [success_funclet.input_types[argument_node_results.len() + index]]
                         {
                             ir::Type::Ref {
                                 storage_place,
@@ -1032,10 +1038,8 @@ impl<'program> CodeGen<'program> {
                                             _ => panic!("Must be an erased length array if allocation size slot is present")
                                         }
                                 } else {
-                                    self.code_generator.build_buffer_suballocate_ref(
-                                        buffer_var_id,
-                                        *storage_type,
-                                    )
+                                    self.code_generator
+                                        .build_buffer_suballocate_ref(buffer_var_id, *storage_type)
                                 };
 
                                 NodeResult::Ref {
@@ -1218,11 +1222,22 @@ impl<'program> CodeGen<'program> {
         while current_funclet_id_opt.is_some() {
             while let Some(current_funclet_id) = current_funclet_id_opt {
                 current_funclet_id_opt = None;
-                current_output_node_results_opt = self.process_current_funclet(current_funclet_id, current_output_node_results_opt.unwrap(), pipeline_context, &mut traversal_state_stack, &mut default_join_point_id_opt);
+                current_output_node_results_opt = self.process_current_funclet(
+                    current_funclet_id,
+                    current_output_node_results_opt.unwrap(),
+                    pipeline_context,
+                    &mut traversal_state_stack,
+                    &mut default_join_point_id_opt,
+                );
 
                 // Nothing to run next
                 if default_join_point_id_opt.is_none() {
-                    current_funclet_id_opt = self.process_traversal_stack(&mut current_output_node_results_opt, pipeline_context, &mut traversal_state_stack, &mut default_join_point_id_opt);
+                    current_funclet_id_opt = self.process_traversal_stack(
+                        &mut current_output_node_results_opt,
+                        pipeline_context,
+                        &mut traversal_state_stack,
+                        &mut default_join_point_id_opt,
+                    );
                 }
 
                 if current_funclet_id_opt.is_none() {
@@ -1233,24 +1248,30 @@ impl<'program> CodeGen<'program> {
 
                         match &join_point {
                             JoinPoint::RootJoinPoint(_) => {
-                                let return_var_ids =
-                                    NodeResult::collect_vars(current_output_node_results_opt.as_ref().unwrap());
+                                let return_var_ids = NodeResult::collect_vars(
+                                    current_output_node_results_opt.as_ref().unwrap(),
+                                );
                                 self.code_generator.build_return(&return_var_ids);
                             }
                             JoinPoint::SimpleJoinPoint(simple_join_point) => {
                                 let mut input_node_results = Vec::<NodeResult>::new();
                                 input_node_results.extend_from_slice(&simple_join_point.captures);
-                                input_node_results.extend_from_slice(current_output_node_results_opt.as_ref().unwrap());
+                                input_node_results.extend_from_slice(
+                                    current_output_node_results_opt.as_ref().unwrap(),
+                                );
 
-                                current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
+                                current_funclet_id_opt =
+                                    Some(simple_join_point.scheduling_funclet_id);
                                 default_join_point_id_opt =
                                     Some(simple_join_point.continuation_join_point_id);
-                                current_output_node_results_opt = Some(input_node_results.into_boxed_slice());
+                                current_output_node_results_opt =
+                                    Some(input_node_results.into_boxed_slice());
                             }
                             JoinPoint::SerializedJoinPoint(serialized_join_point) => {
                                 //panic!("Need to insert jump here");
-                                let argument_var_ids =
-                                    NodeResult::collect_vars(current_output_node_results_opt.as_ref().unwrap());
+                                let argument_var_ids = NodeResult::collect_vars(
+                                    current_output_node_results_opt.as_ref().unwrap(),
+                                );
                                 self.code_generator
                                     .build_indirect_stack_jump_to_popped_serialized_join(
                                         &argument_var_ids,

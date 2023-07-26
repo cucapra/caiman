@@ -484,19 +484,19 @@ impl<'program> FuncletChecker<'program> {
                 program,
                 value_funclet,
                 value_spec,
-                "Value"
+                "Value",
             )),
             timeline_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
                 &program.funclets[timeline_spec.funclet_id_opt.unwrap()],
                 timeline_spec,
-                "Timeline"
+                "Timeline",
             )),
             spatial_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
                 &program.funclets[spatial_spec.funclet_id_opt.unwrap()],
                 spatial_spec,
-                "Spatial"
+                "Spatial",
             )),
             node_join_points: HashMap::new(),
             node_types: HashMap::new(),
