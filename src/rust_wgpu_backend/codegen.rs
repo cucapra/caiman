@@ -877,6 +877,249 @@ impl<'program> CodeGen<'program> {
         }
     }
 
+    fn process_traversal_stack(&mut self, current_output_node_results_opt : &mut Option<Box<[NodeResult]>>, pipeline_context: &mut PipelineContext, traversal_state_stack : &mut Vec<TraversalState>, default_join_point_id_opt : &mut Option<JoinPointId>) -> Option<ir::FuncletId> {
+        let mut current_funclet_id_opt = Option::<ir::FuncletId>::None;
+
+        while let Some(traversal_state) = traversal_state_stack.pop() {
+            match traversal_state {
+                TraversalState::SelectIf {
+                    branch_input_node_results,
+                    condition_slot_id: condition_var_id,
+                    true_funclet_id,
+                    false_funclet_id,
+                    continuation_join_point_id_opt,
+                } => {
+                    let true_funclet = &self.program.funclets[true_funclet_id];
+                    let output_types = true_funclet
+                        .output_types
+                        .iter()
+                        .map(|type_id| self.get_cpu_useable_type(*type_id))
+                        .collect::<Box<[ir::ffi::TypeId]>>();
+                    let output_var_ids = self
+                        .code_generator
+                        .begin_if_else(condition_var_id, &output_types);
+                    let mut output_node_results = Vec::<NodeResult>::new();
+                    for (output_index, output_type) in
+                        true_funclet.output_types.iter().enumerate()
+                    {
+                        // Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
+                        let node_result = match &self.program.types[*output_type] {
+                            ir::Type::NativeValue { storage_type, .. } => {
+                                NodeResult::LocalValue {
+                                    var_id: output_var_ids[output_index],
+                                    storage_type: *storage_type,
+                                }
+                            }
+                            ir::Type::Ref {
+                                storage_type,
+                                storage_place,
+                                ..
+                            } => NodeResult::Ref {
+                                var_id: output_var_ids[output_index],
+                                storage_place: *storage_place,
+                                storage_type: *storage_type,
+                            },
+                            _ => panic!("Incorrect type"),
+                        };
+
+                        output_node_results.push(node_result);
+                    }
+                    current_funclet_id_opt = Some(true_funclet_id);
+                    *current_output_node_results_opt = Some(branch_input_node_results.clone());
+                    traversal_state_stack.push(TraversalState::SelectElse {
+                        output_node_results: output_node_results.into_boxed_slice(),
+                        branch_input_node_results,
+                        false_funclet_id,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::SelectElse {
+                    output_node_results,
+                    branch_input_node_results,
+                    false_funclet_id,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator
+                        .end_if_begin_else(&NodeResult::collect_vars(
+                            current_output_node_results_opt.as_ref().unwrap(),
+                        ));
+                    current_funclet_id_opt = Some(false_funclet_id);
+                    *current_output_node_results_opt = Some(branch_input_node_results);
+                    traversal_state_stack.push(TraversalState::SelectEnd {
+                        output_node_results,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::SelectEnd {
+                    output_node_results,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator.end_else(&NodeResult::collect_vars(
+                        current_output_node_results_opt.as_ref().unwrap(),
+                    ));
+                    *default_join_point_id_opt = continuation_join_point_id_opt;
+                    *current_output_node_results_opt = Some(output_node_results);
+                }
+                TraversalState::DynAllocIf {
+                    buffer_node_result,
+                    success_funclet_id,
+                    failure_funclet_id,
+                    argument_node_results,
+                    dynamic_allocation_size_slot_ids,
+                    continuation_join_point_id_opt,
+                } => {
+                    let success_funclet = &self.program.funclets[success_funclet_id];
+
+                    let (buffer_var_id, condition_var_id) =
+                        if let NodeResult::Buffer {
+                            var_id: buffer_var_id,
+                            ..
+                        } = buffer_node_result
+                        {
+                            let pairs = dynamic_allocation_size_slot_ids
+                                .iter()
+                                .enumerate()
+                                .map(|(index, slot_id_opt)| {
+                                    (
+                                        self.get_cpu_useable_type(
+                                            success_funclet.input_types
+                                                [argument_node_results.len() + index],
+                                        ),
+                                        slot_id_opt.map(|slot_id| slot_id),
+                                    )
+                                })
+                                .collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
+                            (
+                                buffer_var_id,
+                                self.code_generator
+                                    .build_test_suballocate_many(buffer_var_id, &pairs),
+                            )
+                        } else {
+                            panic!("Not a buffer")
+                        };
+
+                    let output_types = success_funclet
+                        .output_types
+                        .iter()
+                        .map(|type_id| self.get_cpu_useable_type(*type_id))
+                        .collect::<Box<[ir::ffi::TypeId]>>();
+                    let output_var_ids = self
+                        .code_generator
+                        .begin_if_else(condition_var_id, &output_types);
+                    let mut success_argument_node_results = Vec::<NodeResult>::new();
+                    success_argument_node_results
+                        .extend_from_slice(&argument_node_results);
+                    for (index, slot_id_opt) in
+                        dynamic_allocation_size_slot_ids.iter().enumerate()
+                    {
+                        let node_result = match &self.program.types[success_funclet
+                            .input_types[argument_node_results.len() + index]]
+                        {
+                            ir::Type::Ref {
+                                storage_place,
+                                storage_type,
+                                buffer_flags,
+                            } => {
+                                //
+                                let var_id = if let Some(slot_id) = slot_id_opt {
+                                    match & self.program.native_interface.types[storage_type.0]
+                                        {
+                                            ir::ffi::Type::ErasedLengthArray{element_type} =>
+                                            {
+                                                let allocation_size_var_id = * slot_id;
+                                                self.code_generator.build_buffer_suballocate_slice(buffer_var_id, * element_type, allocation_size_var_id)
+                                            }
+                                            _ => panic!("Must be an erased length array if allocation size slot is present")
+                                        }
+                                } else {
+                                    self.code_generator.build_buffer_suballocate_ref(
+                                        buffer_var_id,
+                                        *storage_type,
+                                    )
+                                };
+
+                                NodeResult::Ref {
+                                    storage_place: *storage_place,
+                                    storage_type: *storage_type,
+                                    var_id,
+                                }
+                            }
+                            ir::Type::Buffer {
+                                storage_place,
+                                static_layout_opt,
+                                flags,
+                            } => {
+                                panic!("To do")
+                                //NodeResult::Buffer{var_id}
+                            }
+                            _ => panic!("Wrong type for dynamic slot"),
+                        };
+                        success_argument_node_results.push(node_result);
+                    }
+
+                    let mut output_node_results = Vec::<NodeResult>::new();
+                    for (output_index, output_type) in
+                        success_funclet.output_types.iter().enumerate()
+                    {
+                        match &self.program.types[*output_type] {
+                            ir::Type::Ref {
+                                storage_type,
+                                storage_place,
+                                buffer_flags,
+                            } => {
+                                output_node_results.push(NodeResult::Ref {
+                                    var_id: output_var_ids[output_index],
+                                    storage_place: *storage_place,
+                                    storage_type: *storage_type,
+                                });
+                            }
+                            _ => panic!("Unimplemented"),
+                        }
+                    }
+
+                    current_funclet_id_opt = Some(success_funclet_id);
+                    *current_output_node_results_opt =
+                        Some(success_argument_node_results.into_boxed_slice());
+                    traversal_state_stack.push(TraversalState::DynAllocElse {
+                        output_node_results: output_node_results.into_boxed_slice(),
+                        argument_node_results,
+                        failure_funclet_id,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::DynAllocElse {
+                    output_node_results,
+                    failure_funclet_id,
+                    argument_node_results,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator
+                        .end_if_begin_else(&NodeResult::collect_vars(
+                            current_output_node_results_opt.as_ref().unwrap(),
+                        ));
+                    current_funclet_id_opt = Some(failure_funclet_id);
+                    *current_output_node_results_opt = Some(argument_node_results);
+                    traversal_state_stack.push(TraversalState::SelectEnd {
+                        output_node_results,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::DynAllocEnd {
+                    output_node_results,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator.end_else(&NodeResult::collect_vars(
+                        current_output_node_results_opt.as_ref().unwrap(),
+                    ));
+                    *default_join_point_id_opt = continuation_join_point_id_opt;
+                    *current_output_node_results_opt = Some(output_node_results);
+                }
+            }
+        }
+
+        return current_funclet_id_opt;
+    }
+
     fn compile_externally_visible_scheduling_funclet(
         &mut self,
         funclet_id: ir::FuncletId,
@@ -979,242 +1222,7 @@ impl<'program> CodeGen<'program> {
 
                 // Nothing to run next
                 if default_join_point_id_opt.is_none() {
-                    while let Some(traversal_state) = traversal_state_stack.pop() {
-                        match traversal_state {
-                            TraversalState::SelectIf {
-                                branch_input_node_results,
-                                condition_slot_id: condition_var_id,
-                                true_funclet_id,
-                                false_funclet_id,
-                                continuation_join_point_id_opt,
-                            } => {
-                                let true_funclet = &self.program.funclets[true_funclet_id];
-                                let output_types = true_funclet
-                                    .output_types
-                                    .iter()
-                                    .map(|type_id| self.get_cpu_useable_type(*type_id))
-                                    .collect::<Box<[ir::ffi::TypeId]>>();
-                                let output_var_ids = self
-                                    .code_generator
-                                    .begin_if_else(condition_var_id, &output_types);
-                                let mut output_node_results = Vec::<NodeResult>::new();
-                                for (output_index, output_type) in
-                                    true_funclet.output_types.iter().enumerate()
-                                {
-                                    // Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
-                                    let node_result = match &self.program.types[*output_type] {
-                                        ir::Type::NativeValue { storage_type, .. } => {
-                                            NodeResult::LocalValue {
-                                                var_id: output_var_ids[output_index],
-                                                storage_type: *storage_type,
-                                            }
-                                        }
-                                        ir::Type::Ref {
-                                            storage_type,
-                                            storage_place,
-                                            ..
-                                        } => NodeResult::Ref {
-                                            var_id: output_var_ids[output_index],
-                                            storage_place: *storage_place,
-                                            storage_type: *storage_type,
-                                        },
-                                        _ => panic!("Incorrect type"),
-                                    };
-
-                                    output_node_results.push(node_result);
-                                }
-                                current_funclet_id_opt = Some(true_funclet_id);
-                                current_output_node_results_opt = Some(branch_input_node_results.clone());
-                                traversal_state_stack.push(TraversalState::SelectElse {
-                                    output_node_results: output_node_results.into_boxed_slice(),
-                                    branch_input_node_results,
-                                    false_funclet_id,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::SelectElse {
-                                output_node_results,
-                                branch_input_node_results,
-                                false_funclet_id,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator
-                                    .end_if_begin_else(&NodeResult::collect_vars(
-                                        current_output_node_results_opt.as_ref().unwrap(),
-                                    ));
-                                current_funclet_id_opt = Some(false_funclet_id);
-                                current_output_node_results_opt = Some(branch_input_node_results);
-                                traversal_state_stack.push(TraversalState::SelectEnd {
-                                    output_node_results,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::SelectEnd {
-                                output_node_results,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator.end_else(&NodeResult::collect_vars(
-                                    current_output_node_results_opt.as_ref().unwrap(),
-                                ));
-                                default_join_point_id_opt = continuation_join_point_id_opt;
-                                current_output_node_results_opt = Some(output_node_results);
-                            }
-                            TraversalState::DynAllocIf {
-                                buffer_node_result,
-                                success_funclet_id,
-                                failure_funclet_id,
-                                argument_node_results,
-                                dynamic_allocation_size_slot_ids,
-                                continuation_join_point_id_opt,
-                            } => {
-                                let success_funclet = &self.program.funclets[success_funclet_id];
-
-                                let (buffer_var_id, condition_var_id) =
-                                    if let NodeResult::Buffer {
-                                        var_id: buffer_var_id,
-                                        ..
-                                    } = buffer_node_result
-                                    {
-                                        let pairs = dynamic_allocation_size_slot_ids
-                                            .iter()
-                                            .enumerate()
-                                            .map(|(index, slot_id_opt)| {
-                                                (
-                                                    self.get_cpu_useable_type(
-                                                        success_funclet.input_types
-                                                            [argument_node_results.len() + index],
-                                                    ),
-                                                    slot_id_opt.map(|slot_id| slot_id),
-                                                )
-                                            })
-                                            .collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
-                                        (
-                                            buffer_var_id,
-                                            self.code_generator
-                                                .build_test_suballocate_many(buffer_var_id, &pairs),
-                                        )
-                                    } else {
-                                        panic!("Not a buffer")
-                                    };
-
-                                let output_types = success_funclet
-                                    .output_types
-                                    .iter()
-                                    .map(|type_id| self.get_cpu_useable_type(*type_id))
-                                    .collect::<Box<[ir::ffi::TypeId]>>();
-                                let output_var_ids = self
-                                    .code_generator
-                                    .begin_if_else(condition_var_id, &output_types);
-                                let mut success_argument_node_results = Vec::<NodeResult>::new();
-                                success_argument_node_results
-                                    .extend_from_slice(&argument_node_results);
-                                for (index, slot_id_opt) in
-                                    dynamic_allocation_size_slot_ids.iter().enumerate()
-                                {
-                                    let node_result = match &self.program.types[success_funclet
-                                        .input_types[argument_node_results.len() + index]]
-                                    {
-                                        ir::Type::Ref {
-                                            storage_place,
-                                            storage_type,
-                                            buffer_flags,
-                                        } => {
-                                            //
-                                            let var_id = if let Some(slot_id) = slot_id_opt {
-                                                match & self.program.native_interface.types[storage_type.0]
-													{
-														ir::ffi::Type::ErasedLengthArray{element_type} =>
-														{
-															let allocation_size_var_id = * slot_id;
-															self.code_generator.build_buffer_suballocate_slice(buffer_var_id, * element_type, allocation_size_var_id)
-														}
-														_ => panic!("Must be an erased length array if allocation size slot is present")
-													}
-                                            } else {
-                                                self.code_generator.build_buffer_suballocate_ref(
-                                                    buffer_var_id,
-                                                    *storage_type,
-                                                )
-                                            };
-
-                                            NodeResult::Ref {
-                                                storage_place: *storage_place,
-                                                storage_type: *storage_type,
-                                                var_id,
-                                            }
-                                        }
-                                        ir::Type::Buffer {
-                                            storage_place,
-                                            static_layout_opt,
-                                            flags,
-                                        } => {
-                                            panic!("To do")
-                                            //NodeResult::Buffer{var_id}
-                                        }
-                                        _ => panic!("Wrong type for dynamic slot"),
-                                    };
-                                    success_argument_node_results.push(node_result);
-                                }
-
-                                let mut output_node_results = Vec::<NodeResult>::new();
-                                for (output_index, output_type) in
-                                    success_funclet.output_types.iter().enumerate()
-                                {
-                                    match &self.program.types[*output_type] {
-                                        ir::Type::Ref {
-                                            storage_type,
-                                            storage_place,
-                                            buffer_flags,
-                                        } => {
-                                            output_node_results.push(NodeResult::Ref {
-                                                var_id: output_var_ids[output_index],
-                                                storage_place: *storage_place,
-                                                storage_type: *storage_type,
-                                            });
-                                        }
-                                        _ => panic!("Unimplemented"),
-                                    }
-                                }
-
-                                current_funclet_id_opt = Some(success_funclet_id);
-                                current_output_node_results_opt =
-                                    Some(success_argument_node_results.into_boxed_slice());
-                                traversal_state_stack.push(TraversalState::DynAllocElse {
-                                    output_node_results: output_node_results.into_boxed_slice(),
-                                    argument_node_results,
-                                    failure_funclet_id,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::DynAllocElse {
-                                output_node_results,
-                                failure_funclet_id,
-                                argument_node_results,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator
-                                    .end_if_begin_else(&NodeResult::collect_vars(
-                                        current_output_node_results_opt.as_ref().unwrap(),
-                                    ));
-                                current_funclet_id_opt = Some(failure_funclet_id);
-                                current_output_node_results_opt = Some(argument_node_results);
-                                traversal_state_stack.push(TraversalState::SelectEnd {
-                                    output_node_results,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::DynAllocEnd {
-                                output_node_results,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator.end_else(&NodeResult::collect_vars(
-                                    current_output_node_results_opt.as_ref().unwrap(),
-                                ));
-                                default_join_point_id_opt = continuation_join_point_id_opt;
-                                current_output_node_results_opt = Some(output_node_results);
-                            }
-                        }
-                    }
+                    current_funclet_id_opt = self.process_traversal_stack(&mut current_output_node_results_opt, pipeline_context, &mut traversal_state_stack, &mut default_join_point_id_opt);
                 }
 
                 if current_funclet_id_opt.is_none() {
