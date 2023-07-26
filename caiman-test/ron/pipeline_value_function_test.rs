@@ -18,6 +18,6 @@ fn pipeline_with_value_function() -> Result<(), String> {
     let mut join_stack_bytes = [0u8; 4096usize];
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
     let instance = pipeline_with_value_function::Instance::new(&mut root_state, &callbacks);
-    let result = instance.start(&mut join_stack, 1);
+    let result = instance.start(&mut join_stack, &mut 1);
     crate::expect_returned!(2, result.returned().map(|x| x.0));
 }

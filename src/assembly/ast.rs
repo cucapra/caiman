@@ -120,7 +120,7 @@ pub struct RemoteNodeId {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Quotient {
-    None,
+    None(Hole<RemoteNodeId>),
     Node(Hole<RemoteNodeId>),
     Input(Hole<RemoteNodeId>),
     Output(Hole<RemoteNodeId>),
@@ -149,6 +149,7 @@ macro_rules! lookup_abstract_type_parser {
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
+    (BufferFlags) => { ir::BufferFlags };
 }
 
 macro_rules! map_parser_refs {
@@ -321,6 +322,7 @@ pub enum LocalTypeInfo {
     Ref {
         storage_type: TypeId,
         storage_place: ir::Place,
+        buffer_flags: ir::BufferFlags,
     },
     Fence {
         queue_place: ir::Place,
@@ -328,6 +330,7 @@ pub enum LocalTypeInfo {
     Buffer {
         storage_place: ir::Place,
         static_layout_opt: Option<ir::StaticBufferLayout>,
+        flags: ir::BufferFlags,
     },
     Encoder {
         queue_place: ir::Place,

@@ -14,11 +14,6 @@ use std::default::Default;
 use std::fmt::Write;
 
 use crate::rust_wgpu_backend::ffi;
-use crate::scheduling_state;
-use crate::scheduling_state::SlotId;
-
-// I'm too lazy to get actual sizes, but 64 bytes ought to be enough for anything... for now.
-//const MAX_BYTES_PER_SLOT = 64usize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct JoinPointId(usize);
@@ -26,9 +21,13 @@ pub struct JoinPointId(usize);
 #[derive(Debug, Clone)]
 enum NodeResult {
     None,
-    Slot {
-        slot_id: SlotId,
-        queue_place: ir::Place,
+    LocalValue {
+        var_id: VarId,
+        storage_type: ir::ffi::TypeId,
+    },
+    Ref {
+        var_id: VarId,
+        storage_place: ir::Place,
         storage_type: ir::ffi::TypeId,
     },
     Fence {
@@ -43,17 +42,45 @@ enum NodeResult {
     },
     Buffer {
         storage_place: ir::Place,
+        static_layout_opt: Option<ir::StaticBufferLayout>,
         var_id: VarId,
     },
 }
 
 impl NodeResult {
-    fn get_slot_id(&self) -> Option<SlotId> {
-        if let NodeResult::Slot { slot_id, .. } = self {
-            Some(*slot_id)
-        } else {
-            None
+    fn get_var_id(&self) -> Option<VarId> {
+        match self {
+            NodeResult::LocalValue { var_id, .. } => Some(*var_id),
+            NodeResult::Ref { var_id, .. } => Some(*var_id),
+            NodeResult::Buffer { var_id, .. } => Some(*var_id),
+            NodeResult::Fence { fence_id, .. } => Some(*fence_id),
+            _ => None,
         }
+    }
+
+    fn get_storage_type(&self) -> Option<ir::StorageTypeId> {
+        match self {
+            NodeResult::LocalValue { storage_type, .. } => Some(*storage_type),
+            NodeResult::Ref { storage_type, .. } => Some(*storage_type),
+            _ => None,
+        }
+    }
+
+    fn collect_vars(node_results: &[NodeResult]) -> Box<[VarId]> {
+        let mut var_ids = Vec::<VarId>::new();
+
+        for node_result in node_results.iter() {
+            if let Some(var_id) = node_result.get_var_id() {
+                var_ids.push(var_id);
+            } else {
+                panic!(
+                    "Node Result {:?} does not have an associated variable",
+                    node_result
+                );
+            }
+        }
+
+        var_ids.into_boxed_slice()
     }
 }
 
@@ -117,66 +144,6 @@ impl JoinGraph {
 }
 
 #[derive(Debug)]
-pub struct PlacementState {
-    scheduling_state: scheduling_state::SchedulingState,
-    slot_variable_ids: HashMap<SlotId, VarId>,
-    var_buffer_ids: HashMap<VarId, ir::NodeId>,
-    join_graph: JoinGraph,
-}
-
-impl PlacementState {
-    fn new() -> Self {
-        Self {
-            scheduling_state: scheduling_state::SchedulingState::new(),
-            slot_variable_ids: HashMap::new(),
-            var_buffer_ids: HashMap::new(),
-            join_graph: JoinGraph::new(),
-        }
-    }
-
-    fn update_slot_state(&mut self, slot_id: SlotId, var_id: VarId) {
-        self.slot_variable_ids.insert(slot_id, var_id);
-    }
-
-    fn mark_var_buffer(&mut self, var_id: VarId, buffer_id: ir::NodeId) {
-        let old = self.var_buffer_ids.insert(var_id, buffer_id);
-        assert!(
-            old.is_none(),
-            "attempted to change buffer assignment of a var"
-        );
-    }
-
-    fn get_slot_var_id(&self, slot_id: SlotId) -> Option<VarId> {
-        self.slot_variable_ids.get(&slot_id).copied()
-    }
-
-    pub fn get_var_buffer_id(&self, var_id: VarId) -> Option<ir::NodeId> {
-        self.var_buffer_ids.get(&var_id).copied()
-    }
-
-    fn get_node_result_var_id(&self, node_result: &NodeResult) -> Option<VarId> {
-        match node_result {
-            NodeResult::Slot { slot_id, .. } => self.get_slot_var_id(*slot_id),
-            NodeResult::Buffer { var_id, .. } => Some(*var_id),
-            NodeResult::Fence { fence_id, .. } => Some(*fence_id),
-            _ => None,
-        }
-    }
-
-    fn get_node_result_var_ids(&self, node_results: &[NodeResult]) -> Option<Box<[VarId]>> {
-        let mut var_ids = Vec::<VarId>::new();
-        for node_result in node_results.iter() {
-            if let Some(var_id) = self.get_node_result_var_id(node_result) {
-                var_ids.push(var_id)
-            } else {
-                return None;
-            }
-        }
-        Some(var_ids.into_boxed_slice())
-    }
-}
-
-#[derive(Debug)]
 enum SplitPoint {
     Next {
         return_node_results: Box<[NodeResult]>,
@@ -189,7 +156,7 @@ enum SplitPoint {
     },
     Select {
         return_node_results: Box<[NodeResult]>,
-        condition_slot_id: SlotId,
+        condition_slot_id: VarId,
         true_funclet_id: ir::FuncletId,
         false_funclet_id: ir::FuncletId,
         continuation_join_point_id_opt: Option<JoinPointId>,
@@ -199,7 +166,7 @@ enum SplitPoint {
         success_funclet_id: ir::FuncletId,
         failure_funclet_id: ir::FuncletId,
         argument_node_results: Box<[NodeResult]>,
-        dynamic_allocation_size_slot_ids: Box<[Option<SlotId>]>,
+        dynamic_allocation_size_slot_ids: Box<[Option<VarId>]>,
         continuation_join_point_id_opt: Option<JoinPointId>,
     },
 }
@@ -207,7 +174,7 @@ enum SplitPoint {
 enum TraversalState {
     SelectIf {
         branch_input_node_results: Box<[NodeResult]>,
-        condition_slot_id: SlotId,
+        condition_slot_id: VarId,
         true_funclet_id: ir::FuncletId,
         false_funclet_id: ir::FuncletId,
         continuation_join_point_id_opt: Option<JoinPointId>,
@@ -227,7 +194,7 @@ enum TraversalState {
         success_funclet_id: ir::FuncletId,
         failure_funclet_id: ir::FuncletId,
         argument_node_results: Box<[NodeResult]>,
-        dynamic_allocation_size_slot_ids: Box<[Option<SlotId>]>,
+        dynamic_allocation_size_slot_ids: Box<[Option<VarId>]>,
         continuation_join_point_id_opt: Option<JoinPointId>,
     },
     DynAllocElse {
@@ -266,24 +233,11 @@ impl FuncletScopedState {
         self.node_results.get(&node_id)
     }
 
-    fn get_node_slot_id(&self, node_id: ir::NodeId) -> Option<SlotId> {
-        match &self.node_results[&node_id] {
-            NodeResult::Slot { slot_id, .. } => Some(*slot_id),
-            _ => None,
-        }
-    }
-
-    fn move_node_slot_id(&mut self, node_id: ir::NodeId) -> Option<SlotId> {
-        let slot_id_opt = match &self.node_results[&node_id] {
-            NodeResult::Slot { slot_id, .. } => Some(*slot_id),
-            _ => None,
-        };
-
-        if let Some(slot_id) = slot_id_opt {
-            *self.node_results.get_mut(&node_id).unwrap() = NodeResult::None;
-        }
-
-        slot_id_opt
+    fn get_node_var_id(&self, node_id: ir::NodeId) -> Option<VarId> {
+        self.node_results
+            .get(&node_id)
+            .map(|x| x.get_var_id())
+            .flatten()
     }
 
     fn get_node_join_point_id(&self, node_id: ir::NodeId) -> Option<JoinPointId> {
@@ -309,21 +263,21 @@ impl FuncletScopedState {
         return None;
     }
 
-    fn collect_slots_for_node_ids(&self, node_ids: &[ir::NodeId]) -> Box<[SlotId]> {
-        let mut slot_ids = Vec::<SlotId>::new();
+    fn collect_vars_for_node_ids(&self, node_ids: &[ir::NodeId]) -> Box<[VarId]> {
+        let mut var_ids = Vec::<VarId>::new();
 
         for &node_id in node_ids.iter() {
-            if let Some(slot_id) = self.get_node_slot_id(node_id) {
-                slot_ids.push(slot_id);
+            if let Some(var_id) = self.get_node_var_id(node_id) {
+                var_ids.push(var_id);
             } else {
                 panic!(
-                    "Node #{} (content: {:?}) is not a slot",
+                    "Node #{} (content: {:?}) does not have an associated variable",
                     node_id, self.node_results[&node_id]
                 );
             }
         }
 
-        slot_ids.into_boxed_slice()
+        var_ids.into_boxed_slice()
     }
 }
 
@@ -355,15 +309,17 @@ struct AbstractEntryPoint {
     continuation_chain: Vec<AbstractContinuationLink>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct PipelineContext {
     pending_funclet_ids: Vec<ir::FuncletId>,
+    join_graph: JoinGraph,
 }
 
 impl PipelineContext {
     fn new() -> Self {
         Self {
             pending_funclet_ids: Default::default(),
+            join_graph: JoinGraph::new(),
         }
     }
 }
@@ -407,40 +363,37 @@ impl<'program> CodeGen<'program> {
             ir::Type::NativeValue { storage_type } => *storage_type,
             ir::Type::Ref {
                 storage_type,
-                //queue_stage: _,
-                storage_place: ir::Place::Cpu,
+                storage_place,
+                buffer_flags,
             } => {
-                // todo DG: this is probably insufficient
-                *storage_type
-            }
-            ir::Type::Ref {
-                storage_type,
-                //queue_stage: _,
-                storage_place: ir::Place::Local,
-            } => {
-                // Should eventually be a MutRef
-                *storage_type
-            }
-            ir::Type::Ref {
-                storage_type,
-                //queue_stage: _,
-                storage_place: ir::Place::Gpu,
-            } => {
-                match &self.program.native_interface.types[storage_type.0] {
-                    ir::ffi::Type::ErasedLengthArray { element_type } => self
-                        .code_generator
-                        .create_ffi_type(ir::ffi::Type::GpuBufferSlice {
-                            element_type: *storage_type,
-                        }),
-                    _ =>
-                    // To do: Should be more restrictive than this...
-                    {
-                        self.code_generator
-                            .create_ffi_type(ir::ffi::Type::GpuBufferRef {
-                                element_type: *storage_type,
-                            })
-                    }
-                }
+                let is_dynamically_sized =
+                    match &self.program.native_interface.types[storage_type.0] {
+                        ir::ffi::Type::ErasedLengthArray { element_type } => true,
+                        _ => false,
+                    };
+
+                let typ = match (storage_place, is_dynamically_sized) {
+                    (ir::Place::Local, true) => ir::ffi::Type::MutSlice {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Local, false) => ir::ffi::Type::MutRef {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Cpu, true) => ir::ffi::Type::CpuBufferSlice {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Cpu, false) => ir::ffi::Type::CpuBufferRef {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Gpu, true) => ir::ffi::Type::GpuBufferSlice {
+                        element_type: *storage_type,
+                    },
+                    (ir::Place::Gpu, false) => ir::ffi::Type::GpuBufferRef {
+                        element_type: *storage_type,
+                    },
+                };
+
+                self.code_generator.create_ffi_type(typ)
             }
             ir::Type::Buffer {
                 storage_place: ir::Place::Gpu,
@@ -466,108 +419,14 @@ impl<'program> CodeGen<'program> {
         ffi_type_id
     }
 
-    #[cfg(feature = "fusion")]
-    fn encode_fuse_header_gpu(
-        &mut self,
-        placement_state: &mut PlacementState,
-        funclet_scoped_state: &mut FuncletScopedState,
-        funclet_checker: &mut type_system::scheduling::FuncletChecker,
-        schema: &ir::fusion::Opportunity,
-        external_function_id: ir::ffi::ExternalFunctionId,
-    ) {
-        let node_to_var_map = |(&node_id)| {
-            let slot_id = funclet_scoped_state.get_node_slot_id(node_id).unwrap();
-            placement_state.slot_variable_ids[&slot_id]
-        };
-
-        let mut dimension_var_ids = Vec::new();
-        for (i, dim) in schema.dimensions.iter().enumerate() {
-            if let Some(dimension_node_id) = dim {
-                dimension_var_ids.push(node_to_var_map(dimension_node_id));
-            } else {
-                let one = self
-                    .code_generator
-                    .build_constant_unsigned_integer(1, self.default_usize_ffi_type_id);
-                dimension_var_ids.push(one);
-            }
-        }
-        assert_eq!(3, dimension_var_ids.len());
-        let dimension_var_ids: [VarId; 3] = dimension_var_ids.as_slice().try_into().unwrap();
-
-        let input_var_ids: Vec<_> = schema.inputs.iter().map(node_to_var_map).collect();
-        let output_var_ids: Vec<_> = schema.outputs.iter().map(node_to_var_map).collect();
-
-        use std::convert::TryInto;
-        self.code_generator.build_compute_dispatch_with_outputs(
-            &placement_state,
-            &schema.kernel,
-            &dimension_var_ids,
-            &input_var_ids,
-            &output_var_ids,
-        );
-    }
-
-    #[cfg(feature = "fusion")]
-    /// This is similar to encode_do_node_gpu, but it only updates the type system.
-    /// It doesn't actually generate any code.
-    fn encode_fused_node_gpu(
-        &mut self,
-        placement_state: &mut PlacementState,
-        value_node: &ir::Node,
-        external_function_id: ir::ffi::ExternalFunctionId,
-        input_slot_ids: &[SlotId],
-        output_slot_ids: &[SlotId],
-    ) {
-        /*let (external_function_id, arguments, dimensions) = match value_node {
-            ir::Node::CallExternalGpuCompute {
-                external_function_id,
-                arguments,
-                dimensions,
-            } => (external_function_id, arguments, dimensions),
-            ir::Node::None => return, // nothing to do...
-            _ => panic!("fused node is not a kernel dispatch or no-op"),
-        };*/
-
-        let function = &self.program.native_interface.external_functions[external_function_id.0];
-        let kernel = function
-            .get_gpu_kernel()
-            .expect("function ID is not a kernel dispatch");
-
-        // Ensure we have the right number of inputs (including dimensions)
-        //assert_eq!(input_slot_ids.len(), arguments.len());
-        // Ensure we have the same number of outputs as the original kernel.
-        assert_eq!(output_slot_ids.len(), kernel.output_types.len());
-
-        // << removed a loop updating slot variable IDs -- that happens in the header now >>
-        // << removed a loop building constant integers for dimensions -- also happens in header >>
-        // << removed remappings of dimensions and arguments, since they're only used for codegen >>
-
-        // The variable IDs corresponding to the output slots should already exist since this
-        // is strictly called after the header, unless one of those output slots was elided.
-        let output_var_ids: Box<[Option<VarId>]> = output_slot_ids
-            .iter()
-            .map(|&x| placement_state.get_slot_var_id(x))
-            .collect();
-
-        for i in 0..kernel.output_types.len() {
-            if let Some(ovi) = output_var_ids[i] {
-                placement_state.update_slot_state(
-                    output_slot_ids[i],
-                    //ir::ResourceQueueStage::Encoded,
-                    ovi,
-                );
-            }
-        }
-    }
     fn encode_do_node_gpu(
         &mut self,
-        placement_state: &mut PlacementState,
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         node: &ir::Node,
         external_function_id: ir::ffi::ExternalFunctionId,
-        input_slot_ids: &[SlotId],
-        output_slot_ids: &[SlotId],
+        input_slot_ids: &[VarId],
+        output_slot_ids: &[VarId],
     ) {
         match node {
             ir::Node::CallFunctionClass {
@@ -586,8 +445,8 @@ impl<'program> CodeGen<'program> {
                 assert_eq!(input_slot_ids.len(), arguments.len());
                 assert_eq!(output_slot_ids.len(), kernel.output_types.len());
 
-                /*let mut input_slot_counts = HashMap::<SlotId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
-                let mut output_slot_bindings = HashMap::<SlotId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
+                /*let mut input_slot_counts = HashMap::<VarId, usize>::from_iter(input_slot_ids.iter().chain(output_slot_ids.iter()).map(|slot_id| (* slot_id, 0usize)));
+                let mut output_slot_bindings = HashMap::<VarId, Option<usize>>::from_iter(output_slot_ids.iter().map(|slot_id| (* slot_id, None)));
                 for (binding_index, resource_binding) in function.resource_bindings.iter().enumerate()
                 {
                     if let Some(index) = resource_binding.input
@@ -630,8 +489,7 @@ impl<'program> CodeGen<'program> {
                     {
                         let input_slot_id = input_slot_ids[kernel.dimensionality + input_index];
                         let output_slot_id = output_slot_ids[forwarded_output_index];
-                        //placement_state.scheduling_state.forward_slot(output_slot_id, input_slot_id);
-                        let var_id = placement_state.slot_variable_ids[&input_slot_id];
+                        //let var_id = placement_state.slot_variable_ids[&input_slot_id];
                         assert_eq!(output_slot_id, input_slot_id);
                         /* let old = placement_state
                             .slot_variable_ids
@@ -643,14 +501,8 @@ impl<'program> CodeGen<'program> {
                 use std::convert::TryInto;
                 use std::iter::FromIterator;
                 //use core::slice::SlicePattern;
-                let dimension_map = |(index, x)| {
-                    let slot_id = input_slot_ids[index];
-                    placement_state.slot_variable_ids[&slot_id]
-                };
-                let argument_map = |(index, x)| {
-                    let slot_id = input_slot_ids[kernel.dimensionality + index];
-                    placement_state.slot_variable_ids[&slot_id]
-                };
+                let dimension_map = |(index, x)| input_slot_ids[index];
+                let argument_map = |(index, x)| input_slot_ids[kernel.dimensionality + index];
 
                 let mut dimension_var_ids = Vec::from_iter(
                     arguments[..kernel.dimensionality]
@@ -674,15 +526,10 @@ impl<'program> CodeGen<'program> {
                         .map(argument_map),
                 )
                 .into_boxed_slice();
-                let output_var_ids = output_slot_ids
-                    .iter()
-                    .map(|x| placement_state.get_slot_var_id(*x).unwrap())
-                    .collect::<Box<[VarId]>>();
+                let output_var_ids = output_slot_ids.iter().map(|x| *x).collect::<Box<[VarId]>>();
 
                 let dimensions_slice: &[VarId] = &dimension_var_ids;
-                //let raw_outputs = self.code_generator.build_compute_dispatch(* external_function_id, dimensions_slice.try_into().expect("Expected 3 elements for dimensions"), & argument_var_ids);
                 self.code_generator.build_compute_dispatch_with_outputs(
-                    &placement_state,
                     kernel,
                     dimensions_slice
                         .try_into()
@@ -690,15 +537,6 @@ impl<'program> CodeGen<'program> {
                     &argument_var_ids,
                     &output_var_ids,
                 );
-
-                for (index, output_type_id) in kernel.output_types.iter().enumerate() {
-                    let slot_id = output_slot_ids[index];
-                    placement_state.update_slot_state(
-                        slot_id,
-                        //ir::ResourceQueueStage::Encoded,
-                        output_var_ids[index],
-                    );
-                }
             }
             _ => panic!("Node cannot be encoded to the gpu"),
         }
@@ -706,26 +544,22 @@ impl<'program> CodeGen<'program> {
 
     fn encode_do_node_local_builtin(
         &mut self,
-        placement_state: &mut PlacementState,
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         node: &ir::Node,
-        input_slot_ids: &[SlotId],
-        output_slot_ids: &[SlotId],
+        input_slot_ids: &[VarId],
+        output_slot_ids: &[VarId],
         output_slot_node_ids: &[ir::NodeId],
     ) {
         // To do: Do something about the value
         match node {
             ir::Node::Constant { value, type_id } => {
-                let slot_id = output_slot_ids[0];
-                let storage_type_id = if let Some(NodeResult::Slot { storage_type, .. }) =
-                    funclet_scoped_state.get_node_result(output_slot_node_ids[0])
-                {
-                    *storage_type
-                } else {
-                    panic!("Not a slot");
-                };
-                //let storage_type_id = placement_state.scheduling_state.get_slot_type_id(slot_id);
+                let storage_type_id = funclet_scoped_state
+                    .get_node_result(output_slot_node_ids[0])
+                    .unwrap()
+                    .get_storage_type()
+                    .unwrap();
+
                 let variable_id = match value {
                     ir::Constant::I64(value) => self
                         .code_generator
@@ -739,34 +573,33 @@ impl<'program> CodeGen<'program> {
                 };
                 check_storage_type_implements_value_type(&self.program, storage_type_id, *type_id);
 
-                placement_state.update_slot_state(
-                    slot_id,
-                    //ir::ResourceQueueStage::Ready,
-                    variable_id,
-                );
+                self.code_generator
+                    .build_write_local_ref(output_slot_ids[0], variable_id);
             }
             ir::Node::Select {
                 condition,
                 true_case,
                 false_case,
             } => {
-                let input_var_ids = input_slot_ids
-                    .iter()
-                    .map(|&slot_id| placement_state.get_slot_var_id(slot_id).unwrap())
-                    .collect::<Box<[VarId]>>();
+                let true_case_storage_type = funclet_scoped_state
+                    .get_node_result(*true_case)
+                    .map(|x| x.get_storage_type())
+                    .flatten();
+                let false_case_storage_type = funclet_scoped_state
+                    .get_node_result(*false_case)
+                    .map(|x| x.get_storage_type())
+                    .flatten();
+                assert!(true_case_storage_type.is_some());
+                assert_eq!(true_case_storage_type, false_case_storage_type);
 
-                let slot_id = output_slot_ids[0];
                 let variable_id = self.code_generator.build_select_hack(
-                    input_var_ids[0],
-                    input_var_ids[1],
-                    input_var_ids[2],
+                    input_slot_ids[0],
+                    input_slot_ids[1],
+                    input_slot_ids[2],
                 );
 
-                placement_state.update_slot_state(
-                    slot_id,
-                    //ir::ResourceQueueStage::Ready,
-                    variable_id,
-                );
+                self.code_generator
+                    .build_write_local_ref(output_slot_ids[0], variable_id);
             }
             _ => panic!("Cannot be scheduled as local builtin"),
         }
@@ -774,13 +607,12 @@ impl<'program> CodeGen<'program> {
 
     fn encode_do_node_local_external(
         &mut self,
-        placement_state: &mut PlacementState,
         funclet_scoped_state: &mut FuncletScopedState,
         funclet_checker: &mut type_system::scheduling::FuncletChecker,
         node: &ir::Node,
         external_function_id: ir::ffi::ExternalFunctionId,
-        input_slot_ids: &[SlotId],
-        output_slot_ids: &[SlotId],
+        input_slot_ids: &[VarId],
+        output_slot_ids: &[VarId],
         output_slot_node_ids: &[ir::NodeId],
     ) {
         // To do: Do something about the value
@@ -799,23 +631,20 @@ impl<'program> CodeGen<'program> {
 
                 use std::iter::FromIterator;
 
-                let argument_var_ids =
-                    Vec::from_iter(arguments.iter().enumerate().map(|(index, x)| {
-                        let slot_id = input_slot_ids[index];
-                        placement_state.slot_variable_ids[&slot_id]
-                    }))
-                    .into_boxed_slice();
+                let argument_var_ids = Vec::from_iter(
+                    arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, x)| input_slot_ids[index]),
+                )
+                .into_boxed_slice();
                 let raw_outputs = self
                     .code_generator
                     .build_external_cpu_function_call(external_function_id, &argument_var_ids);
 
                 for (index, output_type_id) in cpu_operation.output_types.iter().enumerate() {
-                    let slot_id = output_slot_ids[index];
-                    placement_state.update_slot_state(
-                        slot_id,
-                        //ir::ResourceQueueStage::Ready,
-                        raw_outputs[index],
-                    );
+                    self.code_generator
+                        .build_write_local_ref(output_slot_ids[index], raw_outputs[index]);
                 }
             }
             _ => panic!("Cannot be scheduled as local external"),
@@ -824,7 +653,7 @@ impl<'program> CodeGen<'program> {
 
     fn collect_join_graph_path(
         &mut self,
-        placement_state: &mut PlacementState,
+        join_graph: &mut JoinGraph,
         traversal_state_stack: &[TraversalState],
         mut default_join_point_id_opt: Option<JoinPointId>,
     ) -> Box<[JoinPointId]> {
@@ -834,7 +663,7 @@ impl<'program> CodeGen<'program> {
             while let Some(default_join_point_id) = default_join_point_id_opt {
                 default_join_point_id_opt = None;
 
-                let join_point = placement_state.join_graph.get_join(default_join_point_id);
+                let join_point = join_graph.get_join(default_join_point_id);
                 path.push(default_join_point_id);
 
                 match join_point {
@@ -896,25 +725,17 @@ impl<'program> CodeGen<'program> {
         path.into_boxed_slice()
     }
 
-    fn build_push_serialized_join(
-        &mut self,
-        funclet_id: ir::FuncletId,
-        captures: &[NodeResult],
-        placement_state: &PlacementState,
-        pipeline_context: &mut PipelineContext,
-    ) {
+    fn build_push_serialized_join(&mut self, funclet_id: ir::FuncletId, captures: &[NodeResult]) {
         let mut input_storage_types = Vec::<ir::ffi::TypeId>::new();
         let mut output_storage_types = Vec::<ir::ffi::TypeId>::new();
         let mut capture_var_ids = Vec::<VarId>::new();
         let join_point_scheduling_funclet = &self.program.funclets[funclet_id];
         for (capture_index, captured_node_result) in captures.iter().enumerate() {
-            let var_id = placement_state
-                .get_node_result_var_id(&captured_node_result)
-                .unwrap();
+            let var_id = captured_node_result.get_var_id().unwrap();
             capture_var_ids.push(var_id);
-            //capture_storage_types.push(self.get_cpu_useable_type(join_point_scheduling_funclet.input_types[capture_index]));
             match captured_node_result {
-                NodeResult::Slot { .. } => (),
+                NodeResult::LocalValue { .. } => (),
+                NodeResult::Ref { .. } => (),
                 NodeResult::Buffer { .. } => (),
                 NodeResult::Fence { .. } => (),
                 _ => panic!("Not yet supported"),
@@ -942,7 +763,365 @@ impl<'program> CodeGen<'program> {
             &input_storage_types[captures.len()..],
             &output_storage_types[0..],
         );
-        pipeline_context.pending_funclet_ids.push(funclet_id);
+    }
+
+    fn process_current_funclet(
+        &mut self,
+        current_funclet_id: ir::FuncletId,
+        current_output_node_results: Box<[NodeResult]>,
+        pipeline_context: &mut PipelineContext,
+        traversal_state_stack: &mut Vec<TraversalState>,
+        default_join_point_id_opt: &mut Option<JoinPointId>,
+    ) -> Option<Box<[NodeResult]>> {
+        let split_point = self.compile_scheduling_funclet(
+            current_funclet_id,
+            &current_output_node_results,
+            pipeline_context,
+            default_join_point_id_opt,
+        );
+
+        //println!("Split point: {:?}", split_point);
+        match split_point {
+            SplitPoint::Next {
+                return_node_results,
+                continuation_join_point_id_opt,
+            } => {
+                *default_join_point_id_opt = continuation_join_point_id_opt;
+                return Some(return_node_results);
+            }
+            SplitPoint::Yield {
+                external_function_id,
+                yielded_node_results,
+                mut continuation_join_point_id_opt,
+            } => {
+                let path_join_point_ids = self.collect_join_graph_path(
+                    &mut pipeline_context.join_graph,
+                    traversal_state_stack.as_slice(),
+                    continuation_join_point_id_opt,
+                );
+                //println!("Serializing join points: {:?} from root: {:?}", path_join_point_ids, continuation_join_point_id_opt);
+                //panic!("Serialized?");
+
+                let mut join_point_offset_vars = HashMap::<JoinPointId, VarId>::new();
+
+                'serialization_loop: for &join_point_id in path_join_point_ids.iter().rev() {
+                    let join_point = pipeline_context.join_graph.get_join(join_point_id);
+
+                    match join_point {
+                        JoinPoint::RootJoinPoint(_) => (),
+                        JoinPoint::SimpleJoinPoint(simple_join_point) => {
+                            self.build_push_serialized_join(
+                                simple_join_point.scheduling_funclet_id,
+                                &simple_join_point.captures,
+                            );
+                            pipeline_context
+                                .pending_funclet_ids
+                                .push(simple_join_point.scheduling_funclet_id);
+                        }
+                        JoinPoint::SerializedJoinPoint(_) => break 'serialization_loop,
+                        _ => panic!(
+                            "Jump to invalid join point #{:?}: {:?}",
+                            join_point_id, join_point
+                        ),
+                    }
+                    //pipeline_context.pending_funclet_ids.push();
+                }
+
+                let mut yielded_var_ids = Vec::<VarId>::new();
+                for node_result in yielded_node_results.iter() {
+                    let var_id = node_result.get_var_id().unwrap();
+                    yielded_var_ids.push(var_id);
+                }
+
+                self.code_generator
+                    .build_yield(external_function_id, yielded_var_ids.as_slice());
+
+                // To do: Technically, we should insert a join point that recursively forces a split of the funclet once branches merge.
+                // Should probably fix this by adding a new type of ir::Node::Join instead of inserting here and sifting upwards.
+
+                //panic!("Not yet implemented");
+                //current_funclet_id_opt = None;
+                *default_join_point_id_opt = None;
+                return None;
+            }
+            SplitPoint::Select {
+                return_node_results,
+                condition_slot_id,
+                true_funclet_id,
+                false_funclet_id,
+                continuation_join_point_id_opt,
+            } => {
+                assert!(default_join_point_id_opt.is_none());
+                traversal_state_stack.push(TraversalState::SelectIf {
+                    branch_input_node_results: return_node_results,
+                    condition_slot_id,
+                    true_funclet_id,
+                    false_funclet_id,
+                    continuation_join_point_id_opt,
+                });
+                return None;
+            }
+            SplitPoint::DynAlloc {
+                buffer_node_result,
+                success_funclet_id,
+                failure_funclet_id,
+                argument_node_results,
+                dynamic_allocation_size_slot_ids,
+                continuation_join_point_id_opt,
+            } => {
+                assert!(default_join_point_id_opt.is_none());
+                traversal_state_stack.push(TraversalState::DynAllocIf {
+                    buffer_node_result,
+                    success_funclet_id,
+                    failure_funclet_id,
+                    argument_node_results,
+                    dynamic_allocation_size_slot_ids,
+                    continuation_join_point_id_opt,
+                });
+                return None;
+            }
+        }
+    }
+
+    fn process_traversal_stack(
+        &mut self,
+        current_output_node_results_opt: &mut Option<Box<[NodeResult]>>,
+        pipeline_context: &mut PipelineContext,
+        traversal_state_stack: &mut Vec<TraversalState>,
+        default_join_point_id_opt: &mut Option<JoinPointId>,
+    ) -> Option<ir::FuncletId> {
+        let mut current_funclet_id_opt = Option::<ir::FuncletId>::None;
+
+        while let Some(traversal_state) = traversal_state_stack.pop() {
+            match traversal_state {
+                TraversalState::SelectIf {
+                    branch_input_node_results,
+                    condition_slot_id: condition_var_id,
+                    true_funclet_id,
+                    false_funclet_id,
+                    continuation_join_point_id_opt,
+                } => {
+                    let true_funclet = &self.program.funclets[true_funclet_id];
+                    let output_types = true_funclet
+                        .output_types
+                        .iter()
+                        .map(|type_id| self.get_cpu_useable_type(*type_id))
+                        .collect::<Box<[ir::ffi::TypeId]>>();
+                    let output_var_ids = self
+                        .code_generator
+                        .begin_if_else(condition_var_id, &output_types);
+                    let mut output_node_results = Vec::<NodeResult>::new();
+                    for (output_index, output_type) in true_funclet.output_types.iter().enumerate()
+                    {
+                        // Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
+                        let node_result = match &self.program.types[*output_type] {
+                            ir::Type::NativeValue { storage_type, .. } => NodeResult::LocalValue {
+                                var_id: output_var_ids[output_index],
+                                storage_type: *storage_type,
+                            },
+                            ir::Type::Ref {
+                                storage_type,
+                                storage_place,
+                                ..
+                            } => NodeResult::Ref {
+                                var_id: output_var_ids[output_index],
+                                storage_place: *storage_place,
+                                storage_type: *storage_type,
+                            },
+                            _ => panic!("Incorrect type"),
+                        };
+
+                        output_node_results.push(node_result);
+                    }
+                    current_funclet_id_opt = Some(true_funclet_id);
+                    *current_output_node_results_opt = Some(branch_input_node_results.clone());
+                    traversal_state_stack.push(TraversalState::SelectElse {
+                        output_node_results: output_node_results.into_boxed_slice(),
+                        branch_input_node_results,
+                        false_funclet_id,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::SelectElse {
+                    output_node_results,
+                    branch_input_node_results,
+                    false_funclet_id,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator
+                        .end_if_begin_else(&NodeResult::collect_vars(
+                            current_output_node_results_opt.as_ref().unwrap(),
+                        ));
+                    current_funclet_id_opt = Some(false_funclet_id);
+                    *current_output_node_results_opt = Some(branch_input_node_results);
+                    traversal_state_stack.push(TraversalState::SelectEnd {
+                        output_node_results,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::SelectEnd {
+                    output_node_results,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator.end_else(&NodeResult::collect_vars(
+                        current_output_node_results_opt.as_ref().unwrap(),
+                    ));
+                    *default_join_point_id_opt = continuation_join_point_id_opt;
+                    *current_output_node_results_opt = Some(output_node_results);
+                }
+                TraversalState::DynAllocIf {
+                    buffer_node_result,
+                    success_funclet_id,
+                    failure_funclet_id,
+                    argument_node_results,
+                    dynamic_allocation_size_slot_ids,
+                    continuation_join_point_id_opt,
+                } => {
+                    let success_funclet = &self.program.funclets[success_funclet_id];
+
+                    let (buffer_var_id, condition_var_id) = if let NodeResult::Buffer {
+                        var_id: buffer_var_id,
+                        ..
+                    } = buffer_node_result
+                    {
+                        let pairs = dynamic_allocation_size_slot_ids
+                            .iter()
+                            .enumerate()
+                            .map(|(index, slot_id_opt)| {
+                                (
+                                    self.get_cpu_useable_type(
+                                        success_funclet.input_types
+                                            [argument_node_results.len() + index],
+                                    ),
+                                    slot_id_opt.map(|slot_id| slot_id),
+                                )
+                            })
+                            .collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
+                        (
+                            buffer_var_id,
+                            self.code_generator
+                                .build_test_suballocate_many(buffer_var_id, &pairs),
+                        )
+                    } else {
+                        panic!("Not a buffer")
+                    };
+
+                    let output_types = success_funclet
+                        .output_types
+                        .iter()
+                        .map(|type_id| self.get_cpu_useable_type(*type_id))
+                        .collect::<Box<[ir::ffi::TypeId]>>();
+                    let output_var_ids = self
+                        .code_generator
+                        .begin_if_else(condition_var_id, &output_types);
+                    let mut success_argument_node_results = Vec::<NodeResult>::new();
+                    success_argument_node_results.extend_from_slice(&argument_node_results);
+                    for (index, slot_id_opt) in dynamic_allocation_size_slot_ids.iter().enumerate()
+                    {
+                        let node_result = match &self.program.types
+                            [success_funclet.input_types[argument_node_results.len() + index]]
+                        {
+                            ir::Type::Ref {
+                                storage_place,
+                                storage_type,
+                                buffer_flags,
+                            } => {
+                                //
+                                let var_id = if let Some(slot_id) = slot_id_opt {
+                                    match & self.program.native_interface.types[storage_type.0]
+                                        {
+                                            ir::ffi::Type::ErasedLengthArray{element_type} =>
+                                            {
+                                                let allocation_size_var_id = * slot_id;
+                                                self.code_generator.build_buffer_suballocate_slice(buffer_var_id, * element_type, allocation_size_var_id)
+                                            }
+                                            _ => panic!("Must be an erased length array if allocation size slot is present")
+                                        }
+                                } else {
+                                    self.code_generator
+                                        .build_buffer_suballocate_ref(buffer_var_id, *storage_type)
+                                };
+
+                                NodeResult::Ref {
+                                    storage_place: *storage_place,
+                                    storage_type: *storage_type,
+                                    var_id,
+                                }
+                            }
+                            ir::Type::Buffer {
+                                storage_place,
+                                static_layout_opt,
+                                flags,
+                            } => {
+                                panic!("To do")
+                                //NodeResult::Buffer{var_id}
+                            }
+                            _ => panic!("Wrong type for dynamic slot"),
+                        };
+                        success_argument_node_results.push(node_result);
+                    }
+
+                    let mut output_node_results = Vec::<NodeResult>::new();
+                    for (output_index, output_type) in
+                        success_funclet.output_types.iter().enumerate()
+                    {
+                        match &self.program.types[*output_type] {
+                            ir::Type::Ref {
+                                storage_type,
+                                storage_place,
+                                buffer_flags,
+                            } => {
+                                output_node_results.push(NodeResult::Ref {
+                                    var_id: output_var_ids[output_index],
+                                    storage_place: *storage_place,
+                                    storage_type: *storage_type,
+                                });
+                            }
+                            _ => panic!("Unimplemented"),
+                        }
+                    }
+
+                    current_funclet_id_opt = Some(success_funclet_id);
+                    *current_output_node_results_opt =
+                        Some(success_argument_node_results.into_boxed_slice());
+                    traversal_state_stack.push(TraversalState::DynAllocElse {
+                        output_node_results: output_node_results.into_boxed_slice(),
+                        argument_node_results,
+                        failure_funclet_id,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::DynAllocElse {
+                    output_node_results,
+                    failure_funclet_id,
+                    argument_node_results,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator
+                        .end_if_begin_else(&NodeResult::collect_vars(
+                            current_output_node_results_opt.as_ref().unwrap(),
+                        ));
+                    current_funclet_id_opt = Some(failure_funclet_id);
+                    *current_output_node_results_opt = Some(argument_node_results);
+                    traversal_state_stack.push(TraversalState::SelectEnd {
+                        output_node_results,
+                        continuation_join_point_id_opt,
+                    });
+                }
+                TraversalState::DynAllocEnd {
+                    output_node_results,
+                    continuation_join_point_id_opt,
+                } => {
+                    self.code_generator.end_else(&NodeResult::collect_vars(
+                        current_output_node_results_opt.as_ref().unwrap(),
+                    ));
+                    *default_join_point_id_opt = continuation_join_point_id_opt;
+                    *current_output_node_results_opt = Some(output_node_results);
+                }
+            }
+        }
+
+        return current_funclet_id_opt;
     }
 
     fn compile_externally_visible_scheduling_funclet(
@@ -968,7 +1147,6 @@ impl<'program> CodeGen<'program> {
             self.code_generator
                 .begin_funclet(funclet_id, &input_types, &output_types);
 
-        let mut placement_state = PlacementState::new();
         let mut argument_node_results = Vec::<NodeResult>::new();
 
         for (index, input_type_id) in funclet.input_types.iter().enumerate() {
@@ -977,15 +1155,8 @@ impl<'program> CodeGen<'program> {
 
                 match &self.program.types[*input_type_id] {
                     ir::Type::NativeValue { storage_type } => {
-                        let slot_id = placement_state
-                            .scheduling_state
-                            .insert_hacked_slot(*storage_type, ir::Place::Local);
-                        placement_state
-                            .slot_variable_ids
-                            .insert(slot_id, argument_variable_ids[index]);
-                        argument_node_results.push(NodeResult::Slot {
-                            slot_id,
-                            queue_place: ir::Place::Local,
+                        argument_node_results.push(NodeResult::LocalValue {
+                            var_id: argument_variable_ids[index],
                             storage_type: *storage_type,
                         });
                     }
@@ -993,18 +1164,11 @@ impl<'program> CodeGen<'program> {
                         storage_type,
                         //queue_stage,
                         storage_place,
+                        buffer_flags,
                     } => {
-                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
-                            *storage_type,
-                            *storage_place,
-                            //*queue_stage,
-                        );
-                        placement_state
-                            .slot_variable_ids
-                            .insert(slot_id, argument_variable_ids[index]);
-                        argument_node_results.push(NodeResult::Slot {
-                            slot_id,
-                            queue_place: *storage_place,
+                        argument_node_results.push(NodeResult::Ref {
+                            var_id: argument_variable_ids[index],
+                            storage_place: *storage_place,
                             storage_type: *storage_type,
                         });
                     }
@@ -1017,9 +1181,14 @@ impl<'program> CodeGen<'program> {
                             fence_id,
                         });
                     }
-                    ir::Type::Buffer { storage_place, .. } => {
+                    ir::Type::Buffer {
+                        storage_place,
+                        static_layout_opt,
+                        ..
+                    } => {
                         argument_node_results.push(NodeResult::Buffer {
                             storage_place: *storage_place,
+                            static_layout_opt: *static_layout_opt,
                             var_id: argument_variable_ids[index],
                         });
                     }
@@ -1036,7 +1205,7 @@ impl<'program> CodeGen<'program> {
                 .funclet_id_opt
                 .unwrap();
             let join_point_id =
-                placement_state
+                pipeline_context
                     .join_graph
                     .create(JoinPoint::RootJoinPoint(RootJoinPoint {
                         value_funclet_id,
@@ -1047,470 +1216,81 @@ impl<'program> CodeGen<'program> {
 
         let mut traversal_state_stack = Vec::<TraversalState>::new();
 
-        let mut current_output_node_results = argument_node_results.into_boxed_slice();
+        let mut current_output_node_results_opt = Some(argument_node_results.into_boxed_slice());
         let mut current_funclet_id_opt = Some(funclet_id);
 
         while current_funclet_id_opt.is_some() {
             while let Some(current_funclet_id) = current_funclet_id_opt {
-                let split_point = self.compile_scheduling_funclet(
+                current_funclet_id_opt = None;
+                current_output_node_results_opt = self.process_current_funclet(
                     current_funclet_id,
-                    &current_output_node_results,
+                    current_output_node_results_opt.unwrap(),
                     pipeline_context,
-                    &mut placement_state,
+                    &mut traversal_state_stack,
                     &mut default_join_point_id_opt,
                 );
-                //println!("Split point: {:?}", split_point);
-                current_output_node_results = match split_point {
-                    SplitPoint::Next {
-                        return_node_results,
-                        continuation_join_point_id_opt,
-                    } => {
-                        default_join_point_id_opt = continuation_join_point_id_opt;
-                        return_node_results
-                    }
-                    SplitPoint::Yield {
-                        external_function_id,
-                        yielded_node_results,
-                        mut continuation_join_point_id_opt,
-                    } => {
-                        let path_join_point_ids = self.collect_join_graph_path(
-                            &mut placement_state,
-                            traversal_state_stack.as_slice(),
-                            continuation_join_point_id_opt,
-                        );
-                        //println!("Serializing join points: {:?} from root: {:?}", path_join_point_ids, continuation_join_point_id_opt);
-                        //panic!("Serialized?");
 
-                        let mut join_point_offset_vars = HashMap::<JoinPointId, VarId>::new();
-
-                        'serialization_loop: for &join_point_id in path_join_point_ids.iter().rev()
-                        {
-                            let join_point = placement_state.join_graph.get_join(join_point_id);
-
-                            match join_point {
-                                JoinPoint::RootJoinPoint(_) => (),
-                                JoinPoint::SimpleJoinPoint(simple_join_point) => {
-                                    /*//simple_join_point.captures
-                                    let mut input_storage_types = Vec::<ir::ffi::TypeId>::new();
-                                    let mut output_storage_types = Vec::<ir::ffi::TypeId>::new();
-                                    let mut capture_var_ids = Vec::<VarId>::new();
-                                    let join_point_scheduling_funclet = & self.program.funclets[& simple_join_point.scheduling_funclet_id];
-                                    for (capture_index, captured_node_result) in simple_join_point.captures.iter().enumerate()
-                                    {
-                                        let var_id = placement_state.get_node_result_var_id(& captured_node_result).unwrap();
-                                        capture_var_ids.push(var_id);
-                                        //capture_storage_types.push(self.get_cpu_useable_type(join_point_scheduling_funclet.input_types[capture_index]));
-                                        match captured_node_result
-                                        {
-                                            NodeResult::Slot{..} => (),
-                                            NodeResult::Buffer{..} => (),
-                                            _ => panic!("Not yet supported"),
-                                        }
-                                    }
-
-                                    for (input_index, input_type) in join_point_scheduling_funclet.input_types.iter().enumerate()
-                                    {
-                                        input_storage_types.push(self.get_cpu_useable_type(* input_type));
-                                    }
-
-                                    for (output_index, output_type) in join_point_scheduling_funclet.output_types.iter().enumerate()
-                                    {
-                                        output_storage_types.push(self.get_cpu_useable_type(* output_type));
-                                    }
-
-                                    self.code_generator.build_push_serialized_join(simple_join_point.scheduling_funclet_id, capture_var_ids.as_slice(), & input_storage_types[0 .. simple_join_point.captures.len()], & input_storage_types[simple_join_point.captures.len() .. ], & output_storage_types[0 .. ]);
-                                    pipeline_context.pending_funclet_ids.push(simple_join_point.scheduling_funclet_id);*/
-                                    self.build_push_serialized_join(
-                                        simple_join_point.scheduling_funclet_id,
-                                        &simple_join_point.captures,
-                                        &placement_state,
-                                        pipeline_context,
-                                    );
-                                }
-                                JoinPoint::SerializedJoinPoint(_) => break 'serialization_loop,
-                                _ => panic!(
-                                    "Jump to invalid join point #{:?}: {:?}",
-                                    join_point_id, join_point
-                                ),
-                            }
-                            //pipeline_context.pending_funclet_ids.push();
-                        }
-
-                        let mut yielded_var_ids = Vec::<VarId>::new();
-                        for node_result in yielded_node_results.iter() {
-                            let var_id = placement_state
-                                .get_node_result_var_id(&node_result)
-                                .unwrap();
-                            yielded_var_ids.push(var_id);
-                        }
-
-                        self.code_generator
-                            .build_yield(external_function_id, yielded_var_ids.as_slice());
-
-                        // To do: Technically, we should insert a join point that recursively forces a split of the funclet once branches merge.
-                        // Should probably fix this by adding a new type of ir::Node::Join instead of inserting here and sifting upwards.
-
-                        //panic!("Not yet implemented");
-                        current_funclet_id_opt = None;
-                        default_join_point_id_opt = None;
-                        vec![].into_boxed_slice()
-                    }
-                    SplitPoint::Select {
-                        return_node_results,
-                        condition_slot_id,
-                        true_funclet_id,
-                        false_funclet_id,
-                        continuation_join_point_id_opt,
-                    } => {
-                        assert!(default_join_point_id_opt.is_none());
-                        traversal_state_stack.push(TraversalState::SelectIf {
-                            branch_input_node_results: return_node_results,
-                            condition_slot_id,
-                            true_funclet_id,
-                            false_funclet_id,
-                            continuation_join_point_id_opt,
-                        });
-                        vec![].into_boxed_slice()
-                    }
-                    SplitPoint::DynAlloc {
-                        buffer_node_result,
-                        success_funclet_id,
-                        failure_funclet_id,
-                        argument_node_results,
-                        dynamic_allocation_size_slot_ids,
-                        continuation_join_point_id_opt,
-                    } => {
-                        assert!(default_join_point_id_opt.is_none());
-                        traversal_state_stack.push(TraversalState::DynAllocIf {
-                            buffer_node_result,
-                            success_funclet_id,
-                            failure_funclet_id,
-                            argument_node_results,
-                            dynamic_allocation_size_slot_ids,
-                            continuation_join_point_id_opt,
-                        });
-                        vec![].into_boxed_slice()
-                    }
-                };
-
+                // Nothing to run next
                 if default_join_point_id_opt.is_none() {
-                    while let Some(traversal_state) = traversal_state_stack.pop() {
-                        match traversal_state {
-                            TraversalState::SelectIf {
-                                branch_input_node_results,
-                                condition_slot_id,
-                                true_funclet_id,
-                                false_funclet_id,
-                                continuation_join_point_id_opt,
-                            } => {
-                                let condition_var_id =
-                                    placement_state.get_slot_var_id(condition_slot_id).unwrap();
-                                let true_funclet = &self.program.funclets[true_funclet_id];
-                                //let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
-                                //true_funclet_extra.input_slots[& output_index].value_tag
-                                let output_types = true_funclet
-                                    .output_types
-                                    .iter()
-                                    .map(|type_id| self.get_cpu_useable_type(*type_id))
-                                    .collect::<Box<[ir::ffi::TypeId]>>();
-                                let output_var_ids = self
-                                    .code_generator
-                                    .begin_if_else(condition_var_id, &output_types);
-                                let mut output_node_results = Vec::<NodeResult>::new();
-                                for (output_index, output_type) in
-                                    true_funclet.output_types.iter().enumerate()
-                                {
-                                    // Joins capture by slot.  This is ok because joins can't escape the scope they were created in.  We'll reach None before leaving the scope.
-                                    let (storage_type, storage_place) = if let ir::Type::Ref {
-                                        storage_type,
-                                        storage_place,
-                                    } =
-                                        &self.program.types[*output_type]
-                                    {
-                                        (*storage_type, *storage_place)
-                                    } else {
-                                        panic!("Not a slot")
-                                    };
-                                    let slot_id = placement_state
-                                        .scheduling_state
-                                        .insert_hacked_slot(storage_type, storage_place);
-                                    placement_state
-                                        .slot_variable_ids
-                                        .insert(slot_id, output_var_ids[output_index]);
-                                    output_node_results.push(NodeResult::Slot {
-                                        slot_id,
-                                        queue_place: storage_place,
-                                        storage_type,
-                                    });
-                                }
-                                current_funclet_id_opt = Some(true_funclet_id);
-                                current_output_node_results = branch_input_node_results.clone();
-                                traversal_state_stack.push(TraversalState::SelectElse {
-                                    output_node_results: output_node_results.into_boxed_slice(),
-                                    branch_input_node_results,
-                                    false_funclet_id,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::SelectElse {
-                                output_node_results,
-                                branch_input_node_results,
-                                false_funclet_id,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator.end_if_begin_else(
-                                    &placement_state
-                                        .get_node_result_var_ids(&current_output_node_results)
-                                        .unwrap(),
-                                );
-                                current_funclet_id_opt = Some(false_funclet_id);
-                                current_output_node_results = branch_input_node_results;
-                                traversal_state_stack.push(TraversalState::SelectEnd {
-                                    output_node_results,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::SelectEnd {
-                                output_node_results,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator.end_else(
-                                    &placement_state
-                                        .get_node_result_var_ids(&current_output_node_results)
-                                        .unwrap(),
-                                );
-                                default_join_point_id_opt = continuation_join_point_id_opt;
-                                current_output_node_results = output_node_results;
-                            }
-                            TraversalState::DynAllocIf {
-                                buffer_node_result,
-                                success_funclet_id,
-                                failure_funclet_id,
-                                argument_node_results,
-                                dynamic_allocation_size_slot_ids,
-                                continuation_join_point_id_opt,
-                            } => {
-                                let success_funclet = &self.program.funclets[success_funclet_id];
-                                //let success_funclet_extra = & self.program.scheduling_funclet_extras[& success_funclet_id];
-
-                                let (buffer_var_id, condition_var_id) =
-                                    if let NodeResult::Buffer {
-                                        var_id: buffer_var_id,
-                                        ..
-                                    } = buffer_node_result
-                                    {
-                                        let pairs = dynamic_allocation_size_slot_ids
-                                            .iter()
-                                            .enumerate()
-                                            .map(|(index, slot_id_opt)| {
-                                                (
-                                                    self.get_cpu_useable_type(
-                                                        success_funclet.input_types
-                                                            [argument_node_results.len() + index],
-                                                    ),
-                                                    slot_id_opt.map(|slot_id| {
-                                                        placement_state
-                                                            .get_slot_var_id(slot_id)
-                                                            .unwrap()
-                                                    }),
-                                                )
-                                            })
-                                            .collect::<Box<[(ir::ffi::TypeId, Option<VarId>)]>>();
-                                        (
-                                            buffer_var_id,
-                                            self.code_generator
-                                                .build_test_suballocate_many(buffer_var_id, &pairs),
-                                        )
-                                    } else {
-                                        panic!("Not a buffer")
-                                    };
-
-                                let output_types = success_funclet
-                                    .output_types
-                                    .iter()
-                                    .map(|type_id| self.get_cpu_useable_type(*type_id))
-                                    .collect::<Box<[ir::ffi::TypeId]>>();
-                                let output_var_ids = self
-                                    .code_generator
-                                    .begin_if_else(condition_var_id, &output_types);
-                                let mut success_argument_node_results = Vec::<NodeResult>::new();
-                                success_argument_node_results
-                                    .extend_from_slice(&argument_node_results);
-                                for (index, slot_id_opt) in
-                                    dynamic_allocation_size_slot_ids.iter().enumerate()
-                                {
-                                    let node_result = match &self.program.types[success_funclet
-                                        .input_types[argument_node_results.len() + index]]
-                                    {
-                                        ir::Type::Ref {
-                                            storage_place,
-                                            storage_type,
-                                        } => {
-                                            //
-                                            let var_id = if let Some(slot_id) = slot_id_opt {
-                                                match & self.program.native_interface.types[storage_type.0]
-													{
-														ir::ffi::Type::ErasedLengthArray{element_type} =>
-														{
-															let allocation_size_var_id = placement_state.get_slot_var_id(* slot_id).unwrap();
-															self.code_generator.build_buffer_suballocate_slice(buffer_var_id, * element_type, allocation_size_var_id)
-														}
-														_ => panic!("Must be an erased length array if allocation size slot is present")
-													}
-                                            } else {
-                                                self.code_generator.build_buffer_suballocate_ref(
-                                                    buffer_var_id,
-                                                    *storage_type,
-                                                )
-                                            };
-                                            let slot_id = placement_state
-                                                .scheduling_state
-                                                .insert_hacked_slot(
-                                                    *storage_type,
-                                                    *storage_place,
-                                                    //*queue_stage,
-                                                );
-                                            placement_state
-                                                .slot_variable_ids
-                                                .insert(slot_id, var_id);
-                                            NodeResult::Slot {
-                                                queue_place: *storage_place,
-                                                storage_type: *storage_type,
-                                                slot_id,
-                                            }
-                                        }
-                                        ir::Type::Buffer {
-                                            storage_place,
-                                            static_layout_opt,
-                                        } => {
-                                            panic!("To do")
-                                            //NodeResult::Buffer{var_id}
-                                        }
-                                        _ => panic!("Wrong type for dynamic slot"),
-                                    };
-                                    success_argument_node_results.push(node_result);
-                                }
-
-                                let mut output_node_results = Vec::<NodeResult>::new();
-                                for (output_index, output_type) in
-                                    success_funclet.output_types.iter().enumerate()
-                                {
-                                    match &self.program.types[*output_type] {
-                                        ir::Type::Ref {
-                                            storage_type,
-                                            //queue_stage,
-                                            storage_place,
-                                        } => {
-                                            let slot_id = placement_state
-                                                .scheduling_state
-                                                .insert_hacked_slot(
-                                                    *storage_type,
-                                                    *storage_place,
-                                                    //*queue_stage,
-                                                );
-                                            placement_state
-                                                .slot_variable_ids
-                                                .insert(slot_id, output_var_ids[output_index]);
-                                            output_node_results.push(NodeResult::Slot {
-                                                slot_id,
-                                                queue_place: *storage_place,
-                                                storage_type: *storage_type,
-                                            });
-                                        }
-                                        _ => panic!("Unimplemented"),
-                                    }
-                                }
-
-                                current_funclet_id_opt = Some(success_funclet_id);
-                                current_output_node_results =
-                                    success_argument_node_results.into_boxed_slice();
-                                traversal_state_stack.push(TraversalState::DynAllocElse {
-                                    output_node_results: output_node_results.into_boxed_slice(),
-                                    argument_node_results,
-                                    failure_funclet_id,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::DynAllocElse {
-                                output_node_results,
-                                failure_funclet_id,
-                                argument_node_results,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator.end_if_begin_else(
-                                    &placement_state
-                                        .get_node_result_var_ids(&current_output_node_results)
-                                        .unwrap(),
-                                );
-                                current_funclet_id_opt = Some(failure_funclet_id);
-                                current_output_node_results = argument_node_results;
-                                traversal_state_stack.push(TraversalState::SelectEnd {
-                                    output_node_results,
-                                    continuation_join_point_id_opt,
-                                });
-                            }
-                            TraversalState::DynAllocEnd {
-                                output_node_results,
-                                continuation_join_point_id_opt,
-                            } => {
-                                self.code_generator.end_else(
-                                    &placement_state
-                                        .get_node_result_var_ids(&current_output_node_results)
-                                        .unwrap(),
-                                );
-                                default_join_point_id_opt = continuation_join_point_id_opt;
-                                current_output_node_results = output_node_results;
-                            }
-                        }
-                    }
+                    current_funclet_id_opt = self.process_traversal_stack(
+                        &mut current_output_node_results_opt,
+                        pipeline_context,
+                        &mut traversal_state_stack,
+                        &mut default_join_point_id_opt,
+                    );
                 }
 
-                current_funclet_id_opt = None;
-                if let Some(join_point_id) = default_join_point_id_opt {
-                    default_join_point_id_opt = None;
-                    let join_point = placement_state.join_graph.move_join(join_point_id);
-                    println!("Continuing to {:?} {:?}", join_point_id, join_point);
+                if current_funclet_id_opt.is_none() {
+                    if let Some(join_point_id) = default_join_point_id_opt {
+                        default_join_point_id_opt = None;
+                        let join_point = pipeline_context.join_graph.move_join(join_point_id);
+                        println!("Continuing to {:?} {:?}", join_point_id, join_point);
 
-                    match &join_point {
-                        JoinPoint::RootJoinPoint(_) => {
-                            let return_var_ids = placement_state
-                                .get_node_result_var_ids(&current_output_node_results)
-                                .unwrap();
-                            self.code_generator.build_return(&return_var_ids);
-                        }
-                        JoinPoint::SimpleJoinPoint(simple_join_point) => {
-                            let mut input_node_results = Vec::<NodeResult>::new();
-                            input_node_results.extend_from_slice(&simple_join_point.captures);
-                            input_node_results.extend_from_slice(&current_output_node_results);
-
-                            current_funclet_id_opt = Some(simple_join_point.scheduling_funclet_id);
-                            default_join_point_id_opt =
-                                Some(simple_join_point.continuation_join_point_id);
-                            current_output_node_results = input_node_results.into_boxed_slice();
-                        }
-                        JoinPoint::SerializedJoinPoint(serialized_join_point) => {
-                            //panic!("Need to insert jump here");
-                            let argument_var_ids = placement_state
-                                .get_node_result_var_ids(&current_output_node_results)
-                                .unwrap();
-                            self.code_generator
-                                .build_indirect_stack_jump_to_popped_serialized_join(
-                                    &argument_var_ids,
-                                    &serialized_join_point.argument_ffi_types,
+                        match &join_point {
+                            JoinPoint::RootJoinPoint(_) => {
+                                let return_var_ids = NodeResult::collect_vars(
+                                    current_output_node_results_opt.as_ref().unwrap(),
                                 );
-                        }
-                        _ => panic!(
-                            "Jump to invalid join point #{:?}: {:?}",
-                            join_point_id, join_point
-                        ),
-                    }
+                                self.code_generator.build_return(&return_var_ids);
+                            }
+                            JoinPoint::SimpleJoinPoint(simple_join_point) => {
+                                let mut input_node_results = Vec::<NodeResult>::new();
+                                input_node_results.extend_from_slice(&simple_join_point.captures);
+                                input_node_results.extend_from_slice(
+                                    current_output_node_results_opt.as_ref().unwrap(),
+                                );
 
-                    println!(
-                        "{:?} {:?} {:?}",
-                        current_funclet_id_opt,
-                        default_join_point_id_opt,
-                        current_output_node_results
-                    );
+                                current_funclet_id_opt =
+                                    Some(simple_join_point.scheduling_funclet_id);
+                                default_join_point_id_opt =
+                                    Some(simple_join_point.continuation_join_point_id);
+                                current_output_node_results_opt =
+                                    Some(input_node_results.into_boxed_slice());
+                            }
+                            JoinPoint::SerializedJoinPoint(serialized_join_point) => {
+                                //panic!("Need to insert jump here");
+                                let argument_var_ids = NodeResult::collect_vars(
+                                    current_output_node_results_opt.as_ref().unwrap(),
+                                );
+                                self.code_generator
+                                    .build_indirect_stack_jump_to_popped_serialized_join(
+                                        &argument_var_ids,
+                                        &serialized_join_point.argument_ffi_types,
+                                    );
+                            }
+                            _ => panic!(
+                                "Jump to invalid join point #{:?}: {:?}",
+                                join_point_id, join_point
+                            ),
+                        }
+
+                        println!(
+                            "{:?} {:?} {:?}",
+                            current_funclet_id_opt,
+                            default_join_point_id_opt,
+                            current_output_node_results_opt
+                        );
+                    }
                 }
             }
 
@@ -1520,19 +1300,44 @@ impl<'program> CodeGen<'program> {
         self.code_generator.end_funclet();
     }
 
+    fn collect_local_inputs(
+        &mut self,
+        funclet_scoped_state: &FuncletScopedState,
+        inputs: &[ir::NodeId],
+    ) -> Box<[VarId]> {
+        let mut input_var_ids = Vec::<VarId>::new();
+        for input in inputs.iter() {
+            let node_result = funclet_scoped_state.get_node_result(*input).unwrap();
+            match node_result {
+                NodeResult::LocalValue {
+                    storage_type,
+                    var_id,
+                    ..
+                } => {
+                    input_var_ids.push(
+                        self.code_generator
+                            .build_borrow_local_ref(*var_id, *storage_type),
+                    );
+                }
+                NodeResult::Ref { var_id, .. } => {
+                    input_var_ids.push(*var_id);
+                }
+                _ => panic!("Unsupported"),
+            }
+        }
+
+        return input_var_ids.into_boxed_slice();
+    }
+
     fn compile_scheduling_funclet(
         &mut self,
         funclet_id: ir::FuncletId,
         argument_node_results: &[NodeResult],
-        /*argument_slot_ids : &[SlotId],*/ pipeline_context: &mut PipelineContext,
-        placement_state: &mut PlacementState,
+        pipeline_context: &mut PipelineContext,
         default_join_point_id_opt: &mut Option<JoinPointId>,
-    ) -> SplitPoint //Box<[SlotId]>
-    {
+    ) -> SplitPoint {
         let funclet = &self.program.funclets[funclet_id];
         assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
-        //let funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& funclet_id];
-        //let scheduled_value_funclet = & self.program.value_funclets[& scheduling_funclet.value_funclet_id];
 
         let mut funclet_scoped_state = FuncletScopedState::new(
             funclet
@@ -1545,11 +1350,6 @@ impl<'program> CodeGen<'program> {
         let mut funclet_checker =
             type_system::scheduling::FuncletChecker::new(&self.program, funclet);
 
-        /*let live_ranges = ir::analysis::live_ranges(funclet);
-        let fusion_info =
-            ir::fusion::FusionInfo::within_funclet(self.program, funclet_id, funclet, &live_ranges);*/
-        // dbg!(&fusion_info.elided_temps);
-
         if self.print_codegen_debug_info {
             println!(
                 "Compiling Funclet #{} with join {:?}...\n{:?}\n",
@@ -1558,19 +1358,15 @@ impl<'program> CodeGen<'program> {
         }
 
         for (current_node_id, node) in funclet.nodes.iter().enumerate() {
-            //let node_error_contextualizer = |writer : &mut dyn std::fmt::Write| { write!(writer, "While compiling node #{}: {:?}", current_node_id, node) };
-            //let node_error_context = type_system::error::ErrorContext::new(None, Some(& node_error_contextualizer ));
             self.code_generator
                 .insert_comment(format!(" node #{}: {:?}", current_node_id, node).as_str());
 
             if self.print_codegen_debug_info {
                 println!(
                     "#{} {:?} : {:?} {:?}",
-                    current_node_id, node, placement_state, funclet_scoped_state
+                    current_node_id, node, pipeline_context, funclet_scoped_state
                 );
             }
-
-            //funclet_checker.check_next_node(&node_error_context, current_node_id).expect("");
 
             match node {
                 ir::Node::None => (),
@@ -1587,57 +1383,56 @@ impl<'program> CodeGen<'program> {
                     // Extracts must appear directly after the call (so that node order reflects scheduling order)
                     assert_eq!(current_node_id, *node_id + (*index as usize));
 
-                    match & funclet_scoped_state.node_results[node_id]
-					{
-						_ => panic!("Funclet #{} at node #{} {:?}: Node #{} does not have multiple returns {:?}", funclet_id, current_node_id, node, node_id, placement_state)
-					}
+                    match &funclet_scoped_state.node_results[node_id] {
+                        _ => panic!(
+                            "Funclet #{} at node #{} {:?}: Node #{} does not have multiple returns",
+                            funclet_id, current_node_id, node, node_id
+                        ),
+                    }
                 }
                 ir::Node::AllocTemporary {
                     place,
                     storage_type,
-                    //operation,
-                } => {
-                    // We *could* also do unused temporary elision here, but after writing test
-                    // cases I discovered that codegen panics if any slots are unused.
-                    let slot_id = placement_state.scheduling_state.insert_hacked_slot(
-                        *storage_type,
-                        *place,
-                        //ir::ResourceQueueStage::Bound,
-                    );
-                    funclet_scoped_state.node_results.insert(
-                        current_node_id,
-                        NodeResult::Slot {
-                            slot_id,
-                            queue_place: *place,
-                            storage_type: *storage_type,
-                        },
-                    );
-                    /*if fusion_info.elided_temps.contains(&current_node_id) {
-                        continue;
-                    }*/
+                    buffer_flags,
+                } => match place {
+                    ir::Place::Cpu => panic!("Unimplemented"),
+                    ir::Place::Local => {
+                        let var_id = self
+                            .code_generator
+                            .build_alloc_temp_local_ref(*storage_type);
 
-                    // To do: Allocate from buffers for GPU/CPU and assign variable
-                    match place {
-                        ir::Place::Cpu => (),
-                        ir::Place::Local => (),
-                        ir::Place::Gpu => {
-                            let buffer_var_id =
-                                self.code_generator.build_create_buffer(*storage_type);
-                            let offset_var_id = self
-                                .code_generator
-                                .build_constant_unsigned_integer(0, self.default_u64_ffi_type_id);
-                            let var_id = self.code_generator.build_buffer_ref(
-                                buffer_var_id,
-                                offset_var_id,
-                                *storage_type,
-                            );
-                            placement_state.update_slot_state(
-                                slot_id, //ir::ResourceQueueStage::Bound,
+                        funclet_scoped_state.node_results.insert(
+                            current_node_id,
+                            NodeResult::Ref {
                                 var_id,
-                            );
-                        }
+                                storage_place: *place,
+                                storage_type: *storage_type,
+                            },
+                        );
                     }
-                }
+                    ir::Place::Gpu => {
+                        let buffer_var_id = self
+                            .code_generator
+                            .build_create_buffer(*storage_type, *buffer_flags);
+                        let offset_var_id = self
+                            .code_generator
+                            .build_constant_unsigned_integer(0, self.default_u64_ffi_type_id);
+                        let var_id = self.code_generator.build_buffer_ref(
+                            buffer_var_id,
+                            offset_var_id,
+                            *storage_type,
+                        );
+
+                        funclet_scoped_state.node_results.insert(
+                            current_node_id,
+                            NodeResult::Ref {
+                                var_id,
+                                storage_place: *place,
+                                storage_type: *storage_type,
+                            },
+                        );
+                    }
+                },
                 ir::Node::Drop {
                     node: dropped_node_id,
                 } => {
@@ -1660,43 +1455,11 @@ impl<'program> CodeGen<'program> {
                     let encoded_funclet = &self.program.funclets[operation_funclet_id];
                     let encoded_node = &encoded_funclet.nodes[*operation_node_id];
 
-                    let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
-                    let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
-                    /*let mut output_slot_ids = Vec::<SlotId>::new();
-                    let mut outputs = Vec::<ir::NodeId>::new();
-
-                    let (output_count, storage_type) = match encoded_node {
-                        ir::Node::Constant{type_id, ..} => {
-                            let ir::Type::NativeValue{storage_type} = &self.program.types[*type_id] else { panic!("Must be native value") };
-                            (1, *storage_type)
-                        }
-                        ir::Node::Select{true_case, ..} => {
-                            (1, funclet_scoped_state.get_node_result(inputs[1]).unwrap().storage_type().unwrap())
-                        }
-                        _ => panic!("Unsupported")
-                    };
-
-                    for index in 0 .. output_count {
-                        let output_impl_node_id = current_node_id + 1 + index;
-                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
-                            *storage_type,
-                            ir::Place::Local,
-                            //ir::ResourceQueueStage::Bound,
-                        );
-                        funclet_scoped_state.node_results.insert(
-                            output_impl_node_id,
-                            NodeResult::Slot {
-                                slot_id,
-                                queue_place: ir::Place::Local,
-                                storage_type: *storage_type,
-                            },
-                        );
-                        outputs.push(output_impl_node_id);
-                        output_slot_ids.push(slot_id);
-                    }*/
+                    let input_slot_ids = funclet_scoped_state.collect_vars_for_node_ids(inputs);
+                    //let input_slot_ids = self.collect_local_inputs(&funclet_scoped_state, inputs);
+                    let output_slot_ids = funclet_scoped_state.collect_vars_for_node_ids(outputs);
 
                     self.encode_do_node_local_builtin(
-                        placement_state,
                         &mut funclet_scoped_state,
                         &mut funclet_checker,
                         encoded_node,
@@ -1723,32 +1486,22 @@ impl<'program> CodeGen<'program> {
                     let encoded_funclet = &self.program.funclets[operation_funclet_id];
                     let encoded_node = &encoded_funclet.nodes[*operation_node_id];
 
-                    let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
-                    let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
-                    /*let mut outputs = Vec::<ir::NodeId>::new();
+                    /*let mut input_slot_ids = Vec::<VarId>::new();
+                    for input in inputs.iter() {
+                        let node_result = funclet_scoped_state.get_node_result(*input).unwrap();
+                        match node_result {
+                            NodeResult::LocalValue { storage_type, var_id, .. } => { input_slot_ids.push(self.code_generator.build_borrow_local_ref(* var_id, * storage_type)); }
+                            NodeResult::Ref { var_id, .. } => { input_slot_ids.push(* var_id); }
+                            _ => panic!("Unsupported")
+                        }
+                    }
+                    //funclet_scoped_state.collect_vars_for_node_ids(inputs);*/
 
-                    let external_function = & self.program.native_interface.external_functions[external_function_id.0];
-                    let mut output_slot_ids = Vec::<SlotId>::new();
-                    for (output_index, output_type_id) in external_function.get_output_types().unwrap().iter().enumerate() {
-                        let output_impl_node_id = current_node_id + 1 + output_index;
-                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
-                            *output_type_id,
-                            ir::Place::Local,
-                        );
-                        funclet_scoped_state.node_results.insert(
-                            output_impl_node_id,
-                            NodeResult::Slot {
-                                slot_id,
-                                queue_place: ir::Place::Local,
-                                storage_type: *output_type_id,
-                            },
-                        );
-                        outputs.push(output_impl_node_id);
-                        output_slot_ids.push(slot_id);
-                    }*/
+                    let input_slot_ids = funclet_scoped_state.collect_vars_for_node_ids(inputs);
+                    //let input_slot_ids = self.collect_local_inputs(&funclet_scoped_state, inputs);
+                    let output_slot_ids = funclet_scoped_state.collect_vars_for_node_ids(outputs);
 
                     self.encode_do_node_local_external(
-                        placement_state,
                         &mut funclet_scoped_state,
                         &mut funclet_checker,
                         encoded_node,
@@ -1780,8 +1533,9 @@ impl<'program> CodeGen<'program> {
                     let encoded_funclet = &self.program.funclets[operation_funclet_id];
                     let encoded_node = &encoded_funclet.nodes[*operation_node_id];
 
-                    let input_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(inputs);
-                    let output_slot_ids = funclet_scoped_state.collect_slots_for_node_ids(outputs);
+                    let input_slot_ids = funclet_scoped_state.collect_vars_for_node_ids(inputs);
+                    //let input_slot_ids = self.collect_local_inputs(&funclet_scoped_state, inputs);
+                    let output_slot_ids = funclet_scoped_state.collect_vars_for_node_ids(outputs);
 
                     match place {
                         ir::Place::Local => panic!("EncodeDoExternal to Local is unsupported"),
@@ -1820,7 +1574,6 @@ impl<'program> CodeGen<'program> {
                             }*/
 
                             self.encode_do_node_gpu(
-                                placement_state,
                                 &mut funclet_scoped_state,
                                 &mut funclet_checker,
                                 encoded_node,
@@ -1833,51 +1586,51 @@ impl<'program> CodeGen<'program> {
                     }
                 }
                 ir::Node::LocalCopy { input, output } => {
-                    let src_slot_id = funclet_scoped_state.get_node_slot_id(*input).unwrap();
-                    let dst_slot_id = funclet_scoped_state.get_node_slot_id(*output).unwrap();
+                    let src_slot_id = funclet_scoped_state.get_node_var_id(*input).unwrap();
+                    let dst_slot_id = funclet_scoped_state.get_node_var_id(*output).unwrap();
 
-                    let (src_slot_id, src_place) = if let Some(NodeResult::Slot {
-                        slot_id,
-                        queue_place,
+                    let (src_slot_id, src_place, src_type) = if let Some(NodeResult::Ref {
+                        var_id,
+                        storage_place,
+                        storage_type,
                         ..
                     }) =
                         funclet_scoped_state.get_node_result(*input)
                     {
-                        (*slot_id, *queue_place)
+                        (*var_id, *storage_place, *storage_type)
                     } else {
                         panic!("Not a slot")
                     };
 
-                    let (dst_slot_id, dst_place) = if let Some(NodeResult::Slot {
-                        slot_id,
-                        queue_place,
+                    let (dst_slot_id, dst_place, dst_type) = if let Some(NodeResult::Ref {
+                        var_id,
+                        storage_place,
+                        storage_type,
                         ..
                     }) =
                         funclet_scoped_state.get_node_result(*output)
                     {
-                        (*slot_id, *queue_place)
+                        (*var_id, *storage_place, *storage_type)
                     } else {
                         panic!("Not a slot")
                     };
+
+                    assert_eq!(dst_type, src_type);
+
                     match (ir::Place::Local, dst_place, src_place) {
                         (ir::Place::Local, ir::Place::Local, ir::Place::Local) => {
-                            let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-                            placement_state.update_slot_state(
-                                dst_slot_id,
-                                //ir::ResourceQueueStage::Ready,
-                                src_var_id,
-                            );
+                            let temp_var_id = self
+                                .code_generator
+                                .build_read_local_ref(src_slot_id, dst_type);
+                            self.code_generator
+                                .build_write_local_ref(dst_slot_id, temp_var_id);
                         }
                         (ir::Place::Local, ir::Place::Local, ir::Place::Gpu) => {
-                            let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-                            let dst_var_id = self
+                            let temp_var_id = self
                                 .code_generator
-                                .encode_clone_local_data_from_buffer(src_var_id);
-                            placement_state.update_slot_state(
-                                dst_slot_id,
-                                //ir::ResourceQueueStage::Ready,
-                                dst_var_id,
-                            );
+                                .encode_clone_local_data_from_buffer(src_slot_id, dst_type);
+                            self.code_generator
+                                .build_write_local_ref(dst_slot_id, temp_var_id);
                         }
                         _ => panic!("Unimplemented"),
                     }
@@ -1886,73 +1639,66 @@ impl<'program> CodeGen<'program> {
                     source,
                     storage_type,
                 } => {
-                    let src_slot_id = funclet_scoped_state.get_node_slot_id(*source).unwrap();
+                    //let src_slot_id = funclet_scoped_state.get_node_slot_id(*source).unwrap();
 
-                    let (src_slot_id, src_place) = if let Some(NodeResult::Slot {
-                        slot_id,
-                        queue_place,
+                    let (src_slot_id, src_place) = if let Some(NodeResult::Ref {
+                        var_id,
+                        storage_place,
                         ..
                     }) =
                         funclet_scoped_state.get_node_result(*source)
                     {
-                        (*slot_id, *queue_place)
+                        (*var_id, *storage_place)
                     } else {
                         panic!("Not a slot")
                     };
 
-                    let slot_id = placement_state
-                        .scheduling_state
-                        .insert_hacked_slot(*storage_type, ir::Place::Local);
+                    assert_eq!(src_place, ir::Place::Local);
+
+                    //panic!("To do: Implement slices");
+                    let var_id = self
+                        .code_generator
+                        .build_read_local_ref(src_slot_id, *storage_type);
                     funclet_scoped_state.node_results.insert(
                         current_node_id,
-                        NodeResult::Slot {
-                            slot_id,
-                            queue_place: ir::Place::Local,
+                        NodeResult::LocalValue {
+                            var_id,
                             storage_type: *storage_type,
                         },
                     );
-
-                    let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-                    placement_state.update_slot_state(slot_id, src_var_id);
                 }
                 ir::Node::WriteRef {
                     destination,
                     storage_type,
                     source,
                 } => {
-                    let src_slot_id = funclet_scoped_state.get_node_slot_id(*source).unwrap();
-                    let dst_slot_id = funclet_scoped_state.get_node_slot_id(*destination).unwrap();
+                    let (src_slot_id, src_place) =
+                        if let Some(NodeResult::LocalValue { var_id, .. }) =
+                            funclet_scoped_state.get_node_result(*source)
+                        {
+                            (*var_id, ir::Place::Local)
+                        } else {
+                            panic!("Not a slot")
+                        };
 
-                    let (src_slot_id, src_place) = if let Some(NodeResult::Slot {
-                        slot_id,
-                        queue_place,
-                        ..
-                    }) =
-                        funclet_scoped_state.get_node_result(*source)
-                    {
-                        (*slot_id, *queue_place)
-                    } else {
-                        panic!("Not a slot")
-                    };
-
-                    let (dst_slot_id, dst_place) = if let Some(NodeResult::Slot {
-                        slot_id,
-                        queue_place,
+                    let (dst_slot_id, dst_place) = if let Some(NodeResult::Ref {
+                        var_id,
+                        storage_place,
                         ..
                     }) =
                         funclet_scoped_state.get_node_result(*destination)
                     {
-                        (*slot_id, *queue_place)
+                        (*var_id, *storage_place)
                     } else {
                         panic!("Not a slot")
                     };
 
-                    let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-                    placement_state.update_slot_state(
-                        dst_slot_id,
-                        //ir::ResourceQueueStage::Ready,
-                        src_var_id,
-                    );
+                    assert_eq!(src_place, ir::Place::Local);
+                    assert_eq!(dst_place, ir::Place::Local);
+
+                    panic!("To do: Implement slices");
+                    self.code_generator
+                        .build_write_local_ref(dst_slot_id, src_slot_id);
                 }
                 ir::Node::BeginEncoding {
                     place,
@@ -1965,40 +1711,44 @@ impl<'program> CodeGen<'program> {
                         .insert(current_node_id, NodeResult::Encoder { place: *place });
                 }
                 ir::Node::EncodeCopy {
-                    //place,
                     input,
                     output,
                     encoder,
                 } => {
                     let Some(NodeResult::Encoder{place}) = funclet_scoped_state.get_node_result(*encoder) else { panic!("No encoder"); };
-                    let src_slot_id = funclet_scoped_state.get_node_slot_id(*input).unwrap();
-                    let dst_slot_id = funclet_scoped_state.get_node_slot_id(*output).unwrap();
+                    let src_slot_id = funclet_scoped_state.get_node_var_id(*input).unwrap();
+                    let dst_slot_id = funclet_scoped_state.get_node_var_id(*output).unwrap();
 
-                    let (src_slot_id, src_place) = if let Some(NodeResult::Slot {
-                        slot_id,
-                        queue_place,
-                        ..
-                    }) =
-                        funclet_scoped_state.get_node_result(*input)
-                    {
-                        (*slot_id, *queue_place)
-                    } else {
-                        panic!("Not a slot")
-                    };
+                    let (src_slot_id, src_place, src_storage_type) =
+                        if let Some(NodeResult::Ref {
+                            var_id,
+                            storage_place,
+                            storage_type,
+                            ..
+                        }) = funclet_scoped_state.get_node_result(*input)
+                        {
+                            (*var_id, *storage_place, *storage_type)
+                        } else {
+                            panic!("Not a slot")
+                        };
 
-                    let (dst_slot_id, dst_place) = if let Some(NodeResult::Slot {
-                        slot_id,
-                        queue_place,
-                        ..
-                    }) =
-                        funclet_scoped_state.get_node_result(*output)
-                    {
-                        (*slot_id, *queue_place)
-                    } else {
-                        panic!("Not a slot")
-                    };
+                    let (dst_slot_id, dst_place, dst_storage_type) =
+                        if let Some(NodeResult::Ref {
+                            var_id,
+                            storage_place,
+                            storage_type,
+                            ..
+                        }) = funclet_scoped_state.get_node_result(*output)
+                        {
+                            (*var_id, *storage_place, *storage_type)
+                        } else {
+                            panic!("Not a slot")
+                        };
+
+                    assert_eq!(src_storage_type, dst_storage_type);
+
                     match (*place, dst_place, src_place) {
-                        (ir::Place::Cpu, ir::Place::Cpu, ir::Place::Local) => {
+                        /*(ir::Place::Cpu, ir::Place::Cpu, ir::Place::Local) => {
                             // todo DG: I'm not confident this works
                             let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
                             placement_state.update_slot_state(
@@ -2006,7 +1756,7 @@ impl<'program> CodeGen<'program> {
                                 //ir::ResourceQueueStage::Ready,
                                 src_var_id,
                             );
-                        }
+                        }*/
                         /*(ir::Place::Local, ir::Place::Local, ir::Place::Local) => {
                             let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
                             placement_state.update_slot_state(
@@ -2027,25 +1777,17 @@ impl<'program> CodeGen<'program> {
                             );
                         }*/
                         (ir::Place::Gpu, ir::Place::Gpu, ir::Place::Local) => {
-                            let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-                            let dst_var_id = placement_state.get_slot_var_id(dst_slot_id).unwrap();
-                            self.code_generator
-                                .encode_copy_buffer_from_local_data(dst_var_id, src_var_id);
-                            placement_state.update_slot_state(
+                            self.code_generator.encode_copy_buffer_from_local_data(
                                 dst_slot_id,
-                                //ir::ResourceQueueStage::Encoded,
-                                dst_var_id,
+                                src_slot_id,
+                                src_storage_type,
                             );
                         }
                         (ir::Place::Gpu, ir::Place::Gpu, ir::Place::Gpu) => {
-                            let src_var_id = placement_state.get_slot_var_id(src_slot_id).unwrap();
-                            let dst_var_id = placement_state.get_slot_var_id(dst_slot_id).unwrap();
-                            self.code_generator
-                                .encode_copy_buffer_from_buffer(dst_var_id, src_var_id);
-                            placement_state.update_slot_state(
+                            self.code_generator.encode_copy_buffer_from_buffer(
                                 dst_slot_id,
-                                //ir::ResourceQueueStage::Encoded,
-                                dst_var_id,
+                                src_slot_id,
+                                src_storage_type,
                             );
                         }
                         _ => panic!("Unimplemented"),
@@ -2085,6 +1827,55 @@ impl<'program> CodeGen<'program> {
                         panic!("Expected fence")
                     }
                 }
+                ir::Node::StaticSplit {
+                    spatial_operation:
+                        ir::Quotient::Node {
+                            node_id: spatial_spec_node_id,
+                        },
+                    node: buffer_impl_node_id,
+                    sizes,
+                    place,
+                } => {
+                    for (i, size) in sizes.iter().enumerate() {
+                        let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_impl_node_id).unwrap() else { panic!("") };
+                        let predecessor_layout =
+                            static_layout.split_static(&self.program.native_interface, sizes[i]);
+                        /*funclet_scoped_state.node_results.insert(
+                            current_node_id,
+                            NodeResult::Buffer {
+                                var_id: ,
+                                static_layout_opt: Some(predecessor_layout),
+                                storage_place: *place,
+                            },
+                        );*/
+                    }
+                    /*funclet_scoped_state.node_results.insert(
+                        current_node_id,
+                        NodeResult::Buffer {
+                            var_id: ,
+                            static_layout_opt: Some(predecessor_layout),
+                            storage_place: *place,
+                        },
+                    );*/
+                }
+                ir::Node::StaticMerge {
+                    spatial_operation:
+                        ir::Quotient::Node {
+                            node_id: spatial_spec_node_id,
+                        },
+                    nodes: impl_node_ids,
+                    place,
+                } => {
+                    let buffer_node_id = impl_node_ids[impl_node_ids.len() - 1];
+                    for i in (0..(impl_node_ids.len() - 1)).rev() {
+                        let NodeResult::Buffer{static_layout_opt: Some(predecessor_static_layout), ..} = funclet_scoped_state.move_node_result(impl_node_ids[i]).unwrap() else { panic!("") };
+                        let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_node_id).unwrap() else { panic!("") };
+                        static_layout.merge_static_left(
+                            &self.program.native_interface,
+                            predecessor_static_layout,
+                        );
+                    }
+                }
                 ir::Node::StaticSubAlloc {
                     node: buffer_node_id,
                     place,
@@ -2098,33 +1889,29 @@ impl<'program> CodeGen<'program> {
                     if let Some(NodeResult::Buffer {
                         var_id,
                         storage_place,
+                        static_layout_opt,
                         ..
                     }) = funclet_scoped_state.node_results.get_mut(buffer_node_id)
                     {
                         assert_eq!(*storage_place, *place);
+                        if let Some(static_layout) = static_layout_opt {
+                            //let NodeResult::Buffer{static_layout_opt: Some(static_layout), ..} : &mut NodeResult = funclet_scoped_state.node_results.get_mut(&buffer_node_id).unwrap() else { panic!("") };
+                            static_layout
+                                .alloc_static(&self.program.native_interface, *storage_type);
+                        }
+
                         let allocation_var_id = self
                             .code_generator
                             .build_buffer_suballocate_ref(*var_id, *storage_type);
 
-                        let slot_id = placement_state.scheduling_state.insert_hacked_slot(
-                            *storage_type,
-                            *place,
-                            //ir::ResourceQueueStage::Bound,
-                        );
                         funclet_scoped_state.node_results.insert(
                             current_node_id,
-                            NodeResult::Slot {
-                                slot_id,
-                                queue_place: *place,
+                            NodeResult::Ref {
+                                var_id: allocation_var_id,
+                                storage_place: *place,
                                 storage_type: *storage_type,
                             },
                         );
-                        placement_state.update_slot_state(
-                            slot_id,
-                            //ir::ResourceQueueStage::Bound,
-                            allocation_var_id,
-                        );
-                        placement_state.mark_var_buffer(allocation_var_id, *buffer_node_id);
                     } else {
                         panic!("Not a buffer")
                     }
@@ -2146,7 +1933,6 @@ impl<'program> CodeGen<'program> {
                 } => {
                     let mut captured_node_results = Vec::<NodeResult>::new();
                     let join_funclet = &self.program.funclets[*funclet_id];
-                    //let extra = & self.program.scheduling_funclet_extras[funclet_id];
 
                     // Join points can only be constructed for the value funclet they are created in
                     assert_eq!(
@@ -2168,12 +1954,12 @@ impl<'program> CodeGen<'program> {
                     let continuation_join_point_id = funclet_scoped_state
                         .move_node_join_point_id(*continuation_join_node_id)
                         .unwrap();
-                    let continuation_join_point = placement_state
+                    let continuation_join_point = pipeline_context
                         .join_graph
                         .get_join(continuation_join_point_id);
 
                     let join_point_id =
-                        placement_state
+                        pipeline_context
                             .join_graph
                             .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
                                 value_funclet_id: join_funclet
@@ -2196,7 +1982,6 @@ impl<'program> CodeGen<'program> {
                 } => {
                     let mut captured_node_results = Vec::<NodeResult>::new();
                     let join_funclet = &self.program.funclets[*funclet_id];
-                    //let extra = & self.program.scheduling_funclet_extras[funclet_id];
 
                     // Join points can only be constructed for the value funclet they are created in
                     assert_eq!(
@@ -2223,19 +2008,15 @@ impl<'program> CodeGen<'program> {
                     let continuation_join_point_id = funclet_scoped_state
                         .move_node_join_point_id(*continuation_join_node_id)
                         .unwrap();
-                    let continuation_join_point = placement_state
+                    let continuation_join_point = pipeline_context
                         .join_graph
                         .get_join(continuation_join_point_id);
 
-                    //captures : captured_node_results.into_boxed_slice()
-                    self.build_push_serialized_join(
-                        *funclet_id,
-                        captured_node_results.as_slice(),
-                        placement_state,
-                        pipeline_context,
-                    );
+                    self.build_push_serialized_join(*funclet_id, captured_node_results.as_slice());
+                    pipeline_context.pending_funclet_ids.push(*funclet_id);
+
                     let join_point_id =
-                        placement_state
+                        pipeline_context
                             .join_graph
                             .create(JoinPoint::SerializedJoinPoint(SerializedJoinPoint {
                                 value_funclet_id: join_funclet
@@ -2258,12 +2039,9 @@ impl<'program> CodeGen<'program> {
         if self.print_codegen_debug_info {
             println!(
                 "{:?} : {:?} {:?}",
-                funclet.tail_edge, placement_state, funclet_scoped_state
+                funclet.tail_edge, pipeline_context, funclet_scoped_state
             );
         }
-
-        //let tail_error_context = type_system::error::ErrorContext::new(None, Some(& |writer| write!(writer, "While compiling tail edge") ));
-        //funclet_checker.check_tail_edge(& tail_error_context).expect("");
 
         self.code_generator
             .insert_comment(format!(" tail edge: {:?}", funclet.tail_edge).as_str());
@@ -2301,7 +2079,7 @@ impl<'program> CodeGen<'program> {
                 let continuation_join_point_id = funclet_scoped_state
                     .move_node_join_point_id(*continuation_join_node_id)
                     .unwrap();
-                let continuation_join_point = placement_state
+                let continuation_join_point = pipeline_context
                     .join_graph
                     .get_join(continuation_join_point_id);
 
@@ -2314,55 +2092,12 @@ impl<'program> CodeGen<'program> {
                     output_node_results.push(node_result);
                 }
 
-                /*let mut argument_node_results = Vec::<NodeResult>::new();
-                for (argument_index, argument_node_id) in argument_node_ids.iter().enumerate() {
-                    let node_result = funclet_scoped_state
-                        .move_node_result(*argument_node_id)
-                        .unwrap();
-                    argument_node_results.push(node_result);
-                }*/
-
-                //let join_funclet = &self.program.funclets[*next_funclet_id];
-                //let join_extra = & self.program.scheduling_funclet_extras[next_funclet_id];
-                /*let join_point_id = placement_state
-                .join_graph
-                .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
-                    value_funclet_id: join_funclet
-                        .spec_binding
-                        .get_value_spec()
-                        .funclet_id_opt
-                        .unwrap(),
-                    scheduling_funclet_id: *next_funclet_id,
-                    captures: argument_node_results.into_boxed_slice(),
-                    continuation_join_point_id,
-                }));*/
                 SplitPoint::Yield {
                     external_function_id: *external_function_id,
                     yielded_node_results: output_node_results.into_boxed_slice(),
                     continuation_join_point_id_opt: Some(continuation_join_point_id),
                 }
             }
-            /*ir::TailEdge::Yield { funclet_ids, captured_arguments, return_values } =>
-            {
-                let captured_argument_var_ids = placement_state.get_local_state_var_ids(captured_arguments).unwrap();
-                let return_var_ids = placement_state.get_local_state_var_ids(return_values).unwrap();
-
-                let mut next_funclet_input_types = Vec::<Box<[ir::TypeId]>>::new();
-                for & next_funclet_id in funclet_ids.iter()
-                {
-                    pipeline_context.pending_funclet_ids.push(next_funclet_id);
-                    /*if ! pipeline_context.funclet_placement_states.contains_key(& funclet_id)
-                    {
-                    }*/
-                    let input_types = self.program.funclets[& next_funclet_id].input_types.to_vec();
-                    //let input_types = Vec::<ir::TypeId>::new();
-                    next_funclet_input_types.push(input_types.into_boxed_slice());
-                }
-                // Proper codegen is a lot more complicated than this
-                // self.code_generator.build_yield(& captured_argument_var_ids, & return_var_ids);
-                // This is disgusting
-                self.code_generator.build_yield(funclet_ids, next_funclet_input_types.into_boxed_slice(), & captured_argument_var_ids, & return_var_ids);
-            }*/
             ir::TailEdge::Jump { join, arguments } => {
                 let mut join_point_id =
                     funclet_scoped_state.move_node_join_point_id(*join).unwrap();
@@ -2395,15 +2130,12 @@ impl<'program> CodeGen<'program> {
                 let continuation_join_point_id = funclet_scoped_state
                     .move_node_join_point_id(*continuation_join_node_id)
                     .unwrap();
-                let continuation_join_point = placement_state
+                let continuation_join_point = pipeline_context
                     .join_graph
                     .get_join(continuation_join_point_id);
 
-                //assert_eq!(continuation_join_point.get_value_funclet_id(), funclet_scoped_state.value_funclet_id);
-
                 let callee_funclet = &self.program.funclets[callee_scheduling_funclet_id];
                 assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
-                //let callee_funclet_scheduling_extra = & self.program.scheduling_funclet_extras[& callee_scheduling_funclet_id];
                 let callee_value_funclet_id = callee_funclet
                     .spec_binding
                     .get_value_spec()
@@ -2421,7 +2153,7 @@ impl<'program> CodeGen<'program> {
                 }
 
                 assert!(default_join_point_id_opt.is_none());
-                let join_point_id = placement_state
+                let join_point_id = pipeline_context
                     .join_graph
                     .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
                         value_funclet_id: callee_value_funclet_id,
@@ -2444,13 +2176,13 @@ impl<'program> CodeGen<'program> {
                 continuation_join: continuation_join_node_id,
             } => {
                 let condition_slot_id = funclet_scoped_state
-                    .get_node_slot_id(*condition_slot_node_id)
+                    .get_node_var_id(*condition_slot_node_id)
                     .unwrap();
 
                 let continuation_join_point_id = funclet_scoped_state
                     .move_node_join_point_id(*continuation_join_node_id)
                     .unwrap();
-                let continuation_join_point = placement_state
+                let continuation_join_point = pipeline_context
                     .join_graph
                     .get_join(continuation_join_point_id);
 
@@ -2459,8 +2191,6 @@ impl<'program> CodeGen<'program> {
                 let false_funclet_id = callee_funclet_ids[1];
                 let true_funclet = &self.program.funclets[true_funclet_id];
                 let false_funclet = &self.program.funclets[false_funclet_id];
-                //let true_funclet_extra = & self.program.scheduling_funclet_extras[& true_funclet_id];
-                //let false_funclet_extra = & self.program.scheduling_funclet_extras[& false_funclet_id];
 
                 let current_value_funclet =
                     &self.program.funclets[funclet_scoped_state.value_funclet_id];
@@ -2537,7 +2267,7 @@ impl<'program> CodeGen<'program> {
                 assert_eq!(arguments.len(), false_funclet.input_types.len());
 
                 // Do these first before they move
-                let mut dynamic_allocation_size_slot_ids = Vec::<Option<SlotId>>::new();
+                let mut dynamic_allocation_size_slot_ids = Vec::<Option<VarId>>::new();
                 for (allocation_index, allocation_size_node_id_opt) in
                     dynamic_allocation_size_slots.iter().enumerate()
                 {
@@ -2682,22 +2412,6 @@ impl<'program> CodeGen<'program> {
             );
         }
 
-        /*match & entry_funclet.tail_edge
-        {
-            ir::TailEdge::Return {return_values : _} =>
-            {
-                self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
-            }
-
-            ir::TailEdge::Yield {funclet_ids : _, captured_arguments : _, return_values : _} =>
-            {
-                ()
-            }
-
-            _ => panic!("Umimplemented")
-        };*/
-        //self.code_generator.emit_oneshot_pipeline_entry_point(entry_funclet_id, &entry_funclet.input_types, &entry_funclet.output_types);
-
         self.code_generator.end_pipeline();
     }
 
@@ -2705,7 +2419,6 @@ impl<'program> CodeGen<'program> {
         for pipeline in self.program.pipelines.iter() {
             self.generate_pipeline(pipeline);
         }
-        //panic!("Test");
         return self.code_generator.finish();
     }
 }

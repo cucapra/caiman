@@ -33,18 +33,22 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_main<input($time.%e)-have, output($time.%e)-have>() ->
 [%out : %ni64] {
-    %x_loc = alloc-temporary local i64;
-    %y_loc = alloc-temporary local i64;
-    %n1_loc = alloc-temporary local i64;
-    %n2_loc = alloc-temporary local i64;
-    %res_loc = alloc-temporary local i64;
+    %x_loc = alloc-temporary local [] i64;
+    %y_loc = alloc-temporary local [] i64;
+    %n1_loc = alloc-temporary local [] i64;
+    %n2_loc = alloc-temporary local [] i64;
+    %res_loc = alloc-temporary local [] i64;
 
     local-do-builtin node($val.%x)() -> %x_loc;
     local-do-builtin node($val.%y)() -> %y_loc;
 
-    local-do-external %add node($val.%n1_t)(%x_loc, %y_loc) -> %n1_loc;
-    local-do-external %add node($val.%n2_t)(%x_loc, %n1_loc) -> %n2_loc;
-    local-do-external %add node($val.%res_t)(%n1_loc, %n2_loc) -> %res_loc;
+    %x = read-ref i64 %x_loc;
+    %y = read-ref i64 %y_loc;
+    local-do-external %add node($val.%n1_t)(%x, %y) -> %n1_loc;
+    %n1 = read-ref i64 %n1_loc;
+    local-do-external %add node($val.%n2_t)(%x, %n1) -> %n2_loc;
+    %n2 = read-ref i64 %n2_loc;
+    local-do-external %add node($val.%res_t)(%n1, %n2) -> %res_loc;
     
     %res_val = read-ref i64 %res_loc;
     return %res_val;

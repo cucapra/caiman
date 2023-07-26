@@ -2,10 +2,10 @@ version 0.0.2
 
 type i32;
 native_value %i32n : i32;
-ref %i32l : i32-local;
-ref %i32g : i32-gpu;
+ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
+ref %i32g : i32-gpu<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 event %event0;
-buffer %buffer_gpu : gpu<alignment_bits = 0, byte_size = 1024>;
+buffer %buffer_gpu : gpu<flags = [map_read, map_write, copy_src, copy_dst, storage], alignment_bits = 0, byte_size = 1024>;
 buffer_space %buff_space;
 
 function @simple(i32) -> i32;
@@ -52,14 +52,15 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
 %foo_main<input($time.%e)-have, output($time.%e)-have>
 (%x_loc : node($val.%x)-have %i32l)
 -> [%out : %i32n] {
-    %c_loc = alloc-temporary local i32;
-    %x_gpu = alloc-temporary gpu i32;
-    %y_gpu = alloc-temporary gpu i32;
-    %y_loc = alloc-temporary local i32;
+    %c_loc = alloc-temporary local [storage] i32;
+    %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
+    %y_gpu = alloc-temporary gpu [storage, map_read] i32;
+    %y_loc = alloc-temporary local [map_write] i32;
     local-do-builtin node($val.%c)() -> %c_loc;
     %enc = begin-encoding gpu node($time.%enc) [%x_gpu, %y_gpu] [];
     encode-copy %enc %x_loc -> %x_gpu;
-    encode-do %enc %simple node($val.%y_t)(%c_loc, %c_loc, %c_loc, %x_gpu) -> %y_gpu;
+    %c = read-ref i32 %c_loc;
+    encode-do %enc %simple node($val.%y_t)(%c, %c, %c, %x_gpu) -> %y_gpu;
     %fnc = submit %enc node($time.%sub);
     sync-fence %fnc node($time.%snc);
     local-copy %y_gpu -> %y_loc;
