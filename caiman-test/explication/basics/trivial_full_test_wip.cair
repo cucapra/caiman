@@ -21,7 +21,8 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%bar<none-have, none-have>() -> ? {
+<none-have, none-have>
+%bar() -> ? {
     ???;
 }
 

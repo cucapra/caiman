@@ -64,14 +64,14 @@ struct ScheduleFuncletData {
 
 // information held by an "available" allocation hole
 #[derive(Debug, Hash, Eq, PartialEq)]
-pub struct AlloctionHoleInfo {
+struct AlloctionHoleInfo {
     pub ffi_type: Hole<FFIType>,
     pub place: Hole<ir::Place>,
 }
 
 // information held by a finished instantiation
 #[derive(Debug, Hash, Eq, PartialEq)]
-pub struct ScheduledInstantiationInfo {
+struct ScheduledInstantiationInfo {
     pub funclet: FuncletId,
     pub node: NodeId,
     pub place: ir::Place,
@@ -84,7 +84,7 @@ pub struct ScheduledInstantiationInfo {
 // this is mostly for documentation and error checking
 // there isn't anything formal about these classifications
 #[derive(Debug, Hash, Eq, PartialEq)]
-enum Operation {
+enum Opcode {
     // read from an allocation (e.g. to a value)
     Read,
     // write to an allocation
@@ -97,14 +97,14 @@ enum Operation {
 struct OperationInfo {
     pub node: NodeId,
     pub funclet: FuncletId,
-    pub operation: Operation
+    pub operation: Opcode
 }
 
 #[derive(Debug)]
 struct ScheduleScopeData {
     // structure to manage the explication information for the current scope
     // the rule is more-to-less specific, then go up to the next scope out
-    funclet_name: FuncletId,
+    name: FuncletId,
 
     // map from location information to an instantiation (if one exists)
     instantiations: HashMap<ScheduledInstantiationInfo, NodeId>,

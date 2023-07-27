@@ -15,7 +15,7 @@ impl<'context> Context<'context> {
     }
 
     // get the specification type of the value node (if known)
-    pub fn get_value_allocation(
+    pub fn get_spec_instantiation (
         &self,
         funclet: &FuncletId,
         node: &NodeId,
@@ -31,10 +31,10 @@ impl<'context> Context<'context> {
             .map(|f| &f.value_funclet)
     }
 
-    fn get_scoped<T, U, V>(&self, info: T, map: U) -> Option<&V>
+    fn get_scoped<'a, T, U, V>(&'a self, info: T, map: U) -> Option<&V>
     where
-        T: std::hash::Hash + PartialEq + Eq,
-        U: Fn(&ScheduleScopeData) -> HashMap<T, V>,
+        T: std::hash::Hash + PartialEq + Eq + 'a,
+        U: Fn(&ScheduleScopeData) -> &HashMap<T, V>,
     {
         // takes advantage of the invariant that vectors of a key remove that key when emptied
         for scope in self.scopes.iter().rev() {
@@ -48,8 +48,8 @@ impl<'context> Context<'context> {
         None
     }
 
-    // get an allocation of the spec node at the given location (if one exists)
-    pub fn get_type_allocation(
+    // get a reference of the spec node at the given location (if one exists)
+    pub fn get_type_ref(
         &self,
         funclet: FuncletId,
         node: NodeId,
@@ -61,7 +61,7 @@ impl<'context> Context<'context> {
             place,
             is_value: false,
         };
-        self.get_scoped(info, |s| s.instantiations)
+        self.get_scoped(info, |s| &s.instantiations)
     }
 
     // get a value instantiation for the spec node at the given location (if one exists)
@@ -77,51 +77,7 @@ impl<'context> Context<'context> {
             place,
             is_value: true,
         };
-        self.get_scoped(info, |s| s.instantiations)
-    }
-
-    // SKIP
-    pub fn get_first_available_allocation(
-        &self,
-        ffi_type: Hole<FFIType>,
-        place: Hole<ir::Place>,
-    ) -> Option<&NodeId> {
-        let info = AlloctionHoleInfo { ffi_type, place };
-        self.get_scoped(info, |s| s.available_allocations)
-            .map(|s| s.first().unwrap())
-    }
-
-    // SKIP
-    pub fn get_first_available_write(&self, funclet: FuncletId, node: NodeId) -> Option<&NodeId> {
-        let info = OperationInfo {
-            funclet,
-            node,
-            operation: Operation::Write,
-        };
-        self.get_scoped(info, |s| s.available_operations)
-            .map(|s| s.first().unwrap())
-    }
-
-    // SKIP
-    pub fn get_first_available_read(&self, funclet: FuncletId, node: NodeId) -> Option<&NodeId> {
-        let info = OperationInfo {
-            funclet,
-            node,
-            operation: Operation::Read,
-        };
-        self.get_scoped(info, |s| s.available_operations)
-            .map(|s| s.first().unwrap())
-    }
-
-    // SKIP
-    pub fn get_first_available_copy(&self, funclet: FuncletId, node: NodeId) -> Option<&NodeId> {
-        let info = OperationInfo {
-            funclet,
-            node,
-            operation: Operation::Copy,
-        };
-        self.get_scoped(info, |s| s.available_operations)
-            .map(|s| s.first().unwrap())
+        self.get_scoped(info, |s| &s.instantiations)
     }
 
     pub fn get_latest_explication_hole(&self) -> Option<&NodeId> {

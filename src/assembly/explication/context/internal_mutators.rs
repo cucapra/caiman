@@ -4,17 +4,25 @@ impl<'context> Context<'context> {
     pub fn get_spec_info_mut(&mut self, funclet: &FuncletId) -> &mut SpecFuncletData {
         match self.spec_explication_data.get_mut(funclet) {
             Some(data) => data,
-            None => { panic!("Unknown specification functlet {:?}", funclet); }
+            None => {
+                panic!("Unknown specification functlet {:?}", funclet);
+            }
+        }
+    }
+    pub fn get_latest_scope(&mut self) -> &mut ScheduleScopeData {
+        match self.scopes.last_mut() {
+            None => unreachable!("Should be in a scope when doing explication"),
+            Some(scope) => scope
         }
     }
 }
 
 // weird stuff that's not nice to autogenerate
 impl<'context> Context<'context> {
-    fn get_scoped_mut<T, U, V>(&mut self, info: T, map: U) -> Option<&mut V>
-        where
-            T: std::hash::Hash + PartialEq + Eq,
-            U: Fn(&ScheduleScopeData) -> HashMap<T, V>,
+    fn get_scoped_mut<'a, T, U, V>(&'a mut self, info: T, map: U) -> Option<&mut V>
+    where
+        T: std::hash::Hash + PartialEq + Eq + 'a,
+        U: Fn(&mut ScheduleScopeData) -> &mut HashMap<T, V>,
     {
         // takes advantage of the invariant that vectors of a key remove that key when emptied
         for scope in self.scopes.iter_mut().rev() {
@@ -48,7 +56,7 @@ impl<'context> Context<'context> {
             .map(|f| &mut f.value_funclet)
     }
 
-    pub fn get_type_allocation_mut (
+    pub fn get_type_allocation_mut(
         &mut self,
         funclet: FuncletId,
         node: NodeId,
@@ -60,10 +68,10 @@ impl<'context> Context<'context> {
             place,
             is_value: false,
         };
-        self.get_scoped_mut(info, |s| s.instantiations)
+        self.get_scoped_mut(info, |mut s| &mut s.instantiations)
     }
 
-    pub fn get_type_instantiation_mut (
+    pub fn get_type_instantiation_mut(
         &mut self,
         funclet: FuncletId,
         node: NodeId,
@@ -75,7 +83,7 @@ impl<'context> Context<'context> {
             place,
             is_value: true,
         };
-        self.get_scoped_mut(info, |s| s.instantiations)
+        self.get_scoped_mut(info, |mut s| &mut s.instantiations)
     }
 
     pub fn get_funclet_mut(&mut self, funclet_name: &FuncletId) -> &mut ast::Funclet {
@@ -125,5 +133,4 @@ impl<'context> Context<'context> {
         }
         None
     }
-
 }
