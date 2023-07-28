@@ -80,32 +80,17 @@ struct ScheduledInstantiationInfo {
     pub is_value: bool,
 }
 
-// names for each operation
-// should obviously be done with a macro, but I just don't care anymore tonight
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
-pub enum OpCode {
-    AllocTemporary,
-    Drop,
-    StaticSubAlloc,
-    StaticAlloc,
-    StaticDealloc,
-    ReadRef,
-    BorrowRef,
-    WriteRef,
-    LocalDoBuiltin,
-    LocalDoExternal,
-    LocalCopy,
-    BeginEncoding,
-    EncodeDoExternal,
-    EncodeCopy,
-    Submit,
-    SyncFence,
-    InlineJoin,
-    SerializedJoin,
-    DefaultJoin,
-    PromiseCaptures,
-    FulfillCaptures
+// could restrict by language, but this works for now
+macro_rules! make_op_codes {
+    ($($_lang:ident $name:ident ($($_arg:ident : $_arg_type:tt,)*) -> $_output:ident;)*) => {
+        #[derive(Debug, Hash, Eq, PartialEq)]
+        pub enum OpCode {
+            $($name,)*
+        }
+    };
 }
+
+with_operations!(make_op_codes);
 
 #[derive(Debug)]
 struct ScheduleScopeData {

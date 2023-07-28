@@ -68,11 +68,7 @@ impl<'context> Context<'context> {
     ) {
         self.get_latest_scope().add_operation(
             schedule_node,
-            OperationInfo {
-                node: spec_node,
-                funclet: spec_funclet,
-                operation: OpCode::Read,
-            },
+            operation
         )
     }
 
@@ -110,34 +106,25 @@ impl<'context> Context<'context> {
         panic!("No available resource for {:?} found", infos.first());
     }
 
-    pub fn pop_available_allocation(&mut self, ffi_type: FFIType, place: ir::Place) -> NodeId {
-        let mut infos = Vec::new();
-        // check both first
-        infos.push(AlloctionHoleInfo {
-            ffi_type: Some(ffi_type.clone()),
-            place: Some(place.clone()),
-        });
-        // arbitrary search order, ffi_type match before place
-        infos.push(AlloctionHoleInfo {
-            ffi_type: Some(ffi_type.clone()),
-            place: None,
-        });
-        infos.push(AlloctionHoleInfo {
-            ffi_type: None,
-            place: Some(place.clone()),
-        });
-        // then neither
-        infos.push(AlloctionHoleInfo {
-            ffi_type: None,
-            place: None,
-        });
-        self.pop_scoped(infos, |mut s| &mut s.available_allocations)
-    }
-
     // extremely boring search algorithms for each operation
     // since operations have a bunch of fields
     // the most direct way to find the first available operation is just to search
     //   for any that are either none or match the fields provided
     // serde is apparently how you "loop" over fields, so...
-    pub fn pop_available_operation(&mut self, operation:
+    // pub fn pop_available_operation(&mut self, operation:
 }
+
+macro_rules! operation_iniatializations {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        fn compare_ops(req_node: &ast::Node, target_node: &ast::Node) {
+//            match req_node {
+//                $($name)*
+//            }
+        }
+        impl Context {
+
+        }
+    };
+}
+
+with_operations!(operation_iniatializations);

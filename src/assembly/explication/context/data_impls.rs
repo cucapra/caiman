@@ -33,6 +33,20 @@ impl ScheduleScopeData {
     }
 }
 
+macro_rules! op_code_initialization {
+    ($($_lang:ident $name:ident ($($_arg:ident : $_arg_type:tt,)*) -> $_output:ident;)*) => {
+        impl OpCode {
+            pub fn new(node: &ast::Node) -> OpCode {
+                match node {
+                    $(ast::Node::$name { .. } => OpCode::$name,)*
+                }
+            }
+        }
+    };
+}
+
+with_operations!(op_code_initialization);
+
 impl MetaData {
     pub fn new() -> MetaData {
         MetaData { name_index: 0 }
