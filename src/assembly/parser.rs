@@ -1472,7 +1472,7 @@ impl CaimanAssemblyParser {
     fn alloc_temporary_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), alloc_temporary_sep, place_hole_sep(place),
-                type_hole(storage_type)] => (Some(name),
+                ffi_type_hole(storage_type)] => (Some(name),
                     ast::Node::AllocTemporary {
                         place,
                         storage_type
@@ -1494,7 +1494,7 @@ impl CaimanAssemblyParser {
     fn static_sub_alloc_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
-                type_hole_sep(storage_type), name_hole(node)] => (Some(name),
+                ffi_type_hole_sep(storage_type), name_hole(node)] => (Some(name),
                     ast::Node::StaticSubAlloc {
                         node: node.map(|s| NodeId(s)),
                         place,
@@ -1537,7 +1537,7 @@ impl CaimanAssemblyParser {
                 name_hole(source)] => (Some(name),
                     ast::Node::ReadRef {
                         source: source.map(|s| NodeId(s)),
-                        storage_type: storage_type.map(|t| ast::TypeId::FFI(t))
+                        storage_type
                     }
                 )
         ))
@@ -1545,7 +1545,7 @@ impl CaimanAssemblyParser {
 
     fn borrow_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), borrow_sep, type_hole_sep(storage_type),
+            [assign(name), borrow_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source)] => (Some(name),
                     ast::Node::BorrowRef {
                         source: source.map(|s| NodeId(s)),
@@ -1557,7 +1557,7 @@ impl CaimanAssemblyParser {
 
     fn write_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
-            [write_sep, type_hole_sep(storage_type),
+            [write_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source), name_hole(destination)] => (None,
                     ast::Node::WriteRef {
                         storage_type,

@@ -80,24 +80,31 @@ struct ScheduledInstantiationInfo {
     pub is_value: bool,
 }
 
-// classification of available operations on data
-// this is mostly for documentation and error checking
-// there isn't anything formal about these classifications
-#[derive(Debug, Hash, Eq, PartialEq)]
-enum Opcode {
-    // read from an allocation (e.g. to a value)
-    Read,
-    // write to an allocation
-    Write,
-    // copy between things of the same type
-    Copy
-}
-
-#[derive(Debug, Hash, Eq, PartialEq)]
-struct OperationInfo {
-    pub node: NodeId,
-    pub funclet: FuncletId,
-    pub operation: Opcode
+// names for each operation
+// should obviously be done with a macro, but I just don't care anymore tonight
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub enum OpCode {
+    AllocTemporary,
+    Drop,
+    StaticSubAlloc,
+    StaticAlloc,
+    StaticDealloc,
+    ReadRef,
+    BorrowRef,
+    WriteRef,
+    LocalDoBuiltin,
+    LocalDoExternal,
+    LocalCopy,
+    BeginEncoding,
+    EncodeDoExternal,
+    EncodeCopy,
+    Submit,
+    SyncFence,
+    InlineJoin,
+    SerializedJoin,
+    DefaultJoin,
+    PromiseCaptures,
+    FulfillCaptures
 }
 
 #[derive(Debug)]
@@ -113,10 +120,10 @@ struct ScheduleScopeData {
     // order of the slots doesn't formally matter, but for consistency in results, we use a vec
     available_allocations: HashMap<AlloctionHoleInfo, Vec<NodeId>>,
 
-    // map from (optional) funclet and node to a collection of "available" operations
-    // note that this is assumed that either the funclet or the nodeid must be None
-    // note also that any node returned may still need to be explicated
-    available_operations: HashMap<OperationInfo, Vec<NodeId>>,
+    // map from operation code to a vector of "available" operations
+    // note also that any node returned will still need explication
+    // once a node is returned, it's removed from the vector
+    available_operations: HashMap<OpCode, Vec<NodeId>>,
 
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections

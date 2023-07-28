@@ -47,7 +47,7 @@ def_assembly_id_type!(FunctionClassId);
 def_assembly_id_type!(NodeId);
 def_assembly_id_type!(LocalTypeId);
 
-pub type StorageTypeId = TypeId;
+pub type StorageTypeId = FFIType;
 
 // FFI stuff, rebuilt for a few reasons (mostly strings)
 

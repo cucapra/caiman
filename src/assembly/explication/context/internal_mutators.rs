@@ -40,7 +40,7 @@ impl<'context> Context<'context> {
 // THIS AND THE FOLLOWING CODE IS GENERATED WITH evil.py, DO NOT TOUCH
 
 impl<'context> Context<'context> {
-    pub fn get_value_allocation_mut(
+    pub fn get_spec_instantiation_mut (
         &mut self,
         funclet: &FuncletId,
         node: &NodeId,
@@ -56,7 +56,7 @@ impl<'context> Context<'context> {
             .map(|f| &mut f.value_funclet)
     }
 
-    pub fn get_type_allocation_mut(
+    pub fn get_type_ref_mut(
         &mut self,
         funclet: FuncletId,
         node: NodeId,
@@ -68,7 +68,7 @@ impl<'context> Context<'context> {
             place,
             is_value: false,
         };
-        self.get_scoped_mut(info, |mut s| &mut s.instantiations)
+        self.get_scoped_mut(info, |s| &mut s.instantiations)
     }
 
     pub fn get_type_instantiation_mut(
@@ -83,7 +83,7 @@ impl<'context> Context<'context> {
             place,
             is_value: true,
         };
-        self.get_scoped_mut(info, |mut s| &mut s.instantiations)
+        self.get_scoped_mut(info, |s| &mut s.instantiations)
     }
 
     pub fn get_funclet_mut(&mut self, funclet_name: &FuncletId) -> &mut ast::Funclet {
@@ -133,4 +133,5 @@ impl<'context> Context<'context> {
         }
         None
     }
+
 }

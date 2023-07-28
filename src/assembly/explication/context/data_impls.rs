@@ -20,10 +20,10 @@ impl ScheduleScopeData {
             .push(node);
     }
 
-    pub fn add_operation(&mut self, node: NodeId, info: OperationInfo) {
+    pub fn add_operation(&mut self, node: NodeId, operation: OpCode) {
         let result = self
             .available_operations
-            .entry(info)
+            .entry(operation)
             .or_insert_with(|| Vec::new())
             .push(node);
     }

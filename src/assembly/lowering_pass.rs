@@ -395,7 +395,7 @@ fn ir_node(node: &ast::Node, context: &mut Context) -> ir::Node {
             storage_type,
         } => ir::Node::AllocTemporary {
             place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
+            storage_type: ffi::TypeId(context.ffi_type_id(reject_hole(storage_type.as_ref()))),
         },
         ast::Node::Drop { node } => ir::Node::Drop {
             node: context.node_id(reject_hole(node.as_ref())),
@@ -407,7 +407,7 @@ fn ir_node(node: &ast::Node, context: &mut Context) -> ir::Node {
         } => ir::Node::StaticSubAlloc {
             node: context.node_id(reject_hole(node.as_ref())),
             place: reject_hole(place.as_ref()).clone(),
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
+            storage_type: ffi::TypeId(context.ffi_type_id(reject_hole(storage_type.as_ref()))),
         },
         ast::Node::StaticAlloc {
             spatial_operation,
@@ -439,14 +439,14 @@ fn ir_node(node: &ast::Node, context: &mut Context) -> ir::Node {
             storage_type,
             source,
         } => ir::Node::ReadRef {
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
+            storage_type: ffi::TypeId(context.ffi_type_id(reject_hole(storage_type.as_ref()))),
             source: context.node_id(reject_hole(source.as_ref())),
         },
         ast::Node::BorrowRef {
             storage_type,
             source,
         } => ir::Node::BorrowRef {
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
+            storage_type: ffi::TypeId(context.ffi_type_id(reject_hole(storage_type.as_ref()))),
             source: context.node_id(reject_hole(source.as_ref())),
         },
         ast::Node::WriteRef {
@@ -454,7 +454,7 @@ fn ir_node(node: &ast::Node, context: &mut Context) -> ir::Node {
             destination,
             source,
         } => ir::Node::WriteRef {
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
+            storage_type: ffi::TypeId(context.ffi_type_id(reject_hole(storage_type.as_ref()))),
             destination: context.node_id(reject_hole(destination.as_ref())),
             source: context.node_id(reject_hole(source.as_ref())),
         },

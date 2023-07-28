@@ -244,10 +244,10 @@ separated_buffer_space_node = { assign ~ separated_buffer_space_sep ~ n_sep ~ na
 //     scheduling
 
 alloc_temporary_sep = ${ "alloc-temporary" ~ sep }
-alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ type_hole }
+alloc_temporary_node = { assign ~ alloc_temporary_sep ~ place_hole_sep ~ ffi_type_hole }
 drop_node = ${ "drop" ~ sep ~ name_hole }
 static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
-static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
+static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ ffi_type_hole_sep ~ name_hole }
 static_alloc_sep = ${ "static-alloc" ~ sep }
 static_alloc_node = { assign ~ static_alloc_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
 static_dealloc_sep = ${ "static-dealloc" ~ sep }
@@ -256,9 +256,9 @@ static_dealloc_node = { assign ~ static_dealloc_sep ~ place_hole_sep ~ quotient_
 read_sep = ${ "read-ref" ~ sep }
 read_node = { assign ~ read_sep ~ ffi_type_hole_sep ~ name_hole }
 borrow_sep = ${ "borrow-ref" ~ sep }
-borrow_node = { assign ~ borrow_sep ~ type_hole_sep ~ name_hole }
+borrow_node = { assign ~ borrow_sep ~ ffi_type_hole_sep ~ name_hole }
 write_sep = ${ "write-ref" ~ sep }
-write_node = { write_sep ~ type_hole_sep ~ name_hole ~ "->" ~ name_hole }
+write_node = { write_sep ~ ffi_type_hole_sep ~ name_hole ~ "->" ~ name_hole }
 
 local_do_builtin_sep = ${ "local-do-builtin" ~ sep }
 local_do_builtin_node = { local_do_builtin_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box_single }

@@ -80,6 +80,7 @@ impl<'context> Context<'context> {
         self.get_scoped(info, |s| &s.instantiations)
     }
 
+    // SKIP
     pub fn get_latest_explication_hole(&self) -> Option<&NodeId> {
         for scope in self.scopes.iter().rev() {
             match &scope.explication_hole {

@@ -40,123 +40,104 @@ impl<'context> Context<'context> {
         place: ir::Place,
         is_value: bool,
     ) {
-        self.get_latest_scope().add_instantiation(schedule_node, ScheduledInstantiationInfo {
-            funclet: spec_funclet,
-            node: spec_node,
-            place,
-            is_value,
-        })
+        self.get_latest_scope().add_instantiation(
+            schedule_node,
+            ScheduledInstantiationInfo {
+                funclet: spec_funclet,
+                node: spec_node,
+                place,
+                is_value,
+            },
+        )
     }
 
     pub fn add_available_allocation(
         &mut self,
         node: NodeId,
         ffi_type: Hole<FFIType>,
-        place: Hole<ir::Place>
+        place: Hole<ir::Place>,
     ) {
-        self.get_latest_scope().add_allocation(node, AlloctionHoleInfo {
-            ffi_type,
-            place,
-        })
+        self.get_latest_scope()
+            .add_allocation(node, AlloctionHoleInfo { ffi_type, place })
     }
 
-    pub fn add_available_read (
+    pub fn add_available_operation (
         &mut self,
         schedule_node: NodeId,
-        spec_funclet: FuncletId,
-        spec_node: NodeId,
+        operation: OpCode,
     ) {
-        self.get_latest_scope().add_operation(schedule_node, OperationInfo {
-            node: spec_node,
-            funclet: spec_funclet,
-            operation: Opcode::Read,
-        })
+        self.get_latest_scope().add_operation(
+            schedule_node,
+            OperationInfo {
+                node: spec_node,
+                funclet: spec_funclet,
+                operation: OpCode::Read,
+            },
+        )
     }
 
-    pub fn add_available_write (
-        &mut self,
-        schedule_node: NodeId,
-        spec_funclet: FuncletId,
-        spec_node: NodeId,
-    ) {
-        self.get_latest_scope().add_operation(schedule_node, OperationInfo {
-            node: spec_node,
-            funclet: spec_funclet,
-            operation: Opcode::Write,
-        })
-    }
-
-    pub fn add_available_copy (
-        &mut self,
-        schedule_node: NodeId,
-        spec_funclet: FuncletId,
-        spec_node: NodeId,
-    ) {
-        self.get_latest_scope().add_operation(schedule_node, OperationInfo {
-            node: spec_node,
-            funclet: spec_funclet,
-            operation: Opcode::Copy,
-        })
-    }
-
-    pub fn add_explication_hole(
-        &mut self,
-        node: NodeId,
-    ) {
+    pub fn add_explication_hole(&mut self, node: NodeId) {
         self.get_latest_scope().add_explication_hole(node)
     }
 
-    fn pop_scoped<T, U, V>(&mut self, info: T, map: U) -> V
+    fn pop_scoped<T, U>(&mut self, infos: Vec<T>, map: U) -> NodeId
     where
         T: std::hash::Hash + PartialEq + Eq + Debug,
-        U: Fn(&mut ScheduleScopeData) -> &mut HashMap<T, Vec<V>>,
+        U: Fn(&mut ScheduleScopeData) -> &mut HashMap<T, Vec<NodeId>>,
     {
         for scope in self.scopes.iter_mut().rev() {
-            match map(scope).get_mut(&info) {
-                None => {}
-                Some(mut v) => {
-                    if v.len() > 0 {
-                        return v.pop().unwrap();
+            // the premise here is to look less-to-more specific (as given by infos order)
+            // then if nothing is found, return an explication hole
+            // finally, if that doesn't work, go up the stack
+            let data = map(scope);
+            for info in &infos {
+                match data.get_mut(info) {
+                    None => {}
+                    Some(mut v) => {
+                        if v.len() > 0 {
+                            return v.pop().unwrap();
+                        }
                     }
                 }
             }
+            match &scope.explication_hole {
+                None => {}
+                Some(node) => {
+                    return node.clone();
+                }
+            }
         }
-        panic!("No available resource for {:?} found", info);
+        panic!("No available resource for {:?} found", infos.first());
     }
 
-    pub fn pop_available_allocation(
-        &mut self,
-        ffi_type: Hole<FFIType>,
-        place: Hole<ir::Place>,
-    ) -> NodeId {
-        let info = AlloctionHoleInfo { ffi_type, place };
-        self.pop_scoped(info, |mut s| &mut s.available_allocations)
+    pub fn pop_available_allocation(&mut self, ffi_type: FFIType, place: ir::Place) -> NodeId {
+        let mut infos = Vec::new();
+        // check both first
+        infos.push(AlloctionHoleInfo {
+            ffi_type: Some(ffi_type.clone()),
+            place: Some(place.clone()),
+        });
+        // arbitrary search order, ffi_type match before place
+        infos.push(AlloctionHoleInfo {
+            ffi_type: Some(ffi_type.clone()),
+            place: None,
+        });
+        infos.push(AlloctionHoleInfo {
+            ffi_type: None,
+            place: Some(place.clone()),
+        });
+        // then neither
+        infos.push(AlloctionHoleInfo {
+            ffi_type: None,
+            place: None,
+        });
+        self.pop_scoped(infos, |mut s| &mut s.available_allocations)
     }
 
-    pub fn pop_available_write(&mut self, funclet: FuncletId, node: NodeId) -> NodeId {
-        let info = OperationInfo {
-            funclet,
-            node,
-            operation: Opcode::Write,
-        };
-        self.pop_scoped(info, |mut s| &mut s.available_operations)
-    }
-
-    pub fn pop_available_read(&mut self, funclet: FuncletId, node: NodeId) -> NodeId {
-        let info = OperationInfo {
-            funclet,
-            node,
-            operation: Opcode::Read,
-        };
-        self.pop_scoped(info, |mut s| &mut s.available_operations)
-    }
-
-    pub fn pop_available_copy(&mut self, funclet: FuncletId, node: NodeId) -> NodeId {
-        let info = OperationInfo {
-            funclet,
-            node,
-            operation: Opcode::Copy,
-        };
-        self.pop_scoped(info, |mut s| &mut s.available_operations)
-    }
+    // extremely boring search algorithms for each operation
+    // since operations have a bunch of fields
+    // the most direct way to find the first available operation is just to search
+    //   for any that are either none or match the fields provided
+    // serde is apparently how you "loop" over fields, so...
+    pub fn pop_available_operation(&mut self, operation:
 }
