@@ -116,10 +116,13 @@ impl<'context> Context<'context> {
 
 macro_rules! operation_iniatializations {
     ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
-        fn compare_ops(req_node: &ast::Node, target_node: &ast::Node) {
-//            match req_node {
-//                $($name)*
-//            }
+        fn compare_ops(req_node: &ast::Node, target_node: &ast::Node) -> bool {
+           match (req_node, target_node) {
+               $((ast::Node::$name { .. } , ast::Node::$name { .. })=> {
+
+               })*
+               _ => {}
+           }
         }
         impl Context {
 
