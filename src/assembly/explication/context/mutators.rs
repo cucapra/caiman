@@ -1,5 +1,6 @@
 use super::*;
 use crate::assembly::explication::util::*;
+use paste::paste;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
@@ -61,15 +62,9 @@ impl<'context> Context<'context> {
             .add_allocation(node, AlloctionHoleInfo { ffi_type, place })
     }
 
-    pub fn add_available_operation (
-        &mut self,
-        schedule_node: NodeId,
-        operation: OpCode,
-    ) {
-        self.get_latest_scope().add_operation(
-            schedule_node,
-            operation
-        )
+    pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
+        self.get_latest_scope()
+            .add_operation(schedule_node, operation)
     }
 
     pub fn add_explication_hole(&mut self, node: NodeId) {
@@ -105,27 +100,58 @@ impl<'context> Context<'context> {
         }
         panic!("No available resource for {:?} found", infos.first());
     }
+}
 
-    // extremely boring search algorithms for each operation
-    // since operations have a bunch of fields
-    // the most direct way to find the first available operation is just to search
-    //   for any that are either none or match the fields provided
-    // serde is apparently how you "loop" over fields, so...
-    // pub fn pop_available_operation(&mut self, operation:
+// extremely boring search algorithms for each operation
+// since operations have a bunch of fields
+// the most direct way to find the first available operation is just to search
+//   for any that are either none or match the fields provided
+// vectors are essentially unrolled as "arbitrary length fields"
+
+macro_rules! match_op_args {
+    ($arg1:ident $arg2:ident [$arg_type:ident]) => {
+        match_op_args!(@ $arg1 $arg2 true)
+    };
+    ($arg1:ident $arg2:ident $arg_type:ident) => {
+        match_op_args!(@ $arg1 $arg2 false)
+    };
+    (@ $arg1:ident $arg2:ident $nested:tt) => {
+        match ($arg1, $arg2) {
+            // matching each arrangement
+            // we want to check for more specific matches
+            (None, None) => { true },
+            (Some(_), None) => { false }
+            (None, Some(_)) => { true }
+            (Some(s1), Some(s2)) => { match_op_args!(@ $nested (s1, s2)) }
+        }
+    };
+    (@ false ($left:ident, $right:ident)) => {
+        $left == $right
+    };
+    (@ true ($left:ident, $right:ident)) => {
+        $left.iter().zip($right.iter())
+            .fold(true, |res, (val_one, val_two)| res &&
+                match_op_args!(@ val_one val_two false)
+        )
+    }
 }
 
 macro_rules! operation_iniatializations {
     ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
-        fn compare_ops(req_node: &ast::Node, target_node: &ast::Node) -> bool {
-           match (req_node, target_node) {
-               $((ast::Node::$name { .. } , ast::Node::$name { .. })=> {
-
-               })*
-               _ => {}
-           }
-        }
-        impl Context {
-
+        paste! {
+            fn compare_ops(req_node: &ast::Node, target_node: &ast::Node) -> bool {
+                match (req_node, target_node) {
+                    $((ast::Node::$name { $($arg : [<$arg _one>],)* },
+                    ast::Node::$name { $($arg : [<$arg _two>],)* }) => {
+                        let mut valid_node = true;
+                        $(
+                            valid_node = valid_node && match_op_args!([<$arg _one>] [<$arg _two>] $arg_type);
+                        )*
+                        valid_node
+                    })*
+                    _ => { unreachable!("Attempting to compare two nodes of different opcodes {:?} and {:?}", &req_node, &target_node)}
+                }
+            }
         }
     };
 }
