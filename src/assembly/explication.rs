@@ -9,40 +9,7 @@ use context::Context;
 fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) {
     for node in context.static_node_ids(funclet) {
         // we need to clone so we can potentially update the node in the context
-        let node_data = context.get_node(funclet, &node).clone();
-        match node_data {
-            ast::Node::AllocTemporary {
-                place,
-                storage_type,
-            } => {
-
-            }
-            ast::Node::Drop { .. } => {}
-            ast::Node::StaticSubAlloc { .. } => {}
-            ast::Node::StaticAlloc { .. } => {}
-            ast::Node::StaticDealloc { .. } => {}
-            ast::Node::ReadRef { .. } => {}
-            ast::Node::BorrowRef { .. } => {}
-            ast::Node::WriteRef { .. } => {}
-            ast::Node::LocalDoBuiltin {
-                operation,
-                inputs,
-                outputs,
-            } => {}
-            ast::Node::LocalDoExternal { .. } => {}
-            ast::Node::LocalCopy { .. } => {}
-            ast::Node::BeginEncoding { .. } => {}
-            ast::Node::EncodeDoExternal { .. } => {}
-            ast::Node::EncodeCopy { .. } => {}
-            ast::Node::Submit { .. } => {}
-            ast::Node::SyncFence { .. } => {}
-            ast::Node::InlineJoin { .. } => {}
-            ast::Node::SerializedJoin { .. } => {}
-            ast::Node::DefaultJoin => {}
-            ast::Node::PromiseCaptures { .. } => {}
-            ast::Node::FulfillCaptures { .. } => {}
-            _ => {}
-        }
+        explicator::explicate_node(node, funclet, context);
     }
 }
 

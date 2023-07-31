@@ -9,39 +9,52 @@ use crate::assembly::explication::context::Context;
 use crate::assembly::explication::util::*;
 use crate::{assembly, frontend, ir};
 
+fn read_tag (tag: &ast::Tag) {
+
+}
+
+fn explicate_phi_node(
+    node: &ast::NodeId,
+    funclet: &ast::FuncletId,
+    index: usize,
+    context: &mut Context
+) {
+    //context.add_instantiation();
+}
+
 // find, explicate, and return the id of an available node
 // panics if no node can be found
 // heavily recursive
-fn explicate_operation (
-    node: &ast::Node,
-    context: &mut Context,
-) -> RemoteNodeId {
-
-}
-
-pub fn resolve_allocation (
-    place: Hole<Place>,
-    ffi_type: Hole<FFIType>,
+pub fn explicate_node (
+    node: &ast::NodeId,
+    funclet: &ast::FuncletId,
     context: &mut Context,
 ) {
-    context.add_available_allocation(context.location_node().clone(), ffi_type, place);
-}
-
-// external_id is None if it's a builtin
-pub fn resolve_local_do (
-    operation: Hole<ast::Quotient>,
-    external_id: Option<Hole<ExternalFunctionId>>,
-    inputs: Hole<Vec<Hole<NodeId>>>,
-    outputs: Hole<Vec<Hole<NodeId>>>,
-    context: &mut Context
-) {
-    // context.add_available_write(context.location_node().clone())
-}
-
-pub fn resolve_read_ref (
-    source: &NodeId,
-    storage_type: Hole<FFIType>,
-    context: &mut Context
-) {
-
+    match context.get_node(funclet, node).clone() {
+        ast::Node::Phi { index } => {
+            explicate_phi_node(node, funclet, index.unwrap(), context);
+        }
+        ast::Node::AllocTemporary { .. } => {}
+        ast::Node::Drop { .. } => {}
+        ast::Node::StaticSubAlloc { .. } => {}
+        ast::Node::StaticAlloc { .. } => {}
+        ast::Node::StaticDealloc { .. } => {}
+        ast::Node::ReadRef { .. } => {}
+        ast::Node::BorrowRef { .. } => {}
+        ast::Node::WriteRef { .. } => {}
+        ast::Node::LocalDoBuiltin { .. } => {}
+        ast::Node::LocalDoExternal { .. } => {}
+        ast::Node::LocalCopy { .. } => {}
+        ast::Node::BeginEncoding { .. } => {}
+        ast::Node::EncodeDoExternal { .. } => {}
+        ast::Node::EncodeCopy { .. } => {}
+        ast::Node::Submit { .. } => {}
+        ast::Node::SyncFence { .. } => {}
+        ast::Node::InlineJoin { .. } => {}
+        ast::Node::SerializedJoin { .. } => {}
+        ast::Node::DefaultJoin => {}
+        ast::Node::PromiseCaptures { .. } => {}
+        ast::Node::FulfillCaptures { .. } => {}
+        _ => unreachable!("Unsupported node for explication {:?}", node)
+    };
 }
