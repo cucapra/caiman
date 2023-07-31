@@ -12,14 +12,6 @@ impl ScheduleScopeData {
         }
     }
 
-    pub fn add_allocation(&mut self, node: NodeId, info: AlloctionHoleInfo) {
-        let result = self
-            .available_allocations
-            .entry(info)
-            .or_insert_with(|| Vec::new())
-            .push(node);
-    }
-
     pub fn add_operation(&mut self, node: NodeId, operation: OpCode) {
         let result = self
             .available_operations

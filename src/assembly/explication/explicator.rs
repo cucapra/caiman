@@ -9,17 +9,15 @@ use crate::assembly::explication::context::Context;
 use crate::assembly::explication::util::*;
 use crate::{assembly, frontend, ir};
 
-// find an available allocation
-// fills in an allocation if needed
-// fn explicate_allocation (
-//     spec_funclet: &FuncletId,
-//     spec_node: &NodeId,
-//     place: &Place,
-//     storage_type: &TypeId,
-//     context: &mut Context,
-// ) -> RemoteNodeId {
-//
-// }
+// find, explicate, and return the id of an available node
+// panics if no node can be found
+// heavily recursive
+fn explicate_operation (
+    node: &ast::Node,
+    context: &mut Context,
+) -> RemoteNodeId {
+
+}
 
 pub fn resolve_allocation (
     place: Hole<Place>,

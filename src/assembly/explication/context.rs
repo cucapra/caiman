@@ -101,13 +101,10 @@ struct ScheduleScopeData {
     // map from location information to an instantiation (if one exists)
     instantiations: HashMap<ScheduledInstantiationInfo, NodeId>,
 
-    // map from (optional) place and ffi type to "available" allocation slots
-    // order of the slots doesn't formally matter, but for consistency in results, we use a vec
-    available_allocations: HashMap<AlloctionHoleInfo, Vec<NodeId>>,
-
     // map from operation code to a vector of "available" operations
     // note also that any node returned will still need explication
     // once a node is returned, it's removed from the vector
+    // note that an unfinished allocation can be readded later
     available_operations: HashMap<OpCode, Vec<NodeId>>,
 
     // most recently found multiline hole, if one exists in this scope
