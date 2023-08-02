@@ -6,11 +6,13 @@ use crate::assembly::ast;
 use crate::assembly::explication::util::reject_hole;
 use context::Context;
 
-fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) {
+fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) -> bool {
+    context.enter_funclet(funclet.clone());
     for node in context.static_node_ids(funclet) {
         // we need to clone so we can potentially update the node in the context
-        explicator::explicate_node(node, funclet, context);
+        explicator::explicate_node(funclet, &node, context);
     }
+    context.exit_funclet()
 }
 
 fn explicate_funclets(context: &mut Context) {

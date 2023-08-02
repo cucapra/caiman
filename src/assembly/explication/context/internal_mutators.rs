@@ -12,7 +12,7 @@ impl<'context> Context<'context> {
     pub fn get_latest_scope(&mut self) -> &mut ScheduleScopeData {
         match self.scopes.last_mut() {
             None => unreachable!("Should be in a scope when doing explication"),
-            Some(scope) => scope
+            Some(scope) => scope,
         }
     }
 }
@@ -40,7 +40,7 @@ impl<'context> Context<'context> {
 // THIS AND THE FOLLOWING CODE IS GENERATED WITH evil.py, DO NOT TOUCH
 
 impl<'context> Context<'context> {
-    pub fn get_spec_instantiation_mut (
+    pub fn get_spec_instantiation_mut(
         &mut self,
         funclet: &FuncletId,
         node: &NodeId,
@@ -50,9 +50,9 @@ impl<'context> Context<'context> {
             .and_then(|f| f.type_instantiations.get_mut(node))
     }
 
-    pub fn get_current_value_funclet_mut(&mut self) -> Option<&mut FuncletId> {
+    pub fn get_value_funclet_mut(&mut self, schedule: &FuncletId) -> Option<&mut FuncletId> {
         self.schedule_explication_data
-            .get_mut(&mut self.location.funclet.as_ref().unwrap())
+            .get_mut(schedule)
             .map(|f| &mut f.value_funclet)
     }
 
@@ -133,5 +133,4 @@ impl<'context> Context<'context> {
         }
         None
     }
-
 }

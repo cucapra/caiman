@@ -15,7 +15,7 @@ impl<'context> Context<'context> {
     }
 
     // get the specification type of the value node (if known)
-    pub fn get_spec_instantiation (
+    pub fn get_spec_instantiation(
         &self,
         funclet: &FuncletId,
         node: &NodeId,
@@ -25,9 +25,9 @@ impl<'context> Context<'context> {
             .and_then(|f| f.type_instantiations.get(node))
     }
 
-    pub fn get_current_value_funclet(&self) -> Option<&FuncletId> {
+    pub fn get_value_funclet(&self, schedule: &FuncletId) -> Option<&FuncletId> {
         self.schedule_explication_data
-            .get(&self.location.funclet.as_ref().unwrap())
+            .get(schedule)
             .map(|f| &f.value_funclet)
     }
 

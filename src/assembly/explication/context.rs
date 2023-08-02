@@ -18,8 +18,6 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub struct Context<'context> {
-    pub location: ast::RemoteNodeId,
-
     // holds the full program "as we go"
     program: DebugIgnore<&'context mut ast::Program>,
 
@@ -55,8 +53,8 @@ struct ScheduleFuncletData {
     timeline_funclet: FuncletId,
     spatial_funclet: FuncletId,
 
-    // map from the scheduled allocations to what they are instantiating (if known)
-    type_instantiations: HashMap<NodeId, RemoteNodeId>,
+    // map from the scheduled allocations to what things they are instantiating (if known)
+    type_instantiations: HashMap<NodeId, Vec<RemoteNodeId>>,
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"
@@ -74,10 +72,8 @@ struct AlloctionHoleInfo {
 struct ScheduledInstantiationInfo {
     pub funclet: FuncletId,
     pub node: NodeId,
-    pub place: ir::Place,
-    // specific check for differentiating between references and values for now
-    // bit janky, should be generalized to the valid types probably?
-    pub is_value: bool,
+    // values don't have a place, while references do
+    pub place: Option<ir::Place>,
 }
 
 // could restrict by language, but this works for now
@@ -98,8 +94,9 @@ struct ScheduleScopeData {
     // the rule is more-to-less specific, then go up to the next scope out
     name: FuncletId,
 
-    // map from location information to an instantiation (if one exists)
-    instantiations: HashMap<ScheduledInstantiationInfo, NodeId>,
+    // map from location information to all instantiations in this funclet
+    // note that there may be duplicates of the same node across scheduled instantiations
+    instantiations: HashMap<ScheduledInstantiationInfo, Vec<NodeId>>,
 
     // map from operation code to a vector of "available" operations
     // note also that any node returned will still need explication

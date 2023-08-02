@@ -4,32 +4,41 @@ use crate::assembly::ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
-use crate::ir::Place;
 use crate::assembly::explication::context::Context;
 use crate::assembly::explication::util::*;
+use crate::ir::Place;
 use crate::{assembly, frontend, ir};
 
-fn read_tag (tag: &ast::Tag) {
-
+fn tag_quotient(tag: &ast::Tag) -> &Hole<RemoteNodeId> {
+    match &tag.quot {
+        ast::Quotient::None => &None,
+        ast::Quotient::Node(n) => n,
+        ast::Quotient::Input(n) => n,
+        ast::Quotient::Output(n) => n,
+    }
 }
 
 fn explicate_phi_node(
     node: &ast::NodeId,
     funclet: &ast::FuncletId,
     index: usize,
-    context: &mut Context
+    context: &mut Context,
 ) {
-    //context.add_instantiation();
+    let current_funclet = context.get_funclet(funclet);
+    let argument = current_funclet.header.args.get(index).unwrap_or_else(|| {
+        panic!(
+            "Index {} out of bounds for header in funclet {:?}",
+            index, &funclet
+        )
+    });
+    let quotient = argument.tags
+    // context.add_instantiation();
 }
 
 // find, explicate, and return the id of an available node
 // panics if no node can be found
 // heavily recursive
-pub fn explicate_node (
-    node: &ast::NodeId,
-    funclet: &ast::FuncletId,
-    context: &mut Context,
-) {
+pub fn explicate_node(funclet: &ast::FuncletId, node: &ast::NodeId, context: &mut Context) {
     match context.get_node(funclet, node).clone() {
         ast::Node::Phi { index } => {
             explicate_phi_node(node, funclet, index.unwrap(), context);
@@ -55,6 +64,6 @@ pub fn explicate_node (
         ast::Node::DefaultJoin => {}
         ast::Node::PromiseCaptures { .. } => {}
         ast::Node::FulfillCaptures { .. } => {}
-        _ => unreachable!("Unsupported node for explication {:?}", node)
+        _ => unreachable!("Unsupported node for explication {:?}", node),
     };
 }

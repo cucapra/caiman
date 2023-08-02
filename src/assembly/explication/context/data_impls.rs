@@ -5,11 +5,7 @@ impl AlloctionHoleInfo {}
 impl ScheduleScopeData {
     pub fn add_instantiation(&mut self, schedule_node: NodeId, info: ScheduledInstantiationInfo) {
         let error_string = format!("Multiple instantiations of {:?} not supported", &info);
-        let result = self.instantiations.insert(info, schedule_node);
-        match result {
-            None => {}
-            Some(dup) => panic!(error_string),
-        }
+        self.instantiations.entry(info).or_insert(Vec::new()).push(schedule_node);
     }
 
     pub fn add_operation(&mut self, node: NodeId, operation: OpCode) {

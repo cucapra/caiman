@@ -5,13 +5,8 @@ use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
 impl<'context> Context<'context> {
-    pub fn update_node(&mut self, node: NodeId) {
-        self.location.node = Some(node);
-    }
-
     pub fn enter_funclet(&mut self, funclet: FuncletId) {
         // updates the location and the scope vec
-        self.location.funclet = Some(funclet.clone());
         let scope = ScheduleScopeData {
             name: funclet,
             instantiations: Default::default(),
@@ -21,13 +16,11 @@ impl<'context> Context<'context> {
         self.scopes.push(scope);
     }
 
-    pub fn end_current_funclet(&mut self) -> bool {
+    pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the last element of the scope
         match self.scopes.pop() {
             None => panic!("Cannot leave a scope when there is no scope to leave"),
-            Some(funclet) => {
-                self.location.funclet = Some(funclet.name.clone());
-            }
+            Some(_) => {}
         }
         self.scopes.len() == 0
     }
@@ -37,18 +30,24 @@ impl<'context> Context<'context> {
         schedule_node: NodeId,
         spec_funclet: FuncletId,
         spec_node: NodeId,
-        place: ir::Place,
-        is_value: bool,
+        place: Option<ir::Place>,
     ) {
-        self.get_latest_scope().add_instantiation(
-            schedule_node,
+        let scope = self.get_latest_scope();
+        scope.add_instantiation(
+            schedule_node.clone(),
             ScheduledInstantiationInfo {
-                funclet: spec_funclet,
-                node: spec_node,
+                funclet: spec_funclet.clone(),
+                node: spec_node.clone(),
                 place,
-                is_value,
             },
-        )
+        );
+        self.schedule_explication_data
+            .get_mut(&scope.name)
+            .unwrap()
+            .type_instantiations
+            .entry(schedule_node)
+            .or_insert(Vec::new())
+            .push(ast::RemoteNodeId { funclet: Some(spec_funclet), node: Some(spec_node) });
     }
 
     pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
@@ -93,7 +92,7 @@ impl<'context> Context<'context> {
                         Some((index, value)) => {
                             return RemoteNodeId {
                                 funclet: Some(scope.name.clone()),
-                                node: Some(operations.remove(index))
+                                node: Some(operations.remove(index)),
                             };
                         }
                     }
@@ -104,7 +103,7 @@ impl<'context> Context<'context> {
                 Some(node) => {
                     return RemoteNodeId {
                         funclet: Some(scope.name.clone()),
-                        node: Some(node.clone())
+                        node: Some(node.clone()),
                     };
                 }
             }
