@@ -12,6 +12,15 @@ use crate::{frontend, ir};
 use std::any::Any;
 use std::collections::HashMap;
 
+pub fn unwrap_ffi_type(local: ast::TypeId) -> ast::FFIType {
+    match local {
+        TypeId::FFI(f) => f,
+        TypeId::Local(_) => {
+            unreachable!("Attempted to treat local type {:?} as an FFI type", &local)
+        }
+    }
+}
+
 pub fn todo_hole<T>(h: Hole<T>) -> T {
     match h {
         Some(v) => v,

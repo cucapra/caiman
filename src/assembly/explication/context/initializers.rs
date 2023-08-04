@@ -5,7 +5,7 @@ impl<'context> Context<'context> {
     pub fn new(program: &'context mut ast::Program) -> Context<'context> {
         let mut context = Context {
             program: DebugIgnore(program),
-            location: Default::default(),
+            type_declarations: HashMap::new(),
             spec_explication_data: HashMap::new(),
             schedule_explication_data: HashMap::new(),
             scopes: Vec::new(),
@@ -50,10 +50,14 @@ impl<'context> Context<'context> {
     }
 
     fn initialize_declarations(&mut self) {
+        let mut type_decls = HashMap::new();
         let mut spec_funclets = Vec::new();
         let mut schedule_funclets = Vec::new();
-        for declaration in &mut self.program.declarations {
+        for declaration in &self.program.declarations {
             match declaration {
+                ast::Declaration::TypeDecl(ast::TypeDecl::Local(local)) => {
+                    type_decls.insert(local.name.clone(), LocalTypeDeclaration::new(&local.data));
+                }
                 ast::Declaration::Funclet(funclet) => {
                     let name = funclet.header.name.clone();
                     match &funclet.kind {
@@ -75,6 +79,7 @@ impl<'context> Context<'context> {
                 _ => {}
             }
         }
+        self.type_declarations = type_decls;
         for spec_funclet in spec_funclets {
             self.initialize_spec_funclet_info(spec_funclet);
         }

@@ -31,8 +31,16 @@ fn explicate_phi_node(
             index, &funclet
         )
     });
-    let quotient = argument.tags
-    // context.add_instantiation();
+    let mut remotes = Vec::new();
+    for tag in &argument.tags {
+        let quotient = tag_quotient(tag);
+        match quotient {
+            None => {}
+            Some(remote) => remotes.push(remote.clone())
+        }
+    }
+    let place = context.get_type_place(&argument.typ);
+    context.add_instantiation(node.clone(), remotes, place.cloned());
 }
 
 // find, explicate, and return the id of an available node

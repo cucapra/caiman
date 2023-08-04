@@ -28,26 +28,27 @@ impl<'context> Context<'context> {
     pub fn add_instantiation(
         &mut self,
         schedule_node: NodeId,
-        spec_funclet: FuncletId,
-        spec_node: NodeId,
+        mut spec_remotes: Vec<RemoteNodeId>,
         place: Option<ir::Place>,
     ) {
         let scope = self.get_latest_scope();
-        scope.add_instantiation(
-            schedule_node.clone(),
-            ScheduledInstantiationInfo {
-                funclet: spec_funclet.clone(),
-                node: spec_node.clone(),
-                place,
-            },
-        );
+        for spec_remote in spec_remotes {
+            scope.add_instantiation(
+                schedule_node.clone(),
+                ScheduledInstantiationInfo {
+                    funclet: spec_remote.funclet.as_ref().unwrap().clone(),
+                    node: spec_remote.node.as_ref().unwrap().clone(),
+                    place,
+                },
+            );
+        }
         self.schedule_explication_data
             .get_mut(&scope.name)
             .unwrap()
             .type_instantiations
             .entry(schedule_node)
             .or_insert(Vec::new())
-            .push(ast::RemoteNodeId { funclet: Some(spec_funclet), node: Some(spec_node) });
+            .append(&mut spec_remotes);
     }
 
     pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
@@ -59,7 +60,7 @@ impl<'context> Context<'context> {
         self.get_latest_scope().add_explication_hole(node)
     }
 
-    pub fn pop_best_match(&mut self, node: &ast::Node) -> RemoteNodeId {
+    pub fn pop_best_operation(&mut self, node: &ast::Node) -> RemoteNodeId {
         let opcode = OpCode::new(node);
         for scope in self.scopes.iter_mut().rev() {
             // the premise here is to look less-to-more specific (as given by infos order)

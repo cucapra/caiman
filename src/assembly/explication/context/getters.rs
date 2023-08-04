@@ -19,7 +19,7 @@ impl<'context> Context<'context> {
         &self,
         funclet: &FuncletId,
         node: &NodeId,
-    ) -> Option<&ast::RemoteNodeId> {
+    ) -> Option<&Vec<ast::RemoteNodeId>> {
         self.schedule_explication_data
             .get(funclet)
             .and_then(|f| f.type_instantiations.get(node))
@@ -48,36 +48,64 @@ impl<'context> Context<'context> {
         None
     }
 
-    // get a reference of the spec node at the given location (if one exists)
-    pub fn get_type_ref(
+    fn get_type_decl(&self, typ: &ast::TypeId) -> Option<&LocalTypeDeclaration> {
+        match typ {
+            TypeId::FFI(_) => None,
+            TypeId::Local(type_name) => {
+                Some(self.type_declarations.get(type_name).unwrap_or_else(
+                    || panic!("Unknown type_name {:?}", type_name)
+                ))
+            }
+        }
+    }
+
+    pub fn get_type_place(&self, typ: &ast::TypeId) -> Option<&ir::Place> {
+        self.get_type_decl(typ).and_then(|t| (&t.place).as_ref())
+    }
+
+    pub fn get_type_ffi(&self, typ: &ast::TypeId) -> Option<&ast::FFIType> {
+        self.get_type_decl(typ).and_then(|t| (&t.ffi).as_ref())
+    }
+
+    // get a value instantiation for the spec nodes at the given location
+    pub fn get_type_instantiations(
         &self,
         funclet: FuncletId,
         node: NodeId,
-        place: ir::Place,
-    ) -> Option<&NodeId> {
+        place: Option<ir::Place>,
+    ) -> Option<&Vec<NodeId>> {
         let info = ScheduledInstantiationInfo {
             funclet,
             node,
             place,
-            is_value: false,
         };
         self.get_scoped(info, |s| &s.instantiations)
     }
 
-    // get a value instantiation for the spec node at the given location (if one exists)
-    pub fn get_type_instantiation(
+    pub fn get_latest_type_instantiation(
         &self,
         funclet: FuncletId,
         node: NodeId,
-        place: ir::Place,
+        place: Option<ir::Place>,
     ) -> Option<&NodeId> {
+        // returns the latest type instantiation if one exists in any scope
         let info = ScheduledInstantiationInfo {
             funclet,
             node,
             place,
-            is_value: true,
         };
-        self.get_scoped(info, |s| &s.instantiations)
+        for scope in self.scopes.iter().rev() {
+            match scope.instantiations.get(&info) {
+                None => {}
+                Some(v) => {
+                    match v.first() {
+                        None => {},
+                        Some(n) => { return Some(n); }
+                    }
+                }
+            }
+        }
+        None
     }
 
     // SKIP

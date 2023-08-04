@@ -21,8 +21,12 @@ pub struct Context<'context> {
     // holds the full program "as we go"
     program: DebugIgnore<&'context mut ast::Program>,
 
+    // information about each type
+    type_declarations: HashMap<String, LocalTypeDeclaration>,
+
     // information found about a given value funclet
     spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
+
     // information found about a given schedule funclet
     schedule_explication_data: HashMap<FuncletId, ScheduleFuncletData>,
 
@@ -31,6 +35,15 @@ pub struct Context<'context> {
     scopes: Vec<ScheduleScopeData>,
 
     meta_data: MetaData,
+}
+
+#[derive(Debug)]
+struct LocalTypeDeclaration {
+    // if this (local) type has an associated place
+    pub place: Option<ir::Place>,
+
+    // if this type has an associated FFI Type
+    pub ffi: Option<FFIType>
 }
 
 // this information is static, and doesn't change as explication progresses
@@ -59,13 +72,6 @@ struct ScheduleFuncletData {
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"
 // so basically partially defined holes that the explicator can use
-
-// information held by an "available" allocation hole
-#[derive(Debug, Hash, Eq, PartialEq)]
-struct AlloctionHoleInfo {
-    pub ffi_type: Hole<FFIType>,
-    pub place: Hole<ir::Place>,
-}
 
 // information held by a finished instantiation
 #[derive(Debug, Hash, Eq, PartialEq)]
