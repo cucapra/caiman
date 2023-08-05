@@ -32,7 +32,7 @@ impl<'context> Context<'context> {
         place: Option<ir::Place>,
     ) {
         let scope = self.get_latest_scope();
-        for spec_remote in spec_remotes {
+        for spec_remote in &spec_remotes {
             scope.add_instantiation(
                 schedule_node.clone(),
                 ScheduledInstantiationInfo {
@@ -42,8 +42,9 @@ impl<'context> Context<'context> {
                 },
             );
         }
+        let name = scope.name.clone();
         self.schedule_explication_data
-            .get_mut(&scope.name)
+            .get_mut(&name)
             .unwrap()
             .type_instantiations
             .entry(schedule_node)
@@ -60,53 +61,57 @@ impl<'context> Context<'context> {
         self.get_latest_scope().add_explication_hole(node)
     }
 
-    pub fn pop_best_operation(&mut self, node: &ast::Node) -> RemoteNodeId {
+    pub fn pop_best_operation(&mut self, node: &ast::Node) -> Location {
         let opcode = OpCode::new(node);
-        for scope in self.scopes.iter_mut().rev() {
+        let mut best_found: Option<(usize, usize, usize)> = None;
+        for (scope_index, scope) in self.scopes.iter().enumerate().rev() {
             // the premise here is to look less-to-more specific (as given by infos order)
             // then if nothing is found, return an explication hole
             // finally, if that doesn't work, go up the stack
-            match scope.available_operations.get_mut(&opcode) {
+            match scope.available_operations.get(&opcode) {
                 None => {}
                 Some(operations) => {
                     // 0 --> index, 1 --> value
-                    let mut best_found = None;
                     for (index, comp_node) in operations.iter().enumerate() {
                         best_found = match compare_ops(node, self.get_node(&scope.name, comp_node))
                         {
                             None => best_found,
                             // this is the "magic heuristic"
-                            Some(new_value) => match best_found {
-                                None => Some((index, new_value)),
-                                Some((_, old_value)) => {
-                                    if new_value > old_value {
-                                        Some((index, new_value))
-                                    } else {
-                                        best_found
+                            Some(new_value) => {
+                                let new_found = Some((scope_index, index, new_value));
+                                match best_found {
+                                    None => new_found,
+                                    Some((_, _, old_value)) => {
+                                        if new_value > old_value {
+                                            new_found
+                                        } else {
+                                            best_found
+                                        }
                                     }
                                 }
-                            },
-                        }
-                    }
-                    match best_found {
-                        None => {}
-                        Some((index, value)) => {
-                            return RemoteNodeId {
-                                funclet: Some(scope.name.clone()),
-                                node: Some(operations.remove(index)),
-                            };
+                            }
                         }
                     }
                 }
             }
+        }
+        match best_found {
+            None => {}
+            Some((scope_index, index, value)) => {
+                let scope = &mut self.scopes[scope_index];
+                return Location {
+                    funclet: scope.name.clone(),
+                    node: scope.available_operations.get_mut(&opcode).unwrap().remove(index),
+                };
+            }
+        }
+        for scope in self.scopes.iter().rev() {
             match &scope.explication_hole {
                 None => {}
-                Some(node) => {
-                    return RemoteNodeId {
-                        funclet: Some(scope.name.clone()),
-                        node: Some(node.clone()),
-                    };
-                }
+                Some(hole) => { return Location {
+                    funclet: scope.name.clone(),
+                    node: hole.clone()
+                };}
             }
         }
         panic!("No available resource for resolving {:?} found", node);

@@ -44,7 +44,7 @@ impl<'context> Context<'context> {
         &mut self,
         funclet: &FuncletId,
         node: &NodeId,
-    ) -> Option<&mut ast::RemoteNodeId> {
+    ) -> Option<&mut Vec<ast::RemoteNodeId>> {
         self.schedule_explication_data
             .get_mut(funclet)
             .and_then(|f| f.type_instantiations.get_mut(node))
@@ -56,32 +56,16 @@ impl<'context> Context<'context> {
             .map(|f| &mut f.value_funclet)
     }
 
-    pub fn get_type_ref_mut(
+    pub fn get_type_instantiations_mut(
         &mut self,
         funclet: FuncletId,
         node: NodeId,
-        place: ir::Place,
-    ) -> Option<&mut NodeId> {
+        place: Option<ir::Place>,
+    ) -> Option<&mut Vec<NodeId>> {
         let info = ScheduledInstantiationInfo {
             funclet,
             node,
             place,
-            is_value: false,
-        };
-        self.get_scoped_mut(info, |s| &mut s.instantiations)
-    }
-
-    pub fn get_type_instantiation_mut(
-        &mut self,
-        funclet: FuncletId,
-        node: NodeId,
-        place: ir::Place,
-    ) -> Option<&mut NodeId> {
-        let info = ScheduledInstantiationInfo {
-            funclet,
-            node,
-            place,
-            is_value: true,
         };
         self.get_scoped_mut(info, |s| &mut s.instantiations)
     }
@@ -133,4 +117,5 @@ impl<'context> Context<'context> {
         }
         None
     }
+
 }

@@ -59,10 +59,12 @@ impl<'context> Context<'context> {
         }
     }
 
+    // SKIP
     pub fn get_type_place(&self, typ: &ast::TypeId) -> Option<&ir::Place> {
         self.get_type_decl(typ).and_then(|t| (&t.place).as_ref())
     }
 
+    // SKIP
     pub fn get_type_ffi(&self, typ: &ast::TypeId) -> Option<&ast::FFIType> {
         self.get_type_decl(typ).and_then(|t| (&t.ffi).as_ref())
     }
@@ -82,6 +84,7 @@ impl<'context> Context<'context> {
         self.get_scoped(info, |s| &s.instantiations)
     }
 
+    // SKIP
     pub fn get_latest_type_instantiation(
         &self,
         funclet: FuncletId,

@@ -1,6 +1,7 @@
 mod context;
 mod explicator;
 mod util;
+mod explicator_macros;
 
 use crate::assembly::ast;
 use crate::assembly::explication::util::reject_hole;
@@ -10,7 +11,7 @@ fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) -> bool {
     context.enter_funclet(funclet.clone());
     for node in context.static_node_ids(funclet) {
         // we need to clone so we can potentially update the node in the context
-        explicator::explicate_node(funclet, &node, context);
+        explicator::explicate_node(funclet.clone(), node, context);
     }
     context.exit_funclet()
 }

@@ -9,8 +9,15 @@ use crate::assembly::context::Context;
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::{frontend, ir};
+use serde_derive::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Location {
+    pub funclet: ast::FuncletId,
+    pub node: ast::NodeId,
+}
 
 pub fn unwrap_ffi_type(local: ast::TypeId) -> ast::FFIType {
     match local {
