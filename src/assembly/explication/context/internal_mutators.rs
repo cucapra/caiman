@@ -43,7 +43,7 @@ impl<'context> Context<'context> {
     pub fn get_spec_instantiation_mut(
         &mut self,
         funclet: &FuncletId,
-        node: &NodeId,
+        node: &CommandId,
     ) -> Option<&mut Vec<ast::RemoteNodeId>> {
         self.schedule_explication_data
             .get_mut(funclet)
@@ -59,9 +59,9 @@ impl<'context> Context<'context> {
     pub fn get_type_instantiations_mut(
         &mut self,
         funclet: FuncletId,
-        node: NodeId,
+        node: CommandId,
         place: Option<ir::Place>,
-    ) -> Option<&mut Vec<NodeId>> {
+    ) -> Option<&mut Vec<CommandId>> {
         let info = ScheduledInstantiationInfo {
             funclet,
             node,
@@ -70,37 +70,39 @@ impl<'context> Context<'context> {
         self.get_scoped_mut(info, |s| &mut s.instantiations)
     }
 
-    pub fn get_funclet_mut(&mut self, funclet_name: &FuncletId) -> &mut ast::Funclet {
+    pub fn get_funclet_mut(&mut self, funclet: &FuncletId) -> &mut ast::Funclet {
         for declaration in &mut self.program.declarations {
             match declaration {
                 ast::Declaration::Funclet(f) => {
-                    if &mut f.header.name == funclet_name {
+                    if &mut f.header.name == funclet {
                         return f;
                     }
                 }
                 _ => {}
             }
         }
-        panic!("Unknown funclet {:?}", funclet_name);
+        panic!("Unknown funclet {:?}", funclet);
     }
 
-    pub fn get_node_mut(&mut self, funclet_name: &FuncletId, node_name: &NodeId) -> &mut ast::Node {
-        for command in &mut self.get_funclet_mut(funclet_name).commands {
+    pub fn get_command_mut(&mut self, funclet: &FuncletId, name: &CommandId) -> &mut ast::Command {
+        for command in &mut self.get_funclet_mut(funclet).commands {
             match &mut command.name {
                 None => {}
                 Some(n) => {
-                    if n == node_name {
-                        match &mut command.command {
-                            ast::Command::Node(node) => {
-                                return node;
-                            }
-                            _ => unreachable!("Attempting to treat {} as a node", n.0),
-                        }
+                    if n == name {
+                        { return &mut command.command; }
                     }
                 }
             }
         }
-        panic!("Unknown node {:?} in funclet {:?}", node_name, funclet_name);
+        panic!("Unknown command {:?} in funclet {:?}", name, funclet);
+    }
+
+    pub fn get_node_mut(&mut self, funclet: &FuncletId, name: &CommandId) -> &mut ast::Node {
+        match self.get_command_mut(funclet, name) {
+            ast::Command::Node(n) => n,
+            _ => panic!("Attempted to treat command {:?} in funclet {:?} as a node", name, funclet)
+        }
     }
 
     pub fn get_tail_edge_mut(&mut self, funclet_name: &FuncletId) -> Option<&mut ast::TailEdge> {

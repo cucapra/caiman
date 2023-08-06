@@ -28,6 +28,7 @@ fn explicate_funclets(context: &mut Context) {
 //   seems cool, but probably too much work
 // arguably this pass should be on the lowered AST rather than on the frontend
 //   but debugging explication is gonna be even harder without names...
-pub fn explicate(mut program: &mut ast::Program) {
-    let context = Context::new(&mut program);
+pub fn explicate(program: &mut ast::Program) {
+    let mut context = Context::new(program);
+    explicate_funclets(&mut context);
 }

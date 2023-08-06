@@ -28,7 +28,7 @@ impl LocalTypeDeclaration {
 }
 
 impl ScheduleScopeData {
-    pub fn add_instantiation(&mut self, schedule_node: NodeId, info: ScheduledInstantiationInfo) {
+    pub fn add_instantiation(&mut self, schedule_node: CommandId, info: ScheduledInstantiationInfo) {
         let error_string = format!("Multiple instantiations of {:?} not supported", &info);
         self.instantiations
             .entry(info)
@@ -36,7 +36,7 @@ impl ScheduleScopeData {
             .push(schedule_node);
     }
 
-    pub fn add_operation(&mut self, node: NodeId, operation: OpCode) {
+    pub fn add_operation(&mut self, node: CommandId, operation: OpCode) {
         let result = self
             .available_operations
             .entry(operation)
@@ -44,7 +44,7 @@ impl ScheduleScopeData {
             .push(node);
     }
 
-    pub fn add_explication_hole(&mut self, node: NodeId) {
+    pub fn add_explication_hole(&mut self, node: CommandId) {
         self.explication_hole = Some(node);
     }
 }

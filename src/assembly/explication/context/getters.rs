@@ -18,7 +18,7 @@ impl<'context> Context<'context> {
     pub fn get_spec_instantiation(
         &self,
         funclet: &FuncletId,
-        node: &NodeId,
+        node: &CommandId,
     ) -> Option<&Vec<ast::RemoteNodeId>> {
         self.schedule_explication_data
             .get(funclet)
@@ -73,9 +73,9 @@ impl<'context> Context<'context> {
     pub fn get_type_instantiations(
         &self,
         funclet: FuncletId,
-        node: NodeId,
+        node: CommandId,
         place: Option<ir::Place>,
-    ) -> Option<&Vec<NodeId>> {
+    ) -> Option<&Vec<CommandId>> {
         let info = ScheduledInstantiationInfo {
             funclet,
             node,
@@ -88,9 +88,9 @@ impl<'context> Context<'context> {
     pub fn get_latest_type_instantiation(
         &self,
         funclet: FuncletId,
-        node: NodeId,
+        node: CommandId,
         place: Option<ir::Place>,
-    ) -> Option<&NodeId> {
+    ) -> Option<&CommandId> {
         // returns the latest type instantiation if one exists in any scope
         let info = ScheduledInstantiationInfo {
             funclet,
@@ -112,7 +112,7 @@ impl<'context> Context<'context> {
     }
 
     // SKIP
-    pub fn get_latest_explication_hole(&self) -> Option<&NodeId> {
+    pub fn get_latest_explication_hole(&self) -> Option<&CommandId> {
         for scope in self.scopes.iter().rev() {
             match &scope.explication_hole {
                 None => {}
@@ -124,37 +124,39 @@ impl<'context> Context<'context> {
         None
     }
 
-    pub fn get_funclet(&self, funclet_name: &FuncletId) -> &ast::Funclet {
+    pub fn get_funclet(&self, funclet: &FuncletId) -> &ast::Funclet {
         for declaration in &self.program.declarations {
             match declaration {
                 ast::Declaration::Funclet(f) => {
-                    if &f.header.name == funclet_name {
+                    if &f.header.name == funclet {
                         return f;
                     }
                 }
                 _ => {}
             }
         }
-        panic!("Unknown funclet {:?}", funclet_name);
+        panic!("Unknown funclet {:?}", funclet);
     }
 
-    pub fn get_node(&self, funclet_name: &FuncletId, node_name: &NodeId) -> &ast::Node {
-        for command in &self.get_funclet(funclet_name).commands {
+    pub fn get_command(&self, funclet: &FuncletId, name: &CommandId) -> &ast::Command {
+        for command in &self.get_funclet(funclet).commands {
             match &command.name {
                 None => {}
                 Some(n) => {
-                    if n == node_name {
-                        match &command.command {
-                            ast::Command::Node(node) => {
-                                return node;
-                            }
-                            _ => unreachable!("Attempting to treat {} as a node", n.0),
-                        }
+                    if n == name {
+                        { return &command.command; }
                     }
                 }
             }
         }
-        panic!("Unknown node {:?} in funclet {:?}", node_name, funclet_name);
+        panic!("Unknown command {:?} in funclet {:?}", name, funclet);
+    }
+
+    pub fn get_node(&self, funclet: &FuncletId, name: &CommandId) -> &ast::Node {
+        match self.get_command(funclet, name) {
+            ast::Command::Node(n) => n,
+            _ => panic!("Attempted to treat command {:?} in funclet {:?} as a node", name, funclet)
+        }
     }
 
     pub fn get_tail_edge(&self, funclet_name: &FuncletId) -> Option<&ast::TailEdge> {

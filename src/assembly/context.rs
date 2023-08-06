@@ -1,7 +1,7 @@
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, CommandId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
 use crate::assembly::table::Table;
@@ -27,14 +27,14 @@ pub struct Context {
 #[derive(Debug)]
 pub struct LocationNames {
     pub funclet_name: FuncletId,
-    pub node_name: Option<NodeId>,
+    pub node_name: Option<CommandId>,
 }
 
 #[derive(Debug)]
 pub struct NodeTable {
     // local names and return names such as [%out : i64] or whatever
-    pub local: Table<NodeId>,
-    pub returns: Table<NodeId>,
+    pub local: Table<CommandId>,
+    pub returns: Table<CommandId>,
 }
 
 #[derive(Debug, Clone)]
@@ -245,7 +245,7 @@ impl Context {
         }
     }
 
-    pub fn remote_node_id(&self, funclet: &FuncletId, var: &NodeId) -> usize {
+    pub fn remote_node_id(&self, funclet: &FuncletId, var: &CommandId) -> usize {
         match self.variable_map.get(funclet) {
             Some(f) => match f.local.get(var) {
                 Some(v) => v,
@@ -255,7 +255,7 @@ impl Context {
         }
     }
 
-    pub fn remote_return_id(&self, funclet: &FuncletId, var: &NodeId) -> usize {
+    pub fn remote_return_id(&self, funclet: &FuncletId, var: &CommandId) -> usize {
         match self.variable_map.get(funclet) {
             Some(f) => match f.returns.get_index(var) {
                 Some(v) => v,
@@ -265,7 +265,7 @@ impl Context {
         }
     }
 
-    pub fn node_from_id(&self, index: usize) -> NodeId {
+    pub fn node_from_id(&self, index: usize) -> CommandId {
         self.variable_map
             .get(&self.location.funclet_name)
             .unwrap()
@@ -275,7 +275,7 @@ impl Context {
             .clone()
     }
 
-    pub fn node_id(&self, var: &NodeId) -> usize {
+    pub fn node_id(&self, var: &CommandId) -> usize {
         let funclet = &self.location.funclet_name;
         match self.variable_map.get(funclet).unwrap().local.get_index(var) {
             Some(v) => v,
@@ -283,7 +283,7 @@ impl Context {
         }
     }
 
-    pub fn return_id(&self, var: &NodeId) -> usize {
+    pub fn return_id(&self, var: &CommandId) -> usize {
         let funclet = &self.location.funclet_name;
         match self
             .variable_map

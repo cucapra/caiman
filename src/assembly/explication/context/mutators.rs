@@ -27,7 +27,7 @@ impl<'context> Context<'context> {
 
     pub fn add_instantiation(
         &mut self,
-        schedule_node: NodeId,
+        schedule_node: CommandId,
         mut spec_remotes: Vec<RemoteNodeId>,
         place: Option<ir::Place>,
     ) {
@@ -52,13 +52,30 @@ impl<'context> Context<'context> {
             .append(&mut spec_remotes);
     }
 
-    pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
+    pub fn add_available_operation(&mut self, schedule_node: CommandId, operation: OpCode) {
         self.get_latest_scope()
             .add_operation(schedule_node, operation)
     }
 
-    pub fn add_explication_hole(&mut self, node: NodeId) {
+    pub fn add_explication_hole(&mut self, node: CommandId) {
         self.get_latest_scope().add_explication_hole(node)
+    }
+
+    // extract a given node from the program and return it
+    // leaves a hole behind, which must be filled
+    pub fn extract_node(&mut self, funclet: &FuncletId, name: &CommandId) -> ast::Node {
+        let mut commands = &mut self.get_funclet_mut(&funclet).commands;
+        for command in commands.iter_mut() {
+            if command.name.as_ref().unwrap() == name {
+                let mut to_return = ast::Command::ExplicationHole;
+                std::mem::swap(&mut to_return, &mut command.command);
+                match to_return {
+                    ast::Command::Node(n) => { return n; }
+                    unexpected => { panic!("Expected a node, got {:?}", unexpected); }
+                }
+            }
+        };
+        panic!("Unknown command {:?} in funclet {:?}", name, funclet);
     }
 
     pub fn pop_best_operation(&mut self, node: &ast::Node) -> Location {
@@ -101,17 +118,23 @@ impl<'context> Context<'context> {
                 let scope = &mut self.scopes[scope_index];
                 return Location {
                     funclet: scope.name.clone(),
-                    node: scope.available_operations.get_mut(&opcode).unwrap().remove(index),
+                    command: scope
+                        .available_operations
+                        .get_mut(&opcode)
+                        .unwrap()
+                        .remove(index),
                 };
             }
         }
         for scope in self.scopes.iter().rev() {
             match &scope.explication_hole {
                 None => {}
-                Some(hole) => { return Location {
-                    funclet: scope.name.clone(),
-                    node: hole.clone()
-                };}
+                Some(hole) => {
+                    return Location {
+                        funclet: scope.name.clone(),
+                        command: hole.clone(),
+                    };
+                }
             }
         }
         panic!("No available resource for resolving {:?} found", node);

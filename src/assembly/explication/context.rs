@@ -8,7 +8,7 @@ pub mod mutators;
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, CommandId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
 use crate::assembly::table::Table;
@@ -50,10 +50,10 @@ struct LocalTypeDeclaration {
 #[derive(Debug)]
 struct SpecFuncletData {
     // map of node dependencies for scheduling
-    node_dependencies: HashMap<NodeId, Vec<NodeId>>,
+    node_dependencies: HashMap<CommandId, Vec<CommandId>>,
 
     // tailedge dependencies for scheduling
-    tail_dependencies: Vec<NodeId>,
+    tail_dependencies: Vec<CommandId>,
 
     // stores connections of which schedules refer to this value funclet
     connections: Vec<FuncletId>,
@@ -67,7 +67,7 @@ struct ScheduleFuncletData {
     spatial_funclet: FuncletId,
 
     // map from the scheduled allocations to what things they are instantiating (if known)
-    type_instantiations: HashMap<NodeId, Vec<RemoteNodeId>>,
+    type_instantiations: HashMap<CommandId, Vec<RemoteNodeId>>,
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"
@@ -77,7 +77,7 @@ struct ScheduleFuncletData {
 #[derive(Debug, Hash, Eq, PartialEq)]
 struct ScheduledInstantiationInfo {
     pub funclet: FuncletId,
-    pub node: NodeId,
+    pub node: CommandId,
     // values don't have a place, while references do
     pub place: Option<ir::Place>,
 }
@@ -102,17 +102,17 @@ struct ScheduleScopeData {
 
     // map from location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
-    instantiations: HashMap<ScheduledInstantiationInfo, Vec<NodeId>>,
+    instantiations: HashMap<ScheduledInstantiationInfo, Vec<CommandId>>,
 
     // map from operation code to a vector of "available" operations
     // note also that any node returned will still need explication
     // once a node is returned, it's removed from the vector
     // note that an unfinished allocation can be readded later
-    available_operations: HashMap<OpCode, Vec<NodeId>>,
+    available_operations: HashMap<OpCode, Vec<CommandId>>,
 
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections
-    explication_hole: Option<NodeId>
+    explication_hole: Option<CommandId>
 }
 
 #[derive(Debug)]

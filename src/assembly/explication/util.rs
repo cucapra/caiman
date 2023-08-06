@@ -2,7 +2,7 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
+    ExternalFunctionId, FuncletId, FunctionClassId, CommandId, StorageTypeId, TypeId,
 };
 use crate::assembly::context;
 use crate::assembly::context::Context;
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Location {
     pub funclet: ast::FuncletId,
-    pub node: ast::NodeId,
+    pub command: ast::CommandId,
 }
 
 pub fn unwrap_ffi_type(local: ast::TypeId) -> ast::FFIType {

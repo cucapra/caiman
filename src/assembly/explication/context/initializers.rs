@@ -39,7 +39,7 @@ impl<'context> Context<'context> {
                     for command in f.commands.iter_mut() {
                         // give names to unnamed things (even tail edges, just in case)
                         command.name = match &command.name {
-                            None => Some(NodeId(self.meta_data.next_name())),
+                            None => Some(CommandId(self.meta_data.next_name())),
                             n => n.clone(),
                         };
                     }
@@ -116,7 +116,7 @@ impl<'context> Context<'context> {
         );
     }
 
-    fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
+    fn identify_node_deps(node: &ast::Node) -> Vec<CommandId> {
         let dependencies = match node {
             ast::Node::Phi { index } => {
                 vec![]
@@ -176,7 +176,7 @@ impl<'context> Context<'context> {
         dependencies
     }
 
-    fn identify_tailedge_deps(edge: &ast::TailEdge) -> Vec<NodeId> {
+    fn identify_tailedge_deps(edge: &ast::TailEdge) -> Vec<CommandId> {
         let dependencies = match edge {
             ast::TailEdge::DebugHole { inputs } => inputs.iter().map(|n| n.clone()).collect(),
             ast::TailEdge::Return { return_values } => reject_hole(return_values.as_ref())
