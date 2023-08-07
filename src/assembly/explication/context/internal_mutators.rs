@@ -43,7 +43,7 @@ impl<'context> Context<'context> {
     pub fn get_spec_instantiation_mut(
         &mut self,
         funclet: &FuncletId,
-        node: &CommandId,
+        node: &NodeId,
     ) -> Option<&mut Vec<ast::RemoteNodeId>> {
         self.schedule_explication_data
             .get_mut(funclet)
@@ -59,9 +59,9 @@ impl<'context> Context<'context> {
     pub fn get_type_instantiations_mut(
         &mut self,
         funclet: FuncletId,
-        node: CommandId,
+        node: NodeId,
         place: Option<ir::Place>,
-    ) -> Option<&mut Vec<CommandId>> {
+    ) -> Option<&mut Vec<NodeId>> {
         let info = ScheduledInstantiationInfo {
             funclet,
             node,
@@ -84,7 +84,7 @@ impl<'context> Context<'context> {
         panic!("Unknown funclet {:?}", funclet);
     }
 
-    pub fn get_command_mut(&mut self, funclet: &FuncletId, name: &CommandId) -> &mut ast::Command {
+    pub fn get_command_mut(&mut self, funclet: &FuncletId, name: &NodeId) -> &mut ast::Command {
         for command in &mut self.get_funclet_mut(funclet).commands {
             match &mut command.name {
                 None => {}
@@ -98,7 +98,7 @@ impl<'context> Context<'context> {
         panic!("Unknown command {:?} in funclet {:?}", name, funclet);
     }
 
-    pub fn get_node_mut(&mut self, funclet: &FuncletId, name: &CommandId) -> &mut ast::Node {
+    pub fn get_node_mut(&mut self, funclet: &FuncletId, name: &NodeId) -> &mut ast::Node {
         match self.get_command_mut(funclet, name) {
             ast::Command::Node(n) => n,
             _ => panic!("Attempted to treat command {:?} in funclet {:?} as a node", name, funclet)

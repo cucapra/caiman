@@ -1,6 +1,47 @@
 use super::*;
 use crate::assembly::explication::util::*;
 
+impl InstantiatedNodes {
+    pub fn new(specs: &SpecLanguages, remotes: Vec<RemoteNodeId>) -> InstantiatedNodes {
+        let mut result = InstantiatedNodes {
+            value: None,
+            timeline: None,
+            spatial: None,
+        };
+        for remote in remotes {
+            let funclet = remote.funclet.unwrap();
+            let node = remote.node.unwrap();
+            if &funclet == &specs.value {
+                if result.value.is_some() {
+                    panic!("Duplicate value node definitions in {:?}", remotes);
+                }
+                result.value = Some(node);
+            }
+            else if &funclet == &specs.timeline {
+                if result.timeline.is_some() {
+                    panic!("Duplicate value node definitions in {:?}", remotes);
+                }
+                result.timeline = Some(node);
+            }
+            else if &funclet == &specs.spatial {
+                if result.spatial.is_some() {
+                    panic!("Duplicate value node definitions in {:?}", remotes);
+                }
+                result.spatial = Some(node);
+            }
+        }
+        result
+    }
+
+    pub fn get(&self, spec: &SpecLanguage) -> Option<&NodeId> {
+        match spec {
+            SpecLanguage::Value => self.value.as_ref(),
+            SpecLanguage::Timeline => self.timeline.as_ref(),
+            SpecLanguage::Spatial => self.spatial.as_ref()
+        }
+    }
+}
+
 impl LocalTypeDeclaration {
     pub fn new(info: &ast::LocalTypeInfo) -> LocalTypeDeclaration {
         let (place, ffi) = match info {
@@ -28,7 +69,7 @@ impl LocalTypeDeclaration {
 }
 
 impl ScheduleScopeData {
-    pub fn add_instantiation(&mut self, schedule_node: CommandId, info: ScheduledInstantiationInfo) {
+    pub fn add_instantiation(&mut self, schedule_node: NodeId, info: ScheduledInstantiationInfo) {
         let error_string = format!("Multiple instantiations of {:?} not supported", &info);
         self.instantiations
             .entry(info)
@@ -36,7 +77,7 @@ impl ScheduleScopeData {
             .push(schedule_node);
     }
 
-    pub fn add_operation(&mut self, node: CommandId, operation: OpCode) {
+    pub fn add_operation(&mut self, node: NodeId, operation: OpCode) {
         let result = self
             .available_operations
             .entry(operation)
@@ -44,7 +85,7 @@ impl ScheduleScopeData {
             .push(node);
     }
 
-    pub fn add_explication_hole(&mut self, node: CommandId) {
+    pub fn add_explication_hole(&mut self, node: NodeId) {
         self.explication_hole = Some(node);
     }
 }

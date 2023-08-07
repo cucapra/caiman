@@ -1,8 +1,8 @@
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    CommandId, ExternalFunctionId, FFIType, FuncletId, FunctionClassId, RemoteNodeId,
-    StorageTypeId, TypeId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
+    TypeId,
 };
 use crate::assembly::explication::context::Context;
 use crate::assembly::explication::context::OpCode;
@@ -23,7 +23,7 @@ fn tag_quotient(tag: &ast::Tag) -> &Hole<RemoteNodeId> {
     quotient_id(&tag.quot)
 }
 
-fn read_phi_node(location: Location, index: usize, context: &mut Context) {
+fn read_phi_node(location: &Location, index: usize, context: &mut Context) -> ast::Node {
     let current_funclet = context.get_funclet(&location.funclet);
     let argument = current_funclet.header.args.get(index).unwrap_or_else(|| {
         panic!(
@@ -40,30 +40,39 @@ fn read_phi_node(location: Location, index: usize, context: &mut Context) {
         }
     }
     let place = context.get_type_place(&argument.typ);
-    context.add_instantiation(location.command, remotes, place.cloned());
+    context.add_instantiation(location.node.clone(), remotes, place.cloned());
+    ast::Node::Phi { index: Some(index) }
 }
 
 // the function that handles "ok, I have an output, now figure out how to get there"
-fn read_output(
-    location: Location,
-    operation: &Hole<ast::Quotient>,
-    inputs: &Hole<Vec<Hole<CommandId>>>,
-    output: &CommandId,
+// searches exactly the given spec language of the "location" funclet
+fn deduce_operation(
+    location: &Location,
+    known_outputs: &Vec<&NodeId>,
+    spec: &SpecLanguage,
     context: &mut Context,
-) {
+) -> RemoteNodeId {
+    let spec_funclet = context.get_spec_funclet(&location.funclet, spec);
+    let outputs = known_outputs
+        .iter()
+        .map(|output| context.get_spec_instantiation(&location.funclet, output, spec))
+        .collect();
+    let spec_node = context.get_matching_operation(&location.funclet, outputs);
+    RemoteNodeId {
+        funclet: Some(spec_funclet.clone()),
+        node: spec_node.cloned(),
+    }
 }
 
 fn explicate_local_do_builtin(
-    location: Location,
-    operation: &Hole<ast::Quotient>,
-    inputs: &Hole<Vec<Hole<CommandId>>>,
-    outputs: &Hole<Vec<Hole<CommandId>>>,
+    location: &Location,
+    operation: Hole<ast::Quotient>,
+    inputs: Hole<Vec<Hole<NodeId>>>,
+    outputs: Hole<Vec<Hole<NodeId>>>,
     context: &mut Context,
-) {
-    let remote_loc = operation.as_ref().map(|q| quotient_id(q));
+) -> ast::Node {
     let mut to_instantiate = Vec::new();
-    let mut available = false;
-    match outputs {
+    match &outputs {
         None => {}
         Some(v) => {
             for output in v {
@@ -72,30 +81,45 @@ fn explicate_local_do_builtin(
                     Some(n) => {
                         // if there's an allocation we're using that we don't yet know
                         // figure out what it instantiates
-                        to_instantiate
-                            .push((n, context.get_spec_instantiation(&location.funclet, n)));
+                        to_instantiate.push(n);
                     }
                 }
             }
         }
     };
 
+    let exp_operation = match operation {
+        Some(op) => op,
+        None => ast::Quotient::Node(Some(deduce_operation(
+            &location,
+            &to_instantiate,
+            &SpecLanguage::Value,
+            context,
+        ))),
+    };
+
+    let mut available = false;
     // if there's stuff left to explicate, make this available and return
     if available {
-        context.add_available_operation(location.command, OpCode::LocalDoBuiltin);
+        context.add_available_operation(location.node.clone(), OpCode::LocalDoBuiltin);
+    }
+    ast::Node::LocalDoBuiltin {
+        operation: Some(exp_operation),
+        inputs,
+        outputs,
     }
 }
 
 // initially setup a node that hasn't yet been read
 // distinct from explication in that we have no request to fulfill
 // panics if no node can be found during any step of the recursion
-fn explicate_node(location: Location, current: ast::Node, context: &mut Context) {
-    match current {
-        ast::Node::Phi { index } => {
-            read_phi_node(location, index.unwrap(), context);
-        }
+fn explicate_node(location: Location, context: &mut Context) {
+    let current = context.extract_node(&location.funclet, &location.node);
+    let result = match current {
+        ast::Node::Phi { index } => read_phi_node(&location, index.unwrap(), context),
         ast::Node::AllocTemporary { .. } => {
-            context.add_available_operation(location.command, OpCode::AllocTemporary)
+            context.add_available_operation(location.node.clone(), OpCode::AllocTemporary);
+            current
         }
         ast::Node::Drop { .. } => {
             todo!()
@@ -122,7 +146,7 @@ fn explicate_node(location: Location, current: ast::Node, context: &mut Context)
             operation,
             inputs,
             outputs,
-        } => explicate_local_do_builtin(location, operation, inputs, outputs, context),
+        } => explicate_local_do_builtin(&location, operation, inputs, outputs, context),
         ast::Node::LocalDoExternal { .. } => {
             todo!()
         }
@@ -161,20 +185,18 @@ fn explicate_node(location: Location, current: ast::Node, context: &mut Context)
         }
         _ => unreachable!("Unsupported node for explication {:?}", location),
     };
+    context.replace_node_hole(&location.funclet, &location.node, result);
 }
 
-pub fn explicate_command(funclet: ast::FuncletId, command: ast::CommandId, context: &mut Context) {
-    let location = Location { funclet, command };
-    match context.get_command(&location.funclet, &location.command) {
-        ast::Command::Hole => {
-            context.add_explication_hole(location.command.clone())
-        }
+pub fn explicate_command(funclet: ast::FuncletId, command: ast::NodeId, context: &mut Context) {
+    let location = Location {
+        funclet,
+        node: command,
+    };
+    match context.get_command(&location.funclet, &location.node) {
+        ast::Command::Hole => context.add_explication_hole(location.node.clone()),
         ast::Command::Node(n) => {
-            explicate_node(
-                location,
-                context.extract_node(&location.funclet, &location.command),
-                context,
-            );
+            explicate_node(location, context);
         }
         ast::Command::TailEdge(_) => {
             todo!()

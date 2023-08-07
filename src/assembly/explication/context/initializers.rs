@@ -39,7 +39,7 @@ impl<'context> Context<'context> {
                     for command in f.commands.iter_mut() {
                         // give names to unnamed things (even tail edges, just in case)
                         command.name = match &command.name {
-                            None => Some(CommandId(self.meta_data.next_name())),
+                            None => Some(NodeId(self.meta_data.next_name())),
                             n => n.clone(),
                         };
                     }
@@ -104,6 +104,12 @@ impl<'context> Context<'context> {
                 ast::Command::TailEdge(edge) => {
                     tail_dependencies = Context::identify_tailedge_deps(edge);
                 }
+                ast::Command::ExplicationHole => {
+                    panic!(
+                        "Encountered an explication hole when initializing the context in {:?}",
+                        funclet_name
+                    );
+                }
             }
         }
         self.spec_explication_data.insert(
@@ -116,7 +122,7 @@ impl<'context> Context<'context> {
         );
     }
 
-    fn identify_node_deps(node: &ast::Node) -> Vec<CommandId> {
+    fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
         let dependencies = match node {
             ast::Node::Phi { index } => {
                 vec![]
@@ -176,7 +182,7 @@ impl<'context> Context<'context> {
         dependencies
     }
 
-    fn identify_tailedge_deps(edge: &ast::TailEdge) -> Vec<CommandId> {
+    fn identify_tailedge_deps(edge: &ast::TailEdge) -> Vec<NodeId> {
         let dependencies = match edge {
             ast::TailEdge::DebugHole { inputs } => inputs.iter().map(|n| n.clone()).collect(),
             ast::TailEdge::Return { return_values } => reject_hole(return_values.as_ref())
@@ -203,24 +209,24 @@ impl<'context> Context<'context> {
         match &funclet.kind {
             ir::FuncletKind::ScheduleExplicit => match &funclet.header.binding {
                 ast::FuncletBinding::ScheduleBinding(binding) => {
-                    let value_funclet = reject_hole_clone(&binding.value);
-                    let timeline_funclet = reject_hole_clone(&binding.timeline);
-                    let spatial_funclet = reject_hole_clone(&binding.spatial);
-                    self.get_spec_info_mut(&value_funclet)
+                    let specs = SpecLanguages {
+                        value: reject_hole_clone(&binding.value),
+                        timeline: reject_hole_clone(&binding.timeline),
+                        spatial: reject_hole_clone(&binding.spatial),
+                    };
+                    self.get_spec_info_mut(&specs.value)
                         .connections
                         .push(funclet_name.clone());
-                    self.get_spec_info_mut(&timeline_funclet)
+                    self.get_spec_info_mut(&specs.timeline)
                         .connections
                         .push(funclet_name.clone());
-                    self.get_spec_info_mut(&spatial_funclet)
+                    self.get_spec_info_mut(&specs.spatial)
                         .connections
                         .push(funclet_name.clone());
                     self.schedule_explication_data.insert(
                         funclet_name,
                         ScheduleFuncletData {
-                            value_funclet,
-                            timeline_funclet,
-                            spatial_funclet,
+                            specs,
                             type_instantiations: Default::default(),
                         },
                     );

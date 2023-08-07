@@ -147,14 +147,14 @@ fn quotient_funclet(quot: &ast::Quotient, context: &mut Context) -> Option<ast::
 
 fn ir_external_gpu_resource(
     d: &ast::ExternalGpuFunctionResourceBinding,
-    input_args: &Vec<Option<ast::CommandId>>,
-    output_args: &Vec<Option<ast::CommandId>>,
+    input_args: &Vec<Option<ast::NodeId>>,
+    output_args: &Vec<Option<ast::NodeId>>,
     context: &mut Context,
 ) -> ffi::GpuKernelResourceBinding {
     fn local_name(
-        val: &ast::CommandId,
-        input_args: &Vec<Option<ast::CommandId>>,
-        output_args: &Vec<Option<ast::CommandId>>,
+        val: &ast::NodeId,
+        input_args: &Vec<Option<ast::NodeId>>,
+        output_args: &Vec<Option<ast::NodeId>>,
     ) -> usize {
         let mut index = 0;
         for arg in input_args {

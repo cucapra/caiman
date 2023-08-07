@@ -2,7 +2,7 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FuncletId, FunctionClassId, CommandId, StorageTypeId, TypeId,
+    ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
 use crate::assembly::context;
 use crate::assembly::context::Context;
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Location {
     pub funclet: ast::FuncletId,
-    pub command: ast::CommandId,
+    pub node: ast::NodeId,
 }
 
 pub fn unwrap_ffi_type(local: ast::TypeId) -> ast::FFIType {
@@ -72,14 +72,37 @@ where
     }
 }
 
-pub fn get_first<'a, T>(v: &'a Vec<T>, test: fn(&T) -> bool) -> Option<&'a T>
-where
-    T: Sized,
+pub fn assign_or_compare<T>(current: Option<T>, comparison: T) -> Option<T>
+where T : Eq + core::fmt::Debug
 {
-    for item in v {
-        if test(item) {
-            return Some(&item);
+    match current {
+        None => Some(comparison),
+        Some(value) => { assert_eq!(value, comparison); Some(value) }
+    }
+}
+
+// used for identifying which spec language to reason about in a given search
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum SpecLanguage {
+    Value,
+    Timeline,
+    Spatial
+}
+
+// struct for storing the triple of languages
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SpecLanguages {
+    pub value: FuncletId,
+    pub timeline: FuncletId,
+    pub spatial: FuncletId,
+}
+
+impl SpecLanguages {
+    pub fn get(&self, spec: &SpecLanguage) -> &FuncletId {
+        match spec {
+            SpecLanguage::Value => &self.value,
+            SpecLanguage::Timeline => &self.timeline,
+            SpecLanguage::Spatial => &self.spatial,
         }
     }
-    None
 }

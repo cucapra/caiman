@@ -27,8 +27,8 @@ impl<'context> Context<'context> {
 
     pub fn add_instantiation(
         &mut self,
-        schedule_node: CommandId,
-        mut spec_remotes: Vec<RemoteNodeId>,
+        schedule_node: NodeId,
+        spec_remotes: Vec<RemoteNodeId>,
         place: Option<ir::Place>,
     ) {
         let scope = self.get_latest_scope();
@@ -43,39 +43,61 @@ impl<'context> Context<'context> {
             );
         }
         let name = scope.name.clone();
-        self.schedule_explication_data
-            .get_mut(&name)
-            .unwrap()
+        let explication_data = self.schedule_explication_data.get_mut(&name).unwrap();
+        let instantiated = InstantiatedNodes::new(&explication_data.specs, spec_remotes);
+        explication_data
             .type_instantiations
-            .entry(schedule_node)
-            .or_insert(Vec::new())
-            .append(&mut spec_remotes);
+            .insert(schedule_node, instantiated);
     }
 
-    pub fn add_available_operation(&mut self, schedule_node: CommandId, operation: OpCode) {
+    pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
         self.get_latest_scope()
             .add_operation(schedule_node, operation)
     }
 
-    pub fn add_explication_hole(&mut self, node: CommandId) {
+    pub fn add_explication_hole(&mut self, node: NodeId) {
         self.get_latest_scope().add_explication_hole(node)
     }
 
     // extract a given node from the program and return it
     // leaves a hole behind, which must be filled
-    pub fn extract_node(&mut self, funclet: &FuncletId, name: &CommandId) -> ast::Node {
+    pub fn extract_node(&mut self, funclet: &FuncletId, name: &NodeId) -> ast::Node {
         let mut commands = &mut self.get_funclet_mut(&funclet).commands;
         for command in commands.iter_mut() {
             if command.name.as_ref().unwrap() == name {
                 let mut to_return = ast::Command::ExplicationHole;
                 std::mem::swap(&mut to_return, &mut command.command);
                 match to_return {
-                    ast::Command::Node(n) => { return n; }
-                    unexpected => { panic!("Expected a node, got {:?}", unexpected); }
+                    ast::Command::Node(n) => {
+                        return n;
+                    }
+                    unexpected => {
+                        panic!("Expected a node, got {:?}", unexpected);
+                    }
                 }
             }
-        };
+        }
         panic!("Unknown command {:?} in funclet {:?}", name, funclet);
+    }
+
+    pub fn replace_node_hole(&mut self, funclet: &FuncletId, name: &NodeId, node: ast::Node) {
+        let mut commands = &mut self.get_funclet_mut(&funclet).commands;
+        for command in commands.iter_mut() {
+            if command.name.as_ref().unwrap() == name {
+                match command.command {
+                    ast::Command::ExplicationHole => {}
+                    _ => {
+                        unreachable!("Can only replace previously extracted nodes");
+                    }
+                }
+                command.command = ast::Command::Node(node);
+                return;
+            }
+        }
+        panic!(
+            "No node {:?} found while attempting to fill an extracted hole",
+            name
+        );
     }
 
     pub fn pop_best_operation(&mut self, node: &ast::Node) -> Location {
@@ -118,7 +140,7 @@ impl<'context> Context<'context> {
                 let scope = &mut self.scopes[scope_index];
                 return Location {
                     funclet: scope.name.clone(),
-                    command: scope
+                    node: scope
                         .available_operations
                         .get_mut(&opcode)
                         .unwrap()
@@ -132,7 +154,7 @@ impl<'context> Context<'context> {
                 Some(hole) => {
                     return Location {
                         funclet: scope.name.clone(),
-                        command: hole.clone(),
+                        node: hole.clone(),
                     };
                 }
             }

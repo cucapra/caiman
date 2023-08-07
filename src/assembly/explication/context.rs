@@ -8,13 +8,14 @@ pub mod mutators;
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, CommandId, RemoteNodeId, StorageTypeId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
 use crate::assembly::table::Table;
 use crate::ir;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
+use crate::assembly::explication::util::*;
 
 #[derive(Debug)]
 pub struct Context<'context> {
@@ -49,25 +50,30 @@ struct LocalTypeDeclaration {
 // this information is static, and doesn't change as explication progresses
 #[derive(Debug)]
 struct SpecFuncletData {
-    // map of node dependencies for scheduling
-    node_dependencies: HashMap<CommandId, Vec<CommandId>>,
+    // map of direct node dependencies for scheduling
+    node_dependencies: HashMap<NodeId, Vec<NodeId>>,
 
     // tailedge dependencies for scheduling
-    tail_dependencies: Vec<CommandId>,
+    tail_dependencies: Vec<NodeId>,
 
     // stores connections of which schedules refer to this value funclet
     connections: Vec<FuncletId>,
 }
 
+#[derive(Clone, Debug)]
+pub struct InstantiatedNodes {
+    pub value: Option<NodeId>,
+    pub timeline: Option<NodeId>,
+    pub spatial: Option<NodeId>,
+}
+
 #[derive(Debug)]
 struct ScheduleFuncletData {
     // associated specification funclets
-    value_funclet: FuncletId,
-    timeline_funclet: FuncletId,
-    spatial_funclet: FuncletId,
+    specs: SpecLanguages,
 
     // map from the scheduled allocations to what things they are instantiating (if known)
-    type_instantiations: HashMap<CommandId, Vec<RemoteNodeId>>,
+    type_instantiations: HashMap<NodeId, InstantiatedNodes>,
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"
@@ -77,7 +83,7 @@ struct ScheduleFuncletData {
 #[derive(Debug, Hash, Eq, PartialEq)]
 struct ScheduledInstantiationInfo {
     pub funclet: FuncletId,
-    pub node: CommandId,
+    pub node: NodeId,
     // values don't have a place, while references do
     pub place: Option<ir::Place>,
 }
@@ -102,17 +108,17 @@ struct ScheduleScopeData {
 
     // map from location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
-    instantiations: HashMap<ScheduledInstantiationInfo, Vec<CommandId>>,
+    instantiations: HashMap<ScheduledInstantiationInfo, Vec<NodeId>>,
 
     // map from operation code to a vector of "available" operations
     // note also that any node returned will still need explication
     // once a node is returned, it's removed from the vector
     // note that an unfinished allocation can be readded later
-    available_operations: HashMap<OpCode, Vec<CommandId>>,
+    available_operations: HashMap<OpCode, Vec<NodeId>>,
 
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections
-    explication_hole: Option<CommandId>
+    explication_hole: Option<NodeId>
 }
 
 #[derive(Debug)]

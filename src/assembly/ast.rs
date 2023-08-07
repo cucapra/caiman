@@ -44,7 +44,7 @@ macro_rules! def_assembly_id_type {
 def_assembly_id_type!(FuncletId);
 def_assembly_id_type!(ExternalFunctionId);
 def_assembly_id_type!(FunctionClassId);
-def_assembly_id_type!(CommandId);
+def_assembly_id_type!(NodeId);
 def_assembly_id_type!(LocalTypeId);
 
 pub type StorageTypeId = FFIType;
@@ -107,15 +107,15 @@ pub enum TypeId {
 pub struct ExternalGpuFunctionResourceBinding {
     pub group: usize,
     pub binding: usize,
-    pub input: Option<CommandId>,
-    pub output: Option<CommandId>,
+    pub input: Option<NodeId>,
+    pub output: Option<NodeId>,
 }
 
 // keeping this idea around for the frontend, easier to reason about for tags
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
     pub funclet: Hole<FuncletId>,
-    pub node: Hole<CommandId>,
+    pub node: Hole<NodeId>,
 }
 
 impl Default for RemoteNodeId {
@@ -153,7 +153,7 @@ macro_rules! lookup_abstract_type_parser {
 	(Index) => { usize };
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { FunctionClassId };
-	(Operation) => { CommandId };
+	(Operation) => { NodeId };
 	(RemoteOperation) => { Quotient };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
@@ -221,18 +221,18 @@ pub enum TailEdge {
     // Always passes type checking, but fails codegen
     DebugHole {
         // Scalar nodes
-        inputs: Vec<CommandId>,
+        inputs: Vec<NodeId>,
         // Continuations
         //outputs : Box<[NodeId]>
     },
 
     // Common?
     Return {
-        return_values: Hole<Vec<Hole<CommandId>>>,
+        return_values: Hole<Vec<Hole<NodeId>>>,
     },
     Jump {
-        join: Hole<CommandId>,
-        arguments: Hole<Vec<Hole<CommandId>>>,
+        join: Hole<NodeId>,
+        arguments: Hole<Vec<Hole<NodeId>>>,
     },
 
     // Scheduling only
@@ -242,25 +242,25 @@ pub enum TailEdge {
         timeline_operation: Hole<Quotient>,
         spatial_operation: Hole<Quotient>,
         callee_funclet_id: Hole<FuncletId>,
-        callee_arguments: Hole<Vec<Hole<CommandId>>>,
-        continuation_join: Hole<CommandId>,
+        callee_arguments: Hole<Vec<Hole<NodeId>>>,
+        continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
         value_operation: Hole<Quotient>,
         timeline_operation: Hole<Quotient>,
         spatial_operation: Hole<Quotient>,
-        condition: Hole<CommandId>,
+        condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
-        callee_arguments: Hole<Vec<Hole<CommandId>>>,
-        continuation_join: Hole<CommandId>,
+        callee_arguments: Hole<Vec<Hole<NodeId>>>,
+        continuation_join: Hole<NodeId>,
     },
     ScheduleCallYield {
         value_operation: Hole<Quotient>,
         timeline_operation: Hole<Quotient>,
         spatial_operation: Hole<Quotient>,
         external_function_id: Hole<ExternalFunctionId>,
-        yielded_nodes: Hole<Vec<Hole<CommandId>>>,
-        continuation_join: Hole<CommandId>,
+        yielded_nodes: Hole<Vec<Hole<NodeId>>>,
+        continuation_join: Hole<NodeId>,
     },
 }
 
@@ -288,7 +288,7 @@ pub enum FuncletBinding {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FuncletArgument {
-    pub name: Option<CommandId>,
+    pub name: Option<NodeId>,
     pub typ: TypeId,
     pub tags: Vec<Tag>,
 }
@@ -313,7 +313,7 @@ pub enum Command {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NamedCommand {
-    pub name: Option<CommandId>,
+    pub name: Option<NodeId>,
     pub command: Command,
 }
 
@@ -387,7 +387,7 @@ pub enum ExternalFunctionKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalArgument {
-    pub name: Option<CommandId>,
+    pub name: Option<NodeId>,
     pub ffi_type: FFIType,
 }
 

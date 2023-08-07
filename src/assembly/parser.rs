@@ -12,7 +12,7 @@ use crate::{assembly, frontend, ir};
 use assembly::ast;
 use ast::Hole;
 use ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, CommandId, RemoteNodeId, StorageTypeId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
 use ir::ffi;
@@ -325,7 +325,7 @@ impl CaimanAssemblyParser {
                 match meta_map.get(&meta_name) {
                         Some(funclet) => Ok(ast::RemoteNodeId {
                             funclet: Some(funclet.clone()),
-                            node: Some(CommandId(node))
+                            node: Some(NodeId(node))
                         }),
                         None => Err(error)
                 }
@@ -347,13 +347,13 @@ impl CaimanAssemblyParser {
                 match meta_name_hole {
                     None => Ok(ast::RemoteNodeId {
                                 funclet: None,
-                                node: name_hole.map(|s| CommandId(s))
+                                node: name_hole.map(|s| NodeId(s))
                             }),
                     Some(meta_name) =>
                         match meta_map.get(&meta_name) {
                                 Some(funclet) => Ok(ast::RemoteNodeId {
                                     funclet: Some(funclet.clone()),
-                                    node: name_hole.map(|s| CommandId(s))
+                                    node: name_hole.map(|s| NodeId(s))
                                 }),
                                 None => Err(error)
                         }
@@ -416,8 +416,8 @@ impl CaimanAssemblyParser {
         input: Node,
     ) -> ParseResult<Box<dyn Fn(ast::FFIType) -> ast::FFIType>> {
         fn box_up<F>(f: &'static F) -> Box<dyn Fn(ast::FFIType) -> ast::FFIType>
-        where
-            F: Fn(Box<ast::FFIType>) -> ast::FFIType,
+            where
+                F: Fn(Box<ast::FFIType>) -> ast::FFIType,
         {
             Box::new(move |x| f(Box::new(x)))
         }
@@ -527,8 +527,8 @@ impl CaimanAssemblyParser {
         input: Node,
     ) -> ParseResult<Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>> {
         fn box_up<F>(f: &'static F) -> Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>
-        where
-            F: Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient,
+            where
+                F: Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient,
         {
             Box::new(move |x| f(x))
         }
@@ -710,49 +710,49 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn name_elements(input: Node) -> ParseResult<Vec<CommandId>> {
+    fn name_elements(input: Node) -> ParseResult<Vec<NodeId>> {
         Ok(match_nodes!(input.into_children();
-               [name(names)..] => names.map(|name| CommandId(name)).collect()
+               [name(names)..] => names.map(|name| NodeId(name)).collect()
         ))
     }
 
-    fn name_list(input: Node) -> ParseResult<Vec<CommandId>> {
+    fn name_list(input: Node) -> ParseResult<Vec<NodeId>> {
         Ok(match_nodes!(input.into_children();
             [name_elements(names)] => names,
-            [name(name)] => vec![CommandId(name)]
+            [name(name)] => vec![NodeId(name)]
         ))
     }
 
-    fn name_hole_elements(input: Node) -> ParseResult<Vec<Hole<CommandId>>> {
+    fn name_hole_elements(input: Node) -> ParseResult<Vec<Hole<NodeId>>> {
         Ok(match_nodes!(input.into_children();
-               [name_hole(names)..] => names.map(|name| name.map(|s| CommandId(s))).collect()
+               [name_hole(names)..] => names.map(|name| name.map(|s| NodeId(s))).collect()
         ))
     }
 
-    fn name_box(input: Node) -> ParseResult<Hole<Vec<Hole<CommandId>>>> {
+    fn name_box(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
             [name_hole_elements(lst)] => Some(lst),
             [hole] => None
         ))
     }
 
-    fn name_box_single(input: Node) -> ParseResult<Hole<Vec<Hole<CommandId>>>> {
+    fn name_box_single(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
             [name_box(b)] => b,
-            [name_hole(name)] => Some(vec![name.map(|s| CommandId(s))])
+            [name_hole(name)] => Some(vec![name.map(|s| NodeId(s))])
         ))
     }
 
-    fn name_call(input: Node) -> ParseResult<Hole<Vec<Hole<CommandId>>>> {
+    fn name_call(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
             [name_hole_elements(lst)] => Some(lst),
             [hole] => None
         ))
     }
 
-    fn assign(input: Node) -> ParseResult<ast::CommandId> {
+    fn assign(input: Node) -> ParseResult<ast::NodeId> {
         Ok(match_nodes!(input.into_children();
-            [name(name)] => CommandId(name)
+            [name(name)] => NodeId(name)
         ))
     }
 
@@ -800,15 +800,15 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn external_input(input: Node) -> ParseResult<CommandId> {
+    fn external_input(input: Node) -> ParseResult<NodeId> {
         Ok(match_nodes!(input.into_children();
-            [name(name)] => CommandId(name)
+            [name(name)] => NodeId(name)
         ))
     }
 
-    fn external_output(input: Node) -> ParseResult<CommandId> {
+    fn external_output(input: Node) -> ParseResult<NodeId> {
         Ok(match_nodes!(input.into_children();
-            [name(name)] => CommandId(name)
+            [name(name)] => NodeId(name)
         ))
     }
 
@@ -864,7 +864,7 @@ impl CaimanAssemblyParser {
     fn external_arg(input: Node) -> ParseResult<ast::ExternalArgument> {
         Ok(match_nodes!(input.into_children();
             [name(name), ffi_type(ffi_type)] =>
-                ast::ExternalArgument { name: Some(CommandId(name)), ffi_type },
+                ast::ExternalArgument { name: Some(NodeId(name)), ffi_type },
             [ffi_type(ffi_type)] => ast::ExternalArgument{ name: None, ffi_type }
         ))
     }
@@ -1038,7 +1038,7 @@ impl CaimanAssemblyParser {
         let error = error_hole(&input);
         Ok(match_nodes!(input.into_children();
             [name(name), typ(typ)] =>  ast::FuncletArgument {
-                    name: Some(CommandId(name)),
+                    name: Some(NodeId(name)),
                     typ,
                     tags: vec![]
                 },
@@ -1155,7 +1155,7 @@ impl CaimanAssemblyParser {
     fn schedule_arg(input: Node) -> ParseResult<ast::FuncletArgument> {
         Ok(match_nodes!(input.into_children();
             [name(name), schedule_typ(info)] => ast::FuncletArgument {
-                name: Some(CommandId(name)),
+                name: Some(NodeId(name)),
                 typ: info.1,
                 tags: info.0
             },
@@ -1297,7 +1297,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [join_sep, name_hole(join), name_box_single(arguments)] =>
                 ast::TailEdge::Jump {
-                    join: join.map(|s| CommandId(s)),
+                    join: join.map(|s| NodeId(s)),
                     arguments
                 }
         ))
@@ -1314,7 +1314,7 @@ impl CaimanAssemblyParser {
                     spatial_operation,
                     callee_funclet_id: callee_funclet_id.map(|s| FuncletId(s)),
                     callee_arguments,
-                    continuation_join: continuation_join.map(|s| CommandId(s))
+                    continuation_join: continuation_join.map(|s| NodeId(s))
                 }
         ))
     }
@@ -1328,7 +1328,7 @@ impl CaimanAssemblyParser {
                     value_operation,
                     timeline_operation,
                     spatial_operation,
-                    condition: condition.map(|s| CommandId(s)),
+                    condition: condition.map(|s| NodeId(s)),
                     callee_funclet_ids: callee_funclet_ids.map(
                         |v| v.into_iter().map(
                             |name| name.map(
@@ -1337,7 +1337,7 @@ impl CaimanAssemblyParser {
                         ).collect()
                     ),
                     callee_arguments,
-                    continuation_join: continuation_join.map(|s| CommandId(s))
+                    continuation_join: continuation_join.map(|s| NodeId(s))
                 }
         ))
     }
@@ -1353,7 +1353,7 @@ impl CaimanAssemblyParser {
                     spatial_operation,
                     external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
                     yielded_nodes,
-                    continuation_join: continuation_join.map(|s| CommandId(s))
+                    continuation_join: continuation_join.map(|s| NodeId(s))
                 }
         ))
     }
@@ -1373,7 +1373,7 @@ impl CaimanAssemblyParser {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
 
-    fn constant_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn constant_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), name_sep(type_id), constant_value(value)] => (Some(name),
                 ast::Node::Constant {
@@ -1384,18 +1384,18 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn extract_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn extract_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), extract_sep, name(node_id), n(index)] => (Some(name),
                 ast::Node::ExtractResult {
-                    node_id: Some(CommandId(node_id)),
+                    node_id: Some(NodeId(node_id)),
                     index: Some(index)
                 }
             )
         ))
     }
 
-    fn call_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn call_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         // will split apart later
         Ok(match_nodes!(input.into_children();
             [assign(name), call_sep, function_class_name(external_function_id),
@@ -1408,26 +1408,26 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn select_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn select_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), select_sep, name_sep(condition),
                 name_sep(true_case), name(false_case)] => (Some(name),
                     ast::Node::Select {
-                        condition: Some(CommandId(condition)),
-                        true_case: Some(CommandId(true_case)),
-                        false_case: Some(CommandId(false_case))
+                        condition: Some(NodeId(condition)),
+                        true_case: Some(NodeId(true_case)),
+                        false_case: Some(NodeId(false_case))
 
                     }
                 )
         ))
     }
 
-    fn encoding_event_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn encoding_event_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), encoding_event_sep, name_sep(local_past),
                 name_box(remote_local_pasts)] => (Some(name),
                     ast::Node::EncodingEvent {
-                        local_past: Some(CommandId(local_past)),
+                        local_past: Some(NodeId(local_past)),
                         remote_local_pasts
 
                     }
@@ -1435,41 +1435,41 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn submission_event_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn submission_event_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submission_event_sep, name(local_past)] => (Some(name),
                     ast::Node::SubmissionEvent {
-                            local_past: Some(CommandId(local_past))
+                            local_past: Some(NodeId(local_past))
                     }
                 )
         ))
     }
 
-    fn synchronization_event_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn synchronization_event_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submission_event_sep, name_sep(local_past),
                 name(remote_local_past)] => (Some(name),
                     ast::Node::SynchronizationEvent {
-                            local_past: Some(CommandId(local_past)),
-                            remote_local_past: Some(CommandId(remote_local_past))
+                            local_past: Some(NodeId(local_past)),
+                            remote_local_past: Some(NodeId(remote_local_past))
                     }
                 )
         ))
     }
 
-    fn separated_buffer_space_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn separated_buffer_space_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), separated_buffer_space_sep,
                 n_sep(count), name(space)] => (Some(name),
                     ast::Node::SeparatedBufferSpaces {
                             count: Some(count),
-                            space: Some(CommandId(space))
+                            space: Some(NodeId(space))
                     }
                 )
         ))
     }
 
-    fn alloc_temporary_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn alloc_temporary_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), alloc_temporary_sep, place_hole_sep(place),
                 ffi_type_hole(storage_type)] => (Some(name),
@@ -1481,22 +1481,22 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn drop_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn drop_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [name_hole(node)] => (None,
                 ast::Node::Drop {
-                    node: node.map(|s| CommandId(s))
+                    node: node.map(|s| NodeId(s))
                 }
             )
         ))
     }
 
-    fn static_sub_alloc_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn static_sub_alloc_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
                 ffi_type_hole_sep(storage_type), name_hole(node)] => (Some(name),
                     ast::Node::StaticSubAlloc {
-                        node: node.map(|s| CommandId(s)),
+                        node: node.map(|s| NodeId(s)),
                         place,
                         storage_type
                     }
@@ -1504,12 +1504,12 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn static_alloc_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn static_alloc_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_alloc_sep, place_hole_sep(place),
                 name_hole(node), n_list(sizes), quotient_hole(spatial_operation)] => (Some(name),
                     ast::Node::StaticAlloc {
-                        node: node.map(|s| CommandId(s)),
+                        node: node.map(|s| NodeId(s)),
                         place,
                         sizes,
                         spatial_operation
@@ -1518,7 +1518,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn static_dealloc_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn static_dealloc_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
                 quotient_hole(spatial_operation), name_box(nodes)] => (Some(name),
@@ -1531,44 +1531,44 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn read_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn read_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), read_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source)] => (Some(name),
                     ast::Node::ReadRef {
-                        source: source.map(|s| CommandId(s)),
+                        source: source.map(|s| NodeId(s)),
                         storage_type
                     }
                 )
         ))
     }
 
-    fn borrow_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn borrow_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), borrow_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source)] => (Some(name),
                     ast::Node::BorrowRef {
-                        source: source.map(|s| CommandId(s)),
+                        source: source.map(|s| NodeId(s)),
                         storage_type
                     }
                 )
         ))
     }
 
-    fn write_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn write_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [write_sep, ffi_type_hole_sep(storage_type),
                 name_hole(source), name_hole(destination)] => (None,
                     ast::Node::WriteRef {
                         storage_type,
-                        source: source.map(|s| CommandId(s)),
-                        destination: destination.map(|s| CommandId(s))
+                        source: source.map(|s| NodeId(s)),
+                        destination: destination.map(|s| NodeId(s))
                     }
                 )
         ))
     }
 
-    fn local_do_builtin_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn local_do_builtin_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [local_do_builtin_sep, quotient_hole(operation),
                 name_call(inputs), name_box_single(outputs)] => (None,
@@ -1581,7 +1581,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn local_do_external_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn local_do_external_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [local_do_external_sep, name_hole_sep(external_function_id),
                 quotient_hole(operation), name_call(inputs),
@@ -1596,18 +1596,18 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn local_copy_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn local_copy_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [local_copy_sep, name_hole(input), name_hole(output)] => (None,
                     ast::Node::LocalCopy {
-                        input: input.map(|s| CommandId(s)),
-                        output: output.map(|s| CommandId(s))
+                        input: input.map(|s| NodeId(s)),
+                        output: output.map(|s| NodeId(s))
                     }
                 )
         ))
     }
 
-    fn begin_encoding_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn begin_encoding_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), begin_encoding_sep, place_hole_sep(place),
                 quotient_hole(event), name_box(encoded),
@@ -1622,13 +1622,13 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn encode_do_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn encode_do_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [encode_do_sep, name_hole_sep(encoder), name_hole_sep(external_function_id),
                 quotient_hole(operation), name_call(inputs),
                 name_box_single(outputs)] => (None,
                     ast::Node::EncodeDoExternal {
-                        encoder: encoder.map(|s| CommandId(s)),
+                        encoder: encoder.map(|s| NodeId(s)),
                         external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
                         operation,
                         inputs,
@@ -1638,92 +1638,92 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn encode_copy_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn encode_copy_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [encode_copy_sep, name_hole_sep(encoder), name_hole(input),
                 name_hole(output)] => (None,
                     ast::Node::EncodeCopy {
-                        encoder: encoder.map(|s| CommandId(s)),
-                        input: input.map(|s| CommandId(s)),
-                        output: output.map(|s| CommandId(s))
+                        encoder: encoder.map(|s| NodeId(s)),
+                        input: input.map(|s| NodeId(s)),
+                        output: output.map(|s| NodeId(s))
                     }
                 )
         ))
     }
 
-    fn submit_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn submit_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submit_sep, name_hole_sep(encoder),
                 quotient_hole(event)] => (Some(name),
                     ast::Node::Submit {
-                        encoder: encoder.map(|s| CommandId(s)),
+                        encoder: encoder.map(|s| NodeId(s)),
                         event
                     }
                 )
         ))
     }
 
-    fn sync_fence_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn sync_fence_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [sync_fence_sep, name_hole_sep(fence), quotient_hole(event)] => (None,
                     ast::Node::SyncFence {
-                        fence: fence.map(|s| CommandId(s)),
+                        fence: fence.map(|s| NodeId(s)),
                         event
                     }
                 )
         ))
     }
 
-    fn inline_join_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn inline_join_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), inline_join_sep, name_hole_sep(funclet), name_box(captures),
                 name_hole(continuation)] => (Some(name),
                     ast::Node::InlineJoin {
                         funclet: funclet.map(|s| FuncletId(s)),
                         captures,
-                        continuation: continuation.map(|s| CommandId(s)),
+                        continuation: continuation.map(|s| NodeId(s)),
                     }
                 )
         ))
     }
 
-    fn serialized_join_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn serialized_join_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), serialized_join_sep, name_hole_sep(funclet),
                 name_box(captures), name_hole(continuation)] => (None,
                     ast::Node::SerializedJoin {
                         funclet: funclet.map(|s| FuncletId(s)),
                         captures,
-                        continuation: continuation.map(|s| CommandId(s)),
+                        continuation: continuation.map(|s| NodeId(s)),
                     }
                 )
         ))
     }
 
-    fn default_join_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn default_join_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name)] => (Some(name), ast::Node::DefaultJoin{})
         ))
     }
 
-    fn promise_captures_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn promise_captures_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), promise_captures_sep, n(count),
                 name_hole(continuation)] => (Some(name),
                     ast::Node::PromiseCaptures {
                         count: Some(count),
-                        continuation: continuation.map(|s| CommandId(s))
+                        continuation: continuation.map(|s| NodeId(s))
                     }
                 )
         ))
     }
 
-    fn fulfill_captures_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn fulfill_captures_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [assign(name), fulfill_captures_sep, name_hole_sep(continuation),
                 name_box(haves), name_box(needs)] => (Some(name),
                     ast::Node::FulfillCaptures {
-                        continuation: continuation.map(|s| CommandId(s)),
+                        continuation: continuation.map(|s| NodeId(s)),
                         haves,
                         needs
                     }
@@ -1731,7 +1731,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn value_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn value_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [constant_node(n)] => n,
             [extract_node(n)] => n,
@@ -1740,7 +1740,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn timeline_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn timeline_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [extract_node(n)] => n,
             [encoding_event_node(n)] => n,
@@ -1750,14 +1750,14 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn spatial_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn spatial_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [extract_node(n)] => n,
             [separated_buffer_space_node(n)] => n
         ))
     }
 
-    fn schedule_node(input: Node) -> ParseResult<(Option<CommandId>, ast::Node)> {
+    fn schedule_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
         Ok(match_nodes!(input.into_children();
             [alloc_temporary_node(n)] => n,
             [drop_node(n)] => n,

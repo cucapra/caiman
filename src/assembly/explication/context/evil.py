@@ -17,7 +17,7 @@ def main():
         started_function = False
         skip_next = False
         for line in f:
-            if line.strip() == '// SKIP':
+            if line.strip() == '// IMMUTABLE':
                 skip_next = True
             if current_function or re.search(r'\s*pub\s+fn\s+get', line):
                 current_function += line
