@@ -22,7 +22,10 @@ def main():
             if current_function or re.search(r'\s*pub\s+fn\s+get', line):
                 current_function += line
                 # allow for multiline arguments
+                old_started = started_function
                 started_function = line.count("{") > 0 or started_function
+                if old_started != started_function:
+                    print(f'copying function {line}')
                 open_count += line.count("{") # completely safe
                 open_count -= line.count("}") # completely legit
                 if not open_count and started_function: # hmhmmm, very good
