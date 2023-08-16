@@ -2,8 +2,8 @@ pub mod data_impls;
 pub mod getters;
 pub mod initializers;
 mod internal_mutators;
-pub mod static_getters;
 pub mod mutators;
+pub mod static_getters;
 
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
@@ -11,11 +11,11 @@ use crate::assembly::ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
     TypeId,
 };
+use crate::assembly::explication::util::*;
 use crate::assembly::table::Table;
 use crate::ir;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
-use crate::assembly::explication::util::*;
 
 #[derive(Debug)]
 pub struct Context<'context> {
@@ -44,7 +44,7 @@ struct LocalTypeDeclaration {
     pub place: Option<ir::Place>,
 
     // if this type has an associated FFI Type
-    pub ffi: Option<FFIType>
+    pub ffi: Option<FFIType>,
 }
 
 // this information is static, and doesn't change as explication progresses
@@ -118,7 +118,7 @@ struct ScheduleScopeData {
 
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections
-    explication_hole: Option<NodeId>
+    explication_hole: Option<NodeId>,
 }
 
 #[derive(Debug)]

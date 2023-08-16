@@ -17,14 +17,12 @@ impl InstantiatedNodes {
                     panic!(error);
                 }
                 result.value = Some(node);
-            }
-            else if &funclet == &specs.timeline {
+            } else if &funclet == &specs.timeline {
                 if result.timeline.is_some() {
                     panic!(error);
                 }
                 result.timeline = Some(node);
-            }
-            else if &funclet == &specs.spatial {
+            } else if &funclet == &specs.spatial {
                 if result.spatial.is_some() {
                     panic!(error);
                 }
@@ -38,7 +36,7 @@ impl InstantiatedNodes {
         match spec {
             SpecLanguage::Value => self.value.as_ref(),
             SpecLanguage::Timeline => self.timeline.as_ref(),
-            SpecLanguage::Spatial => self.spatial.as_ref()
+            SpecLanguage::Spatial => self.spatial.as_ref(),
         }
     }
 }

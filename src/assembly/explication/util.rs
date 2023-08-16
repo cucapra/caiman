@@ -73,11 +73,15 @@ where
 }
 
 pub fn assign_or_compare<T>(current: Option<T>, comparison: T) -> Option<T>
-where T : Eq + core::fmt::Debug
+where
+    T: Eq + core::fmt::Debug,
 {
     match current {
         None => Some(comparison),
-        Some(value) => { assert_eq!(value, comparison); Some(value) }
+        Some(value) => {
+            assert_eq!(value, comparison);
+            Some(value)
+        }
     }
 }
 
@@ -86,7 +90,7 @@ where T : Eq + core::fmt::Debug
 pub enum SpecLanguage {
     Value,
     Timeline,
-    Spatial
+    Spatial,
 }
 
 // struct for storing the triple of languages

@@ -416,8 +416,8 @@ impl CaimanAssemblyParser {
         input: Node,
     ) -> ParseResult<Box<dyn Fn(ast::FFIType) -> ast::FFIType>> {
         fn box_up<F>(f: &'static F) -> Box<dyn Fn(ast::FFIType) -> ast::FFIType>
-            where
-                F: Fn(Box<ast::FFIType>) -> ast::FFIType,
+        where
+            F: Fn(Box<ast::FFIType>) -> ast::FFIType,
         {
             Box::new(move |x| f(Box::new(x)))
         }
@@ -527,8 +527,8 @@ impl CaimanAssemblyParser {
         input: Node,
     ) -> ParseResult<Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>> {
         fn box_up<F>(f: &'static F) -> Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>
-            where
-                F: Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient,
+        where
+            F: Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient,
         {
             Box::new(move |x| f(x))
         }

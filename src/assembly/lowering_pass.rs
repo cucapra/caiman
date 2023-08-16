@@ -32,7 +32,7 @@ pub fn undefined<T>(h: Hole<T>) -> T {
     }
 }
 
-pub fn ffi_to_ffi(value:ast::FFIType, context: &mut Context) -> ffi::Type {
+pub fn ffi_to_ffi(value: ast::FFIType, context: &mut Context) -> ffi::Type {
     fn box_map(b: Box<[ast::FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
         b.iter()
             .map(|x| ffi::TypeId(context.ffi_type_id(x)))
@@ -42,56 +42,56 @@ pub fn ffi_to_ffi(value:ast::FFIType, context: &mut Context) -> ffi::Type {
         ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
     }
     match value {
-       ast::FFIType::F32 => ffi::Type::F32,
-       ast::FFIType::F64 => ffi::Type::F64,
-       ast::FFIType::U8 => ffi::Type::U8,
-       ast::FFIType::U16 => ffi::Type::U16,
-       ast::FFIType::U32 => ffi::Type::U32,
-       ast::FFIType::U64 => ffi::Type::U64,
-       ast::FFIType::USize => ffi::Type::USize,
-       ast::FFIType::I8 => ffi::Type::I8,
-       ast::FFIType::I16 => ffi::Type::I16,
-       ast::FFIType::I32 => ffi::Type::I32,
-       ast::FFIType::I64 => ffi::Type::I64,
-       ast::FFIType::Array {
+        ast::FFIType::F32 => ffi::Type::F32,
+        ast::FFIType::F64 => ffi::Type::F64,
+        ast::FFIType::U8 => ffi::Type::U8,
+        ast::FFIType::U16 => ffi::Type::U16,
+        ast::FFIType::U32 => ffi::Type::U32,
+        ast::FFIType::U64 => ffi::Type::U64,
+        ast::FFIType::USize => ffi::Type::USize,
+        ast::FFIType::I8 => ffi::Type::I8,
+        ast::FFIType::I16 => ffi::Type::I16,
+        ast::FFIType::I32 => ffi::Type::I32,
+        ast::FFIType::I64 => ffi::Type::I64,
+        ast::FFIType::Array {
             element_type,
             length,
         } => ffi::Type::Array {
             element_type: type_id(element_type, context),
             length,
         },
-       ast::FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
+        ast::FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
             element_type: type_id(element_type, context),
         },
-       ast::FFIType::Struct {
+        ast::FFIType::Struct {
             fields,
             byte_alignment,
             byte_size,
         } => todo!(),
-       ast::FFIType::Tuple(element_types) => ffi::Type::Tuple {
+        ast::FFIType::Tuple(element_types) => ffi::Type::Tuple {
             fields: box_map(element_types.into_boxed_slice(), context),
         },
-       ast::FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
+        ast::FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
             element_type: type_id(element_type, context),
         },
-       ast::FFIType::MutRef(element_type) => ffi::Type::MutRef {
+        ast::FFIType::MutRef(element_type) => ffi::Type::MutRef {
             element_type: type_id(element_type, context),
         },
-       ast::FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
+        ast::FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
             element_type: type_id(element_type, context),
         },
-       ast::FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
+        ast::FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
             element_type: type_id(element_type, context),
         },
-       ast::FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
+        ast::FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
             element_type: type_id(element_type, context),
         },
-       ast::FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
+        ast::FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
             element_type: type_id(element_type, context),
         },
-       ast::FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
-       ast::FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
-       ast::FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
+        ast::FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
+        ast::FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
+        ast::FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
             element_type: type_id(element_type, context),
         },
     }
@@ -350,9 +350,15 @@ fn ir_node(node: &ast::Node, context: &mut Context) -> ir::Node {
                 ast::TypeId::Local(name) => match context.native_type_map.get(name) {
                     None => panic!("{:?} must have a direct FFI storage type", type_id),
                     Some(t) => match t {
-                       ast::FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
-                       ast::FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
-                       ast::FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
+                        ast::FFIType::U64 => {
+                            ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap())
+                        }
+                        ast::FFIType::I32 => {
+                            ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap())
+                        }
+                        ast::FFIType::I64 => {
+                            ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap())
+                        }
                         _ => panic!("Unsupported constant type {:?}", type_id),
                     },
                 },

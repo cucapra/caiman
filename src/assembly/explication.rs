@@ -1,7 +1,7 @@
 mod context;
 mod explicator;
-mod util;
 mod explicator_macros;
+mod util;
 
 use crate::assembly::ast;
 use crate::assembly::explication::util::reject_hole;
