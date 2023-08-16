@@ -931,8 +931,8 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
                 }
                 tail_edge = Some(ir_tail_edge(tail, context));
             }
-            ast::Command::Hole => {
-                // do nothing, command holes aren't removed before lowering
+            _ => {
+                unreachable!("Unresolved Hole {:?}", command);
             }
         }
     }
@@ -1069,10 +1069,12 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
 pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
     explication::explicate(&mut program);
-    let mut context = Context::new(&program);
-    // dbg!(&context);
-    frontend::Definition {
-        version: ir_version(&program.version, &mut context),
-        program: ir_program(&program, &mut context),
-    }
+    dbg!(&program);
+    todo!();
+    // let mut context = Context::new(&program);
+    // // dbg!(&context);
+    // frontend::Definition {
+    //     version: ir_version(&program.version, &mut context),
+    //     program: ir_program(&program, &mut context),
+    // }
 }

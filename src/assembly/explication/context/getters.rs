@@ -14,11 +14,13 @@ impl<'context> Context<'context> {
         &self.program
     }
 
+    // IMMUTABLE
     pub fn get_spec_funclet(&self, funclet: &FuncletId, spec: &SpecLanguage) -> &FuncletId {
         self.get_schedule_info(funclet).specs.get(spec)
     }
 
     // get the specification type of the value node (if known)
+    // IMMUTABLE
     pub fn get_spec_instantiation(
         &self,
         funclet: &FuncletId,
@@ -37,6 +39,7 @@ impl<'context> Context<'context> {
             .map(|f| &f.specs.value)
     }
 
+    // IMMUTABLE
     fn get_scoped<'a, T, U, V>(&'a self, info: T, map: U) -> Option<&V>
     where
         T: std::hash::Hash + PartialEq + Eq + 'a,

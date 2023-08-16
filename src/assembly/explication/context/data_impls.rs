@@ -8,24 +8,25 @@ impl InstantiatedNodes {
             timeline: None,
             spatial: None,
         };
+        let error = format!("Duplicate value node definitions in {:?}", &remotes);
         for remote in remotes {
             let funclet = remote.funclet.unwrap();
             let node = remote.node.unwrap();
             if &funclet == &specs.value {
                 if result.value.is_some() {
-                    panic!("Duplicate value node definitions in {:?}", remotes);
+                    panic!(error);
                 }
                 result.value = Some(node);
             }
             else if &funclet == &specs.timeline {
                 if result.timeline.is_some() {
-                    panic!("Duplicate value node definitions in {:?}", remotes);
+                    panic!(error);
                 }
                 result.timeline = Some(node);
             }
             else if &funclet == &specs.spatial {
                 if result.spatial.is_some() {
-                    panic!("Duplicate value node definitions in {:?}", remotes);
+                    panic!(error);
                 }
                 result.spatial = Some(node);
             }

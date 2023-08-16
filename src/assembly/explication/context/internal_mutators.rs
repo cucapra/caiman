@@ -40,26 +40,21 @@ impl<'context> Context<'context> {
 // THIS AND THE FOLLOWING CODE IS GENERATED WITH evil.py, DO NOT TOUCH
 
 impl<'context> Context<'context> {
-    pub fn get_spec_funclet_mut(&mut self, funclet: &FuncletId, spec: &SpecLanguage) -> &mut FuncletId {
-        self.get_schedule_info_mut(funclet).specs.get_mut(spec)
-    }
-
-    pub fn get_spec_instantiation_mut(
-        &mut self,
-        funclet: &FuncletId,
-        node: &NodeId,
-        spec: &SpecLanguage,
-    ) -> Option<&mut NodeId> {
-        self.get_schedule_info_mut(funclet)
-            .type_instantiations
-            .get_mut(node)
-            .and_then(|inst| inst.get_mut(spec))
-    }
-
     pub fn get_value_funclet_mut(&mut self, schedule: &FuncletId) -> Option<&mut FuncletId> {
         self.schedule_explication_data
             .get_mut(schedule)
             .map(|f| &mut f.specs.value)
+    }
+
+    fn get_type_decl_mut(&mut self, typ: &ast::TypeId) -> Option<&mut LocalTypeDeclaration> {
+        match typ {
+            TypeId::FFI(_) => None,
+            TypeId::Local(type_name) => Some(
+                self.type_declarations
+                    .get_mut(type_name)
+                    .unwrap_or_else(|| panic!("Unknown type_name {:?}", type_name)),
+            ),
+        }
     }
 
     pub fn get_type_instantiations_mut(
@@ -74,6 +69,27 @@ impl<'context> Context<'context> {
             place,
         };
         self.get_scoped_mut(info, |s| &mut s.instantiations)
+    }
+
+    fn get_schedule_info_mut(&mut self, funclet: &FuncletId) -> &mut ScheduleFuncletData {
+        match self.schedule_explication_data.get_mut(funclet) {
+            Some(data) => data,
+            None => panic!("Unknown schedule funclet {:?}", funclet),
+        }
+    }
+
+    pub fn get_funclet_mut(&mut self, funclet: &FuncletId) -> &mut ast::Funclet {
+        for declaration in &mut self.program.declarations {
+            match declaration {
+                ast::Declaration::Funclet(f) => {
+                    if &mut f.header.name == funclet {
+                        return f;
+                    }
+                }
+                _ => {}
+            }
+        }
+        panic!("Unknown funclet {:?}", funclet);
     }
 
     pub fn get_command_mut(&mut self, funclet: &FuncletId, name: &NodeId) -> &mut ast::Command {

@@ -12,28 +12,29 @@ def main():
     getters : list[str] = []
 
     with open("getters.rs", 'r') as f:
-        current_function = ""
+        current_function = []
         open_count = 0
         started_function = False
         skip_next = False
+        print('copying the following functions: ')
         for line in f:
             if line.strip() == '// IMMUTABLE':
                 skip_next = True
-            if current_function or re.search(r'\s*pub\s+fn\s+get', line):
-                current_function += line
+            if current_function or re.search(r'\s*(pub\s+)?fn\s+get', line):
+                current_function.append(line)
                 # allow for multiline arguments
                 old_started = started_function
                 started_function = line.count("{") > 0 or started_function
                 if old_started != started_function:
-                    print(f'copying function {line}')
+                    print(f'  {current_function[0].strip()}')
                 open_count += line.count("{") # completely safe
                 open_count -= line.count("}") # completely legit
                 if not open_count and started_function: # hmhmmm, very good
                     if skip_next:
                         skip_next = False
                     else:
-                        getters.append(current_function)
-                    current_function = ""
+                        getters.append("".join(current_function))
+                    current_function = []
                     started_function = False
     
     print("Read getters succesfully")

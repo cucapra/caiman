@@ -105,4 +105,12 @@ impl SpecLanguages {
             SpecLanguage::Spatial => &self.spatial,
         }
     }
+
+    pub fn get_mut(&self, spec: &SpecLanguage) -> &FuncletId {
+        match spec {
+            SpecLanguage::Value => &self.value,
+            SpecLanguage::Timeline => &self.timeline,
+            SpecLanguage::Spatial => &self.spatial,
+        }
+    }
 }
