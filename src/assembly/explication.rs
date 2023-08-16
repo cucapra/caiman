@@ -9,7 +9,7 @@ use context::Context;
 
 fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) -> bool {
     context.enter_funclet(funclet.clone());
-    for node in context.static_node_ids(funclet) {
+    for node in context.static_command_ids(funclet) {
         // we need to clone so we can potentially update the node in the context
         explicator::explicate_command(funclet.clone(), node, context);
     }
@@ -31,4 +31,7 @@ fn explicate_funclets(context: &mut Context) {
 pub fn explicate(program: &mut ast::Program) {
     let mut context = Context::new(program);
     explicate_funclets(&mut context);
+
+    // dbg!(&context);
+    todo!()
 }
