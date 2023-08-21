@@ -57,20 +57,6 @@ impl<'context> Context<'context> {
         }
     }
 
-    pub fn get_type_instantiations_mut(
-        &mut self,
-        funclet: FuncletId,
-        node: NodeId,
-        place: Option<ir::Place>,
-    ) -> Option<&mut Vec<NodeId>> {
-        let info = ScheduledInstantiationInfo {
-            funclet,
-            node,
-            place,
-        };
-        self.get_scoped_mut(info, |s| &mut s.instantiations)
-    }
-
     fn get_schedule_info_mut(&mut self, funclet: &FuncletId) -> &mut ScheduleFuncletData {
         match self.schedule_explication_data.get_mut(funclet) {
             Some(data) => data,
@@ -132,4 +118,5 @@ impl<'context> Context<'context> {
         }
         None
     }
+
 }

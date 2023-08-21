@@ -13,7 +13,10 @@ fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) -> bool {
         // we need to clone so we can potentially update the node in the context
         explicator::explicate_command(funclet.clone(), node, context);
     }
-    context.exit_funclet()
+    dbg!(&context);
+    todo!();
+    // explicator::explicate_tail_edge(&funclet, context);
+    // context.exit_funclet()
 }
 
 fn explicate_funclets(context: &mut Context) {

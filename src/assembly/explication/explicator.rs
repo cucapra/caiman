@@ -48,63 +48,75 @@ fn read_phi_node(location: &Location, index: usize, context: &mut Context) -> as
 // searches exactly the given spec language of the "location" funclet
 fn deduce_operation(
     location: &Location,
-    known_outputs: &Vec<&NodeId>,
+    outputs: &Hole<Vec<Hole<NodeId>>>,
     spec: &SpecLanguage,
     context: &mut Context,
 ) -> RemoteNodeId {
     let spec_funclet = context.get_spec_funclet(&location.funclet, spec);
-    let outputs = known_outputs
-        .iter()
-        .map(|output| context.get_spec_instantiation(&location.funclet, output, spec))
-        .collect();
-    let spec_node = context.get_matching_operation(&location.funclet, outputs);
-    RemoteNodeId {
-        funclet: Some(spec_funclet.clone()),
-        node: spec_node.cloned(),
+    match outputs {
+        None => RemoteNodeId {
+            funclet: Some(spec_funclet.clone()),
+            node: None,
+        },
+        Some(outs) => {
+            let output_specs: Vec<Hole<&NodeId>> = outs
+                .iter()
+                .map(|hole| {
+                    hole.as_ref().and_then(|output| {
+                        context.get_spec_instantiation(&location.funclet, output, spec)
+                    })
+                })
+                .collect();
+            let spec_node = context.get_matching_operation(&location.funclet, output_specs);
+            RemoteNodeId {
+                funclet: Some(spec_funclet.clone()),
+                node: spec_node.cloned(),
+            }
+        }
     }
 }
 
 fn explicate_local_do_builtin(
     location: &Location,
-    operation: Hole<ast::Quotient>,
-    inputs: Hole<Vec<Hole<NodeId>>>,
-    outputs: Hole<Vec<Hole<NodeId>>>,
+    og_operation: Hole<ast::Quotient>,
+    og_inputs: Hole<Vec<Hole<NodeId>>>,
+    og_outputs: Hole<Vec<Hole<NodeId>>>,
     context: &mut Context,
 ) -> ast::Node {
-    let mut to_instantiate = Vec::new();
-    match &outputs {
-        None => {}
-        Some(v) => {
-            for output in v {
-                match output {
-                    None => {}
-                    Some(n) => {
-                        // if there's an allocation we're using that we don't yet know
-                        // figure out what it instantiates
-                        to_instantiate.push(n);
-                    }
+    let mut available = false;
+
+    let deduced_op = match og_operation {
+        Some(q) => {
+            let op =
+                quotient_id(&q).unwrap_or_else(|| panic!("Assuming operations must not be Nones"));
+            match &op.node {
+                Some(n) => op,
+                None => {
+                    // kinda stupid, we just ignore the funclet here
+                    // but that's ok I think cause a bad funclet will be caught by typechecking
+                    deduce_operation(&location, &og_outputs, &SpecLanguage::Value, context)
                 }
             }
         }
+        None => deduce_operation(&location, &og_outputs, &SpecLanguage::Value, context),
     };
 
-    let exp_operation = match operation {
-        Some(op) => op,
-        None => ast::Quotient::Node(Some(deduce_operation(
-            &location,
-            &to_instantiate,
-            &SpecLanguage::Value,
-            context,
-        ))),
+    available = available || deduced_op.node.is_none();
+
+    let outputs = match og_outputs {
+        None => {}
+        Some(ogo) => {
+            for
+        }
     };
 
-    let mut available = false;
     // if there's stuff left to explicate, make this available and return
     if available {
         context.add_available_operation(location.node.clone(), OpCode::LocalDoBuiltin);
     }
+    let operation = Some(ast::Quotient::Node(Some(deduced_op)));
     ast::Node::LocalDoBuiltin {
-        operation: Some(exp_operation),
+        operation,
         inputs,
         outputs,
     }
@@ -134,6 +146,7 @@ fn explicate_node(location: Location, context: &mut Context) {
             todo!()
         }
         ast::Node::ReadRef { .. } => {
+            // dbg!(&context.program());
             todo!()
         }
         ast::Node::BorrowRef { .. } => {
@@ -199,10 +212,27 @@ pub fn explicate_command(funclet: ast::FuncletId, command: ast::NodeId, context:
             explicate_node(location, context);
         }
         ast::Command::TailEdge(_) => {
-            todo!()
+            unreachable!("Tail Edges are explicated separately")
         }
         ast::Command::ExplicationHole => {
             unreachable!("Should not be attempting to explicate an explication hole as a command")
         }
     }
+}
+
+pub fn explicate_tail_edge(funclet: &ast::FuncletId, context: &mut Context) {
+    match context.get_tail_edge(funclet) {
+        None => {
+            todo!()
+        }
+        Some(tail_edge) => match tail_edge {
+            ast::TailEdge::DebugHole { .. } => {}
+            ast::TailEdge::Return { .. } => {}
+            ast::TailEdge::Jump { .. } => {}
+            ast::TailEdge::ScheduleCall { .. } => {}
+            ast::TailEdge::ScheduleSelect { .. } => {}
+            ast::TailEdge::ScheduleCallYield { .. } => {}
+        },
+    }
+    todo!()
 }

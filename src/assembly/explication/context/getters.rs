@@ -120,48 +120,6 @@ impl<'context> Context<'context> {
         self.get_type_decl(typ).and_then(|t| (&t.ffi).as_ref())
     }
 
-    // get a value instantiation for the spec nodes at the given location
-    pub fn get_type_instantiations(
-        &self,
-        funclet: FuncletId,
-        node: NodeId,
-        place: Option<ir::Place>,
-    ) -> Option<&Vec<NodeId>> {
-        let info = ScheduledInstantiationInfo {
-            funclet,
-            node,
-            place,
-        };
-        self.get_scoped(info, |s| &s.instantiations)
-    }
-
-    // IMMUTABLE
-    pub fn get_latest_type_instantiation(
-        &self,
-        funclet: FuncletId,
-        node: NodeId,
-        place: Option<ir::Place>,
-    ) -> Option<&NodeId> {
-        // returns the latest type instantiation if one exists in any scope
-        let info = ScheduledInstantiationInfo {
-            funclet,
-            node,
-            place,
-        };
-        for scope in self.scopes.iter().rev() {
-            match scope.instantiations.get(&info) {
-                None => {}
-                Some(v) => match v.first() {
-                    None => {}
-                    Some(n) => {
-                        return Some(n);
-                    }
-                },
-            }
-        }
-        None
-    }
-
     // IMMUTABLE
     pub fn get_latest_explication_hole(&self) -> Option<&NodeId> {
         for scope in self.scopes.iter().rev() {

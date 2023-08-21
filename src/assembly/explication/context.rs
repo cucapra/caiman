@@ -53,6 +53,11 @@ struct SpecFuncletData {
     // map of direct node dependencies for scheduling
     node_dependencies: HashMap<NodeId, Vec<NodeId>>,
 
+    // type information derived from dependencies (only filled in for value funclets)
+    // technically this can be derived from the nodes lazily
+    // but it's slow enough recursing repeatedly when explicating to wanna do it up-front I guess
+    deduced_types: HashMap<NodeId, Vec<ast::TypeId>>,
+
     // tailedge dependencies for scheduling
     tail_dependencies: Vec<NodeId>,
 
@@ -79,19 +84,10 @@ struct ScheduleFuncletData {
 // NOTE: we use "available" here to mean "either not filled or not used yet"
 // so basically partially defined holes that the explicator can use
 
-// information held by a finished instantiation
-#[derive(Debug, Hash, Eq, PartialEq)]
-struct ScheduledInstantiationInfo {
-    pub funclet: FuncletId,
-    pub node: NodeId,
-    // values don't have a place, while references do
-    pub place: Option<ir::Place>,
-}
-
 // could restrict by language, but this works for now
 macro_rules! make_op_codes {
     ($($_lang:ident $name:ident ($($_arg:ident : $_arg_type:tt,)*) -> $_output:ident;)*) => {
-        #[derive(Debug, Hash, Eq, PartialEq)]
+        #[derive(Clone, Debug, Hash, Eq, PartialEq)]
         pub enum OpCode {
             $($name,)*
         }
@@ -108,7 +104,7 @@ struct ScheduleScopeData {
 
     // map from location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
-    instantiations: HashMap<ScheduledInstantiationInfo, Vec<NodeId>>,
+    instantiations: HashMap<Location, Vec<(ir::Place, NodeId)>>,
 
     // map from operation code to a vector of "available" operations
     // note also that any node returned will still need explication

@@ -68,20 +68,21 @@ impl LocalTypeDeclaration {
 }
 
 impl ScheduleScopeData {
-    pub fn add_instantiation(&mut self, schedule_node: NodeId, info: ScheduledInstantiationInfo) {
-        let error_string = format!("Multiple instantiations of {:?} not supported", &info);
+    pub fn add_instantiation(&mut self, schedule_node: NodeId, location: Location, place: ir::Place) {
         self.instantiations
-            .entry(info)
+            .entry(location)
             .or_insert(Vec::new())
-            .push(schedule_node);
+            .push((place, schedule_node));
     }
 
     pub fn add_operation(&mut self, node: NodeId, operation: OpCode) {
-        let result = self
+        let vec = self
             .available_operations
             .entry(operation)
-            .or_insert_with(|| Vec::new())
-            .push(node);
+            .or_insert_with(|| Vec::new());
+        // safety check that the algorithm isn't reinserting operations
+        assert!(!vec.contains(&node));
+        vec.push(node);
     }
 
     pub fn add_explication_hole(&mut self, node: NodeId) {

@@ -13,7 +13,7 @@ use serde_derive::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Location {
     pub funclet: ast::FuncletId,
     pub node: ast::NodeId,

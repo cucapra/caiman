@@ -27,7 +27,6 @@ impl<'context> Context<'context> {
     // the command names should never be changed, but to be safe
     pub fn static_command_ids(&self, funclet: &ast::FuncletId) -> Vec<NodeId> {
         let mut result = Vec::new();
-        let mut tail_edge = None;
         for command in &self.get_funclet(funclet).commands {
             match &command.command {
                 ast::Command::Node(_) => {
@@ -36,18 +35,9 @@ impl<'context> Context<'context> {
                 ast::Command::Hole => {
                     result.push(command.name.as_ref().unwrap().clone());
                 }
-                ast::Command::TailEdge(_) => {
-                    if tail_edge.is_some() {
-                        panic!("Multiple tail edges found for {:?}", funclet);
-                    }
-                    tail_edge = Some(command.name.as_ref().unwrap().clone());
-                }
+                ast::Command::TailEdge(_) => {}
                 ast::Command::ExplicationHole => unreachable!(),
             }
-        }
-        match tail_edge {
-            None => {} // no error because this might be a hole
-            Some(edge) => result.push(edge),
         }
         result
     }
