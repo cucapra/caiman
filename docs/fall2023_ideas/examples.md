@@ -1,4 +1,4 @@
-# Benchmark Ideas
+# Example Ideas
 
 The first step for any project we've proposed is going to be to write some
 simple examples in Caiman.  Strictly speaking benchmarks in WGPU or really any
@@ -15,8 +15,9 @@ writing one "easy" program and one "medium" program, and we can talk about
 
 # Easy
 
-Smaller programs to get you familiar with Caiman and have more black-box style
-testing that I haven't gotten around to:
+Smaller programs to get you familiar with Caiman and have more glass-box style
+testing that I haven't gotten around to (in that they "match" things that need
+explicit tests to some degree):
 
 ```rs
 // local x, number
@@ -104,9 +105,10 @@ between devices.
 ### 1D Jacobian
 
 [Classic kernel](https://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant).
-Useful for checking updated arrays.  C code stolen from polybench somewhere.
+Useful for checking updated arrays.  C code stolen from polybench, uh, one of
+them.
 
-```
+```c
 for (int t = 0; t < timesteps; t++)
 {
     for (int i = 1; i < size - 1; i++)
