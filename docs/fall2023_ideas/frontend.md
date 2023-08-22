@@ -177,6 +177,19 @@ return *y_cpu; // note that technically we should be returning the value, not th
 
 ## Filled-out tail edges
 
+Currently we have exactly `return` as best as I know.  We should have a few more
+explicit tail edges, both to help with testing and to be explicit if needed.  As
+part of this, adding a few more nodes in general might be useful if they come up
+(a standard library is also worth discussing).  The main things are:
+
+```
+yield ...; // for parallel flow
+jump ...; // for being explicit if needed
+select ...; // we could skip this and just use `if` statements, but might be nice for testing
+// continuations might be tricky here in general, maybe don't make them explicit?
+// worth discussing
+```
+
 ## If statements (control flow)
 
 ## Recursion (testing)
