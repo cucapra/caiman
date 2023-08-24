@@ -71,6 +71,22 @@ fence my_fence : cpu;
 Perhaps with less keywords cause keywords are evil, but it would be nice I
 think.
 
+### Explicit Tags
+
+Caiman has a tag system that should be made explicit.  Some of this can be
+inferred (of course), but for arguments at least must be explicit:
+
+```
+schedule foo {
+    fn head(x : i64-have, y : u64-need) {
+        ...
+    }
+}
+```
+
+The current names of `have`, `need`, `none`, and `met` will...probably be
+changed, so be aware of that.  We're open to suggestions!
+
 ### Remove `let`
 
 After looking at this again, we might consider removing `let` from the
@@ -192,6 +208,73 @@ select ...; // we could skip this and just use `if` statements, but might be nic
 
 ## If statements (control flow)
 
+The main thing to add for the frontend is going to be control flow.  Caiman
+frontend should ideally use more procedural-style control flow (even loops
+eventually, though I suspect that's gonna take some clever design), rather than
+the very IR-y CPS-style of program flow.  What I would like this to look like is
+to be able to write a program something like this:
+
+```
+value max(x : i64, y : i64) -> i64 {
+    test = (> x y).
+    result = (if test x y).
+    returns result.
+}
+
+schedule max {
+    fn main(x : value.x.have ni64, y : value.y.have ni64) -> value.result.have {
+        test := alloc i64 local;
+        *test := value.test.Call(gtn, x, y);
+        if (*test) {
+            return *x;
+        } else {
+            return *y;
+        }
+    }
+}
+```
+
 ## Recursion (testing)
 
-## 
+Recursion should "just work" once we have control flow, but it's important to
+test.  Here's an example program to work with.  It's obviously...very verbose,
+so contemplating how to make this less bad might be worthwhile:
+
+```
+value sum(x : i64) -> i64 {
+    returns result.
+    result = (if test rec 0).
+    test = (> x 0).
+    rec = (sum (- x 1)).
+}
+
+schedule sum {
+    fn main(x : value.x.have ni64) -> value.result.have {
+        zero := alloc i64 local;
+        test := alloc i64 local;
+        *zero := value.test.Second.Prim;
+        *test := value.test.Call(x, zero);
+        if *test {
+            rec := alloc i64 local;
+            one := alloc i64 local;
+            m1 := alloc i64 local;
+
+            *one := value.rec.First.Second.Prim;
+            *m1 := value.rec.First.Call(x, one);
+            *rec := value.rec.Call(m1);
+            return *rec;
+        } else {
+            // might not work
+            return *zero;
+        }
+    }
+}
+```
+
+## Timeline
+
+Given the nature of this project, I don't feel like a timeline makes a _ton_ of
+sense in the current setup, since there are a bunch of features that would be
+nice to have that I didn't get to here.  It's sort of "initial work, let's see
+what needs changing and add stuff" now that we have a good baseline and the time
+to make something more intensive.

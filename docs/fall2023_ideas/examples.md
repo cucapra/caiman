@@ -20,6 +20,17 @@ testing that I haven't gotten around to (in that they "match" things that need
 explicit tests to some degree):
 
 ```rs
+// just some more "easy" _stuff_ to have
+max(x : cpu-i64, y : gpu-i64) -> cpu-i64 {
+    if x > y {
+        return x; // cpu
+    } else {
+        return y; // on the cpu
+    }
+}
+```
+
+```rs
 // local x, number
 gpu_kernel_triangle(x : local-u64, number : local-i64) -> local-i64 {
     if x > 0 {
@@ -40,7 +51,7 @@ gpu_kernel_2(number : gpu-i64) -> gpu-i64 {
 ```
 
 ```rs
-// all cpu probably for simplicity
+// recursion: all cpu for simplicity
 collatz(x : u64) -> u64 {
     if x <= 1 {
         return 1;
