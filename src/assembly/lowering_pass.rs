@@ -378,12 +378,16 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
                 .collect();
-            let function_id = context.funclet_indices.get_funclet(&name.0).unwrap();
             ir::Node::CallFunctionClass {
                 function_id: context
                     .function_classes
                     .get(&ast::FunctionClassId(name.0.clone()))
-                    .unwrap(),
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Function class {:?} not found in {:?}",
+                            name.0, context.function_classes
+                        )
+                    }),
                 arguments: mapped_arguments.into_boxed_slice(),
             }
         }
