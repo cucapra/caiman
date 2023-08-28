@@ -101,12 +101,30 @@ fn explicate_local_do_builtin(
         None => deduce_operation(&location, &og_outputs, &SpecLanguage::Value, context),
     };
 
-    available = available || deduced_op.node.is_none();
+    available = available || deduced_op.funclet.is_none() || deduced_op.node.is_none();
+
+    let mut expected_inputs = Vec::new();
+    let mut expected_outputs = Vec::new();
+    match (&deduced_op.funclet, &deduced_op.node) {
+        Some(f), Some(n) => {
+
+        }
+    }
 
     let outputs = match og_outputs {
-        None => {}
+        None => {
+            match
+        },
         Some(ogo) => {
-            for
+            let mut result = Vec::new();
+            for output in ogo {
+                match output {
+                    Some(out) => Some(out),
+                    None => {},
+
+                }
+            }
+            result
         }
     };
 
@@ -115,11 +133,7 @@ fn explicate_local_do_builtin(
         context.add_available_operation(location.node.clone(), OpCode::LocalDoBuiltin);
     }
     let operation = Some(ast::Quotient::Node(Some(deduced_op)));
-    ast::Node::LocalDoBuiltin {
-        operation,
-        inputs,
-        outputs,
-    }
+
 }
 
 // initially setup a node that hasn't yet been read
