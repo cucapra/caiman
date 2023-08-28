@@ -30,7 +30,7 @@ function_class_name = ${ "@" ~ id }
 function_class_name_sep = ${ function_class_name ~ sep }
 name_hole = { name | hole }
 name_hole_sep = ${ name_hole ~ sep }
-meta_name = ${ "$" ~ (id | throwaway) }
+meta_name = ${ "$" ~ id }
 meta_name_sep = ${ meta_name ~ sep }
 meta_name_hole = { meta_name | hole }
 meta_name_hole_sep = ${ meta_name_hole ~ sep }
@@ -60,13 +60,13 @@ place = @{ "local" | "cpu" | "gpu" }
 place_sep = ${ place ~ sep }
 place_hole = { place | hole }
 place_hole_sep = ${ place_hole ~ sep }
-buffer_flag = @{ "map_read" | "map_write" | "copy_src" | "copy_dst" | "storage" | "unform" }
+buffer_flag = @{ "map_read" | "map_write" | "copy_src" | "copy_dst" | "storage" | "uniform" }
 buffer_flags_elements = !{ (buffer_flag ~ ("," ~ buffer_flag)*)? }
 buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
-meta_remote = { meta_name ~ "." ~ name }
-meta_remote_hole = { meta_name_hole ~ "." ~ name_hole | hole }
-quotient_name = { "node" | "input" | "output" | "halt" | "none" }
+meta_remote = { meta_name | meta_name ~ "." ~ name }
+meta_remote_hole = { meta_name_hole | meta_name_hole ~ "." ~ name_hole | hole }
+quotient_name = { "node" | "input" | "output" | "none" }
 quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" }
 quotient_hole = !{ quotient_name ~ "(" ~ meta_remote_hole ~ ")" | hole }
 flow = { "none" | "have" | "met" | "need" }
@@ -84,11 +84,14 @@ ffi_type_decl = ${ "type" ~ sep ~ ffi_type }
 
 name_type_separator = !{ name ~ ":" ~ "" }
 native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ typ }
-ref_decl = ${ "ref" ~ sep ~ name_type_separator ~ typ ~ "-" ~ place ~ "<" ~ "flags" ~ "=" ~ buffer_flags ~ ">" }
+ref_buffer = { "<" ~ "flags" ~ "=" ~ buffer_flags ~ ">" }
+ref_type = ${  typ ~ "-" ~ place }
+ref_decl = { "ref" ~ name_type_separator ~ ref_type ~ ref_buffer }
 fence_decl = ${ "fence" ~ sep ~ name_type_separator ~ place }
 buffer_alignment_decl = !{ name ~ ":" ~ place ~ "<"
     ~ "flags" ~ "=" ~ buffer_flags ~ ","
-    ~ "alignment_bits" ~ "=" ~ n ~ "," ~ "byte_size" ~ "=" ~ n ~ ">" }
+    ~ "alignment_bits" ~ "=" ~ n ~ ","
+    ~ "byte_size" ~ "=" ~ n ~ ">" }
 
 buffer_decl = ${ "buffer" ~ sep ~ buffer_alignment_decl }
 encoder_sep = ${"encoder" ~ sep}
@@ -247,6 +250,7 @@ static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
 static_split_sep = ${ "static-split" ~ sep }
 static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
+// static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
 static_merge_sep = ${ "static-merge" ~ sep }
 static_merge_node = { assign ~ static_merge_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
 

@@ -324,6 +324,14 @@ impl CaimanAssemblyParser {
             .unwrap()
             .meta_map;
         match_nodes!(input.into_children();
+            [meta_name(meta_name)] =>
+                match meta_map.get(&meta_name) {
+                        Some(funclet) => Ok(ast::RemoteNodeId {
+                            funclet: Some(funclet.clone()),
+                            node: None
+                        }),
+                        None => Err(error)
+                },
             [meta_name(meta_name), name(node)] =>
                 match meta_map.get(&meta_name) {
                         Some(funclet) => Ok(ast::RemoteNodeId {
@@ -346,6 +354,21 @@ impl CaimanAssemblyParser {
             .meta_map;
         match_nodes!(input.into_children();
             // there's a way to make this pretty, but I'm stupid
+            [meta_name_hole(meta_name_hole)] =>
+                match meta_name_hole {
+                    None => Ok(ast::RemoteNodeId {
+                                funclet: None,
+                                node: None
+                            }),
+                    Some(meta_name) =>
+                        match meta_map.get(&meta_name) {
+                                Some(funclet) => Ok(ast::RemoteNodeId {
+                                    funclet: Some(funclet.clone()),
+                                    node: None
+                                }),
+                                None => Err(error)
+                        }
+                },
             [meta_name_hole(meta_name_hole), name_hole(name_hole)] =>
                 match meta_name_hole {
                     None => Ok(ast::RemoteNodeId {
@@ -657,9 +680,21 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn ref_buffer(input: Node) -> ParseResult<ir::BufferFlags> {
+        Ok(match_nodes!(input.into_children();
+            [buffer_flags(buffer_flags)] => buffer_flags
+        ))
+    }
+
+    fn ref_type(input: Node) -> ParseResult<(ast::TypeId, ir::Place)> {
+        Ok(match_nodes!(input.into_children();
+            [typ(typ), place(place)] => (typ, place)
+        ))
+    }
+
     fn ref_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name), typ(storage_type), place(storage_place), buffer_flags(buffer_flags)] =>
+            [name_type_separator(name), ref_type((storage_type, storage_place)), ref_buffer(buffer_flags)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::Ref {
