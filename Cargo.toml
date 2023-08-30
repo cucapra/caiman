@@ -28,6 +28,7 @@ caiman-spec = { path = "caiman-spec" }
 [dev-dependencies]
 caiman-rt = { path = "caiman-rt" }
 caiman-test = { path = "caiman-test" }
+caiman-bench = { path = "caiman-bench" }
 
 [features]
 default = [
