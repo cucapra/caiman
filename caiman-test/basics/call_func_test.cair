@@ -9,13 +9,13 @@ native_value %ni64 : i64;
 native_value %nti64 : tuple<i64>;
 
 function @main() -> i64;
-function @rec_sum() -> i64;
+function @foo() -> i64;
 
 
 // main
 
-value[impl default @main] %foo() -> i64 {
-    %y_t = call @rec_sum();
+value[impl default @main] %main() -> i64 {
+    %y_t = call @foo();
     %y = extract %y_t 0;
     return %y;
 }
@@ -28,22 +28,22 @@ spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_head<none($time.%e)-have, none($time.%e)-have>() ->
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_head<none($time.%e)-have, none($time.%e)-have>() ->
 [%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] {
-
-    %default = default-join;
-    %join = inline-join %foo_ret [] %default;
 
     %y_loc = alloc-temporary local [] i64;
 
-    schedule-call %sum_func[value node($val.%y_t),
+    %default = default-join;
+    %join = inline-join %main_ret [] %default;
+
+    schedule-call %foo_impl[value node($val.%y_t),
         timeline output($time.%e),
         spatial none($space.%none)](%y_loc) %join;
 }
 
-schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_ret<none($time.%e)-have, none($time.%e)-have>
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_ret<none($time.%e)-have, none($time.%e)-have>
 (%y_loc : node($val.%y)-have none($space.%e)-met none($time.%e)-have %i64l) ->
 [%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] {
     %result = read-ref i64 %y_loc;
@@ -53,21 +53,21 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 // rec_sum
 
 
-value[impl default @rec_sum] %val_sum() -> i64 {
+value[impl default @foo] %foo() -> i64 {
     %i = constant %ni64 20;
     return %i;
 }
 
-timeline %time_sum(%e : %event0) -> %event0 {
+timeline %time_foo(%e : %event0) -> %event0 {
     return %e;
 }
 
-spatial %space_sum(%bs : %buffspace) -> %buffspace {
+spatial %space_foo(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule[value $val = %val_sum, timeline $time = %time_sum, spatial $space = %space_sum]
-%sum_func<none($time.%e)-have, none($time.%e)-have>
+schedule[value $val = %foo, timeline $time = %time_foo, spatial $space = %space_foo]
+%foo_impl<none($time.%e)-have, none($time.%e)-have>
 (%y_loc : none($val.%i)-none none($space.%e)-met none($time.%e)-have %i64l) ->
 [%out : node($val.%i)-have none($space.%none)-met none($time.%none)-have %i64l] {
     local-do-builtin node($val.%i)() -> %y_loc;
@@ -76,5 +76,4 @@ schedule[value $val = %val_sum, timeline $time = %time_sum, spatial $space = %sp
 
 
 
-
-pipeline "main" = %foo_head;
+pipeline "main" = %main_head;
