@@ -30,7 +30,8 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_head<none($time.%e)-have, none($time.%e)-have>() ->
-[%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] {
+    [%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
+{
 
     %y_loc = alloc-temporary local [] i64;
 
@@ -44,13 +45,14 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_ret<none($time.%e)-have, none($time.%e)-have>
-(%y_loc : node($val.%y)-have none($space.%e)-met none($time.%e)-have %i64l) ->
-[%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] {
+    (%y_loc : node($val.%y)-have none($space.%e)-met none($time.%e)-have %i64l) ->
+    [%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
+{
     %result = read-ref i64 %y_loc;
     return %result;
 }
 
-// rec_sum
+// foo
 
 
 value[impl default @foo] %foo() -> i64 {
@@ -68,8 +70,9 @@ spatial %space_foo(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %foo, timeline $time = %time_foo, spatial $space = %space_foo]
 %foo_impl<none($time.%e)-have, none($time.%e)-have>
-(%y_loc : none($val.%i)-none none($space.%e)-met none($time.%e)-have %i64l) ->
-[%out : node($val.%i)-have none($space.%none)-met none($time.%none)-have %i64l] {
+    (%y_loc : none($val.%i)-none none($space.%e)-met none($time.%e)-have %i64l) ->
+    [%out : node($val.%i)-have none($space.%none)-met none($time.%none)-have %i64l] 
+{
     local-do-builtin node($val.%i)() -> %y_loc;
     return %y_loc;
 }
