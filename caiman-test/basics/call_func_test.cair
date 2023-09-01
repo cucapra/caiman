@@ -2,7 +2,6 @@ version 0.0.2
 
 type i64;
 type tuple<i64>;
-ref %i64l : i64-local<flags=[]>;
 event %event0;
 buffer_space %buffspace;
 native_value %ni64 : i64;
@@ -33,22 +32,27 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
     [%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
 {
 
-    %y_loc = alloc-temporary local [] i64;
-
     %default = default-join;
     %join = inline-join %main_ret [] %default;
 
     schedule-call %foo_impl[value node($val.%y_t),
-        timeline output($time.%e),
-        spatial none($space.%none)](%y_loc) %join;
+        timeline none($time.%e),
+        spatial none($space.%none)]() %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_ret<none($time.%e)-have, none($time.%e)-have>
-    (%y_loc : node($val.%y)-have none($space.%e)-met none($time.%e)-have %i64l) ->
+    (%y : none($val.%y)-have none($space.%e)-met none($time.%e)-have %ni64) ->
     [%out : node($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
 {
-    %result = read-ref i64 %y_loc;
+    // %result = read-ref i64 %y;
+
+    // return %y;
+
+    %y_ref = alloc-temporary local [] i64;
+    // local-do-builtin node($val.%y)() -> %y_ref;
+    local-copy %y -> %y_ref;
+    %result = read-ref i64 %y_ref;
     return %result;
 }
 
@@ -60,21 +64,14 @@ value[impl default @foo] %foo() -> i64 {
     return %i;
 }
 
-timeline %time_foo(%e : %event0) -> %event0 {
-    return %e;
-}
-
-spatial %space_foo(%bs : %buffspace) -> %buffspace {
-    return %bs;
-}
-
-schedule[value $val = %foo, timeline $time = %time_foo, spatial $space = %space_foo]
-%foo_impl<none($time.%e)-have, none($time.%e)-have>
-    (%y_loc : none($val.%i)-none none($space.%e)-met none($time.%e)-have %i64l) ->
-    [%out : node($val.%i)-have none($space.%none)-met none($time.%none)-have %i64l] 
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_impl<none($time.%e)-have, none($time.%e)-have>() ->
+    [%out : none($val.%i)-have none($space.%none)-met none($time.%none)-have %ni64] 
 {
-    local-do-builtin node($val.%i)() -> %y_loc;
-    return %y_loc;
+    %i_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%i)() -> %i_ref;
+    %result = read-ref i64 %i_ref;
+    return %result;
 }
 
 
