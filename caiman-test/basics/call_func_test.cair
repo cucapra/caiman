@@ -28,8 +28,8 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_head<none($time.%e)-have, none($time.%e)-have>() ->
-    [%out : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
+%main_head<none($time.%e)-met, none($time.%e)-met>() ->
+    [%out : none($val.%y)-have none($space.%e)-met none($time.%e)-met %ni64] 
 {
 
     %default = default-join;
@@ -41,9 +41,9 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_ret<none($time.%e)-have, none($time.%e)-have>
-    (%y : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64) ->
-    [%out : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
+%main_ret<none($time.%e)-met, none($time.%e)-met>
+    (%y : none($val.%y)-have none($space.%e)-met none($time.%e)-met %ni64) ->
+    [%out : none($val.%y)-have none($space.%e)-met none($time.%e)-met %ni64] 
 {
     // %result = read-ref i64 %y;
 
@@ -65,8 +65,8 @@ value[impl default @foo] %foo() -> i64 {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_impl<none($time.%e)-have, none($time.%e)-have>() ->
-    [%out : none($val.%i)-have none($space.%none)-have none($time.%none)-have %ni64] 
+%foo_impl<none($time.%e)-met, none($time.%e)-met>() ->
+    [%out : none($val.%i)-have none($space.%none)-met none($time.%none)-met %ni64] 
 {
     %i_ref = alloc-temporary local [] i64;
     local-do-builtin node($val.%i)() -> %i_ref;
