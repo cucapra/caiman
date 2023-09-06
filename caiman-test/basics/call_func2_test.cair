@@ -6,16 +6,18 @@ event %event0;
 buffer_space %buffspace;
 native_value %ni64 : i64;
 
-// A simple tests where a funclet invokes another
+// A simple tests where a funclet invokes another and passes a value
+
 
 function @main() -> i64;
-function @foo() -> i64;
+function @foo(i64) -> i64;
 
 
 // main
 
 value[impl default @main] %main() -> i64 {
-    %y_t = call @foo();
+    %x = constant %ni64 -1;
+    %y_t = call @foo(%x);
     %y = extract %y_t 0;
     return %y;
 }
@@ -32,13 +34,16 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_head<none($time.%e)-have, none($time.%e)-have>() ->
     [%out : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
 {
+    %x_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%x)() -> %x_ref;
+    %arg = read-ref i64 %x_ref;
 
     %default = default-join;
     %join = inline-join %main_ret [] %default;
 
     schedule-call %foo_impl[value node($val.%y_t),
         timeline none($time.%e),
-        spatial none($space.%none)]() %join;
+        spatial none($space.%none)](%arg) %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
@@ -46,33 +51,23 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
     (%y : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64) ->
     [%out : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
 {
-    // %result = read-ref i64 %y;
 
     return %y;
-
-    // %y_ref = alloc-temporary local [] i64;
-    // local-do-builtin node($val.%y)() -> %y_ref;
-    // local-copy %y -> %y_ref;
-    // %result = read-ref i64 %y_ref;
-    // return %result;
 }
 
 // foo
 
 
-value[impl default @foo] %foo() -> i64 {
-    %i = constant %ni64 20;
+value[impl default @foo] %foo(%i : %ni64) -> i64 {
     return %i;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_impl<none($time.%e)-have, none($time.%e)-have>() ->
+%foo_impl<none($time.%e)-have, none($time.%e)-have>
+    (%arg : input($val.%i)-have none($space.%none)-have none($time.%none)-have %ni64) ->
     [%out : none($val.%i)-have none($space.%none)-have none($time.%none)-have %ni64] 
 {
-    %i_ref = alloc-temporary local [] i64;
-    local-do-builtin node($val.%i)() -> %i_ref;
-    %result = read-ref i64 %i_ref;
-    return %result;
+    return %arg;
 }
 
 
