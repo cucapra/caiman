@@ -46,15 +46,9 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
     (%y : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64) ->
     [%out : none($val.%y)-have none($space.%e)-have none($time.%e)-have %ni64] 
 {
-    // %result = read-ref i64 %y;
 
     return %y;
 
-    // %y_ref = alloc-temporary local [] i64;
-    // local-do-builtin node($val.%y)() -> %y_ref;
-    // local-copy %y -> %y_ref;
-    // %result = read-ref i64 %y_ref;
-    // return %result;
 }
 
 // foo
