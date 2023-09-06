@@ -21,18 +21,18 @@ explicit tests to some degree):
 
 ```rs
 // just some more "easy" _stuff_ to have
-max(x : cpu-i64, y : gpu-i64) -> cpu-i64 {
+max(x : i64-host, y : i64-host) -> i64-host {
     if x > y {
-        return x; // cpu
+        return x; // host
     } else {
-        return y; // on the cpu
+        return y; // on the host
     }
 }
 ```
 
 ```rs
-// local x, number
-gpu_kernel_triangle(x : local-u64, number : local-i64) -> local-i64 {
+// host x, number
+gpu_kernel_triangle(x : u64-host, number : i64-host) -> i64-host {
     if x > 0 {
         return gpu_kernel_1(number);
     }
@@ -51,7 +51,7 @@ gpu_kernel_2(number : gpu-i64) -> gpu-i64 {
 ```
 
 ```rs
-// recursion: all cpu for simplicity
+// recursion: all host for simplicity
 collatz(x : u64) -> u64 {
     if x <= 1 {
         return 1;
@@ -64,8 +64,8 @@ collatz(x : u64) -> u64 {
 ```
 
 ```rs
-// gpu (or cpu) buffer testing
-sum_buffer(buff : gpu_buffer_ref<i64>, size: u64) -> gpu-i64 {
+// gpu buffer testing
+sum_buffer(buff : gpu_buffer_ref<i64>, size: u64-host) -> i64-gpu {
     if size <= 0 {
         return size;
     }

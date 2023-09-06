@@ -2,7 +2,7 @@
 
 A more carefully made list of some examples we're missing, building from the "ground up".  In other words, taking a look at a more complete set of examples, both for raw caiman and explication, that start with just very basic variations of existing programs.
 
-For a concrete goal, I will propose some number, like 10 "trivial examples", 3-4 "simple examples", and 1 "big example" program.  The alternative is to help develop the actual benchmarking software, but I worry about piling on extra tooling with little payoff.
+For a concrete goal, I will propose some number, like all the "trivial examples", 3-4 "simple examples", and 1 "big example" program.  The alternative is to help develop the actual benchmarking software, but I worry about piling on extra tooling with little payoff.
 
 ## "Trivial" Examples
 
@@ -89,17 +89,47 @@ fn ref_stuff(x: &i64-host) -> i64-host {
 ```
 
 ```rs
-fn yield_test(x : i64-host, y : i64-host) {
-    let x_gpu = put_on_gpu(x);
-    let y_gpu = put_on_gpu(y);
-    let result = alloc-gpu buff;
-    *result = val_gpu + 1;
+// the goal here is to have a slightly weirder nested logic to stress continuations
+fn nested(x : i64-host) -> i64-host {
+    f(g(x))
+}
+
+fn g(x : i64-host) -> i64-host {
+    x + x
+}
+
+fn f(x : i64-host) -> i64-host {
+    if x > 0 {
+        g(x)
+    } else {
+        x
+    }
 }
 ```
 
 ## "Simple" Examples
 
+In addition to the "easy" problems in [examples.md](./examples.md), I wanna add a couple more that might be interesting:
 
+```rs
+fn dist(v1 : Vec2-host, v2 : Vec2-host) -> f64-host {
+    let x_val = square(v1.x - v2.x);
+    let y_val = square(v1.y - v2.y);
+    sqrt(x_val + y_val)
+}
+```
+
+```rs
+fn test_yield(x : i64-host, y : i64-host) -> i64-host {
+    let mut generator = || {
+        yield x;
+        yield y;
+    };
+    let first = next(generator);
+    let second = next(generator);
+    first + second
+}
+```
 
 ## "Big" Examples
 
