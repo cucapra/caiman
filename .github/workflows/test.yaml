@@ -19,7 +19,8 @@ jobs:
       #   with:
       #     toolchain: stable
       - name: Build
-        run: cargo build
+        run: |
+          cargo --version && rustc --version && cargo build
       - name: Format
         run: cargo fmt --check
       - name: Clippy
