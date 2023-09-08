@@ -19,10 +19,7 @@ jobs:
         with:
           toolchain: stable
       - name: Format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --check --all
+        run: cargo fmt --check
       - name: Clippy
         uses: actions-rs/cargo@v1
         with:
