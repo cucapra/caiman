@@ -19,11 +19,11 @@ fn main() {
             compatible_surface: None,
             force_fallback_adapter: false,
         }))
-            .unwrap();
+        .unwrap();
     let (mut device, mut queue) = futures::executor::block_on(
         adapter.request_device(&std::default::Default::default(), None),
     )
-        .unwrap();
+    .unwrap();
     let callbacks = crate::Callbacks;
     let mut root_state = caiman_rt::RootState::new(&mut device, &mut queue);
     let mut join_stack_bytes = [0u8; 4096usize];

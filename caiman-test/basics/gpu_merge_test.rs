@@ -5,17 +5,13 @@ impl pipeline::main::CpuFunctions for Callbacks {
         &self,
         state: &mut caiman_rt::State,
         x: i64,
-        y: i64
+        y: i64,
     ) -> pipeline::main::outputs::cpu_add {
-        return (x + y, );
+        return (x + y,);
     }
-    fn flatten (
-        &self,
-        state: &mut caiman_rt::State,
-        x: i64
-    ) -> pipeline::main::outputs::flatten {
+    fn flatten(&self, state: &mut caiman_rt::State, x: i64) -> pipeline::main::outputs::flatten {
         use std::convert::TryFrom;
-        return (i32::try_from(x).ok().unwrap(), );
+        return (i32::try_from(x).ok().unwrap(),);
     }
 }
 
@@ -30,11 +26,9 @@ fn main() {
             compatible_surface: None,
             force_fallback_adapter: false,
         }))
-            .unwrap();
-    let (mut device, mut queue) = futures::executor::block_on(
-        adapter.request_device(&Default::default(), None),
-    )
         .unwrap();
+    let (mut device, mut queue) =
+        futures::executor::block_on(adapter.request_device(&Default::default(), None)).unwrap();
 
     let input_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
@@ -70,8 +64,7 @@ fn main() {
     let buffer_slice = output_buffer.slice(0..);
     let future = buffer_slice.map_async(wgpu::MapMode::Read);
     device.poll(wgpu::Maintain::Wait);
-    let slice =
-        unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
+    let slice = unsafe { std::slice::from_raw_parts(buffer_slice.get_mapped_range().as_ptr(), 4) };
     let final_value: i32 = i32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);
     crate::expect_returned!(13, Some(final_value));
 }

@@ -90,14 +90,13 @@ pub fn fusion_huge() -> Result<(), String> {
     let c = vec![16.4f32; 1024];
     let d = vec![0.75f32; 1024];
     let result = instance.start(
-        &mut join_stack, 
-        a.try_into().unwrap(), 
-        b.try_into().unwrap(), 
-        c.try_into().unwrap(), 
-        d.try_into().unwrap()
+        &mut join_stack,
+        a.try_into().unwrap(),
+        b.try_into().unwrap(),
+        c.try_into().unwrap(),
+        d.try_into().unwrap(),
     );
     let expected = vec![-32.7f32; 1024];
     let returned = result.returned().map(|x| Vec::from(x.0));
     crate::expect_returned!(&expected, returned.as_ref());
 }
-
