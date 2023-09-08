@@ -18,6 +18,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - name: Build
+        run: cargo build
       - name: Format
         run: cargo fmt --check
       - name: Clippy
