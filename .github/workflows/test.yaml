@@ -15,19 +15,16 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      # - uses: actions-rs/toolchain@v1
-      #   with:
-      #     toolchain: stable
-      - name: Test
+      - name: Weird Hacks
         run: |
-          python3 ./caiman-test/test.py run
-      # - name: Build
-      #   run: |
-      #     cargo --version && rustc --version && cargo build
+          echo "#\![rustfmt::skip]\n" > caiman-test/src/lib.rs
       - name: Format
-        run: cargo fmt --check
+        run: cargo fmt --check --all
       - name: Clippy
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: -- -D clippy::suspicious -W clippy::all -D clippy::correctness
+      - name: Test
+        run: |
+          python3 ./caiman-test/test.py run
