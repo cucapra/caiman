@@ -18,9 +18,12 @@ jobs:
       # - uses: actions-rs/toolchain@v1
       #   with:
       #     toolchain: stable
-      - name: Build
+      - name: Test
         run: |
-          cargo --version && rustc --version && cargo build
+          python3 ./caiman-test/test.py run
+      # - name: Build
+      #   run: |
+      #     cargo --version && rustc --version && cargo build
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -28,6 +31,3 @@ jobs:
         with:
           command: clippy
           args: -- -D clippy::suspicious -W clippy::all -D clippy::correctness
-      - name: Test
-        run: |
-          python3 ./caiman-test/test.py run
