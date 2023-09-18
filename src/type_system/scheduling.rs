@@ -220,7 +220,7 @@ fn advance_forward_value_copy<'program>(
     assert!(scalar.flow.is_readable());
     //value_spec_checker.check_node_tag(output_impl_node_id, ir::Tag{quot: scalar.quot, flow: ir::Flow::None})?;
     assert!(value_spec_checker.can_drop_node(output_impl_node_id));
-    value_spec_checker.update_scalar_node(output_impl_node_id, scalar.quot, ir::Flow::Have);
+    value_spec_checker.update_scalar_node(output_impl_node_id, scalar.quot, ir::Flow::Usable);
     return Ok(());
 }
 
@@ -247,7 +247,7 @@ fn advance_forward_value_do<'program>(
                 ir::Quotient::Node {
                     node_id: spec_node_id,
                 },
-                ir::Flow::Have,
+                ir::Flow::Usable,
             );
         }
         ir::Node::Select {
@@ -278,7 +278,7 @@ fn advance_forward_value_do<'program>(
                 ir::Quotient::Node {
                     node_id: spec_node_id,
                 },
-                ir::Flow::Have,
+                ir::Flow::Usable,
             );
         }
         ir::Node::CallFunctionClass {
@@ -308,7 +308,7 @@ fn advance_forward_value_do<'program>(
                     ir::Quotient::Node {
                         node_id: spec_node_id + 1 + output_index,
                     },
-                    ir::Flow::Have,
+                    ir::Flow::Usable,
                 );
             }
         }
@@ -342,7 +342,7 @@ fn advance_forward_timeline<'program>(
                 quot: ir::Quotient::Node {
                     node_id: *local_past,
                 },
-                flow: ir::Flow::Have,
+                flow: ir::Flow::Usable,
             };
             timeline_spec_checker.check_implicit_tag(error_context, from_tag)?;
             let encoded_impl_node_ids = &input_impl_node_ids[remote_local_pasts.len()..];
@@ -366,7 +366,7 @@ fn advance_forward_timeline<'program>(
                 ir::Quotient::Node {
                     node_id: new_encoded_state_spec_node_id,
                 },
-                ir::Flow::Have,
+                ir::Flow::Usable,
             );
         }
         ir::Node::SubmissionEvent { local_past } => {
@@ -377,7 +377,7 @@ fn advance_forward_timeline<'program>(
                 quot: ir::Quotient::Node {
                     node_id: *local_past,
                 },
-                flow: ir::Flow::Have,
+                flow: ir::Flow::Usable,
             };
             // Use encoder
             timeline_spec_checker.check_node_tag(
@@ -390,7 +390,7 @@ fn advance_forward_timeline<'program>(
                 ir::Quotient::Node {
                     node_id: *local_past,
                 },
-                ir::Flow::None,
+                ir::Flow::Dead,
             );
 
             //timeline_spec_checker.check_implicit_tag(from_tag)?;
@@ -400,7 +400,7 @@ fn advance_forward_timeline<'program>(
                 ir::Quotient::Node {
                     node_id: spec_node_id,
                 },
-                ir::Flow::Have,
+                ir::Flow::Usable,
             );
         }
         ir::Node::SynchronizationEvent {
@@ -414,13 +414,13 @@ fn advance_forward_timeline<'program>(
                 quot: ir::Quotient::Node {
                     node_id: *local_past,
                 },
-                flow: ir::Flow::Have,
+                flow: ir::Flow::Usable,
             };
             let remote_from_tag = ir::Tag {
                 quot: ir::Quotient::Node {
                     node_id: *remote_local_past,
                 },
-                flow: ir::Flow::Have,
+                flow: ir::Flow::Usable,
             };
             timeline_spec_checker.check_implicit_tag(error_context, from_tag)?;
 
@@ -435,7 +435,7 @@ fn advance_forward_timeline<'program>(
                 ir::Quotient::Node {
                     node_id: *remote_local_past,
                 },
-                ir::Flow::None,
+                ir::Flow::Dead,
             );
 
             timeline_spec_checker.transition_state_forwards(*local_past, spec_node_id)?;
@@ -732,7 +732,7 @@ impl<'program> FuncletChecker<'program> {
                     quot: ir::Quotient::Node {
                         node_id: argument_spec_node_id,
                     },
-                    flow: ir::Flow::Have,
+                    flow: ir::Flow::Usable,
                 },
             )?;
         }
@@ -742,7 +742,7 @@ impl<'program> FuncletChecker<'program> {
                 quot: ir::Quotient::Node {
                     node_id: arguments[0],
                 },
-                flow: ir::Flow::Have,
+                flow: ir::Flow::Usable,
             },
         )?;
 
@@ -763,7 +763,7 @@ impl<'program> FuncletChecker<'program> {
                 quot: ir::Quotient::Node {
                     node_id: extract_node_id,
                 },
-                flow: ir::Flow::Have,
+                flow: ir::Flow::Usable,
             });
         }
 
@@ -776,7 +776,7 @@ impl<'program> FuncletChecker<'program> {
                 quot: ir::Quotient::Node {
                     node_id: call_node_id + 1,
                 },
-                flow: ir::Flow::Have,
+                flow: ir::Flow::Usable,
             },
         );
 
@@ -803,7 +803,7 @@ impl<'program> FuncletChecker<'program> {
                 self.value_spec_checker_opt
                     .as_mut()
                     .unwrap()
-                    .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::None);
+                    .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Dead);
                 // Can be used in encoding
                 self.timeline_spec_checker_opt
                     .as_mut()
@@ -813,12 +813,12 @@ impl<'program> FuncletChecker<'program> {
                 let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
                 assert_eq!(
                     spatial_spec_checker.current_implicit_tag.flow,
-                    ir::Flow::Have
+                    ir::Flow::Usable
                 );
                 spatial_spec_checker.update_scalar_node(
                     current_node_id,
                     spatial_spec_checker.current_implicit_tag.quot,
-                    ir::Flow::Met,
+                    ir::Flow::Save,
                 );
                 self.node_types.insert(
                     current_node_id,
@@ -1314,7 +1314,7 @@ impl<'program> FuncletChecker<'program> {
                 self.value_spec_checker_opt
                     .as_mut()
                     .unwrap()
-                    .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
+                    .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Usable);
                 self.spatial_spec_checker_opt
                     .as_mut()
                     .unwrap()
@@ -1350,7 +1350,7 @@ impl<'program> FuncletChecker<'program> {
                 self.value_spec_checker_opt
                     .as_mut()
                     .unwrap()
-                    .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
+                    .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Usable);
                 //let implicit_tag = timeline_spec_checker.current_implicit_tag;
                 //self.timeline_spec_checker_opt.as_mut().unwrap().update_node_current_with_implicit(current_node_id);
                 //self.spatial_spec_checker_opt.as_mut().unwrap().update_scalar_node(current_node_id, ir::Tag::None, ir::Flow::Have);
@@ -1423,7 +1423,7 @@ impl<'program> FuncletChecker<'program> {
                             quot: ir::Quotient::Node {
                                 node_id: *space_spec_node_id,
                             },
-                            flow: ir::Flow::Have,
+                            flow: ir::Flow::Usable,
                         },
                     );
 
@@ -1450,7 +1450,7 @@ impl<'program> FuncletChecker<'program> {
                         .update_scalar_node(
                             output_impl_node_id,
                             ir::Quotient::None,
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                     self.timeline_spec_checker_opt
                         .as_mut()
@@ -1458,7 +1458,7 @@ impl<'program> FuncletChecker<'program> {
                         .update_scalar_node(
                             output_impl_node_id,
                             ir::Quotient::None,
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                     self.spatial_spec_checker_opt
                         .as_mut()
@@ -1468,7 +1468,7 @@ impl<'program> FuncletChecker<'program> {
                             ir::Quotient::Node {
                                 node_id: *spatial_spec_node_id + offset,
                             },
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                     self.node_types.insert(
                         output_impl_node_id,
@@ -1489,7 +1489,7 @@ impl<'program> FuncletChecker<'program> {
                         .update_scalar_node(
                             *buffer_impl_node_id,
                             ir::Quotient::None,
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                     self.timeline_spec_checker_opt
                         .as_mut()
@@ -1497,7 +1497,7 @@ impl<'program> FuncletChecker<'program> {
                         .update_scalar_node(
                             *buffer_impl_node_id,
                             ir::Quotient::None,
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                     self.spatial_spec_checker_opt
                         .as_mut()
@@ -1507,7 +1507,7 @@ impl<'program> FuncletChecker<'program> {
                             ir::Quotient::Node {
                                 node_id: *spatial_spec_node_id + offset,
                             },
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                 }
             }
@@ -1543,7 +1543,7 @@ impl<'program> FuncletChecker<'program> {
                             quot: ir::Quotient::Node {
                                 node_id: *space_spec_node_id + impl_node_ids.len(),
                             },
-                            flow: ir::Flow::Have,
+                            flow: ir::Flow::Usable,
                         },
                     );
 
@@ -1583,7 +1583,7 @@ impl<'program> FuncletChecker<'program> {
                             impl_node_id,
                             ir::Tag {
                                 quot: ir::Quotient::None,
-                                flow: ir::Flow::Have,
+                                flow: ir::Flow::Usable,
                             },
                         );
                     self.spatial_spec_checker_opt
@@ -1596,7 +1596,7 @@ impl<'program> FuncletChecker<'program> {
                                 quot: ir::Quotient::Node {
                                     node_id: *spatial_spec_node_id + offset,
                                 },
-                                flow: ir::Flow::Have,
+                                flow: ir::Flow::Usable,
                             },
                         );
                 }
@@ -1608,7 +1608,7 @@ impl<'program> FuncletChecker<'program> {
                         .update_scalar_node(
                             buffer_impl_node_id,
                             ir::Quotient::None,
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                     self.timeline_spec_checker_opt
                         .as_mut()
@@ -1616,7 +1616,7 @@ impl<'program> FuncletChecker<'program> {
                         .update_scalar_node(
                             buffer_impl_node_id,
                             ir::Quotient::None,
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                     self.spatial_spec_checker_opt
                         .as_mut()
@@ -1626,7 +1626,7 @@ impl<'program> FuncletChecker<'program> {
                             ir::Quotient::Node {
                                 node_id: *spatial_spec_node_id,
                             },
-                            ir::Flow::Have,
+                            ir::Flow::Usable,
                         );
                 }
             }
@@ -1803,7 +1803,7 @@ impl<'program> FuncletChecker<'program> {
 
                 let buffer_spatial_tag =
                     self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[buffer_node_id];
-                assert_ne!(buffer_spatial_tag.flow, ir::Flow::Met); // A continuation must own the space
+                assert_ne!(buffer_spatial_tag.flow, ir::Flow::Save); // A continuation must own the space
 
                 if let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_node_id) {
                     assert_eq!(buffer.storage_place, *place);
@@ -1817,18 +1817,18 @@ impl<'program> FuncletChecker<'program> {
                     self.value_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Usable);
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
-                        .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Have);
+                        .update_scalar_node(current_node_id, ir::Quotient::None, ir::Flow::Usable);
                     self.spatial_spec_checker_opt
                         .as_mut()
                         .unwrap()
                         .update_scalar_node(
                             current_node_id,
                             buffer_spatial_tag.quot,
-                            ir::Flow::Met,
+                            ir::Flow::Save,
                         );
                     self.node_types.insert(
                         current_node_id,
@@ -2207,7 +2207,7 @@ impl<'program> FuncletChecker<'program> {
                                 quot: ir::Quotient::Node {
                                     node_id: *condition,
                                 },
-                                flow: ir::Flow::Have,
+                                flow: ir::Flow::Usable,
                             },
                         );
                     self.value_spec_checker_opt.as_mut().unwrap().check_choice(

@@ -626,9 +626,9 @@ impl CaimanAssemblyParser {
             .parse::<String>()
             .map_err(|e| input.error(e))
             .and_then(|s| match s.as_str() {
-                "none" => Ok(ir::Flow::None),
-                "have" => Ok(ir::Flow::Have),
-                "met" => Ok(ir::Flow::Met),
+                "dead" => Ok(ir::Flow::Dead),
+                "usable" => Ok(ir::Flow::Usable),
+                "save" => Ok(ir::Flow::Save),
                 "need" => Ok(ir::Flow::Need),
                 _ => unreachable!(),
             })

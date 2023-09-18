@@ -199,7 +199,7 @@ impl<'program> FuncletSpecChecker<'program> {
             let scalar = &self.scalar_nodes[capture_node_id];
 
             match scalar.flow {
-                ir::Flow::Have => (), // Can borrow
+                ir::Flow::Usable => (), // Can borrow
                 _ => panic!("Capturing {:?} is unsupported", scalar.flow),
             }
             assert_eq!(
@@ -216,7 +216,7 @@ impl<'program> FuncletSpecChecker<'program> {
             )?;
 
             let quot = scalar.quot;
-            self.update_scalar_node(*capture_node_id, quot, ir::Flow::Met);
+            self.update_scalar_node(*capture_node_id, quot, ir::Flow::Save);
         }
 
         let mut remaining_input_tags = Vec::<ir::Tag>::new();
@@ -696,7 +696,7 @@ impl<'program> FuncletSpecChecker<'program> {
 
         let scalar = self.scalar_nodes.get(&node_id).unwrap();
         assert!(scalar.flow.is_readable(), "{}", error_context);
-        assert_eq!(reader_tag.flow, ir::Flow::Have, "{}", error_context);
+        assert_eq!(reader_tag.flow, ir::Flow::Usable, "{}", error_context);
         let tag = ir::Tag {
             quot: reader_tag.quot,
             flow: scalar.flow,
@@ -774,14 +774,14 @@ impl<'program> FuncletSpecChecker<'program> {
     ) -> Result<(), Error> {
         match tag.quot {
             ir::Quotient::Node { node_id } if node_id == from_spec_node_id => match tag.flow {
-                ir::Flow::None => (),
-                ir::Flow::Have => {
+                ir::Flow::Dead => (),
+                ir::Flow::Usable => {
                     tag.quot = ir::Quotient::Node {
                         node_id: to_spec_node_id,
                     };
                 }
                 ir::Flow::Need => panic!("Flow::Need cannot advance forwards"),
-                ir::Flow::Met => panic!("Flow::Met cannot advance"),
+                ir::Flow::Save => panic!("Flow::Met cannot advance"),
             },
             _ => (),
         }
@@ -966,8 +966,8 @@ fn check_tag_compatibility_exit(
     source_tag: ir::Tag,
     destination_tag: ir::Tag,
 ) -> Result<(), Error> {
-    assert_eq!(source_tag.flow, ir::Flow::Have, "{}", error_context);
-    assert_eq!(destination_tag.flow, ir::Flow::Have, "{}", error_context);
+    assert_eq!(source_tag.flow, ir::Flow::Usable, "{}", error_context);
+    assert_eq!(destination_tag.flow, ir::Flow::Usable, "{}", error_context);
     match (source_tag.quot, destination_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (
@@ -1069,7 +1069,7 @@ fn check_tag_compatibility_interior(
             ir::Quotient::Node {
                 node_id: remote_node_id,
             },
-        ) if flow == ir::Flow::Have => {
+        ) if flow == ir::Flow::Usable => {
             if let ir::Node::Phi { index: phi_index } = &current_value_funclet.nodes[remote_node_id]
             {
                 assert_eq!(*phi_index, index, "\n{}", error_context);
@@ -1111,7 +1111,7 @@ fn check_tag_compatibility_interior(
         }
         // An output is not necessarily equivalent to a node (there are some monad things going on)
         (ir::Quotient::Node { node_id }, ir::Quotient::Output { index })
-            if flow == ir::Flow::Have =>
+            if flow == ir::Flow::Usable =>
         {
             match &current_value_funclet.tail_edge {
                 ir::TailEdge::Return { return_values } => {

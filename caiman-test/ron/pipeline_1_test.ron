@@ -128,20 +128,20 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(0),
-						input_tags : [(quot: Input(index : 0), flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
+						input_tags : [(quot: Input(index : 0), flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)],
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)],
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
-						input_tags : [(quot: Input(index : 0), flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have)],
-						implicit_in_tag : (quot: Input(index : 0), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: Input(index : 0), flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable)],
+						implicit_in_tag : (quot: Input(index : 0), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [

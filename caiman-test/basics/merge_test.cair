@@ -31,7 +31,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_main<input($time.%e)-have, output($time.%e)-have>() ->
+%foo_main<input($time.%e)-usable, output($time.%e)-usable>() ->
 [%out : %ni64] {
     %x_loc = alloc-temporary local [] i64;
     %y_loc = alloc-temporary local [] i64;
