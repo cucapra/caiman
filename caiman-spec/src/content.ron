@@ -114,7 +114,7 @@
 		),
 		(
 			// Suballocates from a static layout buffer
-			// The buffer must have a Met flow (it must be owned by a continuation) and will shrink after the call
+			// The buffer must have a Save flow (it must be owned by a continuation) and will shrink after the call
 			// All suballocations will also have a Met flow
 			name : "StaticSubAlloc",
 			inputs : [
@@ -164,7 +164,7 @@
 			has_local_side_effect : true
 		),
 		(
-			// Produces a ref with a met flow from a local variable
+			// Produces a ref with a save flow from a local variable
 			name : "BorrowRef",
 			inputs : [
 				(name : "storage_type", kind : StorageType),

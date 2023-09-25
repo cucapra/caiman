@@ -176,51 +176,51 @@ impl Default for Quotient {
 // Encodes the "sign" of the data (this can be made more formal categorically as the interaction of adjunction pairs with a chirality structure)
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Flow {
-    None, // Does not transform, can only be discarded and not read
-    Have, // Transforms forwards with state changes
+    Dead, // Does not transform, can only be discarded and not read
+    Usable, // Transforms forwards with state changes
     Need, // Transforms backwards with state changes
-    Met,  // Have has met Need and associated state will not change, but can still be read
+    Save,  // Usable has met Need and associated state will not change, but can still be read
 }
 
-// Met is a zero value that cannot be discarded or duplicated
-// None is a zero value that can only be discarded or duplicated
-// Have is a nonzero (owning) value that can only be read and discarded
+// Save is a zero value that cannot be discarded or duplicated
+// Dead is a zero value that can only be discarded or duplicated
+// Usable is a nonzero (owning) value that can only be read and discarded
 // Need is a nonzero (owning) value that can only be written and duplicated
 
 impl Flow {
     pub fn is_droppable(&self) -> bool {
         match self {
-            Self::None => true,
-            Self::Have => true,
+            Self::Dead => true,
+            Self::Usable => true,
             Self::Need => false,
-            Self::Met => false,
+            Self::Save => false,
         }
     }
 
     pub fn is_duplicable(&self) -> bool {
         match self {
-            Self::None => false,
-            Self::Have => false,
+            Self::Dead => false,
+            Self::Usable => false,
             Self::Need => true,
-            Self::Met => false,
+            Self::Save => false,
         }
     }
 
     pub fn is_readable(&self) -> bool {
         match self {
-            Self::None => false,
-            Self::Have => true,
+            Self::Dead => false,
+            Self::Usable => true,
             Self::Need => false,
-            Self::Met => true,
+            Self::Save => true,
         }
     }
 
     pub fn is_neutral(&self) -> bool {
         match self {
-            Self::None => true,
-            Self::Have => false,
+            Self::Dead => true,
+            Self::Usable => false,
             Self::Need => false,
-            Self::Met => true,
+            Self::Save => true,
         }
     }
 }
@@ -235,7 +235,7 @@ impl Default for Tag {
     fn default() -> Self {
         Self {
             quot: Quotient::None,
-            flow: Flow::Have,
+            flow: Flow::Usable,
         }
     }
 }

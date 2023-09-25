@@ -102,20 +102,20 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(19),
-						input_tags : [(quot: Input(index : 0), flow: Have), (quot: None, flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have), (quot: None, flow: Have)]
+						input_tags : [(quot: Input(index : 0), flow: Usable), (quot: None, flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable), (quot: None, flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)],
-						output_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)]
+						input_tags : [(quot: Node(node_id : 0), flow: Usable), (quot: None, flow: Usable)],
+						output_tags : [(quot: Node(node_id : 0), flow: Usable), (quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(22),
-						input_tags : [(quot: Input(index : 1), flow: Have), (quot: Input(index : 1), flow: Have)],
-						output_tags : [(quot: Output(index : 1), flow: Have), (quot: Output(index : 1), flow: Have)],
-						implicit_in_tag : (quot: Input(index : 0), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: Input(index : 1), flow: Usable), (quot: Input(index : 1), flow: Usable)],
+						output_tags : [(quot: Output(index : 1), flow: Usable), (quot: Output(index : 1), flow: Usable)],
+						implicit_in_tag : (quot: Input(index : 0), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [
@@ -138,20 +138,20 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(19),
-						input_tags : [(quot: Node(node_id : 2), flow: Have), (quot: None, flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have), (quot: None, flow: Have)]
+						input_tags : [(quot: Node(node_id : 2), flow: Usable), (quot: None, flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable), (quot: None, flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)],
-						output_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)]
+						input_tags : [(quot: Node(node_id : 0), flow: Usable), (quot: None, flow: Usable)],
+						output_tags : [(quot: Node(node_id : 0), flow: Usable), (quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(22),
-						input_tags : [(quot: Node(node_id : 5), flow: Have), (quot: Node(node_id : 5), flow: Have)],
-						output_tags : [(quot: Output(index : 1), flow: Have), (quot: Output(index : 1), flow: Have)],
-						implicit_in_tag : (quot: Node(node_id : 7), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: Node(node_id : 5), flow: Usable), (quot: Node(node_id : 5), flow: Usable)],
+						output_tags : [(quot: Output(index : 1), flow: Usable), (quot: Output(index : 1), flow: Usable)],
+						implicit_in_tag : (quot: Node(node_id : 7), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [
@@ -194,20 +194,20 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(19),
-						input_tags : [(quot: Node(node_id : 4), flow: Have), (quot: None, flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have), (quot: None, flow: Have)]
+						input_tags : [(quot: Node(node_id : 4), flow: Usable), (quot: None, flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable), (quot: None, flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)],
-						output_tags : [(quot: Node(node_id : 0), flow: Have), (quot: None, flow: Have)]
+						input_tags : [(quot: Node(node_id : 0), flow: Usable), (quot: None, flow: Usable)],
+						output_tags : [(quot: Node(node_id : 0), flow: Usable), (quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(22),
-						input_tags : [(quot: Node(node_id : 10), flow: Have), (quot: Node(node_id : 10), flow: Have)],
-						output_tags : [(quot: Output(index : 1), flow: Have), (quot: Output(index : 1), flow: Have)],
-						implicit_in_tag : (quot: Node(node_id : 9), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: Node(node_id : 10), flow: Usable), (quot: Node(node_id : 10), flow: Usable)],
+						output_tags : [(quot: Output(index : 1), flow: Usable), (quot: Output(index : 1), flow: Usable)],
+						implicit_in_tag : (quot: Node(node_id : 9), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [

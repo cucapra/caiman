@@ -69,7 +69,7 @@ meta_remote_hole = { meta_name_hole ~ ("." ~ name_hole)? | hole }
 quotient_name = { "node" | "input" | "output" | "none" }
 quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" }
 quotient_hole = !{ quotient_name ~ "(" ~ meta_remote_hole ~ ")" | hole }
-flow = { "none" | "have" | "met" | "need" }
+flow = { "dead" | "usable" | "save" | "need" }
 tag = ${ quotient ~ "-" ~ flow }
 
 // Program

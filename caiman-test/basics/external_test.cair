@@ -18,7 +18,7 @@ value[impl default @main] %foo() -> i64 {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%bar<input($time.%e)-have, output($time.%e)-have>() ->
+%bar<input($time.%e)-usable, output($time.%e)-usable>() ->
 [%out : %ni64] {
     %x_ref = alloc-temporary local [storage, map_write] i64;
     %y_ref = alloc-temporary local [storage, map_write] i64;
