@@ -1723,7 +1723,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), serialized_join_sep, name_hole_sep(funclet),
                 name_box(captures), name_hole(continuation)] => ast::NamedNode {
-                    name: None,
+                    name: Some(name),
                     node: ast::Node::SerializedJoin {
                         funclet: funclet.map(|s| FuncletId(s)),
                         captures,

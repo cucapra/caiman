@@ -21,7 +21,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%bar<none($time.%e)-usable, none($time.%e)-usable>() ->
+%bar<none($time)-usable, none($time)-usable>() ->
 [%out : %ni64] {
     %x_ref = alloc-temporary local [] i64;
     local-do-builtin node($val.%x)() -> %x_ref;
