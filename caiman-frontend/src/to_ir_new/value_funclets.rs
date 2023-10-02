@@ -57,7 +57,7 @@ impl ExprTranslation
             let mut pre_opts = pre_output.into_iter().map(|nn| Some(nn)).collect();
             let mut post_opts = post_output.into_iter().map(|nn| Some(nn)).collect();
             nns.append(&mut pre_opts);
-            nns.push(Some(asm::NamedNode { name, node: output }));
+            nns.push(Some(asm::NamedNode { name: Some(name), node: output }));
             nns.append(&mut post_opts);
             nns
         } else {
@@ -105,7 +105,7 @@ fn translate_expr(expr: &ast::value::Expr, label: NodeLabel) -> ExprTranslation
                 });
                 sub_exprs.push(et);
             }
-            let function_call = asm::Node::CallValueFunction {
+            let function_call = asm::Node::CallFunctionClass {
                 function_id: Some(asm::FunctionClassId(f.clone())),
                 arguments: Some(sub_expr_ids.into_iter().map(|n| Some(n)).collect()),
             };
@@ -116,7 +116,10 @@ fn translate_expr(expr: &ast::value::Expr, label: NodeLabel) -> ExprTranslation
             };
             ExprTranslation::NewExpr {
                 name,
-                pre_output: vec![asm::NamedNode { name: fcall_node_name, node: function_call }],
+                pre_output: vec![asm::NamedNode {
+                    name: Some(fcall_node_name),
+                    node: function_call,
+                }],
                 output: extract_result,
                 post_output: vec![],
                 sub_exprs,

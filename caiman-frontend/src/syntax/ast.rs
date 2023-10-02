@@ -87,6 +87,20 @@ pub mod scheduling
                 Hole::Vacant => None,
             }
         }
+
+        pub fn from_option(o: Option<T>) -> Self
+        {
+            match o {
+                None => Hole::Vacant,
+                Some(t) => Hole::Filled(t),
+            }
+        }
+
+        /*pub fn apply_option_method<U, F>(&self, f: F) -> Hole<U>
+            where F: Fn(Option<T>) -> Option<U>
+        {
+            Hole::from_option(f(self.clone().to_option_move()))
+        }*/
     }
 
     pub fn fill<T>(t: T) -> Hole<T>
@@ -109,7 +123,8 @@ pub mod scheduling
         // likely be inferred??? Will keep it this way for now. In any case I imagine Dietrich
         // would want me to keep it this way and then they can infer it if the programmer uses
         // the currently-unimplemented ? expression
-        Call(Vec<Hole<Var>>),
+        Call(Hole<Var>, Vec<Hole<Var>>),
+        CallExternal(Hole<Var>, Vec<Hole<Var>>),
     }
 
     #[derive(Clone, Debug)]
@@ -129,7 +144,7 @@ pub mod scheduling
     pub enum StmtKind
     {
         Let(Var, Expr),
-        // Should we rly return var??? or just like the expr ??? unsure
+        // Should we rly return var??? or just like the expr??? unsure
         Return(Var),
     }
 
@@ -169,6 +184,26 @@ pub mod timeline
     pub type Stmt = (Info, StmtKind);
 }
 
+pub mod spatial
+{
+    use super::{Info, Var};
+
+    #[derive(Clone, Debug)]
+    pub enum Type
+    {
+        // Implicitly Local
+        BufferSpace,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum StmtKind
+    {
+        Return(Var),
+    }
+
+    pub type Stmt = (Info, StmtKind);
+}
+
 #[derive(Clone, Debug)]
 pub enum DeclKind
 {
@@ -187,8 +222,8 @@ pub enum DeclKind
     SchedulingImpl
     {
         value_funclet_name: String,
-        scheduling_funclets: Vec<scheduling::SchedulingFunclet>,
-    },
+        scheduling_funclets: Vec<scheduling::SchedulingFunclet>, 
+    }, 
     TimelineFunclet
     {
         name: String,
@@ -196,8 +231,13 @@ pub enum DeclKind
         output: timeline::Type,
         statements: Vec<timeline::Stmt>,
     },
-    // TODO spatial funclet stuff
-    SpatialFunclet,
+    SpatialFunclet
+    {
+        name: String,
+        input: Vec<Arg<spatial::Type>>,
+        output: spatial::Type,
+        statements: Vec<spatial::Stmt>,
+    },
     Pipeline
     {
         name: String,

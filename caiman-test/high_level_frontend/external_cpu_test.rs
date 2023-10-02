@@ -1,9 +1,9 @@
 struct Callbacks;
 
-impl main::CpuFunctions for Callbacks {}
-
-fn compute(x: i64, z: i64) -> i64 {
-    x * z 
+impl main::CpuFunctions for Callbacks {
+    fn compute(&self, _: &mut dyn caiman_rt::State, x: i64, z: i64) -> main::outputs::compute {
+        return (x * z,);
+    }
 }
 
 #[test]
@@ -16,5 +16,5 @@ fn main() -> Result<(), String> {
     let instance = main::Instance::new(&mut root_state, &callbacks);
     let result = instance.start(&mut join_stack);
     let end = result.returned().map(|x| x.0);
-    crate::expect_returned!(4, end);
+    crate::expect_returned!(40, end);
 }

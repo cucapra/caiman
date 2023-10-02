@@ -9,12 +9,12 @@ match {
 
   // Keywords (omitting things with symbols in here is ok for some reason)
   "value", "function", "class", "schedule", "fn", "timeline", "pipeline",
-      "extern",
+      "extern", "spatial",
   "let", "returns", "return",
-  "i32", "i64", "bool", "Event",
-  "at", "and", "space", "time",
-  "Prim", "Call",
-  "+",
+  "i32", "i64", "bool", "Event", "BufferSpace",
+  "at", "and", "space", "time", 
+  "Prim", "Call", "CallExternal",
+  "+", ".",
 
 
   r"\s*" => { }, // Whitespace
@@ -49,6 +49,13 @@ Decl: Decl = {
     "}"
     <@R> => astf.timeline_funclet(<>),
 
+    <@L>
+    "spatial" <Id> "(" <CommaList<Arg<SpaceType>>> ")" "->" <SpaceType>
+    "{"
+        <SpaceStmt*>
+    "}"
+    <@R> => astf.spatial_funclet(<>),
+
     <@L> "pipeline" <Id> "=" <Id> ";" <@R> => astf.pipeline(<>),
 
     <@L> 
@@ -79,6 +86,7 @@ ValueExpr: value::Expr = {
     <@L> <Bool> <@R>                                  => astf.value_bool(<>),
     <@L> <ValueNumber> <@R>                           => astf.value_number(<>),
     <@L> "(" <Id> <ValueExpr+> ")" <@R>               => astf.value_app(<>),
+    <@L> "(" <Id> "(" ")" ")" <@R>                    => astf.value_app_no_args(<>),
     <@L> "(" <Binop> <ValueExpr> <ValueExpr> ")" <@R> => astf.value_bop(<>),
     "(" <ValueExpr> ")",
 }
@@ -133,7 +141,10 @@ SchExpr: scheduling::Expr = {
 
 SchFull: scheduling::FullSchedulable = {
     "Prim" => scheduling::FullSchedulable::Primitive,
-    "Call" "(" <CommaList<Hole<Id>>> ")" => scheduling::FullSchedulable::Call(<>),
+    "CallExternal" "." <Hole<Id>> "(" <CommaList<Hole<Id>>> ")" 
+        => scheduling::FullSchedulable::CallExternal(<>),
+    "Call" "." <Hole<Id>> "(" <CommaList<Hole<Id>>> ")" 
+        => scheduling::FullSchedulable::Call(<>),
 }
 
 // TIMELINE FUNCLET SECTION
@@ -146,6 +157,15 @@ TimeStmt: timeline::Stmt = {
     <@L> "return" <Id> ";" <@R> => astf.time_return(<>),
 }
 
+// SPATIAL FUNCLET SECTION
+
+SpaceType: spatial::Type = {
+    "BufferSpace" => spatial::Type::BufferSpace,
+}
+
+SpaceStmt: spatial::Stmt = {
+    <@L> "return" <Id> ";" <@R> => astf.space_return(<>),
+}
 
 // MISC
 

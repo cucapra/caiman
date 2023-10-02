@@ -67,6 +67,7 @@ impl ASTFactory
         value_number(n: (String, value::NumberType)) => value::ExprKind::Num(n.0, n.1));
     factory!(value::Expr, value_app(f: String, es: Vec<value::Expr>) 
         => value::ExprKind::App(f, es));
+    factory!(value::Expr, value_app_no_args(f: String) => value::ExprKind::App(f, vec![]));
     factory!(value::Expr, value_bop(b: value::Binop, e1: value::Expr, e2: value::Expr)
         => value::ExprKind::Binop(b, Box::new(e1), Box::new(e2)));
 
@@ -133,6 +134,18 @@ impl ASTFactory
         => DeclKind::TimelineFunclet { name, input, output, statements });
 
     factory!(timeline::Stmt, time_return(x: String) => timeline::StmtKind::Return(x));
+
+    // SPATIAL
+    factory!(
+        Decl, 
+        spatial_funclet(
+            name: String, 
+            input: Vec<Arg<spatial::Type>>, 
+            output: spatial::Type, 
+            statements: Vec<spatial::Stmt>) 
+        => DeclKind::SpatialFunclet { name, input, output, statements });
+
+    factory!(spatial::Stmt, space_return(x: String) => spatial::StmtKind::Return(x));
 
     // PIPELINE
     factory!(Decl, pipeline(name: String, funclet_to_run: String) => 

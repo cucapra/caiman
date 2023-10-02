@@ -1,13 +1,11 @@
 extern compute : (i64, i64) -> i64;
 
-// These shouldn't have to be the same name, but currently lowering
-// will fail if they have different names :(
 function class compute { compute }
 
 value foo() -> i64 {
     let x = 4. 
-    let z = 10. 
     let y = (compute x z).
+    let z = 10. 
     returns y.
 }
 
@@ -15,11 +13,11 @@ function class foo_class { foo }
 
 schedule foo {
     fn bar() -> &y 
-      at time my_time
+      at time my_time and space my_space
     {
         let x_slot := x.Prim;
         let z_slot := z.Prim;
-        let y_slot := y.Call(x_slot, z_slot);
+        let y_slot := y.CallExternal.compute(x_slot, z_slot);
         return y_slot;
     }
 
@@ -28,5 +26,10 @@ schedule foo {
 timeline my_time(e : Event) -> Event {
     return e;
 }
+
+spatial my_space(bs : BufferSpace) -> BufferSpace {
+    return bs;
+}
+
 
 pipeline main = bar;

@@ -153,12 +153,15 @@ fn externalize_expr(
             *kind = ast::value::ExprKind::App(function_name, vec![*e1, *e2]);
         },
 
-        // All branches below just apply recursively to their subexpressions
-        ast::value::ExprKind::App(_, ref mut es) => {
+        // For some reason, former me decided to externalize all function applications for no
+        // reason. Leaving it here in case it's ever needed
+        /*
+           // All branches below just apply recursively to their subexpressions
+         ast::value::ExprKind::App(_, ref mut es) => {
             for e in es.iter_mut() {
                 externalize_expr(e, ctx, external_bops);
             }
-        },
+        },*/
         _ => (),
     }
 }
@@ -172,8 +175,25 @@ pub fn externalize_binops(
     let mut ctx = Context::new();
     for (_, decl_kind) in program.iter() {
         match decl_kind {
-            ast::DeclKind::ExternCPU { name, input: _, output } => {
-                ctx.insert_function(name, output.clone());
+            ast::DeclKind::ExternCPU { name: extern_name, input: _, output } => {
+                let mut ctx_name = None;
+                for (_, decl_kind) in program.iter() {
+                    match decl_kind {
+                        ast::DeclKind::FunctionClass { name: class_name, functions } => {
+                            if functions
+                                .iter()
+                                .find(|s| s.to_string() == extern_name.to_string())
+                                .is_some()
+                            {
+                                ctx_name = Some(class_name.clone());
+                            }
+                        },
+                        _ => (),
+                    }
+                }
+                if let Some(name) = ctx_name {
+                    ctx.insert_function(&name, output.clone());
+                }
             },
             _ => (),
         }

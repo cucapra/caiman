@@ -111,8 +111,7 @@ fn main() {
     let result = if args.explicate_only {
         frontend::explicate_caiman(compile_info, options)
     } else if args.show_assembly_tree {
-        todo!()
-        //frontend::show_assembly_tree(&input_string, options)
+        frontend::show_assembly_tree(compile_info, options)
     } else {
         frontend::compile_caiman(compile_info, options)
     };

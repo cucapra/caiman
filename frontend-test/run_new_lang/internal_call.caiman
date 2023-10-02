@@ -1,4 +1,6 @@
-extern compute : (i64, i64) -> i64;
+value compute(a : i64, b : i64) -> i64 {
+    returns b.
+}
 
 function class compute { compute }
 
@@ -12,13 +14,20 @@ value foo() -> i64 {
 function class foo_class { foo }
 
 schedule foo {
+
     fn bar() -> &y 
       at time my_time and space my_space
     {
         let x_slot := x.Prim;
         let z_slot := z.Prim;
-        let y_slot := y.CallExternal.compute(x_slot, z_slot);
+        let y_slot := y.Call.compute(x_slot, z_slot);
         return y_slot;
+    }
+
+    fn compute_schedule(a_slot : &a, b_slot: &b) -> &b
+      at time my_time and space my_space
+    {
+        return b_slot;
     }
 
 }
@@ -30,6 +39,5 @@ timeline my_time(e : Event) -> Event {
 spatial my_space(bs : BufferSpace) -> BufferSpace {
     return bs;
 }
-
 
 pipeline main = bar;

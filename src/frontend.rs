@@ -75,13 +75,15 @@ fn read_definition(
 }
 
 pub fn show_assembly_tree(
-    input_string: &str, 
+    compile_data: CompileData,
     options: CompileOptions,
 ) -> Result<String, CompileError> {
-    panic!("Show assembly tree not fixed (parse arguments are different currently)")
-    /*match options.compile_mode {
+    match options.compile_mode {
         CompileMode::Assembly => {
-            let program = crate::assembly::parser::parse(input_string);
+            let program = crate::assembly::parser::parse(
+                &compile_data.path, 
+                &compile_data.input_string,
+            );
             match program {
                 Err(why) => Err(CompileError {
                     message: format!("Parse error: {}", why),
@@ -94,7 +96,7 @@ pub fn show_assembly_tree(
                 message: format!("Cannot output assembly tree of RON"),
             })
         },
-    }*/
+    }
 }
 
 pub fn compile_caiman(

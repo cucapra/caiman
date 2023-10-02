@@ -34,7 +34,7 @@ schedule foo {
   // Just gonna make them optional for now
 
     fn bar() -> &x 
-      at time my_time
+      at time my_time and space my_space
     {
         // Does x_slot need to be named and returned? 
         // The type is already &x so we should be able to find
@@ -52,6 +52,10 @@ schedule foo {
 
 timeline my_time(e : Event) -> Event {
     return e;
+}
+
+spatial my_space(bs : BufferSpace) -> BufferSpace {
+    return bs;
 }
 
 // Make sure the pipeline's name (in this case main) is the same as the one 

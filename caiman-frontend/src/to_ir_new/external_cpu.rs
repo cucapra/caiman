@@ -40,7 +40,7 @@ fn lower_cpu_extern(
     asm::ExternalFunction {
         kind: asm::ExternalFunctionKind::CPUPure,
         value_function_binding: asm::FunctionClassBinding {
-            default: true,
+            default: false,
             function_class,
         },
         name: name.to_string(),

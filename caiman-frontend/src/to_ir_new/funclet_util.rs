@@ -25,8 +25,10 @@ pub fn vf_node_with_name<'a>(vf: &'a ValueFunclet, name: &str) -> Option<&'a asm
 {
     for com_opt in vf.0.commands.iter() {
         if let Some(asm::Command::Node(nn)) = com_opt {
-            if nn.name.0 == name {
-                return Some(nn);
+            if let Some(nn_name) = &nn.name {
+                if nn_name.0 == name {
+                    return Some(nn);
+                }
             }
         }
     }
