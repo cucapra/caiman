@@ -242,12 +242,14 @@ fn lower_scheduling_funclet(
 ) -> Vec<ASMSchedulingFunclet>
 {
     // TODO  this is used for testing 
-    /*let _ = scheduling_funclets_ir::ast_to_total_funclet(
+    if scheduling_funclet.name == "bar" {
+    let _ = scheduling_funclets_ir::ast_to_total_funclet(
         function_class_ctx,
         //typing_ctx,
         funclet_being_scheduled,
         scheduling_funclet,
-    );*/
+    );
+    }
     // end
 
     let mut scheduling_ctx = SchedulingContext { map: HashMap::new() };

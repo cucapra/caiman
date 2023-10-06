@@ -25,7 +25,7 @@ schedule foo {
     fn bar() -> &y 
       at time my_time and space my_space
     {
-        let y_slot := y.Call.compute();
+        let y_slot := y.Call.compute_schedule();
         return y_slot;
     }
 }

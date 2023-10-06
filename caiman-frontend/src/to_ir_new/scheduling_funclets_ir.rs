@@ -56,6 +56,16 @@ impl UnsplitStmt
             _ => vec![],
         }
     }
+
+    fn expr_kind(&self) -> Option<sch::FullSchedulable>
+    {
+        match self {
+            UnsplitStmt::Let {
+                e: sch::Hole::Filled(Expr { operation: Some(op), .. }), ..
+            } => Some(op.kind.clone()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -75,20 +85,24 @@ pub enum SplitStmt
 {
     Unsplit(UnsplitStmt),
     // Inline join with default continuation
-    InlineDefaultJoin(usize /* TODO more*/),
+    InlineDefaultJoin(usize /* TODO captures */),
 }
 
 #[derive(Clone, Debug)]
 pub enum TailEdge
 {
     Return(String),
-    ScheduleCall, // TODO info here
+    ScheduleCall
+    {
+        callee_funclet_id: String,
+        // TODO callee arguments
+    },
 }
 
 #[derive(Clone, Debug)]
 pub struct SplitFunclet
 {
-    pub stmts: Vec<SplitStmt>,
+    pub stmts: Vec<sch::Hole<SplitStmt>>,
     pub inputs: Vec<ast::Arg<sch::Type>>,
     pub output: ast::Arg<sch::Type>,
     pub tail_edge: TailEdge,
@@ -205,6 +219,7 @@ fn ast_to_unsplit(
     }
 }
 
+#[derive(Clone, Debug)]
 struct UnsplitBasicBlock
 {
     block: Vec<sch::Hole<UnsplitStmt>>,
@@ -214,9 +229,11 @@ struct UnsplitBasicBlock
 
 fn partition_unsplit_basic_blocks(stmts: Vec<sch::Hole<UnsplitStmt>>) -> Vec<UnsplitBasicBlock>
 {
-    let mut blocks: Vec<UnsplitBasicBlock> = Vec::new();
+    let mut blocks: Vec<UnsplitBasicBlock> =
+        vec![UnsplitBasicBlock { block: vec![], prev: vec![], next: vec![] }];
     for stmt in stmts.into_iter() {
         let l = blocks.len();
+
         let next = match stmt {
             sch::Hole::Filled(UnsplitStmt::Let {
                 e:
@@ -228,9 +245,12 @@ fn partition_unsplit_basic_blocks(stmts: Vec<sch::Hole<UnsplitStmt>>) -> Vec<Uns
             }) => Some(vec![l]),
             _ => None,
         };
+
         blocks[l - 1].block.push(stmt);
+
         if let Some(n) = next {
-            blocks.push(UnsplitBasicBlock { block: vec![], prev: vec![], next: n });
+            blocks[l - 1].next = n;
+            blocks.push(UnsplitBasicBlock { block: vec![], prev: vec![], next: vec![] });
         }
     }
     // Attach backpointers
@@ -279,34 +299,62 @@ fn split(unsplit_funclet: UnsplitFunclet) -> Vec<SplitFunclet>
     let num_blocks = unsplit_blocks.len();
     let mut split_funclets = Vec::new();
     for i in 0..num_blocks {
-        let inputs = if i == 0 { inputs.clone() } else {
-                // TODO use vars used!!! this is a hack
-                // Doing hack for now because getting types of the vars is hard
-                vec![(returned_var.clone(), output.clone())]
+        let inputs = if i == 0 {
+            inputs.clone()
+        } else {
+            // TODO use vars used!!! this is a hack
+            // Doing hack for now because getting types of the vars is hard
+            vec![(returned_var.clone(), output.clone())]
         };
         // TODO this is very incorrect!!!! hack for now
-        let output = output.clone();
+        let output = ("out".to_string(), output.clone());
+
         let block = &mut unsplit_blocks[i];
         let mut inner_block = std::mem::take(&mut block.block);
-        let (stmts, tail_edge): (Vec<sch::Hole<SplitStmt>>, TailEdge) =
-            if let Some(last) = inner_block.pop() {
-                /*match last {
-                 * TODO match on last actually
-                 *
-                }*/
-                // TODO convert unscheduled stmts & add the joins
-                (vec![], TailEdge::ScheduleCall)
-            } else {
-                // Is return
-                (vec![], TailEdge::Return(returned_var.clone()))
+
+        let (join, tail_edge) = if block.next.len() > 0 {
+            let last = inner_block
+                .pop()
+                .unwrap_or_else(|| panic!("Split on empty block somehow"))
+                .to_option_move()
+                .unwrap_or_else(|| panic!("Split on ???"));
+            let last_expr_kind = last.expr_kind().unwrap_or_else(|| panic!("Split on ?"));
+            let (join, tail_edge) = match last_expr_kind {
+                sch::FullSchedulable::Call(f, _xs) => {
+                    let next = match block.next[..] {
+                        [n] => n,
+                        _ => panic!("Schedule call block somehow has multiple nexts"),
+                    };
+                    let join = sch::Hole::Filled(SplitStmt::InlineDefaultJoin(next));
+
+                    let f = f
+                        .to_option()
+                        .unwrap_or_else(|| panic!("? unavailable for use as callee id"));
+
+                    let tail = TailEdge::ScheduleCall { callee_funclet_id: f.clone() };
+                    (join, tail)
+                },
+                sch::FullSchedulable::Primitive | sch::FullSchedulable::CallExternal(_, _) => {
+                    panic!("Split on statement which is not supposed to split (e.g. primitive)")
+                },
             };
+
+            (Some(join), tail_edge)
+        } else {
+            // Is return
+            (None, TailEdge::Return(returned_var.clone()))
+        };
+
+
+        let mut stmts: Vec<sch::Hole<SplitStmt>> = inner_block
+            .into_iter()
+            .map(|hole| hole.map(|stmt| SplitStmt::Unsplit(stmt)))
+            .collect();
+        if let Some(j) = join {
+            stmts.push(j);
+        }
+
+        split_funclets.push(SplitFunclet { stmts, inputs, output, tail_edge });
     }
     split_funclets
-    /*
-         *
-    pub stmts: Vec<SplitStmt>,
-    pub inputs: Vec<ast::Arg<sch::Type>>,
-    pub output: ast::Arg<sch::Type>,
-    pub tail_edge: TailEdge,
-         */
 }

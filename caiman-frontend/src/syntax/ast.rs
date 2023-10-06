@@ -96,6 +96,14 @@ pub mod scheduling
             }
         }
 
+        pub fn map<U, F>(self, f: F) -> Hole<U>
+            where F: Fn(T) -> U
+        {
+            if let Hole::Filled(t) = self {
+                Hole::Filled(f(t))
+            } else { Hole::Vacant }
+        }
+
         /*pub fn apply_option_method<U, F>(&self, f: F) -> Hole<U>
             where F: Fn(Option<T>) -> Option<U>
         {
