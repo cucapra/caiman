@@ -1,6 +1,6 @@
+use super::value_funclets::ValueFunclet;
 use caiman::assembly::ast as asm;
 use caiman::ir;
-use super::value_funclets::ValueFunclet;
 
 /*
     let mut commands: Vec<Option<asm::Command>> =
@@ -27,6 +27,20 @@ pub fn vf_node_with_name<'a>(vf: &'a ValueFunclet, name: &str) -> Option<&'a asm
         if let Some(asm::Command::Node(nn)) = com_opt {
             if let Some(nn_name) = &nn.name {
                 if nn_name.0 == name {
+                    return Some(nn);
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn find_function_call<'a>(vf: &'a ValueFunclet, f_called: &str) -> Option<&'a asm::NamedNode>
+{
+    for com_opt in vf.0.commands.iter() {
+        if let Some(asm::Command::Node(nn)) = com_opt {
+            if let asm::Node::CallFunctionClass { function_id: Some(fid_name), .. } = &nn.node {
+                if fid_name.0 == f_called {
                     return Some(nn);
                 }
             }

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use super::funclet_util::make_asm_funclet;
-use super::funclet_util::vf_node_with_name;
+use super::funclet_util::{self, make_asm_funclet, vf_node_with_name};
 use super::function_classes::FunctionClassContext;
 use super::scheduling_funclets_ir;
 use super::scheduling_funclets_ir::SplitStmt;
@@ -81,11 +80,11 @@ fn lower_scheduling_funclet(
             let scheduling_context = build_scheduling_context(funclet);
             let mut nodes: Vec<Option<asm::NamedNode>> = Vec::new();
             for stmt in funclet.stmts.iter() {
-                add_stmt(&mut nodes, stmt);
+                add_stmt(&mut nodes, stmt, &total_funclet.name);
             }
             let tail_edge = handle_tail_edge(
-                &funclet.tail_edge, 
-                &mut nodes, 
+                &funclet.tail_edge,
+                &mut nodes,
                 scheduling_context,
                 funclet_being_scheduled,
                 function_class_ctx,
@@ -116,11 +115,24 @@ fn lower_scheduling_funclet(
         .collect()
 }
 
+fn make_funclet_name(total_name: &str, index: usize) -> asm::FuncletId
+{
+    if index == 0 {
+        asm::FuncletId(total_name.to_string())
+    } else {
+        asm::FuncletId(format!("{}{}", total_name, index))
+    }
+}
 
+fn name_node(name: &str, node: asm::Node) -> asm::NamedNode
+{
+    asm::NamedNode { name: Some(asm::NodeId(name.to_string())), node }
+}
 
 fn add_stmt(
     nodes: &mut Vec<Option<asm::NamedNode>>,
     stmt: &Hole<scheduling_funclets_ir::SplitStmt>,
+    total_name: &str,
 )
 {
     let filled_stmt = if let Hole::Filled(filled_stmt) = stmt {
@@ -131,17 +143,31 @@ fn add_stmt(
     };
 
     match filled_stmt {
-        SplitStmt::Unsplit(ustmt) => {
-            match ustmt {
-                scheduling_funclets_ir::UnsplitStmt::Let { x, e: Hole::Filled(e_filled) } => {
-                    let mut v = translate_ir_expr(e_filled.clone(), x);
-                    nodes.append(&mut v);
-                },
-                _ => panic!("Unsure what to do when expression is a hole"),
-            }
+        SplitStmt::Unsplit(ustmt) => match ustmt {
+            scheduling_funclets_ir::UnsplitStmt::Let { x, e: Hole::Filled(e_filled) } => {
+                let mut v = translate_ir_expr(e_filled.clone(), x);
+                nodes.append(&mut v);
+            },
+            _ => panic!("Unsure what to do when expression is a hole"),
         },
         SplitStmt::InlineDefaultJoin(index) => {
-            todo!()
+            let default_name = "defaultjoin~";
+            let inline_name = "inlinejoin~";
+            let next_funclet = make_funclet_name(total_name, *index);
+
+            let default_join = asm::Node::DefaultJoin;
+            let default_join_nn = name_node(default_name, default_join);
+
+            let inline_join = asm::Node::InlineJoin {
+                funclet: Some(next_funclet),
+                // TODO args!!!
+                captures: Some(vec![]),
+                continuation: default_join_nn.name.clone(),
+            };
+            let inline_join_nn = name_node(inline_name, inline_join);
+
+            nodes.push(Some(default_join_nn));
+            nodes.push(Some(inline_join_nn));
         },
     }
 }
@@ -201,9 +227,6 @@ fn translate_ir_expr(e: scheduling_funclets_ir::Expr, name: &str) -> Vec<Option<
     vec![alloc_temp_nn, encode_do_nn]
 }
 
-
-
-
 fn build_scheduling_context(funclet: &scheduling_funclets_ir::SplitFunclet) -> SchedulingContext
 {
     let mut scheduling_ctx = SchedulingContext { map: HashMap::new() };
@@ -232,11 +255,14 @@ fn handle_tail_edge(
 ) -> asm::TailEdge
 {
     match tail_edge {
-        scheduling_funclets_ir::TailEdge::Return(x) => { 
-            let value_x_opt = scheduling_ctx
-                .map
-                .get(x)
-                .unwrap_or_else(|| panic!("Returning an unknown variable {}", x));
+        scheduling_funclets_ir::TailEdge::Return(x) => {
+            let value_x_opt = if let Some(value_x_opt) = scheduling_ctx.map.get(x) {
+                value_x_opt
+            } else {
+                // Is an argument and not local variable, so no need to read ref
+                let x_ret = Some(asm::NodeId(x.to_string()));
+                return asm::TailEdge::Return { return_values: Some(vec![x_ret]) };
+            };
 
             let returned_variable_name = Some(asm::NodeId("result".to_string()));
 
@@ -250,21 +276,36 @@ fn handle_tail_edge(
             let read_ref_named =
                 Some(asm::NamedNode { name: returned_variable_name.clone(), node: read_ref });
             nodes.push(read_ref_named);
-            
+
             asm::TailEdge::Return { return_values: Some(vec![returned_variable_name]) }
         },
-        scheduling_funclets_ir::TailEdge::ScheduleCall { callee_funclet_id } => { todo!() }
-    }
 
-}
+        scheduling_funclets_ir::TailEdge::ScheduleCall { callee_funclet_id } => {
+            let callee_class = function_class_ctx.get(callee_funclet_id);
+            let callee_node = callee_class.and_then(|f| {
+                funclet_util::find_function_call(funclet_being_scheduled, &f.0)
+                    .and_then(|nn| nn.clone().name)
+            });
 
+            asm::TailEdge::ScheduleCall {
+                value_operation: Some(asm::Quotient::Node(Some(asm::RemoteNodeId {
+                    funclet: Some(funclet_being_scheduled.0.header.name.clone()),
+                    node: callee_node,
+                }))),
 
-fn make_funclet_name(total_name: &str, index: usize) -> asm::FuncletId
-{
-    if index == 0 {
-        asm::FuncletId(total_name.to_string())
-    } else {
-        asm::FuncletId(format!("{}{}", total_name, index))
+                // Unsure what to put here
+                timeline_operation: Some(asm::Quotient::None),
+                spatial_operation: Some(asm::Quotient::None),
+
+                callee_funclet_id: Some(asm::FuncletId(callee_funclet_id.to_string())),
+
+                // TODO not this
+                callee_arguments: Some(vec![]),
+
+                // XXX unsure if this works in all cases
+                continuation_join: nodes[nodes.len() - 1].clone().and_then(|nn| nn.name),
+            }
+        },
     }
 }
 
@@ -320,12 +361,12 @@ fn make_headers(
 }
 
 /*
- -------------------------------------------------------------------------------
- ********************************************************************************
- * OLD CODE BELOW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- ********************************************************************************
- -------------------------------------------------------------------------------
- */
+-------------------------------------------------------------------------------
+********************************************************************************
+* OLD CODE BELOW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+********************************************************************************
+-------------------------------------------------------------------------------
+*/
 /*
 impl SchedulingContext
 {
