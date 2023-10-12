@@ -137,15 +137,13 @@ pub fn ast_to_total_funclet(
         scheduling_funclet,
     );
 
-    println!("UNSPLIT: {:#?}", u);
+    //println!("UNSPLIT: {:#?}", u);
 
     let split_funclets = split(u);
-    println!("SPLIT: {:#?}", split_funclets);
-
-    panic!(":3");
+    //println!("SPLIT: {:#?}", split_funclets);
 
     TotalFunclet {
-        split_funclets: vec![], //split_funclets,
+        split_funclets,
         timeline_funclet: scheduling_funclet.timeline_funclet.clone(),
         spatial_funclet: scheduling_funclet.spatial_funclet.clone(),
         name: scheduling_funclet.name.clone(),
