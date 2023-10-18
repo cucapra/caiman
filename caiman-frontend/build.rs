@@ -105,7 +105,7 @@ fn build_rust_parser(src_dir: &Path) -> Result<(), Box<dyn Error>>
 
 fn main()
 {
-    let spec = caiman_spec::content::build_spec();
+    /*let spec = caiman_spec::content::build_spec();
     write_spec_nodes_module(&spec).unwrap();
     let src_dir = Path::new("./src/value_language/");
     build_lalrpop_parser(&src_dir, &spec);
@@ -116,7 +116,7 @@ fn main()
     let sched_parser_config = lalrpop::Configuration::new();
     sched_parser_config
         .process_file(Path::new("./src/scheduling_language/parser.lalrpop"))
-        .unwrap();
+        .unwrap();*/
 
     // Make "both parser" normally too
     let parser_config = lalrpop::Configuration::new();

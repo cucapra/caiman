@@ -10,7 +10,6 @@ use super::function_classes::FunctionClassContext;
 use super::typing;
 //use super::typing::TypingContext;
 use super::value_funclets::ValueFunclet;
-//use crate::to_ir_new::label;
 //use caiman::ir;
 
 #[derive(Clone, Debug)]

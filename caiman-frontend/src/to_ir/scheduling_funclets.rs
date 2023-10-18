@@ -11,7 +11,7 @@ use super::value_funclets::ValueFunclet;
 use crate::error::Info;
 use crate::syntax::ast;
 use crate::syntax::ast::scheduling::Hole;
-use crate::to_ir_new::label;
+use super::label;
 use caiman::assembly::ast as asm;
 use caiman::ir;
 

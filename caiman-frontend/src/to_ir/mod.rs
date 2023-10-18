@@ -1,113 +1,68 @@
-use std::collections::HashMap;
-
-use crate::scheduling_language::ast as schedule_ast;
-//use crate::spec;
-use crate::value_language::ast as value_ast;
-//use crate::value_language::typing;
-//use caiman::arena::Arena;
+use crate::syntax::ast;
 use caiman::assembly::ast as asm;
-//use caiman::assembly_context as asm_ctx;
-use caiman::ir;
-//use std::collections::HashMap;
+//use caiman::ir;
 
-mod context;
+mod binops;
+mod external_cpu;
+mod funclet_util;
+mod function_classes;
 mod label;
-
-mod dual_compatibility;
-mod index;
-
-mod ir_typing;
-
-mod ir_funclets;
-
-mod to_value_funclets;
-
-mod to_se_funclets;
-
-pub mod to_vil;
-pub mod vil;
-
-mod error;
-pub use error::ToIRError;
-use error::ToIRResult;
+mod pipelines;
+mod value_funclets;
+mod scheduling_funclets_ir;
+mod scheduling_funclets;
+mod spatial_funclets;
+mod timeline_funclets;
+mod typing;
 
 macro_rules! to_decl {
     ($v : expr, $kind : ident) => {
         $v.into_iter().map(|x| asm::Declaration::$kind(x))
     };
+    ($v : expr) => {
+        $v.into_iter().map(|x| asm::Declaration::Funclet(x.0))
+    };
 }
 
-pub fn go(
-    value_ast: &value_ast::TypedProgram,
-    schedule_ast: &schedule_ast::ParsedProgram,
-) -> ToIRResult<asm::Program>
+pub fn frontend_to_asm(mut program: ast::Program) -> asm::Program
 {
-    let mut context = context::Context::new();
+    let mut typing_ctx = typing::TypingContext::new();
 
-    let vil_program = to_vil::value_ast_to_vil(value_ast);
-    let matched_schedule_stmts =
-        dual_compatibility::match_vil_to_scheduling(&vil_program, schedule_ast)?;
+    let (mut asm_function_classes, mut function_class_ctx) = function_classes::make(&program);
+    //binops::externalize_binops(&mut program, &mut asm_function_classes, &mut function_class_ctx);
 
-    let value_funclets = to_value_funclets::vil_to_value_funclets(&vil_program, &mut context);
-    let schedule_explicit_funclets = to_se_funclets::schedule_ast_to_schedule_explicit_funclets(
-        &matched_schedule_stmts,
-        &mut context,
+    let asm_external_cpus = external_cpu::lower_cpu_externs(&function_class_ctx, &program);
+
+    let mut asm_value_funclets =
+        value_funclets::lower_value_funclets(&function_class_ctx, &program);
+    typing_ctx.add_value_funclet_types(&asm_value_funclets);
+    typing_ctx.convert_value_funclet_types(&mut asm_value_funclets);
+
+    let asm_scheduling_funclets = scheduling_funclets::lower_scheduling_funclets(
+        &function_class_ctx,
+        &mut typing_ctx,
+        &asm_value_funclets,
+        &program,
     );
 
-    let mut funclets: Vec<asm::Funclet> = value_funclets
-        .into_iter()
-        .map(ir_funclets::make_asm_funclet)
-        .chain(schedule_explicit_funclets.into_iter().map(ir_funclets::make_asm_funclet))
-        .collect();
-    funclets.push(dummy_timeline_funclet(&mut context));
+    let asm_timeline_funclets =
+        timeline_funclets::lower_timeline_funclets(&mut typing_ctx, &program);
 
-    // XXX THESE ARE BOTH VERY TEMPORARY AND A HACK! :)
-    let main_name = "main".to_string();
-    let header = &funclets[0].header;
-    let function_classes: Vec<asm::FunctionClass> = vec![asm::FunctionClass {
-        name: main_name.clone(),
-        input_types: header.args.iter().map(|fa| fa.typ.clone()).collect(),
-        output_types: header.ret.iter().map(|fa| fa.typ.clone()).collect(),
-    }];
-    let mut pipelines: Vec<asm::Pipeline> = Vec::new();
-    pipelines.push(asm::Pipeline {
-        name: main_name,
-        funclet: asm::FuncletId("my_great_scheduleexplicitfunclet".to_string()),
-    });
+    let asm_spatial_funclets = spatial_funclets::lower_spatial_funclets(&mut typing_ctx, &program);
 
-    let types = context.into_types();
+    let asm_pipelines = pipelines::lower_pipelines(&program);
+
+    let types = typing_ctx.into_types();
     let declarations = to_decl!(types, TypeDecl)
-        .chain(to_decl!(function_classes, FunctionClass))
-        .chain(to_decl!(funclets, Funclet))
-        .chain(to_decl!(pipelines, Pipeline))
+        .chain(to_decl!(asm_function_classes, FunctionClass))
+        .chain(to_decl!(asm_external_cpus, ExternalFunction))
+        .chain(to_decl!(asm_value_funclets))
+        .chain(to_decl!(asm_scheduling_funclets))
+        .chain(to_decl!(asm_timeline_funclets))
+        .chain(to_decl!(asm_spatial_funclets))
+        .chain(to_decl!(asm_pipelines, Pipeline))
         .collect();
 
     let version = asm::Version { major: 0, minor: 0, detailed: 2 };
-    Ok(asm::Program { version, declarations })
-}
-
-fn dummy_timeline_funclet(context: &mut context::Context) -> asm::Funclet
-{
-    let funclet_name = "my_great_timelinefunclet".to_string();
-
-    let arg_type_str = context.add_event(ir::Place::Local);
-    let arg_str = asm::NodeId("e".to_string());
-    let arg_type_local = asm::TypeId::Local(arg_type_str);
-
-    let tail_edge = asm::TailEdge::Return { return_values: Some(vec![Some(arg_str.clone())]) };
-
-    asm::Funclet {
-        kind: ir::FuncletKind::Timeline,
-        header: asm::FuncletHeader {
-            args: vec![asm::FuncletArgument {
-                name: Some(arg_str),
-                typ: arg_type_local.clone(),
-                tags: Vec::new(),
-            }],
-            ret: vec![asm::FuncletArgument { name: None, typ: arg_type_local, tags: Vec::new() }],
-            name: asm::FuncletId(funclet_name),
-            binding: asm::FuncletBinding::None,
-        },
-        commands: vec![Some(asm::Command::TailEdge(tail_edge))],
-    }
+    asm::Program { version, declarations, path: String::new() }
 }
