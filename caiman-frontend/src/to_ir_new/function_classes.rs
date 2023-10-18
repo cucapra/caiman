@@ -35,6 +35,8 @@ impl FunctionClassContext
             panic!("Multiple typings inserted for {}", fc_name)
         }
     }
+
+    pub fn print_map(&self, msg: &str) { println!("{}: {:?}", msg, self.map) }
 }
 
 pub fn make(program: &ast::Program) -> (Vec<asm::FunctionClass>, FunctionClassContext)
@@ -67,7 +69,9 @@ pub fn make(program: &ast::Program) -> (Vec<asm::FunctionClass>, FunctionClassCo
         }
 
         match type_of_first_matching_decl(program, &functions) {
-            None => panic!("Empty function class declared"),
+            None => {
+                panic!("Empty function class declared")
+            },
             Some((t_in, t_out)) => {
                 let input_types: Vec<asm::TypeId> =
                     t_in.into_iter().map(typing::convert_value_type).collect();
@@ -89,10 +93,24 @@ fn type_of_first_matching_decl(
     funclet_names: &Vec<String>,
 ) -> Option<(Vec<ast::value::Type>, ast::value::Type)>
 {
+    let mut schedule_vf = "";
+    for (_, decl) in program.iter() {
+        match decl {
+            ast::DeclKind::SchedulingImpl { scheduling_funclets, value_funclet_name } => {
+                for funclet in scheduling_funclets {
+                    if funclet_names.contains(&funclet.name) {
+                        schedule_vf = &value_funclet_name;
+                    }
+                }
+            },
+            _ => (),
+        }
+    }
+
     for (_, decl) in program.iter() {
         match decl {
             ast::DeclKind::ValueFunclet { name, input, output: (_, t_out), statements: _ } => {
-                if funclet_names.contains(name) {
+                if funclet_names.contains(name) || name == schedule_vf {
                     let t_in = input.iter().map(|(_, input_type)| input_type.clone()).collect();
                     return Some((t_in, t_out.clone()));
                 }
