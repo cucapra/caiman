@@ -29,9 +29,9 @@ type cpu_buffer_allocator;
 type cpu_buffer_ref<i64>;
 
 native_value %native_i64 : i64;
-ref %slot0 : i64-local;
+ref %slot0 : i64-local<flags=[map_read,map_write,copy_src,copy_dst,storage,uniform]>;
 fence %fence0 : cpu;
-buffer %buffer0 : gpu<alignment_bits = 4, byte_size = 8>;
+buffer %buffer0 : gpu<flags = [], alignment_bits = 4, byte_size = 8>;
 encoder %encoder0 : gpu;
 event %event0;
 buffer_space %buffer_space0;
@@ -86,16 +86,15 @@ spatial %space(%b : %buffer_space0) -> [%iout : i64] {
 }
 
 // can syntactically be empty, even though this is meaningless
-schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0] {
-    %x = alloc-temporary local i64;
+schedule[value $val = %foo] %bar<none($val)-usable, none($val)-dead>(%0 : %slot0) -> [%out : %slot0] {
+    %x = alloc-temporary local [copy_dst, copy_src] i64;
     drop %0;
     %y = static-sub-alloc local i64 %x;
-    %4 = static-alloc local %0 [1, 2] input(?);
-    %z = static-dealloc local node($val.%5) [%x, %4];
+    %z = static-split local %y [1, 2, 3] ?;
     %_ = read-ref i64 %x;
     %_ = borrow-ref i64 %x;
     write-ref i64 %x -> %4;
-    local-do-builtin none(%x, %3) -> [%4, %0];
+    local-do-builtin none($val)(%x, %3) -> [%4, %0];
     local-do-external %do_pure_thing_on_cpu output(?)(%x, %3) -> [%4, %0];
     local-copy %x -> %3;
     %_ = begin-encoding local node(?.?)[%x, %3] [%4, %0];
@@ -113,38 +112,38 @@ schedule[value $val = %foo] %bar<none, none-none>(%0 : %slot0) -> [%out : %slot0
     return %x;
 }
 
-schedule[value $val = %foo, spatial $space = %space]
-%scall<none-have, none-met>
-(%abc : input($val.%x)-have %slot0)
--> [%out : output($val.%y)-met %slot0] {
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%scall<none($time)-usable, none($time)-save>
+(%abc : input($val.%x)-usable %slot0)
+-> [%out : output($val.%y)-save %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-call %bar[value input(?),
         timeline output(?),
-        spatial none](%abc, %abc) %abc;
+        spatial none($space)](%abc, %abc) %abc;
 }
 
 // value, timeline, spatial order is mandatory (though you can freely omit one of course)
 schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
-%sselect<input($time.%e)-met, output($time.%e)-have>
-(%abc : input($time.%e)-met input($val.%x)-have %slot0)
--> input($time.%e)-met output($val.%x)-none %slot0 {
+%sselect<input($time.%e)-save, output($time.%e)-usable>
+(%abc : input($time.%e)-save input($val.%x)-usable %slot0)
+-> input($time.%e)-save output($val.%x)-dead %slot0 {
     schedule-select %abc [%bar, %scall][value input(?),
         timeline output(?),
-        spatial none](%abc, %abc) %abc;
-}
-
-schedule[value $val = %foo, timeline $time = %time]
-%syield<input($time.%e)-have, node($time.%e)-need>
-(%abc : input($time.%bs)-none %event0)
--> [%out : node($time.%bs)-need %buffer0] {
-    schedule-call-yield %bar[value input($val.%x),
-        timeline output($time.%e),
-        spatial none](%abc, %abc) %abc;
+        spatial none($space)](%abc, %abc) %abc;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%debugtest<input($time.%e)-have, node($time.%e)-none>
-(%abc : input($space.%bs)-none %event0)
+%syield<input($time.%e)-usable, node($time.%e)-need>
+(%abc : input($time.%bs)-dead %event0)
+-> [%out : node($time.%bs)-need %buffer0] {
+    schedule-call-yield %bar[value input($val.%x),
+        timeline output($time.%e),
+        spatial none($space)](%abc, %abc) %abc;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%debugtest<input($time.%e)-usable, node($time.%e)-dead>
+(%abc : input($space.%bs)-dead %event0)
 -> [%out : node($space.%bs)-need %buffer0] {
     debug-hole [%abc, %abc];
 }

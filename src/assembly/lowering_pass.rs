@@ -118,7 +118,7 @@ pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient
         context.remote_node_id(funclet_id, node_id)
     }
     match quot {
-        ast::Quotient::None => ir::Quotient::None,
+        ast::Quotient::None(_) => ir::Quotient::None,
         ast::Quotient::Node(r) => ir::Quotient::Node {
             node_id: get_node(reject_hole(r.as_ref()), context),
         },
@@ -140,7 +140,7 @@ fn ir_tag(tag: &ast::Tag, context: &mut Context) -> ir::Tag {
 
 fn quotient_funclet(quot: &ast::Quotient, context: &mut Context) -> Option<ast::FuncletId> {
     match quot {
-        ast::Quotient::None => None,
+        ast::Quotient::None(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
         ast::Quotient::Node(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
         ast::Quotient::Input(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
         ast::Quotient::Output(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
@@ -310,9 +310,11 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<ir::
                 ast::LocalTypeInfo::Ref {
                     storage_type,
                     storage_place,
+                    buffer_flags,
                 } => ir::Type::Ref {
                     storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
                     storage_place: storage_place.clone(),
+                    buffer_flags: buffer_flags.clone(),
                 },
                 ast::LocalTypeInfo::Fence { queue_place } => ir::Type::Fence {
                     queue_place: queue_place.clone(),
@@ -320,9 +322,11 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<ir::
                 ast::LocalTypeInfo::Buffer {
                     storage_place,
                     static_layout_opt,
+                    flags,
                 } => ir::Type::Buffer {
                     storage_place: storage_place.clone(),
                     static_layout_opt: static_layout_opt.clone(),
+                    flags: flags.clone(),
                 },
                 ast::LocalTypeInfo::Encoder { queue_place } => ir::Type::Encoder {
                     queue_place: queue_place.clone(),
@@ -374,12 +378,16 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
                 .collect();
-            let function_id = context.funclet_indices.get_funclet(&name.0).unwrap();
             ir::Node::CallFunctionClass {
                 function_id: context
                     .function_classes
                     .get(&ast::FunctionClassId(name.0.clone()))
-                    .unwrap(),
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Function class {:?} not found in {:?}",
+                            name.0, context.function_classes
+                        )
+                    }),
                 arguments: mapped_arguments.into_boxed_slice(),
             }
         }
@@ -395,9 +403,11 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         ast::Node::AllocTemporary {
             place,
             storage_type,
+            buffer_flags,
         } => ir::Node::AllocTemporary {
             place: reject_hole(place.clone()),
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
+            buffer_flags: reject_hole(*buffer_flags),
         },
         ast::Node::Drop { node } => ir::Node::Drop {
             node: context.node_id(reject_hole(node.as_ref())),
@@ -411,12 +421,12 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
             place: reject_hole(place.as_ref()).clone(),
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
         },
-        ast::Node::StaticAlloc {
+        ast::Node::StaticSplit {
             spatial_operation,
             node,
             sizes,
             place,
-        } => ir::Node::StaticAlloc {
+        } => ir::Node::StaticSplit {
             spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
             node: context.node_id(reject_hole(node.as_ref())),
             sizes: reject_hole(sizes.as_ref())
@@ -425,11 +435,11 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
                 .collect(),
             place: reject_hole(place.as_ref()).clone(),
         },
-        ast::Node::StaticDealloc {
+        ast::Node::StaticMerge {
             spatial_operation,
             nodes,
             place,
-        } => ir::Node::StaticDealloc {
+        } => ir::Node::StaticMerge {
             spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
             nodes: reject_hole(nodes.as_ref())
                 .iter()
@@ -759,7 +769,7 @@ fn ir_schedule_binding(
             let new_tag = ir_tag(tag, context);
             let data = quotient_funclet(&tag.quot, context);
             match data {
-                None => {}
+                None => panic!("Tag must have a funclet id associated with it: {:?}", tag),
                 Some(fnid) => {
                     if fnid == value.clone().unwrap_or(ast::FuncletId("".to_string())) {
                         result.value = new_tag;

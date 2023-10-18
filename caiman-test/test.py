@@ -33,14 +33,14 @@ def eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
 
 class Colorizer:
-    def cyan(s: str) -> str:
-        return f"\033[36m{s}\033[39m"
-    def yellow(s: str) -> str:
-        return f"\033[93m{s}\033[39m"
-    def red(s: str) -> str:
-        return f"\033[31m{s}\033[39m"
-    def grey(s: str) -> str:
-        return f"\033[90m{s}\033[39m"
+    def cyan(self: str) -> str:
+        return f"\033[36m{self}\033[39m"
+    def yellow(self: str) -> str:
+        return f"\033[93m{self}\033[39m"
+    def red(self: str) -> str:
+        return f"\033[31m{self}\033[39m"
+    def grey(self: str) -> str:
+        return f"\033[90m{self}\033[39m"
 
 COLOR_INFO = Colorizer.cyan("[info]")
 COLOR_WARN = Colorizer.yellow("[warn]")

@@ -127,10 +127,10 @@ impl CaimanAssemblyParser {
     fn static_sub_alloc_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
-    fn static_alloc_sep(_input: Node) -> ParseResult<()> {
+    fn static_split_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
-    fn static_dealloc_sep(_input: Node) -> ParseResult<()> {
+    fn static_merge_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
     fn read_sep(_input: Node) -> ParseResult<()> {
@@ -324,6 +324,14 @@ impl CaimanAssemblyParser {
             .unwrap()
             .meta_map;
         match_nodes!(input.into_children();
+            [meta_name(meta_name)] =>
+                match meta_map.get(&meta_name) {
+                        Some(funclet) => Ok(ast::RemoteNodeId {
+                            funclet: Some(funclet.clone()),
+                            node: None
+                        }),
+                        None => Err(error)
+                },
             [meta_name(meta_name), name(node)] =>
                 match meta_map.get(&meta_name) {
                         Some(funclet) => Ok(ast::RemoteNodeId {
@@ -346,6 +354,21 @@ impl CaimanAssemblyParser {
             .meta_map;
         match_nodes!(input.into_children();
             // there's a way to make this pretty, but I'm stupid
+            [meta_name_hole(meta_name_hole)] =>
+                match meta_name_hole {
+                    None => Ok(ast::RemoteNodeId {
+                                funclet: None,
+                                node: None
+                            }),
+                    Some(meta_name) =>
+                        match meta_map.get(&meta_name) {
+                                Some(funclet) => Ok(ast::RemoteNodeId {
+                                    funclet: Some(funclet.clone()),
+                                    node: None
+                                }),
+                                None => Err(error)
+                        }
+                },
             [meta_name_hole(meta_name_hole), name_hole(name_hole)] =>
                 match meta_name_hole {
                     None => Ok(ast::RemoteNodeId {
@@ -510,6 +533,52 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children(); [place_hole(t)] => t))
     }
 
+    fn buffer_flag(input: Node) -> ParseResult<ir::BufferFlags> {
+        input
+            .as_str()
+            .parse::<String>()
+            .map_err(|e| input.error(e))
+            .and_then(|s| match s.as_str() {
+                "map_read" => Ok(ir::BufferFlags {
+                    map_read: true,
+                    ..Default::default()
+                }),
+                "map_write" => Ok(ir::BufferFlags {
+                    map_write: true,
+                    ..Default::default()
+                }),
+                "copy_src" => Ok(ir::BufferFlags {
+                    copy_src: true,
+                    ..Default::default()
+                }),
+                "copy_dst" => Ok(ir::BufferFlags {
+                    copy_dst: true,
+                    ..Default::default()
+                }),
+                "storage" => Ok(ir::BufferFlags {
+                    storage: true,
+                    ..Default::default()
+                }),
+                "uniform" => Ok(ir::BufferFlags {
+                    uniform: true,
+                    ..Default::default()
+                }),
+                _ => unimplemented!(),
+            })
+    }
+
+    fn buffer_flags_elements(input: Node) -> ParseResult<ir::BufferFlags> {
+        Ok(match_nodes!(input.into_children();
+            [buffer_flag(flags)..] => flags.fold(ir::BufferFlags::new(), |flags, new_flags| (flags.or(& new_flags))),
+        ))
+    }
+
+    fn buffer_flags(input: Node) -> ParseResult<ir::BufferFlags> {
+        Ok(match_nodes!(input.into_children();
+            [buffer_flags_elements(flags)] => flags
+        ))
+    }
+
     // weirdly, this seems like the best way to do this with pest_consume for now?
     fn quotient_name(
         input: Node,
@@ -529,13 +598,13 @@ impl CaimanAssemblyParser {
                 "node" => Ok(box_up(&ast::Quotient::Node)),
                 "input" => Ok(box_up(&ast::Quotient::Input)),
                 "output" => Ok(box_up(&ast::Quotient::Output)),
+                "none" => Ok(box_up(&ast::Quotient::None)),
                 _ => Err(input.error(unexpected(s))),
             })
     }
 
     fn quotient(input: Node) -> ParseResult<ast::Quotient> {
         Ok(match_nodes!(input.into_children();
-            [none] => ast::Quotient::None,
             [quotient_name(quot), meta_remote(remote)] => {
                 quot(Some(remote))
             },
@@ -545,7 +614,6 @@ impl CaimanAssemblyParser {
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::Quotient>> {
         Ok(match_nodes!(input.into_children();
             [hole(hole)] => None,
-            [none(none)] => Some(ast::Quotient::None),
             [quotient_name(quot), meta_remote_hole(remote)] => {
                 Some(quot(Some(remote)))
             },
@@ -558,9 +626,9 @@ impl CaimanAssemblyParser {
             .parse::<String>()
             .map_err(|e| input.error(e))
             .and_then(|s| match s.as_str() {
-                "none" => Ok(ir::Flow::None),
-                "have" => Ok(ir::Flow::Have),
-                "met" => Ok(ir::Flow::Met),
+                "dead" => Ok(ir::Flow::Dead),
+                "usable" => Ok(ir::Flow::Usable),
+                "save" => Ok(ir::Flow::Save),
                 "need" => Ok(ir::Flow::Need),
                 _ => unreachable!(),
             })
@@ -568,7 +636,6 @@ impl CaimanAssemblyParser {
 
     fn tag(input: Node) -> ParseResult<ast::Tag> {
         Ok(match_nodes!(input.into_children();
-            [none] => ast::Tag { quot : ast::Quotient::None, flow : ir::Flow::None},
             [quotient(quot), flow(flow)] => ast::Tag { quot, flow }
         ))
     }
@@ -613,14 +680,27 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn ref_buffer(input: Node) -> ParseResult<ir::BufferFlags> {
+        Ok(match_nodes!(input.into_children();
+            [buffer_flags(buffer_flags)] => buffer_flags
+        ))
+    }
+
+    fn ref_type(input: Node) -> ParseResult<(ast::TypeId, ir::Place)> {
+        Ok(match_nodes!(input.into_children();
+            [typ(typ), place(place)] => (typ, place)
+        ))
+    }
+
     fn ref_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name), typ(storage_type), place(storage_place)] =>
+            [name_type_separator(name), ref_type((storage_type, storage_place)), ref_buffer(buffer_flags)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::Ref {
                         storage_type,
-                        storage_place
+                        storage_place,
+                        buffer_flags
                 }
             })
         ))
@@ -638,7 +718,7 @@ impl CaimanAssemblyParser {
 
     fn buffer_alignment_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name(name), place(storage_place), n(alignment_bits), n(byte_size)] =>
+            [name(name), place(storage_place), buffer_flags(flags), n(alignment_bits), n(byte_size)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::Buffer {
@@ -646,7 +726,8 @@ impl CaimanAssemblyParser {
                         static_layout_opt: Some(ir::StaticBufferLayout {
                             alignment_bits,
                             byte_size
-                        })
+                        }),
+                        flags
                     }
                 })
         ))
@@ -1404,11 +1485,13 @@ impl CaimanAssemblyParser {
     fn alloc_temporary_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), alloc_temporary_sep, place_hole_sep(place),
+                buffer_flags(buffer_flags),
                 type_hole(storage_type)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::AllocTemporary {
                         place,
-                        storage_type
+                        buffer_flags: Some(buffer_flags),
+                        storage_type,
                     }
                 }
         ))
@@ -1439,12 +1522,12 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn static_alloc_node(input: Node) -> ParseResult<ast::NamedNode> {
+    fn static_split_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), static_alloc_sep, place_hole_sep(place),
+            [assign(name), static_split_sep, place_hole_sep(place),
                 name_hole(node), n_list(sizes), quotient_hole(spatial_operation)] => ast::NamedNode {
                     name: Some(name),
-                    node: ast::Node::StaticAlloc {
+                    node: ast::Node::StaticSplit {
                         node: node.map(|s| NodeId(s)),
                         place,
                         sizes,
@@ -1454,12 +1537,12 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn static_dealloc_node(input: Node) -> ParseResult<ast::NamedNode> {
+    fn static_merge_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
                 quotient_hole(spatial_operation), name_box(nodes)] => ast::NamedNode {
                     name: Some(name),
-                    node: ast::Node::StaticDealloc {
+                    node: ast::Node::StaticMerge {
                         nodes,
                         place,
                         spatial_operation
@@ -1640,7 +1723,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [assign(name), serialized_join_sep, name_hole_sep(funclet),
                 name_box(captures), name_hole(continuation)] => ast::NamedNode {
-                    name: None,
+                    name: Some(name),
                     node: ast::Node::SerializedJoin {
                         funclet: funclet.map(|s| FuncletId(s)),
                         captures,
@@ -1717,8 +1800,8 @@ impl CaimanAssemblyParser {
             [alloc_temporary_node(n)] => n,
             [drop_node(n)] => n,
             [static_sub_alloc_node(n)] => n,
-            [static_alloc_node(n)] => n,
-            [static_dealloc_node(n)] => n,
+            [static_split_node(n)] => n,
+            [static_merge_node(n)] => n,
             [read_node(n)] => n,
             [borrow_node(n)] => n,
             [write_node(n)] => n,
