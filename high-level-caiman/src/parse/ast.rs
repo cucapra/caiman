@@ -333,12 +333,12 @@ pub enum ResourceMembers {
 impl std::fmt::Display for ResourceMembers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResourceMembers::Numeric(name, val) => write!(f, "{}: {}", name, val),
-            ResourceMembers::Input(val) => {
-                write!(f, "input: {}", val)
+            Self::Numeric(name, val) => write!(f, "{name}: {val}"),
+            Self::Input(val) => {
+                write!(f, "input: {val}")
             }
-            ResourceMembers::Output(val) => {
-                write!(f, "output: {}", val)
+            Self::Output(val) => {
+                write!(f, "output: {val}")
             }
         }
     }
@@ -380,9 +380,8 @@ pub enum ExternDefMembers {
 impl std::fmt::Display for ExternDefMembers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExternDefMembers::StrVal(name, val) => write!(f, "{}: {}", name, val),
-            ExternDefMembers::Dimensions(name, val) => write!(f, "{}: {}", name, val),
-            _ => Result::Ok(()),
+            Self::Dimensions(name, val) | Self::StrVal(name, val) => write!(f, "{name}: {val}"),
+            Self::Resource(_) => Result::Ok(()),
         }
     }
 }
@@ -410,18 +409,18 @@ pub enum ClassMembers {
 
 impl ClassMembers {
     /// Get's the name of the function
+    #[must_use]
     pub fn get_name(&self) -> String {
         match self {
-            ClassMembers::ValueFunclet { name, .. } => name.clone(),
-            ClassMembers::Extern { name, .. } => name.clone(),
+            Self::ValueFunclet { name, .. } | Self::Extern { name, .. } => name.clone(),
         }
     }
 
     /// Get's the source info of the function
-    pub fn get_info(&self) -> Info {
+    #[must_use]
+    pub const fn get_info(&self) -> Info {
         match self {
-            ClassMembers::ValueFunclet { info, .. } => *info,
-            ClassMembers::Extern { info, .. } => *info,
+            Self::ValueFunclet { info, .. } | Self::Extern { info, .. } => *info,
         }
     }
 

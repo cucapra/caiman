@@ -1,5 +1,6 @@
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::wildcard_imports)]
 use std::iter;
 
 use lalrpop_util::{ParseError, lexer::Token};
@@ -26,6 +27,7 @@ const PATCH_VERSION: &str = "0";
 /// ```
 macro_rules! tuple_variant_factory {
     ($f:ident ( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path) => {
+        #[must_use]
         pub fn $f (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var(self.info(l, r), $($x,)*)
         }
@@ -67,6 +69,7 @@ macro_rules! tuple_variant_factory {
 /// ```
 macro_rules! struct_variant_factory {
     ($f:ident ( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path) => {
+        #[must_use]
         pub fn $f (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
@@ -75,6 +78,7 @@ macro_rules! struct_variant_factory {
         }
     };
     ($f:ident ( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path{$($g:ident:$e:expr),*}) => {
+        #[must_use]
         pub fn $f (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
@@ -83,6 +87,7 @@ macro_rules! struct_variant_factory {
         }
     };
     ($f:ident<$($templates:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path) => {
+        #[must_use]
         pub fn $f<$($templates,)*>(&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
@@ -91,6 +96,7 @@ macro_rules! struct_variant_factory {
         }
     };
     ($f:ident<$($templates:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path{$($g:ident:$e:expr),*}) => {
+        #[must_use]
         pub fn $f<$($templates,)*> (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
@@ -118,7 +124,8 @@ type ParserError = ParseError<usize, Token<'static>, CustomParsingError>;
 
 impl ASTFactory {
 
-    /// Creates a new ASTFactory from a string of caimain frontend code
+    /// Creates a new `ASTFactory` from a string of caimain frontend code
+    #[must_use]
     pub fn new(_filename: &str, s: &str) -> Self {
         Self {
             line_ending_byte_offsets: s
@@ -133,11 +140,12 @@ impl ASTFactory {
     }
 
     /// Returns the line and column number of the given byte offset
+    /// # Panics
+    /// Panics if the byte offset is greater than the length of the string
+    #[must_use]
     pub fn line_and_column(&self, u: usize) -> (usize, usize) {
         if let Some(b) = self.line_ending_byte_offsets.last() {
-            if u > *b {
-                panic!("Byte offset too big: {}", u);
-            }
+            assert!(u <= *b, "Byte offset too big: {u}");
         }
         self.line_ending_byte_offsets
             .iter()
@@ -160,6 +168,10 @@ impl ASTFactory {
     }
 
     /// Constructs an external resource from a list of members
+    /// # Errors
+    /// Returns an error if the resource is missing a binding or group field
+    /// # Panics
+    /// Panics if somehow we didn't exit early with an error
     pub fn extern_resource(&self, l: usize, v: Vec<ResourceMembers>, r: usize) 
         -> Result<ExternResource, ParserError> 
     {
@@ -171,16 +183,16 @@ impl ASTFactory {
             for member in v {
                 match member {
                     ResourceMembers::Input(val) => {
-                        input = Some(val.clone())
+                        input = Some(val.clone());
                     }
                     ResourceMembers::Output(val) => {
-                        output = Some(val.clone())
+                        output = Some(val.clone());
                     }
                     ResourceMembers::Numeric(name, val) if name == "binding" => {
-                        binding = Some(val.clone())
+                        binding = Some(val.clone());
                     }
                     ResourceMembers::Numeric(name, val) if name == "group" => group = Some(val.clone()),
-                    m => return Err(custom_parse_error!(src_info, "Invalid member '{}' in extern definition", m)),
+                    m @ ResourceMembers::Numeric(..) => return Err(custom_parse_error!(src_info, "Invalid member '{}' in extern definition", m)),
                 }
             }
             if binding.is_none() {
@@ -198,19 +210,23 @@ impl ASTFactory {
                 caiman_val: match (input, output) {
                     (Some(s), None) => InputOrOutputVal::Input(s),
                     (None, Some(s)) => InputOrOutputVal::Output(s),
-                    _ => panic!("Resource at {} must have exactly one input or output", src_info),
+                    _ => panic!("Resource at {src_info} must have exactly one input or output"),
                 },
             })
     }
 
     /// Constructs an extern definition from a list of members
+    /// # Errors
+    /// Returns an error if the definition is missing a path, entry, or dimensions field
+    /// # Panics
+    /// Panics if somehow we didn't exit early with an error
     pub fn extern_def(&self, l: usize, members: Vec<ExternDefMembers>, r: usize) 
         -> Result<ExternDef, ParserError> 
     {
         let info = self.info(l, r);
         let mut def = ExternDef {
-            path: "".to_string(),
-            entry: "".to_string(),
+            path: String::new(),
+            entry: String::new(),
             dimensions: usize::MAX,
             resources: Vec::new(),
         };
@@ -219,7 +235,7 @@ impl ASTFactory {
                 ExternDefMembers::StrVal(key, s) if key == "path" => def.path = s,
                 ExternDefMembers::StrVal(key, s) if key == "entry" => def.entry = s,
                 ExternDefMembers::Dimensions(key, s) if key == "dimensions" => {
-                    def.dimensions = s.parse().unwrap()
+                    def.dimensions = s.parse().unwrap();
                 }
                 ExternDefMembers::Resource(r) => def.resources.push(r),
                 x => {
@@ -241,6 +257,8 @@ impl ASTFactory {
 
     /// Checks that an expression is, (syntactically), a valid constant expression
     /// and returns it if so. Otherwise, returns an error.
+    /// # Errors
+    /// Returns an error if the expression is not a constant expression
     pub fn const_expr(&self, expr: SpecExpr) -> Result<SpecExpr, ParserError> {
         fn sanitize_expr(expr: &SpecExpr) -> Result<(), ParserError> {
             match expr {
@@ -280,6 +298,7 @@ impl ASTFactory {
 
     /// Constructs a flagged type from a data type and a list of flags/settings
     /// Flags/settings are optional
+    #[must_use]
     pub fn flagged_type(&self, l: usize, t: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> FlaggedType {
         // are there a limited set of WGPU flags/setting we should check for?
         match flags {
@@ -313,6 +332,8 @@ impl ASTFactory {
 
     /// Converts a scheduling expression to a specification expression or
     /// returns an error if the expression is invalid in a specification
+    /// # Errors
+    /// Returns an error if the expression is invalid in a specification
     pub fn sched_to_spec_expr(e: SchedExpr) -> Result<SpecExpr, ParserError> {
         match e {
             SchedExpr::Binop { info, op, lhs, rhs } => {
@@ -355,7 +376,7 @@ impl ASTFactory {
                         let args = args.into_iter().map(Self::sched_to_spec_expr).collect::<Result<Vec<_>, _>>()?;
                         Ok(SpecTerm::Call { info, function: Box::new(target), args, template: templates.and_then(|t| match t {
                             TemplateArgs::Type(t) => Some(t),
-                            _ => None,
+                            TemplateArgs::Vals(_) => None,
                         }) })
                    }
                 }
@@ -411,6 +432,9 @@ impl ASTFactory {
 
     // Spec Statements
 
+    /// Constructs a declaration in a specification
+    /// # Errors
+    /// Returns an error if the declaration cannot occur in a specification
     pub fn spec_decl(&self, l: usize, lhs: Vec<(Name, Option<DataType>)>, rhs: SchedExpr, r: usize) -> Result<SpecStmt, ParserError> {
         let rhs = Self::sched_to_spec_expr(rhs)?;
         Ok(SpecStmt::Assign {
@@ -420,6 +444,9 @@ impl ASTFactory {
         })
     }
 
+    /// Constructs a return in a specification
+    /// # Errors
+    /// Returns an error if the return cannot occur in a specification
     pub fn spec_returns(&self, l: usize, e: SchedExpr, r: usize) -> Result<SpecStmt, ParserError> {
         let e = Self::sched_to_spec_expr(e)?;
         Ok(SpecStmt::Returns(self.info(l, r), e))
@@ -461,6 +488,7 @@ impl ASTFactory {
     // scheduling function calls:
 
     /// Constructs a scheduling function call
+    #[must_use]
     pub fn sched_fn_call(&self, target: SchedExpr, templates: Option<TemplateArgs>, args: Vec<SchedExpr>, tag: Option<Tags>) 
         -> SchedFuncCall {
         SchedFuncCall {
@@ -472,6 +500,8 @@ impl ASTFactory {
     }
 
     /// Constructs template value arguments for a scheduling function call
+    /// # Errors
+    /// Returns an error if the templates are not valid in a scheduling context
     pub fn template_args(&self, templates: Vec<SchedExpr>) -> Result<TemplateArgs, ParserError> {
         Ok(TemplateArgs::Vals(templates.into_iter()
             .map(Self::sched_to_spec_expr)
@@ -484,6 +514,7 @@ impl ASTFactory {
     tuple_variant_factory!(sched_call_expr(call: SchedFuncCall) -> SchedTerm:SchedTerm::Call);
 
     /// Constructs an encoded statement
+    #[must_use]
     pub fn sched_encode(&self, target: SchedExpr, encoding: EncodedStmt, tag: Option<Tags>) 
         -> SchedFuncCall {
             SchedFuncCall {
@@ -551,6 +582,7 @@ impl ASTFactory {
         });
     
     /// Constructs a function class for a single class member (value or external function)
+    #[must_use]
     pub fn singleton_function_class(&self, member: ClassMembers) -> TopLevel {
         TopLevel::FunctionClass { info: member.get_info(), name: member.get_name(), members: vec![member] }
     }
@@ -561,12 +593,17 @@ impl ASTFactory {
 
     /// Constructs a constant definition from a name and expression. Checks that
     /// the expression is a valid constant expression and returns an error if not
+    /// # Errors
+    /// Returns an error if the expression is not a constant expression
     pub fn const_def(&self, l: usize, name: Name, expr: SchedExpr, r: usize) -> Result<TopLevel, ParserError> {
         self.const_expr(Self::sched_to_spec_expr(expr)?).map(|expr| TopLevel::Const { info: self.info(l, r), name, expr })
     }
 
     /// Constructs a program from a list of top level declarations, checking the
     /// version string and returning an error if it is invalid
+    /// Constructs a high-level-caiman program
+    /// # Errors
+    /// Returns an error if the program is not a valid high-level-caiman program
     pub fn program(&self, maj_min: &str, patch: &str, prog: Program) -> Result<Program, ParserError> {
         let split_maj_min: Vec<_> = maj_min.split('.').collect();
         if split_maj_min.len() != 2 {

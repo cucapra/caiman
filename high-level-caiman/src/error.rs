@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)]
 use std::fmt;
 
 /// Struct containing information about a token's starting and ending
@@ -25,7 +26,7 @@ pub struct CustomParsingError {
 /// Constructs a custom parsing error
 /// ## Arguments
 /// * `$loc` - The location of the error
-/// * ...format_args - the arguments to the format macro which will format a message to display
+/// * ...`format_args` - the arguments to the format macro which will format a message to display
 #[macro_export]
 macro_rules! custom_parse_error {
     ($loc:expr, $($msg:expr),*) => {
@@ -93,14 +94,14 @@ impl fmt::Display for Error {
 
 impl std::process::Termination for Error {
     fn report(self) -> std::process::ExitCode {
-        eprintln!("{}", self);
+        eprintln!("{self}");
         std::process::ExitCode::FAILURE
     }
 }
 
 impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 

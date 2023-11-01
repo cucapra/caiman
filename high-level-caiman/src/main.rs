@@ -1,3 +1,5 @@
+#![warn(clippy::pedantic, clippy::nursery)]
+#![warn(clippy::all, clippy::correctness)]
 extern crate clap;
 mod error;
 mod lower;

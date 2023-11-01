@@ -1,6 +1,8 @@
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
+
 
 grammar(astf: &ASTFactory);
 
@@ -25,6 +27,7 @@ match {
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
+  r"/\*(.|\s)*\*/" => { }, // Multiline (non-nested) comments
 
   _, // Everything else
 }
