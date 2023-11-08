@@ -1,14 +1,2 @@
-Error: At param_in_spec.cm:3:12, 
-  Parsing Error: Unrecognized token: ':', expected one of [
-    "\"!\"",
-    "\"(\"",
-    "\"-\"",
-    "\"?\"",
-    "\"[\"",
-    "\"false\"",
-    "\"true\"",
-    "\"~\"",
-    "r#\"[0-9]+\"#",
-    "r#\"[0-9]+[.][0-9]+\"#",
-    "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
-]
+Error: At param_in_spec.cm:3:10, 
+  Parsing Error: Cannot parameterize a function call with non-type template arguments nor specify a tag in this context
