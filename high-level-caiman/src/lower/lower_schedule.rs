@@ -117,9 +117,9 @@ fn quot_ref_to_remote_node(qr: &QuotientReference) -> asm::RemoteNodeId {
 
 /// Gets the assembly quotient from a high level caiman tag
 fn tag_to_quot(t: &Tag) -> asm::Quotient {
-    t.quot
-        .as_ref()
-        .map(|x| match x {
+    t.quot.as_ref().map_or_else(
+        || asm::Quotient::None(t.quot_var.as_ref().map(quot_ref_to_remote_node)),
+        |x| match x {
             Quotient::Node => asm::Quotient::Node(t.quot_var.as_ref().map(quot_ref_to_remote_node)),
             Quotient::Input => {
                 asm::Quotient::Input(t.quot_var.as_ref().map(quot_ref_to_remote_node))
@@ -128,10 +128,8 @@ fn tag_to_quot(t: &Tag) -> asm::Quotient {
                 asm::Quotient::Output(t.quot_var.as_ref().map(quot_ref_to_remote_node))
             }
             Quotient::None => asm::Quotient::None(t.quot_var.as_ref().map(quot_ref_to_remote_node)),
-        })
-        .unwrap_or(asm::Quotient::None(
-            t.quot_var.as_ref().map(quot_ref_to_remote_node),
-        ))
+        },
+    )
 }
 
 /// Converts a hlc tag to a tag in the assembly

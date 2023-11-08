@@ -324,11 +324,6 @@ impl ASTFactory {
     }
 
     struct_variant_factory!(tag(quot: Option<Quotient>, quot_var: Option<QuotientReference>, flow: Option<Flow>) -> Tag:Tag);
-    struct_variant_factory!(empty_tag() -> Tag:Tag {
-        quot: None,
-        quot_var: None,
-        flow: None
-    });
 
     /// Converts a scheduling expression to a specification expression or
     /// returns an error if the expression is invalid in a specification
@@ -457,8 +452,6 @@ impl ASTFactory {
 
     // scheduling statements
 
-    struct_variant_factory!(sched_decl(lhs: Vec<Arg<Option<FullType>>>, is_const: bool, 
-        expr: SchedExpr) -> SchedStmt:SchedStmt::Decl);
     struct_variant_factory!(sched_assign(lhs: Name, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign);
     tuple_variant_factory!(sched_return(e: SchedExpr) -> SchedStmt:SchedStmt::Return);
     tuple_variant_factory!(sched_hole_stmt() -> SchedStmt:SchedStmt::Hole);
