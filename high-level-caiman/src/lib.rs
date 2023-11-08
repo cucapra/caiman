@@ -1,4 +1,3 @@
-pub mod parse;
-// pub mod to_ir_new;
-
 pub mod error;
+pub mod lower;
+pub mod parse;

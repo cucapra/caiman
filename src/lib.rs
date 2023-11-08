@@ -16,3 +16,26 @@ mod rust_wgpu_backend;
 mod scheduling_state;
 mod shadergen;
 mod type_system;
+
+// TODO (stephen): unified CLI
+pub fn explicate_and_execute(output: Option<String>, program: assembly::ast::Program) {
+    let version = &program.version;
+    assert_eq!((version.major, version.minor, version.detailed), (0, 0, 2));
+
+    let definition = assembly::lowering_pass::lower(program);
+    ir::validation::validate_program(&definition.program);
+    let mut codegen = rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
+    codegen.set_print_codgen_debug_info(true);
+    let output_string = codegen.generate();
+    match output {
+        None => println!("{}", output_string),
+        Some(path_str) => {
+            // Copied from caiman/src/main.rs (by Mia)
+            // Copied from Mia (by Stephen)
+            let path = std::path::Path::new(&path_str);
+            let prefix = path.parent().unwrap();
+            std::fs::create_dir_all(prefix).unwrap();
+            std::fs::write(path, output_string).unwrap();
+        }
+    }
+}

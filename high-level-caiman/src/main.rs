@@ -1,8 +1,10 @@
 extern crate clap;
-use std::path::Path;
+mod error;
+mod lower;
+mod parse;
 
 use clap::Parser;
-use hlc::{error, lower::lower, parse};
+use lower::lower;
 
 #[derive(Parser)]
 #[clap(version)]
@@ -42,30 +44,8 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         if args.lower {
             println!("{:#?}", lowered);
         } else {
-            explicate_and_execute(args.output, lowered);
+            caiman::explicate_and_execute(args.output, lowered);
         }
     }
     Ok(())
-}
-
-// TODO: unified CLI
-fn explicate_and_execute(output: Option<String>, program: caiman::assembly::ast::Program) {
-    let version = &program.version;
-    assert_eq!((version.major, version.minor, version.detailed), (0, 0, 2));
-
-    let definition = caiman::assembly::lowering_pass::lower(program);
-    caiman::ir::validation::validate_program(&definition.program);
-    let mut codegen = caiman::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
-    codegen.set_print_codgen_debug_info(true);
-    let output_string = codegen.generate();
-    match output {
-        None => println!("{}", output_string),
-        Some(path_str) => {
-            // Copied from caiman/src/main.rs
-            let path = Path::new(&path_str);
-            let prefix = path.parent().unwrap();
-            std::fs::create_dir_all(prefix).unwrap();
-            std::fs::write(path, output_string).unwrap();
-        }
-    }
 }

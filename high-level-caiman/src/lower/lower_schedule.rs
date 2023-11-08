@@ -41,6 +41,7 @@ fn lower_flat_decl(
             name: Some(asm::NodeId(temp_node_name.clone())),
             node: asm::Node::AllocTemporary {
                 place: Some(ir::Place::Local),
+                buffer_flags: Some(ir::BufferFlags::new()),
                 storage_type: Some(asm::TypeId::FFI(asm::FFIType::I64)),
             },
         });
@@ -126,20 +127,22 @@ fn tag_to_quot(t: &Tag) -> asm::Quotient {
             Quotient::Output => {
                 asm::Quotient::Output(t.quot_var.as_ref().map(quot_ref_to_remote_node))
             }
-            Quotient::None => asm::Quotient::None,
+            Quotient::None => asm::Quotient::None(t.quot_var.as_ref().map(quot_ref_to_remote_node)),
         })
-        .unwrap_or(asm::Quotient::None)
+        .unwrap_or(asm::Quotient::None(
+            t.quot_var.as_ref().map(quot_ref_to_remote_node),
+        ))
 }
 
 /// Converts a hlc tag to a tag in the assembly
 fn tag_to_tag(t: &Tag) -> asm::Tag {
     asm::Tag {
         quot: tag_to_quot(t),
-        flow: t.flow.as_ref().map_or(ir::Flow::None, |f| match f {
-            Flow::Dead => ir::Flow::None,
+        flow: t.flow.as_ref().map_or(ir::Flow::Usable, |f| match f {
+            Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
-            Flow::Usable => ir::Flow::Have,
-            Flow::Save => ir::Flow::Met,
+            Flow::Usable => ir::Flow::Usable,
+            Flow::Save => ir::Flow::Save,
         }),
     }
 }
