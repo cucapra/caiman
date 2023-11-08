@@ -8,7 +8,7 @@ clean:
 explicate_setup:
 	turnt $(wildcard */*_baseline.cair) -v --save
 
-test:
+test: hlc
 	turnt $(wildcard */*_test.cair) $(wildcard */*_test.ron) $(print) $(diff)
 
 test_dir:

@@ -223,28 +223,6 @@ def run(test_dir: Path, inputs):
     return subprocess.run(args).returncode
 
 
-def turnt():
-    """
-    Runs TURNT tests on files which may or may not be in this directory.
-    Returns 0 on success
-    """
-    eprint(f"{COLOR_INFO} running Turnt")
-    project_dir = Path(__file__).resolve().parent.parent
-    # Put globs for turnt files here
-    globs = [
-        "/high-level-caiman/test/**/*.cm",
-    ]
-    ret = 0
-    for g in globs:
-        args = [
-            "turnt",
-            "--diff",
-            *glob.glob(str(project_dir) + g, recursive=True),
-        ]
-        ret |= subprocess.run(args).returncode
-    return ret
-
-
 def clean(test_dir: Path):
     for log in test_dir.rglob("*.log"):
         log.unlink()
@@ -277,7 +255,6 @@ def main():
     if args.command == "run":
         ret = build(test_dir, inputs, args.quiet)
         ret |= run(test_dir, args.files)
-        ret |= turnt()
         exit(ret)
     elif args.command == "build":
         build(test_dir, inputs, args.quiet)
