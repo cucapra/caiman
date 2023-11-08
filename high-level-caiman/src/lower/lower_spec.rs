@@ -6,7 +6,7 @@ use crate::{
 };
 use caiman::{assembly::ast as asm, ir};
 
-use super::data_type_to_type;
+use super::data_type_to_local_type;
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm) -> asm::Node {
@@ -29,7 +29,7 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
                 value: Some(v),
                 type_id: Some(asm::TypeId::Local(String::from("f64"))),
             },
-            _ => unimplemented!(),
+            _ => todo!(),
         },
         SpecTerm::Call { function, args, .. } => match function.as_ref() {
             SpecExpr::Term(SpecTerm::Var { name, .. }) => asm::Node::CallFunctionClass {
@@ -102,7 +102,7 @@ fn lower_spec_funclet(
                     let (name, dt) = x;
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(name)),
-                        typ: data_type_to_type(&dt),
+                        typ: data_type_to_local_type(&dt),
                         tags: Vec::new(),
                     }
                 })
@@ -113,7 +113,7 @@ fn lower_spec_funclet(
                     let (name, dt) = x;
                     asm::FuncletArgument {
                         name: name.map(asm::NodeId),
-                        typ: data_type_to_type(&dt),
+                        typ: data_type_to_local_type(&dt),
                         tags: Vec::new(),
                     }
                 })

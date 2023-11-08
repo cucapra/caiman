@@ -2,6 +2,7 @@ use caiman::assembly::ast::{self as asm, FuncletArgument, Hole};
 
 use crate::{
     error::{type_error, LocalError},
+    lower::data_type_to_ffi_type,
     parse::ast::{
         Arg, Flow, FullType, NestedExpr, Quotient, QuotientReference, SchedLiteral, SchedStmt,
         SchedTerm, SchedulingFunc, Tag,
@@ -42,11 +43,11 @@ fn lower_flat_decl(
             node: asm::Node::AllocTemporary {
                 place: Some(ir::Place::Local),
                 buffer_flags: Some(ir::BufferFlags::new()),
-                storage_type: Some(asm::TypeId::FFI(asm::FFIType::I64)),
+                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
             },
         });
         let mv = asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(format!("_t{}", temp_id + 1))),
+            name: None,
             node: asm::Node::LocalDoBuiltin {
                 operation: Some(tag_to_quot(&dest_tag.tags[0])),
                 // no inputs
@@ -58,10 +59,10 @@ fn lower_flat_decl(
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
                 source: Some(asm::NodeId(temp_node_name)),
-                storage_type: Some(asm::TypeId::FFI(asm::FFIType::I64)),
+                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
             },
         });
-        (vec![Some(temp), Some(mv), Some(rd_ref)], temp_id + 2)
+        (vec![Some(temp), Some(mv), Some(rd_ref)], temp_id + 1)
     } else {
         todo!()
     }
@@ -136,6 +137,8 @@ fn tag_to_quot(t: &Tag) -> asm::Quotient {
 fn tag_to_tag(t: &Tag) -> asm::Tag {
     asm::Tag {
         quot: tag_to_quot(t),
+        // TODO: this is a mistake in the IR/assembly, the flow should be able
+        // to be a hole
         flow: t.flow.as_ref().map_or(ir::Flow::Usable, |f| match f {
             Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
@@ -150,7 +153,7 @@ fn hlc_arg_to_asm_arg(arg: &Arg<FullType>) -> FuncletArgument {
     let ft = &arg.1;
     FuncletArgument {
         name: Some(asm::NodeId(arg.0.to_string())),
-        typ: super::data_type_to_type(&ft.base.base),
+        typ: super::data_type_to_local_type(&ft.base.base),
         tags: ft.tags.iter().map(tag_to_tag).collect(),
     }
 }

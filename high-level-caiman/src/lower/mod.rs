@@ -14,32 +14,35 @@ use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funcle
 const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::U8;
 
 /// Converts a high-level caiman data type to a caiman assembly type id.
-fn data_type_to_type(dt: &DataType) -> asm::TypeId {
-    use asm::{FFIType, TypeId};
+fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
+    use asm::TypeId;
     match dt {
         DataType::Bool => TypeId::Local(String::from("bool")),
         DataType::Num(NumberType::I32) => TypeId::Local(String::from("i32")),
         DataType::Num(NumberType::I64) => TypeId::Local(String::from("i64")),
         DataType::BufferSpace => TypeId::Local(String::from("BufferSpace")),
-        DataType::Tuple(dts) => {
-            let tys = data_types_to_type(dts)
-                .into_iter()
-                .map(|x| match x {
-                    TypeId::FFI(ffi) => ffi,
-                    TypeId::Local(_) => panic!("TODO: Tuple type contains non-FFI type"),
-                })
-                .collect();
-            TypeId::FFI(FFIType::Tuple(tys))
-        }
         DataType::Event => TypeId::Local(String::from("Event")),
         DataType::UserDefined(name) => TypeId::Local(name.clone()),
-        _ => unimplemented!("TODO"),
+        _ => todo!("TODO"),
+    }
+}
+
+/// For types that have FFI equivalents, convert a high-level caiman data type
+/// to the caiman assembly type id for the corresponding FFI type. For types
+/// that do not have FFI equivalents, this is the same as `data_type_to_local_type`.
+fn data_type_to_ffi_type(dt: &DataType) -> asm::TypeId {
+    use asm::TypeId;
+    match dt {
+        DataType::Bool => TypeId::FFI(BOOL_FFI_TYPE),
+        DataType::Num(NumberType::I32) => TypeId::FFI(asm::FFIType::I32),
+        DataType::Num(NumberType::I64) => TypeId::FFI(asm::FFIType::I64),
+        dt => data_type_to_local_type(dt),
     }
 }
 
 /// Convert a high-level caiman data type to a caiman assembly type.
-fn data_types_to_type(dts: &[DataType]) -> Vec<asm::TypeId> {
-    dts.iter().map(data_type_to_type).collect()
+fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
+    dts.iter().map(data_type_to_local_type).collect()
 }
 
 #[macro_export]
@@ -62,6 +65,8 @@ macro_rules! enum_cast {
 /// Requires that the high-level caiman program is well-typed and flattened.
 /// # Errors
 /// Returns an error if the program is not well-typed or flattened.
+/// # Panics
+/// If lowering something with currently unsupported language features.
 pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
     // Preprocessing: (before this function)
     // 1. Match literals to literals in the spec
@@ -106,8 +111,8 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 // lower funclets and fill in their funclass class bindings
                 let class = asm::FunctionClass {
                     name: asm::FunctionClassId(name.clone()),
-                    input_types: data_types_to_type(&in_types),
-                    output_types: data_types_to_type(&out_types),
+                    input_types: data_types_to_local_type(&in_types),
+                    output_types: data_types_to_local_type(&out_types),
                 };
                 for f in members {
                     match f {
@@ -115,7 +120,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                             let funclet = lower_val_funclet(f, &name);
                             asm.declarations.push(asm::Declaration::Funclet(funclet));
                         }
-                        ClassMembers::Extern { .. } => unimplemented!(),
+                        ClassMembers::Extern { .. } => todo!(),
                     }
                 }
                 asm.declarations
@@ -149,7 +154,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 asm.declarations
                     .extend(res.into_iter().map(asm::Declaration::Funclet));
             }
-            _ => unimplemented!(),
+            _ => todo!(),
         }
     }
     Ok(asm)
