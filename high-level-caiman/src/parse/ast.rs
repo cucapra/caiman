@@ -307,7 +307,7 @@ pub struct SchedulingFunc {
     pub statements: Vec<SchedStmt>,
 }
 
-/// Input or output binding of a resource
+/// Input or output binding of an extern function resource
 #[derive(Clone, Debug)]
 pub enum InputOrOutputVal {
     Input(Name),
@@ -322,7 +322,8 @@ pub struct ExternResource {
     pub caiman_val: InputOrOutputVal,
 }
 
-/// An enum for parsing resource members in any order
+/// An enum for parsing resource members of an extern function
+/// in any order
 pub enum ResourceMembers {
     Numeric(String, String),
     Input(Name),
@@ -386,7 +387,7 @@ impl std::fmt::Display for ExternDefMembers {
     }
 }
 
-/// Function class members
+/// Function class members. Either an extern function or a value functlet
 #[derive(Clone, Debug)]
 pub enum ClassMembers {
     ValueFunclet {
