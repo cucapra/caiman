@@ -1,0 +1,68 @@
+const N = 64
+
+timeline time(e: event) -> event { returns e. }
+spatial space(bs: bufferspace) -> bufferspace { returns bs. }
+
+val vadd2(v1: [i32; N], v2: [i32; N], v3: [i32: N]) -> [i32; N] {
+    tmp :- vadd(v1, v2).
+    result :- vadd(tmp, v3).
+    returns result.
+}
+
+// need not be one single block (like rust impl)
+feq vadd {
+    extern(cpu) vadd_extern([i32; N], [i32; N], [i32; N]) -> [i32; N]
+
+    val vadd_host(v1: [i32; N], v2: [i32; N]) : [i32; N] {
+        rec :- vadd(tail(v1), tail(v2)).
+        new_hd :- head(v1) + head(v2).
+        result :- [] if v1.empty() else new_hd :: rec.
+        returns result.
+
+    }
+}
+
+
+fn vadd2_extern(v1: [i32; N], v2: [i32; N], v3: [i32; N]) -> [i32; N]
+    impls vadd2, time, space
+{
+    let tmp = vadd_extern(v1, v2);
+    let result = vadd_extern(tmp, v3);
+    return result;
+}
+
+spl alloc_space(bs: bufferspace) -> bufferspace {
+    s :- alloc<[i32; N]>(bs).
+    t :- dealloc<[i32; N]>(s)
+    returns t.
+}
+
+fn vadd_host(v1: [i32; N], v2: [i32; N])
+    impls vadd, time, alloc_space
+{
+    let new_array = alloc_host<[i32; N]>();
+    let result = vadd_rec_cpu(v1, v2, new_array);
+    // do something with data
+    free(result);
+}
+
+// N is a parameter
+// internally unsized
+fn vadd_host_rec(v1: [i32; 'N], v2: [i32; 'N], result: [i32; 'N]) -> [i32: 'N]
+    impls vadd, time, space
+{
+    ???;
+    if eq_cpu(?, ?) {
+        result = result;
+    } else {
+        let v1_hd, v1_tl = split(v1);
+        let v2_hd, v2_tl = split(v2);
+        ???;
+        result = vadd_host_rec(?, ?, ?);
+    }
+    return result;
+}
+
+pipeline main {
+    vadd_host
+}

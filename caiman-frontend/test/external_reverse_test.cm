@@ -1,0 +1,30 @@
+timeline time(e: event) -> event { returns e. }
+spatial space(bs: bufferspace) -> bufferspace { returns bs. }
+
+
+// the same name
+feq op {
+    extern(cpu, pure) op(i64, i64) -> i64
+    extern(cpu, pure) op2(i64, i64) -> i64
+}
+
+val main() -> i64 {
+    returns op(x, y).
+    x :- 2.
+    y :- 10.
+}
+
+fn foo() -> i64 
+    impls time, space
+{
+    return op(2, 10);
+}
+
+
+fn bar() -> i64
+    impls time, space
+{
+    return op2(2, 10);
+}
+
+pipeline main { foo }
