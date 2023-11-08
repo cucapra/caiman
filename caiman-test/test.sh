@@ -9,4 +9,4 @@ if [ "$1" != "-t" ]; then
     fi
 fi
 
-find ./high-level-caiman -name "*.cm" | xargs turnt --diff -v
+find ./high-level-caiman/turnt -name "*.cm" | xargs turnt --diff -v
