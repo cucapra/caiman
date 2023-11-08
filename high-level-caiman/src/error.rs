@@ -45,12 +45,19 @@ pub trait HasInfo {
 pub enum ErrorKind {
     SyntaxParsing(String),
     IO(String),
+    TypeError(String),
 }
 
 pub enum ErrorLocation {
     // (Line, Column)
     Single(usize, usize),
     Double(Info),
+}
+
+impl From<Info> for ErrorLocation {
+    fn from(info: Info) -> Self {
+        Self::Double(info)
+    }
 }
 
 /// An error that occurs in a single file
@@ -77,8 +84,9 @@ impl fmt::Display for Error {
             }
         }
         match &self.error.kind {
-            ErrorKind::SyntaxParsing(e) => write!(f, "Parsing Error: {}", e),
-            ErrorKind::IO(e) => write!(f, "IO Error: {}", e),
+            ErrorKind::SyntaxParsing(e) => write!(f, "Parsing Error: {e}"),
+            ErrorKind::IO(e) => write!(f, "IO Error: {e}"),
+            ErrorKind::TypeError(e) => write!(f, "Type Error: {e}"),
         }
     }
 }
@@ -93,5 +101,14 @@ impl std::process::Termination for Error {
 impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+/// Constructs a type error
+#[must_use]
+pub fn type_error(info: Info, msg: &str) -> LocalError {
+    LocalError {
+        kind: ErrorKind::TypeError(msg.to_string()),
+        location: info.into(),
     }
 }

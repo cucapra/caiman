@@ -424,6 +424,21 @@ impl ClassMembers {
             ClassMembers::Extern { info, .. } => *info,
         }
     }
+
+    /// Gets a tuple of the input and output types of the function
+    #[must_use]
+    pub fn get_type_signature(&self) -> (Vec<DataType>, Vec<DataType>) {
+        match self {
+            Self::Extern { input, output, .. } => (
+                input.iter().map(|(_, typ)| typ.clone()).collect(),
+                output.iter().map(|(_, typ)| typ.clone()).collect(),
+            ),
+            Self::ValueFunclet { input, output, .. } => (
+                input.iter().map(|(_, typ)| typ.clone()).collect(),
+                output.iter().map(|(_, typ)| typ.clone()).collect(),
+            ),
+        }
+    }
 }
 
 /// A top level statement in the source language
