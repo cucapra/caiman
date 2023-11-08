@@ -1,13 +1,15 @@
 #![allow(warnings)]
 
+use frontend::Definition;
+
 extern crate core;
 
 #[macro_use]
 mod operations;
-mod assembly;
+pub mod assembly;
 mod id_generator;
-mod ir;
-mod stable_vec;
+pub mod ir;
+pub mod stable_vec;
 //mod ir_builders;
 pub mod frontend;
 mod rust_wgpu_backend;

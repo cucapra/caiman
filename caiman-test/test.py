@@ -37,17 +37,17 @@ def eprint(*args, **kwargs):
 
 
 class Colorizer:
-    def cyan(self: str) -> str:
-        return f"\033[36m{self}\033[39m"
+    def cyan(s: str) -> str:
+        return f"\033[36m{s}\033[39m"
 
-    def yellow(self: str) -> str:
-        return f"\033[93m{self}\033[39m"
+    def yellow(s: str) -> str:
+        return f"\033[93m{s}\033[39m"
 
-    def red(self: str) -> str:
-        return f"\033[31m{self}\033[39m"
+    def red(s: str) -> str:
+        return f"\033[31m{s}\033[39m"
 
-    def grey(self: str) -> str:
-        return f"\033[90m{self}\033[39m"
+    def grey(s: str) -> str:
+        return f"\033[90m{s}\033[39m"
 
 
 COLOR_INFO = Colorizer.cyan("[info]")
@@ -91,6 +91,24 @@ class Compiler:
         )
 
 
+class HighLevelCaiman:
+    def __init__(self, test_dir):
+        args = ["cargo", "build", "--all"]
+        rv = subprocess.run(args)
+        if rv.returncode != 0:
+            eprint(f"{COLOR_WARN} using previous high-level-caiman")
+        self.test_dir = test_dir
+
+    def _compiler_path(self) -> Path:
+        return self.test_dir / ".." / "target" / "debug" / "hlc"
+
+    def compile(self, input: Path, output: Path) -> subprocess.CompletedProcess:
+        args = [self._compiler_path(), "-o", output, input]
+        return subprocess.run(
+            args, capture_output=True, encoding="utf8", cwd=input.parent
+        )
+
+
 @dataclass
 class ProcessStatistics:
     """Successfully compiled inputs which are associated with a test Rust file."""
@@ -125,14 +143,21 @@ def compiler_error(
 
 # returns num failed, num succeeded
 def process_inputs(
-    compiler: Compiler, test_dir: Path, inputs, quiet: bool
+    compiler: Compiler,
+    hlc: HighLevelCaiman,
+    test_dir: Path,
+    inputs,
+    quiet: bool,
 ) -> ProcessStatistics:
     lf = (test_dir / "src" / "lib.rs").open(mode="w")
     lf.write("pub mod util;\n")
     ps = ProcessStatistics(0, 0, 0)
     if not inputs:
         inputs = chain(
-            test_dir.rglob("*test.cair"), test_dir.rglob("*test.ron")
+            test_dir.rglob("*test.cair"),
+            test_dir.rglob("*test.ron"),
+            test_dir.rglob("*test.caiman"),
+            test_dir.rglob("*lower/*test.cm"),
         )
     for input in inputs:
         relativized = input.absolute().relative_to(test_dir)
@@ -170,7 +195,9 @@ def process_inputs(
 
                 continue
 
-        rv = compiler.compile(input.absolute(), output)
+        input_compiler = hlc if input_str.endswith(".cm") else compiler
+        rv = input_compiler.compile(input.absolute(), output)
+
         if rv.returncode == 0:
             eprint(Colorizer.grey(f"    pass: {relativized}"))
             if not quiet and rv.stderr:
@@ -206,8 +233,11 @@ def build(test_dir: Path, inputs, quiet: bool):
     eprint(f"{COLOR_INFO} building caimanc")
     c = Compiler(test_dir)
 
+    eprint(f"{COLOR_INFO} building high-level-caiman")
+    hlc = HighLevelCaiman(test_dir)
+
     eprint(f"{COLOR_INFO} compiling Caiman source files")
-    ps = process_inputs(c, test_dir, inputs, quiet)
+    ps = process_inputs(c, hlc, test_dir, inputs, quiet)
     if ps.failures > 0:
         eprint(
             f"{COLOR_WARN} {ps.failures}/{ps.total()} files failed to compile"

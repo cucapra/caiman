@@ -1,10 +1,14 @@
-use crate::parse::ast::{ClassMembers, DataType, NumberType, TopLevel};
+use crate::{
+    error,
+    parse::ast::{ClassMembers, DataType, NumberType, SchedulingFunc, TopLevel},
+};
 use caiman::assembly::ast as asm;
 mod cfg;
 mod global_context;
 mod lower_schedule;
 mod lower_spec;
 
+use lower_schedule::lower_schedule;
 use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funclet};
 
 const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::U8;
@@ -13,9 +17,9 @@ const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::U8;
 fn data_type_to_type(dt: &DataType) -> asm::TypeId {
     use asm::{FFIType, TypeId};
     match dt {
-        DataType::Bool => TypeId::FFI(BOOL_FFI_TYPE),
-        DataType::Num(NumberType::I32) => TypeId::FFI(FFIType::I32),
-        DataType::Num(NumberType::I64) => TypeId::FFI(FFIType::I64),
+        DataType::Bool => TypeId::Local(String::from("bool")),
+        DataType::Num(NumberType::I32) => TypeId::Local(String::from("i32")),
+        DataType::Num(NumberType::I64) => TypeId::Local(String::from("i64")),
         DataType::BufferSpace => TypeId::Local(String::from("BufferSpace")),
         DataType::Tuple(dts) => {
             let tys = data_types_to_type(dts)
@@ -56,8 +60,9 @@ macro_rules! enum_cast {
 
 /// Lower a high-level caiman program to caiman assembly.
 /// Requires that the high-level caiman program is well-typed and flattened.
-#[must_use]
-pub fn lower(hlc: Vec<TopLevel>) -> asm::Program {
+/// # Errors
+/// Returns an error if the program is not well-typed or flattened.
+pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
     // Preprocessing: (before this function)
     // 1. Match literals to literals in the spec
     // 2. Constant fold constants
@@ -66,6 +71,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> asm::Program {
     //  * Remove all nested expressions
     //  * Convert all operators to external functions
     //  * Convert all function and expression arguments to names
+    //  * Convert tuple assignments to multiple assignments
     // 4. Type deduction / type checking
 
     // This function: (assumes all expressions are terms)
@@ -84,6 +90,8 @@ pub fn lower(hlc: Vec<TopLevel>) -> asm::Program {
         },
         declarations: Vec::new(),
     };
+    let ctx = global_context::gen_context(&hlc);
+    asm.declarations.extend(ctx.type_decls.iter().cloned());
     for top in hlc {
         match top {
             TopLevel::Pipeline { name, entry, .. } => {
@@ -119,8 +127,30 @@ pub fn lower(hlc: Vec<TopLevel>) -> asm::Program {
             tf @ TopLevel::TimelineFunclet { .. } => asm
                 .declarations
                 .push(asm::Declaration::Funclet(lower_timeline_funclet(tf))),
+            TopLevel::SchedulingFunc {
+                name,
+                input,
+                output,
+                specs,
+                statements,
+                info,
+            } => {
+                let res = lower_schedule(
+                    &ctx,
+                    SchedulingFunc {
+                        info,
+                        name,
+                        input,
+                        output,
+                        specs,
+                        statements,
+                    },
+                )?;
+                asm.declarations
+                    .extend(res.into_iter().map(asm::Declaration::Funclet));
+            }
             _ => unimplemented!(),
         }
     }
-    asm
+    Ok(asm)
 }

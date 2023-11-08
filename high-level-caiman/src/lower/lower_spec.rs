@@ -6,7 +6,7 @@ use crate::{
 };
 use caiman::{assembly::ast as asm, ir};
 
-use super::{data_type_to_type, BOOL_FFI_TYPE};
+use super::data_type_to_type;
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm) -> asm::Node {
@@ -15,7 +15,7 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
             SpecLiteral::Int(v) => asm::Node::Constant {
                 // TODO: different int widths
                 value: Some(v),
-                type_id: Some(asm::TypeId::FFI(asm::FFIType::I64)),
+                type_id: Some(asm::TypeId::Local(String::from("i64"))),
             },
             SpecLiteral::Bool(v) => asm::Node::Constant {
                 value: Some(if v {
@@ -23,11 +23,11 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
                 } else {
                     String::from("0")
                 }),
-                type_id: Some(asm::TypeId::FFI(BOOL_FFI_TYPE)),
+                type_id: Some(asm::TypeId::Local(String::from("bool"))),
             },
             SpecLiteral::Float(v) => asm::Node::Constant {
                 value: Some(v),
-                type_id: Some(asm::TypeId::FFI(asm::FFIType::F64)),
+                type_id: Some(asm::TypeId::Local(String::from("f64"))),
             },
             _ => unimplemented!(),
         },
@@ -78,12 +78,20 @@ fn lower_spec_stmts(stmts: Vec<SpecStmt>) -> Vec<Option<asm::Command>> {
 }
 
 /// Lower a spec funclet into a caiman assembly funclet.
+/// # Arguments
+/// * `name` - The name of the funclet
+/// * `input` - The input arguments of the funclet
+/// * `output` - The output arguments of the funclet. Can be `None` for a void
+///     returning funclet
+/// * `statements` - The statements of the funclet
+/// * `class_name` - The name of the class the funclet belongs to. Can be `None`
+///    for a non-value spec funclet
 fn lower_spec_funclet(
     name: String,
     input: Vec<(String, DataType)>,
     output: Option<(Option<String>, DataType)>,
     statements: Vec<SpecStmt>,
-    class_name: &str,
+    class_name: Option<&str>,
 ) -> (asm::FuncletHeader, Vec<Option<asm::Command>>) {
     (
         asm::FuncletHeader {
@@ -110,9 +118,11 @@ fn lower_spec_funclet(
                     }
                 })
                 .collect(),
-            binding: asm::FuncletBinding::ValueBinding(asm::FunctionClassBinding {
-                default: false,
-                function_class: asm::FunctionClassId(class_name.to_string()),
+            binding: class_name.map_or(asm::FuncletBinding::None, |name| {
+                asm::FuncletBinding::ValueBinding(asm::FunctionClassBinding {
+                    default: false,
+                    function_class: asm::FunctionClassId(name.to_string()),
+                })
             }),
         },
         lower_spec_stmts(statements),
@@ -131,7 +141,8 @@ pub fn lower_val_funclet(f: ClassMembers, class_name: &str) -> asm::Funclet {
         ..
     } = f
     {
-        let (header, commands) = lower_spec_funclet(name, input, output, statements, class_name);
+        let (header, commands) =
+            lower_spec_funclet(name, input, output, statements, Some(class_name));
         asm::Funclet {
             kind: ir::FuncletKind::Value,
             header,
@@ -157,7 +168,7 @@ pub fn lower_timeline_funclet(f: TopLevel) -> asm::Funclet {
         (name, input, output, statements),
         f
     );
-    let (header, commands) = lower_spec_funclet(name, input, Some(output), statements, "");
+    let (header, commands) = lower_spec_funclet(name, input, Some(output), statements, None);
     asm::Funclet {
         kind: ir::FuncletKind::Timeline,
         header,
@@ -180,7 +191,7 @@ pub fn lower_spatial_funclet(f: TopLevel) -> asm::Funclet {
         (name, input, output, statements),
         f
     );
-    let (header, commands) = lower_spec_funclet(name, input, Some(output), statements, "");
+    let (header, commands) = lower_spec_funclet(name, input, Some(output), statements, None);
     asm::Funclet {
         kind: ir::FuncletKind::Spatial,
         header,

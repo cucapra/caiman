@@ -302,7 +302,7 @@ pub struct SchedulingFunc {
     pub info: Info,
     pub name: String,
     pub input: Vec<Arg<FullType>>,
-    pub output: FullType,
+    pub output: Option<FullType>,
     pub specs: Vec<String>,
     pub statements: Vec<SchedStmt>,
 }

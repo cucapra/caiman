@@ -11,7 +11,7 @@ val main() -> i64 {
 
 fn foo() -> i64 impls main, time, space
 {
-    let x = 4;
+    let x : i64 @ node(main.x)-usable = 4;
     return x;
 }
 
