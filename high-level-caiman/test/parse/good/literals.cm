@@ -1,0 +1,13 @@
+#version 0.1.0
+val foo(x: i32) -> i32 {
+    arr :- [x, x, 10]
+    tuple :- (10,)
+    tuple_2 :- (10, x)
+    t :- true
+    f :- false
+    k :- 1001
+    nested_arr :- [[t, f], [f, f]]
+    nested_arr_2 :- [[[]]]
+    nested_tuple :- ((10, (x,)), x)
+    index_arr :- [tuple, tuple][0]
+}

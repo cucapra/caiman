@@ -1,0 +1,2 @@
+#version 0.1.0
+const R = foo(10, 20)

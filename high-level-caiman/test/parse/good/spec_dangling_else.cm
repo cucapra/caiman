@@ -1,0 +1,6 @@
+#version 0.1.0
+
+val baz() -> custom_type
+{
+    foo :- 2 if c else 1 if a else b
+}

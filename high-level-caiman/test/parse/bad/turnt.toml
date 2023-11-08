@@ -1,0 +1,4 @@
+[envs.parse]
+command = """
+    cargo run --bin hlc -- --parse {filename} 2>&1 > /dev/null \
+    | sed -n '/Error/,$p' | grep ."""

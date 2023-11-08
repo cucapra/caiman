@@ -1,2 +1,0 @@
-[envs.parse]
-command = "cargo run --bin caiman-frontend -- --parse --filename {filename}"

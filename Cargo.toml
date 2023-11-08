@@ -6,7 +6,7 @@ resolver = "2"
 build = "build/build.rs"
 
 [workspace]
-members = ["caiman-frontend"]
+members = ["high-level-caiman"]
 
 [dependencies]
 itertools = "0.10.5"

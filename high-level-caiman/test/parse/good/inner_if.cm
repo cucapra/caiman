@@ -1,0 +1,5 @@
+#version 0.1.0
+fn foo() impls a, b {
+    let x = 0 if x == 3 else 1 if x == 5 else 2 if x == 7 else 3;
+    let x = ((0 if x == 3 else 1) if x == 5 else 2) if x == 7 else 3;
+}

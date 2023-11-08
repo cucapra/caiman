@@ -7,5 +7,3 @@ mod merge_test;
 mod pipeline_looping_value_function_test;
 mod pipeline_value_function_test;
 mod pipeline_1_test;
-mod external_cpu_test;
-mod hl_trivial_test;

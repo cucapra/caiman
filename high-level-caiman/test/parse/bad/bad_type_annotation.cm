@@ -1,0 +1,4 @@
+#version 0.1.0
+val f() {
+    x: i32<storage> :- 10
+}

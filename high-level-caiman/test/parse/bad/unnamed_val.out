@@ -1,0 +1,5 @@
+Error: At unnamed_val.cm:2:7, 
+  Parsing Error: Unrecognized token: 'i32', expected one of [
+    "\")\"",
+    "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
+]

@@ -6,6 +6,8 @@ from itertools import chain
 from sys import stderr
 from dataclasses import dataclass
 from shutil import rmtree
+import glob
+import os
 
 
 # stupid hack to build a test file for each pair of results
@@ -210,6 +212,7 @@ def build(test_dir: Path, inputs, quiet: bool):
         eprint(
             f"{COLOR_WARN} {ps.failures}/{ps.total()} files failed to compile"
         )
+    return ps.failures
 
 
 def run(test_dir: Path, inputs):
@@ -217,7 +220,29 @@ def run(test_dir: Path, inputs):
     manifest_path = test_dir / "Cargo.toml"
     args = ["cargo", "test", "--manifest-path", manifest_path, "--"]
     args += [Path(input).stem for input in inputs]
-    _ = subprocess.run(args)
+    return subprocess.run(args).returncode
+
+
+def turnt():
+    """
+    Runs TURNT tests on files which may or may not be in this directory.
+    Returns 0 on success
+    """
+    eprint(f"{COLOR_INFO} running Turnt")
+    project_dir = Path(__file__).resolve().parent.parent
+    # Put globs for turnt files here
+    globs = [
+        "/high-level-caiman/test/**/*.cm",
+    ]
+    ret = 0
+    for g in globs:
+        args = [
+            "turnt",
+            "--diff",
+            *glob.glob(str(project_dir) + g, recursive=True),
+        ]
+        ret |= subprocess.run(args).returncode
+    return ret
 
 
 def clean(test_dir: Path):
@@ -250,8 +275,10 @@ def main():
     args = parser.parse_args()
     inputs = [Path(file) for file in args.files]
     if args.command == "run":
-        build(test_dir, inputs, args.quiet)
-        run(test_dir, args.files)
+        ret = build(test_dir, inputs, args.quiet)
+        ret |= run(test_dir, args.files)
+        ret |= turnt()
+        exit(ret)
     elif args.command == "build":
         build(test_dir, inputs, args.quiet)
     elif args.command == "clean":

@@ -1,0 +1,8 @@
+#version 0.1.0
+
+val foo(a: i32) -> i64 {
+    b, e, f :- a(10, 20, 30)
+    c :- (10 + 2) / f(20) - a
+    d :- (10 + foo()) * 100
+    returns d || c && b
+}

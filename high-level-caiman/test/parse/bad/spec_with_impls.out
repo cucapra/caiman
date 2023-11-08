@@ -1,0 +1,5 @@
+Error: At spec_with_impls.cm:2:15, 
+  Parsing Error: Unrecognized token: 'impls', expected one of [
+    "\"->\"",
+    "\"{\"",
+]

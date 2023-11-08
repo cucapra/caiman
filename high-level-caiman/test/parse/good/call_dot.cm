@@ -1,0 +1,5 @@
+#version 0.1.0
+val f(a: i32) -> bool {
+    returns f(10).g(10)
+    returns f(10)[0].k(10)[2]
+}

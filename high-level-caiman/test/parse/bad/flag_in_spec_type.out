@@ -1,0 +1,5 @@
+Error: At flag_in_spec_type.cm:2:16, 
+  Parsing Error: Unrecognized token: ''', expected one of [
+    "\")\"",
+    "\",\"",
+]

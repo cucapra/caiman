@@ -1,0 +1,16 @@
+Error: At flag_in_spec_out.cm:2:27, 
+  Parsing Error: Unrecognized token: ''', expected one of [
+    "\")\"",
+    "\",\"",
+    "\"const\"",
+    "\"extern\"",
+    "\"feq\"",
+    "\"fn\"",
+    "\"pipeline\"",
+    "\"sptl\"",
+    "\"tmln\"",
+    "\"type\"",
+    "\"val\"",
+    "\"{\"",
+    "\"}\"",
+]

@@ -1,0 +1,467 @@
+[
+    FunctionClass {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                5,
+                2,
+            ),
+        },
+        name: "main",
+        members: [
+            ValueFunclet {
+                info: Info {
+                    start_ln_and_col: (
+                        3,
+                        1,
+                    ),
+                    end_ln_and_col: (
+                        5,
+                        2,
+                    ),
+                },
+                name: "main",
+                input: [],
+                output: Some(
+                    (
+                        None,
+                        Num(
+                            I32,
+                        ),
+                    ),
+                ),
+                statements: [
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                4,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                4,
+                                12,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "a",
+                                None,
+                            ),
+                        ],
+                        rhs: Term(
+                            Lit {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        10,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        12,
+                                    ),
+                                },
+                                lit: Int(
+                                    "10",
+                                ),
+                            },
+                        ),
+                    },
+                ],
+            },
+        ],
+    },
+    TimelineFunclet {
+        info: Info {
+            start_ln_and_col: (
+                7,
+                1,
+            ),
+            end_ln_and_col: (
+                9,
+                2,
+            ),
+        },
+        name: "t",
+        input: [
+            (
+                "e",
+                Event,
+            ),
+        ],
+        output: (
+            None,
+            Event,
+        ),
+        statements: [
+            Returns(
+                Info {
+                    start_ln_and_col: (
+                        8,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        8,
+                        14,
+                    ),
+                },
+                Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                8,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                8,
+                                14,
+                            ),
+                        },
+                        name: "e",
+                    },
+                ),
+            ),
+        ],
+    },
+    SpatialFunclet {
+        info: Info {
+            start_ln_and_col: (
+                11,
+                1,
+            ),
+            end_ln_and_col: (
+                13,
+                2,
+            ),
+        },
+        name: "s",
+        input: [
+            (
+                "b",
+                UserDefined(
+                    "Buffersptl",
+                ),
+            ),
+        ],
+        output: (
+            None,
+            UserDefined(
+                "Buffersptl",
+            ),
+        ),
+        statements: [
+            Returns(
+                Info {
+                    start_ln_and_col: (
+                        12,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        12,
+                        14,
+                    ),
+                },
+                Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                12,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                12,
+                                14,
+                            ),
+                        },
+                        name: "s",
+                    },
+                ),
+            ),
+        ],
+    },
+    TimelineFunclet {
+        info: Info {
+            start_ln_and_col: (
+                15,
+                1,
+            ),
+            end_ln_and_col: (
+                20,
+                2,
+            ),
+        },
+        name: "t2",
+        input: [
+            (
+                "e",
+                Event,
+            ),
+        ],
+        output: (
+            None,
+            Event,
+        ),
+        statements: [
+            Assign {
+                info: Info {
+                    start_ln_and_col: (
+                        16,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        16,
+                        40,
+                    ),
+                },
+                lhs: [
+                    (
+                        "enc1",
+                        None,
+                    ),
+                    (
+                        "enc2",
+                        None,
+                    ),
+                ],
+                rhs: Term(
+                    Call {
+                        info: Info {
+                            start_ln_and_col: (
+                                16,
+                                19,
+                            ),
+                            end_ln_and_col: (
+                                16,
+                                40,
+                            ),
+                        },
+                        function: Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        16,
+                                        19,
+                                    ),
+                                    end_ln_and_col: (
+                                        16,
+                                        33,
+                                    ),
+                                },
+                                name: "encoding_event",
+                            },
+                        ),
+                        args: [
+                            Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            16,
+                                            34,
+                                        ),
+                                        end_ln_and_col: (
+                                            16,
+                                            35,
+                                        ),
+                                    },
+                                    name: "e",
+                                },
+                            ),
+                            Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            16,
+                                            37,
+                                        ),
+                                        end_ln_and_col: (
+                                            16,
+                                            39,
+                                        ),
+                                    },
+                                    lit: Array(
+                                        [],
+                                    ),
+                                },
+                            ),
+                        ],
+                        template: None,
+                    },
+                ),
+            },
+            Assign {
+                info: Info {
+                    start_ln_and_col: (
+                        17,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        17,
+                        34,
+                    ),
+                },
+                lhs: [
+                    (
+                        "sub",
+                        None,
+                    ),
+                ],
+                rhs: Term(
+                    Call {
+                        info: Info {
+                            start_ln_and_col: (
+                                17,
+                                12,
+                            ),
+                            end_ln_and_col: (
+                                17,
+                                34,
+                            ),
+                        },
+                        function: Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        17,
+                                        12,
+                                    ),
+                                    end_ln_and_col: (
+                                        17,
+                                        28,
+                                    ),
+                                },
+                                name: "submission_event",
+                            },
+                        ),
+                        args: [
+                            Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            17,
+                                            29,
+                                        ),
+                                        end_ln_and_col: (
+                                            17,
+                                            33,
+                                        ),
+                                    },
+                                    name: "enc2",
+                                },
+                            ),
+                        ],
+                        template: None,
+                    },
+                ),
+            },
+            Assign {
+                info: Info {
+                    start_ln_and_col: (
+                        18,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        18,
+                        44,
+                    ),
+                },
+                lhs: [
+                    (
+                        "snc",
+                        None,
+                    ),
+                ],
+                rhs: Term(
+                    Call {
+                        info: Info {
+                            start_ln_and_col: (
+                                18,
+                                12,
+                            ),
+                            end_ln_and_col: (
+                                18,
+                                44,
+                            ),
+                        },
+                        function: Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        18,
+                                        12,
+                                    ),
+                                    end_ln_and_col: (
+                                        18,
+                                        33,
+                                    ),
+                                },
+                                name: "synchronization_event",
+                            },
+                        ),
+                        args: [
+                            Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            18,
+                                            34,
+                                        ),
+                                        end_ln_and_col: (
+                                            18,
+                                            38,
+                                        ),
+                                    },
+                                    name: "enc1",
+                                },
+                            ),
+                            Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            18,
+                                            40,
+                                        ),
+                                        end_ln_and_col: (
+                                            18,
+                                            43,
+                                        ),
+                                    },
+                                    name: "sub",
+                                },
+                            ),
+                        ],
+                        template: None,
+                    },
+                ),
+            },
+            Returns(
+                Info {
+                    start_ln_and_col: (
+                        19,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        19,
+                        16,
+                    ),
+                },
+                Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                19,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                19,
+                                16,
+                            ),
+                        },
+                        name: "snc",
+                    },
+                ),
+            ),
+        ],
+    },
+]

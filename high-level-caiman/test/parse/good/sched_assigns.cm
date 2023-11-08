@@ -1,0 +1,8 @@
+#version 0.1.0
+fn foo(a: i32, b: bool'<storage> @ [?(v)-?, ?(sp)-usable])
+    -> (i32, i32)'<storage> @ [output(n)-?, none(v)-?, none(sp)-usable]
+    impls n, v, sp
+{
+    var x = a + a * a;
+    x = b;
+}

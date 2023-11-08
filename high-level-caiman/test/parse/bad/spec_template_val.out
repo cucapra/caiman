@@ -1,0 +1,2 @@
+Error: At spec_template_val.cm:3:10, 
+  Parsing Error: Cannot parameterize a function call with non-type template arguments nor specify a tag in this context

@@ -1,0 +1,2 @@
+Error: At missing_resource.cm:6:5, 
+  Parsing Error: Resource at 6:5 - 9:6 missing field "group"
