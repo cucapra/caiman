@@ -2363,7 +2363,7 @@
                         ),
                     },
                 ],
-                false_block: Some(
+                false_block: [
                     Block(
                         Info {
                             start_ln_and_col: (
@@ -2637,7 +2637,7 @@
                             },
                         ],
                     ),
-                ),
+                ],
             },
             Return(
                 Info {

@@ -288,7 +288,7 @@ pub enum SchedStmt {
         info: Info,
         guard: SchedExpr,
         true_block: Vec<SchedStmt>,
-        false_block: Option<Box<SchedStmt>>,
+        false_block: Vec<SchedStmt>,
     },
     Block(Info, Vec<SchedStmt>),
     Return(Info, SchedExpr),

@@ -460,13 +460,13 @@ impl ASTFactory {
         false_block: Option<SchedStmt>) -> SchedStmt:SchedStmt::If {
             guard: guard,
             true_block: true_block,
-            false_block: false_block.map(Box::new)
+            false_block: false_block.map(|x| vec![x]).unwrap_or_default()
         });
     struct_variant_factory!(sched_matched_if(guard: SchedExpr, true_block: Vec<SchedStmt>, 
         false_block: SchedStmt) -> SchedStmt:SchedStmt::If {
             guard: guard,
             true_block: true_block,
-            false_block: Some(Box::new(false_block))
+            false_block: vec![false_block]
         });
 
     tuple_variant_factory!(sched_block(stmts: Vec<SchedStmt>) -> SchedStmt:SchedStmt::Block);

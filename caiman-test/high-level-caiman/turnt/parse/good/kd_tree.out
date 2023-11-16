@@ -436,7 +436,7 @@
                         ),
                     ),
                 ],
-                false_block: Some(
+                false_block: [
                     Block(
                         Info {
                             start_ln_and_col: (
@@ -479,7 +479,7 @@
                             ),
                         ],
                     ),
-                ),
+                ],
             },
         ],
     },
@@ -2707,7 +2707,7 @@
                         ),
                     ),
                 ],
-                false_block: Some(
+                false_block: [
                     Block(
                         Info {
                             start_ln_and_col: (
@@ -2750,7 +2750,7 @@
                             ),
                         ],
                     ),
-                ),
+                ],
             },
         ],
     },
@@ -3038,7 +3038,7 @@
                         ),
                     ),
                 ],
-                false_block: Some(
+                false_block: [
                     Block(
                         Info {
                             start_ln_and_col: (
@@ -3228,7 +3228,7 @@
                             ),
                         ],
                     ),
-                ),
+                ],
             },
         ],
     },
@@ -6294,7 +6294,7 @@
                         },
                     ),
                 ],
-                false_block: Some(
+                false_block: [
                     Block(
                         Info {
                             start_ln_and_col: (
@@ -6907,7 +6907,7 @@
                                         },
                                     },
                                 ],
-                                false_block: None,
+                                false_block: [],
                             },
                             Decl {
                                 info: Info {
@@ -7414,7 +7414,7 @@
                                         },
                                     },
                                 ],
-                                false_block: None,
+                                false_block: [],
                             },
                             Decl {
                                 info: Info {
@@ -7544,7 +7544,7 @@
                                         ),
                                     },
                                 ],
-                                false_block: None,
+                                false_block: [],
                             },
                             Return(
                                 Info {
@@ -7678,7 +7678,7 @@
                             ),
                         ],
                     ),
-                ),
+                ],
             },
         ],
     },

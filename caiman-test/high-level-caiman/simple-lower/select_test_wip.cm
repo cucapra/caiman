@@ -6,16 +6,21 @@ sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
 val main() -> i64 {
     b :- true
-    returns 1 if b else 2
+    one :- 1
+    two :- 2
+    r :- one if b else two
+    returns r
 }
 
 fn foo() -> i64 impls main, time, space
 {
-    let b = true;
+    let b: bool @ node(main.b)-usable = true;
     if b {
-        return 1;
+        let one: i64 @ node(main.one)-usable = 1;
+        return one;
     } else {
-        return 2;
+        let two: i64 @ node(main.two)-usable = 2;
+        return two;
     }
 }
 

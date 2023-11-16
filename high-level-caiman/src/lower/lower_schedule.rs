@@ -4,14 +4,17 @@ use crate::{
     error::{type_error, LocalError},
     lower::data_type_to_ffi_type,
     parse::ast::{
-        Arg, Flow, FullType, NestedExpr, Quotient, QuotientReference, SchedLiteral, SchedStmt,
-        SchedTerm, SchedulingFunc, Tag,
+        Arg, Flow, FullType, Quotient, QuotientReference, SchedLiteral, SchedTerm, SchedulingFunc,
+        Tag,
     },
 };
 use caiman::ir;
 
 use super::{
-    cfg::{BasicBlock, Cfg, Terminator},
+    cfg::{
+        hir::{Hir, Terminator},
+        BasicBlock, Cfg,
+    },
     global_context::{Context, SpecType},
 };
 
@@ -25,17 +28,19 @@ type CommandVec = Vec<Hole<asm::Command>>;
 /// and the next available temporary id
 fn lower_flat_decl(
     dest: &str,
-    dest_tag: Option<FullType>,
-    rhs: &NestedExpr<SchedTerm>,
+    dest_tag: &Option<FullType>,
+    rhs: &SchedTerm,
     temp_id: usize,
 ) -> (CommandVec, usize) {
-    if let NestedExpr::Term(SchedTerm::Lit {
+    if let SchedTerm::Lit {
         lit: SchedLiteral::Int(_x),
         tag: _tag,
         ..
-    }) = rhs
+    } = rhs
     {
-        let dest_tag = dest_tag.expect("We require all variables to have type annotations");
+        let dest_tag = dest_tag
+            .as_ref()
+            .expect("We require all variables to have type annotations");
         assert_eq!(dest_tag.tags.len(), 1);
         let temp_node_name = format!("_t{temp_id}");
         let temp = asm::Command::Node(asm::NamedNode {
@@ -72,14 +77,89 @@ fn lower_flat_decl(
 /// # Returns
 /// A tuple containing the commands that implement the statement
 /// and the next available temporary id
-fn lower_instr(s: &SchedStmt, temp_id: usize) -> (CommandVec, usize) {
+fn lower_instr(s: &Hir, temp_id: usize) -> (CommandVec, usize) {
     match s {
-        SchedStmt::Decl { lhs, expr, .. } => {
+        Hir::Decl {
+            lhs, rhs, lhs_tag, ..
+        } => {
             assert_eq!(lhs.len(), 1);
-            lower_flat_decl(&lhs[0].0, lhs[0].1.clone(), expr, temp_id)
+            lower_flat_decl(lhs, lhs_tag, rhs, temp_id)
         }
-        SchedStmt::Return(..) => panic!("Return should be a terminator"),
         _ => todo!(),
+    }
+}
+
+/// Gets the quotient for a particular spec type from a list of tags
+fn get_quotient(
+    specs: &Specs,
+    tag: &Option<Vec<Tag>>,
+    qtype: SpecType,
+) -> asm::Hole<asm::Quotient> {
+    if let Some(tags) = tag {
+        for t in tags {
+            if let res @ Some(_) = t.quot_var.as_ref().and_then(|qr| {
+                if qr.spec_name == specs.value.0 && qtype == SpecType::Value {
+                    return Some(tag_to_quot(t));
+                }
+                if qr.spec_name == specs.timeline.0 && qtype == SpecType::Timeline {
+                    return Some(tag_to_quot(t));
+                }
+                if qr.spec_name == specs.spatial.0 && qtype == SpecType::Spatial {
+                    return Some(tag_to_quot(t));
+                }
+                None
+            }) {
+                return res;
+            }
+        }
+    }
+    None
+}
+
+/// A reference to a cfg and a basic block to query information about the block
+/// and its relation to other blocks in the cfg
+struct BlockRef<'a> {
+    block: &'a BasicBlock,
+    cfg: &'a Cfg,
+}
+
+impl<'a> BlockRef<'a> {
+    const fn new(block: &'a BasicBlock, cfg: &'a Cfg) -> Self {
+        Self { block, cfg }
+    }
+
+    /// Gets the next blocks in the cfg as FuncletIds
+    fn next_blocks(&self) -> Vec<asm::Hole<asm::FuncletId>> {
+        match &self.block.terminator {
+            Terminator::Return(_) => vec![],
+            Terminator::Select(_) => {
+                let mut e = self
+                    .cfg
+                    .successors(self.block.id)
+                    .into_iter()
+                    .map(|id| asm::FuncletId(self.cfg.funclet_id(id)));
+                let mut res = vec![];
+                if let Some(true_block) = e.next() {
+                    res.push(Some(true_block));
+                }
+                if let Some(false_block) = e.next() {
+                    res.push(Some(false_block));
+                }
+                assert_eq!(res.len(), 2);
+                res
+            }
+            Terminator::Call(..) => todo!(),
+            Terminator::None => {
+                let e = self
+                    .cfg
+                    .successors(self.block.id)
+                    .into_iter()
+                    .map(|id| Some(asm::FuncletId(self.cfg.funclet_id(id))));
+                let res: Vec<_> = e.collect();
+                assert_eq!(res.len(), 1);
+                res
+            }
+        }
     }
 }
 
@@ -87,14 +167,33 @@ fn lower_instr(s: &SchedStmt, temp_id: usize) -> (CommandVec, usize) {
 /// # Returns
 /// A tuple containing the commands that implement the terminator
 /// and the next available temporary id
-fn lower_terminator(t: &Terminator, temp_id: usize, _cfg: &Cfg) -> (CommandVec, usize) {
+fn lower_terminator(
+    t: &Terminator,
+    temp_id: usize,
+    cfg: BlockRef<'_>,
+    specs: &Specs,
+) -> (CommandVec, usize) {
     match t {
-        Terminator::Return(Some(NestedExpr::Term(SchedTerm::Var { name, .. }))) => (
+        Terminator::Return(Some(name)) => (
             vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
                 return_values: Some(vec![Some(asm::NodeId(name.clone()))]),
             }))],
             temp_id,
         ),
+        // Terminator::Select(NestedExpr::Term(SchedTerm::Var { name, tag, .. })) => (
+        //     vec![Some(asm::Command::TailEdge(
+        //         asm::TailEdge::ScheduleSelect {
+        //             value_operation: get_quotient(specs, tag, SpecType::Value),
+        //             timeline_operation: get_quotient(specs, tag, SpecType::Timeline),
+        //             spatial_operation: get_quotient(specs, tag, SpecType::Spatial),
+        //             condition: Some(asm::NodeId(name.clone())),
+        //             callee_funclet_ids: Some(cfg.next_blocks()),
+        //             callee_arguments: (),
+        //             continuation_join: (),
+        //         },
+        //     ))],
+        //     temp_id,
+        // ),
         Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
         _ => todo!(),
     }
@@ -175,7 +274,8 @@ fn lower_block(func: &FuncInfo, specs: &Specs, cfg: &Cfg, b: &BasicBlock) -> asm
         temp_id = new_id;
         commands.append(&mut new_cmds);
     }
-    commands.append(&mut lower_terminator(&b.terminator, temp_id, cfg).0);
+    commands
+        .append(&mut lower_terminator(&b.terminator, temp_id, BlockRef { cfg, block: b }, specs).0);
     asm::Funclet {
         kind: ir::FuncletKind::ScheduleExplicit,
         header: asm::FuncletHeader {
@@ -203,7 +303,7 @@ pub fn lower_schedule(
     ctx: &Context,
     func: SchedulingFunc,
 ) -> Result<Vec<asm::Funclet>, LocalError> {
-    let cfg = Cfg::new(func.statements);
+    let cfg = Cfg::new(&func.name, func.statements);
     let mut val = None;
     let mut timeline = None;
     let mut spatial = None;

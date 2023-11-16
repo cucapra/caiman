@@ -53,6 +53,50 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
     }
 }
 
+/// Converts a term to its node name, assuming that the term is a variable
+/// # Panics
+/// Panics if the term is not a variable
+fn term_to_name(t: NestedExpr<SpecTerm>) -> String {
+    enum_cast!(
+        SpecTerm::Var { name, .. },
+        name,
+        enum_cast!(NestedExpr::Term, t)
+    )
+}
+
+/// Lowers a flattened spec assignment into an assembly command.
+/// This will convert things like additions and conditionals into assembly constructrs
+/// like external function calls and select nodes.
+/// # Panics
+/// Panics if the rhs expression is not flattened
+/// (i.e. contains a nested expression, or constants outside of direct assignments)
+fn lower_spec_assign(lhs: String, e: NestedExpr<SpecTerm>) -> asm::Hole<asm::Command> {
+    match e {
+        NestedExpr::Conditional {
+            if_true,
+            if_false,
+            guard,
+            ..
+        } => {
+            let guard_id = term_to_name(*guard);
+            let true_id = term_to_name(*if_true);
+            let false_id = term_to_name(*if_false);
+            Some(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(lhs)),
+                node: asm::Node::Select {
+                    condition: Some(asm::NodeId(guard_id)),
+                    true_case: Some(asm::NodeId(true_id)),
+                    false_case: Some(asm::NodeId(false_id)),
+                },
+            }))
+        }
+        NestedExpr::Term(t) => Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(lhs)),
+            node: lower_spec_term(t),
+        })),
+        NestedExpr::Binop { .. } | NestedExpr::Uop { .. } => todo!(),
+    }
+}
 /// Lower a list of spec statements into a list of assembly commands.
 fn lower_spec_stmts(stmts: Vec<SpecStmt>) -> Vec<Option<asm::Command>> {
     let mut res = vec![];
@@ -60,14 +104,10 @@ fn lower_spec_stmts(stmts: Vec<SpecStmt>) -> Vec<Option<asm::Command>> {
         match stmt {
             SpecStmt::Assign { mut lhs, rhs, .. } => {
                 assert_eq!(lhs.len(), 1);
-                res.push(Some(asm::Command::Node(asm::NamedNode {
-                    name: Some(asm::NodeId(lhs.swap_remove(0).0)),
-                    node: lower_spec_term(enum_cast!(NestedExpr::Term, rhs)),
-                })));
+                res.push(lower_spec_assign(lhs.swap_remove(0).0, rhs));
             }
             SpecStmt::Returns(_, e) => {
-                let t = enum_cast!(NestedExpr::Term, e);
-                let v = enum_cast!(SpecTerm::Var { name, .. }, name, t);
+                let v = term_to_name(e);
                 res.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
                     return_values: Some(vec![Some(asm::NodeId(v))]),
                 })));

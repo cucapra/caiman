@@ -150,7 +150,7 @@
                     ),
                 },
                 true_block: [],
-                false_block: Some(
+                false_block: [
                     If {
                         info: Info {
                             start_ln_and_col: (
@@ -301,10 +301,10 @@
                                         ),
                                     },
                                 ],
-                                false_block: None,
+                                false_block: [],
                             },
                         ],
-                        false_block: Some(
+                        false_block: [
                             Block(
                                 Info {
                                     start_ln_and_col: (
@@ -318,9 +318,9 @@
                                 },
                                 [],
                             ),
-                        ),
+                        ],
                     },
-                ),
+                ],
             },
         ],
     },

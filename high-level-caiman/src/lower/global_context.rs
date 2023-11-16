@@ -6,6 +6,7 @@ use crate::{
 };
 use caiman::assembly::ast as asm;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
 pub enum SpecType {
     Value,
