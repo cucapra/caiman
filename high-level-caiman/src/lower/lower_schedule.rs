@@ -12,8 +12,9 @@ use caiman::ir;
 
 use super::{
     cfg::{
+        self,
         hir::{Hir, Terminator},
-        BasicBlock, Cfg,
+        BasicBlock, Cfg, InOutFacts, LiveVars,
     },
     global_context::{Context, SpecType},
 };
@@ -21,6 +22,11 @@ use super::{
 /// A vector of commands with holes.
 /// A hole in a command means `???`
 type CommandVec = Vec<Hole<asm::Command>>;
+
+/// Gets the name of a temporary variable with the given id
+fn temp_var_name(temp_id: usize) -> String {
+    format!("_t{temp_id}")
+}
 
 /// Lowers a flattened declaration statement into a caiman assembly command
 /// # Returns
@@ -90,6 +96,7 @@ fn lower_instr(s: &Hir, temp_id: usize) -> (CommandVec, usize) {
 }
 
 /// Gets the quotient for a particular spec type from a list of tags
+#[allow(dead_code)]
 fn get_quotient(
     specs: &Specs,
     tag: &Option<Vec<Tag>>,
@@ -128,7 +135,7 @@ impl<'a> BlockRef<'a> {
         Self { block, cfg }
     }
 
-    /// Gets the next blocks in the cfg as FuncletIds
+    /// Gets the next blocks in the cfg as `FuncletIds`
     fn next_blocks(&self) -> Vec<asm::Hole<asm::FuncletId>> {
         match &self.block.terminator {
             Terminator::Return(_) => vec![],
@@ -170,33 +177,86 @@ impl<'a> BlockRef<'a> {
 fn lower_terminator(
     t: &Terminator,
     temp_id: usize,
-    cfg: BlockRef<'_>,
+    cfg: &BlockRef<'_>,
     specs: &Specs,
-) -> (CommandVec, usize) {
+    live_vars: &InOutFacts<LiveVars>,
+) -> CommandVec {
+    // we do not return the new `temp_id` because this is the last instruction
+    // in the block
     match t {
-        Terminator::Return(Some(name)) => (
+        Terminator::Return(Some(name)) => {
             vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
                 return_values: Some(vec![Some(asm::NodeId(name.clone()))]),
-            }))],
-            temp_id,
-        ),
-        // Terminator::Select(NestedExpr::Term(SchedTerm::Var { name, tag, .. })) => (
-        //     vec![Some(asm::Command::TailEdge(
-        //         asm::TailEdge::ScheduleSelect {
-        //             value_operation: get_quotient(specs, tag, SpecType::Value),
-        //             timeline_operation: get_quotient(specs, tag, SpecType::Timeline),
-        //             spatial_operation: get_quotient(specs, tag, SpecType::Spatial),
-        //             condition: Some(asm::NodeId(name.clone())),
-        //             callee_funclet_ids: Some(cfg.next_blocks()),
-        //             callee_arguments: (),
-        //             continuation_join: (),
-        //         },
-        //     ))],
-        //     temp_id,
-        // ),
+            }))]
+        }
+        Terminator::Select(guard_name) => lower_select(guard_name, temp_id, cfg, specs, live_vars),
         Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
         _ => todo!(),
     }
+}
+
+/// Lowers a select terminator into a series of caiman assembly commands
+/// # Returns
+/// The commands that implement the terminator
+fn lower_select(
+    guard_name: &str,
+    temp_id: usize,
+    cfg: &BlockRef<'_>,
+    specs: &Specs,
+    live_vars: &InOutFacts<LiveVars>,
+) -> CommandVec {
+    let djoin_id = temp_id;
+    let djoin_name = temp_var_name(djoin_id);
+    let join = temp_id + 1;
+    let join_var = temp_var_name(join);
+    vec![
+        Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(djoin_name.clone())),
+            node: asm::Node::DefaultJoin,
+        })),
+        Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(join_var.clone())),
+            node: asm::Node::SerializedJoin {
+                funclet: cfg
+                    .block
+                    .join_block
+                    .map(|id| asm::FuncletId(cfg.cfg.funclet_id(id))),
+                captures: None,
+                continuation: Some(asm::NodeId(djoin_name)),
+            },
+        })),
+        Some(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
+            /// TODO don't hardcode
+            value_operation: Some(asm::Quotient::Node(Some(asm::RemoteNodeId {
+                /// the select in the spec must store into the node `r`
+                node: Some(asm::NodeId(String::from("r"))),
+                funclet: Some(specs.value.clone()),
+            }))),
+            // TODO
+            timeline_operation: Some(asm::Quotient::None(Some(asm::RemoteNodeId {
+                node: None,
+                funclet: Some(specs.timeline.clone()),
+            }))),
+            // TODO
+            spatial_operation: Some(asm::Quotient::None(Some(asm::RemoteNodeId {
+                node: None,
+                funclet: Some(specs.spatial.clone()),
+            }))),
+            condition: Some(asm::NodeId(guard_name.to_string())),
+            callee_funclet_ids: Some(cfg.next_blocks()),
+            callee_arguments: Some(
+                live_vars
+                    .get_out_fact(cfg.block.id)
+                    .live_set()
+                    .iter()
+                    .cloned()
+                    .map(asm::NodeId)
+                    .map(Some)
+                    .collect(),
+            ),
+            continuation_join: Some(asm::NodeId(join_var)),
+        })),
+    ]
 }
 
 /// Scheduling funclet specs
@@ -259,14 +319,19 @@ fn hlc_arg_to_asm_arg(arg: &Arg<FullType>) -> FuncletArgument {
 
 /// Information about a high level caiman function
 struct FuncInfo {
-    name: String,
     input: Vec<Arg<FullType>>,
     output: Arg<FullType>,
 }
 
 /// Lowers a basic block into a caiman assembly funclet
 ///
-fn lower_block(func: &FuncInfo, specs: &Specs, cfg: &Cfg, b: &BasicBlock) -> asm::Funclet {
+fn lower_block(
+    func: &FuncInfo,
+    specs: &Specs,
+    cfg: &Cfg,
+    b: &BasicBlock,
+    live_vars: &InOutFacts<LiveVars>,
+) -> asm::Funclet {
     let mut commands = vec![];
     let mut temp_id = 0;
     for cmd in &b.stmts {
@@ -274,17 +339,19 @@ fn lower_block(func: &FuncInfo, specs: &Specs, cfg: &Cfg, b: &BasicBlock) -> asm
         temp_id = new_id;
         commands.append(&mut new_cmds);
     }
-    commands
-        .append(&mut lower_terminator(&b.terminator, temp_id, BlockRef { cfg, block: b }, specs).0);
+    commands.extend(lower_terminator(
+        &b.terminator,
+        temp_id,
+        &BlockRef::new(b, cfg),
+        specs,
+        live_vars,
+    ));
     asm::Funclet {
         kind: ir::FuncletKind::ScheduleExplicit,
         header: asm::FuncletHeader {
-            // TODO: this only works when the function is a single basic block
-            name: asm::FuncletId(func.name.clone()),
-            // TODO: this only works when the function is a single basic block
-            args: func.input.iter().map(hlc_arg_to_asm_arg).collect(),
-            // TODO: this only works when the function is a single basic block
-            ret: vec![hlc_arg_to_asm_arg(&func.output)],
+            name: asm::FuncletId(cfg.funclet_id(b.id)),
+            args: block_inputs(b.id, func, specs, live_vars),
+            ret: block_outputs(b.id, func, specs, live_vars),
             binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
                 implicit_tags: None,
                 value: Some(specs.value.clone()),
@@ -296,6 +363,87 @@ fn lower_block(func: &FuncInfo, specs: &Specs, cfg: &Cfg, b: &BasicBlock) -> asm
     }
 }
 
+/// Gets a vector of tags for each of the specs, all with a none quotient
+/// and a usable flow
+fn none_usable(specs: &Specs) -> Vec<asm::Tag> {
+    vec![
+        asm::Tag {
+            quot: asm::Quotient::None(Some(asm::RemoteNodeId {
+                funclet: Some(specs.value.clone()),
+                node: None,
+            })),
+            flow: ir::Flow::Usable,
+        },
+        asm::Tag {
+            quot: asm::Quotient::None(Some(asm::RemoteNodeId {
+                funclet: Some(specs.timeline.clone()),
+                node: None,
+            })),
+            flow: ir::Flow::Usable,
+        },
+        asm::Tag {
+            quot: asm::Quotient::None(Some(asm::RemoteNodeId {
+                funclet: Some(specs.spatial.clone()),
+                node: None,
+            })),
+            flow: ir::Flow::Usable,
+        },
+    ]
+}
+
+/// Gets the input arguments for each block based on the block's live in variables
+fn block_inputs(
+    block_id: usize,
+    func: &FuncInfo,
+    specs: &Specs,
+    live_vars: &InOutFacts<LiveVars>,
+) -> Vec<FuncletArgument> {
+    if block_id == cfg::START_BLOCK_ID {
+        func.input.iter().map(hlc_arg_to_asm_arg).collect()
+    } else {
+        live_vars
+            .get_in_fact(block_id)
+            .live_set()
+            .iter()
+            .map(|var| {
+                FuncletArgument {
+                    name: Some(asm::NodeId(var.clone())),
+                    // TODO: support more types
+                    typ: asm::TypeId::Local(String::from("i64")),
+                    // TODO: don't hardcode this
+                    tags: none_usable(specs),
+                }
+            })
+            .collect()
+    }
+}
+
+/// Gets the return arguments of a funclet based on the block's live out variables
+fn block_outputs(
+    block_id: usize,
+    func: &FuncInfo,
+    specs: &Specs,
+    live_vars: &InOutFacts<LiveVars>,
+) -> Vec<FuncletArgument> {
+    if block_id == cfg::START_BLOCK_ID {
+        vec![hlc_arg_to_asm_arg(&func.output)]
+    } else {
+        // I don't think this is right
+        live_vars
+            .get_out_fact(block_id)
+            .live_set()
+            .iter()
+            .map(|var| FuncletArgument {
+                name: Some(asm::NodeId(var.clone())),
+                // TODO: support more types
+                typ: asm::TypeId::Local(String::from("i64")),
+                // TODO: don't hardcode this
+                tags: none_usable(specs),
+            })
+            .collect()
+    }
+}
+
 /// Lower a scheduling function into one or more caiman assembly funclet.
 /// # Errors
 /// Returns an error if the function is missing a spec.
@@ -304,6 +452,7 @@ pub fn lower_schedule(
     func: SchedulingFunc,
 ) -> Result<Vec<asm::Funclet>, LocalError> {
     let cfg = Cfg::new(&func.name, func.statements);
+    let live_vars = cfg::analyze(&cfg, &cfg::LiveVars::top());
     let mut val = None;
     let mut timeline = None;
     let mut spatial = None;
@@ -330,16 +479,18 @@ pub fn lower_schedule(
             .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
     };
     let finfo = FuncInfo {
-        name: func.name,
         input: func.input,
         output: (
             String::new(),
             func.output.expect("Functions must return values for now"),
         ),
     };
+    // if cfg.blocks[cfg::FINAL_BLOCK_ID].stmts.is_empty() {
+    //     cfg.blocks.remove(cfg::FINAL_BLOCK_ID);
+    // }
     Ok(cfg
         .blocks
         .iter()
-        .map(|bb| lower_block(&finfo, &specs, &cfg, bb))
+        .map(|bb| lower_block(&finfo, &specs, &cfg, bb, &live_vars))
         .collect())
 }

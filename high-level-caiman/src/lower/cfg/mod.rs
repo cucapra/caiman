@@ -11,12 +11,14 @@ pub mod hir;
 #[cfg(test)]
 mod test;
 
+pub use analysis::{analyze, Fact, InOutFacts, LiveVars};
+
 /// The id of the final block of the canonicalized CFG.
 /// A canonical CFG has one entry and exit node.
-const FINAL_BLOCK_ID: usize = 0;
+pub const FINAL_BLOCK_ID: usize = 0;
 /// The id of the entry block of the canonicalized CFG.
 /// A canonical CFG has one entry and exit node.
-const START_BLOCK_ID: usize = FINAL_BLOCK_ID + 1;
+pub const START_BLOCK_ID: usize = FINAL_BLOCK_ID + 1;
 
 /// A basic block in a scheduling function
 pub struct BasicBlock {
@@ -267,7 +269,7 @@ impl Cfg {
 
     /// Gets the name of the scheduling funclet for a given block
     pub fn funclet_id(&self, block_id: usize) -> String {
-        if block_id == 0 {
+        if block_id == START_BLOCK_ID {
             self.fn_name.clone()
         } else {
             format!("_{}{block_id}", self.fn_name)

@@ -3,11 +3,11 @@ use std::collections::{HashMap, HashSet};
 use crate::lower::cfg::START_BLOCK_ID;
 
 use super::{
-    hir::{Hir, HirInstr, Terminator},
+    hir::{HirInstr, Terminator},
     Cfg, Edge,
 };
 
-pub(super) trait Fact: PartialEq + Clone {
+pub trait Fact: PartialEq + Clone {
     /// Performs a meet operation on tw facts
     #[must_use]
     fn meet(self, other: &Self) -> Self;
@@ -19,7 +19,7 @@ pub(super) trait Fact: PartialEq + Clone {
     type Dir: Direction;
 }
 
-pub(super) trait Direction {
+pub trait Direction {
     /// Gets the adj list for the direction
     fn get_adj_list(cfg: &Cfg) -> HashMap<usize, Vec<usize>>;
 
@@ -36,6 +36,28 @@ pub(super) trait Direction {
 
     /// Gets the starting point for the analysis in this direction
     fn root_id() -> usize;
+
+    /// Gets the input facts for the analysis, with respect to the direction
+    /// # Arguments
+    /// * `in_facts` - The input facts for each block, relative to the direction
+    /// * `out_facts` - The output facts for each block, relative to the direction
+    /// # Returns
+    /// * The input facts for the analysis as if the analysis was a forward analysis
+    fn get_in_facts<'a, T: Fact>(
+        in_facts: &'a HashMap<usize, T>,
+        out_facts: &'a HashMap<usize, T>,
+    ) -> &'a HashMap<usize, T>;
+
+    /// Gets the output facts for the analysis, with respect to the direction
+    /// # Arguments
+    /// * `in_facts` - The input facts for each block, relative to the direction
+    /// * `out_facts` - The output facts for each block, relative to the direction
+    /// # Returns
+    /// * The output facts for the analysis as if the analysis was a forward analysis
+    fn get_out_facts<'a, T: Fact>(
+        in_facts: &'a HashMap<usize, T>,
+        out_facts: &'a HashMap<usize, T>,
+    ) -> &'a HashMap<usize, T>;
 }
 
 /// Analyzes a basic block
@@ -48,7 +70,7 @@ pub(super) trait Direction {
 /// * Tuple of input facts for each instruction and the output fact for the block
 fn analyze_basic_block<T: Fact>(cfg: &Cfg, block_id: usize, in_fact: &T) -> T {
     let mut fact = in_fact.clone();
-    let block = &cfg.blocks[block_id];
+    let block = &cfg.blocks[block_id - START_BLOCK_ID];
     T::Dir::local_iter(
         &mut block
             .stmts
@@ -62,8 +84,33 @@ fn analyze_basic_block<T: Fact>(cfg: &Cfg, block_id: usize, in_fact: &T) -> T {
     fact
 }
 
+/// The result of an analysis pass
+pub struct InOutFacts<T: Fact> {
+    /// Mapping from blocks to facts coming from the predecessors
+    in_facts: HashMap<usize, T>,
+    /// Mapping from blocks to facts going to the successors
+    out_facts: HashMap<usize, T>,
+}
+
+impl<T: Fact> InOutFacts<T> {
+    /// Gets the input fact for the given block
+    /// # Panics
+    /// If the block does not exist
+    pub fn get_in_fact(&self, block: usize) -> &T {
+        T::Dir::get_in_facts(&self.in_facts, &self.out_facts)
+            .get(&block)
+            .unwrap()
+    }
+
+    pub fn get_out_fact(&self, block: usize) -> &T {
+        T::Dir::get_out_facts(&self.in_facts, &self.out_facts)
+            .get(&block)
+            .unwrap()
+    }
+}
+
 #[must_use]
-pub(super) fn analyze<T: Fact>(cfg: &Cfg, top: &T) -> HashMap<usize, T> {
+pub fn analyze<T: Fact>(cfg: &Cfg, top: &T) -> InOutFacts<T> {
     let mut in_facts: HashMap<usize, T> = HashMap::new();
     let mut out_facts: HashMap<usize, T> = HashMap::new();
     let mut worklist: Vec<usize> = Vec::new();
@@ -81,7 +128,10 @@ pub(super) fn analyze<T: Fact>(cfg: &Cfg, top: &T) -> HashMap<usize, T> {
         }
         out_facts.insert(block, out_fact);
     }
-    in_facts
+    InOutFacts {
+        in_facts,
+        out_facts,
+    }
 }
 
 /// Broadcasts the output facts to the neighbors
@@ -114,7 +164,7 @@ fn broadcast_out_facts<T: Fact>(
     in_facts
 }
 
-pub(super) struct Backwards {}
+pub struct Backwards {}
 impl Direction for Backwards {
     fn get_adj_list(cfg: &Cfg) -> HashMap<usize, Vec<usize>> {
         // gets the reverse adjacency list
@@ -150,11 +200,38 @@ impl Direction for Backwards {
     fn root_id() -> usize {
         START_BLOCK_ID
     }
+
+    fn get_in_facts<'a, T: Fact>(
+        _: &'a HashMap<usize, T>,
+        out_facts: &'a HashMap<usize, T>,
+    ) -> &'a HashMap<usize, T> {
+        out_facts
+    }
+
+    fn get_out_facts<'a, T: Fact>(
+        in_facts: &'a HashMap<usize, T>,
+        _: &'a HashMap<usize, T>,
+    ) -> &'a HashMap<usize, T> {
+        in_facts
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(super) struct LiveVars {
+pub struct LiveVars {
+    // TODO: tag information
     pub(super) live_set: HashSet<String>,
+}
+
+impl LiveVars {
+    pub fn top() -> Self {
+        Self {
+            live_set: HashSet::new(),
+        }
+    }
+
+    pub const fn live_set(&self) -> &HashSet<String> {
+        &self.live_set
+    }
 }
 
 const RET_VAR: &str = "_out";

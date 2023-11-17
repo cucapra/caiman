@@ -35,6 +35,7 @@ pub enum Hir {
     },
     Hole(Info),
     /// Built-in operation
+    #[allow(dead_code)]
     Op {
         info: Info,
         dest: Name,
@@ -49,6 +50,7 @@ pub enum Hir {
 #[derive(Clone, Debug)]
 pub enum Terminator {
     /// A call to a function with a list of arguments.
+    #[allow(dead_code)]
     Call(SchedFuncCall),
     /// A select statement with a guard node. If the guard is true
     /// we transition to the `true_branch` of the outgoing edge of this block
@@ -66,6 +68,7 @@ pub enum Terminator {
 /// Either a tail edge (terminator) or a statement.
 ///
 /// Hir body and terminators are owned by the basic block they are in.
+#[allow(clippy::module_name_repetitions)]
 pub enum HirInstr<'a> {
     Stmt(&'a Hir),
     Tail(&'a Terminator),
@@ -130,12 +133,13 @@ impl Hir {
     }
 }
 
-/// Convert a list of SchedStmts to a list of Hirs
+/// Convert a list of `SchedStmts` to a list of Hirs
+#[allow(clippy::module_name_repetitions)]
 pub fn stmts_to_hir(stmts: Vec<SchedStmt>) -> Vec<Hir> {
     stmts.into_iter().map(Hir::new).collect()
 }
 
-/// Get the uses in a SchedTerm
+/// Get the uses in a `SchedTerm`
 fn term_get_uses(t: &SchedTerm, res: &mut HashSet<String>) {
     match t {
         SchedTerm::Var { name, .. } => {
