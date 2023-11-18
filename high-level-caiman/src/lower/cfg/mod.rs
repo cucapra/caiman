@@ -11,7 +11,7 @@ pub mod hir;
 #[cfg(test)]
 mod test;
 
-pub use analysis::{analyze, Fact, InOutFacts, LiveVars};
+pub use analysis::{analyze, Fact, InOutFacts, LiveVars, RET_VAR};
 
 /// The id of the final block of the canonicalized CFG.
 /// A canonical CFG has one entry and exit node.
@@ -45,7 +45,7 @@ pub enum Edge {
 /// A control flow graph for a scheduling function.
 /// Each basic block in the CFG contains HIR body statements and a terminator.
 pub struct Cfg {
-    pub blocks: Vec<BasicBlock>,
+    pub blocks: HashMap<usize, BasicBlock>,
     pub fn_name: String,
     graph: HashMap<usize, Edge>,
 }
@@ -119,7 +119,7 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
 fn make_blocks(
     cur_id: &mut usize,
-    blocks: &mut Vec<BasicBlock>,
+    blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
     stmts: Vec<SchedStmt>,
     join_edge: Edge,
@@ -135,12 +135,15 @@ fn make_blocks(
         match stmt {
             SchedStmt::Return(_, sched_expr) => {
                 let old_id = *cur_id;
-                blocks.push(make_block(
-                    cur_id,
-                    &mut cur_stmts,
-                    Terminator::Return(Some(expr_to_node_id(sched_expr))),
-                    &join_edge,
-                ));
+                blocks.insert(
+                    *cur_id,
+                    make_block(
+                        cur_id,
+                        &mut cur_stmts,
+                        Terminator::Return(Some(expr_to_node_id(sched_expr))),
+                        &join_edge,
+                    ),
+                );
                 edges.insert(old_id, Edge::Next(FINAL_BLOCK_ID));
             }
             SchedStmt::If {
@@ -150,12 +153,15 @@ fn make_blocks(
                 ..
             } => {
                 let parent_id = *cur_id;
-                blocks.push(make_block(
-                    cur_id,
-                    &mut cur_stmts,
-                    Terminator::Select(expr_to_node_id(guard)),
-                    &join_edge,
-                ));
+                blocks.insert(
+                    *cur_id,
+                    make_block(
+                        cur_id,
+                        &mut cur_stmts,
+                        Terminator::Select(expr_to_node_id(guard)),
+                        &join_edge,
+                    ),
+                );
                 children.push(PendingChild {
                     parent_id,
                     join_id: *cur_id,
@@ -185,12 +191,10 @@ fn make_blocks(
         */
         // the continuation can't also be one of the target funclets in the select
         let old_id = *cur_id;
-        blocks.push(make_block(
-            cur_id,
-            &mut cur_stmts,
-            Terminator::None,
-            &join_edge,
-        ));
+        blocks.insert(
+            *cur_id,
+            make_block(cur_id, &mut cur_stmts, Terminator::None, &join_edge),
+        );
         edges.insert(old_id, join_edge);
     }
     make_child_blocks(children, cur_id, blocks, edges);
@@ -206,7 +210,7 @@ fn make_blocks(
 fn make_child_blocks(
     children: Vec<PendingChild>,
     cur_id: &mut usize,
-    blocks: &mut Vec<BasicBlock>,
+    blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
 ) {
     for PendingChild {
@@ -236,7 +240,16 @@ fn make_child_blocks(
 impl Cfg {
     /// Create a new CFG from a list of scheduling statements
     pub fn new(fn_name: &str, stmts: Vec<SchedStmt>) -> Self {
-        let mut blocks = vec![];
+        let mut blocks = HashMap::new();
+        blocks.insert(
+            FINAL_BLOCK_ID,
+            BasicBlock {
+                id: FINAL_BLOCK_ID,
+                stmts: vec![],
+                terminator: Terminator::FinalReturn,
+                join_block: None,
+            },
+        );
         let mut edges = HashMap::new();
         let mut cur_id = START_BLOCK_ID;
         edges.insert(FINAL_BLOCK_ID, Edge::None);
@@ -313,7 +326,7 @@ impl Cfg {
         // this doesn't take unreachable cycles into account, which I think
         // can't occur right now
         self.graph.retain(|k, _| !unreachable.contains(k));
-        self.blocks.retain(|b| !unreachable.contains(&b.id));
+        self.blocks.retain(|_, b| !unreachable.contains(&b.id));
         self
     }
 }

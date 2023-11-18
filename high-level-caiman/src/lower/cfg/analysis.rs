@@ -1,10 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::lower::cfg::START_BLOCK_ID;
-
 use super::{
     hir::{HirInstr, Terminator},
-    Cfg, Edge,
+    Cfg, Edge, FINAL_BLOCK_ID,
 };
 
 pub trait Fact: PartialEq + Clone {
@@ -70,7 +68,7 @@ pub trait Direction {
 /// * Tuple of input facts for each instruction and the output fact for the block
 fn analyze_basic_block<T: Fact>(cfg: &Cfg, block_id: usize, in_fact: &T) -> T {
     let mut fact = in_fact.clone();
-    let block = &cfg.blocks[block_id - START_BLOCK_ID];
+    let block = cfg.blocks.get(&block_id).unwrap();
     T::Dir::local_iter(
         &mut block
             .stmts
@@ -198,7 +196,7 @@ impl Direction for Backwards {
     }
 
     fn root_id() -> usize {
-        START_BLOCK_ID
+        FINAL_BLOCK_ID
     }
 
     fn get_in_facts<'a, T: Fact>(
@@ -234,7 +232,8 @@ impl LiveVars {
     }
 }
 
-const RET_VAR: &str = "_out";
+/// The name of the special variable for return variables
+pub const RET_VAR: &str = "_out";
 
 impl Fact for LiveVars {
     fn meet(mut self, other: &Self) -> Self {
@@ -248,13 +247,16 @@ impl Fact for LiveVars {
         match stmt {
             HirInstr::Tail(Terminator::Return(Some(expr))) => {
                 self.live_set.insert(expr.clone());
-                self.live_set.insert(String::from(RET_VAR));
+                self.live_set.remove(RET_VAR);
             }
             HirInstr::Tail(Terminator::Return(None)) => {
-                self.live_set.insert(String::from(RET_VAR));
+                self.live_set.remove(RET_VAR);
             }
             HirInstr::Tail(Terminator::Select(guard)) => {
                 self.live_set.insert(guard.clone());
+            }
+            HirInstr::Tail(Terminator::FinalReturn) => {
+                self.live_set.insert(String::from(RET_VAR));
             }
             HirInstr::Tail(Terminator::None) => (),
             HirInstr::Tail(Terminator::Call(..)) => todo!(),

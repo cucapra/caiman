@@ -4,8 +4,7 @@ use crate::{
     error::{type_error, LocalError},
     lower::data_type_to_ffi_type,
     parse::ast::{
-        Arg, Flow, FullType, Quotient, QuotientReference, SchedLiteral, SchedTerm, SchedulingFunc,
-        Tag,
+        Arg, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
     },
 };
 use caiman::ir;
@@ -14,7 +13,7 @@ use super::{
     cfg::{
         self,
         hir::{Hir, Terminator},
-        BasicBlock, Cfg, InOutFacts, LiveVars,
+        BasicBlock, Cfg, InOutFacts, LiveVars, RET_VAR,
     },
     global_context::{Context, SpecType},
 };
@@ -38,12 +37,7 @@ fn lower_flat_decl(
     rhs: &SchedTerm,
     temp_id: usize,
 ) -> (CommandVec, usize) {
-    if let SchedTerm::Lit {
-        lit: SchedLiteral::Int(_x),
-        tag: _tag,
-        ..
-    } = rhs
-    {
+    if let SchedTerm::Lit { .. } = rhs {
         let dest_tag = dest_tag
             .as_ref()
             .expect("We require all variables to have type annotations");
@@ -87,11 +81,8 @@ fn lower_instr(s: &Hir, temp_id: usize) -> (CommandVec, usize) {
     match s {
         Hir::Decl {
             lhs, rhs, lhs_tag, ..
-        } => {
-            assert_eq!(lhs.len(), 1);
-            lower_flat_decl(lhs, lhs_tag, rhs, temp_id)
-        }
-        _ => todo!(),
+        } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id),
+        x => todo!("{x:?}"),
     }
 }
 
@@ -138,7 +129,7 @@ impl<'a> BlockRef<'a> {
     /// Gets the next blocks in the cfg as `FuncletIds`
     fn next_blocks(&self) -> Vec<asm::Hole<asm::FuncletId>> {
         match &self.block.terminator {
-            Terminator::Return(_) => vec![],
+            Terminator::FinalReturn => vec![],
             Terminator::Select(_) => {
                 let mut e = self
                     .cfg
@@ -156,14 +147,14 @@ impl<'a> BlockRef<'a> {
                 res
             }
             Terminator::Call(..) => todo!(),
-            Terminator::None => {
+            Terminator::None | Terminator::Return(..) => {
                 let e = self
                     .cfg
                     .successors(self.block.id)
                     .into_iter()
                     .map(|id| Some(asm::FuncletId(self.cfg.funclet_id(id))));
                 let res: Vec<_> = e.collect();
-                assert_eq!(res.len(), 1);
+                assert!(res.len() <= 1);
                 res
             }
         }
@@ -189,9 +180,15 @@ fn lower_terminator(
                 return_values: Some(vec![Some(asm::NodeId(name.clone()))]),
             }))]
         }
+        Terminator::FinalReturn => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
+            return_values: Some(vec![Some(asm::NodeId(String::from(RET_VAR)))]),
+        }))],
         Terminator::Select(guard_name) => lower_select(guard_name, temp_id, cfg, specs, live_vars),
         Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
-        _ => todo!(),
+        // TODO: review this, I think `None` can only occur during a join, in which
+        // case doing nothing is fine.
+        Terminator::None => vec![],
+        Terminator::Call(..) => todo!(),
     }
 }
 
@@ -216,12 +213,15 @@ fn lower_select(
         })),
         Some(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            node: asm::Node::SerializedJoin {
+            // TODO: for greater generality, should be `SerializedJoin`, but I
+            // think that's broken right now
+            // TODO: optimize and use inline join whenever possible
+            node: asm::Node::InlineJoin {
                 funclet: cfg
                     .block
                     .join_block
                     .map(|id| asm::FuncletId(cfg.cfg.funclet_id(id))),
-                captures: None,
+                captures: Some(vec![]),
                 continuation: Some(asm::NodeId(djoin_name)),
             },
         })),
@@ -490,7 +490,7 @@ pub fn lower_schedule(
     // }
     Ok(cfg
         .blocks
-        .iter()
+        .values()
         .map(|bb| lower_block(&finfo, &specs, &cfg, bb, &live_vars))
         .collect())
 }

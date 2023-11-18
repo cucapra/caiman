@@ -37,14 +37,14 @@ fn main() -> Result<(), error::Error> {
 fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
     let ast = parse::parse_file(&args.filename)?;
     if args.parse {
-        println!("{:#?}", ast);
+        println!("{ast:#?}");
     } else {
         let lowered = lower(ast).map_err(|e| error::Error {
             error: e,
             filename: args.filename.clone(),
         })?;
         if args.lower {
-            println!("{:#?}", lowered);
+            println!("{lowered:#?}");
         } else {
             caiman::explicate_and_execute(args.output, lowered);
         }

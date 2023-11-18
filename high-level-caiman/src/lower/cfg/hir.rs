@@ -19,6 +19,7 @@ use crate::{
 /// occur before passing the CFG to lowering. I got tired of writing
 /// assertions and deep pattern matches so I switched to a different representations
 /// which enforces the flattening and splitting assumptions.
+#[derive(Debug)]
 pub enum Hir {
     // TODO: encodings
     Move {
@@ -60,6 +61,10 @@ pub enum Terminator {
     /// Modeled as an assignment to the special `_out` variable and transition to
     /// the final basic block.
     Return(Option<String>),
+    /// The final return statement in the final basic block. This is **NOT**
+    /// a return statement in the frontend, but rather a special return statement
+    /// for the canonical CFG.
+    FinalReturn,
     /// No terminator, continue to the next block
     None,
 }
