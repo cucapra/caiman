@@ -5,13 +5,7 @@ use crate::{
     parse::ast::{SchedExpr, SchedStmt, SchedTerm},
 };
 
-use self::hir::{stmts_to_hir, Hir, Terminator};
-mod analysis;
-pub mod hir;
-#[cfg(test)]
-mod test;
-
-pub use analysis::{analyze, Fact, InOutFacts, LiveVars, RET_VAR};
+use super::{stmts_to_hir, Hir, Terminator};
 
 /// The id of the final block of the canonicalized CFG.
 /// A canonical CFG has one entry and exit node.
@@ -46,8 +40,7 @@ pub enum Edge {
 /// Each basic block in the CFG contains HIR body statements and a terminator.
 pub struct Cfg {
     pub blocks: HashMap<usize, BasicBlock>,
-    pub fn_name: String,
-    graph: HashMap<usize, Edge>,
+    pub(super) graph: HashMap<usize, Edge>,
 }
 
 /// Make a basic block from the current statements, giving it the next id
@@ -239,7 +232,7 @@ fn make_child_blocks(
 
 impl Cfg {
     /// Create a new CFG from a list of scheduling statements
-    pub fn new(fn_name: &str, stmts: Vec<SchedStmt>) -> Self {
+    pub fn new(stmts: Vec<SchedStmt>) -> Self {
         let mut blocks = HashMap::new();
         blocks.insert(
             FINAL_BLOCK_ID,
@@ -263,7 +256,6 @@ impl Cfg {
         Self {
             blocks,
             graph: edges,
-            fn_name: fn_name.to_string(),
         }
         .remove_unreachable()
     }
@@ -277,15 +269,6 @@ impl Cfg {
                 false_branch,
             } => vec![true_branch, false_branch],
             Edge::None => vec![],
-        }
-    }
-
-    /// Gets the name of the scheduling funclet for a given block
-    pub fn funclet_id(&self, block_id: usize) -> String {
-        if block_id == START_BLOCK_ID {
-            self.fn_name.clone()
-        } else {
-            format!("_{}{block_id}", self.fn_name)
         }
     }
 

@@ -1303,74 +1303,76 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                28,
-                                15,
-                            ),
-                            end_ln_and_col: (
-                                28,
-                                34,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            28,
-                                            15,
-                                        ),
-                                        end_ln_and_col: (
-                                            28,
-                                            26,
-                                        ),
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    28,
+                                    15,
+                                ),
+                                end_ln_and_col: (
+                                    28,
+                                    34,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                28,
+                                                15,
+                                            ),
+                                            end_ln_and_col: (
+                                                28,
+                                                26,
+                                            ),
+                                        },
+                                        name: "vadd_extern",
+                                        tag: None,
                                     },
-                                    name: "vadd_extern",
-                                    tag: None,
-                                },
-                            ),
-                            templates: None,
-                            args: Args(
-                                [
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    28,
-                                                    27,
-                                                ),
-                                                end_ln_and_col: (
-                                                    28,
-                                                    29,
-                                                ),
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        28,
+                                                        27,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        28,
+                                                        29,
+                                                    ),
+                                                },
+                                                name: "v1",
+                                                tag: None,
                                             },
-                                            name: "v1",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    28,
-                                                    31,
-                                                ),
-                                                end_ln_and_col: (
-                                                    28,
-                                                    33,
-                                                ),
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        28,
+                                                        31,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        28,
+                                                        33,
+                                                    ),
+                                                },
+                                                name: "v2",
+                                                tag: None,
                                             },
-                                            name: "v2",
-                                            tag: None,
-                                        },
-                                    ),
-                                ],
-                            ),
-                            tag: None,
-                        },
+                                        ),
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -1392,74 +1394,76 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                29,
-                                18,
-                            ),
-                            end_ln_and_col: (
-                                29,
-                                38,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            29,
-                                            18,
-                                        ),
-                                        end_ln_and_col: (
-                                            29,
-                                            29,
-                                        ),
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    29,
+                                    18,
+                                ),
+                                end_ln_and_col: (
+                                    29,
+                                    38,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                29,
+                                                18,
+                                            ),
+                                            end_ln_and_col: (
+                                                29,
+                                                29,
+                                            ),
+                                        },
+                                        name: "vadd_extern",
+                                        tag: None,
                                     },
-                                    name: "vadd_extern",
-                                    tag: None,
-                                },
-                            ),
-                            templates: None,
-                            args: Args(
-                                [
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    29,
-                                                    30,
-                                                ),
-                                                end_ln_and_col: (
-                                                    29,
-                                                    33,
-                                                ),
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        29,
+                                                        30,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        29,
+                                                        33,
+                                                    ),
+                                                },
+                                                name: "tmp",
+                                                tag: None,
                                             },
-                                            name: "tmp",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    29,
-                                                    35,
-                                                ),
-                                                end_ln_and_col: (
-                                                    29,
-                                                    37,
-                                                ),
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        29,
+                                                        35,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        29,
+                                                        37,
+                                                    ),
+                                                },
+                                                name: "v3",
+                                                tag: None,
                                             },
-                                            name: "v3",
-                                            tag: None,
-                                        },
-                                    ),
-                                ],
-                            ),
-                            tag: None,
-                        },
+                                        ),
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -1867,41 +1871,43 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                42,
-                                31,
-                            ),
-                            end_ln_and_col: (
-                                42,
-                                43,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            42,
-                                            31,
-                                        ),
-                                        end_ln_and_col: (
-                                            42,
-                                            41,
-                                        ),
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    42,
+                                    31,
+                                ),
+                                end_ln_and_col: (
+                                    42,
+                                    43,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                42,
+                                                31,
+                                            ),
+                                            end_ln_and_col: (
+                                                42,
+                                                41,
+                                            ),
+                                        },
+                                        name: "alloc_host",
+                                        tag: None,
                                     },
-                                    name: "alloc_host",
-                                    tag: None,
-                                },
-                            ),
-                            templates: None,
-                            args: Args(
-                                [],
-                            ),
-                            tag: None,
-                        },
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -1923,90 +1929,92 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                43,
-                                18,
-                            ),
-                            end_ln_and_col: (
-                                43,
-                                49,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            43,
-                                            18,
-                                        ),
-                                        end_ln_and_col: (
-                                            43,
-                                            30,
-                                        ),
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    43,
+                                    18,
+                                ),
+                                end_ln_and_col: (
+                                    43,
+                                    49,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                43,
+                                                18,
+                                            ),
+                                            end_ln_and_col: (
+                                                43,
+                                                30,
+                                            ),
+                                        },
+                                        name: "vadd_rec_cpu",
+                                        tag: None,
                                     },
-                                    name: "vadd_rec_cpu",
-                                    tag: None,
-                                },
-                            ),
-                            templates: None,
-                            args: Args(
-                                [
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    43,
-                                                    31,
-                                                ),
-                                                end_ln_and_col: (
-                                                    43,
-                                                    33,
-                                                ),
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        43,
+                                                        31,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        43,
+                                                        33,
+                                                    ),
+                                                },
+                                                name: "v1",
+                                                tag: None,
                                             },
-                                            name: "v1",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    43,
-                                                    35,
-                                                ),
-                                                end_ln_and_col: (
-                                                    43,
-                                                    37,
-                                                ),
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        43,
+                                                        35,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        43,
+                                                        37,
+                                                    ),
+                                                },
+                                                name: "v2",
+                                                tag: None,
                                             },
-                                            name: "v2",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    43,
-                                                    39,
-                                                ),
-                                                end_ln_and_col: (
-                                                    43,
-                                                    48,
-                                                ),
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        43,
+                                                        39,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        43,
+                                                        48,
+                                                    ),
+                                                },
+                                                name: "new_array",
+                                                tag: None,
                                             },
-                                            name: "new_array",
-                                            tag: None,
-                                        },
-                                    ),
-                                ],
-                            ),
-                            tag: None,
-                        },
+                                        ),
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -2398,58 +2406,60 @@
                                     ),
                                 ],
                                 is_const: true,
-                                expr: Term(
-                                    Call(
-                                        Info {
-                                            start_ln_and_col: (
-                                                55,
-                                                28,
-                                            ),
-                                            end_ln_and_col: (
-                                                55,
-                                                37,
-                                            ),
-                                        },
-                                        SchedFuncCall {
-                                            target: Term(
-                                                Var {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            55,
-                                                            28,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            55,
-                                                            33,
-                                                        ),
-                                                    },
-                                                    name: "split",
-                                                    tag: None,
-                                                },
-                                            ),
-                                            templates: None,
-                                            args: Args(
-                                                [
-                                                    Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    55,
-                                                                    34,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    55,
-                                                                    36,
-                                                                ),
-                                                            },
-                                                            name: "v1",
-                                                            tag: None,
+                                expr: Some(
+                                    Term(
+                                        Call(
+                                            Info {
+                                                start_ln_and_col: (
+                                                    55,
+                                                    28,
+                                                ),
+                                                end_ln_and_col: (
+                                                    55,
+                                                    37,
+                                                ),
+                                            },
+                                            SchedFuncCall {
+                                                target: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                55,
+                                                                28,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                55,
+                                                                33,
+                                                            ),
                                                         },
-                                                    ),
-                                                ],
-                                            ),
-                                            tag: None,
-                                        },
+                                                        name: "split",
+                                                        tag: None,
+                                                    },
+                                                ),
+                                                templates: None,
+                                                args: Args(
+                                                    [
+                                                        Term(
+                                                            Var {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        55,
+                                                                        34,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        55,
+                                                                        36,
+                                                                    ),
+                                                                },
+                                                                name: "v1",
+                                                                tag: None,
+                                                            },
+                                                        ),
+                                                    ],
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
                                     ),
                                 ),
                             },
@@ -2475,58 +2485,60 @@
                                     ),
                                 ],
                                 is_const: true,
-                                expr: Term(
-                                    Call(
-                                        Info {
-                                            start_ln_and_col: (
-                                                56,
-                                                28,
-                                            ),
-                                            end_ln_and_col: (
-                                                56,
-                                                37,
-                                            ),
-                                        },
-                                        SchedFuncCall {
-                                            target: Term(
-                                                Var {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            56,
-                                                            28,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            56,
-                                                            33,
-                                                        ),
-                                                    },
-                                                    name: "split",
-                                                    tag: None,
-                                                },
-                                            ),
-                                            templates: None,
-                                            args: Args(
-                                                [
-                                                    Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    56,
-                                                                    34,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    56,
-                                                                    36,
-                                                                ),
-                                                            },
-                                                            name: "v2",
-                                                            tag: None,
+                                expr: Some(
+                                    Term(
+                                        Call(
+                                            Info {
+                                                start_ln_and_col: (
+                                                    56,
+                                                    28,
+                                                ),
+                                                end_ln_and_col: (
+                                                    56,
+                                                    37,
+                                                ),
+                                            },
+                                            SchedFuncCall {
+                                                target: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                56,
+                                                                28,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                56,
+                                                                33,
+                                                            ),
                                                         },
-                                                    ),
-                                                ],
-                                            ),
-                                            tag: None,
-                                        },
+                                                        name: "split",
+                                                        tag: None,
+                                                    },
+                                                ),
+                                                templates: None,
+                                                args: Args(
+                                                    [
+                                                        Term(
+                                                            Var {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        56,
+                                                                        34,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        56,
+                                                                        36,
+                                                                    ),
+                                                                },
+                                                                name: "v2",
+                                                                tag: None,
+                                                            },
+                                                        ),
+                                                    ],
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
                                     ),
                                 ),
                             },

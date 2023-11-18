@@ -37,19 +37,8 @@
                     ),
                 ],
                 is_const: true,
-                expr: Binop {
-                    info: Info {
-                        start_ln_and_col: (
-                            3,
-                            13,
-                        ),
-                        end_ln_and_col: (
-                            3,
-                            38,
-                        ),
-                    },
-                    op: Or,
-                    lhs: Binop {
+                expr: Some(
+                    Binop {
                         info: Info {
                             start_ln_and_col: (
                                 3,
@@ -57,10 +46,10 @@
                             ),
                             end_ln_and_col: (
                                 3,
-                                25,
+                                38,
                             ),
                         },
-                        op: Xor,
+                        op: Or,
                         lhs: Binop {
                             info: Info {
                                 start_ln_and_col: (
@@ -69,147 +58,160 @@
                                 ),
                                 end_ln_and_col: (
                                     3,
-                                    20,
+                                    25,
                                 ),
                             },
-                            op: And,
-                            lhs: Term(
-                                Lit {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            3,
-                                            13,
-                                        ),
-                                        end_ln_and_col: (
-                                            3,
-                                            15,
-                                        ),
-                                    },
-                                    lit: Int(
-                                        "10",
+                            op: Xor,
+                            lhs: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        13,
                                     ),
-                                    tag: None,
+                                    end_ln_and_col: (
+                                        3,
+                                        20,
+                                    ),
                                 },
-                            ),
+                                op: And,
+                                lhs: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                3,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                3,
+                                                15,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "10",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                                rhs: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                3,
+                                                18,
+                                            ),
+                                            end_ln_and_col: (
+                                                3,
+                                                20,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "20",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            },
                             rhs: Term(
                                 Lit {
                                     info: Info {
                                         start_ln_and_col: (
                                             3,
-                                            18,
+                                            23,
                                         ),
                                         end_ln_and_col: (
                                             3,
-                                            20,
+                                            25,
                                         ),
                                     },
                                     lit: Int(
-                                        "20",
+                                        "30",
                                     ),
                                     tag: None,
                                 },
                             ),
                         },
-                        rhs: Term(
-                            Lit {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        3,
-                                        23,
-                                    ),
-                                    end_ln_and_col: (
-                                        3,
-                                        25,
-                                    ),
-                                },
-                                lit: Int(
-                                    "30",
-                                ),
-                                tag: None,
-                            },
-                        ),
-                    },
-                    rhs: Binop {
-                        info: Info {
-                            start_ln_and_col: (
-                                3,
-                                28,
-                            ),
-                            end_ln_and_col: (
-                                3,
-                                38,
-                            ),
-                        },
-                        op: Xor,
-                        lhs: Term(
-                            Lit {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        3,
-                                        28,
-                                    ),
-                                    end_ln_and_col: (
-                                        3,
-                                        30,
-                                    ),
-                                },
-                                lit: Int(
-                                    "40",
-                                ),
-                                tag: None,
-                            },
-                        ),
                         rhs: Binop {
                             info: Info {
                                 start_ln_and_col: (
                                     3,
-                                    33,
+                                    28,
                                 ),
                                 end_ln_and_col: (
                                     3,
                                     38,
                                 ),
                             },
-                            op: And,
+                            op: Xor,
                             lhs: Term(
                                 Lit {
                                     info: Info {
                                         start_ln_and_col: (
                                             3,
-                                            33,
+                                            28,
                                         ),
                                         end_ln_and_col: (
                                             3,
-                                            34,
+                                            30,
                                         ),
                                     },
                                     lit: Int(
-                                        "0",
+                                        "40",
                                     ),
                                     tag: None,
                                 },
                             ),
-                            rhs: Term(
-                                Lit {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            3,
-                                            37,
-                                        ),
-                                        end_ln_and_col: (
-                                            3,
-                                            38,
-                                        ),
-                                    },
-                                    lit: Int(
-                                        "2",
+                            rhs: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        33,
                                     ),
-                                    tag: None,
+                                    end_ln_and_col: (
+                                        3,
+                                        38,
+                                    ),
                                 },
-                            ),
+                                op: And,
+                                lhs: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                3,
+                                                33,
+                                            ),
+                                            end_ln_and_col: (
+                                                3,
+                                                34,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "0",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                                rhs: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                3,
+                                                37,
+                                            ),
+                                            end_ln_and_col: (
+                                                3,
+                                                38,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "2",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            },
                         },
                     },
-                },
+                ),
             },
             Decl {
                 info: Info {
@@ -229,51 +231,88 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                4,
-                                13,
-                            ),
-                            end_ln_and_col: (
-                                4,
-                                30,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            4,
-                                            13,
-                                        ),
-                                        end_ln_and_col: (
-                                            4,
-                                            17,
-                                        ),
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    4,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    4,
+                                    30,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                4,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                4,
+                                                17,
+                                            ),
+                                        },
+                                        name: "call",
+                                        tag: None,
                                     },
-                                    name: "call",
-                                    tag: None,
-                                },
-                            ),
-                            templates: Some(
-                                Vals(
+                                ),
+                                templates: Some(
+                                    Vals(
+                                        [
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            4,
+                                                            19,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            4,
+                                                            20,
+                                                        ),
+                                                    },
+                                                    name: "x",
+                                                },
+                                            ),
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            4,
+                                                            22,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            4,
+                                                            23,
+                                                        ),
+                                                    },
+                                                    name: "x",
+                                                },
+                                            ),
+                                        ],
+                                    ),
+                                ),
+                                args: Args(
                                     [
                                         Term(
                                             Var {
                                                 info: Info {
                                                     start_ln_and_col: (
                                                         4,
-                                                        19,
+                                                        25,
                                                     ),
                                                     end_ln_and_col: (
                                                         4,
-                                                        20,
+                                                        26,
                                                     ),
                                                 },
                                                 name: "x",
+                                                tag: None,
                                             },
                                         ),
                                         Term(
@@ -281,57 +320,22 @@
                                                 info: Info {
                                                     start_ln_and_col: (
                                                         4,
-                                                        22,
+                                                        28,
                                                     ),
                                                     end_ln_and_col: (
                                                         4,
-                                                        23,
+                                                        29,
                                                     ),
                                                 },
                                                 name: "x",
+                                                tag: None,
                                             },
                                         ),
                                     ],
                                 ),
-                            ),
-                            args: Args(
-                                [
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    4,
-                                                    25,
-                                                ),
-                                                end_ln_and_col: (
-                                                    4,
-                                                    26,
-                                                ),
-                                            },
-                                            name: "x",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    4,
-                                                    28,
-                                                ),
-                                                end_ln_and_col: (
-                                                    4,
-                                                    29,
-                                                ),
-                                            },
-                                            name: "x",
-                                            tag: None,
-                                        },
-                                    ),
-                                ],
-                            ),
-                            tag: None,
-                        },
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -353,63 +357,65 @@
                     ),
                 ],
                 is_const: true,
-                expr: Uop {
-                    info: Info {
-                        start_ln_and_col: (
-                            5,
-                            13,
-                        ),
-                        end_ln_and_col: (
-                            5,
-                            18,
-                        ),
-                    },
-                    op: Not,
-                    expr: Uop {
+                expr: Some(
+                    Uop {
                         info: Info {
                             start_ln_and_col: (
                                 5,
-                                14,
+                                13,
                             ),
                             end_ln_and_col: (
                                 5,
                                 18,
                             ),
                         },
-                        op: LNot,
+                        op: Not,
                         expr: Uop {
                             info: Info {
                                 start_ln_and_col: (
                                     5,
-                                    15,
+                                    14,
                                 ),
                                 end_ln_and_col: (
                                     5,
                                     18,
                                 ),
                             },
-                            op: Neg,
-                            expr: Term(
-                                Lit {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            5,
-                                            16,
-                                        ),
-                                        end_ln_and_col: (
-                                            5,
-                                            18,
-                                        ),
-                                    },
-                                    lit: Int(
-                                        "10",
+                            op: LNot,
+                            expr: Uop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        5,
+                                        15,
                                     ),
-                                    tag: None,
+                                    end_ln_and_col: (
+                                        5,
+                                        18,
+                                    ),
                                 },
-                            ),
+                                op: Neg,
+                                expr: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                5,
+                                                16,
+                                            ),
+                                            end_ln_and_col: (
+                                                5,
+                                                18,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "10",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            },
                         },
                     },
-                },
+                ),
             },
         ],
     },

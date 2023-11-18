@@ -521,11 +521,11 @@ impl ASTFactory {
     struct_variant_factory!(sched_let_decl(lhs: Vec<(String, Option<FullType>)>, rhs: SchedExpr) 
         -> SchedStmt:SchedStmt::Decl {
             is_const: true,
-            expr: rhs,
+            expr: Some(rhs),
             lhs: lhs
         });
 
-    struct_variant_factory!(sched_var_decl(lhs: Vec<(String, Option<FullType>)>, rhs: SchedExpr) 
+    struct_variant_factory!(sched_var_decl(lhs: Vec<(String, Option<FullType>)>, rhs: Option<SchedExpr>) 
         -> SchedStmt:SchedStmt::Decl {
             is_const: false,
             expr: rhs,

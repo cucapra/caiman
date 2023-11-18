@@ -605,50 +605,52 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Lit {
-                        info: Info {
-                            start_ln_and_col: (
-                                33,
-                                29,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    33,
+                                    29,
+                                ),
+                                end_ln_and_col: (
+                                    33,
+                                    48,
+                                ),
+                            },
+                            lit: Int(
+                                "1",
                             ),
-                            end_ln_and_col: (
-                                33,
-                                48,
-                            ),
-                        },
-                        lit: Int(
-                            "1",
-                        ),
-                        tag: Some(
-                            [
-                                Tag {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            33,
-                                            34,
-                                        ),
-                                        end_ln_and_col: (
-                                            33,
-                                            47,
-                                        ),
-                                    },
-                                    quot: Some(
-                                        Node,
-                                    ),
-                                    quot_var: Some(
-                                        QuotientReference {
-                                            spec_name: "foo",
-                                            spec_var: Some(
-                                                "c",
+                            tag: Some(
+                                [
+                                    Tag {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                33,
+                                                34,
+                                            ),
+                                            end_ln_and_col: (
+                                                33,
+                                                47,
                                             ),
                                         },
-                                    ),
-                                    flow: None,
-                                },
-                            ],
-                        ),
-                    },
+                                        quot: Some(
+                                            Node,
+                                        ),
+                                        quot_var: Some(
+                                            QuotientReference {
+                                                spec_name: "foo",
+                                                spec_var: Some(
+                                                    "c",
+                                                ),
+                                            },
+                                        ),
+                                        flow: None,
+                                    },
+                                ],
+                            ),
+                        },
+                    ),
                 ),
             },
             Decl {
@@ -669,41 +671,43 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                34,
-                                13,
-                            ),
-                            end_ln_and_col: (
-                                34,
-                                30,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            34,
-                                            13,
-                                        ),
-                                        end_ln_and_col: (
-                                            34,
-                                            28,
-                                        ),
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    34,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    34,
+                                    30,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                34,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                34,
+                                                28,
+                                            ),
+                                        },
+                                        name: "new_gpu_encoder",
+                                        tag: None,
                                     },
-                                    name: "new_gpu_encoder",
-                                    tag: None,
-                                },
-                            ),
-                            templates: None,
-                            args: Args(
-                                [],
-                            ),
-                            tag: None,
-                        },
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -1007,70 +1011,72 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                37,
-                                13,
-                            ),
-                            end_ln_and_col: (
-                                37,
-                                23,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Binop {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        37,
-                                        13,
-                                    ),
-                                    end_ln_and_col: (
-                                        37,
-                                        21,
-                                    ),
-                                },
-                                op: Dot,
-                                lhs: Term(
-                                    Var {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                37,
-                                                13,
-                                            ),
-                                            end_ln_and_col: (
-                                                37,
-                                                14,
-                                            ),
-                                        },
-                                        name: "e",
-                                        tag: None,
-                                    },
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    37,
+                                    13,
                                 ),
-                                rhs: Term(
-                                    Var {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                37,
-                                                15,
-                                            ),
-                                            end_ln_and_col: (
-                                                37,
-                                                21,
-                                            ),
-                                        },
-                                        name: "submit",
-                                        tag: None,
-                                    },
+                                end_ln_and_col: (
+                                    37,
+                                    23,
                                 ),
                             },
-                            templates: None,
-                            args: Args(
-                                [],
-                            ),
-                            tag: None,
-                        },
+                            SchedFuncCall {
+                                target: Binop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            37,
+                                            13,
+                                        ),
+                                        end_ln_and_col: (
+                                            37,
+                                            21,
+                                        ),
+                                    },
+                                    op: Dot,
+                                    lhs: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    37,
+                                                    13,
+                                                ),
+                                                end_ln_and_col: (
+                                                    37,
+                                                    14,
+                                                ),
+                                            },
+                                            name: "e",
+                                            tag: None,
+                                        },
+                                    ),
+                                    rhs: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    37,
+                                                    15,
+                                                ),
+                                                end_ln_and_col: (
+                                                    37,
+                                                    21,
+                                                ),
+                                            },
+                                            name: "submit",
+                                            tag: None,
+                                        },
+                                    ),
+                                },
+                                templates: None,
+                                args: Args(
+                                    [],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -1092,58 +1098,60 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                40,
-                                13,
-                            ),
-                            end_ln_and_col: (
-                                40,
-                                21,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            40,
-                                            13,
-                                        ),
-                                        end_ln_and_col: (
-                                            40,
-                                            18,
-                                        ),
-                                    },
-                                    name: "await",
-                                    tag: None,
-                                },
-                            ),
-                            templates: None,
-                            args: Args(
-                                [
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    40,
-                                                    19,
-                                                ),
-                                                end_ln_and_col: (
-                                                    40,
-                                                    20,
-                                                ),
-                                            },
-                                            name: "f",
-                                            tag: None,
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    40,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    40,
+                                    21,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                40,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                40,
+                                                18,
+                                            ),
                                         },
-                                    ),
-                                ],
-                            ),
-                            tag: None,
-                        },
+                                        name: "await",
+                                        tag: None,
+                                    },
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        40,
+                                                        19,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        40,
+                                                        20,
+                                                    ),
+                                                },
+                                                name: "f",
+                                                tag: None,
+                                            },
+                                        ),
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -1165,51 +1173,53 @@
                     ),
                 ],
                 is_const: true,
-                expr: Binop {
-                    info: Info {
-                        start_ln_and_col: (
-                            41,
-                            18,
+                expr: Some(
+                    Binop {
+                        info: Info {
+                            start_ln_and_col: (
+                                41,
+                                18,
+                            ),
+                            end_ln_and_col: (
+                                41,
+                                25,
+                            ),
+                        },
+                        op: Dot,
+                        lhs: Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        41,
+                                        18,
+                                    ),
+                                    end_ln_and_col: (
+                                        41,
+                                        19,
+                                    ),
+                                },
+                                name: "y",
+                                tag: None,
+                            },
                         ),
-                        end_ln_and_col: (
-                            41,
-                            25,
+                        rhs: Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        41,
+                                        20,
+                                    ),
+                                    end_ln_and_col: (
+                                        41,
+                                        25,
+                                    ),
+                                },
+                                name: "y_gpu",
+                                tag: None,
+                            },
                         ),
                     },
-                    op: Dot,
-                    lhs: Term(
-                        Var {
-                            info: Info {
-                                start_ln_and_col: (
-                                    41,
-                                    18,
-                                ),
-                                end_ln_and_col: (
-                                    41,
-                                    19,
-                                ),
-                            },
-                            name: "y",
-                            tag: None,
-                        },
-                    ),
-                    rhs: Term(
-                        Var {
-                            info: Info {
-                                start_ln_and_col: (
-                                    41,
-                                    20,
-                                ),
-                                end_ln_and_col: (
-                                    41,
-                                    25,
-                                ),
-                            },
-                            name: "y_gpu",
-                            tag: None,
-                        },
-                    ),
-                },
+                ),
             },
             Return(
                 Info {

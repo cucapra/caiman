@@ -310,47 +310,49 @@
                     ),
                 ],
                 is_const: true,
-                expr: Binop {
-                    info: Info {
-                        start_ln_and_col: (
-                            10,
-                            43,
+                expr: Some(
+                    Binop {
+                        info: Info {
+                            start_ln_and_col: (
+                                10,
+                                43,
+                            ),
+                            end_ln_and_col: (
+                                10,
+                                48,
+                            ),
+                        },
+                        op: Mul,
+                        lhs: Term(
+                            Hole(
+                                Info {
+                                    start_ln_and_col: (
+                                        10,
+                                        43,
+                                    ),
+                                    end_ln_and_col: (
+                                        10,
+                                        44,
+                                    ),
+                                },
+                            ),
                         ),
-                        end_ln_and_col: (
-                            10,
-                            48,
+                        rhs: Term(
+                            Hole(
+                                Info {
+                                    start_ln_and_col: (
+                                        10,
+                                        47,
+                                    ),
+                                    end_ln_and_col: (
+                                        10,
+                                        48,
+                                    ),
+                                },
+                            ),
                         ),
                     },
-                    op: Mul,
-                    lhs: Term(
-                        Hole(
-                            Info {
-                                start_ln_and_col: (
-                                    10,
-                                    43,
-                                ),
-                                end_ln_and_col: (
-                                    10,
-                                    44,
-                                ),
-                            },
-                        ),
-                    ),
-                    rhs: Term(
-                        Hole(
-                            Info {
-                                start_ln_and_col: (
-                                    10,
-                                    47,
-                                ),
-                                end_ln_and_col: (
-                                    10,
-                                    48,
-                                ),
-                            },
-                        ),
-                    ),
-                },
+                ),
             },
             Decl {
                 info: Info {
@@ -370,70 +372,72 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Call(
-                        Info {
-                            start_ln_and_col: (
-                                11,
-                                13,
-                            ),
-                            end_ln_and_col: (
-                                11,
-                                22,
-                            ),
-                        },
-                        SchedFuncCall {
-                            target: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            11,
-                                            13,
-                                        ),
-                                        end_ln_and_col: (
-                                            11,
-                                            16,
-                                        ),
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    11,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    11,
+                                    22,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                11,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                11,
+                                                16,
+                                            ),
+                                        },
+                                        name: "foo",
+                                        tag: None,
                                     },
-                                    name: "foo",
-                                    tag: None,
-                                },
-                            ),
-                            templates: None,
-                            args: Args(
-                                [
-                                    Term(
-                                        Hole(
-                                            Info {
-                                                start_ln_and_col: (
-                                                    11,
-                                                    17,
-                                                ),
-                                                end_ln_and_col: (
-                                                    11,
-                                                    18,
-                                                ),
-                                            },
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [
+                                        Term(
+                                            Hole(
+                                                Info {
+                                                    start_ln_and_col: (
+                                                        11,
+                                                        17,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        11,
+                                                        18,
+                                                    ),
+                                                },
+                                            ),
                                         ),
-                                    ),
-                                    Term(
-                                        Hole(
-                                            Info {
-                                                start_ln_and_col: (
-                                                    11,
-                                                    20,
-                                                ),
-                                                end_ln_and_col: (
-                                                    11,
-                                                    21,
-                                                ),
-                                            },
+                                        Term(
+                                            Hole(
+                                                Info {
+                                                    start_ln_and_col: (
+                                                        11,
+                                                        20,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        11,
+                                                        21,
+                                                    ),
+                                                },
+                                            ),
                                         ),
-                                    ),
-                                ],
-                            ),
-                            tag: None,
-                        },
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
                     ),
                 ),
             },
@@ -543,18 +547,20 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Hole(
-                        Info {
-                            start_ln_and_col: (
-                                15,
-                                13,
-                            ),
-                            end_ln_and_col: (
-                                15,
-                                14,
-                            ),
-                        },
+                expr: Some(
+                    Term(
+                        Hole(
+                            Info {
+                                start_ln_and_col: (
+                                    15,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    15,
+                                    14,
+                                ),
+                            },
+                        ),
                     ),
                 ),
             },

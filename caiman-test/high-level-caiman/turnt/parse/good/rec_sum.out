@@ -262,23 +262,25 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Lit {
-                        info: Info {
-                            start_ln_and_col: (
-                                13,
-                                13,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    13,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    13,
+                                    15,
+                                ),
+                            },
+                            lit: Int(
+                                "10",
                             ),
-                            end_ln_and_col: (
-                                13,
-                                15,
-                            ),
+                            tag: None,
                         },
-                        lit: Int(
-                            "10",
-                        ),
-                        tag: None,
-                    },
+                    ),
                 ),
             },
             Return(

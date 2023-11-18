@@ -216,7 +216,7 @@ SpecStmt: SpecStmt = {
 // Top level scheduling statements
 SchedStmt: SchedStmt = {
     <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
-    <@L> "var" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_var_decl(<>),
+    <@L> "var" <CommaList<MaybeArg<FullType>>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
     <@L> <Id> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
     <Block> => <>,
     <@L> "return" <SchedExpr> ";" <@R> => astf.sched_return(<>),

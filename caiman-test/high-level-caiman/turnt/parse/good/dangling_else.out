@@ -70,23 +70,25 @@
                             ),
                         ],
                         is_const: true,
-                        expr: Term(
-                            Lit {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        4,
-                                        17,
+                        expr: Some(
+                            Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            4,
+                                            17,
+                                        ),
+                                        end_ln_and_col: (
+                                            4,
+                                            19,
+                                        ),
+                                    },
+                                    lit: Int(
+                                        "10",
                                     ),
-                                    end_ln_and_col: (
-                                        4,
-                                        19,
-                                    ),
+                                    tag: None,
                                 },
-                                lit: Int(
-                                    "10",
-                                ),
-                                tag: None,
-                            },
+                            ),
                         ),
                     },
                 ],

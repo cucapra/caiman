@@ -226,80 +226,82 @@
                     ),
                 ],
                 is_const: false,
-                expr: Binop {
-                    info: Info {
-                        start_ln_and_col: (
-                            6,
-                            13,
-                        ),
-                        end_ln_and_col: (
-                            6,
-                            22,
-                        ),
-                    },
-                    op: Add,
-                    lhs: Term(
-                        Var {
-                            info: Info {
-                                start_ln_and_col: (
-                                    6,
-                                    13,
-                                ),
-                                end_ln_and_col: (
-                                    6,
-                                    14,
-                                ),
-                            },
-                            name: "a",
-                            tag: None,
-                        },
-                    ),
-                    rhs: Binop {
+                expr: Some(
+                    Binop {
                         info: Info {
                             start_ln_and_col: (
                                 6,
-                                17,
+                                13,
                             ),
                             end_ln_and_col: (
                                 6,
                                 22,
                             ),
                         },
-                        op: Mul,
+                        op: Add,
                         lhs: Term(
                             Var {
                                 info: Info {
                                     start_ln_and_col: (
                                         6,
-                                        17,
+                                        13,
                                     ),
                                     end_ln_and_col: (
                                         6,
-                                        18,
+                                        14,
                                     ),
                                 },
                                 name: "a",
                                 tag: None,
                             },
                         ),
-                        rhs: Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        6,
-                                        21,
-                                    ),
-                                    end_ln_and_col: (
-                                        6,
-                                        22,
-                                    ),
-                                },
-                                name: "a",
-                                tag: None,
+                        rhs: Binop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    6,
+                                    17,
+                                ),
+                                end_ln_and_col: (
+                                    6,
+                                    22,
+                                ),
                             },
-                        ),
+                            op: Mul,
+                            lhs: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            6,
+                                            17,
+                                        ),
+                                        end_ln_and_col: (
+                                            6,
+                                            18,
+                                        ),
+                                    },
+                                    name: "a",
+                                    tag: None,
+                                },
+                            ),
+                            rhs: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            6,
+                                            21,
+                                        ),
+                                        end_ln_and_col: (
+                                            6,
+                                            22,
+                                        ),
+                                    },
+                                    name: "a",
+                                    tag: None,
+                                },
+                            ),
+                        },
                     },
-                },
+                ),
             },
             Assign {
                 info: Info {

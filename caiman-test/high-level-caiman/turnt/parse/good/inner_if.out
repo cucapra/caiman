@@ -36,87 +36,12 @@
                     ),
                 ],
                 is_const: true,
-                expr: Conditional {
-                    info: Info {
-                        start_ln_and_col: (
-                            3,
-                            13,
-                        ),
-                        end_ln_and_col: (
-                            3,
-                            65,
-                        ),
-                    },
-                    if_true: Term(
-                        Lit {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    13,
-                                ),
-                                end_ln_and_col: (
-                                    3,
-                                    14,
-                                ),
-                            },
-                            lit: Int(
-                                "0",
-                            ),
-                            tag: None,
-                        },
-                    ),
-                    guard: Binop {
+                expr: Some(
+                    Conditional {
                         info: Info {
                             start_ln_and_col: (
                                 3,
-                                18,
-                            ),
-                            end_ln_and_col: (
-                                3,
-                                24,
-                            ),
-                        },
-                        op: Eq,
-                        lhs: Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        3,
-                                        18,
-                                    ),
-                                    end_ln_and_col: (
-                                        3,
-                                        19,
-                                    ),
-                                },
-                                name: "x",
-                                tag: None,
-                            },
-                        ),
-                        rhs: Term(
-                            Lit {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        3,
-                                        23,
-                                    ),
-                                    end_ln_and_col: (
-                                        3,
-                                        24,
-                                    ),
-                                },
-                                lit: Int(
-                                    "3",
-                                ),
-                                tag: None,
-                            },
-                        ),
-                    },
-                    if_false: Conditional {
-                        info: Info {
-                            start_ln_and_col: (
-                                3,
-                                30,
+                                13,
                             ),
                             end_ln_and_col: (
                                 3,
@@ -128,15 +53,15 @@
                                 info: Info {
                                     start_ln_and_col: (
                                         3,
-                                        30,
+                                        13,
                                     ),
                                     end_ln_and_col: (
                                         3,
-                                        31,
+                                        14,
                                     ),
                                 },
                                 lit: Int(
-                                    "1",
+                                    "0",
                                 ),
                                 tag: None,
                             },
@@ -145,11 +70,11 @@
                             info: Info {
                                 start_ln_and_col: (
                                     3,
-                                    35,
+                                    18,
                                 ),
                                 end_ln_and_col: (
                                     3,
-                                    41,
+                                    24,
                                 ),
                             },
                             op: Eq,
@@ -158,11 +83,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             3,
-                                            35,
+                                            18,
                                         ),
                                         end_ln_and_col: (
                                             3,
-                                            36,
+                                            19,
                                         ),
                                     },
                                     name: "x",
@@ -174,15 +99,15 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             3,
-                                            40,
+                                            23,
                                         ),
                                         end_ln_and_col: (
                                             3,
-                                            41,
+                                            24,
                                         ),
                                     },
                                     lit: Int(
-                                        "5",
+                                        "3",
                                     ),
                                     tag: None,
                                 },
@@ -192,7 +117,7 @@
                             info: Info {
                                 start_ln_and_col: (
                                     3,
-                                    47,
+                                    30,
                                 ),
                                 end_ln_and_col: (
                                     3,
@@ -204,15 +129,15 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             3,
-                                            47,
+                                            30,
                                         ),
                                         end_ln_and_col: (
                                             3,
-                                            48,
+                                            31,
                                         ),
                                     },
                                     lit: Int(
-                                        "2",
+                                        "1",
                                     ),
                                     tag: None,
                                 },
@@ -221,11 +146,11 @@
                                 info: Info {
                                     start_ln_and_col: (
                                         3,
-                                        52,
+                                        35,
                                     ),
                                     end_ln_and_col: (
                                         3,
-                                        58,
+                                        41,
                                     ),
                                 },
                                 op: Eq,
@@ -234,11 +159,11 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 3,
-                                                52,
+                                                35,
                                             ),
                                             end_ln_and_col: (
                                                 3,
-                                                53,
+                                                36,
                                             ),
                                         },
                                         name: "x",
@@ -250,41 +175,118 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 3,
-                                                57,
+                                                40,
                                             ),
                                             end_ln_and_col: (
                                                 3,
-                                                58,
+                                                41,
                                             ),
                                         },
                                         lit: Int(
-                                            "7",
+                                            "5",
                                         ),
                                         tag: None,
                                     },
                                 ),
                             },
-                            if_false: Term(
-                                Lit {
+                            if_false: Conditional {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        47,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        65,
+                                    ),
+                                },
+                                if_true: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                3,
+                                                47,
+                                            ),
+                                            end_ln_and_col: (
+                                                3,
+                                                48,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "2",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                                guard: Binop {
                                     info: Info {
                                         start_ln_and_col: (
                                             3,
-                                            64,
+                                            52,
                                         ),
                                         end_ln_and_col: (
                                             3,
-                                            65,
+                                            58,
                                         ),
                                     },
-                                    lit: Int(
-                                        "3",
+                                    op: Eq,
+                                    lhs: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    3,
+                                                    52,
+                                                ),
+                                                end_ln_and_col: (
+                                                    3,
+                                                    53,
+                                                ),
+                                            },
+                                            name: "x",
+                                            tag: None,
+                                        },
                                     ),
-                                    tag: None,
+                                    rhs: Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    3,
+                                                    57,
+                                                ),
+                                                end_ln_and_col: (
+                                                    3,
+                                                    58,
+                                                ),
+                                            },
+                                            lit: Int(
+                                                "7",
+                                            ),
+                                            tag: None,
+                                        },
+                                    ),
                                 },
-                            ),
+                                if_false: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                3,
+                                                64,
+                                            ),
+                                            end_ln_and_col: (
+                                                3,
+                                                65,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "3",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            },
                         },
                     },
-                },
+                ),
             },
             Decl {
                 info: Info {
@@ -304,66 +306,133 @@
                     ),
                 ],
                 is_const: true,
-                expr: Conditional {
-                    info: Info {
-                        start_ln_and_col: (
-                            4,
-                            13,
-                        ),
-                        end_ln_and_col: (
-                            4,
-                            69,
-                        ),
-                    },
-                    if_true: Conditional {
+                expr: Some(
+                    Conditional {
                         info: Info {
                             start_ln_and_col: (
                                 4,
-                                14,
+                                13,
                             ),
                             end_ln_and_col: (
                                 4,
-                                51,
+                                69,
                             ),
                         },
                         if_true: Conditional {
                             info: Info {
                                 start_ln_and_col: (
                                     4,
-                                    15,
+                                    14,
                                 ),
                                 end_ln_and_col: (
                                     4,
-                                    33,
+                                    51,
                                 ),
                             },
-                            if_true: Term(
-                                Lit {
+                            if_true: Conditional {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        15,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        33,
+                                    ),
+                                },
+                                if_true: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                4,
+                                                15,
+                                            ),
+                                            end_ln_and_col: (
+                                                4,
+                                                16,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "0",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                                guard: Binop {
                                     info: Info {
                                         start_ln_and_col: (
                                             4,
-                                            15,
+                                            20,
                                         ),
                                         end_ln_and_col: (
                                             4,
-                                            16,
+                                            26,
                                         ),
                                     },
-                                    lit: Int(
-                                        "0",
+                                    op: Eq,
+                                    lhs: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    4,
+                                                    20,
+                                                ),
+                                                end_ln_and_col: (
+                                                    4,
+                                                    21,
+                                                ),
+                                            },
+                                            name: "x",
+                                            tag: None,
+                                        },
                                     ),
-                                    tag: None,
+                                    rhs: Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    4,
+                                                    25,
+                                                ),
+                                                end_ln_and_col: (
+                                                    4,
+                                                    26,
+                                                ),
+                                            },
+                                            lit: Int(
+                                                "3",
+                                            ),
+                                            tag: None,
+                                        },
+                                    ),
                                 },
-                            ),
+                                if_false: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                4,
+                                                32,
+                                            ),
+                                            end_ln_and_col: (
+                                                4,
+                                                33,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "1",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            },
                             guard: Binop {
                                 info: Info {
                                     start_ln_and_col: (
                                         4,
-                                        20,
+                                        38,
                                     ),
                                     end_ln_and_col: (
                                         4,
-                                        26,
+                                        44,
                                     ),
                                 },
                                 op: Eq,
@@ -372,11 +441,11 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 4,
-                                                20,
+                                                38,
                                             ),
                                             end_ln_and_col: (
                                                 4,
-                                                21,
+                                                39,
                                             ),
                                         },
                                         name: "x",
@@ -388,15 +457,15 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 4,
-                                                25,
+                                                43,
                                             ),
                                             end_ln_and_col: (
                                                 4,
-                                                26,
+                                                44,
                                             ),
                                         },
                                         lit: Int(
-                                            "3",
+                                            "5",
                                         ),
                                         tag: None,
                                     },
@@ -407,15 +476,15 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             4,
-                                            32,
+                                            50,
                                         ),
                                         end_ln_and_col: (
                                             4,
-                                            33,
+                                            51,
                                         ),
                                     },
                                     lit: Int(
-                                        "1",
+                                        "2",
                                     ),
                                     tag: None,
                                 },
@@ -425,11 +494,11 @@
                             info: Info {
                                 start_ln_and_col: (
                                     4,
-                                    38,
+                                    56,
                                 ),
                                 end_ln_and_col: (
                                     4,
-                                    44,
+                                    62,
                                 ),
                             },
                             op: Eq,
@@ -438,11 +507,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             4,
-                                            38,
+                                            56,
                                         ),
                                         end_ln_and_col: (
                                             4,
-                                            39,
+                                            57,
                                         ),
                                     },
                                     name: "x",
@@ -454,15 +523,15 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             4,
-                                            43,
+                                            61,
                                         ),
                                         end_ln_and_col: (
                                             4,
-                                            44,
+                                            62,
                                         ),
                                     },
                                     lit: Int(
-                                        "5",
+                                        "7",
                                     ),
                                     tag: None,
                                 },
@@ -473,86 +542,21 @@
                                 info: Info {
                                     start_ln_and_col: (
                                         4,
-                                        50,
+                                        68,
                                     ),
                                     end_ln_and_col: (
                                         4,
-                                        51,
+                                        69,
                                     ),
                                 },
                                 lit: Int(
-                                    "2",
+                                    "3",
                                 ),
                                 tag: None,
                             },
                         ),
                     },
-                    guard: Binop {
-                        info: Info {
-                            start_ln_and_col: (
-                                4,
-                                56,
-                            ),
-                            end_ln_and_col: (
-                                4,
-                                62,
-                            ),
-                        },
-                        op: Eq,
-                        lhs: Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        4,
-                                        56,
-                                    ),
-                                    end_ln_and_col: (
-                                        4,
-                                        57,
-                                    ),
-                                },
-                                name: "x",
-                                tag: None,
-                            },
-                        ),
-                        rhs: Term(
-                            Lit {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        4,
-                                        61,
-                                    ),
-                                    end_ln_and_col: (
-                                        4,
-                                        62,
-                                    ),
-                                },
-                                lit: Int(
-                                    "7",
-                                ),
-                                tag: None,
-                            },
-                        ),
-                    },
-                    if_false: Term(
-                        Lit {
-                            info: Info {
-                                start_ln_and_col: (
-                                    4,
-                                    68,
-                                ),
-                                end_ln_and_col: (
-                                    4,
-                                    69,
-                                ),
-                            },
-                            lit: Int(
-                                "3",
-                            ),
-                            tag: None,
-                        },
-                    ),
-                },
+                ),
             },
         ],
     },

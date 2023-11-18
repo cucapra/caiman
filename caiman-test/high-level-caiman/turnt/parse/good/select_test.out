@@ -309,23 +309,25 @@
                     ),
                 ],
                 is_const: true,
-                expr: Term(
-                    Lit {
-                        info: Info {
-                            start_ln_and_col: (
-                                12,
-                                13,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    12,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    12,
+                                    17,
+                                ),
+                            },
+                            lit: Bool(
+                                true,
                             ),
-                            end_ln_and_col: (
-                                12,
-                                17,
-                            ),
+                            tag: None,
                         },
-                        lit: Bool(
-                            true,
-                        ),
-                        tag: None,
-                    },
+                    ),
                 ),
             },
             If {

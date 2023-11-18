@@ -1,0 +1,127 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    b :- true
+    one :- 1
+    two :- 2
+    r :- one if b else two
+    returns r
+}
+
+fn foo() -> i64 impls main, time, space
+{
+    let b: bool @ node(main.b)-? = true;
+    var v: i64 @ node(main.r)-?;
+    if b {
+        let one: i64 @ node(main.one)-? = 1;
+        v = one;
+    } else {
+        let two: i64 @ node(main.two)-? = 2;
+        v = two;
+    }
+    return v;
+
+
+/*
+    Pros: Explicit reference usage
+    Cons: we don't alloc a temporary for `let`, and even though it's
+        a temporary, to me I get suspicious when I see an `alloc` without
+        some kind of free.
+
+
+    let v: &i64 @ node(main.r) = alloc_temp();
+    if b {
+        let one: i64 @ node(main.one)-? = 1;
+        v <- one;
+    } else {
+        let two: i64 @ node(main.two)-? = 2;
+        v <- two;
+    }
+    return *v;
+*/
+}
+
+pipeline main { foo }
+
+
+// =================== CAIR ===================
+/*
+
+version 0.0.2
+
+type i64;
+ref %i64l : i64-local<flags=[]>;
+event %event0;
+buffer_space %buffspace;
+native_value %i64n : i64;
+
+function @main() -> i64;
+
+value[impl default @main] %foo() -> i64 {
+    %x = constant %i64n 0;
+    %y = constant %i64n 1;
+    %z = constant %i64n 2;
+    %r = select %x %y %z;
+    return %r;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+    %foo_main<none($time.%e)-usable, none($time.%e)-usable>() ->
+    [%out : node($val.%r)-usable none($space.%e)-usable none($time.%e)-usable %i64n] 
+{
+    %x_loc = alloc-temporary local [] i64;
+    local-do-builtin node($val.%x)() -> %x_loc;
+    %x_val = read-ref i64 %x_loc;
+
+    %r_loc = alloc-temporary local [] i64;
+
+    %djoin = default-join;
+    %join = inline-join %foo_ret [] %djoin;
+
+    schedule-select %x_val [%foo_left, %foo_right]
+        [value node($val.%r), timeline none($time.%none), spatial none($space.%none)]
+        (%r_loc) %join;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+    %foo_left<none($time.%e)-usable, none($time.%e)-usable>
+    (%r_loc : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
+    [%out : node($val.%y)-usable none($space.%e)-save none($time.%e)-usable %i64l] 
+{
+    local-do-builtin node($val.%y)() -> %r_loc;
+    return %r_loc;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+    %foo_right<none($time.%e)-usable, none($time.%e)-usable>
+    (%r_loc : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
+    [%out : node($val.%z)-usable none($space.%e)-save none($time.%e)-usable %i64l] 
+{
+    local-do-builtin node($val.%z)() -> %r_loc;
+    return %r_loc;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+    %foo_ret<none($time.%e)-usable, none($time.%e)-usable>
+    (%r_loc : node($val.%r)-usable none($space.%e)-save none($time.%e)-usable %i64l) ->
+    [%out : node($val.%r)-usable none($space.%e)-usable none($time.%e)-usable %i64n] 
+{
+    %r_val = read-ref i64 %r_loc;
+    return %r_val;
+}
+
+pipeline "main" = %foo_main;
+
+*/

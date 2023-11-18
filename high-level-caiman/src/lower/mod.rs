@@ -3,8 +3,8 @@ use crate::{
     parse::ast::{ClassMembers, DataType, NumberType, SchedulingFunc, TopLevel},
 };
 use caiman::assembly::ast as asm;
-mod cfg;
 mod global_context;
+mod hir;
 mod lower_schedule;
 mod lower_spec;
 

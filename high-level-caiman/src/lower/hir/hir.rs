@@ -22,17 +22,25 @@ use crate::{
 #[derive(Debug)]
 pub enum Hir {
     // TODO: encodings
+    /// A data movement into a mutable variable
     Move {
         info: Info,
         lhs: Name,
         rhs: SchedTerm,
     },
-    Decl {
+    /// Declaration of an immutable variable
+    ConstDecl {
         info: Info,
         lhs: Name,
         lhs_tag: Hole<FullType>,
-        is_const: bool,
         rhs: SchedTerm,
+    },
+    /// Declaration of a mutable variable (reference)
+    VarDecl {
+        info: Info,
+        lhs: Name,
+        lhs_tag: Hole<FullType>,
+        rhs: Option<SchedTerm>,
     },
     Hole(Info),
     /// Built-in operation
@@ -90,18 +98,32 @@ impl Hir {
             SchedStmt::Decl {
                 info,
                 lhs,
-                expr,
-                is_const,
+                expr: Some(expr),
+                is_const: true,
             } => {
                 let rhs = enum_cast!(SchedExpr::Term, expr);
-                Self::Decl {
+                Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
                     lhs_tag: lhs[0].1.clone(),
                     rhs,
-                    is_const,
                 }
             }
+            SchedStmt::Decl {
+                info,
+                lhs,
+                expr,
+                is_const: false,
+            } => {
+                let rhs = expr.map(|x| enum_cast!(SchedExpr::Term, x));
+                Self::VarDecl {
+                    info,
+                    lhs: lhs[0].0.clone(),
+                    lhs_tag: lhs[0].1.clone(),
+                    rhs,
+                }
+            }
+            SchedStmt::Decl { .. } => panic!("Invalid declaration"),
             SchedStmt::Return(..)
             | SchedStmt::Block(..)
             | SchedStmt::If { .. }
@@ -116,8 +138,19 @@ impl Hir {
     /// Mutates the given vector by appending the variables used to it.
     pub fn get_uses(&self, res: &mut HashSet<String>) {
         match self {
-            Self::Move { rhs, .. } | Self::Decl { rhs, .. } => {
+            Self::ConstDecl { rhs, .. } => {
                 term_get_uses(rhs, res);
+            }
+            Self::VarDecl { rhs, .. } => {
+                if let Some(rhs) = rhs {
+                    term_get_uses(rhs, res);
+                }
+            }
+            Self::Move { lhs, rhs, .. } => {
+                term_get_uses(rhs, res);
+                // Viewing this as a store to a reference, then the destination
+                // is a use
+                res.insert(lhs.clone());
             }
             Self::Hole(..) => (),
             Self::Op { args, .. } => {
@@ -129,10 +162,14 @@ impl Hir {
     }
 
     /// Get the name of the variable defined by this statement, if any.
+    /// A `Move` is not considered to have a `def` because it is updating a
+    /// reference.
     pub fn get_def(&self) -> Option<String> {
         match self {
-            Self::Move { lhs, .. } | Self::Decl { lhs, .. } => Some(lhs.clone()),
-            Self::Hole(..) => None,
+            Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } => Some(lhs.clone()),
+            // TODO: re-evaluate the move instruction.
+            // Viewing it as a write to a reference, then it had no defs
+            Self::Hole(..) | Self::Move { .. } => None,
             Self::Op { dest, .. } => Some(dest.clone()),
         }
     }

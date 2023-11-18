@@ -1,12 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
+mod tags;
+
 use super::{
+    cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
     hir::{HirInstr, Terminator},
-    Cfg, Edge, FINAL_BLOCK_ID,
 };
 
+/// A dataflow analysis fact
 pub trait Fact: PartialEq + Clone {
-    /// Performs a meet operation on tw facts
+    /// Performs a meet operation on two facts
     #[must_use]
     fn meet(self, other: &Self) -> Self;
 
@@ -17,6 +20,8 @@ pub trait Fact: PartialEq + Clone {
     type Dir: Direction;
 }
 
+/// The direction of an analysis. Provides hooks to change the behavior of the
+/// worklist algorithm depending on the analysis direction.
 pub trait Direction {
     /// Gets the adj list for the direction
     fn get_adj_list(cfg: &Cfg) -> HashMap<usize, Vec<usize>>;
@@ -100,6 +105,9 @@ impl<T: Fact> InOutFacts<T> {
             .unwrap()
     }
 
+    /// Gets the output fact for the given block
+    /// # Panics
+    /// If the block does not exist
     pub fn get_out_fact(&self, block: usize) -> &T {
         T::Dir::get_out_facts(&self.in_facts, &self.out_facts)
             .get(&block)
@@ -107,6 +115,7 @@ impl<T: Fact> InOutFacts<T> {
     }
 }
 
+/// Performs a dataflow analysis using the worklist algorithm
 #[must_use]
 pub fn analyze<T: Fact>(cfg: &Cfg, top: &T) -> InOutFacts<T> {
     let mut in_facts: HashMap<usize, T> = HashMap::new();
@@ -162,6 +171,7 @@ fn broadcast_out_facts<T: Fact>(
     in_facts
 }
 
+/// A backwards analysis
 pub struct Backwards {}
 impl Direction for Backwards {
     fn get_adj_list(cfg: &Cfg) -> HashMap<usize, Vec<usize>> {
@@ -214,9 +224,65 @@ impl Direction for Backwards {
     }
 }
 
+/// A forwards analysis
+pub struct Forwards {}
+impl Direction for Forwards {
+    fn get_adj_list(cfg: &Cfg) -> HashMap<usize, Vec<usize>> {
+        // gets the reverse adjacency list
+        let mut res = HashMap::new();
+        for (k, v) in &cfg.graph {
+            match v {
+                Edge::Next(n) => {
+                    res.entry(*k).or_insert_with(Vec::new).push(*n);
+                    // ensure next node has an entry
+                    res.entry(*n).or_insert_with(Vec::default);
+                }
+                Edge::Select {
+                    true_branch,
+                    false_branch,
+                } => {
+                    res.entry(*k).or_insert_with(Vec::new).push(*true_branch);
+                    res.entry(*k).or_insert_with(Vec::new).push(*false_branch);
+                    // ensure nodes have entries
+                    res.entry(*false_branch).or_insert_with(Vec::default);
+                    res.entry(*true_branch).or_insert_with(Vec::default);
+                }
+                Edge::None => {}
+            };
+        }
+        res
+    }
+
+    fn local_iter<'a>(
+        it: &mut dyn std::iter::DoubleEndedIterator<Item = HirInstr<'a>>,
+        func: &mut dyn FnMut(HirInstr<'a>),
+    ) {
+        for instr in it {
+            func(instr);
+        }
+    }
+
+    fn root_id() -> usize {
+        START_BLOCK_ID
+    }
+
+    fn get_in_facts<'a, T: Fact>(
+        in_facts: &'a HashMap<usize, T>,
+        _: &'a HashMap<usize, T>,
+    ) -> &'a HashMap<usize, T> {
+        in_facts
+    }
+
+    fn get_out_facts<'a, T: Fact>(
+        _: &'a HashMap<usize, T>,
+        out_facts: &'a HashMap<usize, T>,
+    ) -> &'a HashMap<usize, T> {
+        out_facts
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LiveVars {
-    // TODO: tag information
     pub(super) live_set: HashSet<String>,
 }
 
