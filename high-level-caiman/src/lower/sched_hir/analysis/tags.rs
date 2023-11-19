@@ -4,11 +4,11 @@ use std::rc::Rc;
 
 use crate::lower::data_type_to_local_type;
 use crate::lower::global_context::SpecType;
-use crate::lower::hir::{Hir, HirInstr, Specs};
 use crate::lower::lower_schedule::{tag_to_quot, tag_to_tag};
+use crate::lower::sched_hir::{Hir, HirInstr, Specs};
 use crate::parse::ast::{FullType, SchedTerm};
 
-use super::{Fact, Forwards};
+use super::{Fact, Forwards, RET_VAR};
 
 /// Assembly-level type information
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +63,11 @@ impl TypeInfo {
         };
         self
     }
+
+    /// Returns the tag vector for this type
+    pub fn tags_vec(self) -> Vec<asm::Tag> {
+        vec![self.value, self.spatial, self.timeline]
+    }
 }
 
 /// Tag analysis for determining tags
@@ -77,9 +82,14 @@ pub struct TagAnalysis {
 
 impl TagAnalysis {
     /// Constructs a new top element
-    pub fn top(specs: &Specs) -> Self {
+    pub fn top(specs: &Specs, out: &Option<FullType>) -> Self {
+        let mut tags = HashMap::new();
+        tags.insert(
+            String::from(RET_VAR),
+            TypeInfo::from(out.as_ref().unwrap(), specs),
+        );
         Self {
-            tags: HashMap::new(),
+            tags,
             specs: Rc::new(specs.clone()),
         }
     }
@@ -88,6 +98,7 @@ impl TagAnalysis {
     /// # Panics
     /// If the value quotient is not specified in the term and
     /// the term is not a variable with a previously known value quotient
+    #[allow(dead_code)]
     fn value_quotient(&self, term: &SchedTerm) -> asm::Quotient {
         let tags = term.get_tags();
         if let Some(tags) = tags {
@@ -102,6 +113,34 @@ impl TagAnalysis {
         }
         panic!("Quotient not specified nor saved")
     }
+
+    /// Gets the type of the specified variable or `None` if we have no information
+    /// about it
+    pub fn get_type(&self, var: &str) -> Option<TypeInfo> {
+        self.tags.get(var).cloned()
+    }
+}
+
+/// Gets the remote node id of `q`
+#[allow(dead_code)]
+const fn remote_node_id(q: &asm::Quotient) -> &asm::Hole<asm::RemoteNodeId> {
+    match q {
+        asm::Quotient::None(r)
+        | asm::Quotient::Node(r)
+        | asm::Quotient::Input(r)
+        | asm::Quotient::Output(r) => r,
+    }
+}
+
+/// Sets the remote node id of `q` to `id`
+#[allow(dead_code)]
+fn set_remote_node_id(q: &mut asm::Quotient, id: asm::Hole<asm::RemoteNodeId>) {
+    match q {
+        asm::Quotient::None(r)
+        | asm::Quotient::Node(r)
+        | asm::Quotient::Input(r)
+        | asm::Quotient::Output(r) => *r = id,
+    }
 }
 
 impl Fact for TagAnalysis {
@@ -109,7 +148,9 @@ impl Fact for TagAnalysis {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
             match self.tags.entry(k.to_string()) {
-                Entry::Occupied(old_v) => assert_eq!(old_v.get(), v),
+                Entry::Occupied(old_v) => {
+                    assert_eq!(old_v.get(), v, "Duplicate key {k} with unequal values");
+                }
                 Entry::Vacant(entry) => {
                     entry.insert(v.clone());
                 }
@@ -137,11 +178,12 @@ impl Fact for TagAnalysis {
                 }
                 self.tags.insert(lhs.clone(), info);
             }
-            HirInstr::Stmt(Hir::Move { lhs, rhs, .. }) => {
-                let quot = self.value_quotient(rhs);
+            HirInstr::Stmt(Hir::Move { lhs, rhs: _, .. }) => {
+                // let quot = self.value_quotient(rhs);
                 let t = self.tags.get_mut(lhs).unwrap();
                 t.value.flow = ir::Flow::Usable;
-                t.value.quot = quot;
+                // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
+                // t.value.quot = quot;
             }
             HirInstr::Stmt(Hir::Op { .. } | Hir::Hole(_)) => todo!(),
         }

@@ -1,8 +1,12 @@
 use caiman::assembly::ast::{self as asm, FuncletArgument, Hole};
 
 use crate::{
+    enum_cast,
     error::{type_error, LocalError},
-    lower::data_type_to_ffi_type,
+    lower::{
+        data_type_to_ffi_type,
+        sched_hir::{is_ref, TypeInfo},
+    },
     parse::ast::{
         Arg, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
     },
@@ -11,7 +15,7 @@ use caiman::ir;
 
 use super::{
     global_context::{Context, SpecType},
-    hir::{Funclet, Funclets, Hir, Specs, Terminator, RET_VAR},
+    sched_hir::{Funclet, Funclets, Hir, Specs, Terminator, RET_VAR},
 };
 
 /// A vector of commands with holes.
@@ -19,6 +23,7 @@ use super::{
 type CommandVec = Vec<Hole<asm::Command>>;
 
 /// Gets the name of a temporary variable with the given id
+#[inline]
 fn temp_var_name(temp_id: usize) -> String {
     format!("_t{temp_id}")
 }
@@ -38,7 +43,7 @@ fn lower_flat_decl(
             .as_ref()
             .expect("We require all variables to have type annotations");
         assert_eq!(dest_tag.tags.len(), 1);
-        let temp_node_name = format!("_t{temp_id}");
+        let temp_node_name = temp_var_name(temp_id);
         let temp = asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(temp_node_name.clone())),
             node: asm::Node::AllocTemporary {
@@ -79,7 +84,6 @@ fn lower_var_decl(
     let dest_tag = dest_tag
         .as_ref()
         .expect("We require all variables to have type annotations");
-    assert_eq!(dest_tag.tags.len(), 1);
     let mut result = vec![Some(asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::AllocTemporary {
@@ -106,11 +110,28 @@ fn lower_var_decl(
     (result, temp_id)
 }
 
+/// Lowers a store lhs <- rhs
+fn lower_store(lhs: &str, rhs: &SchedTerm, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
+    let rhs = enum_cast!(SchedTerm::Var { name, .. }, name, rhs);
+    (
+        vec![Some(asm::Command::Node(asm::NamedNode {
+            name: None,
+            node: asm::Node::LocalDoBuiltin {
+                operation: Some(f.get_final_type(rhs).unwrap().value.quot),
+                // no inputs
+                inputs: Some(Vec::new()),
+                outputs: Some(vec![Some(asm::NodeId(lhs.to_string()))]),
+            },
+        }))],
+        temp_id,
+    )
+}
+
 /// Lowers a scheduling statement into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the statement
 /// and the next available temporary id
-fn lower_instr(s: &Hir, temp_id: usize) -> (CommandVec, usize) {
+fn lower_instr(s: &Hir, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
     match s {
         Hir::ConstDecl {
             lhs, rhs, lhs_tag, ..
@@ -118,6 +139,7 @@ fn lower_instr(s: &Hir, temp_id: usize) -> (CommandVec, usize) {
         Hir::VarDecl {
             lhs, lhs_tag, rhs, ..
         } => lower_var_decl(lhs, lhs_tag, rhs, temp_id),
+        Hir::Move { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
         x => todo!("{x:?}"),
     }
 }
@@ -159,8 +181,30 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
     // in the block
     match t {
         Terminator::Return(Some(name)) => {
+            let mut cmds = vec![];
+            let mut use_name = name.clone();
+            // TODO: this is a hack for now
+            if let Some(TypeInfo { typ, .. }) = f.get_type(name) {
+                if is_ref(&typ) {
+                    use_name = temp_var_name(temp_id);
+                    cmds.push(Some(asm::Command::Node(asm::NamedNode {
+                        name: Some(asm::NodeId(use_name.clone())),
+                        node: asm::Node::ReadRef {
+                            source: Some(asm::NodeId(name.to_string())),
+                            // TODO
+                            storage_type: Some(asm::TypeId::FFI(asm::FFIType::I64)),
+                        },
+                    })));
+                }
+            }
+            cmds.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
+                return_values: Some(vec![Some(asm::NodeId(use_name))]),
+            })));
+            cmds
+        }
+        Terminator::Next(vars) => {
             vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-                return_values: Some(vec![Some(asm::NodeId(name.clone()))]),
+                return_values: Some(vars.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),
             }))]
         }
         Terminator::FinalReturn => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
@@ -168,9 +212,8 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         }))],
         Terminator::Select(guard_name) => lower_select(guard_name, temp_id, f),
         Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
-        // TODO: review this, I think `None` can only occur during a join, in which
-        // case doing nothing is fine.
-        Terminator::None => vec![],
+        // TODO: review this
+        Terminator::None => panic!("None terminator not replaced by Next"),
         Terminator::Call(..) => todo!(),
     }
 }
@@ -194,7 +237,7 @@ fn lower_select(guard_name: &str, temp_id: usize, f: &Funclet<'_>) -> CommandVec
             // think that's broken right now
             // TODO: optimize and use inline join whenever possible
             node: asm::Node::InlineJoin {
-                funclet: f.join_funclet(),
+                funclet: Some(f.join_funclet()),
                 captures: Some(vec![]),
                 continuation: Some(asm::NodeId(djoin_name)),
             },
@@ -281,7 +324,7 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
     let mut commands = vec![];
     let mut temp_id = 0;
     for cmd in funclet.stmts() {
-        let (mut new_cmds, new_id) = lower_instr(cmd, temp_id);
+        let (mut new_cmds, new_id) = lower_instr(cmd, temp_id, funclet);
         temp_id = new_id;
         commands.append(&mut new_cmds);
     }
@@ -336,8 +379,5 @@ pub fn lower_schedule(
             .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
     };
     let blocks = Funclets::new(func, specs);
-    // if cfg.blocks[cfg::FINAL_BLOCK_ID].stmts.is_empty() {
-    //     cfg.blocks.remove(cfg::FINAL_BLOCK_ID);
-    // }
     Ok(blocks.funclets().iter().map(lower_block).collect())
 }

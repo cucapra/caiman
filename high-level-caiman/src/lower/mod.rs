@@ -4,9 +4,9 @@ use crate::{
 };
 use caiman::assembly::ast as asm;
 mod global_context;
-mod hir;
 mod lower_schedule;
 mod lower_spec;
+mod sched_hir;
 
 use lower_schedule::lower_schedule;
 use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funclet};

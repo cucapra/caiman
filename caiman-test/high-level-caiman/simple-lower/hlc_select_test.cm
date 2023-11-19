@@ -14,17 +14,19 @@ val main() -> i64 {
 
 fn foo() -> i64 impls main, time, space
 {
-    let b: bool @ node(main.b)-? = true;
-    var v: i64 @ node(main.r)-?;
+    let b: bool @ node(main.b)-usable = false;
+    var v: i64 @ none(main.r)-?;
     if b {
-        let one: i64 @ node(main.one)-? = 1;
+        let one: i64 @ node(main.one)-usable = 1;
         v = one;
     } else {
-        let two: i64 @ node(main.two)-? = 2;
+        let two: i64 @ node(main.two)-usable = 2;
         v = two;
     }
     return v;
+}
 
+pipeline main { foo }
 
 /*
     Pros: Explicit reference usage
@@ -35,17 +37,14 @@ fn foo() -> i64 impls main, time, space
 
     let v: &i64 @ node(main.r) = alloc_temp();
     if b {
-        let one: i64 @ node(main.one)-? = 1;
+        let one: i64 @ node(main.one)-usable = 1;
         v <- one;
     } else {
-        let two: i64 @ node(main.two)-? = 2;
+        let two: i64 @ node(main.two)-usable = 2;
         v <- two;
     }
     return *v;
 */
-}
-
-pipeline main { foo }
 
 
 // =================== CAIR ===================

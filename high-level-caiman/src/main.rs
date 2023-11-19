@@ -24,6 +24,11 @@ struct Arguments {
     #[clap(long)]
     lower: bool,
 
+    /// When this flag is enabled, the compiler will only explicate the lowered
+    /// AST and print the result
+    #[clap(long)]
+    explicate_only: bool,
+
     /// When this parameter is set, outputs the compiled code to the given file.
     #[clap(long, short, takes_value = true)]
     output: Option<String>,
@@ -46,7 +51,7 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         if args.lower {
             println!("{lowered:#?}");
         } else {
-            caiman::explicate_and_execute(args.output, lowered);
+            caiman::explicate_and_execute(args.output, lowered, args.explicate_only);
         }
     }
     Ok(())

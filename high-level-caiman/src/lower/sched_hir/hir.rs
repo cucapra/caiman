@@ -73,8 +73,12 @@ pub enum Terminator {
     /// a return statement in the frontend, but rather a special return statement
     /// for the canonical CFG.
     FinalReturn,
-    /// No terminator, continue to the next block
+    /// No terminator, continue to the next block. A `None` terminator is just
+    /// a temporary value until live vars and tag analysis can be done to know
+    /// what the output variables are for the `Next` terminator
     None,
+    /// No terminator, continue to next block with the specified returns
+    Next(Vec<String>),
 }
 
 /// A reference to an instruction in the high-level IR.

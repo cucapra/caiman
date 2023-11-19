@@ -20,8 +20,10 @@ pub struct BasicBlock {
     /// Invariant: no tail edges in the middle of the block
     pub stmts: Vec<Hir>,
     pub terminator: Terminator,
-    /// The next block on the same depth as this one, which
-    /// is the join point for any continuations in this block
+    /// The next block in the parent stack frame as this block. This is
+    /// the continuation for a parent block.
+    // TODO: re-evaluate how we want to store join information, and which block
+    // is the join block
     pub join_block: Option<usize>,
 }
 

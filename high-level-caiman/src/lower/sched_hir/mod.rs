@@ -6,14 +6,14 @@ pub use hir::*;
 
 use crate::parse::ast::{Arg, FullType, SchedulingFunc};
 use caiman::assembly::ast as asm;
-use caiman::ir;
 
 use self::{
-    analysis::{analyze, LiveVars},
-    cfg::{BasicBlock, Cfg},
+    analysis::{analyze, InOutFacts, LiveVars, TagAnalysis},
+    cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
 };
 
 use super::{global_context::SpecType, lower_schedule::hlc_arg_to_asm_arg};
+pub use analysis::TypeInfo;
 mod analysis;
 #[cfg(test)]
 mod test;
@@ -44,34 +44,6 @@ impl Specs {
     }
 }
 
-/// Gets a vector of tags for each of the specs, all with a none quotient
-/// and a usable flow
-fn none_usable(specs: &Specs) -> Vec<asm::Tag> {
-    vec![
-        asm::Tag {
-            quot: asm::Quotient::None(Some(asm::RemoteNodeId {
-                funclet: Some(specs.value.clone()),
-                node: None,
-            })),
-            flow: ir::Flow::Usable,
-        },
-        asm::Tag {
-            quot: asm::Quotient::None(Some(asm::RemoteNodeId {
-                funclet: Some(specs.timeline.clone()),
-                node: None,
-            })),
-            flow: ir::Flow::Usable,
-        },
-        asm::Tag {
-            quot: asm::Quotient::None(Some(asm::RemoteNodeId {
-                funclet: Some(specs.spatial.clone()),
-                node: None,
-            })),
-            flow: ir::Flow::Usable,
-        },
-    ]
-}
-
 /// Information about a high level caiman function
 struct FuncInfo {
     name: String,
@@ -84,6 +56,7 @@ struct FuncInfo {
 pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
+    type_info: analysis::InOutFacts<TagAnalysis>,
     finfo: FuncInfo,
     specs: Specs,
 }
@@ -118,7 +91,7 @@ impl<'a> Funclet<'a> {
                 res
             }
             Terminator::Call(..) => todo!(),
-            Terminator::None | Terminator::Return(..) => {
+            Terminator::None | Terminator::Return(..) | Terminator::Next(_) => {
                 let e = self
                     .parent
                     .cfg
@@ -147,14 +120,22 @@ impl<'a> Funclet<'a> {
                 .get_in_fact(self.id())
                 .live_set()
                 .iter()
-                .map(|var| {
-                    asm::FuncletArgument {
-                        name: Some(asm::NodeId(var.clone())),
-                        // TODO: support more types
-                        typ: asm::TypeId::Local(String::from("i64")),
-                        // TODO: don't hardcode this
-                        tags: none_usable(&self.parent.specs),
-                    }
+                .map(|var| asm::FuncletArgument {
+                    name: Some(asm::NodeId(var.clone())),
+                    typ: self
+                        .parent
+                        .type_info
+                        .get_in_fact(self.id())
+                        .get_type(var)
+                        .unwrap()
+                        .typ,
+                    tags: self
+                        .parent
+                        .type_info
+                        .get_in_fact(self.id())
+                        .get_type(var)
+                        .unwrap()
+                        .tags_vec(),
                 })
                 .collect()
         }
@@ -172,11 +153,21 @@ impl<'a> Funclet<'a> {
                 .live_set()
                 .iter()
                 .map(|var| asm::FuncletArgument {
-                    name: Some(asm::NodeId(var.clone())),
-                    // TODO: support more types
-                    typ: asm::TypeId::Local(String::from("i64")),
-                    // TODO: don't hardcode this
-                    tags: none_usable(&self.parent.specs),
+                    name: Some(asm::NodeId(format!("_out_{var}"))),
+                    typ: self
+                        .parent
+                        .type_info
+                        .get_out_fact(self.id())
+                        .get_type(var)
+                        .unwrap()
+                        .typ,
+                    tags: self
+                        .parent
+                        .type_info
+                        .get_out_fact(self.id())
+                        .get_type(var)
+                        .unwrap()
+                        .tags_vec(),
                 })
                 .collect()
         }
@@ -205,13 +196,14 @@ impl<'a> Funclet<'a> {
         &self.block.terminator
     }
 
-    /// Numeric id of the funclet, which is how its represented at the HIR level
+    /// Numeric id of the funclet, which is how it's identified at the HIR level
     #[inline]
     pub const fn id(&self) -> usize {
         self.block.id
     }
 
-    /// Gets the name of the funclet
+    /// Gets the name of the funclet, which is how it's identified at the
+    /// assembly level.
     #[inline]
     pub fn name(&self) -> String {
         self.parent.funclet_name(self.id())
@@ -223,19 +215,91 @@ impl<'a> Funclet<'a> {
         &self.parent.specs
     }
 
-    /// Gets the funclet id of the join point
+    /// Gets the funclet name of the join point. The join point is the
+    /// first successor funclet shared by all immediate successors of this funclet.
     #[inline]
-    pub fn join_funclet(&self) -> Option<asm::FuncletId> {
-        self.block
-            .join_block
-            .map(|id| asm::FuncletId(self.parent.funclet_name(id)))
+    pub fn join_funclet(&self) -> asm::FuncletId {
+        // TODO: re-evaluate if this is correct for the general case
+        let id = match self.parent.cfg.graph.get(&self.id()).unwrap() {
+            Edge::Select {
+                true_branch,
+                false_branch,
+            } => {
+                let s = self
+                    .parent
+                    .cfg
+                    .blocks
+                    .get(true_branch)
+                    .unwrap()
+                    .join_block
+                    .unwrap_or(FINAL_BLOCK_ID);
+                assert_eq!(
+                    s,
+                    self.parent
+                        .cfg
+                        .blocks
+                        .get(false_branch)
+                        .unwrap()
+                        .join_block
+                        .unwrap_or(FINAL_BLOCK_ID)
+                );
+                s
+            }
+            Edge::Next(id) => self
+                .parent
+                .cfg
+                .blocks
+                .get(id)
+                .unwrap()
+                .join_block
+                .unwrap_or(FINAL_BLOCK_ID),
+            Edge::None => FINAL_BLOCK_ID,
+        };
+        asm::FuncletId(self.parent.funclet_name(id))
+    }
+
+    /// Gets the type of the specified variable at the start of the funclet
+    #[inline]
+    pub fn get_type(&self, var: &str) -> Option<TypeInfo> {
+        self.parent.type_info.get_in_fact(self.id()).get_type(var)
+    }
+
+    /// Gets the type of the specified variable at the end of the funclet
+    #[inline]
+    pub fn get_final_type(&self, var: &str) -> Option<TypeInfo> {
+        self.parent.type_info.get_out_fact(self.id()).get_type(var)
     }
 }
 
 impl Funclets {
+    /// Replaces `Terminator::None` with `Terminator::Next` which is required for
+    /// lowering. `Terminator::Next` contains information about which variables
+    /// escape the basic block while `Terminator::None` does not. We use
+    /// `Terminator::None` as a temporary until CFG analyses can be performed.
+    fn add_terminators(cfg: &mut Cfg, live_vars: &InOutFacts<LiveVars>) {
+        for (id, bb) in &mut cfg.blocks {
+            if matches!(bb.terminator, Terminator::None)
+                && cfg
+                    .graph
+                    .get(id)
+                    .map_or(false, |e| !matches!(e, Edge::None))
+            {
+                bb.terminator = Terminator::Next(
+                    live_vars
+                        .get_out_fact(*id)
+                        .live_set
+                        .iter()
+                        .cloned()
+                        .collect(),
+                );
+            }
+        }
+    }
     pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
-        let cfg = Cfg::new(f.statements);
-        let live_vars = analyze(&cfg, &analysis::LiveVars::top());
+        let mut cfg = Cfg::new(f.statements);
+        let live_vars = analyze(&cfg, &LiveVars::top());
+        let type_info = analyze(&cfg, &TagAnalysis::top(&specs, &f.output));
+        Self::add_terminators(&mut cfg, &live_vars);
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,
@@ -247,20 +311,26 @@ impl Funclets {
         Self {
             cfg,
             live_vars,
+            type_info,
             finfo,
             specs,
         }
     }
 
+    /// Get's the list of funclets in this scheduling function
     pub fn funclets(&self) -> Vec<Funclet<'_>> {
-        self.cfg
+        let mut v: Vec<_> = self
+            .cfg
             .blocks
             .values()
             .map(|blk| Funclet {
                 parent: self,
                 block: blk,
             })
-            .collect()
+            .collect();
+        // sort for determinism in assigning of funclet ids at the IR level
+        v.sort_by_key(Funclet::id);
+        v
     }
 
     /// Gets the name of the scheduling funclet for a given block
@@ -271,4 +341,13 @@ impl Funclets {
             format!("_{}{block_id}", self.finfo.name)
         }
     }
+}
+
+/// Returns true if the type is a reference
+pub fn is_ref(typ: &asm::TypeId) -> bool {
+    matches!(typ, asm::TypeId::Local(s) if s.starts_with('&'))
+        || matches!(
+            typ,
+            asm::TypeId::FFI(asm::FFIType::ConstRef(_) | asm::FFIType::MutRef(_))
+        )
 }

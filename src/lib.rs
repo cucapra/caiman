@@ -18,11 +18,19 @@ mod shadergen;
 mod type_system;
 
 // TODO (stephen): unified CLI
-pub fn explicate_and_execute(output: Option<String>, program: assembly::ast::Program) {
+pub fn explicate_and_execute(
+    output: Option<String>,
+    program: assembly::ast::Program,
+    explicate_only: bool,
+) {
     let version = &program.version;
     assert_eq!((version.major, version.minor, version.detailed), (0, 0, 2));
 
     let definition = assembly::lowering_pass::lower(program);
+    if explicate_only {
+        println!("{:#?}", definition);
+        return;
+    }
     ir::validation::validate_program(&definition.program);
     let mut codegen = rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
     codegen.set_print_codgen_debug_info(true);

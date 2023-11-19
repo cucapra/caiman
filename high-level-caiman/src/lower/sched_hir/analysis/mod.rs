@@ -7,6 +7,9 @@ use super::{
     hir::{HirInstr, Terminator},
 };
 
+#[allow(clippy::module_name_repetitions)]
+pub use tags::{TagAnalysis, TypeInfo};
+
 /// A dataflow analysis fact
 pub trait Fact: PartialEq + Clone {
     /// Performs a meet operation on two facts
@@ -324,7 +327,7 @@ impl Fact for LiveVars {
             HirInstr::Tail(Terminator::FinalReturn) => {
                 self.live_set.insert(String::from(RET_VAR));
             }
-            HirInstr::Tail(Terminator::None) => (),
+            HirInstr::Tail(Terminator::None | Terminator::Next(_)) => (),
             HirInstr::Tail(Terminator::Call(..)) => todo!(),
             HirInstr::Stmt(hir) => {
                 hir.get_def().map(|var| self.live_set.remove(&var));

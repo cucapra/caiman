@@ -5,6 +5,7 @@ use crate::{
     parse::ast::{ClassMembers, TopLevel},
 };
 use caiman::assembly::ast as asm;
+use caiman::ir;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
@@ -33,9 +34,6 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             data: asm::LocalTypeInfo::Event,
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(asm::FFIType::I64)),
-        asm::Declaration::TypeDecl(asm::TypeDecl::FFI(asm::FFIType::MutRef(Box::new(
-            asm::FFIType::I64,
-        )))),
         asm::Declaration::TypeDecl(asm::TypeDecl::FFI(BOOL_FFI_TYPE)),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("bool"),
@@ -51,8 +49,10 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("&i64"),
-            data: asm::LocalTypeInfo::NativeValue {
-                storage_type: asm::TypeId::FFI(asm::FFIType::MutRef(Box::new(asm::FFIType::I64))),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::TypeId::FFI(asm::FFIType::I64),
+                storage_place: ir::Place::Local,
+                buffer_flags: ir::BufferFlags::new(),
             },
         })),
     ]
