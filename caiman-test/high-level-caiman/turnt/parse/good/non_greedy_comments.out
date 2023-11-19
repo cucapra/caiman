@@ -1,0 +1,112 @@
+[
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                22,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [],
+        output: Some(
+            FullType {
+                base: FlaggedType {
+                    info: Info {
+                        start_ln_and_col: (
+                            3,
+                            13,
+                        ),
+                        end_ln_and_col: (
+                            3,
+                            16,
+                        ),
+                    },
+                    base: Num(
+                        I64,
+                    ),
+                    flags: [],
+                    settings: [],
+                },
+                tags: [],
+            },
+        ),
+        specs: [
+            "a",
+            "b",
+            "c",
+        ],
+        statements: [
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        7,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        7,
+                        16,
+                    ),
+                },
+                lhs: [
+                    (
+                        "x",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    7,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    7,
+                                    15,
+                                ),
+                            },
+                            lit: Int(
+                                "10",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Return(
+                Info {
+                    start_ln_and_col: (
+                        20,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        20,
+                        14,
+                    ),
+                },
+                Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                20,
+                                12,
+                            ),
+                            end_ln_and_col: (
+                                20,
+                                13,
+                            ),
+                        },
+                        name: "x",
+                        tag: None,
+                    },
+                ),
+            ),
+        ],
+    },
+]

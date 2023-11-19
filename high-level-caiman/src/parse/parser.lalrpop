@@ -27,7 +27,8 @@ match {
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
-  r"/\*(.|\s)*\*/" => { }, // Multiline (non-nested) comments
+  // From: https://stackoverflow.com/questions/13014947/regex-to-match-a-c-style-multiline-comment
+  r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { }, // Multiline (non-nested) comments
 
   _, // Everything else
 }

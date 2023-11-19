@@ -1,0 +1,24 @@
+#version 0.1.0
+
+fn foo() -> i64 impls a, b, c {
+    /* Hello
+    There */
+
+    let x = 10;
+
+    /* 
+    let y = x * x;
+    return y;
+    */
+
+    /**
+     *
+     * Java Docs
+     *
+     */
+
+    return x;
+
+}
+
+/* So */
