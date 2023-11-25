@@ -1,0 +1,91 @@
+version 0.0.2
+
+type i64;
+event %event0;
+buffer_space %buffspace;
+native_value %ni64 : i64;
+ref %i64l : i64-local<flags=[]>;
+
+function @lt(i64, i64) -> i64;
+function @main() -> i64;
+
+
+external-cpu-pure[impl @lt] %lt(i64, i64) -> i64;
+
+value[impl default @main] %main() -> %ni64 {
+    %a = constant %ni64 2;
+    %b = constant %ni64 1;
+    %r_t = call @lt(%a, %b);
+    %r = extract %r_t 0;
+    %s = select %r %a %b;
+    return %s;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+
+
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_head<none($time.%e)-usable, none($time.%e)-usable>() ->
+    [%out : node($val.%s)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
+{
+    %a_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%a)() -> %a_ref;
+    %a = read-ref i64 %a_ref;
+
+    %b_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%b)() -> %b_ref;
+    %b = read-ref i64 %b_ref;
+
+
+    %r_ref = alloc-temporary local [] i64;
+    local-do-external %lt node($val.%r_t)(%a, %b) -> %r_ref;
+    %r_val = read-ref i64 %r_ref;
+
+    %s_ref = alloc-temporary local [] i64;
+
+    %default = default-join;
+    %join = inline-join %main_ret [] %default;
+
+    schedule-select %r_val [%main_left, %main_right]
+        [value node($val.%s), timeline none($time.%none), spatial none($space.%none)]
+        (%s_ref) %join;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_left<none($time.%e)-usable, none($time.%e)-usable>
+    (%s_ref : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
+    [%out : node($val.%a)-usable none($space.%e)-save none($time.%e)-usable %i64l] 
+{
+    local-do-builtin node($val.%a)() -> %s_ref;
+    return %s_ref;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_right<none($time.%e)-usable, none($time.%e)-usable>
+    (%s_ref : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
+    [%out : node($val.%b)-usable none($space.%e)-save none($time.%e)-usable %i64l] 
+{
+    local-do-builtin node($val.%b)() -> %s_ref;
+    return %s_ref;
+}
+
+
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_ret<none($time.%e)-usable, none($time.%e)-usable>
+    (%s_ref : node($val.%s)-usable none($space.%e)-save none($time.%e)-usable %i64l) ->
+    [%out : node($val.%s)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
+{
+    %s = read-ref i64 %s_ref;
+    return %s;
+}
+
+pipeline "main" = %main_head;
