@@ -158,6 +158,11 @@ TagOp: Vec<Tag> = {
     "@"  <Tag> => vec![<>],
 }
 
+Tags: Vec<Tag> = {
+    <Tag> => vec![<>],
+    "[" <CommaList<Tag>> "]" => <>,
+}
+
 Tag: Tag = {
     <@L> <Quotient> "(" <QuotRef> ")" "-" <Flow> <@R> => astf.tag(<>),
 }
@@ -218,11 +223,13 @@ SpecStmt: SpecStmt = {
 SchedStmt: SchedStmt = {
     <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
     <@L> "var" <CommaList<MaybeArg<FullType>>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
-    <@L> <Id> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
+    <@L> <Id> <TagOp?> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
     <Block> => <>,
     <@L> "return" <SchedExpr> ";" <@R> => astf.sched_return(<>),
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
+    <@L> "@in" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
+    <@L> "@out" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
 }
 
 // IFs and dangling else 
@@ -233,11 +240,11 @@ Block: SchedStmt = {
 }
 
 UnmatchedIf: SchedStmt = {
-    <@L> "if" <SchedExpr> "{" <SchedStmt*> "}" <("else" <UnmatchedIf>)?> <@R> => astf.sched_if(<>),
+    <@L> "if" <TagOp?> <SchedExpr> "{" <SchedStmt*> "}" <("else" <UnmatchedIf>)?> <@R> => astf.sched_if(<>),
 }
 
 MatchedIf: SchedStmt = {
-    <@L> "if" <SchedExpr> "{" <SchedStmt*> "}" "else" <MatchedIf> <@R> => astf.sched_matched_if(<>),
+    <@L> "if" <TagOp?> <SchedExpr> "{" <SchedStmt*> "}" "else" <MatchedIf> <@R> => astf.sched_matched_if(<>),
     <@L> "{" <SchedStmt*> "}" <@R> => astf.sched_block(<>),
 }
 

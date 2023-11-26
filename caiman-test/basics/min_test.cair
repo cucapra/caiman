@@ -30,8 +30,6 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 
-
-
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_head<none($time.%e)-usable, none($time.%e)-usable>() ->
     [%out : node($val.%s)-usable none($space.%e)-usable none($time.%e)-usable %ni64]

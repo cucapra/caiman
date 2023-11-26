@@ -3,10 +3,7 @@ use caiman::assembly::ast::{self as asm, FuncletArgument, Hole};
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
-    lower::{
-        data_type_to_ffi_type,
-        sched_hir::{is_ref, TypeInfo},
-    },
+    lower::{data_type_to_ffi_type, sched_hir::is_ref},
     parse::ast::{
         Arg, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
     },
@@ -117,7 +114,13 @@ fn lower_store(lhs: &str, rhs: &SchedTerm, temp_id: usize, f: &Funclet) -> (Comm
         vec![Some(asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalDoBuiltin {
-                operation: Some(f.get_final_type(rhs).unwrap().value.quot),
+                operation: Some(
+                    f.get_out_tag(rhs)
+                        .unwrap()
+                        .value
+                        .expect("Tag must be set")
+                        .quot,
+                ),
                 // no inputs
                 inputs: Some(Vec::new()),
                 outputs: Some(vec![Some(asm::NodeId(lhs.to_string()))]),
@@ -140,12 +143,13 @@ fn lower_instr(s: &Hir, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
             lhs, lhs_tag, rhs, ..
         } => lower_var_decl(lhs, lhs_tag, rhs, temp_id),
         Hir::Move { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
+        // annotations don't lower to anything
+        Hir::InAnnotation(..) | Hir::OutAnnotation(..) => (vec![], temp_id),
         x => todo!("{x:?}"),
     }
 }
 
 /// Gets the quotient for a particular spec type from a list of tags
-#[allow(dead_code)]
 fn get_quotient(
     specs: &Specs,
     tag: &Option<Vec<Tag>>,
@@ -184,7 +188,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
             let mut cmds = vec![];
             let mut use_name = name.clone();
             // TODO: this is a hack for now
-            if let Some(TypeInfo { typ, .. }) = f.get_type(name) {
+            if let Some(typ) = f.get_local_type(name) {
                 if is_ref(&typ) {
                     use_name = temp_var_name(temp_id);
                     cmds.push(Some(asm::Command::Node(asm::NamedNode {
@@ -210,7 +214,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         Terminator::FinalReturn => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
             return_values: Some(vec![Some(asm::NodeId(String::from(RET_VAR)))]),
         }))],
-        Terminator::Select(guard_name) => lower_select(guard_name, temp_id, f),
+        Terminator::Select(guard_name, tags) => lower_select(guard_name, tags, temp_id, f),
         Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
         // TODO: review this
         Terminator::None => panic!("None terminator not replaced by Next"),
@@ -221,7 +225,12 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
 /// Lowers a select terminator into a series of caiman assembly commands
 /// # Returns
 /// The commands that implement the terminator
-fn lower_select(guard_name: &str, temp_id: usize, f: &Funclet<'_>) -> CommandVec {
+fn lower_select(
+    guard_name: &str,
+    tags: &Option<Vec<Tag>>,
+    temp_id: usize,
+    f: &Funclet<'_>,
+) -> CommandVec {
     let djoin_id = temp_id;
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
@@ -243,22 +252,26 @@ fn lower_select(guard_name: &str, temp_id: usize, f: &Funclet<'_>) -> CommandVec
             },
         })),
         Some(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
-            /// TODO don't hardcode
-            value_operation: Some(asm::Quotient::Node(Some(asm::RemoteNodeId {
-                /// the select in the spec must store into the node `r`
-                node: Some(asm::NodeId(String::from("r"))),
-                funclet: Some(f.specs().value.clone()),
-            }))),
-            // TODO
-            timeline_operation: Some(asm::Quotient::None(Some(asm::RemoteNodeId {
-                node: None,
-                funclet: Some(f.specs().timeline.clone()),
-            }))),
-            // TODO
-            spatial_operation: Some(asm::Quotient::None(Some(asm::RemoteNodeId {
-                node: None,
-                funclet: Some(f.specs().spatial.clone()),
-            }))),
+            value_operation: Some(
+                get_quotient(f.specs(), tags, SpecType::Value)
+                    .expect("Selects need a value node for now"),
+            ),
+            timeline_operation: Some(
+                get_quotient(f.specs(), tags, SpecType::Timeline).unwrap_or_else(|| {
+                    asm::Quotient::None(Some(asm::RemoteNodeId {
+                        node: None,
+                        funclet: Some(f.specs().timeline.clone()),
+                    }))
+                }),
+            ),
+            spatial_operation: Some(
+                get_quotient(f.specs(), tags, SpecType::Spatial).unwrap_or_else(|| {
+                    asm::Quotient::None(Some(asm::RemoteNodeId {
+                        node: None,
+                        funclet: Some(f.specs().spatial.clone()),
+                    }))
+                }),
+            ),
             condition: Some(asm::NodeId(guard_name.to_string())),
             callee_funclet_ids: Some(f.next_blocks()),
             callee_arguments: Some(f.output_args()),

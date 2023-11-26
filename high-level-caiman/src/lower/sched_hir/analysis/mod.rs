@@ -8,7 +8,7 @@ use super::{
 };
 
 #[allow(clippy::module_name_repetitions)]
-pub use tags::{TagAnalysis, TypeInfo};
+pub use tags::{TagAnalysis, TagInfo};
 
 /// A dataflow analysis fact
 pub trait Fact: PartialEq + Clone {
@@ -321,7 +321,7 @@ impl Fact for LiveVars {
             HirInstr::Tail(Terminator::Return(None)) => {
                 self.live_set.remove(RET_VAR);
             }
-            HirInstr::Tail(Terminator::Select(guard)) => {
+            HirInstr::Tail(Terminator::Select(guard, _)) => {
                 self.live_set.insert(guard.clone());
             }
             HirInstr::Tail(Terminator::FinalReturn) => {

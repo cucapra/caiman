@@ -3,18 +3,27 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
-val min(a: i32, b: i32) -> i32 {
-    returns a if a < b else b
+val min() -> i64 {
+    a :- 2
+    b :- 1
+    c :- a < b
+    ret :- a if c else b
+    returns ret
 }
 
-fn min(a: i32, b: i32) -> i32 
+fn min() -> i64
     impls min, time, space
 {
-    if a < b {
-        return a;
+    let a: i64 @ node(min.a)-usable = 2;
+    let b: i64 @ node(min.b)-usable = 1;
+    let c: i32 @ node(min.c)-usable = a < b;
+    var v: i64 @ [none(min)-dead, none(time)-save];
+    if @ node(main.ret)-? c {
+        v @ [node(min.a)-usable, none(time)-save] = a;
     } else {
-        return b;
+        v @ [node(min.b)-usable, none(time)-save] = b;
     }
+    return v @ node(min.ret)-usable;
 }
 
 pipeline main { min }

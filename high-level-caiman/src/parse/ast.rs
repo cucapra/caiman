@@ -146,7 +146,7 @@ pub enum SpecStmt {
     Returns(Info, SpecExpr),
 }
 /// AST-level quotient (once merged, we can use the ir enum)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Quotient {
     Node,
     None,
@@ -155,7 +155,7 @@ pub enum Quotient {
 }
 
 /// AST-level flow (once merged, we can use the ir enum)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Flow {
     Usable,
     Save,
@@ -166,7 +166,7 @@ pub enum Flow {
 /// The part of a type annotation referring to a specific variable in a spec
 /// Ex: `i64<storage, map_write, align=8> @ [node(val.x)-usable, node(space.y)-usable, none(time.x)-usable]`
 /// `val.x` is a spec var
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuotientReference {
     /// Name of the spec
     pub spec_name: String,
@@ -182,6 +182,14 @@ pub struct Tag {
     pub quot_var: Option<QuotientReference>,
     pub flow: Option<Flow>,
 }
+
+impl PartialEq for Tag {
+    fn eq(&self, other: &Self) -> bool {
+        self.quot == other.quot && self.quot_var == other.quot_var && self.flow == other.flow
+    }
+}
+
+impl Eq for Tag {}
 
 /// A flagged type is a base type parameterized by an optional set of WGPU
 /// flags and settings
@@ -294,14 +302,24 @@ pub enum SchedStmt {
     },
     Assign {
         info: Info,
+        tag: Option<Tags>,
         lhs: Name,
         rhs: SchedExpr,
     },
     If {
         info: Info,
         guard: SchedExpr,
+        tag: Option<Tags>,
         true_block: Vec<SchedStmt>,
         false_block: Vec<SchedStmt>,
+    },
+    InEdgeAnnotation {
+        info: Info,
+        tags: Vec<Arg<Tags>>,
+    },
+    OutEdgeAnnotation {
+        info: Info,
+        tags: Vec<Arg<Tags>>,
     },
     Block(Info, Vec<SchedStmt>),
     Return(Info, SchedExpr),
@@ -360,7 +378,7 @@ impl std::fmt::Display for ResourceMembers {
 /// Definition of an extern function
 /// Ex:
 ///
-/// ```
+/// ```ignore
 /// path : "gpu_external.comp",
 /// entry : "main",
 /// dimensionality : 3,

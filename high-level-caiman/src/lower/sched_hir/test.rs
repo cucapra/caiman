@@ -17,6 +17,7 @@ fn cfg_gen() {
                 name: "x".to_string(),
                 tag: None,
             }),
+            tag: None,
             true_block: vec![SchedStmt::If {
                 info: Info::default(),
                 guard: NestedExpr::Term(SchedTerm::Var {
@@ -24,6 +25,7 @@ fn cfg_gen() {
                     name: "x".to_string(),
                     tag: None,
                 }),
+                tag: None,
                 true_block: vec![SchedStmt::Decl {
                     info: Info::default(),
                     lhs: vec![("y".to_string(), None)],
@@ -57,6 +59,7 @@ fn cfg_gen() {
         SchedStmt::Assign {
             info: Info::default(),
             lhs: String::from("x"),
+            tag: None,
             rhs: SchedExpr::Term(SchedTerm::Lit {
                 info: Info::default(),
                 lit: SchedLiteral::Int(5.to_string()),
@@ -85,6 +88,7 @@ fn if_gen() {
             name: "x".to_string(),
             tag: None,
         }),
+        tag: None,
         info: Info::default(),
         true_block: vec![SchedStmt::Return(
             Info::default(),
@@ -133,9 +137,11 @@ fn if_ret() {
                 name: "x".to_string(),
                 tag: None,
             }),
+            tag: None,
             info: Info::default(),
             true_block: vec![SchedStmt::Assign {
                 info: Info::default(),
+                tag: None,
                 lhs: String::from("x"),
                 rhs: SchedExpr::Term(SchedTerm::Lit {
                     info: Info::default(),
@@ -147,6 +153,7 @@ fn if_ret() {
                 Info::default(),
                 vec![SchedStmt::Assign {
                     info: Info::default(),
+                    tag: None,
                     lhs: String::from("x"),
                     rhs: SchedExpr::Term(SchedTerm::Lit {
                         info: Info::default(),

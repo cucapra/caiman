@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
     enum_cast,
@@ -43,6 +43,7 @@ pub enum Edge {
 pub struct Cfg {
     pub blocks: HashMap<usize, BasicBlock>,
     pub(super) graph: HashMap<usize, Edge>,
+    pub(super) transpose_graph: HashMap<usize, BTreeSet<usize>>,
 }
 
 /// Make a basic block from the current statements, giving it the next id
@@ -86,11 +87,13 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
             SchedStmt::Block(_, stmts) => res.extend(flatten_stmts(stmts)),
             SchedStmt::If {
                 guard,
+                tag,
                 true_block,
                 false_block,
                 info,
             } => res.push(SchedStmt::If {
                 guard,
+                tag,
                 true_block: flatten_stmts(true_block),
                 false_block: flatten_stmts(false_block),
                 info,
@@ -143,6 +146,7 @@ fn make_blocks(
             }
             SchedStmt::If {
                 guard,
+                tag,
                 true_block,
                 false_block,
                 ..
@@ -153,7 +157,7 @@ fn make_blocks(
                     make_block(
                         cur_id,
                         &mut cur_stmts,
-                        Terminator::Select(expr_to_node_id(guard)),
+                        Terminator::Select(expr_to_node_id(guard), tag),
                         &join_edge,
                     ),
                 );
@@ -257,12 +261,39 @@ impl Cfg {
         );
         Self {
             blocks,
+            transpose_graph: Self::transpose(&edges),
             graph: edges,
         }
         .remove_unreachable()
     }
 
-    /// Gets the successors of a given block
+    /// Transposes a CFG
+    fn transpose(graph: &HashMap<usize, Edge>) -> HashMap<usize, BTreeSet<usize>> {
+        let mut res = HashMap::new();
+        for (id, edge) in graph {
+            match edge {
+                Edge::Next(next) => {
+                    res.entry(*next).or_insert_with(BTreeSet::new).insert(*id);
+                }
+                Edge::Select {
+                    true_branch,
+                    false_branch,
+                } => {
+                    res.entry(*true_branch)
+                        .or_insert_with(BTreeSet::new)
+                        .insert(*id);
+                    res.entry(*false_branch)
+                        .or_insert_with(BTreeSet::new)
+                        .insert(*id);
+                }
+                Edge::None => (),
+            }
+        }
+        res
+    }
+
+    /// Gets the successors of a given block.
+    /// The returned block ids contains no duplicates.
     pub fn successors(&self, block_id: usize) -> Vec<usize> {
         match self.graph[&block_id] {
             Edge::Next(id) => vec![id],
@@ -272,6 +303,14 @@ impl Cfg {
             } => vec![true_branch, false_branch],
             Edge::None => vec![],
         }
+    }
+
+    /// Gets the predecessors of a given block.
+    /// The returned block ids contains no duplicates.
+    pub fn predecessors(&self, block_id: usize) -> Vec<usize> {
+        self.transpose_graph
+            .get(&block_id)
+            .map_or(vec![], |x| x.iter().copied().collect())
     }
 
     /// Removes unreachable blocks from the CFG

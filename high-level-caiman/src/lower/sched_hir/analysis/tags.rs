@@ -2,21 +2,20 @@ use caiman::{assembly::ast as asm, ir};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::lower::data_type_to_local_type;
 use crate::lower::global_context::SpecType;
-use crate::lower::lower_schedule::{tag_to_quot, tag_to_tag};
+use crate::lower::lower_schedule::tag_to_tag;
 use crate::lower::sched_hir::{Hir, HirInstr, Specs};
-use crate::parse::ast::{FullType, SchedTerm};
+use crate::parse::ast::{FullType, SchedTerm, Tag, Tags};
 
 use super::{Fact, Forwards, RET_VAR};
 
 /// Assembly-level type information
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeInfo {
-    pub typ: asm::TypeId,
-    pub value: asm::Tag,
-    pub spatial: asm::Tag,
-    pub timeline: asm::Tag,
+pub struct TagInfo {
+    pub value: Option<asm::Tag>,
+    pub spatial: Option<asm::Tag>,
+    pub timeline: Option<asm::Tag>,
+    specs: Specs,
 }
 
 /// Creates a tag with a none quotient for the given spec and flow
@@ -30,15 +29,40 @@ fn none_tag(spec_name: &asm::FuncletId, flow: ir::Flow) -> asm::Tag {
     }
 }
 
-impl TypeInfo {
-    /// Constructs a `TypeInfo` from an AST `FullType`. Any unspecified
-    /// tags will be assumed to be `none()-usable`
+impl TagInfo {
+    /// Constructs a `TagInfo` from an AST `FullType`.
     pub fn from(t: &FullType, specs: &Specs) -> Self {
-        let typ = data_type_to_local_type(&t.base.base);
+        Self::from_tags(&t.tags, specs)
+    }
+
+    /// Constructs a `TagInfo` from a vector of tags
+    pub fn from_tags(t: &[Tag], specs: &Specs) -> Self {
         let mut value = None;
         let mut spatial = None;
         let mut timeline = None;
-        for tag in &t.tags {
+        for tag in t {
+            match specs.get_spec_type(&tag.quot_var.as_ref().unwrap().spec_name) {
+                Some(SpecType::Value) => value = Some(tag_to_tag(tag)),
+                Some(SpecType::Spatial) => spatial = Some(tag_to_tag(tag)),
+                Some(SpecType::Timeline) => timeline = Some(tag_to_tag(tag)),
+                None => panic!("Unknown spec"),
+            }
+        }
+        Self {
+            value,
+            timeline,
+            spatial,
+            specs: specs.clone(),
+        }
+    }
+
+    /// Overwrites all of this type info with the tags from `other`. If
+    /// `other` does not specify a tag, the tag will NOT be updated.
+    pub fn update(&mut self, specs: &Specs, other: &Tags) {
+        let mut value = None;
+        let mut spatial = None;
+        let mut timeline = None;
+        for tag in other {
             match specs.get_spec_type(&tag.quot_var.as_ref().unwrap().spec_name) {
                 Some(SpecType::Value) => value = Some(tag_to_tag(tag)),
                 Some(SpecType::Spatial) => spatial = Some(tag_to_tag(tag)),
@@ -46,27 +70,39 @@ impl TypeInfo {
                 None => panic!("Unknwon spec"),
             }
         }
-        Self {
-            typ,
-            value: value.unwrap_or_else(|| none_tag(&specs.value, ir::Flow::Usable)),
-            timeline: timeline.unwrap_or_else(|| none_tag(&specs.timeline, ir::Flow::Usable)),
-            spatial: spatial.unwrap_or_else(|| none_tag(&specs.spatial, ir::Flow::Usable)),
+        // TODO: re-evaluate this approach
+        if let Some(value) = value {
+            self.value = Some(value);
+        }
+        if let Some(spatial) = spatial {
+            self.spatial = Some(spatial);
+        }
+        if let Some(timeline) = timeline {
+            self.timeline = Some(timeline);
         }
     }
 
-    /// Makes the base type of this type info a reference to the existing type
-    /// Does not check against references to references
-    fn make_ref(mut self) -> Self {
-        self.typ = match self.typ {
-            asm::TypeId::Local(type_name) => asm::TypeId::Local(format!("&{type_name}")),
-            asm::TypeId::FFI(_) => todo!(),
-        };
-        self
+    /// Returns the tag vector for this type. Any unspecified tags will be
+    /// assumed to be `none()-usable`
+    pub fn tags_vec_default(self) -> Vec<asm::Tag> {
+        vec![
+            self.value
+                .unwrap_or_else(|| none_tag(&self.specs.value, ir::Flow::Usable)),
+            self.spatial
+                .unwrap_or_else(|| none_tag(&self.specs.spatial, ir::Flow::Usable)),
+            self.timeline
+                .unwrap_or_else(|| none_tag(&self.specs.timeline, ir::Flow::Usable)),
+        ]
     }
 
-    /// Returns the tag vector for this type
-    pub fn tags_vec(self) -> Vec<asm::Tag> {
-        vec![self.value, self.spatial, self.timeline]
+    /// Returns the default tag for the specified specifcation type
+    #[allow(dead_code)]
+    pub fn default_tag(&self, spec_type: SpecType) -> asm::Tag {
+        match spec_type {
+            SpecType::Value => none_tag(&self.specs.value, ir::Flow::Usable),
+            SpecType::Spatial => none_tag(&self.specs.spatial, ir::Flow::Usable),
+            SpecType::Timeline => none_tag(&self.specs.timeline, ir::Flow::Usable),
+        }
     }
 }
 
@@ -76,8 +112,10 @@ impl TypeInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
 pub struct TagAnalysis {
-    tags: HashMap<String, TypeInfo>,
+    tags: HashMap<String, TagInfo>,
     specs: Rc<Specs>,
+    /// For an output fact, thse are the input tags to be overridden
+    input_overrides: HashMap<String, Vec<Tag>>,
 }
 
 impl TagAnalysis {
@@ -86,38 +124,25 @@ impl TagAnalysis {
         let mut tags = HashMap::new();
         tags.insert(
             String::from(RET_VAR),
-            TypeInfo::from(out.as_ref().unwrap(), specs),
+            TagInfo::from(out.as_ref().unwrap(), specs),
         );
         Self {
             tags,
             specs: Rc::new(specs.clone()),
+            input_overrides: HashMap::new(),
         }
     }
 
-    /// Gets the value quotient of a term
-    /// # Panics
-    /// If the value quotient is not specified in the term and
-    /// the term is not a variable with a previously known value quotient
-    #[allow(dead_code)]
-    fn value_quotient(&self, term: &SchedTerm) -> asm::Quotient {
-        let tags = term.get_tags();
-        if let Some(tags) = tags {
-            for t in tags {
-                if t.quot_var.as_ref().unwrap().spec_name == self.specs.value.0 {
-                    return tag_to_quot(t);
-                }
-            }
-        }
-        if let SchedTerm::Var { name, .. } = term {
-            return self.tags.get(name).unwrap().value.quot.clone();
-        }
-        panic!("Quotient not specified nor saved")
-    }
-
-    /// Gets the type of the specified variable or `None` if we have no information
-    /// about it
-    pub fn get_type(&self, var: &str) -> Option<TypeInfo> {
+    /// Gets the type of the specified variable or `None` if we have no concrete
+    /// information about it.
+    pub fn get_tag(&self, var: &str) -> Option<TagInfo> {
         self.tags.get(var).cloned()
+    }
+
+    /// Gets the input override for the specified variable or `None` if it was not
+    /// overridden
+    pub fn get_input_override(&self, var: &str) -> Option<Vec<Tag>> {
+        self.input_overrides.get(var).cloned()
     }
 }
 
@@ -149,7 +174,11 @@ impl Fact for TagAnalysis {
             use std::collections::hash_map::Entry;
             match self.tags.entry(k.to_string()) {
                 Entry::Occupied(old_v) => {
-                    assert_eq!(old_v.get(), v, "Duplicate key {k} with unequal values");
+                    if old_v.get() != v {
+                        // We can't infer the tag, require it to be specified
+                        old_v.remove_entry();
+                    }
+                    // assert_eq!(old_v.get(), v, "Duplicate key {k} with unequal values");
                 }
                 Entry::Vacant(entry) => {
                     entry.insert(v.clone());
@@ -165,27 +194,49 @@ impl Fact for TagAnalysis {
             HirInstr::Stmt(Hir::ConstDecl { lhs, lhs_tag, .. }) => {
                 self.tags.insert(
                     lhs.clone(),
-                    TypeInfo::from(lhs_tag.as_ref().unwrap(), &self.specs),
+                    TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs),
                 );
             }
             HirInstr::Stmt(Hir::VarDecl {
                 lhs, lhs_tag, rhs, ..
             }) => {
-                let mut info = TypeInfo::from(lhs_tag.as_ref().unwrap(), &self.specs).make_ref();
+                let mut info = TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs);
                 if rhs.is_none() {
-                    info.value.flow = ir::Flow::Dead;
-                    info.spatial.flow = ir::Flow::Save;
+                    if let Some(val) = info.value.as_mut() {
+                        val.flow = ir::Flow::Dead;
+                    }
+                    info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));
                 }
                 self.tags.insert(lhs.clone(), info);
             }
-            HirInstr::Stmt(Hir::Move { lhs, rhs: _, .. }) => {
+            HirInstr::Stmt(Hir::Move {
+                lhs, lhs_tags, rhs, ..
+            }) => {
                 // let quot = self.value_quotient(rhs);
-                let t = self.tags.get_mut(lhs).unwrap();
-                t.value.flow = ir::Flow::Usable;
+                if let Some(lhs_tags) = lhs_tags {
+                    let t = self.tags.get_mut(lhs).unwrap();
+                    t.update(&self.specs, lhs_tags);
+                } else if let SchedTerm::Var { name, .. } = rhs {
+                    // TODO: this is probably not what we want to do
+                    if let Some(rhs_typ) = self.tags.get(name).cloned() {
+                        let t = self.tags.get_mut(lhs).unwrap();
+                        t.value = rhs_typ.value;
+                    }
+                }
                 // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
                 // t.value.quot = quot;
             }
             HirInstr::Stmt(Hir::Op { .. } | Hir::Hole(_)) => todo!(),
+            HirInstr::Stmt(Hir::OutAnnotation(_, tags)) => {
+                for (v, tag) in tags {
+                    self.tags.get_mut(v).unwrap().update(&self.specs, tag);
+                }
+            }
+            HirInstr::Stmt(Hir::InAnnotation(_, tags)) => {
+                for (v, tag) in tags {
+                    self.input_overrides.insert(v.clone(), tag.clone());
+                }
+            }
         }
     }
 

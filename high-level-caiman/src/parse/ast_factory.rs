@@ -17,12 +17,12 @@ const PATCH_VERSION: &str = "0";
 /// of location information.
 ///
 /// Has the format:
-/// ```
+/// ```ignore
 /// function_name(<fn_args>) -> <Enum Type>:<Enum Variant>
 /// ```
 ///
 /// ### Examples:
-/// ```
+/// ```ignore
 /// tuple_variant_factory!(sched_returns(e: SchedExpr) -> SchedStmt:SchedStmt::Return);
 /// ```
 macro_rules! tuple_variant_factory {
@@ -38,11 +38,11 @@ macro_rules! tuple_variant_factory {
 /// of location information
 ///
 /// Has the format:
-/// ```
+/// ```ignore
 /// function_name(<fn_args>) -> <Enum Type>:<Enum Variant>
 /// ```
 /// OR
-/// ```
+/// ```ignore
 /// function_name(<fn_args>) -> <Enum Type>:<Enum Variant> {
 ///     <field_name>: <field_expr>,
 ///     ...
@@ -51,7 +51,7 @@ macro_rules! tuple_variant_factory {
 ///
 ///
 /// ### Examples:
-/// ````
+/// ````ignore
 /// // Pass along the arguments of the function to the enum variant with
 /// // the same types and names:
 /// struct_variant_factory!(spec_call(function: Name, args: Vec<SpecExpr>)
@@ -452,19 +452,23 @@ impl ASTFactory {
 
     // scheduling statements
 
-    struct_variant_factory!(sched_assign(lhs: Name, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign);
+    struct_variant_factory!(sched_in_annotation(tags: Vec<Arg<Tags>>) -> SchedStmt:SchedStmt::InEdgeAnnotation);
+    struct_variant_factory!(sched_out_annotation(tags: Vec<Arg<Tags>>) -> SchedStmt:SchedStmt::OutEdgeAnnotation);
+    struct_variant_factory!(sched_assign(lhs: Name, tag: Option<Tags>, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign);
     tuple_variant_factory!(sched_return(e: SchedExpr) -> SchedStmt:SchedStmt::Return);
     tuple_variant_factory!(sched_hole_stmt() -> SchedStmt:SchedStmt::Hole);
     tuple_variant_factory!(sched_call_stmt(call: SchedFuncCall) -> SchedStmt:SchedStmt::Call);
-    struct_variant_factory!(sched_if(guard: SchedExpr, true_block: Vec<SchedStmt>, 
+    struct_variant_factory!(sched_if(tags: Option<Tags>, guard: SchedExpr, true_block: Vec<SchedStmt>, 
         false_block: Option<SchedStmt>) -> SchedStmt:SchedStmt::If {
             guard: guard,
+            tag: tags,
             true_block: true_block,
             false_block: false_block.map(|x| vec![x]).unwrap_or_default()
         });
-    struct_variant_factory!(sched_matched_if(guard: SchedExpr, true_block: Vec<SchedStmt>, 
+    struct_variant_factory!(sched_matched_if(tags: Option<Tags>, guard: SchedExpr, true_block: Vec<SchedStmt>, 
         false_block: SchedStmt) -> SchedStmt:SchedStmt::If {
             guard: guard,
+            tag: tags,
             true_block: true_block,
             false_block: vec![false_block]
         });

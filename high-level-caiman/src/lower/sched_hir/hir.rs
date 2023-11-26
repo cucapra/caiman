@@ -2,8 +2,10 @@ use std::collections::HashSet;
 
 use crate::{
     enum_cast,
-    parse::ast::{SchedExpr, SchedFuncCall},
+    lower::data_type_to_local_type,
+    parse::ast::{SchedExpr, SchedFuncCall, Tags},
 };
+use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
 
 use crate::{
@@ -25,6 +27,7 @@ pub enum Hir {
     /// A data movement into a mutable variable
     Move {
         info: Info,
+        lhs_tags: Option<Tags>,
         lhs: Name,
         rhs: SchedTerm,
     },
@@ -51,6 +54,8 @@ pub enum Hir {
         op: Name,
         args: Vec<SchedTerm>,
     },
+    InAnnotation(Info, Vec<(String, Tags)>),
+    OutAnnotation(Info, Vec<(String, Tags)>),
 }
 
 /// A terminator of a basic block.
@@ -64,7 +69,7 @@ pub enum Terminator {
     /// A select statement with a guard node. If the guard is true
     /// we transition to the `true_branch` of the outgoing edge of this block
     /// in the CFG. Otherwise, we transition to the `false_branch`.
-    Select(String),
+    Select(String, Option<Tags>),
     /// A return statement with an optional node.
     /// Modeled as an assignment to the special `_out` variable and transition to
     /// the final basic block.
@@ -95,9 +100,19 @@ impl Hir {
     pub fn new(stmt: SchedStmt) -> Self {
         // TODO: operations
         match stmt {
-            SchedStmt::Assign { info, lhs, rhs } => {
+            SchedStmt::Assign {
+                info,
+                tag,
+                lhs,
+                rhs,
+            } => {
                 let rhs = enum_cast!(SchedExpr::Term, rhs);
-                Self::Move { info, lhs, rhs }
+                Self::Move {
+                    info,
+                    lhs_tags: tag,
+                    lhs,
+                    rhs,
+                }
             }
             SchedStmt::Decl {
                 info,
@@ -135,6 +150,8 @@ impl Hir {
                 panic!("Unexpected stmt")
             }
             SchedStmt::Hole(info) => Self::Hole(info),
+            SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(info, tags),
+            SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(info, tags),
         }
     }
 
@@ -156,12 +173,12 @@ impl Hir {
                 // is a use
                 res.insert(lhs.clone());
             }
-            Self::Hole(..) => (),
             Self::Op { args, .. } => {
                 for arg in args {
                     term_get_uses(arg, res);
                 }
             }
+            Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::Hole(..) => (),
         }
     }
 
@@ -173,8 +190,29 @@ impl Hir {
             Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } => Some(lhs.clone()),
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
-            Self::Hole(..) | Self::Move { .. } => None,
+            Self::Hole(..)
+            | Self::Move { .. }
+            | Self::InAnnotation(..)
+            | Self::OutAnnotation(..) => None,
             Self::Op { dest, .. } => Some(dest.clone()),
+        }
+    }
+
+    /// Gets the local type of the variable defined by this statement, if any.
+    pub fn get_def_local_type(&self) -> Option<asm::TypeId> {
+        // TODO: flags
+        match self {
+            Self::ConstDecl { lhs_tag, .. } => lhs_tag
+                .as_ref()
+                .map(|tag| data_type_to_local_type(&tag.base.base)),
+            Self::VarDecl { lhs_tag, .. } => lhs_tag
+                .as_ref()
+                .map(|tag| make_ref(data_type_to_local_type(&tag.base.base))),
+            Self::Move { .. }
+            | Self::Hole(..)
+            | Self::InAnnotation(..)
+            | Self::OutAnnotation(..)
+            | Self::Op { .. } => None,
         }
     }
 }
@@ -193,5 +231,14 @@ fn term_get_uses(t: &SchedTerm, res: &mut HashSet<String>) {
         }
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
         SchedTerm::Call(..) => todo!(),
+    }
+}
+
+/// Makes the base type of this type info a reference to the existing type
+/// Does not check against references to references
+fn make_ref(typ: asm::TypeId) -> asm::TypeId {
+    match typ {
+        asm::TypeId::Local(type_name) => asm::TypeId::Local(format!("&{type_name}")),
+        asm::TypeId::FFI(_) => todo!(),
     }
 }

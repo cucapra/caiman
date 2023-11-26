@@ -2,9 +2,14 @@ pub mod cfg;
 #[allow(clippy::module_inception)]
 mod hir;
 
+use std::collections::{HashMap, HashSet};
+
 pub use hir::*;
 
-use crate::parse::ast::{Arg, FullType, SchedulingFunc};
+use crate::{
+    lower::data_type_to_local_type,
+    parse::ast::{Arg, FullType, SchedulingFunc},
+};
 use caiman::assembly::ast as asm;
 
 use self::{
@@ -13,7 +18,7 @@ use self::{
 };
 
 use super::{global_context::SpecType, lower_schedule::hlc_arg_to_asm_arg};
-pub use analysis::TypeInfo;
+pub use analysis::TagInfo;
 mod analysis;
 #[cfg(test)]
 mod test;
@@ -57,6 +62,7 @@ pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
     type_info: analysis::InOutFacts<TagAnalysis>,
+    types: HashMap<String, asm::TypeId>,
     finfo: FuncInfo,
     specs: Specs,
 }
@@ -73,7 +79,7 @@ impl<'a> Funclet<'a> {
     pub fn next_blocks(&self) -> Vec<asm::Hole<asm::FuncletId>> {
         match &self.block.terminator {
             Terminator::FinalReturn => vec![],
-            Terminator::Select(_) => {
+            Terminator::Select(..) => {
                 let mut e = self
                     .parent
                     .cfg
@@ -105,8 +111,32 @@ impl<'a> Funclet<'a> {
         }
     }
 
+    /// Gets the input arguments of this funclet based on the union of the live
+    /// variables of all predecessor funclets.
+    fn input_vars(&self) -> HashSet<&String> {
+        // TODO: re-evaluate if this is correct for the general case
+        self.parent
+            .cfg
+            .predecessors(self.id())
+            .iter()
+            .flat_map(|id| self.parent.live_vars.get_out_fact(*id).live_set().iter())
+            .collect()
+    }
+
+    /// Gets the output arguments of this funclet based on the live out variables
+    /// of this block. The returned vector of strings do not contain duplicates.
+    fn output_vars(&self) -> Vec<&String> {
+        self.parent
+            .live_vars
+            .get_out_fact(self.id())
+            .live_set()
+            .iter()
+            .collect()
+    }
+
     /// Gets the input arguments for each block based on the block's live in variables
     pub fn inputs(&self) -> Vec<asm::FuncletArgument> {
+        #[allow(clippy::map_unwrap_or)]
         if self.id() == cfg::START_BLOCK_ID {
             self.parent
                 .finfo
@@ -115,29 +145,42 @@ impl<'a> Funclet<'a> {
                 .map(hlc_arg_to_asm_arg)
                 .collect()
         } else {
-            self.parent
-                .live_vars
-                .get_in_fact(self.id())
-                .live_set()
+            self.input_vars()
                 .iter()
-                .map(|var| asm::FuncletArgument {
+                .map(|&var| asm::FuncletArgument {
                     name: Some(asm::NodeId(var.clone())),
                     typ: self
                         .parent
-                        .type_info
-                        .get_in_fact(self.id())
-                        .get_type(var)
-                        .unwrap()
-                        .typ,
+                        .types
+                        .get(var)
+                        .unwrap_or_else(|| panic!("Missing type for {var}"))
+                        .clone(),
                     tags: self
-                        .parent
-                        .type_info
-                        .get_in_fact(self.id())
-                        .get_type(var)
-                        .unwrap()
-                        .tags_vec(),
+                        .get_input_tag(var)
+                        .unwrap_or_else(|| panic!("A tag must be specified for {var}"))
+                        .tags_vec_default(),
                 })
                 .collect()
+        }
+    }
+
+    /// Gets the input tag of the specified variable, handling input overrides
+    fn get_input_tag(&self, var: &str) -> Option<TagInfo> {
+        let ovr = self
+            .parent
+            .type_info
+            .get_out_fact(self.id())
+            .get_input_override(var);
+        match (
+            self.parent.type_info.get_in_fact(self.id()).get_tag(var),
+            ovr,
+        ) {
+            (orig, None) => orig,
+            (None, Some(ovr)) => Some(TagInfo::from_tags(&ovr, self.specs())),
+            (Some(mut orig), Some(ovr)) => {
+                orig.update(self.specs(), &ovr);
+                Some(orig)
+            }
         }
     }
 
@@ -146,28 +189,25 @@ impl<'a> Funclet<'a> {
         if self.id() == cfg::START_BLOCK_ID || self.id() == cfg::FINAL_BLOCK_ID {
             vec![hlc_arg_to_asm_arg(&self.parent.finfo.output)]
         } else {
-            // I don't think this is right
-            self.parent
-                .live_vars
-                .get_out_fact(self.id())
-                .live_set()
+            // TODO: re-evaluate if this is correct for the general case
+            self.output_vars()
                 .iter()
-                .map(|var| asm::FuncletArgument {
+                .map(|&var| asm::FuncletArgument {
                     name: Some(asm::NodeId(format!("_out_{var}"))),
                     typ: self
                         .parent
-                        .type_info
-                        .get_out_fact(self.id())
-                        .get_type(var)
-                        .unwrap()
-                        .typ,
+                        .types
+                        .get(var)
+                        .unwrap_or_else(|| panic!("Missing base type for {var}"))
+                        .clone(),
                     tags: self
                         .parent
                         .type_info
                         .get_out_fact(self.id())
-                        .get_type(var)
-                        .unwrap()
-                        .tags_vec(),
+                        .get_tag(var)
+                        // no need for input overrides since this is the output
+                        .unwrap_or_else(|| panic!("A tag must be specified for {var}"))
+                        .tags_vec_default(),
                 })
                 .collect()
         }
@@ -258,16 +298,16 @@ impl<'a> Funclet<'a> {
         asm::FuncletId(self.parent.funclet_name(id))
     }
 
-    /// Gets the type of the specified variable at the start of the funclet
+    /// Gets the local type of the specified variable.
     #[inline]
-    pub fn get_type(&self, var: &str) -> Option<TypeInfo> {
-        self.parent.type_info.get_in_fact(self.id()).get_type(var)
+    pub fn get_local_type(&self, var: &str) -> Option<asm::TypeId> {
+        self.parent.types.get(var).cloned()
     }
 
-    /// Gets the type of the specified variable at the end of the funclet
+    /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
-    pub fn get_final_type(&self, var: &str) -> Option<TypeInfo> {
-        self.parent.type_info.get_out_fact(self.id()).get_type(var)
+    pub fn get_out_tag(&self, var: &str) -> Option<TagInfo> {
+        self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
 }
 
@@ -300,6 +340,7 @@ impl Funclets {
         let live_vars = analyze(&cfg, &LiveVars::top());
         let type_info = analyze(&cfg, &TagAnalysis::top(&specs, &f.output));
         Self::add_terminators(&mut cfg, &live_vars);
+        let types = Self::collect_types(&cfg, &f.input, &f.output);
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,
@@ -312,9 +353,44 @@ impl Funclets {
             cfg,
             live_vars,
             type_info,
+            types,
             finfo,
             specs,
         }
+    }
+
+    /// Collects a map of variable names to their base types.
+    /// # Arguments
+    /// * `cfg` - The canonical CFG of the scheduling function
+    /// * `f_in` - The input arguments of the scheduling function
+    /// * `f_out` - The output argument of the scheduling function
+    fn collect_types(
+        cfg: &Cfg,
+        f_in: &[(String, FullType)],
+        f_out: &Option<FullType>,
+    ) -> HashMap<String, asm::TypeId> {
+        use std::collections::hash_map::Entry;
+        let mut types = HashMap::new();
+        types.insert(
+            String::from(RET_VAR),
+            data_type_to_local_type(&f_out.as_ref().unwrap().base.base),
+        );
+        for (var, typ) in f_in {
+            types.insert(var.to_string(), data_type_to_local_type(&typ.base.base));
+        }
+        for bb in cfg.blocks.values() {
+            for stmt in &bb.stmts {
+                if let (Some(def), Some(typ)) = (stmt.get_def(), stmt.get_def_local_type()) {
+                    match types.entry(def) {
+                        Entry::Occupied(t) => assert_eq!(t.get(), &typ),
+                        Entry::Vacant(v) => {
+                            v.insert(typ);
+                        }
+                    }
+                }
+            }
+        }
+        types
     }
 
     /// Get's the list of funclets in this scheduling function
