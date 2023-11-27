@@ -2,7 +2,7 @@ pub mod cfg;
 #[allow(clippy::module_inception)]
 mod hir;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 pub use hir::*;
 
@@ -113,7 +113,7 @@ impl<'a> Funclet<'a> {
 
     /// Gets the input arguments of this funclet based on the union of the live
     /// variables of all predecessor funclets.
-    fn input_vars(&self) -> HashSet<&String> {
+    fn input_vars(&self) -> BTreeSet<&String> {
         // TODO: re-evaluate if this is correct for the general case
         self.parent
             .cfg

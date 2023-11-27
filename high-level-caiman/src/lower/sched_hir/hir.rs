@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use crate::{
     enum_cast,
@@ -157,7 +157,7 @@ impl Hir {
 
     /// Get the variables used by this statement.
     /// Mutates the given vector by appending the variables used to it.
-    pub fn get_uses(&self, res: &mut HashSet<String>) {
+    pub fn get_uses(&self, res: &mut BTreeSet<String>) {
         match self {
             Self::ConstDecl { rhs, .. } => {
                 term_get_uses(rhs, res);
@@ -224,7 +224,7 @@ pub fn stmts_to_hir(stmts: Vec<SchedStmt>) -> Vec<Hir> {
 }
 
 /// Get the uses in a `SchedTerm`
-fn term_get_uses(t: &SchedTerm, res: &mut HashSet<String>) {
+fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
     match t {
         SchedTerm::Var { name, .. } => {
             res.insert(name.clone());

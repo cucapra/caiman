@@ -306,7 +306,7 @@ impl Cfg {
     }
 
     /// Gets the predecessors of a given block.
-    /// The returned block ids contains no duplicates.
+    /// The returned block ids contains no duplicates and is sorted.
     pub fn predecessors(&self, block_id: usize) -> Vec<usize> {
         self.transpose_graph
             .get(&block_id)

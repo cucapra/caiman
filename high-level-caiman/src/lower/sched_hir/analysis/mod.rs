@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 mod tags;
 
@@ -286,17 +286,17 @@ impl Direction for Forwards {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct LiveVars {
-    pub(super) live_set: HashSet<String>,
+    pub(super) live_set: BTreeSet<String>,
 }
 
 impl LiveVars {
-    pub fn top() -> Self {
+    pub const fn top() -> Self {
         Self {
-            live_set: HashSet::new(),
+            live_set: BTreeSet::new(),
         }
     }
 
-    pub const fn live_set(&self) -> &HashSet<String> {
+    pub const fn live_set(&self) -> &BTreeSet<String> {
         &self.live_set
     }
 }
