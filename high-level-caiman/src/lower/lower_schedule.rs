@@ -130,6 +130,54 @@ fn lower_store(lhs: &str, rhs: &SchedTerm, temp_id: usize, f: &Funclet) -> (Comm
     )
 }
 
+/// Lowers an operation into a local-do-external and read-ref
+fn lower_op(
+    dest: &str,
+    dest_tag: &Option<FullType>,
+    op: &str,
+    args: &[SchedTerm],
+    temp_id: usize,
+    f: &Funclet,
+) -> (CommandVec, usize) {
+    let dest_tag = dest_tag
+        .as_ref()
+        .expect("We require all variables to have type annotations");
+    let temp_node_name = temp_var_name(temp_id);
+    let temp = asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(temp_node_name.clone())),
+        node: asm::Node::AllocTemporary {
+            place: Some(ir::Place::Local),
+            buffer_flags: Some(ir::BufferFlags::new()),
+            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
+        },
+    });
+    let mut inputs = vec![];
+    for arg in args {
+        let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
+        inputs.push(Some(asm::NodeId(arg.to_string())));
+    }
+    let local_do = asm::Command::Node(asm::NamedNode {
+        name: None,
+        node: asm::Node::LocalDoExternal {
+            operation: unextract_quotient(get_quotient(f.specs(), &dest_tag.tags, SpecType::Value)),
+            inputs: Some(inputs),
+            outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
+            external_function_id: Some(asm::ExternalFunctionId(op.to_string())),
+        },
+    });
+    let read_ref = asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(dest.to_string())),
+        node: asm::Node::ReadRef {
+            source: Some(asm::NodeId(temp_node_name)),
+            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
+        },
+    });
+    (
+        vec![Some(temp), Some(local_do), Some(read_ref)],
+        temp_id + 1,
+    )
+}
+
 /// Lowers a scheduling statement into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the statement
@@ -145,12 +193,19 @@ fn lower_instr(s: &Hir, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
         Hir::Move { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
         // annotations don't lower to anything
         Hir::InAnnotation(..) | Hir::OutAnnotation(..) => (vec![], temp_id),
-        x => todo!("{x:?}"),
+        Hir::Op {
+            dest,
+            dest_tag,
+            op,
+            args,
+            ..
+        } => lower_op(dest, dest_tag, op, args, temp_id, f),
+        x @ Hir::Hole(_) => todo!("{x:?}"),
     }
 }
 
 /// Gets the quotient for a particular spec type from a list of tags
-fn get_quotient(
+fn get_quotient_opt(
     specs: &Specs,
     tag: &Option<Vec<Tag>>,
     qtype: SpecType,
@@ -171,6 +226,50 @@ fn get_quotient(
             }) {
                 return res;
             }
+        }
+    }
+    None
+}
+
+/// Changes the remote node id to the remote id of the result of the call
+fn unextract_quotient(q: Hole<asm::Quotient>) -> Hole<asm::Quotient> {
+    match q {
+        Hole::Some(
+            asm::Quotient::Node(Some(asm::RemoteNodeId {
+                funclet,
+                node: Some(node),
+            }))
+            | asm::Quotient::Input(Some(asm::RemoteNodeId {
+                funclet,
+                node: Some(node),
+            }))
+            | asm::Quotient::Output(Some(asm::RemoteNodeId {
+                funclet,
+                node: Some(node),
+            })),
+        ) => Hole::Some(asm::Quotient::Node(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(asm::NodeId(format!("_{}_t", node.0))),
+        }))),
+        x => x,
+    }
+}
+
+fn get_quotient(specs: &Specs, tags: &[Tag], qtype: SpecType) -> asm::Hole<asm::Quotient> {
+    for t in tags {
+        if let res @ Some(_) = t.quot_var.as_ref().and_then(|qr| {
+            if qr.spec_name == specs.value.0 && qtype == SpecType::Value {
+                return Some(tag_to_quot(t));
+            }
+            if qr.spec_name == specs.timeline.0 && qtype == SpecType::Timeline {
+                return Some(tag_to_quot(t));
+            }
+            if qr.spec_name == specs.spatial.0 && qtype == SpecType::Spatial {
+                return Some(tag_to_quot(t));
+            }
+            None
+        }) {
+            return res;
         }
     }
     None
@@ -253,11 +352,11 @@ fn lower_select(
         })),
         Some(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
             value_operation: Some(
-                get_quotient(f.specs(), tags, SpecType::Value)
+                get_quotient_opt(f.specs(), tags, SpecType::Value)
                     .expect("Selects need a value node for now"),
             ),
             timeline_operation: Some(
-                get_quotient(f.specs(), tags, SpecType::Timeline).unwrap_or_else(|| {
+                get_quotient_opt(f.specs(), tags, SpecType::Timeline).unwrap_or_else(|| {
                     asm::Quotient::None(Some(asm::RemoteNodeId {
                         node: None,
                         funclet: Some(f.specs().timeline.clone()),
@@ -265,7 +364,7 @@ fn lower_select(
                 }),
             ),
             spatial_operation: Some(
-                get_quotient(f.specs(), tags, SpecType::Spatial).unwrap_or_else(|| {
+                get_quotient_opt(f.specs(), tags, SpecType::Spatial).unwrap_or_else(|| {
                     asm::Quotient::None(Some(asm::RemoteNodeId {
                         node: None,
                         funclet: Some(f.specs().spatial.clone()),

@@ -1,6 +1,6 @@
 use crate::{
     error,
-    parse::ast::{ClassMembers, DataType, NumberType, SchedulingFunc, TopLevel},
+    parse::ast::{Binop, ClassMembers, DataType, NumberType, SchedulingFunc, TopLevel},
 };
 use caiman::assembly::ast as asm;
 mod global_context;
@@ -160,4 +160,12 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
         }
     }
     Ok(asm)
+}
+
+/// Converts a high-level caiman data type to an extern funclet id.
+fn binop_to_str(op: Binop) -> &'static str {
+    match op {
+        Binop::Lt => "_lt",
+        _ => todo!(),
+    }
 }

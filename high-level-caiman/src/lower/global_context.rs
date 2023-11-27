@@ -1,11 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     lower::BOOL_FFI_TYPE,
-    parse::ast::{ClassMembers, TopLevel},
+    parse::ast::{Binop, ClassMembers, SchedExpr, SchedStmt, TopLevel},
 };
 use caiman::assembly::ast as asm;
 use caiman::ir;
+
+use super::binop_to_str;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
@@ -58,11 +60,90 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
     ]
 }
 
+/// Generates a list of extern declarations needed for a given program.
+#[allow(clippy::single_match)]
+fn gen_extern_decls(tl: &[TopLevel]) -> Vec<asm::Declaration> {
+    let mut res = vec![];
+    let mut existing_externs = HashSet::new();
+    // TODO: scan spects
+    for decl in tl {
+        match decl {
+            TopLevel::SchedulingFunc { statements, .. } => {
+                for stmt in statements {
+                    match stmt {
+                        SchedStmt::Decl { expr, .. } => {
+                            if let Some(expr) = expr.as_ref() {
+                                res.extend(get_extern_decls(expr, &mut existing_externs));
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
+    res
+}
+
+/// Returns a list of extern declarations needed for a given expression.
+fn get_extern_decls(
+    expr: &SchedExpr,
+    existing_externs: &mut HashSet<Binop>,
+) -> Vec<asm::Declaration> {
+    match expr {
+        SchedExpr::Binop { op, .. } => match op {
+            Binop::Lt if !existing_externs.contains(op) => {
+                existing_externs.insert(*op);
+                vec![
+                    asm::Declaration::FunctionClass(asm::FunctionClass {
+                        name: asm::FunctionClassId(binop_to_str(*op).to_string()),
+                        // TODO: generalize
+                        input_types: vec![
+                            asm::TypeId::FFI(asm::FFIType::I64),
+                            asm::TypeId::FFI(asm::FFIType::I64),
+                        ],
+                        output_types: vec![asm::TypeId::FFI(BOOL_FFI_TYPE)],
+                    }),
+                    asm::Declaration::ExternalFunction(asm::ExternalFunction {
+                        name: binop_to_str(*op).to_string(),
+                        kind: asm::ExternalFunctionKind::CPUPure,
+                        value_function_binding: asm::FunctionClassBinding {
+                            default: false,
+                            function_class: asm::FunctionClassId(binop_to_str(*op).to_string()),
+                        },
+                        // TODO: generalize
+                        input_args: vec![
+                            asm::ExternalArgument {
+                                name: None,
+                                ffi_type: asm::FFIType::I64,
+                            },
+                            asm::ExternalArgument {
+                                name: None,
+                                ffi_type: asm::FFIType::I64,
+                            },
+                        ],
+                        output_types: vec![asm::ExternalArgument {
+                            name: None,
+                            ffi_type: BOOL_FFI_TYPE,
+                        }],
+                    }),
+                ]
+            }
+            _ => todo!(),
+        },
+        _ => vec![],
+    }
+}
+
 /// Creates a global context from a list of top-level declarations.
 pub fn gen_context(tl: &[TopLevel]) -> Context {
     let mut ctx = Context {
         specs: HashMap::new(),
-        type_decls: gen_type_decls(tl),
+        type_decls: gen_type_decls(tl)
+            .into_iter()
+            .chain(gen_extern_decls(tl))
+            .collect(),
     };
     for decl in tl {
         match decl {

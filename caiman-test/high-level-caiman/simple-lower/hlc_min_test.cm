@@ -11,22 +11,25 @@ val min() -> i64 {
     returns ret
 }
 
-fn min() -> i64
+fn min_impl() -> i64
     impls min, time, space
 {
     let a: i64 @ node(min.a)-usable = 2;
     let b: i64 @ node(min.b)-usable = 1;
-    let c: i32 @ node(min.c)-usable = a < b;
-    var v: i64 @ [none(min)-dead, none(time)-save];
-    if @ node(main.ret)-? c {
-        v @ [node(min.a)-usable, none(time)-save] = a;
+    let c: bool @ node(min.c)-usable = a < b;
+    var v: i64 @ node(min.ret)-dead;
+    if @ node(min.ret)-? c {
+        let a: i64 @ node(min.a)-usable = 2;
+        v = a;
     } else {
-        v @ [node(min.b)-usable, none(time)-save] = b;
+        let b: i64 @ node(min.b)-usable = 1;
+        v = b;
     }
-    return v @ node(min.ret)-usable;
+    @in { v: node(min.ret)-usable };
+    return v;
 }
 
-pipeline main { min }
+pipeline main { min_impl }
 
 // ===================== CAIR ===================
 /*

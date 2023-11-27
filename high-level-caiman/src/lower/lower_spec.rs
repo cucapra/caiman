@@ -6,7 +6,7 @@ use crate::{
 };
 use caiman::{assembly::ast as asm, ir};
 
-use super::data_type_to_local_type;
+use super::{binop_to_str, data_type_to_local_type};
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm) -> asm::Node {
@@ -70,7 +70,7 @@ fn term_to_name(t: NestedExpr<SpecTerm>) -> String {
 /// # Panics
 /// Panics if the rhs expression is not flattened
 /// (i.e. contains a nested expression, or constants outside of direct assignments)
-fn lower_spec_assign(lhs: String, e: NestedExpr<SpecTerm>) -> asm::Hole<asm::Command> {
+fn lower_spec_assign(lhs: String, e: NestedExpr<SpecTerm>) -> Vec<asm::Hole<asm::Command>> {
     match e {
         NestedExpr::Conditional {
             if_true,
@@ -81,20 +81,46 @@ fn lower_spec_assign(lhs: String, e: NestedExpr<SpecTerm>) -> asm::Hole<asm::Com
             let guard_id = term_to_name(*guard);
             let true_id = term_to_name(*if_true);
             let false_id = term_to_name(*if_false);
-            Some(asm::Command::Node(asm::NamedNode {
+            vec![Some(asm::Command::Node(asm::NamedNode {
                 name: Some(asm::NodeId(lhs)),
                 node: asm::Node::Select {
                     condition: Some(asm::NodeId(guard_id)),
                     true_case: Some(asm::NodeId(true_id)),
                     false_case: Some(asm::NodeId(false_id)),
                 },
-            }))
+            }))]
         }
-        NestedExpr::Term(t) => Some(asm::Command::Node(asm::NamedNode {
+        NestedExpr::Term(t) => vec![Some(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(lhs)),
             node: lower_spec_term(t),
-        })),
-        NestedExpr::Binop { .. } | NestedExpr::Uop { .. } => todo!(),
+        }))],
+        NestedExpr::Binop {
+            op,
+            lhs: op_lhs,
+            rhs: op_rhs,
+            ..
+        } => {
+            let op_lhs = term_to_name(*op_lhs);
+            let op_rhs = term_to_name(*op_rhs);
+            let temp = format!("_{lhs}_t");
+            vec![
+                Some(asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(temp.clone())),
+                    node: asm::Node::CallFunctionClass {
+                        function_id: Some(asm::FunctionClassId(binop_to_str(op).to_string())),
+                        arguments: Some(vec![Some(asm::NodeId(op_lhs)), Some(asm::NodeId(op_rhs))]),
+                    },
+                })),
+                Some(asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(lhs)),
+                    node: asm::Node::ExtractResult {
+                        node_id: Some(asm::NodeId(temp)),
+                        index: Some(0),
+                    },
+                })),
+            ]
+        }
+        NestedExpr::Uop { .. } => todo!(),
     }
 }
 /// Lower a list of spec statements into a list of assembly commands.
@@ -104,7 +130,7 @@ fn lower_spec_stmts(stmts: Vec<SpecStmt>) -> Vec<Option<asm::Command>> {
         match stmt {
             SpecStmt::Assign { mut lhs, rhs, .. } => {
                 assert_eq!(lhs.len(), 1);
-                res.push(lower_spec_assign(lhs.swap_remove(0).0, rhs));
+                res.extend(lower_spec_assign(lhs.swap_remove(0).0, rhs));
             }
             SpecStmt::Returns(_, e) => {
                 let v = term_to_name(e);

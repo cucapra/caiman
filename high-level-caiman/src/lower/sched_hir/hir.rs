@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     enum_cast,
-    lower::data_type_to_local_type,
+    lower::{binop_to_str, data_type_to_local_type},
     parse::ast::{SchedExpr, SchedFuncCall, Tags},
 };
 use caiman::assembly::ast as asm;
@@ -46,11 +46,11 @@ pub enum Hir {
         rhs: Option<SchedTerm>,
     },
     Hole(Info),
-    /// Built-in operation
-    #[allow(dead_code)]
+    /// Built-in operation (performs a const decl)
     Op {
         info: Info,
         dest: Name,
+        dest_tag: Hole<FullType>,
         op: Name,
         args: Vec<SchedTerm>,
     },
@@ -119,15 +119,31 @@ impl Hir {
                 lhs,
                 expr: Some(expr),
                 is_const: true,
-            } => {
-                let rhs = enum_cast!(SchedExpr::Term, expr);
-                Self::ConstDecl {
+            } => match expr {
+                SchedExpr::Term(rhs) => Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
                     lhs_tag: lhs[0].1.clone(),
                     rhs,
+                },
+                SchedExpr::Binop {
+                    info,
+                    op,
+                    lhs: op_lhs,
+                    rhs: op_rhs,
+                } => {
+                    let lhs_term = enum_cast!(SchedExpr::Term, op_lhs.as_ref());
+                    let rhs_term = enum_cast!(SchedExpr::Term, op_rhs.as_ref());
+                    Self::Op {
+                        info,
+                        dest: lhs[0].0.clone(),
+                        dest_tag: lhs[0].1.clone(),
+                        op: binop_to_str(op).to_string(),
+                        args: vec![lhs_term.clone(), rhs_term.clone()],
+                    }
                 }
-            }
+                _ => todo!(),
+            },
             SchedStmt::Decl {
                 info,
                 lhs,

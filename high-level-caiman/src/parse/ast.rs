@@ -31,7 +31,7 @@ pub enum DataType {
 }
 
 /// Binary operators in the value and scheduling languages
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Copy)]
 pub enum Binop {
     Dot,
     Add,

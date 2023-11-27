@@ -226,7 +226,13 @@ impl Fact for TagAnalysis {
                 // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
                 // t.value.quot = quot;
             }
-            HirInstr::Stmt(Hir::Op { .. } | Hir::Hole(_)) => todo!(),
+            HirInstr::Stmt(Hir::Hole(_)) => todo!(),
+            HirInstr::Stmt(Hir::Op { dest, dest_tag, .. }) => {
+                self.tags.insert(
+                    dest.clone(),
+                    TagInfo::from(dest_tag.as_ref().unwrap(), &self.specs),
+                );
+            }
             HirInstr::Stmt(Hir::OutAnnotation(_, tags)) => {
                 for (v, tag) in tags {
                     self.tags.get_mut(v).unwrap().update(&self.specs, tag);
