@@ -39,7 +39,7 @@ fn lower_flat_decl(
         let dest_tag = dest_tag
             .as_ref()
             .expect("We require all variables to have type annotations");
-        assert_eq!(dest_tag.tags.len(), 1);
+        assert!(!dest_tag.tags.is_empty());
         let temp_node_name = temp_var_name(temp_id);
         let temp = asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(temp_node_name.clone())),
@@ -93,7 +93,7 @@ fn lower_var_decl(
         let rhs_tag = rhs_tag
             .as_ref()
             .expect("We require all variables to have type annotations");
-        assert_eq!(rhs_tag.len(), 1);
+        assert!(!rhs_tag.is_empty());
         result.push(Some(asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalDoBuiltin {

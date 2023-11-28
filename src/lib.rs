@@ -31,7 +31,10 @@ pub fn explicate_and_execute(
         println!("{:#?}", definition);
         return;
     }
-    ir::validation::validate_program(&definition.program);
+    match crate::type_system::check_program(&definition.program) {
+        Ok(_) => (),
+        Err(error) => panic!("Type checking failed:\n{}", error),
+    }
     let mut codegen = rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
     codegen.set_print_codgen_debug_info(true);
     let output_string = codegen.generate();

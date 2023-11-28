@@ -16,7 +16,7 @@ fn foo() -> i64 @ node(main.r)-usable
     impls main, time, space
 {
     let b: bool @ node(main.b)-usable = false;
-    var v: i64 @ node(main.r)-?;
+    var v: i64 @ none(main)-?;
     if @ node(main.r)-? b {
         let one: i64 @ node(main.one)-usable = 1;
         v = one;
@@ -24,7 +24,7 @@ fn foo() -> i64 @ node(main.r)-usable
         let two: i64 @ node(main.two)-usable = 2;
         v = two;
     }
-    @in { v: node(main.r)-save };
+    @in { v: [node(main.r)-usable, none(space)-save] };
     return v;
 }
 

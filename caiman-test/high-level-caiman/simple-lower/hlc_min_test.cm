@@ -17,7 +17,7 @@ fn min_impl() -> i64
     let a: i64 @ node(min.a)-usable = 2;
     let b: i64 @ node(min.b)-usable = 1;
     let c: bool @ node(min.c)-usable = a < b;
-    var v: i64 @ node(min.ret)-dead;
+    var v: i64 @ [none(min)-dead, none(space)-save];
     if @ node(min.ret)-? c {
         let a: i64 @ node(min.a)-usable = 2;
         v = a;
@@ -25,7 +25,7 @@ fn min_impl() -> i64
         let b: i64 @ node(min.b)-usable = 1;
         v = b;
     }
-    @in { v: node(min.ret)-usable };
+    @in { v: [node(min.ret)-usable, none(space)-save] };
     return v;
 }
 
