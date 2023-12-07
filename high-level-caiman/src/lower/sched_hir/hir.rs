@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use crate::{
     enum_cast,
     lower::{binop_to_str, data_type_to_local_type},
-    parse::ast::{SchedExpr, SchedFuncCall, Tags},
+    parse::ast::{DataType, SchedExpr, SchedFuncCall, Tags},
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -25,11 +25,17 @@ use crate::{
 pub enum Hir {
     // TODO: encodings
     /// A data movement into a mutable variable
-    Move {
+    RefStore {
         info: Info,
         lhs_tags: Option<Tags>,
         lhs: Name,
         rhs: SchedTerm,
+    },
+    /// Load from a reference into a new variable
+    RefLoad {
+        dest: Name,
+        typ: DataType,
+        src: Name,
     },
     /// Declaration of an immutable variable
     ConstDecl {
@@ -92,8 +98,8 @@ pub enum Terminator {
 /// Hir body and terminators are owned by the basic block they are in.
 #[allow(clippy::module_name_repetitions)]
 pub enum HirInstr<'a> {
-    Stmt(&'a Hir),
-    Tail(&'a Terminator),
+    Stmt(&'a mut Hir),
+    Tail(&'a mut Terminator),
 }
 
 impl Hir {
@@ -107,7 +113,7 @@ impl Hir {
                 rhs,
             } => {
                 let rhs = enum_cast!(SchedExpr::Term, rhs);
-                Self::Move {
+                Self::RefStore {
                     info,
                     lhs_tags: tag,
                     lhs,
@@ -183,11 +189,14 @@ impl Hir {
                     term_get_uses(rhs, res);
                 }
             }
-            Self::Move { lhs, rhs, .. } => {
+            Self::RefStore { lhs, rhs, .. } => {
                 term_get_uses(rhs, res);
                 // Viewing this as a store to a reference, then the destination
                 // is a use
                 res.insert(lhs.clone());
+            }
+            Self::RefLoad { src, .. } => {
+                res.insert(src.clone());
             }
             Self::Op { args, .. } => {
                 for arg in args {
@@ -203,11 +212,13 @@ impl Hir {
     /// reference.
     pub fn get_def(&self) -> Option<String> {
         match self {
-            Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } => Some(lhs.clone()),
+            Self::ConstDecl { lhs, .. }
+            | Self::VarDecl { lhs, .. }
+            | Self::RefLoad { dest: lhs, .. } => Some(lhs.clone()),
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
             Self::Hole(..)
-            | Self::Move { .. }
+            | Self::RefStore { .. }
             | Self::InAnnotation(..)
             | Self::OutAnnotation(..) => None,
             Self::Op { dest, .. } => Some(dest.clone()),
@@ -224,11 +235,35 @@ impl Hir {
             Self::VarDecl { lhs_tag, .. } => lhs_tag
                 .as_ref()
                 .map(|tag| make_ref(data_type_to_local_type(&tag.base.base))),
-            Self::Move { .. }
+            Self::RefLoad { typ, .. } => Some(data_type_to_local_type(typ)),
+            Self::RefStore { .. }
             | Self::Hole(..)
             | Self::InAnnotation(..)
             | Self::OutAnnotation(..)
             | Self::Op { .. } => None,
+        }
+    }
+
+    /// Renames all uses in this statement using the given function
+    pub fn rename_uses(&mut self, f: &mut dyn FnMut(&str) -> String) {
+        match self {
+            Self::ConstDecl { rhs, .. }
+            | Self::VarDecl { rhs: Some(rhs), .. }
+            | Self::RefStore { rhs, .. } => {
+                term_rename_uses(rhs, f);
+            }
+            Self::Op { args, .. } => {
+                for arg in args {
+                    term_rename_uses(arg, f);
+                }
+            }
+            Self::RefLoad { src, .. } => {
+                *src = f(src);
+            }
+            Self::Hole(..)
+            | Self::InAnnotation(..)
+            | Self::OutAnnotation(..)
+            | Self::VarDecl { rhs: None, .. } => (),
         }
     }
 }
@@ -240,7 +275,7 @@ pub fn stmts_to_hir(stmts: Vec<SchedStmt>) -> Vec<Hir> {
 }
 
 /// Get the uses in a `SchedTerm`
-fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
+pub fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
     match t {
         SchedTerm::Var { name, .. } => {
             res.insert(name.clone());
@@ -250,11 +285,32 @@ fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
     }
 }
 
-/// Makes the base type of this type info a reference to the existing type
+/// Renames all uses in a `SchedTerm` using the given function
+pub fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
+    match t {
+        SchedTerm::Var { name, .. } => *name = f(name),
+        SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
+        SchedTerm::Call(..) => todo!(),
+    }
+}
+
+/// Makes the base type of this type into a reference to the existing type
 /// Does not check against references to references
-fn make_ref(typ: asm::TypeId) -> asm::TypeId {
+pub(super) fn make_ref(typ: asm::TypeId) -> asm::TypeId {
     match typ {
         asm::TypeId::Local(type_name) => asm::TypeId::Local(format!("&{type_name}")),
+        asm::TypeId::FFI(_) => todo!(),
+    }
+}
+
+/// Makes the base type of this type into a dereference to the existing type
+/// Does not check against references to references
+pub(super) fn make_deref(typ: &asm::TypeId) -> asm::TypeId {
+    match typ {
+        asm::TypeId::Local(type_name) => {
+            assert_eq!(&type_name[0..1], "&");
+            asm::TypeId::Local(type_name[1..].to_string())
+        }
         asm::TypeId::FFI(_) => todo!(),
     }
 }

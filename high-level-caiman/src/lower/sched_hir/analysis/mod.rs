@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
+mod refs;
 mod tags;
 
 use super::{
@@ -7,6 +8,7 @@ use super::{
     hir::{HirInstr, Terminator},
 };
 
+pub use refs::deref_transform_pass;
 #[allow(clippy::module_name_repetitions)]
 pub use tags::{TagAnalysis, TagInfo};
 
@@ -18,7 +20,7 @@ pub trait Fact: PartialEq + Clone {
 
     /// Updates the basic block's fact after propagating the fact through the given
     /// statement or terminator.
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>);
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, block_id: usize);
 
     type Dir: Direction;
 }
@@ -74,17 +76,17 @@ pub trait Direction {
 /// * `in_fact` - The input fact for the block
 /// # Returns
 /// * Tuple of input facts for each instruction and the output fact for the block
-fn analyze_basic_block<T: Fact>(cfg: &Cfg, block_id: usize, in_fact: &T) -> T {
+fn analyze_basic_block<T: Fact>(cfg: &mut Cfg, block_id: usize, in_fact: &T) -> T {
     let mut fact = in_fact.clone();
-    let block = cfg.blocks.get(&block_id).unwrap();
+    let block = cfg.blocks.get_mut(&block_id).unwrap();
     T::Dir::local_iter(
         &mut block
             .stmts
-            .iter()
+            .iter_mut()
             .map(HirInstr::Stmt)
-            .chain(std::iter::once(HirInstr::Tail(&block.terminator))),
+            .chain(std::iter::once(HirInstr::Tail(&mut block.terminator))),
         &mut |instr| {
-            fact.transfer_instr(instr);
+            fact.transfer_instr(instr, block_id);
         },
     );
     fact
@@ -120,7 +122,7 @@ impl<T: Fact> InOutFacts<T> {
 
 /// Performs a dataflow analysis using the worklist algorithm
 #[must_use]
-pub fn analyze<T: Fact>(cfg: &Cfg, top: &T) -> InOutFacts<T> {
+pub fn analyze<T: Fact>(cfg: &mut Cfg, top: &T) -> InOutFacts<T> {
     let mut in_facts: HashMap<usize, T> = HashMap::new();
     let mut out_facts: HashMap<usize, T> = HashMap::new();
     let mut worklist: Vec<usize> = Vec::new();
@@ -312,7 +314,7 @@ impl Fact for LiveVars {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
         match stmt {
             HirInstr::Tail(Terminator::Return(Some(expr))) => {
                 self.live_set.insert(expr.clone());

@@ -13,7 +13,7 @@ use crate::{
 use caiman::assembly::ast as asm;
 
 use self::{
-    analysis::{analyze, InOutFacts, LiveVars, TagAnalysis},
+    analysis::{analyze, deref_transform_pass, InOutFacts, LiveVars, TagAnalysis},
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
 };
 
@@ -193,7 +193,7 @@ impl<'a> Funclet<'a> {
             self.output_vars()
                 .iter()
                 .map(|&var| asm::FuncletArgument {
-                    name: Some(asm::NodeId(format!("_out_{var}"))),
+                    name: None,
                     typ: self
                         .parent
                         .types
@@ -300,6 +300,7 @@ impl<'a> Funclet<'a> {
 
     /// Gets the local type of the specified variable.
     #[inline]
+    #[allow(dead_code)]
     pub fn get_local_type(&self, var: &str) -> Option<asm::TypeId> {
         self.parent.types.get(var).cloned()
     }
@@ -337,10 +338,11 @@ impl Funclets {
     }
     pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
         let mut cfg = Cfg::new(f.statements);
-        let live_vars = analyze(&cfg, &LiveVars::top());
-        let type_info = analyze(&cfg, &TagAnalysis::top(&specs, &f.output));
+        let mut types = Self::collect_types(&cfg, &f.input, &f.output);
+        deref_transform_pass(&mut cfg, &mut types);
+        let live_vars = analyze(&mut cfg, &LiveVars::top());
+        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.output));
         Self::add_terminators(&mut cfg, &live_vars);
-        let types = Self::collect_types(&cfg, &f.input, &f.output);
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,

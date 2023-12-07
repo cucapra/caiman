@@ -44,6 +44,14 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
+            name: String::from("&bool"),
+            data: asm::LocalTypeInfo::Ref {
+                storage_type: asm::TypeId::FFI(BOOL_FFI_TYPE),
+                storage_place: ir::Place::Local,
+                buffer_flags: ir::BufferFlags::new(),
+            },
+        })),
+        asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
             name: String::from("i64"),
             data: asm::LocalTypeInfo::NativeValue {
                 storage_type: asm::TypeId::FFI(asm::FFIType::I64),

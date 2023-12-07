@@ -188,7 +188,7 @@ impl Fact for TagAnalysis {
         self
     }
 
-    fn transfer_instr(&mut self, stmt: HirInstr<'_>) {
+    fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
         match stmt {
             HirInstr::Tail(..) => (),
             HirInstr::Stmt(Hir::ConstDecl { lhs, lhs_tag, .. }) => {
@@ -211,7 +211,7 @@ impl Fact for TagAnalysis {
                 }
                 self.tags.insert(lhs.clone(), info);
             }
-            HirInstr::Stmt(Hir::Move {
+            HirInstr::Stmt(Hir::RefStore {
                 lhs, lhs_tags, rhs, ..
             }) => {
                 // let quot = self.value_quotient(rhs);
@@ -227,6 +227,12 @@ impl Fact for TagAnalysis {
                 }
                 // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
                 // t.value.quot = quot;
+            }
+            HirInstr::Stmt(Hir::RefLoad { dest, src, .. }) => {
+                let tag = self.tags.get(src).cloned().unwrap_or_else(|| {
+                    TagInfo::from_tags(self.input_overrides.get(src).unwrap(), &self.specs)
+                });
+                self.tags.insert(dest.clone(), tag);
             }
             HirInstr::Stmt(Hir::Hole(_)) => todo!(),
             HirInstr::Stmt(Hir::Op { dest, dest_tag, .. }) => {

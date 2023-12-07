@@ -3,9 +3,9 @@ use caiman::assembly::ast::{self as asm, FuncletArgument, Hole};
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
-    lower::{data_type_to_ffi_type, sched_hir::is_ref},
+    lower::data_type_to_ffi_type,
     parse::ast::{
-        Arg, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
+        Arg, DataType, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
     },
 };
 use caiman::ir;
@@ -178,6 +178,19 @@ fn lower_op(
     )
 }
 
+fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (CommandVec, usize) {
+    (
+        vec![Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(dest.to_string())),
+            node: asm::Node::ReadRef {
+                source: Some(asm::NodeId(src.to_string())),
+                storage_type: Some(data_type_to_ffi_type(typ)),
+            },
+        }))],
+        temp_id,
+    )
+}
+
 /// Lowers a scheduling statement into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the statement
@@ -190,7 +203,8 @@ fn lower_instr(s: &Hir, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
         Hir::VarDecl {
             lhs, lhs_tag, rhs, ..
         } => lower_var_decl(lhs, lhs_tag, rhs, temp_id),
-        Hir::Move { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
+        Hir::RefStore { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
+        Hir::RefLoad { dest, src, typ } => lower_load(dest, typ, src, temp_id),
         // annotations don't lower to anything
         Hir::InAnnotation(..) | Hir::OutAnnotation(..) => (vec![], temp_id),
         Hir::Op {
@@ -284,26 +298,9 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
     // in the block
     match t {
         Terminator::Return(Some(name)) => {
-            let mut cmds = vec![];
-            let mut use_name = name.clone();
-            // TODO: this is a hack for now
-            if let Some(typ) = f.get_local_type(name) {
-                if is_ref(&typ) {
-                    use_name = temp_var_name(temp_id);
-                    cmds.push(Some(asm::Command::Node(asm::NamedNode {
-                        name: Some(asm::NodeId(use_name.clone())),
-                        node: asm::Node::ReadRef {
-                            source: Some(asm::NodeId(name.to_string())),
-                            // TODO
-                            storage_type: Some(asm::TypeId::FFI(asm::FFIType::I64)),
-                        },
-                    })));
-                }
-            }
-            cmds.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
-                return_values: Some(vec![Some(asm::NodeId(use_name))]),
-            })));
-            cmds
+            vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
+                return_values: Some(vec![Some(asm::NodeId(name.clone()))]),
+            }))]
         }
         Terminator::Next(vars) => {
             vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
