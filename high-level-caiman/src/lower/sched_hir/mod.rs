@@ -128,7 +128,7 @@ impl<'a> Funclet<'a> {
     fn output_vars(&self) -> Vec<&String> {
         self.parent
             .live_vars
-            .get_out_fact(self.id())
+            .get_out_fact(self.block.cont_block.unwrap_or_else(|| self.id()))
             .live_set()
             .iter()
             .collect()
@@ -203,7 +203,7 @@ impl<'a> Funclet<'a> {
                     tags: self
                         .parent
                         .type_info
-                        .get_out_fact(self.id())
+                        .get_out_fact(self.block.cont_block.unwrap_or_else(|| self.id()))
                         .get_tag(var)
                         // no need for input overrides since this is the output
                         .unwrap_or_else(|| panic!("A tag must be specified for {var}"))

@@ -25,6 +25,9 @@ pub struct BasicBlock {
     // TODO: re-evaluate how we want to store join information, and which block
     // is the join block
     pub join_block: Option<usize>,
+    /// The next block at the same level as this block. This is the continuation.
+    /// If a block has no continuation (at the deepest level), then this is `None`.
+    pub cont_block: Option<usize>,
 }
 
 /// An edge in the CFG
@@ -53,6 +56,7 @@ fn make_block(
     cur_stmt: &mut Vec<SchedStmt>,
     term: Terminator,
     join_edge: &Edge,
+    cont_block: Option<usize>,
 ) -> BasicBlock {
     let join_block = match join_edge {
         Edge::Next(id) => Some(*id),
@@ -64,6 +68,7 @@ fn make_block(
         stmts: stmts_to_hir(std::mem::take(cur_stmt)),
         terminator: term,
         join_block,
+        cont_block,
     };
     *cur_id += 1;
     res
@@ -140,6 +145,7 @@ fn make_blocks(
                         &mut cur_stmts,
                         Terminator::Return(Some(expr_to_node_id(sched_expr))),
                         &join_edge,
+                        None,
                     ),
                 );
                 edges.insert(old_id, Edge::Next(FINAL_BLOCK_ID));
@@ -159,6 +165,7 @@ fn make_blocks(
                         &mut cur_stmts,
                         Terminator::Select(expr_to_node_id(guard), tag),
                         &join_edge,
+                        Some(*cur_id + 1),
                     ),
                 );
                 children.push(PendingChild {
@@ -173,6 +180,7 @@ fn make_blocks(
                 });
             }
             // TODO (function and procedure calls)
+            SchedStmt::Call(..) => todo!(),
             other => cur_stmts.push(other),
         }
     }
@@ -192,7 +200,7 @@ fn make_blocks(
         let old_id = *cur_id;
         blocks.insert(
             *cur_id,
-            make_block(cur_id, &mut cur_stmts, Terminator::None, &join_edge),
+            make_block(cur_id, &mut cur_stmts, Terminator::None, &join_edge, None),
         );
         edges.insert(old_id, join_edge);
     }
@@ -247,6 +255,7 @@ impl Cfg {
                 stmts: vec![],
                 terminator: Terminator::FinalReturn,
                 join_block: None,
+                cont_block: None,
             },
         );
         let mut edges = HashMap::new();
