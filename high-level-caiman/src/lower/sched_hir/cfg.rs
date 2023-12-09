@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
     enum_cast,
+    error::Info,
     parse::ast::{SchedExpr, SchedStmt, SchedTerm},
 };
 
@@ -25,9 +26,11 @@ pub struct BasicBlock {
     // TODO: re-evaluate how we want to store join information, and which block
     // is the join block
     pub join_block: Option<usize>,
-    /// The next block at the same level as this block. This is the continuation.
-    /// If a block has no continuation (at the deepest level), then this is `None`.
-    pub cont_block: Option<usize>,
+    /// The block whose live-out set is the return arguments of this block.
+    /// This is either the block itself, or the block's continuation.
+    pub ret_block: Option<usize>,
+    /// Starting line and index for the block
+    pub src_loc: Info,
 }
 
 /// An edge in the CFG
@@ -57,6 +60,7 @@ fn make_block(
     term: Terminator,
     join_edge: &Edge,
     cont_block: Option<usize>,
+    src_loc: Info,
 ) -> BasicBlock {
     let join_block = match join_edge {
         Edge::Next(id) => Some(*id),
@@ -68,7 +72,8 @@ fn make_block(
         stmts: stmts_to_hir(std::mem::take(cur_stmt)),
         terminator: term,
         join_block,
-        cont_block,
+        ret_block: cont_block,
+        src_loc,
     };
     *cur_id += 1;
     res
@@ -134,10 +139,16 @@ fn make_blocks(
     let ends_with_tail = stmts.last().map_or(false, |x| {
         matches!(x, SchedStmt::Return(..) | SchedStmt::Call(..))
     });
+    let mut last_info = Info::default();
     for stmt in stmts {
         match stmt {
-            SchedStmt::Return(_, sched_expr) => {
+            SchedStmt::Return(end, sched_expr) => {
                 let old_id = *cur_id;
+                last_info = end;
+                let info = Info::new_range(
+                    cur_stmts.first().map_or(&end, |x: &SchedStmt| x.get_info()),
+                    &end,
+                );
                 blocks.insert(
                     *cur_id,
                     make_block(
@@ -146,6 +157,7 @@ fn make_blocks(
                         Terminator::Return(Some(expr_to_node_id(sched_expr))),
                         &join_edge,
                         None,
+                        info,
                     ),
                 );
                 edges.insert(old_id, Edge::Next(FINAL_BLOCK_ID));
@@ -155,9 +167,17 @@ fn make_blocks(
                 tag,
                 true_block,
                 false_block,
-                ..
+                info: end_info,
             } => {
                 let parent_id = *cur_id;
+                last_info = *false_block.last().map_or_else(
+                    || true_block.last().map_or(&end_info, |s| s.get_info()),
+                    |s| s.get_info(),
+                );
+                let info = Info::new_range(
+                    cur_stmts.first().map_or(&end_info, |x| x.get_info()),
+                    &end_info,
+                );
                 blocks.insert(
                     *cur_id,
                     make_block(
@@ -166,6 +186,7 @@ fn make_blocks(
                         Terminator::Select(expr_to_node_id(guard), tag),
                         &join_edge,
                         Some(*cur_id + 1),
+                        info,
                     ),
                 );
                 children.push(PendingChild {
@@ -198,9 +219,17 @@ fn make_blocks(
         */
         // the continuation can't also be one of the target funclets in the select
         let old_id = *cur_id;
+        let info = cur_stmts.last().map_or(last_info, |x| *x.get_info());
         blocks.insert(
             *cur_id,
-            make_block(cur_id, &mut cur_stmts, Terminator::None, &join_edge, None),
+            make_block(
+                cur_id,
+                &mut cur_stmts,
+                Terminator::None,
+                &join_edge,
+                None,
+                info,
+            ),
         );
         edges.insert(old_id, join_edge);
     }
@@ -255,7 +284,8 @@ impl Cfg {
                 stmts: vec![],
                 terminator: Terminator::FinalReturn,
                 join_block: None,
-                cont_block: None,
+                ret_block: None,
+                src_loc: Info::default(),
             },
         );
         let mut edges = HashMap::new();

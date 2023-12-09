@@ -128,7 +128,7 @@ impl<'a> Funclet<'a> {
     fn output_vars(&self) -> Vec<&String> {
         self.parent
             .live_vars
-            .get_out_fact(self.block.cont_block.unwrap_or_else(|| self.id()))
+            .get_out_fact(self.block.ret_block.unwrap_or_else(|| self.id()))
             .live_set()
             .iter()
             .collect()
@@ -153,11 +153,16 @@ impl<'a> Funclet<'a> {
                         .parent
                         .types
                         .get(var)
-                        .unwrap_or_else(|| panic!("Missing type for {var}"))
+                        .unwrap_or_else(|| panic!("{}: Missing type for {var}", self.block.src_loc))
                         .clone(),
                     tags: self
                         .get_input_tag(var)
-                        .unwrap_or_else(|| panic!("A tag must be specified for {var}"))
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "{}: An input tag must be specified for {var}",
+                                self.block.src_loc
+                            )
+                        })
                         .tags_vec_default(),
                 })
                 .collect()
@@ -198,15 +203,22 @@ impl<'a> Funclet<'a> {
                         .parent
                         .types
                         .get(var)
-                        .unwrap_or_else(|| panic!("Missing base type for {var}"))
+                        .unwrap_or_else(|| {
+                            panic!("{}: Missing base type for {var}", self.block.src_loc)
+                        })
                         .clone(),
                     tags: self
                         .parent
                         .type_info
-                        .get_out_fact(self.block.cont_block.unwrap_or_else(|| self.id()))
+                        .get_out_fact(self.block.ret_block.unwrap_or_else(|| self.id()))
                         .get_tag(var)
                         // no need for input overrides since this is the output
-                        .unwrap_or_else(|| panic!("A tag must be specified for {var}"))
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "{}: An output tag must be specified for {var}",
+                                self.block.src_loc
+                            )
+                        })
                         .tags_vec_default(),
                 })
                 .collect()

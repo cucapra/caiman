@@ -327,6 +327,24 @@ pub enum SchedStmt {
     Call(Info, SchedFuncCall),
 }
 
+impl SchedStmt {
+    /// Gets the src line and column info of this statement
+    #[must_use]
+    pub const fn get_info(&self) -> &Info {
+        match self {
+            Self::Decl { info, .. }
+            | Self::Assign { info, .. }
+            | Self::If { info, .. }
+            | Self::InEdgeAnnotation { info, .. }
+            | Self::OutEdgeAnnotation { info, .. }
+            | Self::Block(info, _)
+            | Self::Return(info, _)
+            | Self::Hole(info)
+            | Self::Call(info, _) => info,
+        }
+    }
+}
+
 /// A scheduling function
 #[derive(Clone, Debug)]
 pub struct SchedulingFunc {

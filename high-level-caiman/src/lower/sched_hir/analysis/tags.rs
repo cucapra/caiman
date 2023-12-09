@@ -189,6 +189,7 @@ impl Fact for TagAnalysis {
     }
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
+        use std::collections::hash_map::Entry;
         match stmt {
             HirInstr::Tail(..) => (),
             HirInstr::Stmt(Hir::ConstDecl { lhs, lhs_tag, .. }) => {
@@ -243,7 +244,14 @@ impl Fact for TagAnalysis {
             }
             HirInstr::Stmt(Hir::OutAnnotation(_, tags)) => {
                 for (v, tag) in tags {
-                    self.tags.get_mut(v).unwrap().update(&self.specs, tag);
+                    match self.tags.entry(v.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().update(&self.specs, tag);
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(TagInfo::from_tags(tag, &self.specs));
+                        }
+                    }
                 }
             }
             HirInstr::Stmt(Hir::InAnnotation(_, tags)) => {

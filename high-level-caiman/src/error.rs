@@ -9,6 +9,18 @@ pub struct Info {
     pub end_ln_and_col: (usize, usize),
 }
 
+impl Info {
+    /// Constructs a new `Info` struct that represents a range of characters
+    /// from `start` to `end`
+    #[must_use]
+    pub const fn new_range(start: &Self, end: &Self) -> Self {
+        Self {
+            start_ln_and_col: start.start_ln_and_col,
+            end_ln_and_col: end.end_ln_and_col,
+        }
+    }
+}
+
 impl std::fmt::Display for Info {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (l1, c1) = self.start_ln_and_col;
