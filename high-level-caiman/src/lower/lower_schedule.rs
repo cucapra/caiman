@@ -12,7 +12,7 @@ use caiman::ir;
 
 use super::{
     global_context::{Context, SpecType},
-    sched_hir::{Funclet, Funclets, Hir, Specs, Terminator, RET_VAR},
+    sched_hir::{Funclet, Funclets, HirBody, Specs, Terminator, RET_VAR},
 };
 
 /// A vector of commands with holes.
@@ -195,26 +195,26 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
 /// # Returns
 /// A tuple containing the commands that implement the statement
 /// and the next available temporary id
-fn lower_instr(s: &Hir, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
+fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
     match s {
-        Hir::ConstDecl {
+        HirBody::ConstDecl {
             lhs, rhs, lhs_tag, ..
         } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id),
-        Hir::VarDecl {
+        HirBody::VarDecl {
             lhs, lhs_tag, rhs, ..
         } => lower_var_decl(lhs, lhs_tag, rhs, temp_id),
-        Hir::RefStore { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
-        Hir::RefLoad { dest, src, typ } => lower_load(dest, typ, src, temp_id),
+        HirBody::RefStore { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
+        HirBody::RefLoad { dest, src, typ } => lower_load(dest, typ, src, temp_id),
         // annotations don't lower to anything
-        Hir::InAnnotation(..) | Hir::OutAnnotation(..) => (vec![], temp_id),
-        Hir::Op {
+        HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) => (vec![], temp_id),
+        HirBody::Op {
             dest,
             dest_tag,
             op,
             args,
             ..
         } => lower_op(dest, dest_tag, op, args, temp_id, f),
-        x @ Hir::Hole(_) => todo!("{x:?}"),
+        x @ HirBody::Hole(_) => todo!("{x:?}"),
     }
 }
 

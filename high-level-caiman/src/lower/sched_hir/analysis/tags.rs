@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::lower::global_context::SpecType;
 use crate::lower::lower_schedule::tag_to_tag;
-use crate::lower::sched_hir::{Hir, HirInstr, Specs};
+use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator};
 use crate::parse::ast::{FullType, SchedTerm, Tag, Tags};
 
 use super::{Fact, Forwards, RET_VAR};
@@ -191,14 +191,22 @@ impl Fact for TagAnalysis {
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
         use std::collections::hash_map::Entry;
         match stmt {
+            HirInstr::Tail(Terminator::Call(dests, _)) => {
+                for (dest, dest_tags) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        TagInfo::from_tags(&dest_tags.as_ref().unwrap().tags, &self.specs),
+                    );
+                }
+            }
             HirInstr::Tail(..) => (),
-            HirInstr::Stmt(Hir::ConstDecl { lhs, lhs_tag, .. }) => {
+            HirInstr::Stmt(HirBody::ConstDecl { lhs, lhs_tag, .. }) => {
                 self.tags.insert(
                     lhs.clone(),
                     TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs),
                 );
             }
-            HirInstr::Stmt(Hir::VarDecl {
+            HirInstr::Stmt(HirBody::VarDecl {
                 lhs, lhs_tag, rhs, ..
             }) => {
                 let mut info = TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs);
@@ -212,7 +220,7 @@ impl Fact for TagAnalysis {
                 }
                 self.tags.insert(lhs.clone(), info);
             }
-            HirInstr::Stmt(Hir::RefStore {
+            HirInstr::Stmt(HirBody::RefStore {
                 lhs, lhs_tags, rhs, ..
             }) => {
                 // let quot = self.value_quotient(rhs);
@@ -229,20 +237,20 @@ impl Fact for TagAnalysis {
                 // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
                 // t.value.quot = quot;
             }
-            HirInstr::Stmt(Hir::RefLoad { dest, src, .. }) => {
+            HirInstr::Stmt(HirBody::RefLoad { dest, src, .. }) => {
                 let tag = self.tags.get(src).cloned().unwrap_or_else(|| {
                     TagInfo::from_tags(self.input_overrides.get(src).unwrap(), &self.specs)
                 });
                 self.tags.insert(dest.clone(), tag);
             }
-            HirInstr::Stmt(Hir::Hole(_)) => todo!(),
-            HirInstr::Stmt(Hir::Op { dest, dest_tag, .. }) => {
+            HirInstr::Stmt(HirBody::Hole(_)) => todo!(),
+            HirInstr::Stmt(HirBody::Op { dest, dest_tag, .. }) => {
                 self.tags.insert(
                     dest.clone(),
                     TagInfo::from(dest_tag.as_ref().unwrap(), &self.specs),
                 );
             }
-            HirInstr::Stmt(Hir::OutAnnotation(_, tags)) => {
+            HirInstr::Stmt(HirBody::OutAnnotation(_, tags)) => {
                 for (v, tag) in tags {
                     match self.tags.entry(v.clone()) {
                         Entry::Occupied(mut entry) => {
@@ -254,7 +262,7 @@ impl Fact for TagAnalysis {
                     }
                 }
             }
-            HirInstr::Stmt(Hir::InAnnotation(_, tags)) => {
+            HirInstr::Stmt(HirBody::InAnnotation(_, tags)) => {
                 for (v, tag) in tags {
                     self.input_overrides.insert(v.clone(), tag.clone());
                 }

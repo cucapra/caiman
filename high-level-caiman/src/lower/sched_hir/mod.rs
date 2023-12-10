@@ -239,7 +239,7 @@ impl<'a> Funclet<'a> {
     }
 
     #[inline]
-    pub fn stmts(&self) -> &[hir::Hir] {
+    pub fn stmts(&self) -> &[hir::HirBody] {
         &self.block.stmts
     }
 
@@ -393,12 +393,23 @@ impl Funclets {
             types.insert(var.to_string(), data_type_to_local_type(&typ.base.base));
         }
         for bb in cfg.blocks.values() {
-            for stmt in &bb.stmts {
-                if let (Some(def), Some(typ)) = (stmt.get_def(), stmt.get_def_local_type()) {
-                    match types.entry(def) {
-                        Entry::Occupied(t) => assert_eq!(t.get(), &typ),
-                        Entry::Vacant(v) => {
-                            v.insert(typ);
+            for stmt in bb
+                .stmts
+                .iter()
+                .map(|x| x as &dyn Hir)
+                .chain(std::iter::once(&bb.terminator as &dyn Hir))
+            {
+                if let Some(dests) = stmt.get_defs() {
+                    for (var, typ) in dests {
+                        if let Some(local_type) = typ {
+                            match types.entry(var.clone()) {
+                                Entry::Occupied(t) => assert_eq!(t.get(), &local_type),
+                                Entry::Vacant(v) => {
+                                    v.insert(local_type);
+                                }
+                            }
+                        } else {
+                            assert!(types.contains_key(&var), "Missing type for {var}");
                         }
                     }
                 }

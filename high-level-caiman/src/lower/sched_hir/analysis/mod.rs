@@ -5,7 +5,7 @@ mod tags;
 
 use super::{
     cfg::{Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
-    hir::{HirInstr, Terminator},
+    hir::HirInstr,
 };
 
 pub use refs::deref_transform_pass;
@@ -315,27 +315,12 @@ impl Fact for LiveVars {
     }
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
-        match stmt {
-            HirInstr::Tail(Terminator::Return(Some(expr))) => {
-                self.live_set.insert(expr.clone());
-                self.live_set.remove(RET_VAR);
-            }
-            HirInstr::Tail(Terminator::Return(None)) => {
-                self.live_set.remove(RET_VAR);
-            }
-            HirInstr::Tail(Terminator::Select(guard, _)) => {
-                self.live_set.insert(guard.clone());
-            }
-            HirInstr::Tail(Terminator::FinalReturn) => {
-                self.live_set.insert(String::from(RET_VAR));
-            }
-            HirInstr::Tail(Terminator::None | Terminator::Next(_)) => (),
-            HirInstr::Tail(Terminator::Call(..)) => todo!(),
-            HirInstr::Stmt(hir) => {
-                hir.get_def().map(|var| self.live_set.remove(&var));
-                hir.get_uses(&mut self.live_set);
+        if let Some(defs) = stmt.get_defs() {
+            for (var, _) in defs {
+                self.live_set.remove(&var);
             }
         }
+        stmt.get_uses(&mut self.live_set);
     }
 
     type Dir = Backwards;

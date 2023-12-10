@@ -1,9 +1,10 @@
+#![allow(clippy::module_name_repetitions)]
 use std::collections::BTreeSet;
 
 use crate::{
     enum_cast,
     lower::{binop_to_str, data_type_to_local_type},
-    parse::ast::{DataType, SchedExpr, SchedFuncCall, Tags},
+    parse::ast::{ArgsOrEnc, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags},
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -12,6 +13,8 @@ use crate::{
     error::Info,
     parse::ast::{FullType, Name, SchedStmt, SchedTerm},
 };
+
+use super::RET_VAR;
 
 /// High-level caiman IR, excluding tail edges.
 ///
@@ -22,7 +25,7 @@ use crate::{
 /// assertions and deep pattern matches so I switched to a different representations
 /// which enforces the flattening and splitting assumptions.
 #[derive(Debug)]
-pub enum Hir {
+pub enum HirBody {
     // TODO: encodings
     /// A data movement into a mutable variable
     RefStore {
@@ -64,14 +67,49 @@ pub enum Hir {
     OutAnnotation(Info, Vec<(String, Tags)>),
 }
 
+/// An internal function call in the high-level IR.
+#[derive(Clone, Debug)]
+#[allow(clippy::module_name_repetitions)]
+pub struct HirFuncCall {
+    pub target: String,
+    pub args: Vec<String>,
+    pub tag: Option<Tags>,
+}
+
+impl TryFrom<SchedFuncCall> for HirFuncCall {
+    type Error = ();
+    fn try_from(value: SchedFuncCall) -> Result<Self, Self::Error> {
+        if let NestedExpr::Term(SchedTerm::Var { name, .. }) = *value.target {
+            if let ArgsOrEnc::Args(args) = *value.args {
+                let args = args
+                    .into_iter()
+                    .map(|a| {
+                        enum_cast!(
+                            SchedTerm::Var { name, .. },
+                            name,
+                            enum_cast!(SchedExpr::Term, a)
+                        )
+                    })
+                    .collect();
+                return Ok(Self {
+                    target: name,
+                    args,
+                    tag: value.tag,
+                });
+            }
+        }
+        panic!("Invalid internal function call")
+    }
+}
+
 /// A terminator of a basic block.
 /// We use a seperate `Terminator` rather than a `SchedStmt` or `Hir` to allow moving data
 /// from the `SchedStmt` and to ensure type safety.
 #[derive(Clone, Debug)]
 pub enum Terminator {
-    /// A call to a function with a list of arguments.
-    #[allow(dead_code)]
-    Call(SchedFuncCall),
+    /// A call to an internal function with a list of destinations to store the
+    /// return values in.
+    Call(Vec<(String, Option<FullType>)>, HirFuncCall),
     /// A select statement with a guard node. If the guard is true
     /// we transition to the `true_branch` of the outgoing edge of this block
     /// in the CFG. Otherwise, we transition to the `false_branch`.
@@ -92,17 +130,127 @@ pub enum Terminator {
     Next(Vec<String>),
 }
 
+/// How a variable is used in a statement.
+#[derive(Copy, Debug, Clone, PartialEq, Eq)]
+pub enum UseType {
+    Write,
+    Read,
+}
+
+pub type Args = Vec<(String, Option<asm::TypeId>)>;
+
+/// A generalized HIR instruction which is either a body statement or a terminator.
+pub trait Hir {
+    /// Get the variables used by this statement.
+    /// Mutates the given set by appending the variables used to it.
+    fn get_uses(&self, res: &mut BTreeSet<String>);
+
+    /// Get the name and type of the variables defined by this statement, if any.
+    /// A def is a **NEW** variable, not a write to an existing variable.
+    fn get_defs(&self) -> Option<Args>;
+
+    /// Renames all uses in this statement using the given function which is
+    /// passed the name of the variable and the type of use.
+    fn rename_uses(&mut self, f: &mut dyn FnMut(&str, UseType) -> String);
+
+    /// Get the variables used by this statement.
+    fn get_use_set(&self) -> BTreeSet<String> {
+        let mut res = BTreeSet::new();
+        self.get_uses(&mut res);
+        res
+    }
+}
+
+impl Hir for Terminator {
+    fn get_defs(&self) -> Option<Args> {
+        match self {
+            Self::Call(defs, ..) => Some(
+                defs.iter()
+                    .map(|(d, t)| {
+                        (
+                            d.clone(),
+                            t.as_ref().map(|dt| data_type_to_local_type(&dt.base.base)),
+                        )
+                    })
+                    .collect(),
+            ),
+            Self::Return(..) => Some(vec![(RET_VAR.to_string(), None)]),
+            Self::Select(..) | Self::FinalReturn | Self::None | Self::Next(..) => None,
+        }
+    }
+
+    fn get_uses(&self, uses: &mut BTreeSet<String>) {
+        match self {
+            Self::Call(_, call) => {
+                uses.insert(call.target.clone());
+                for arg in &call.args {
+                    uses.insert(arg.clone());
+                }
+            }
+            Self::Select(guard, ..) => {
+                uses.insert(guard.clone());
+            }
+            Self::Return(Some(node)) => {
+                uses.insert(node.clone());
+            }
+            Self::FinalReturn => {
+                uses.insert(RET_VAR.to_string());
+            }
+            Self::Return(None) | Self::None | Self::Next(..) => (),
+        }
+    }
+
+    fn rename_uses(&mut self, f: &mut dyn FnMut(&str, UseType) -> String) {
+        match self {
+            Self::Call(_, call) => {
+                for arg in &mut call.args {
+                    *arg = f(arg, UseType::Read);
+                }
+            }
+            Self::Select(guard, ..) => {
+                *guard = f(guard, UseType::Read);
+            }
+            Self::Return(Some(node)) => {
+                *node = f(node, UseType::Read);
+            }
+            Self::FinalReturn | Self::Return(None) | Self::None | Self::Next(..) => (),
+        }
+    }
+}
+
 /// A reference to an instruction in the high-level IR.
 /// Either a tail edge (terminator) or a statement.
 ///
 /// Hir body and terminators are owned by the basic block they are in.
-#[allow(clippy::module_name_repetitions)]
+///
+/// This enum provides the ability to access instruction specific
+/// methods not present in the HIR trait or perform instruction
+/// matching.
 pub enum HirInstr<'a> {
-    Stmt(&'a mut Hir),
+    Stmt(&'a mut HirBody),
     Tail(&'a mut Terminator),
 }
 
-impl Hir {
+impl std::ops::Deref for HirInstr<'_> {
+    type Target = dyn Hir;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Stmt(s) => *s,
+            Self::Tail(t) => *t,
+        }
+    }
+}
+
+impl std::ops::DerefMut for HirInstr<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Stmt(s) => *s,
+            Self::Tail(t) => *t,
+        }
+    }
+}
+
+impl HirBody {
     pub fn new(stmt: SchedStmt) -> Self {
         // TODO: operations
         match stmt {
@@ -176,10 +324,9 @@ impl Hir {
             SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(info, tags),
         }
     }
-
-    /// Get the variables used by this statement.
-    /// Mutates the given vector by appending the variables used to it.
-    pub fn get_uses(&self, res: &mut BTreeSet<String>) {
+}
+impl Hir for HirBody {
+    fn get_uses(&self, res: &mut BTreeSet<String>) {
         match self {
             Self::ConstDecl { rhs, .. } => {
                 term_get_uses(rhs, res);
@@ -207,58 +354,57 @@ impl Hir {
         }
     }
 
-    /// Get the name of the variable defined by this statement, if any.
-    /// A `Move` is not considered to have a `def` because it is updating a
-    /// reference.
-    pub fn get_def(&self) -> Option<String> {
+    fn get_defs(&self) -> Option<Args> {
         match self {
-            Self::ConstDecl { lhs, .. }
-            | Self::VarDecl { lhs, .. }
-            | Self::RefLoad { dest: lhs, .. } => Some(lhs.clone()),
+            Self::ConstDecl { lhs, lhs_tag, .. } => {
+                Some(vec![(
+                    lhs.clone(),
+                    lhs_tag
+                        .as_ref()
+                        .map(|tag| data_type_to_local_type(&tag.base.base)),
+                )])
+            }
+            Self::VarDecl { lhs, lhs_tag, ..} => {
+                Some(vec![(
+                    lhs.clone(),
+                    lhs_tag
+                        .as_ref()
+                        .map(|tag| make_ref(data_type_to_local_type(&tag.base.base))),
+                )])
+            }
+            Self::RefLoad { dest: lhs, typ, .. } => {
+                Some(vec![(lhs.clone(), Some(data_type_to_local_type(typ)))])
+            }
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
             Self::Hole(..)
+            // RefStore doesn't have a def bc it's a store to a reference
             | Self::RefStore { .. }
             | Self::InAnnotation(..)
             | Self::OutAnnotation(..) => None,
-            Self::Op { dest, .. } => Some(dest.clone()),
+            Self::Op { dest, dest_tag, .. } => Some(vec![(
+                dest.clone(),
+                dest_tag.as_ref().map(|tag| data_type_to_local_type(&tag.base.base)),
+            )]),
         }
     }
 
-    /// Gets the local type of the variable defined by this statement, if any.
-    pub fn get_def_local_type(&self) -> Option<asm::TypeId> {
-        // TODO: flags
+    fn rename_uses(&mut self, f: &mut dyn FnMut(&str, UseType) -> String) {
         match self {
-            Self::ConstDecl { lhs_tag, .. } => lhs_tag
-                .as_ref()
-                .map(|tag| data_type_to_local_type(&tag.base.base)),
-            Self::VarDecl { lhs_tag, .. } => lhs_tag
-                .as_ref()
-                .map(|tag| make_ref(data_type_to_local_type(&tag.base.base))),
-            Self::RefLoad { typ, .. } => Some(data_type_to_local_type(typ)),
-            Self::RefStore { .. }
-            | Self::Hole(..)
-            | Self::InAnnotation(..)
-            | Self::OutAnnotation(..)
-            | Self::Op { .. } => None,
-        }
-    }
-
-    /// Renames all uses in this statement using the given function
-    pub fn rename_uses(&mut self, f: &mut dyn FnMut(&str) -> String) {
-        match self {
-            Self::ConstDecl { rhs, .. }
-            | Self::VarDecl { rhs: Some(rhs), .. }
-            | Self::RefStore { rhs, .. } => {
-                term_rename_uses(rhs, f);
+            Self::ConstDecl { rhs, .. } | Self::VarDecl { rhs: Some(rhs), .. } => {
+                term_rename_uses(rhs, &mut |name| f(name, UseType::Read));
+            }
+            Self::RefStore { lhs, rhs, .. } => {
+                term_rename_uses(rhs, &mut |name| f(name, UseType::Read));
+                *lhs = f(lhs, UseType::Write);
             }
             Self::Op { args, .. } => {
                 for arg in args {
-                    term_rename_uses(arg, f);
+                    term_rename_uses(arg, &mut |name| f(name, UseType::Read));
                 }
             }
             Self::RefLoad { src, .. } => {
-                *src = f(src);
+                *src = f(src, UseType::Read);
             }
             Self::Hole(..)
             | Self::InAnnotation(..)
@@ -270,12 +416,12 @@ impl Hir {
 
 /// Convert a list of `SchedStmts` to a list of Hirs
 #[allow(clippy::module_name_repetitions)]
-pub fn stmts_to_hir(stmts: Vec<SchedStmt>) -> Vec<Hir> {
-    stmts.into_iter().map(Hir::new).collect()
+pub fn stmts_to_hir(stmts: Vec<SchedStmt>) -> Vec<HirBody> {
+    stmts.into_iter().map(HirBody::new).collect()
 }
 
 /// Get the uses in a `SchedTerm`
-pub fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
+fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
     match t {
         SchedTerm::Var { name, .. } => {
             res.insert(name.clone());
@@ -286,7 +432,7 @@ pub fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
 }
 
 /// Renames all uses in a `SchedTerm` using the given function
-pub fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
+fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
     match t {
         SchedTerm::Var { name, .. } => *name = f(name),
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
@@ -296,7 +442,7 @@ pub fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
 
 /// Makes the base type of this type into a reference to the existing type
 /// Does not check against references to references
-pub(super) fn make_ref(typ: asm::TypeId) -> asm::TypeId {
+fn make_ref(typ: asm::TypeId) -> asm::TypeId {
     match typ {
         asm::TypeId::Local(type_name) => asm::TypeId::Local(format!("&{type_name}")),
         asm::TypeId::FFI(_) => todo!(),

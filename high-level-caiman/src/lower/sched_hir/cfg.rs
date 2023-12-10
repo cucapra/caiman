@@ -6,7 +6,7 @@ use crate::{
     parse::ast::{SchedExpr, SchedStmt, SchedTerm},
 };
 
-use super::{stmts_to_hir, Hir, Terminator};
+use super::{stmts_to_hir, HirBody, Terminator};
 
 /// The id of the final block of the canonicalized CFG.
 /// A canonical CFG has one entry and exit node.
@@ -19,7 +19,7 @@ pub const START_BLOCK_ID: usize = FINAL_BLOCK_ID + 1;
 pub struct BasicBlock {
     pub id: usize,
     /// Invariant: no tail edges in the middle of the block
-    pub stmts: Vec<Hir>,
+    pub stmts: Vec<HirBody>,
     pub terminator: Terminator,
     /// The next block in the parent stack frame as this block. This is
     /// the continuation for a parent block.
@@ -114,6 +114,75 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
     res
 }
 
+fn handle_return(
+    cur_id: &mut usize,
+    blocks: &mut HashMap<usize, BasicBlock>,
+    edges: &mut HashMap<usize, Edge>,
+    cur_stmts: &mut Vec<SchedStmt>,
+    sched_expr: SchedExpr,
+    join_edge: Edge,
+    end: Info,
+) {
+    let old_id = *cur_id;
+    let info = Info::new_range(
+        cur_stmts.first().map_or(&end, |x: &SchedStmt| x.get_info()),
+        &end,
+    );
+    blocks.insert(
+        *cur_id,
+        make_block(
+            cur_id,
+            cur_stmts,
+            Terminator::Return(Some(expr_to_node_id(sched_expr))),
+            &join_edge,
+            None,
+            info,
+        ),
+    );
+    edges.insert(old_id, Edge::Next(FINAL_BLOCK_ID));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_select(
+    cur_id: &mut usize,
+    blocks: &mut HashMap<usize, BasicBlock>,
+    cur_stmts: &mut Vec<SchedStmt>,
+    guard: SchedExpr,
+    tag: Option<Vec<crate::parse::ast::Tag>>,
+    true_block: Vec<SchedStmt>,
+    false_block: Vec<SchedStmt>,
+    join_edge: Edge,
+    end_info: Info,
+    children: &mut Vec<PendingChild>,
+) {
+    let parent_id = *cur_id;
+    let info = Info::new_range(
+        cur_stmts.first().map_or(&end_info, |x| x.get_info()),
+        &end_info,
+    );
+    blocks.insert(
+        *cur_id,
+        make_block(
+            cur_id,
+            cur_stmts,
+            Terminator::Select(expr_to_node_id(guard), tag),
+            &join_edge,
+            Some(*cur_id + 1),
+            info,
+        ),
+    );
+    children.push(PendingChild {
+        parent_id,
+        join_id: *cur_id,
+        true_block,
+        false_block: if false_block.is_empty() {
+            None
+        } else {
+            Some(false_block)
+        },
+    });
+}
+
 /// Makes one or more basic blocks from a list of scheduling statements. Adds the
 /// blocks to the list of blocks and adds edges to the edge map. Also updates the
 /// id counter so that the counter stores the value for the next available id.
@@ -125,6 +194,8 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
 /// * `edges` - The list of edges to add to. Edges for new blocks are added to this map.
 /// * `stmts` - The list of scheduling statements to convert to blocks.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
+// TODO: cleanup
+#[allow(clippy::too_many_lines)]
 fn make_blocks(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
@@ -143,7 +214,67 @@ fn make_blocks(
     for stmt in stmts {
         match stmt {
             SchedStmt::Return(end, sched_expr) => {
-                let old_id = *cur_id;
+                last_info = end;
+                handle_return(
+                    cur_id,
+                    blocks,
+                    edges,
+                    &mut cur_stmts,
+                    sched_expr,
+                    join_edge,
+                    end,
+                );
+            }
+            SchedStmt::If {
+                guard,
+                tag,
+                true_block,
+                false_block,
+                info: end_info,
+            } => {
+                last_info = *false_block.last().map_or_else(
+                    || true_block.last().map_or(&end_info, |s| s.get_info()),
+                    |s| s.get_info(),
+                );
+                handle_select(
+                    cur_id,
+                    blocks,
+                    &mut cur_stmts,
+                    guard,
+                    tag,
+                    true_block,
+                    false_block,
+                    join_edge,
+                    end_info,
+                    &mut children,
+                );
+            }
+            SchedStmt::Decl {
+                info,
+                lhs,
+                is_const: _,
+                expr: Some(SchedExpr::Term(SchedTerm::Call(_, call))),
+            } => {
+                last_info = info;
+                let info = Info::new_range(
+                    cur_stmts
+                        .first()
+                        .map_or(&info, |x: &SchedStmt| x.get_info()),
+                    &info,
+                );
+                blocks.insert(
+                    *cur_id,
+                    make_block(
+                        cur_id,
+                        &mut cur_stmts,
+                        Terminator::Call(lhs, call.try_into().unwrap()),
+                        &join_edge,
+                        None,
+                        info,
+                    ),
+                );
+            }
+            SchedStmt::Call(end, call_info) => {
                 last_info = end;
                 let info = Info::new_range(
                     cur_stmts.first().map_or(&end, |x: &SchedStmt| x.get_info()),
@@ -154,54 +285,13 @@ fn make_blocks(
                     make_block(
                         cur_id,
                         &mut cur_stmts,
-                        Terminator::Return(Some(expr_to_node_id(sched_expr))),
-                        &join_edge,
-                        None,
-                        info,
-                    ),
-                );
-                edges.insert(old_id, Edge::Next(FINAL_BLOCK_ID));
-            }
-            SchedStmt::If {
-                guard,
-                tag,
-                true_block,
-                false_block,
-                info: end_info,
-            } => {
-                let parent_id = *cur_id;
-                last_info = *false_block.last().map_or_else(
-                    || true_block.last().map_or(&end_info, |s| s.get_info()),
-                    |s| s.get_info(),
-                );
-                let info = Info::new_range(
-                    cur_stmts.first().map_or(&end_info, |x| x.get_info()),
-                    &end_info,
-                );
-                blocks.insert(
-                    *cur_id,
-                    make_block(
-                        cur_id,
-                        &mut cur_stmts,
-                        Terminator::Select(expr_to_node_id(guard), tag),
+                        Terminator::Call(vec![], call_info.try_into().unwrap()),
                         &join_edge,
                         Some(*cur_id + 1),
                         info,
                     ),
                 );
-                children.push(PendingChild {
-                    parent_id,
-                    join_id: *cur_id,
-                    true_block,
-                    false_block: if false_block.is_empty() {
-                        None
-                    } else {
-                        Some(false_block)
-                    },
-                });
             }
-            // TODO (function and procedure calls)
-            SchedStmt::Call(..) => todo!(),
             other => cur_stmts.push(other),
         }
     }

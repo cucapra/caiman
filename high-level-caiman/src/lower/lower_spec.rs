@@ -1,8 +1,6 @@
 use crate::{
     enum_cast,
-    parse::ast::{
-        ClassMembers, DataType, NestedExpr, SpecExpr, SpecLiteral, SpecStmt, SpecTerm, TopLevel,
-    },
+    parse::ast::{ClassMembers, DataType, NestedExpr, SpecLiteral, SpecStmt, SpecTerm, TopLevel},
 };
 use caiman::{assembly::ast as asm, ir};
 
@@ -31,26 +29,50 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
             },
             _ => todo!(),
         },
-        SpecTerm::Call { function, args, .. } => match function.as_ref() {
-            SpecExpr::Term(SpecTerm::Var { name, .. }) => asm::Node::CallFunctionClass {
-                function_id: Some(asm::FunctionClassId(name.to_string())),
+        SpecTerm::Call { .. } => panic!("Unexpected call"),
+        // we can probably do a local copy propagation here
+        SpecTerm::Var { .. } => todo!(),
+    }
+}
+
+/// Lowers a spec call into caiman assembly call and extract.
+fn lower_spec_call(
+    lhs: String,
+    function: &NestedExpr<SpecTerm>,
+    args: Vec<NestedExpr<SpecTerm>>,
+) -> Vec<asm::Hole<asm::Command>> {
+    // TODO: multiple returns
+    let function = enum_cast!(
+        SpecTerm::Var { name, .. },
+        name,
+        enum_cast!(NestedExpr::Term, function)
+    )
+    .clone();
+    let tuple_id = format!("_t{lhs}");
+    vec![
+        Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(tuple_id.clone())),
+            node: asm::Node::CallFunctionClass {
+                function_id: Some(asm::FunctionClassId(function)),
                 arguments: Some(
                     args.into_iter()
                         .map(|x| {
-                            Some(asm::NodeId(enum_cast!(
-                                SpecTerm::Var { name, .. },
-                                name,
-                                enum_cast!(NestedExpr::Term, x)
-                            )))
+                            let t = enum_cast!(NestedExpr::Term, x);
+                            let v = enum_cast!(SpecTerm::Var { name, .. }, name, t);
+                            Some(asm::NodeId(v))
                         })
                         .collect(),
                 ),
             },
-            _ => panic!("Not flattened"),
-        },
-        // we can probably do a local copy propagation here
-        SpecTerm::Var { .. } => todo!(),
-    }
+        })),
+        Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(lhs)),
+            node: asm::Node::ExtractResult {
+                node_id: Some(asm::NodeId(tuple_id)),
+                index: Some(0),
+            },
+        })),
+    ]
 }
 
 /// Converts a term to its node name, assuming that the term is a variable
@@ -89,6 +111,9 @@ fn lower_spec_assign(lhs: String, e: NestedExpr<SpecTerm>) -> Vec<asm::Hole<asm:
                     false_case: Some(asm::NodeId(false_id)),
                 },
             }))]
+        }
+        NestedExpr::Term(SpecTerm::Call { function, args, .. }) => {
+            lower_spec_call(lhs, &function, args)
         }
         NestedExpr::Term(t) => vec![Some(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(lhs)),
