@@ -15,7 +15,7 @@ val id(a: i64) -> i64 {
 
 fn main_func() -> i64 @ node(main.r)-usable impls main, time, space  {
     let c: i64 @ node(main.c)-usable = 1;
-    let r: i64 @ node(main.r)-usable = id_func(c) @ node(main.r)-usable;
+    let r: i64 @ node(main.r)-usable = id_func(c) @ node(main.r);
     return r;
 }
 

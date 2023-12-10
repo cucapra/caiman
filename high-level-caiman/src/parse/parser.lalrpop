@@ -139,6 +139,7 @@ BaseType: DataType = {
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
+    "&" <BaseType> => DataType::Ref(Box::new(<>)),
 }
 
 // Full type: base type with flags and settings and an optional tag
@@ -164,7 +165,7 @@ Tags: Vec<Tag> = {
 }
 
 Tag: Tag = {
-    <@L> <Quotient> "(" <QuotRef> ")" "-" <Flow> <@R> => astf.tag(<>),
+    <@L> <Quotient> "(" <QuotRef> ")" <Flow?> <@R> => astf.tag(<>),
 }
 
 Quotient: Option<Quotient> = {
@@ -176,11 +177,11 @@ Quotient: Option<Quotient> = {
 }
 
 Flow: Option<Flow> = {
-    "usable" => Some(Flow::Usable),
-    "save" => Some(Flow::Save),
-    "need" => Some(Flow::Need),
-    "dead" => Some(Flow::Dead),
-    "?" => None,
+    "-usable" => Some(Flow::Usable),
+    "-save" => Some(Flow::Save),
+    "-need" => Some(Flow::Need),
+    "-dead" => Some(Flow::Dead),
+    "-?" => None,
 }
 
 // Quotient reference: the part of the quotient which refers to a specific node
@@ -500,6 +501,7 @@ UnOp: Uop = {
     "-" => Uop::Neg,
     "!" => Uop::LNot,
     "~" => Uop::Not,
+    "&" => Uop::Ref,
 }
 
 // LITERALS

@@ -314,6 +314,7 @@
                         11,
                     ),
                 },
+                tag: None,
                 lhs: "x",
                 rhs: Term(
                     Var {

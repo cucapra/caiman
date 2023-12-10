@@ -323,7 +323,11 @@ impl ASTFactory {
         }
     }
 
-    struct_variant_factory!(tag(quot: Option<Quotient>, quot_var: Option<QuotientReference>, flow: Option<Flow>) -> Tag:Tag);
+    struct_variant_factory!(tag(quot: Option<Quotient>, quot_var: Option<QuotientReference>, flow: Option<Option<Flow>>) -> Tag:Tag {
+        quot: quot,
+        quot_var: quot_var,
+        flow: flow.flatten()
+    });
 
     /// Converts a scheduling expression to a specification expression or
     /// returns an error if the expression is invalid in a specification

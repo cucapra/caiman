@@ -28,6 +28,7 @@ pub enum DataType {
     Array(Box<DataType>, Box<SpecExpr>),
     Slice(Box<DataType>),
     UserDefined(String),
+    Ref(Box<DataType>),
 }
 
 /// Binary operators in the value and scheduling languages
@@ -64,6 +65,7 @@ pub enum Uop {
     Neg,
     LNot,
     Not,
+    Ref,
 }
 
 /// A literal in the spec languages
@@ -288,7 +290,7 @@ pub enum EncodedStmt {
         lhs: Vec<(Name, Option<FlaggedType>)>,
         rhs: SchedExpr,
     },
-    Invoke(Info, SchedFuncCall),
+    // Invoke(Info, SchedFuncCall),
 }
 
 /// Statements for the scheduling language

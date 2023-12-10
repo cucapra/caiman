@@ -2340,6 +2340,7 @@
                         },
                     ),
                 ),
+                tag: None,
                 true_block: [
                     Assign {
                         info: Info {
@@ -2352,6 +2353,7 @@
                                 25,
                             ),
                         },
+                        tag: None,
                         lhs: "result",
                         rhs: Term(
                             Var {
@@ -2565,6 +2567,7 @@
                                         41,
                                     ),
                                 },
+                                tag: None,
                                 lhs: "result",
                                 rhs: Term(
                                     Call(

@@ -357,6 +357,7 @@
                         tag: None,
                     },
                 ),
+                tag: None,
                 true_block: [
                     Return(
                         Info {

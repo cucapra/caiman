@@ -406,6 +406,7 @@
                         },
                     ),
                 },
+                tag: None,
                 true_block: [
                     Return(
                         Info {
@@ -2314,6 +2315,7 @@
                         },
                     ),
                 },
+                tag: None,
                 true_block: [
                     Decl {
                         info: Info {
@@ -2977,6 +2979,7 @@
                         },
                     ),
                 },
+                tag: None,
                 true_block: [
                     Return(
                         Info {
@@ -5567,6 +5570,7 @@
                         },
                     ),
                 },
+                tag: None,
                 true_block: [
                     Decl {
                         info: Info {
@@ -6861,6 +6865,7 @@
                                         },
                                     },
                                 },
+                                tag: None,
                                 true_block: [
                                     Assign {
                                         info: Info {
@@ -6873,6 +6878,7 @@
                                                 34,
                                             ),
                                         },
+                                        tag: None,
                                         lhs: "nxt_start",
                                         rhs: Binop {
                                             info: Info {
@@ -7370,6 +7376,7 @@
                                         },
                                     },
                                 },
+                                tag: None,
                                 true_block: [
                                     Assign {
                                         info: Info {
@@ -7382,6 +7389,7 @@
                                                 32,
                                             ),
                                         },
+                                        tag: None,
                                         lhs: "nxt_end",
                                         rhs: Binop {
                                             info: Info {
@@ -7531,6 +7539,7 @@
                                         },
                                     ),
                                 },
+                                tag: None,
                                 true_block: [
                                     Assign {
                                         info: Info {
@@ -7543,6 +7552,7 @@
                                                 25,
                                             ),
                                         },
+                                        tag: None,
                                         lhs: "nxt_idx",
                                         rhs: Term(
                                             Lit {

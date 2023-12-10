@@ -151,6 +151,7 @@
                         },
                     ),
                 },
+                tag: None,
                 true_block: [],
                 false_block: [
                     If {
@@ -211,6 +212,7 @@
                                 },
                             ),
                         },
+                        tag: None,
                         true_block: [
                             If {
                                 info: Info {
@@ -270,6 +272,7 @@
                                         },
                                     ),
                                 },
+                                tag: None,
                                 true_block: [
                                     Assign {
                                         info: Info {
@@ -282,6 +285,7 @@
                                                 19,
                                             ),
                                         },
+                                        tag: None,
                                         lhs: "x",
                                         rhs: Term(
                                             Lit {
