@@ -12,7 +12,7 @@ use caiman::ir;
 
 use super::{
     global_context::{Context, SpecType},
-    sched_hir::{Funclet, Funclets, HirBody, Specs, Terminator, RET_VAR},
+    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, RET_VAR},
 };
 
 /// A vector of commands with holes.
@@ -289,6 +289,86 @@ fn get_quotient(specs: &Specs, tags: &[Tag], qtype: SpecType) -> asm::Hole<asm::
     None
 }
 
+/// Changes the remote node id to the remote id of the result of the call
+fn get_tuple_quot(t: Option<asm::Tag>) -> asm::Hole<asm::Quotient> {
+    t.map(|t| match t.quot {
+        asm::Quotient::Node(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(node),
+        })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(asm::NodeId(format!("_t{}", node.0))),
+        })),
+        asm::Quotient::Input(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(node),
+        })) => asm::Quotient::Input(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(asm::NodeId(format!("_t{}", node.0))),
+        })),
+        asm::Quotient::Output(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(node),
+        })) => asm::Quotient::Output(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(asm::NodeId(format!("_t{}", node.0))),
+        })),
+        x => x,
+    })
+}
+
+/// Lowers a function call into a caiman assembly command.
+/// # Arguments
+/// * `call` - the function call to lower
+/// * `temp_id` - the next available temporary id
+/// * `f` - the funclet that contains the call
+/// # Returns
+/// A tuple containing the commands that implement the call
+fn lower_func_call(call: &HirFuncCall, temp_id: usize, f: &Funclet) -> CommandVec {
+    use crate::lower::sched_hir::TagInfo;
+    let djoin_id = temp_id;
+    let djoin_name = temp_var_name(djoin_id);
+    let join = temp_id + 1;
+    let join_var = temp_var_name(join);
+    let tags = TagInfo::from_maybe_tags(&call.tag, f.specs());
+    vec![
+        Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(djoin_name.clone())),
+            node: asm::Node::DefaultJoin,
+        })),
+        Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(join_var.clone())),
+            // TODO: for greater generality, should be `SerializedJoin`, but I
+            // think that's broken right now
+            // TODO: optimize and use inline join whenever possible
+            node: asm::Node::InlineJoin {
+                funclet: f.next_blocks().first().unwrap().clone(),
+                captures: Some(vec![]),
+                continuation: Some(asm::NodeId(djoin_name)),
+            },
+        })),
+        Some(asm::Command::TailEdge(asm::TailEdge::ScheduleCall {
+            timeline_operation: Some(tags.timeline.as_ref().map_or_else(
+                || tags.default_tag(SpecType::Timeline).quot,
+                |x| x.quot.clone(),
+            )),
+            spatial_operation: Some(tags.timeline.as_ref().map_or_else(
+                || tags.default_tag(SpecType::Spatial).quot,
+                |x| x.quot.clone(),
+            )),
+            value_operation: get_tuple_quot(tags.value),
+            callee_funclet_id: Some(asm::FuncletId(call.target.clone())),
+            callee_arguments: Some(
+                call.args
+                    .iter()
+                    .map(|x| Some(asm::NodeId(x.clone())))
+                    .collect(),
+            ),
+            continuation_join: Some(asm::NodeId(join_var)),
+        })),
+    ]
+}
+
 /// Lowers a basic block terminator into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the terminator
@@ -314,7 +394,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
         // TODO: review this
         Terminator::None => panic!("None terminator not replaced by Next"),
-        Terminator::Call(..) => todo!(),
+        Terminator::Call(_, call) => lower_func_call(call, temp_id, f),
     }
 }
 

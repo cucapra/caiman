@@ -56,6 +56,19 @@ impl TagInfo {
         }
     }
 
+    /// Constructs a `TagInfo` from an optional vector of tags. If `t` is `None`
+    pub fn from_maybe_tags(t: &Option<Tags>, specs: &Specs) -> Self {
+        t.as_ref().map_or_else(
+            || Self {
+                value: None,
+                timeline: None,
+                spatial: None,
+                specs: specs.clone(),
+            },
+            |t| Self::from_tags(t, specs),
+        )
+    }
+
     /// Overwrites all of this type info with the tags from `other`. If
     /// `other` does not specify a tag, the tag will NOT be updated.
     pub fn update(&mut self, specs: &Specs, other: &Tags) {
@@ -95,8 +108,8 @@ impl TagInfo {
         ]
     }
 
-    /// Returns the default tag for the specified specifcation type
-    #[allow(dead_code)]
+    /// Returns the default tag for the specified specifcation type.
+    /// The default tag is `none()-usable`
     pub fn default_tag(&self, spec_type: SpecType) -> asm::Tag {
         match spec_type {
             SpecType::Value => none_tag(&self.specs.value, ir::Flow::Usable),

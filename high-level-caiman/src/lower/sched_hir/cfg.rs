@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use crate::{
     enum_cast,
     error::Info,
-    parse::ast::{SchedExpr, SchedStmt, SchedTerm},
+    parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedStmt, SchedTerm},
 };
 
 use super::{stmts_to_hir, HirBody, Terminator};
@@ -27,7 +27,7 @@ pub struct BasicBlock {
     // is the join block
     pub join_block: Option<usize>,
     /// The block whose live-out set is the return arguments of this block.
-    /// This is either the block itself, or the block's continuation.
+    /// This is either the block itself (`None`), or the block's continuation.
     pub ret_block: Option<usize>,
     /// Starting line and index for the block
     pub src_loc: Info,
@@ -54,6 +54,18 @@ pub struct Cfg {
 
 /// Make a basic block from the current statements, giving it the next id
 /// and incrementing the id counter. The current statements are cleared.
+/// # Arguments
+/// * `cur_id` - The id of the next block. For every new block created, this is incremented
+///  and thus always is the id of the next block.
+/// * `cur_stmt` - The list of scheduling statements that are part of this block.
+/// * `term` - The terminator for the block.
+/// * `join_edge` - The edge to use for a basic block to join back to the parent.
+/// This is the next block in the parent stack frame.
+/// * `cont_block` - The block whose live-out set is the return arguments of this block. This is
+/// either the block itself (`None`), or the block's continuation.
+/// * `src_loc` - The source location of the block.
+/// # Returns
+/// The newly created basic block.
 fn make_block(
     cur_id: &mut usize,
     cur_stmt: &mut Vec<SchedStmt>,
@@ -114,6 +126,16 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
     res
 }
 
+/// Handles a return statement by constructing a new block with the return as the terminator.
+/// # Arguments
+/// * `cur_id` - The id of the next block. For every new block created, this is incremented
+///   and thus always is the id of the next block.
+/// * `blocks` - The list of blocks to add to. New blocks are appended to the end.
+/// * `edges` - The list of edges to add to. Edges for new blocks are added to this map.
+/// * `cur_stmts` - The list of scheduling statements to convert to blocks.
+/// * `sched_expr` - The expression to return.
+/// * `join_edge` - The edge to use for a basic block to join back to the parent.
+/// * `end` - The source location of the return statement.
 fn handle_return(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
@@ -183,6 +205,49 @@ fn handle_select(
     });
 }
 
+/// Handles a call statement by constructing a new block with the call as the terminator.
+/// # Arguments
+/// * `edges` - The list of edges to add to. Edges for new blocks are added to this map.
+/// * `blocks` - The list of blocks to add to. New blocks are appended to the end.
+/// * `cur_id` - The id of the next block. For every new block created, this is incremented
+///    and thus always is the id of the next block.
+/// * `cur_stmts` - The list of scheduling statements to convert to blocks.
+/// * `lhs` - The left hand side of the call statement. This is the list of variables to
+///   assign the return values to.
+/// * `call` - The call statement to add to a block.
+/// * `join_edge` - The edge to use for a basic block to join back to the parent.
+/// * `info` - The source location of the call statement.
+#[allow(clippy::too_many_arguments)]
+fn handle_call(
+    edges: &mut HashMap<usize, Edge>,
+    blocks: &mut HashMap<usize, BasicBlock>,
+    cur_id: &mut usize,
+    cur_stmts: &mut Vec<SchedStmt>,
+    lhs: Vec<(String, Option<FullType>)>,
+    call: SchedFuncCall,
+    join_edge: Edge,
+    info: Info,
+) {
+    let info = Info::new_range(
+        cur_stmts
+            .first()
+            .map_or(&info, |x: &SchedStmt| x.get_info()),
+        &info,
+    );
+    edges.insert(*cur_id, Edge::Next(*cur_id + 1));
+    blocks.insert(
+        *cur_id,
+        make_block(
+            cur_id,
+            cur_stmts,
+            Terminator::Call(lhs, call.try_into().unwrap()),
+            &join_edge,
+            None,
+            info,
+        ),
+    );
+}
+
 /// Makes one or more basic blocks from a list of scheduling statements. Adds the
 /// blocks to the list of blocks and adds edges to the edge map. Also updates the
 /// id counter so that the counter stores the value for the next available id.
@@ -195,7 +260,6 @@ fn handle_select(
 /// * `stmts` - The list of scheduling statements to convert to blocks.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
 // TODO: cleanup
-#[allow(clippy::too_many_lines)]
 fn make_blocks(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
@@ -256,40 +320,28 @@ fn make_blocks(
                 expr: Some(SchedExpr::Term(SchedTerm::Call(_, call))),
             } => {
                 last_info = info;
-                let info = Info::new_range(
-                    cur_stmts
-                        .first()
-                        .map_or(&info, |x: &SchedStmt| x.get_info()),
-                    &info,
-                );
-                blocks.insert(
-                    *cur_id,
-                    make_block(
-                        cur_id,
-                        &mut cur_stmts,
-                        Terminator::Call(lhs, call.try_into().unwrap()),
-                        &join_edge,
-                        None,
-                        info,
-                    ),
+                handle_call(
+                    edges,
+                    blocks,
+                    cur_id,
+                    &mut cur_stmts,
+                    lhs,
+                    call,
+                    join_edge,
+                    info,
                 );
             }
             SchedStmt::Call(end, call_info) => {
                 last_info = end;
-                let info = Info::new_range(
-                    cur_stmts.first().map_or(&end, |x: &SchedStmt| x.get_info()),
-                    &end,
-                );
-                blocks.insert(
-                    *cur_id,
-                    make_block(
-                        cur_id,
-                        &mut cur_stmts,
-                        Terminator::Call(vec![], call_info.try_into().unwrap()),
-                        &join_edge,
-                        Some(*cur_id + 1),
-                        info,
-                    ),
+                handle_call(
+                    edges,
+                    blocks,
+                    cur_id,
+                    &mut cur_stmts,
+                    vec![],
+                    call_info,
+                    join_edge,
+                    end,
                 );
             }
             other => cur_stmts.push(other),

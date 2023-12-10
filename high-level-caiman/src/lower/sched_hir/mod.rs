@@ -96,8 +96,10 @@ impl<'a> Funclet<'a> {
                 assert_eq!(res.len(), 2);
                 res
             }
-            Terminator::Call(..) => todo!(),
-            Terminator::None | Terminator::Return(..) | Terminator::Next(_) => {
+            Terminator::None
+            | Terminator::Return(..)
+            | Terminator::Next(_)
+            | Terminator::Call(..) => {
                 let e = self
                     .parent
                     .cfg
@@ -353,8 +355,8 @@ impl Funclets {
         let mut types = Self::collect_types(&cfg, &f.input, &f.output);
         deref_transform_pass(&mut cfg, &mut types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
-        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.output));
         Self::add_terminators(&mut cfg, &live_vars);
+        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.output));
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,
