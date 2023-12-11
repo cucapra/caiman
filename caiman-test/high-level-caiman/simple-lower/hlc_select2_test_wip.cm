@@ -18,13 +18,15 @@ fn foo() -> i64 @ node(main.r)-usable
     let b: bool @ node(main.b)-usable = false;
     let one: i64 @ node(main.one)-usable = 1;
     let two: i64 @ node(main.two)-usable = 2;
-    var v: i64 @ node(main.r)-?;
-    if @ node(main.r)-? b {
+    var v: i64 @ none(main);
+    
+    // Need to use serialized-join, but that doesn't work with temporaries
+    if @ node(main.r) b {
         v = one;
     } else {
         v = two;
     }
-    @in { v: node(main.r)-save };
+    @in { v: [node(main.r)-usable, none(space)-save] };
     return v;
 }
 
