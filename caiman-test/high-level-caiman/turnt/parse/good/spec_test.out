@@ -28,7 +28,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -101,7 +101,7 @@
                 input: [
                     (
                         "a",
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -109,7 +109,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -186,7 +186,7 @@
                         Some(
                             "a",
                         ),
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -194,7 +194,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -231,19 +231,19 @@
                 input: [
                     (
                         "g",
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
                     (
                         "h",
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
                     (
                         "z",
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -251,7 +251,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -277,7 +277,7 @@
                         Some(
                             "g",
                         ),
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -285,7 +285,7 @@
                         Some(
                             "h",
                         ),
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -293,7 +293,7 @@
                         Some(
                             "z",
                         ),
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -301,7 +301,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),

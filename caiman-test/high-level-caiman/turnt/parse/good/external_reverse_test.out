@@ -133,13 +133,13 @@
                 input: [
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -147,7 +147,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -171,13 +171,13 @@
                 input: [
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -185,7 +185,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -223,7 +223,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -403,7 +403,7 @@
                             16,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I64,
                     ),
                     flags: [],
@@ -531,7 +531,7 @@
                             16,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I64,
                     ),
                     flags: [],

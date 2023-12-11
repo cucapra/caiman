@@ -132,7 +132,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -229,7 +229,7 @@
                             16,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I64,
                     ),
                     flags: [],
@@ -379,7 +379,7 @@
                 input: [
                     (
                         "a",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -387,7 +387,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -681,7 +681,7 @@
                                 15,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [],
@@ -779,7 +779,7 @@
                             85,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I64,
                     ),
                     flags: [],

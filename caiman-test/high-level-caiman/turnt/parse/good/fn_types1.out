@@ -25,10 +25,10 @@
             base: Slice(
                 Tuple(
                     [
-                        Num(
+                        Int(
                             I32,
                         ),
-                        Num(
+                        Int(
                             I32,
                         ),
                         Bool,
@@ -98,7 +98,7 @@
                                 29,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I32,
                         ),
                         flags: [
@@ -192,7 +192,7 @@
                             81,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I32,
                     ),
                     flags: [],

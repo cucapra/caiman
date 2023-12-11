@@ -162,7 +162,7 @@
                     (
                         "v1",
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -185,7 +185,7 @@
                     (
                         "v2",
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -208,7 +208,7 @@
                     (
                         "v3",
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -233,7 +233,7 @@
                     (
                         None,
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -477,7 +477,7 @@
                     (
                         None,
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -500,7 +500,7 @@
                     (
                         None,
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -523,7 +523,7 @@
                     (
                         None,
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -548,7 +548,7 @@
                     (
                         None,
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -587,7 +587,7 @@
                     (
                         "v1",
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -610,7 +610,7 @@
                     (
                         "v2",
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -635,7 +635,7 @@
                     (
                         None,
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -1134,7 +1134,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -1174,7 +1174,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -1214,7 +1214,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -1254,7 +1254,7 @@
                         ),
                     },
                     base: Array(
-                        Num(
+                        Int(
                             I32,
                         ),
                         Term(
@@ -1594,7 +1594,7 @@
                                     ),
                                 },
                                 base: Array(
-                                    Num(
+                                    Int(
                                         I32,
                                     ),
                                     Term(
@@ -1742,7 +1742,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -1782,7 +1782,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -1843,7 +1843,7 @@
                                         ),
                                     },
                                     base: Array(
-                                        Num(
+                                        Int(
                                             I32,
                                         ),
                                         Term(
@@ -2100,7 +2100,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -2140,7 +2140,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -2180,7 +2180,7 @@
                             ),
                         },
                         base: Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -2220,7 +2220,7 @@
                         ),
                     },
                     base: Array(
-                        Num(
+                        Int(
                             I32,
                         ),
                         Term(

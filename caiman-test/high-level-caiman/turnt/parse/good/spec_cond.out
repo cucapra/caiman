@@ -70,19 +70,19 @@
                     ),
                     (
                         "start",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
                     (
                         "end",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
                     (
                         "idx",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),

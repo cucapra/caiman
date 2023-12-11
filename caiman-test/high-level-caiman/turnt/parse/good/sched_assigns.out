@@ -26,7 +26,7 @@
                                 14,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I32,
                         ),
                         flags: [],
@@ -117,10 +117,10 @@
                     },
                     base: Tuple(
                         [
-                            Num(
+                            Int(
                                 I32,
                             ),
-                            Num(
+                            Int(
                                 I32,
                             ),
                         ],

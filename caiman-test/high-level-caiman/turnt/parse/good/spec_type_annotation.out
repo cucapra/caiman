@@ -42,7 +42,7 @@
                             (
                                 "x",
                                 Some(
-                                    Num(
+                                    Int(
                                         I32,
                                     ),
                                 ),
@@ -82,7 +82,7 @@
                                 "x",
                                 Some(
                                     Array(
-                                        Num(
+                                        Int(
                                             I32,
                                         ),
                                         Term(
@@ -194,7 +194,7 @@
                                             ),
                                         },
                                         base: Array(
-                                            Num(
+                                            Int(
                                                 I32,
                                             ),
                                             Term(

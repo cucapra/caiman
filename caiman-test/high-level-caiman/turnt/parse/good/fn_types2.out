@@ -22,7 +22,7 @@
                     26,
                 ),
             },
-            base: Num(
+            base: Int(
                 I32,
             ),
             flags: [
@@ -129,7 +129,7 @@
                                 47,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [
@@ -238,7 +238,7 @@
                             35,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I32,
                     ),
                     flags: [

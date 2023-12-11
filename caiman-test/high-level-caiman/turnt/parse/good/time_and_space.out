@@ -28,7 +28,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),

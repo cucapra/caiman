@@ -141,13 +141,13 @@
                 input: [
                     (
                         "a",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
                     (
                         "b",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -155,7 +155,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -289,7 +289,7 @@
                                 14,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [],
@@ -312,7 +312,7 @@
                                 22,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [],
@@ -335,7 +335,7 @@
                             30,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I64,
                     ),
                     flags: [],
@@ -3416,19 +3416,19 @@
                     ),
                     (
                         "start",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
                     (
                         "end",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
                     (
                         "idx",
-                        Num(
+                        Int(
                             I64,
                         ),
                     ),
@@ -5394,7 +5394,7 @@
                                 64,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [],
@@ -5417,7 +5417,7 @@
                                 13,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [],
@@ -5440,7 +5440,7 @@
                                 23,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [],

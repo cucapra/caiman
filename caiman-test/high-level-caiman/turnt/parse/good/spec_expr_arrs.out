@@ -28,7 +28,7 @@
                     (
                         "a",
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(
@@ -54,10 +54,10 @@
                         "b",
                         Tuple(
                             [
-                                Num(
+                                Int(
                                     I32,
                                 ),
-                                Num(
+                                Int(
                                     I32,
                                 ),
                                 Bool,
@@ -71,10 +71,10 @@
                         Slice(
                             Tuple(
                                 [
-                                    Num(
+                                    Int(
                                         I32,
                                     ),
-                                    Num(
+                                    Int(
                                         I32,
                                     ),
                                 ],
@@ -528,7 +528,7 @@
                         "a",
                         Tuple(
                             [
-                                Num(
+                                Int(
                                     I32,
                                 ),
                             ],
@@ -539,7 +539,7 @@
                     (
                         None,
                         Array(
-                            Num(
+                            Int(
                                 I32,
                             ),
                             Term(

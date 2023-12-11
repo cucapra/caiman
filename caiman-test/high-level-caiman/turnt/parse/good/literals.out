@@ -27,7 +27,7 @@
                 input: [
                     (
                         "x",
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),
@@ -35,7 +35,7 @@
                 output: Some(
                     (
                         None,
-                        Num(
+                        Int(
                             I32,
                         ),
                     ),

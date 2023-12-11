@@ -26,7 +26,7 @@
                                 15,
                             ),
                         },
-                        base: Num(
+                        base: Int(
                             I64,
                         ),
                         flags: [],
@@ -74,7 +74,7 @@
                             38,
                         ),
                     },
-                    base: Num(
+                    base: Int(
                         I64,
                     ),
                     flags: [],

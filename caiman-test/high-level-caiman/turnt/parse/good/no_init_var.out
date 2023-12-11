@@ -64,7 +64,7 @@
                                             15,
                                         ),
                                     },
-                                    base: Num(
+                                    base: Int(
                                         I64,
                                     ),
                                     flags: [],
@@ -132,7 +132,7 @@
                                             15,
                                         ),
                                     },
-                                    base: Num(
+                                    base: Int(
                                         I64,
                                     ),
                                     flags: [],
