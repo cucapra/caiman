@@ -408,7 +408,13 @@ impl Funclets {
                     for (var, typ) in dests {
                         if let Some(local_type) = typ {
                             match types.entry(var.clone()) {
-                                Entry::Occupied(t) => assert_eq!(t.get(), &local_type),
+                                Entry::Occupied(t) => assert_eq!(
+                                    t.get(),
+                                    &local_type,
+                                    "{}: Type mismatch for {var}: {:?} != {local_type:?}",
+                                    bb.src_loc,
+                                    t.get()
+                                ),
                                 Entry::Vacant(v) => {
                                     v.insert(local_type);
                                 }

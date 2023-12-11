@@ -331,7 +331,12 @@ pub fn gen_context(tl: &[TopLevel]) -> Context {
             TopLevel::TimelineFunclet { name, .. } => {
                 ctx.specs.insert(name.to_string(), SpecType::Timeline);
             }
-            TopLevel::FunctionClass { members, .. } => {
+            TopLevel::FunctionClass {
+                name: class_name,
+                members,
+                ..
+            } => {
+                let mut member_name = None;
                 for m in members {
                     match m {
                         ClassMembers::ValueFunclet {
@@ -340,6 +345,7 @@ pub fn gen_context(tl: &[TopLevel]) -> Context {
                             output,
                             ..
                         } => {
+                            member_name = Some(name.to_string());
                             ctx.specs.insert(name.to_string(), SpecType::Value);
                             ctx.signatures.insert(
                                 name.to_string(),
@@ -349,13 +355,32 @@ pub fn gen_context(tl: &[TopLevel]) -> Context {
                                 ),
                             );
                         }
-                        ClassMembers::Extern { .. } => (),
+                        ClassMembers::Extern {
+                            name,
+                            input,
+                            output,
+                            ..
+                        } => {
+                            member_name = Some(name.to_string());
+                            ctx.signatures.insert(
+                                name.to_string(),
+                                (
+                                    input.iter().map(|x| x.1.clone()).collect(),
+                                    output.as_ref().map_or_else(Vec::new, |x| vec![x.1.clone()]),
+                                ),
+                            );
+                        }
                     }
                 }
+                ctx.signatures.insert(
+                    class_name.clone(),
+                    ctx.signatures[&member_name.unwrap()].clone(),
+                );
             }
             TopLevel::SchedulingFunc {
                 name,
                 input,
+                output,
                 statements,
                 ..
             } => {
@@ -365,6 +390,15 @@ pub fn gen_context(tl: &[TopLevel]) -> Context {
                 }
                 collect_sched_types(statements, &mut types);
                 ctx.sched_types.insert(name.to_string(), types);
+                ctx.signatures.insert(
+                    name.to_string(),
+                    (
+                        input.iter().map(|x| x.1.base.base.clone()).collect(),
+                        output
+                            .as_ref()
+                            .map_or_else(Vec::new, |x| vec![x.base.base.clone()]),
+                    ),
+                );
             }
             _ => (),
         }

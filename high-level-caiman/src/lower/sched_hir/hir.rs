@@ -206,7 +206,6 @@ impl Hir for Terminator {
     fn get_uses(&self, uses: &mut BTreeSet<String>) {
         match self {
             Self::Call(_, call) => {
-                uses.insert(call.target.clone());
                 for arg in &call.args {
                     uses.insert(arg.clone());
                 }

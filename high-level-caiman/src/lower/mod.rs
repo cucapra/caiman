@@ -43,7 +43,7 @@ fn data_type_to_ffi_type(dt: &DataType) -> asm::TypeId {
 /// For types that have FFI equivalents, convert a high-level caiman data type
 /// to the caiman assembly type for the corresponding FFI type. For types
 /// that do not have FFI equivalents, return `None`.
-fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
+const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
     use asm::FFIType;
     match dt {
         DataType::Bool => Some(BOOL_FFI_TYPE),
