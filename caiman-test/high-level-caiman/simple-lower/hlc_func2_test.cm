@@ -10,17 +10,17 @@ val main() -> i64 {
 }
 
 val calc(a: i64) -> i64 {
-    ten :- 10
-    b :- a * ten
-    returns b
+    b :- a * a
+    c :- b ^ a
+    returns c
 }
 
-fn calc_impl(a: i64 @ input(calc.a)-usable) -> i64 @ output(calc.b)-usable
+fn calc_impl(a: i64 @ input(calc.a)-usable) -> i64 @ output(calc.c)-usable
     impls calc, time, space
 {
-    let ten: i64 @ node(calc.ten)-usable = 10;
-    let b: i64 @ node(calc.b)-usable = a * ten;
-    return b;
+    let b: i64 @ node(calc.b) = a * a;
+    let c: i64 @ node(calc.c)-usable = b ^ a;
+    return c;
 }
 
 fn main_impl() -> i64 @ node(main.c)-usable

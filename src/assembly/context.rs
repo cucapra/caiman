@@ -186,6 +186,7 @@ impl Context {
                         .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut node_table = NodeTable::new();
                     // added because phi nodes themselves are unnamed
+                    let mut rets = vec![];
                     for command in &f.commands {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
@@ -197,12 +198,29 @@ impl Context {
                                     Some(v) => node_table.local.push(v.clone()),
                                 }
                             }
+                            Some(ast::Command::TailEdge(ast::TailEdge::Return {
+                                return_values: Some(return_values),
+                            })) => {
+                                for return_value in return_values {
+                                    match return_value {
+                                        Some(node) => {
+                                            rets.push(node.clone());
+                                        }
+                                        None => todo!(),
+                                    }
+                                }
+                            }
                             _ => {}
                         }
                     }
-                    for ret_arg in &f.header.ret {
+                    // TODO: this is a bit of a hack
+                    for (idx, ret_arg) in f.header.ret.iter().enumerate() {
                         match &ret_arg.name {
-                            None => {}
+                            None => {
+                                if rets.len() > idx {
+                                    node_table.returns.push(rets[idx].clone());
+                                }
+                            }
                             Some(name) => {
                                 node_table.returns.push(name.clone());
                             }

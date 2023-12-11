@@ -4,6 +4,10 @@ impl main::CpuFunctions for Callbacks {
     fn _mul_i64_i64(&self, _: &mut dyn caiman_rt::State, a: i64, b: i64) -> (i64,) {
         (a * b,)
     }
+
+    fn _xor_i64_i64(&self, _: &mut dyn caiman_rt::State, a: i64, b: i64) -> (i64,) {
+        (a ^ b,)
+    }
 }
 
 #[test]
@@ -15,5 +19,5 @@ fn main() -> Result<(), String> {
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
     let instance = main::Instance::new(&mut root_state, &callbacks);
     let result = instance.start(&mut join_stack);
-    crate::expect_returned!(1, result.returned().map(|x| x.0))
+    crate::expect_returned!(6, result.returned().map(|x| x.0))
 }

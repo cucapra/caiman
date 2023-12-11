@@ -161,9 +161,18 @@ with_operations!(make_nodes);
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Quotient {
     None,
-    Node { node_id: usize },
-    Input { index: usize },
-    Output { index: usize },
+    Node {
+        /// Node id
+        node_id: usize,
+    },
+    Input {
+        index: usize,
+    },
+    /// Output quotient holding the index into the funclet's output array
+    Output {
+        /// The index into the funclet's output array
+        index: usize,
+    },
 }
 
 impl Default for Quotient {
