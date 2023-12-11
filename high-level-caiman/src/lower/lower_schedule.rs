@@ -213,7 +213,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             op,
             args,
             ..
-        } => lower_op(dest, dest_tag, op, args, temp_id, f),
+        } => lower_op(dest, dest_tag, &op.lower(), args, temp_id, f),
         x @ HirBody::Hole(_) => todo!("{x:?}"),
     }
 }

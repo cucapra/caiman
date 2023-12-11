@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 
 use crate::{
     enum_cast,
-    lower::{binop_to_str, data_type_to_local_type},
-    parse::ast::{ArgsOrEnc, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags},
+    lower::data_type_to_local_type,
+    parse::ast::{ArgsOrEnc, Binop, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags, Uop},
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -60,11 +60,35 @@ pub enum HirBody {
         info: Info,
         dest: Name,
         dest_tag: Hole<FullType>,
-        op: Name,
+        op: HirOp,
         args: Vec<SchedTerm>,
     },
     InAnnotation(Info, Vec<(String, Tags)>),
     OutAnnotation(Info, Vec<(String, Tags)>),
+}
+
+/// A high level IR operation.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum HirOp {
+    /// an unlowered binary operation
+    Binary(Binop),
+    /// an unlowered unary operation
+    #[allow(dead_code)]
+    Unary(Uop),
+    /// a lowered operation into an external call
+    FFI(Name),
+}
+
+impl HirOp {
+    /// Lowers a HIR operation into the name of the external function to call.
+    /// Panics if the operation is not lowered.
+    pub fn lower(&self) -> Name {
+        match self {
+            Self::Binary(_) | Self::Unary(_) => panic!("Cannot lower unlowered operation"),
+            Self::FFI(name) => name.clone(),
+        }
+    }
 }
 
 /// An internal function call in the high-level IR.
@@ -292,7 +316,7 @@ impl HirBody {
                         info,
                         dest: lhs[0].0.clone(),
                         dest_tag: lhs[0].1.clone(),
-                        op: binop_to_str(op).to_string(),
+                        op: HirOp::Binary(op),
                         args: vec![lhs_term.clone(), rhs_term.clone()],
                     }
                 }

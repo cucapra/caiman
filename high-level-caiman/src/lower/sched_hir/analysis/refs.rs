@@ -8,7 +8,7 @@ use crate::{
         cfg::{BasicBlock, Cfg},
         make_deref, Hir, HirBody, HirInstr, UseType,
     },
-    parse::ast::{DataType, NumberType},
+    parse::ast::{DataType, IntSize},
 };
 
 /// Determines if the given variable has a reference type.
@@ -70,8 +70,8 @@ fn unref_type(typ: &asm::TypeId) -> DataType {
     match typ {
         asm::TypeId::Local(name) => match &name[1..] {
             "bool" => DataType::Bool,
-            "i32" => DataType::Num(NumberType::I32),
-            "i64" => DataType::Num(NumberType::I64),
+            "i32" => DataType::Int(IntSize::I32),
+            "i64" => DataType::Int(IntSize::I64),
             x => panic!("Unrecognized type: {x}"),
         },
         asm::TypeId::FFI(_) => todo!(),

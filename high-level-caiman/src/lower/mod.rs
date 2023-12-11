@@ -1,6 +1,6 @@
 use crate::{
     error,
-    parse::ast::{Binop, ClassMembers, DataType, NumberType, SchedulingFunc, TopLevel},
+    parse::ast::{Binop, ClassMembers, DataType, IntSize, SchedulingFunc, TopLevel},
 };
 use caiman::assembly::ast as asm;
 mod global_context;
@@ -20,8 +20,8 @@ fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
     use asm::TypeId;
     match dt {
         DataType::Bool => TypeId::Local(String::from("bool")),
-        DataType::Num(NumberType::I32) => TypeId::Local(String::from("i32")),
-        DataType::Num(NumberType::I64) => TypeId::Local(String::from("i64")),
+        DataType::Int(IntSize::I32) => TypeId::Local(String::from("i32")),
+        DataType::Int(IntSize::I64) => TypeId::Local(String::from("i64")),
         DataType::BufferSpace => TypeId::Local(String::from("BufferSpace")),
         DataType::Event => TypeId::Local(String::from("Event")),
         DataType::UserDefined(name) => TypeId::Local(name.clone()),
@@ -36,8 +36,8 @@ fn data_type_to_ffi_type(dt: &DataType) -> asm::TypeId {
     use asm::TypeId;
     match dt {
         DataType::Bool => TypeId::FFI(BOOL_FFI_TYPE),
-        DataType::Num(NumberType::I32) => TypeId::FFI(asm::FFIType::I32),
-        DataType::Num(NumberType::I64) => TypeId::FFI(asm::FFIType::I64),
+        DataType::Int(IntSize::I32) => TypeId::FFI(asm::FFIType::I32),
+        DataType::Int(IntSize::I64) => TypeId::FFI(asm::FFIType::I64),
         dt => data_type_to_local_type(dt),
     }
 }
@@ -119,7 +119,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 for f in members {
                     match f {
                         ClassMembers::ValueFunclet { .. } => {
-                            let funclet = lower_val_funclet(f, &name);
+                            let funclet = lower_val_funclet(f, &name, &ctx);
                             asm.declarations.push(asm::Declaration::Funclet(funclet));
                         }
                         ClassMembers::Extern { .. } => todo!(),
@@ -130,10 +130,10 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
             }
             sf @ TopLevel::SpatialFunclet { .. } => asm
                 .declarations
-                .push(asm::Declaration::Funclet(lower_spatial_funclet(sf))),
+                .push(asm::Declaration::Funclet(lower_spatial_funclet(sf, &ctx))),
             tf @ TopLevel::TimelineFunclet { .. } => asm
                 .declarations
-                .push(asm::Declaration::Funclet(lower_timeline_funclet(tf))),
+                .push(asm::Declaration::Funclet(lower_timeline_funclet(tf, &ctx))),
             TopLevel::SchedulingFunc {
                 name,
                 input,
@@ -162,10 +162,35 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
     Ok(asm)
 }
 
-/// Converts a high-level caiman data type to an extern funclet id.
-fn binop_to_str(op: Binop) -> &'static str {
+const fn binop_name(op: Binop) -> &'static str {
     match op {
-        Binop::Lt => "_lt",
-        _ => todo!(),
+        Binop::Lt => "lt",
+        Binop::Leq => "le",
+        Binop::Gt => "gt",
+        Binop::Geq => "ge",
+        Binop::Eq => "eq",
+        Binop::Neq => "ne",
+        Binop::Add => "add",
+        Binop::Sub => "sub",
+        Binop::Mul => "mul",
+        Binop::Div => "div",
+        Binop::Mod => "mod",
+        Binop::And => "and",
+        Binop::Or => "or",
+        Binop::Xor => "xor",
+        Binop::Shl => "shl",
+        Binop::Shr => "shr",
+        Binop::Dot => "dot",
+        Binop::Cons => "cons",
+        Binop::Index => "index",
+        Binop::Land => "land",
+        Binop::Lor => "lor",
+        Binop::AShr => "ashr",
+        Binop::Range => "range",
     }
+}
+
+/// Converts a high-level caiman data type to an extern funclet id.
+fn binop_to_str(op: Binop, type_left: &str, type_right: &str) -> String {
+    format!("_{}_{type_left}_{type_right}", binop_name(op))
 }

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::error::Info;
 
 pub type Name = String;
@@ -6,10 +8,15 @@ pub type Arg<T> = (String, T);
 pub type NamedOutput<T> = (Option<String>, T);
 
 /// A numeric data type
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NumberType {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IntSize {
     I32,
     I64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FloatSize {
+    F64,
 }
 
 /// A core data type available in the value and scheduling languages
@@ -18,9 +25,13 @@ pub enum NumberType {
 /// Not all of these types can be used in every function, however I think
 /// it will be easier to essentially perform AST-level type checking
 /// rather than trying to do it at the parsing level
+///
+/// Can be converted to a mangled string using the alternate formatter
+/// for `Display`
 #[derive(Clone, Debug)]
 pub enum DataType {
-    Num(NumberType),
+    Int(IntSize),
+    Float(FloatSize),
     Bool,
     BufferSpace,
     Event,
@@ -29,6 +40,84 @@ pub enum DataType {
     Slice(Box<DataType>),
     UserDefined(String),
     Ref(Box<DataType>),
+}
+
+impl PartialEq for DataType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Int(l0), Self::Int(r0)) => l0 == r0,
+            (Self::Float(l0), Self::Float(r0)) => l0 == r0,
+            (Self::Tuple(l0), Self::Tuple(r0)) => l0 == r0,
+            (Self::Array(..), Self::Array(..)) => todo!(),
+            (Self::Slice(l0), Self::Slice(r0)) | (Self::Ref(l0), Self::Ref(r0)) => l0 == r0,
+            (Self::UserDefined(l0), Self::UserDefined(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Eq for DataType {}
+
+impl std::hash::Hash for DataType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Int(nt) => nt.hash(state),
+            Self::Float(nt) => nt.hash(state),
+            Self::Tuple(types) => types.hash(state),
+            Self::Array(..) => todo!(),
+            Self::Slice(dt) | Self::Ref(dt) => dt.hash(state),
+            Self::UserDefined(name) => name.hash(state),
+            _ => {}
+        }
+    }
+}
+
+impl Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(IntSize::I32) => write!(f, "i32"),
+            Self::Int(IntSize::I64) => write!(f, "i64"),
+            Self::Float(FloatSize::F64) => write!(f, "f64"),
+            Self::Bool => write!(f, "bool"),
+            Self::BufferSpace => write!(f, "BufferSpace"),
+            Self::Event => write!(f, "Event"),
+            Self::Tuple(types) => {
+                if f.alternate() {
+                    write!(f, "_t{}", types.len())?;
+                    for typ in types.iter() {
+                        write!(f, "_{typ}")?;
+                    }
+                    Ok(())
+                } else {
+                    write!(f, "(")?;
+                    for (i, typ) in types.iter().enumerate() {
+                        if i != 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{typ}")?;
+                    }
+                    write!(f, ")")
+                }
+            }
+            Self::Array(..) => todo!(),
+            Self::Slice(typ) => {
+                if f.alternate() {
+                    write!(f, "_a_{typ}")
+                } else {
+                    write!(f, "[{typ}]")
+                }
+            }
+            Self::UserDefined(name) => write!(f, "{name}"),
+            Self::Ref(typ) => {
+                if f.alternate() {
+                    write!(f, "_r_{typ}")
+                } else {
+                    write!(f, "&{typ}")
+                }
+            }
+        }
+    }
 }
 
 /// Binary operators in the value and scheduling languages
@@ -60,7 +149,7 @@ pub enum Binop {
 }
 
 /// Unary operators in the value and scheduling languages
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub enum Uop {
     Neg,
     LNot,
@@ -268,6 +357,7 @@ pub enum SchedTerm {
 impl SchedTerm {
     /// Gets the tags of this term if they are specified, otherwise returns `None`
     #[must_use]
+    #[allow(dead_code)]
     pub const fn get_tags(&self) -> Option<&Tags> {
         match self {
             Self::Lit { tag, .. }
@@ -535,6 +625,10 @@ pub enum TopLevel {
         info: Info,
         name: String,
         expr: SpecExpr,
+    },
+    Import {
+        info: Info,
+        path: String,
     },
 }
 

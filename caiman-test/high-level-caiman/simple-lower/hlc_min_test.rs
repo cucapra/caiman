@@ -1,7 +1,7 @@
 struct Callbacks;
 
 impl main::CpuFunctions for Callbacks {
-    fn _lt(&self, _: &mut dyn caiman_rt::State, a: i64, b: i64) -> (i32,) {
+    fn _lt_i64_i64(&self, _: &mut dyn caiman_rt::State, a: i64, b: i64) -> (i32,) {
         if a < b {
             (1,)
         } else {

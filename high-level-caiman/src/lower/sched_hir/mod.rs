@@ -13,7 +13,9 @@ use crate::{
 use caiman::assembly::ast as asm;
 
 use self::{
-    analysis::{analyze, deref_transform_pass, InOutFacts, LiveVars, TagAnalysis},
+    analysis::{
+        analyze, deref_transform_pass, op_transform_pass, InOutFacts, LiveVars, TagAnalysis,
+    },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
 };
 
@@ -353,6 +355,7 @@ impl Funclets {
     pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
         let mut cfg = Cfg::new(f.statements);
         let mut types = Self::collect_types(&cfg, &f.input, &f.output);
+        op_transform_pass(&mut cfg, &types);
         deref_transform_pass(&mut cfg, &mut types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         Self::add_terminators(&mut cfg, &live_vars);
