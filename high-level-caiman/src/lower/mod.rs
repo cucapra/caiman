@@ -1,6 +1,6 @@
 use crate::{
     error,
-    parse::ast::{Binop, ClassMembers, DataType, IntSize, SchedulingFunc, TopLevel},
+    parse::ast::{Binop, ClassMembers, DataType, FloatSize, IntSize, SchedulingFunc, TopLevel},
 };
 use caiman::assembly::ast as asm;
 mod global_context;
@@ -35,10 +35,22 @@ fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
 fn data_type_to_ffi_type(dt: &DataType) -> asm::TypeId {
     use asm::TypeId;
     match dt {
-        DataType::Bool => TypeId::FFI(BOOL_FFI_TYPE),
-        DataType::Int(IntSize::I32) => TypeId::FFI(asm::FFIType::I32),
-        DataType::Int(IntSize::I64) => TypeId::FFI(asm::FFIType::I64),
+        dt if data_type_to_ffi(dt).is_some() => TypeId::FFI(data_type_to_ffi(dt).unwrap()),
         dt => data_type_to_local_type(dt),
+    }
+}
+
+/// For types that have FFI equivalents, convert a high-level caiman data type
+/// to the caiman assembly type for the corresponding FFI type. For types
+/// that do not have FFI equivalents, return `None`.
+fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
+    use asm::FFIType;
+    match dt {
+        DataType::Bool => Some(BOOL_FFI_TYPE),
+        DataType::Int(IntSize::I32) => Some(FFIType::I32),
+        DataType::Int(IntSize::I64) => Some(FFIType::I64),
+        DataType::Float(FloatSize::F64) => Some(FFIType::F64),
+        _ => None,
     }
 }
 

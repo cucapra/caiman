@@ -492,7 +492,12 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
             outputs,
         } => ir::Node::LocalDoExternal {
             operation: ir_quotient_node(reject_hole(operation.as_ref()), context),
-            external_function_id: Default::default(),
+            external_function_id: reject_hole(
+                context
+                    .funclet_indices
+                    .get_funclet(reject_hole(external_function_id.as_ref().map(|x| &x.0)))
+                    .map(ffi::ExternalFunctionId),
+            ),
             inputs: reject_hole(inputs.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
@@ -532,7 +537,12 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         } => ir::Node::EncodeDoExternal {
             encoder: context.node_id(reject_hole(encoder.as_ref())),
             operation: ir_quotient_node(reject_hole(operation.as_ref()), context),
-            external_function_id: Default::default(),
+            external_function_id: reject_hole(
+                context
+                    .funclet_indices
+                    .get_funclet(reject_hole(external_function_id.as_ref().map(|x| &x.0)))
+                    .map(ffi::ExternalFunctionId),
+            ),
             inputs: reject_hole(inputs.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))

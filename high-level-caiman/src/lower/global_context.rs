@@ -10,7 +10,7 @@ use crate::{
 use caiman::assembly::ast as asm;
 use caiman::ir;
 
-use super::{binop_to_str, data_type_to_ffi_type};
+use super::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
@@ -250,8 +250,14 @@ fn gen_extern_decls(
     for decl in tl {
         if let TopLevel::FunctionClass { members, .. } = decl {
             for m in members {
-                if let ClassMembers::ValueFunclet { statements, .. } = m {
+                if let ClassMembers::ValueFunclet {
+                    statements, input, ..
+                } = m
+                {
                     let mut types = HashMap::new();
+                    for (name, typ) in input {
+                        types.insert(name.clone(), typ.clone());
+                    }
                     collect_extern_ops(statements, &mut existing_externs, &mut types, signatures);
                     all_types.insert(m.get_name(), types);
                 }
@@ -286,20 +292,19 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
                         default: false,
                         function_class: asm::FunctionClassId(op_name.clone()),
                     },
-                    // TODO: generalize
                     input_args: vec![
                         asm::ExternalArgument {
                             name: None,
-                            ffi_type: asm::FFIType::I64,
+                            ffi_type: data_type_to_ffi(op_l).unwrap(),
                         },
                         asm::ExternalArgument {
                             name: None,
-                            ffi_type: asm::FFIType::I64,
+                            ffi_type: data_type_to_ffi(op_r).unwrap(),
                         },
                     ],
                     output_types: vec![asm::ExternalArgument {
                         name: None,
-                        ffi_type: BOOL_FFI_TYPE,
+                        ffi_type: data_type_to_ffi(ret).unwrap(),
                     }],
                 }),
             ]
