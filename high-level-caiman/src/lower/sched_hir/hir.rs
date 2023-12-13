@@ -132,8 +132,18 @@ impl TryFrom<SchedFuncCall> for HirFuncCall {
 #[derive(Clone, Debug)]
 pub enum Terminator {
     /// A call to an internal function with a list of destinations to store the
-    /// return values in.
+    /// return values in. The destinations are **NEW** variables, not writes to
+    /// existing variables. This terminator is replaced by a `CaptureCall` terminator
+    /// when analyses are complete.
     Call(Vec<(String, Option<FullType>)>, HirFuncCall),
+    /// A call to an internal function with a list of destinations to store the
+    /// return values in and a list of variables to capture. The destinations are
+    /// **NEW** variables, not writes to existing variables.
+    CaptureCall {
+        dests: Vec<(String, Option<FullType>)>,
+        call: HirFuncCall,
+        captures: BTreeSet<String>,
+    },
     /// A select statement with a guard node. If the guard is true
     /// we transition to the `true_branch` of the outgoing edge of this block
     /// in the CFG. Otherwise, we transition to the `false_branch`.
@@ -188,7 +198,7 @@ pub trait Hir {
 impl Hir for Terminator {
     fn get_defs(&self) -> Option<Args> {
         match self {
-            Self::Call(defs, ..) => Some(
+            Self::Call(defs, ..) | Self::CaptureCall { dests: defs, .. } => Some(
                 defs.iter()
                     .map(|(d, t)| {
                         (
@@ -205,7 +215,7 @@ impl Hir for Terminator {
 
     fn get_uses(&self, uses: &mut BTreeSet<String>) {
         match self {
-            Self::Call(_, call) => {
+            Self::Call(_, call) | Self::CaptureCall { call, .. } => {
                 for arg in &call.args {
                     uses.insert(arg.clone());
                 }
@@ -225,7 +235,7 @@ impl Hir for Terminator {
 
     fn rename_uses(&mut self, f: &mut dyn FnMut(&str, UseType) -> String) {
         match self {
-            Self::Call(_, call) => {
+            Self::Call(_, call) | Self::CaptureCall { call, .. } => {
                 for arg in &mut call.args {
                     *arg = f(arg, UseType::Read);
                 }

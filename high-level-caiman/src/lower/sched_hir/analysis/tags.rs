@@ -181,6 +181,82 @@ fn set_remote_node_id(q: &mut asm::Quotient, id: asm::Hole<asm::RemoteNodeId>) {
     }
 }
 
+impl TagAnalysis {
+    /// Transfer function for an HIR body statement
+    fn transfer_stmt(&mut self, stmt: &mut HirBody) {
+        use std::collections::hash_map::Entry;
+        match stmt {
+            HirBody::ConstDecl { lhs, lhs_tag, .. } => {
+                self.tags.insert(
+                    lhs.clone(),
+                    TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs),
+                );
+            }
+            HirBody::VarDecl {
+                lhs, lhs_tag, rhs, ..
+            } => {
+                let mut info = TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs);
+                if rhs.is_none() {
+                    if let Some(val) = info.value.as_mut() {
+                        val.flow = ir::Flow::Dead;
+                    }
+                    if info.spatial.is_none() {
+                        info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));
+                    }
+                }
+                self.tags.insert(lhs.clone(), info);
+            }
+            HirBody::RefStore {
+                lhs, lhs_tags, rhs, ..
+            } => {
+                // let quot = self.value_quotient(rhs);
+                if let Some(lhs_tags) = lhs_tags {
+                    let t = self.tags.get_mut(lhs).unwrap();
+                    t.update(&self.specs, lhs_tags);
+                } else if let SchedTerm::Var { name, .. } = rhs {
+                    // TODO: this is probably not what we want to do
+                    if let Some(rhs_typ) = self.tags.get(name).cloned() {
+                        let t = self.tags.get_mut(lhs).unwrap();
+                        t.value = rhs_typ.value;
+                    }
+                }
+                // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
+                // t.value.quot = quot;
+            }
+            HirBody::RefLoad { dest, src, .. } => {
+                let tag = self.tags.get(src).cloned().unwrap_or_else(|| {
+                    TagInfo::from_tags(self.input_overrides.get(src).unwrap(), &self.specs)
+                });
+                self.tags.insert(dest.clone(), tag);
+            }
+            HirBody::Hole(_) => todo!(),
+            HirBody::Op { dest, dest_tag, .. } => {
+                self.tags.insert(
+                    dest.clone(),
+                    TagInfo::from(dest_tag.as_ref().unwrap(), &self.specs),
+                );
+            }
+            HirBody::OutAnnotation(_, tags) => {
+                for (v, tag) in tags {
+                    match self.tags.entry(v.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().update(&self.specs, tag);
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(TagInfo::from_tags(tag, &self.specs));
+                        }
+                    }
+                }
+            }
+            HirBody::InAnnotation(_, tags) => {
+                for (v, tag) in tags {
+                    self.input_overrides.insert(v.clone(), tag.clone());
+                }
+            }
+        }
+    }
+}
+
 impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
@@ -202,7 +278,6 @@ impl Fact for TagAnalysis {
     }
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
-        use std::collections::hash_map::Entry;
         match stmt {
             HirInstr::Tail(Terminator::Call(dests, _)) => {
                 for (dest, dest_tags) in dests {
@@ -212,74 +287,30 @@ impl Fact for TagAnalysis {
                     );
                 }
             }
-            HirInstr::Tail(..) => (),
-            HirInstr::Stmt(HirBody::ConstDecl { lhs, lhs_tag, .. }) => {
-                self.tags.insert(
-                    lhs.clone(),
-                    TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs),
-                );
-            }
-            HirInstr::Stmt(HirBody::VarDecl {
-                lhs, lhs_tag, rhs, ..
+            HirInstr::Tail(Terminator::CaptureCall {
+                dests, captures, ..
             }) => {
-                let mut info = TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs);
-                if rhs.is_none() {
-                    if let Some(val) = info.value.as_mut() {
-                        val.flow = ir::Flow::Dead;
-                    }
-                    if info.spatial.is_none() {
-                        info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));
-                    }
+                for (dest, dest_tags) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        TagInfo::from_tags(&dest_tags.as_ref().unwrap().tags, &self.specs),
+                    );
                 }
-                self.tags.insert(lhs.clone(), info);
-            }
-            HirInstr::Stmt(HirBody::RefStore {
-                lhs, lhs_tags, rhs, ..
-            }) => {
-                // let quot = self.value_quotient(rhs);
-                if let Some(lhs_tags) = lhs_tags {
-                    let t = self.tags.get_mut(lhs).unwrap();
-                    t.update(&self.specs, lhs_tags);
-                } else if let SchedTerm::Var { name, .. } = rhs {
-                    // TODO: this is probably not what we want to do
-                    if let Some(rhs_typ) = self.tags.get(name).cloned() {
-                        let t = self.tags.get_mut(lhs).unwrap();
-                        t.value = rhs_typ.value;
-                    }
-                }
-                // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
-                // t.value.quot = quot;
-            }
-            HirInstr::Stmt(HirBody::RefLoad { dest, src, .. }) => {
-                let tag = self.tags.get(src).cloned().unwrap_or_else(|| {
-                    TagInfo::from_tags(self.input_overrides.get(src).unwrap(), &self.specs)
-                });
-                self.tags.insert(dest.clone(), tag);
-            }
-            HirInstr::Stmt(HirBody::Hole(_)) => todo!(),
-            HirInstr::Stmt(HirBody::Op { dest, dest_tag, .. }) => {
-                self.tags.insert(
-                    dest.clone(),
-                    TagInfo::from(dest_tag.as_ref().unwrap(), &self.specs),
-                );
-            }
-            HirInstr::Stmt(HirBody::OutAnnotation(_, tags)) => {
-                for (v, tag) in tags {
-                    match self.tags.entry(v.clone()) {
-                        Entry::Occupied(mut entry) => {
-                            entry.get_mut().update(&self.specs, tag);
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(TagInfo::from_tags(tag, &self.specs));
-                        }
-                    }
+                for cap in captures.iter() {
+                    assert!(
+                        self.tags.contains_key(cap),
+                        "Capture {cap} is missing a tag",
+                    );
                 }
             }
-            HirInstr::Stmt(HirBody::InAnnotation(_, tags)) => {
-                for (v, tag) in tags {
-                    self.input_overrides.insert(v.clone(), tag.clone());
-                }
-            }
+            HirInstr::Tail(
+                Terminator::None
+                | Terminator::Next(..)
+                | Terminator::FinalReturn
+                | Terminator::Select(..)
+                | Terminator::Return(..),
+            ) => (),
+            HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }
     }
 

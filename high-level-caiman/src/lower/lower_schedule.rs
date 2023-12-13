@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use caiman::assembly::ast::{self as asm, FuncletArgument, Hole};
 
 use crate::{
@@ -324,7 +326,12 @@ fn get_tuple_quot(t: Option<asm::Tag>) -> asm::Hole<asm::Quotient> {
 /// * `f` - the funclet that contains the call
 /// # Returns
 /// A tuple containing the commands that implement the call
-fn lower_func_call(call: &HirFuncCall, temp_id: usize, f: &Funclet) -> CommandVec {
+fn lower_func_call(
+    call: &HirFuncCall,
+    captures: &BTreeSet<String>,
+    temp_id: usize,
+    f: &Funclet,
+) -> CommandVec {
     use crate::lower::sched_hir::TagInfo;
     let djoin_id = temp_id;
     let djoin_name = temp_var_name(djoin_id);
@@ -343,7 +350,12 @@ fn lower_func_call(call: &HirFuncCall, temp_id: usize, f: &Funclet) -> CommandVe
             // TODO: optimize and use inline join whenever possible
             node: asm::Node::InlineJoin {
                 funclet: f.next_blocks().first().unwrap().clone(),
-                captures: Some(vec![]),
+                captures: Some(
+                    captures
+                        .iter()
+                        .map(|x| Some(asm::NodeId(x.clone())))
+                        .collect(),
+                ),
                 continuation: Some(asm::NodeId(djoin_name)),
             },
         })),
@@ -394,7 +406,10 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
         // TODO: review this
         Terminator::None => panic!("None terminator not replaced by Next"),
-        Terminator::Call(_, call) => lower_func_call(call, temp_id, f),
+        Terminator::Call(..) => panic!("Call not replaced by CaptureCall"),
+        Terminator::CaptureCall { call, captures, .. } => {
+            lower_func_call(call, captures, temp_id, f)
+        }
     }
 }
 

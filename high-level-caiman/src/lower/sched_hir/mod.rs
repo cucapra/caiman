@@ -64,9 +64,13 @@ pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
     type_info: analysis::InOutFacts<TagAnalysis>,
+    /// Mapping from variable names to their base types
     types: HashMap<String, asm::TypeId>,
     finfo: FuncInfo,
     specs: Specs,
+    /// Map from block id to the set of output variables captured by a
+    /// function call
+    captured_out: HashMap<usize, BTreeSet<String>>,
 }
 
 /// A specific funclet in a scheduling function.
@@ -101,7 +105,8 @@ impl<'a> Funclet<'a> {
             Terminator::None
             | Terminator::Return(..)
             | Terminator::Next(_)
-            | Terminator::Call(..) => {
+            | Terminator::Call(..)
+            | Terminator::CaptureCall { .. } => {
                 let e = self
                     .parent
                     .cfg
@@ -117,18 +122,30 @@ impl<'a> Funclet<'a> {
 
     /// Gets the input arguments of this funclet based on the union of the live
     /// variables of all predecessor funclets.
-    fn input_vars(&self) -> BTreeSet<&String> {
-        // TODO: re-evaluate if this is correct for the general case
-        self.parent
-            .cfg
-            .predecessors(self.id())
+    ///
+    /// # Returns
+    /// A vector where captured variables will come before non-captured variables.
+    /// The returned vector of strings do not contain duplicates and each part of the
+    /// result (the captures and non-captures) is sorted alphabetically.
+    fn input_vars(&self) -> Vec<&String> {
+        let preds = self.parent.cfg.predecessors(self.id());
+        let captures = preds
+            .iter()
+            .filter_map(|id| self.parent.captured_out.get(id))
+            .flatten()
+            .collect::<BTreeSet<_>>();
+        assert!(captures.is_empty() || preds.len() == 1);
+        let returns: BTreeSet<_> = preds
             .iter()
             .flat_map(|id| self.parent.live_vars.get_out_fact(*id).live_set().iter())
-            .collect()
+            .filter(|v| !captures.contains(*v))
+            .collect();
+        captures.into_iter().chain(returns).collect()
     }
 
     /// Gets the output arguments of this funclet based on the live out variables
-    /// of this block. The returned vector of strings do not contain duplicates.
+    /// of this block. The returned vector of strings do not contain duplicates and
+    /// contains captures **and** non-captures. The entire result is sorted
     fn output_vars(&self) -> Vec<&String> {
         self.parent
             .live_vars
@@ -329,11 +346,25 @@ impl<'a> Funclet<'a> {
 }
 
 impl Funclets {
+    /// Updates terminators by replacing temporary terminators with their respective
+    /// versions which contain more information computed by analyses.
+    ///
     /// Replaces `Terminator::None` with `Terminator::Next` which is required for
     /// lowering. `Terminator::Next` contains information about which variables
     /// escape the basic block while `Terminator::None` does not. We use
     /// `Terminator::None` as a temporary until CFG analyses can be performed.
-    fn add_terminators(cfg: &mut Cfg, live_vars: &InOutFacts<LiveVars>) {
+    ///
+    /// Also replaces `Terminator::Call` with `Terminator::CaptureCall` which
+    /// contains information about which variables are captured by the call.
+    /// # Returns
+    /// A map from block id to the set of output variables captured by a
+    /// function call and a map from block id to the set of output variables
+    /// returned by the block (i.e. not captured by a function call)
+    fn terminator_transform_pass(
+        cfg: &mut Cfg,
+        live_vars: &InOutFacts<LiveVars>,
+    ) -> HashMap<usize, BTreeSet<String>> {
+        let mut captured_out = HashMap::new();
         for (id, bb) in &mut cfg.blocks {
             if matches!(bb.terminator, Terminator::None)
                 && cfg
@@ -349,16 +380,40 @@ impl Funclets {
                         .cloned()
                         .collect(),
                 );
+            } else if let Terminator::Call(dest, call) = bb.terminator.clone() {
+                let mut captures = BTreeSet::new();
+                for v in &live_vars.get_out_fact(*id).live_set {
+                    let mut handled = false;
+                    for (returned, _) in &dest {
+                        if v == returned {
+                            handled = true;
+                            break;
+                        }
+                    }
+                    if !handled {
+                        captures.insert(v.clone());
+                    }
+                }
+                captured_out.insert(*id, captures.clone());
+                bb.terminator = Terminator::CaptureCall {
+                    dests: dest,
+                    call,
+                    captures,
+                };
             }
         }
+        captured_out
     }
+
+    /// Creates a new `Funclets` from a scheduling function by performing analyses
+    /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
         let mut cfg = Cfg::new(f.statements);
         let mut types = Self::collect_types(&cfg, &f.input, &f.output);
         op_transform_pass(&mut cfg, &types);
         deref_transform_pass(&mut cfg, &mut types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
-        Self::add_terminators(&mut cfg, &live_vars);
+        let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.output));
         let finfo = FuncInfo {
             name: f.name,
@@ -375,6 +430,7 @@ impl Funclets {
             types,
             finfo,
             specs,
+            captured_out,
         }
     }
 
