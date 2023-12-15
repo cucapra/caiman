@@ -242,7 +242,7 @@ fn handle_call(
             cur_stmts,
             Terminator::Call(lhs, call.try_into().unwrap()),
             &join_edge,
-            None,
+            Some(*cur_id + 1),
             info,
         ),
     );

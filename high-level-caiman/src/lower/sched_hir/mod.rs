@@ -146,13 +146,51 @@ impl<'a> Funclet<'a> {
     /// Gets the output arguments of this funclet based on the live out variables
     /// of this block. The returned vector of strings do not contain duplicates and
     /// contains captures **and** non-captures. The entire result is sorted
-    fn output_vars(&self) -> Vec<&String> {
-        self.parent
-            .live_vars
-            .get_out_fact(self.block.ret_block.unwrap_or_else(|| self.id()))
-            .live_set()
-            .iter()
-            .collect()
+    #[allow(clippy::option_if_let_else)]
+    fn output_vars(&self) -> Vec<(String, TagInfo)> {
+        // Schedule call and select occurs "before" funclet ends.
+        // Their returns (return of continuation)
+        // must match the returns of the funclet.
+
+        // `ret_block` is specified for schedule call and select only
+        if let Some(continuation) = self.block.ret_block {
+            self.parent.get_funclet(continuation).output_vars()
+        } else {
+            let captures = self
+                .parent
+                .captured_out
+                .get(&self.id())
+                .cloned()
+                .unwrap_or_default();
+            let normal_rets: BTreeSet<_> = self
+                .parent
+                .live_vars
+                .get_out_fact(self.id())
+                .live_set()
+                .iter()
+                .filter(|x| !captures.contains(*x))
+                .cloned()
+                .collect();
+            captures
+                .into_iter()
+                .chain(normal_rets)
+                .map(|v| {
+                    (
+                        v.clone(),
+                        self.parent
+                            .type_info
+                            .get_out_fact(self.id())
+                            .get_tag(&v)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "{}: An output tag must be specified for {v}",
+                                    self.block.src_loc
+                                )
+                            }),
+                    )
+                })
+                .collect()
+        }
     }
 
     /// Gets the input arguments for each block based on the block's live in variables
@@ -212,35 +250,24 @@ impl<'a> Funclet<'a> {
 
     /// Gets the return arguments of a funclet based on the block's live out variables
     pub fn outputs(&self) -> Vec<asm::FuncletArgument> {
-        if self.id() == cfg::START_BLOCK_ID || self.id() == cfg::FINAL_BLOCK_ID {
+        if self.id() == cfg::FINAL_BLOCK_ID {
+            // TODO: look at this
             vec![hlc_arg_to_asm_arg(&self.parent.finfo.output)]
         } else {
             // TODO: re-evaluate if this is correct for the general case
             self.output_vars()
-                .iter()
-                .map(|&var| asm::FuncletArgument {
+                .into_iter()
+                .map(|(var, tag)| asm::FuncletArgument {
                     name: None,
                     typ: self
                         .parent
                         .types
-                        .get(var)
+                        .get(&var)
                         .unwrap_or_else(|| {
                             panic!("{}: Missing base type for {var}", self.block.src_loc)
                         })
                         .clone(),
-                    tags: self
-                        .parent
-                        .type_info
-                        .get_out_fact(self.block.ret_block.unwrap_or_else(|| self.id()))
-                        .get_tag(var)
-                        // no need for input overrides since this is the output
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "{}: An output tag must be specified for {var}",
-                                self.block.src_loc
-                            )
-                        })
-                        .tags_vec_default(),
+                    tags: tag.tags_vec_default(),
                 })
                 .collect()
         }
@@ -483,6 +510,15 @@ impl Funclets {
             }
         }
         types
+    }
+
+    /// Gets the funclet with the given id
+    #[inline]
+    pub fn get_funclet(&self, id: usize) -> Funclet {
+        Funclet {
+            parent: self,
+            block: self.cfg.blocks.get(&id).unwrap(),
+        }
     }
 
     /// Get's the list of funclets in this scheduling function
