@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
+mod continuations;
 mod op_transform;
 mod refs;
 mod tags;
@@ -9,6 +10,7 @@ use super::{
     hir::HirInstr,
 };
 
+pub use continuations::compute_coninuations;
 pub use op_transform::op_transform_pass;
 pub use refs::deref_transform_pass;
 #[allow(clippy::module_name_repetitions)]

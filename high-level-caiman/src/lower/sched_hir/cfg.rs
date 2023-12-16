@@ -6,7 +6,7 @@ use crate::{
     parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedStmt, SchedTerm},
 };
 
-use super::{stmts_to_hir, HirBody, Terminator};
+use super::{analysis::compute_coninuations, stmts_to_hir, HirBody, Terminator};
 
 /// The id of the final block of the canonicalized CFG.
 /// A canonical CFG has one entry and exit node.
@@ -21,13 +21,9 @@ pub struct BasicBlock {
     /// Invariant: no tail edges in the middle of the block
     pub stmts: Vec<HirBody>,
     pub terminator: Terminator,
-    /// The next block in the parent stack frame as this block. This is
-    /// the continuation for a parent block.
-    // TODO: re-evaluate how we want to store join information, and which block
-    // is the join block
-    pub join_block: Option<usize>,
-    /// The block whose live-out set is the return arguments of this block.
-    /// This is either the block itself (`None`), or the block's continuation.
+    /// The next block at the same stack level as this block. This is the block's
+    /// continuation. This is `None` if the block is the last block at the
+    /// current level of depth.
     pub ret_block: Option<usize>,
     /// Starting line and index for the block
     pub src_loc: Info,
@@ -42,6 +38,19 @@ pub enum Edge {
         false_branch: usize,
     },
     None,
+}
+
+impl Edge {
+    pub fn targets(&self) -> Vec<usize> {
+        match self {
+            Self::Next(id) => vec![*id],
+            Self::Select {
+                true_branch,
+                false_branch,
+            } => vec![*true_branch, *false_branch],
+            Self::None => vec![],
+        }
+    }
 }
 
 /// A control flow graph for a scheduling function.
@@ -70,20 +79,13 @@ fn make_block(
     cur_id: &mut usize,
     cur_stmt: &mut Vec<SchedStmt>,
     term: Terminator,
-    join_edge: &Edge,
     cont_block: Option<usize>,
     src_loc: Info,
 ) -> BasicBlock {
-    let join_block = match join_edge {
-        Edge::Next(id) => Some(*id),
-        Edge::None => None,
-        Edge::Select { .. } => panic!("Join edge should be unconditional"),
-    };
     let res = BasicBlock {
         id: *cur_id,
         stmts: stmts_to_hir(std::mem::take(cur_stmt)),
         terminator: term,
-        join_block,
         ret_block: cont_block,
         src_loc,
     };
@@ -142,7 +144,6 @@ fn handle_return(
     edges: &mut HashMap<usize, Edge>,
     cur_stmts: &mut Vec<SchedStmt>,
     sched_expr: SchedExpr,
-    join_edge: Edge,
     end: Info,
 ) {
     let old_id = *cur_id;
@@ -156,7 +157,6 @@ fn handle_return(
             cur_id,
             cur_stmts,
             Terminator::Return(Some(expr_to_node_id(sched_expr))),
-            &join_edge,
             None,
             info,
         ),
@@ -173,7 +173,6 @@ fn handle_select(
     tag: Option<Vec<crate::parse::ast::Tag>>,
     true_block: Vec<SchedStmt>,
     false_block: Vec<SchedStmt>,
-    join_edge: Edge,
     end_info: Info,
     children: &mut Vec<PendingChild>,
 ) {
@@ -188,7 +187,6 @@ fn handle_select(
             cur_id,
             cur_stmts,
             Terminator::Select(expr_to_node_id(guard), tag),
-            &join_edge,
             Some(*cur_id + 1),
             info,
         ),
@@ -225,7 +223,6 @@ fn handle_call(
     cur_stmts: &mut Vec<SchedStmt>,
     lhs: Vec<(String, Option<FullType>)>,
     call: SchedFuncCall,
-    join_edge: Edge,
     info: Info,
 ) {
     let info = Info::new_range(
@@ -241,7 +238,6 @@ fn handle_call(
             cur_id,
             cur_stmts,
             Terminator::Call(lhs, call.try_into().unwrap()),
-            &join_edge,
             Some(*cur_id + 1),
             info,
         ),
@@ -279,15 +275,7 @@ fn make_blocks(
         match stmt {
             SchedStmt::Return(end, sched_expr) => {
                 last_info = end;
-                handle_return(
-                    cur_id,
-                    blocks,
-                    edges,
-                    &mut cur_stmts,
-                    sched_expr,
-                    join_edge,
-                    end,
-                );
+                handle_return(cur_id, blocks, edges, &mut cur_stmts, sched_expr, end);
             }
             SchedStmt::If {
                 guard,
@@ -308,7 +296,6 @@ fn make_blocks(
                     tag,
                     true_block,
                     false_block,
-                    join_edge,
                     end_info,
                     &mut children,
                 );
@@ -320,16 +307,7 @@ fn make_blocks(
                 expr: Some(SchedExpr::Term(SchedTerm::Call(_, call))),
             } => {
                 last_info = info;
-                handle_call(
-                    edges,
-                    blocks,
-                    cur_id,
-                    &mut cur_stmts,
-                    lhs,
-                    call,
-                    join_edge,
-                    info,
-                );
+                handle_call(edges, blocks, cur_id, &mut cur_stmts, lhs, call, info);
             }
             SchedStmt::Call(end, call_info) => {
                 last_info = end;
@@ -340,7 +318,6 @@ fn make_blocks(
                     &mut cur_stmts,
                     vec![],
                     call_info,
-                    join_edge,
                     end,
                 );
             }
@@ -364,14 +341,7 @@ fn make_blocks(
         let info = cur_stmts.last().map_or(last_info, |x| *x.get_info());
         blocks.insert(
             *cur_id,
-            make_block(
-                cur_id,
-                &mut cur_stmts,
-                Terminator::None,
-                &join_edge,
-                None,
-                info,
-            ),
+            make_block(cur_id, &mut cur_stmts, Terminator::None, None, info),
         );
         edges.insert(old_id, join_edge);
     }
@@ -425,7 +395,6 @@ impl Cfg {
                 id: FINAL_BLOCK_ID,
                 stmts: vec![],
                 terminator: Terminator::FinalReturn,
-                join_block: None,
                 ret_block: None,
                 src_loc: Info::default(),
             },
@@ -440,12 +409,14 @@ impl Cfg {
             flatten_stmts(stmts),
             Edge::Next(FINAL_BLOCK_ID),
         );
-        Self {
-            blocks,
-            transpose_graph: Self::transpose(&edges),
-            graph: edges,
-        }
-        .remove_unreachable()
+        compute_coninuations(
+            Self {
+                blocks,
+                transpose_graph: Self::transpose(&edges),
+                graph: edges,
+            }
+            .remove_unreachable(),
+        )
     }
 
     /// Transposes a CFG
@@ -532,6 +503,7 @@ impl Cfg {
         // can't occur right now
         self.graph.retain(|k, _| !unreachable.contains(k));
         self.blocks.retain(|_, b| !unreachable.contains(&b.id));
+        self.transpose_graph = Self::transpose(&self.graph);
         self
     }
 }

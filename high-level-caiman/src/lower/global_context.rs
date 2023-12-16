@@ -122,7 +122,140 @@ struct TypedBinop {
     ret: DataType,
 }
 
-/// Collects all extern operations used in a given list of statements.
+/// Collects all names defined in a given spec.
+fn collect_spec_names(stmts: &Vec<SpecStmt>) -> HashSet<String> {
+    let mut res = HashSet::new();
+    for stmt in stmts {
+        match stmt {
+            SpecStmt::Assign { lhs, .. } => {
+                for (name, _) in lhs {
+                    res.insert(name.clone());
+                }
+            }
+            SpecStmt::Returns(..) => (),
+        }
+    }
+    res
+}
+
+/// Collects all types of variables used in a given statement for an assignment
+/// `lhs :- t`
+fn collect_spec_assign_term(
+    t: &SpecTerm,
+    lhs: &[(String, Option<DataType>)],
+    types: &mut HashMap<String, DataType>,
+    signatures: &HashMap<String, (Vec<DataType>, Vec<DataType>)>,
+) {
+    match t {
+        SpecTerm::Lit { lit, .. } => match lit {
+            SpecLiteral::Int(_) => {
+                types.insert(lhs[0].0.clone(), DataType::Int(IntSize::I64));
+            }
+            SpecLiteral::Bool(_) => {
+                types.insert(lhs[0].0.clone(), DataType::Bool);
+            }
+            SpecLiteral::Float(_) => {
+                types.insert(lhs[0].0.clone(), DataType::Float(FloatSize::F64));
+            }
+            _ => todo!(),
+        },
+        SpecTerm::Var { .. } => todo!(),
+        SpecTerm::Call { function, .. } => {
+            if let SpecExpr::Term(SpecTerm::Var { name, .. }) = &**function {
+                for ((name, annot), typ) in lhs.iter().zip(signatures.get(name).unwrap().1.iter()) {
+                    if let Some(a) = annot {
+                        assert_eq!(a, typ);
+                    }
+                    types.insert(name.clone(), typ.clone());
+                }
+            }
+        }
+    }
+}
+
+/// Collects all types of variables used in a given statement for an assignment
+/// `lhs :- if_true if guard if_false`.
+///
+/// Returns `true` if the collection failed and should be retried at the next iteration.
+///
+/// # Panics
+/// Panics if the statement is not lowered or it uses a variable that is
+/// undefined (i.e. not present in `names`).
+fn collect_spec_assign_if(
+    lhs: &[(String, Option<DataType>)],
+    if_true: &SpecExpr,
+    if_false: &SpecExpr,
+    guard: &SpecExpr,
+    types: &mut HashMap<String, DataType>,
+    names: &HashSet<String>,
+) -> bool {
+    if let (
+        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
+        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
+        SpecExpr::Term(SpecTerm::Var { name: guard, .. }),
+    ) = (if_true, if_false, guard)
+    {
+        if !types.contains_key(guard) || !types.contains_key(name1) || !types.contains_key(name2) {
+            assert!(names.contains(guard), "Undefined node: {guard}");
+            assert!(names.contains(name1), "Undefined node: {name1}");
+            assert!(names.contains(name2), "Undefined node: {name2}");
+            return true;
+        }
+        assert_eq!(types[guard], DataType::Bool);
+        assert_eq!(
+            types[name1], types[name2],
+            "Conditional types must be equal"
+        );
+        types.insert(lhs[0].0.clone(), types[name1].clone());
+    } else {
+        panic!("Not lowered")
+    }
+    false
+}
+
+/// Collects all types of variables used in a given statement for an assignment
+/// `lhs :- op_l op op_r`.
+///
+/// Returns `true` if the collection failed and should be retried at the next iteration.
+///
+/// # Panics
+/// Panics if the statement is not lowered or it uses a variable that is
+/// undefined (i.e. not present in `names`).
+fn collect_spec_assign_bop(
+    op_l: &SpecExpr,
+    op_r: &SpecExpr,
+    op: Binop,
+    types: &mut HashMap<String, DataType>,
+    externs: &mut HashSet<TypedBinop>,
+    lhs: &[(String, Option<DataType>)],
+    names: &HashSet<String>,
+) -> bool {
+    if let (
+        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
+        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
+    ) = (op_l, op_r)
+    {
+        if !types.contains_key(name1) || !types.contains_key(name2) {
+            assert!(names.contains(name1), "Undefined node: {name1}");
+            assert!(names.contains(name2), "Undefined node: {name2}");
+            return true;
+        }
+        let ret = op_output_type(op, &types[name1], &types[name2]);
+        types.insert(lhs[0].0.clone(), ret.clone());
+        externs.insert(TypedBinop {
+            op,
+            op_l: types[name1].clone(),
+            op_r: types[name2].clone(),
+            ret,
+        });
+    } else {
+        panic!("Not lowered")
+    }
+    false
+}
+
+/// Collects all extern operations used in a given spec and collects all types
+/// of variables used in the spec.
 /// # Arguments
 /// * `stmts` - the statements to scan
 /// * `externs` - a set of all extern operations used in `stmts`. This is updated
@@ -130,90 +263,47 @@ struct TypedBinop {
 /// * `types` - a map from variable names to their types. This is updated as
 /// we scan `stmts` for all new variables.
 /// * `signatures` - a map from spec names to their signatures
-fn collect_extern_ops(
+fn collect_spec(
     stmts: &Vec<SpecStmt>,
     externs: &mut HashSet<TypedBinop>,
     types: &mut HashMap<String, DataType>,
     signatures: &HashMap<String, (Vec<DataType>, Vec<DataType>)>,
 ) {
-    for stmt in stmts {
-        match stmt {
-            SpecStmt::Assign { lhs, rhs, .. } => match rhs {
-                SpecExpr::Term(t) => match t {
-                    SpecTerm::Lit { lit, .. } => match lit {
-                        SpecLiteral::Int(_) => {
-                            types.insert(lhs[0].0.clone(), DataType::Int(IntSize::I64));
-                        }
-                        SpecLiteral::Bool(_) => {
-                            types.insert(lhs[0].0.clone(), DataType::Bool);
-                        }
-                        SpecLiteral::Float(_) => {
-                            types.insert(lhs[0].0.clone(), DataType::Float(FloatSize::F64));
-                        }
-                        _ => todo!(),
-                    },
-                    SpecTerm::Var { .. } => todo!(),
-                    SpecTerm::Call { function, .. } => {
-                        if let SpecExpr::Term(SpecTerm::Var { name, .. }) = &**function {
-                            for ((name, annot), typ) in
-                                lhs.iter().zip(signatures.get(name).unwrap().1.iter())
-                            {
-                                if let Some(a) = annot {
-                                    assert_eq!(a, typ);
-                                }
-                                types.insert(name.clone(), typ.clone());
-                            }
+    let names = collect_spec_names(stmts);
+    let mut skipped = true;
+    // specs are unordered, so iterate until no change.
+    while skipped {
+        skipped = false;
+        for stmt in stmts {
+            match stmt {
+                SpecStmt::Assign { lhs, rhs, .. } => match rhs {
+                    SpecExpr::Term(t) => collect_spec_assign_term(t, lhs, types, signatures),
+                    SpecExpr::Conditional {
+                        if_true,
+                        guard,
+                        if_false,
+                        ..
+                    } => {
+                        if collect_spec_assign_if(lhs, if_true, if_false, guard, types, &names) {
+                            skipped = true;
+                            continue;
                         }
                     }
+                    SpecExpr::Binop {
+                        op,
+                        lhs: op_l,
+                        rhs: op_r,
+                        ..
+                    } => {
+                        if collect_spec_assign_bop(op_l, op_r, *op, types, externs, lhs, &names) {
+                            skipped = true;
+                            continue;
+                        }
+                    }
+                    SpecExpr::Uop { .. } => todo!(),
                 },
-                SpecExpr::Conditional {
-                    if_true,
-                    guard,
-                    if_false,
-                    ..
-                } => {
-                    if let (
-                        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
-                        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
-                        SpecExpr::Term(SpecTerm::Var { name: guard, .. }),
-                    ) = (&**if_true, &**if_false, &**guard)
-                    {
-                        assert_eq!(types[guard], DataType::Bool);
-                        assert_eq!(
-                            types[name1], types[name2],
-                            "Conditional types must be equal"
-                        );
-                        types.insert(lhs[0].0.clone(), types[name1].clone());
-                    } else {
-                        panic!("Not lowered")
-                    }
-                }
-                SpecExpr::Binop {
-                    op,
-                    lhs: op_l,
-                    rhs: op_r,
-                    ..
-                } => {
-                    if let (
-                        SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
-                        SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
-                    ) = (&**op_l, &**op_r)
-                    {
-                        let ret = op_output_type(*op, &types[name1], &types[name2]);
-                        types.insert(lhs[0].0.clone(), ret.clone());
-                        externs.insert(TypedBinop {
-                            op: *op,
-                            op_l: types[name1].clone(),
-                            op_r: types[name2].clone(),
-                            ret,
-                        });
-                    } else {
-                        panic!("Not lowered")
-                    }
-                }
-                SpecExpr::Uop { .. } => todo!(),
-            },
-            SpecStmt::Returns(..) => (),
+                SpecStmt::Returns(..) => (),
+            }
         }
     }
 }
@@ -258,7 +348,7 @@ fn gen_extern_decls(
                     for (name, typ) in input {
                         types.insert(name.clone(), typ.clone());
                     }
-                    collect_extern_ops(statements, &mut existing_externs, &mut types, signatures);
+                    collect_spec(statements, &mut existing_externs, &mut types, signatures);
                     all_types.insert(m.get_name(), types);
                 }
             }

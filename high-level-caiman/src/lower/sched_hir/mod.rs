@@ -152,44 +152,50 @@ impl<'a> Funclet<'a> {
         // Their returns (return of continuation)
         // must match the returns of the funclet.
 
-        // `ret_block` is specified for schedule call and select only
-        if let Some(continuation) = self.block.ret_block {
-            self.parent.get_funclet(continuation).output_vars()
-        } else {
-            let captures = self
-                .parent
-                .captured_out
-                .get(&self.id())
-                .cloned()
-                .unwrap_or_default();
-            let normal_rets: BTreeSet<_> = self
-                .parent
-                .live_vars
-                .get_out_fact(self.id())
-                .live_set()
-                .iter()
-                .filter(|x| !captures.contains(*x))
-                .cloned()
-                .collect();
-            captures
-                .into_iter()
-                .chain(normal_rets)
-                .map(|v| {
-                    (
-                        v.clone(),
-                        self.parent
-                            .type_info
-                            .get_out_fact(self.id())
-                            .get_tag(&v)
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "{}: An output tag must be specified for {v}",
-                                    self.block.src_loc
-                                )
-                            }),
-                    )
-                })
-                .collect()
+        match self.block.terminator {
+            Terminator::Call(..) | Terminator::CaptureCall { .. } | Terminator::Select(..) => {
+                let continuation = self.block.ret_block.unwrap();
+                self.parent.get_funclet(continuation).output_vars()
+            }
+            Terminator::FinalReturn
+            | Terminator::None
+            | Terminator::Next(_)
+            | Terminator::Return(_) => {
+                let captures = self
+                    .parent
+                    .captured_out
+                    .get(&self.id())
+                    .cloned()
+                    .unwrap_or_default();
+                let normal_rets: BTreeSet<_> = self
+                    .parent
+                    .live_vars
+                    .get_out_fact(self.id())
+                    .live_set()
+                    .iter()
+                    .filter(|x| !captures.contains(*x))
+                    .cloned()
+                    .collect();
+                captures
+                    .into_iter()
+                    .chain(normal_rets)
+                    .map(|v| {
+                        (
+                            v.clone(),
+                            self.parent
+                                .type_info
+                                .get_out_fact(self.id())
+                                .get_tag(&v)
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "{}: An output tag must be specified for {v}",
+                                        self.block.src_loc
+                                    )
+                                }),
+                        )
+                    })
+                    .collect()
+            }
         }
     }
 
@@ -319,40 +325,8 @@ impl<'a> Funclet<'a> {
     /// first successor funclet shared by all immediate successors of this funclet.
     #[inline]
     pub fn join_funclet(&self) -> asm::FuncletId {
-        // TODO: re-evaluate if this is correct for the general case
         let id = match self.parent.cfg.graph.get(&self.id()).unwrap() {
-            Edge::Select {
-                true_branch,
-                false_branch,
-            } => {
-                let s = self
-                    .parent
-                    .cfg
-                    .blocks
-                    .get(true_branch)
-                    .unwrap()
-                    .join_block
-                    .unwrap_or(FINAL_BLOCK_ID);
-                assert_eq!(
-                    s,
-                    self.parent
-                        .cfg
-                        .blocks
-                        .get(false_branch)
-                        .unwrap()
-                        .join_block
-                        .unwrap_or(FINAL_BLOCK_ID)
-                );
-                s
-            }
-            Edge::Next(id) => self
-                .parent
-                .cfg
-                .blocks
-                .get(id)
-                .unwrap()
-                .join_block
-                .unwrap_or(FINAL_BLOCK_ID),
+            Edge::Select { .. } | Edge::Next(_) => self.block.ret_block.unwrap_or(FINAL_BLOCK_ID),
             Edge::None => FINAL_BLOCK_ID,
         };
         asm::FuncletId(self.parent.funclet_name(id))
