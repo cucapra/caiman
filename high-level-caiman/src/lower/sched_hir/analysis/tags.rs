@@ -108,6 +108,23 @@ impl TagInfo {
         ]
     }
 
+    /// Returns the indexed tag vector for this type. Any unspecified tags will be
+    /// assumed to be `none()-usable`
+    pub fn tag_info_default(self) -> Self {
+        Self {
+            value: self
+                .value
+                .or_else(|| Some(none_tag(&self.specs.value, ir::Flow::Usable))),
+            spatial: self
+                .spatial
+                .or_else(|| Some(none_tag(&self.specs.spatial, ir::Flow::Usable))),
+            timeline: self
+                .timeline
+                .or_else(|| Some(none_tag(&self.specs.timeline, ir::Flow::Usable))),
+            specs: self.specs,
+        }
+    }
+
     /// Returns the default tag for the specified specifcation type.
     /// The default tag is `none()-usable`
     pub fn default_tag(&self, spec_type: SpecType) -> asm::Tag {
@@ -133,12 +150,15 @@ pub struct TagAnalysis {
 
 impl TagAnalysis {
     /// Constructs a new top element
-    pub fn top(specs: &Specs, out: &Option<FullType>) -> Self {
+    pub fn top(specs: &Specs, input: &[(String, FullType)], out: &Option<FullType>) -> Self {
         let mut tags = HashMap::new();
         tags.insert(
             String::from(RET_VAR),
             TagInfo::from(out.as_ref().unwrap(), specs),
         );
+        for (arg_name, arg_type) in input {
+            tags.insert(arg_name.clone(), TagInfo::from(arg_type, specs));
+        }
         Self {
             tags,
             specs: Rc::new(specs.clone()),
@@ -251,6 +271,14 @@ impl TagAnalysis {
             HirBody::InAnnotation(_, tags) => {
                 for (v, tag) in tags {
                     self.input_overrides.insert(v.clone(), tag.clone());
+                    match self.tags.entry(v.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().update(&self.specs, tag);
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(TagInfo::from_tags(tag, &self.specs));
+                        }
+                    }
                 }
             }
         }
@@ -303,12 +331,16 @@ impl Fact for TagAnalysis {
                     );
                 }
             }
+            HirInstr::Tail(Terminator::Return(Some(r))) => {
+                let tag = self.tags.get(r).cloned().unwrap();
+                self.tags.insert(RET_VAR.to_string(), tag);
+            }
             HirInstr::Tail(
                 Terminator::None
                 | Terminator::Next(..)
                 | Terminator::FinalReturn
                 | Terminator::Select(..)
-                | Terminator::Return(..),
+                | Terminator::Return(None),
             ) => (),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }

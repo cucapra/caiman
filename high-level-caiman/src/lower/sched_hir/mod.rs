@@ -152,8 +152,19 @@ impl<'a> Funclet<'a> {
         // Their returns (return of continuation)
         // must match the returns of the funclet.
 
+        if self.id() == FINAL_BLOCK_ID {
+            return vec![(
+                RET_VAR.to_string(),
+                TagInfo::from(&self.parent.finfo.output.1, &self.parent.specs).tag_info_default(),
+            )];
+        }
+
         match self.block.terminator {
             Terminator::Call(..) | Terminator::CaptureCall { .. } | Terminator::Select(..) => {
+                let continuation = self.block.ret_block.unwrap();
+                self.parent.get_funclet(continuation).output_vars()
+            }
+            Terminator::Return(_) if self.is_final_return() => {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
@@ -209,6 +220,18 @@ impl<'a> Funclet<'a> {
                 .iter()
                 .map(hlc_arg_to_asm_arg)
                 .collect()
+        } else if self.id() == FINAL_BLOCK_ID {
+            vec![asm::FuncletArgument {
+                name: Some(asm::NodeId(RET_VAR.to_string())),
+                typ: self
+                    .parent
+                    .types
+                    .get(RET_VAR)
+                    .unwrap_or_else(|| panic!("{}: Missing type for {RET_VAR}", self.block.src_loc))
+                    .clone(),
+                tags: TagInfo::from(&self.parent.finfo.output.1, &self.parent.specs)
+                    .tags_vec_default(),
+            }]
         } else {
             self.input_vars()
                 .iter()
@@ -258,7 +281,17 @@ impl<'a> Funclet<'a> {
     pub fn outputs(&self) -> Vec<asm::FuncletArgument> {
         if self.id() == cfg::FINAL_BLOCK_ID {
             // TODO: look at this
-            vec![hlc_arg_to_asm_arg(&self.parent.finfo.output)]
+            vec![asm::FuncletArgument {
+                name: Some(asm::NodeId(RET_VAR.to_string())),
+                typ: self
+                    .parent
+                    .types
+                    .get(RET_VAR)
+                    .unwrap_or_else(|| panic!("{}: Missing type for {RET_VAR}", self.block.src_loc))
+                    .clone(),
+                tags: TagInfo::from(&self.parent.finfo.output.1, &self.parent.specs)
+                    .tags_vec_default(),
+            }]
         } else {
             // TODO: re-evaluate if this is correct for the general case
             self.output_vars()
@@ -330,6 +363,14 @@ impl<'a> Funclet<'a> {
             Edge::None => FINAL_BLOCK_ID,
         };
         asm::FuncletId(self.parent.funclet_name(id))
+    }
+
+    /// Returns true if this funclet is the sole predecessor to the final block.
+    /// In other words, this funclet is a top level funclet with a `return`
+    /// terminator.
+    pub fn is_final_return(&self) -> bool {
+        self.parent.cfg.predecessors(FINAL_BLOCK_ID).len() == 1
+            && self.parent.cfg.predecessors(FINAL_BLOCK_ID).first() == Some(&self.id())
     }
 
     /// Gets the local type of the specified variable.
@@ -415,7 +456,7 @@ impl Funclets {
         deref_transform_pass(&mut cfg, &mut types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.output));
+        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.input, &f.output));
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,

@@ -670,11 +670,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
                 .collect(),
         },
         ast::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-            join: context
-                .funclet_indices
-                .get_funclet(&reject_hole(join.as_ref()).0)
-                .unwrap()
-                .clone(),
+            join: context.node_id(reject_hole(join.as_ref())),
             arguments: reject_hole(arguments.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))

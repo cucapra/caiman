@@ -381,6 +381,48 @@ fn lower_func_call(
     ]
 }
 
+/// Lowers a return terminator into a caiman assembly command.
+/// If the return is a final return, it is lowered into a default join and a
+/// jump to the final block. Otherwise it is lowered into a return command.
+///
+/// # Arguments
+/// * `ret` - the name of the variable to return
+/// * `temp_id` - the next available temporary id
+/// * `f` - the funclet that contains the return
+/// # Returns
+/// A tuple containing the commands that implement the return
+fn lower_ret(ret: &str, temp_id: usize, f: &Funclet) -> CommandVec {
+    if f.is_final_return() {
+        let djoin_id = temp_id;
+        let djoin_name = temp_var_name(djoin_id);
+        let join = temp_id + 1;
+        let join_var = temp_var_name(join);
+        assert_eq!(f.next_blocks().len(), 1);
+        vec![
+            Some(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(djoin_name.clone())),
+                node: asm::Node::DefaultJoin,
+            })),
+            Some(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(join_var.clone())),
+                node: asm::Node::InlineJoin {
+                    funclet: f.next_blocks().first().unwrap().clone(),
+                    captures: Some(vec![]),
+                    continuation: Some(asm::NodeId(djoin_name)),
+                },
+            })),
+            Some(asm::Command::TailEdge(asm::TailEdge::Jump {
+                arguments: Some(vec![Some(asm::NodeId(ret.to_string()))]),
+                join: Some(asm::NodeId(join_var)),
+            })),
+        ]
+    } else {
+        vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
+            return_values: Some(vec![Some(asm::NodeId(ret.to_string()))]),
+        }))]
+    }
+}
+
 /// Lowers a basic block terminator into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the terminator
@@ -389,11 +431,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
     // we do not return the new `temp_id` because this is the last instruction
     // in the block
     match t {
-        Terminator::Return(Some(name)) => {
-            vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-                return_values: Some(vec![Some(asm::NodeId(name.clone()))]),
-            }))]
-        }
+        Terminator::Return(Some(name)) => lower_ret(name, temp_id, f),
         Terminator::Next(vars) => {
             vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
                 return_values: Some(vars.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),

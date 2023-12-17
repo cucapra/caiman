@@ -26,7 +26,7 @@ struct Arguments {
 
     /// When this flag is enabled, the compiler will only explicate the lowered
     /// AST and print the result
-    #[clap(long)]
+    #[clap(long, alias = "ir")]
     explicate_only: bool,
 
     /// When this parameter is set, outputs the compiled code to the given file.
