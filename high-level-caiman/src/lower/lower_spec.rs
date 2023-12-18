@@ -46,7 +46,6 @@ fn lower_spec_call(
     function: &NestedExpr<SpecTerm>,
     args: Vec<NestedExpr<SpecTerm>>,
 ) -> Vec<asm::Hole<asm::Command>> {
-    // TODO: multiple returns
     let function = enum_cast!(
         SpecTerm::Var { name, .. },
         name,
