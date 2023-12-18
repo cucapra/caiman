@@ -547,8 +547,13 @@ impl ASTFactory {
     // TOP-Level:
 
     struct_variant_factory!(value_funclet(name: String, input: Vec<Arg<DataType>>, 
-        output: Option<NamedOutput<DataType>>, statements: Vec<SpecStmt>) 
-        -> ClassMembers:ClassMembers::ValueFunclet);
+        output: Option<Vec<NamedOutput<DataType>>>, statements: Vec<SpecStmt>) 
+        -> ClassMembers:ClassMembers::ValueFunclet {
+            name: name,
+            input: input,
+            output: output.unwrap_or_default(),
+            statements: statements
+        });
 
     struct_variant_factory!(space_funclet(name: String, input: Vec<Arg<DataType>>, 
         output: NamedOutput<DataType>, statements: Vec<SpecStmt>) 
@@ -562,26 +567,32 @@ impl ASTFactory {
         -> TopLevel:TopLevel::FunctionClass);
 
     struct_variant_factory!(sched_function(name: String, input: Vec<Arg<FullType>>, 
-        output: Option<FullType>, specs: Vec<String>, statements: Vec<SchedStmt>) 
-        -> TopLevel:TopLevel::SchedulingFunc);
+        output: Option<Vec<FullType>>, specs: Vec<String>, statements: Vec<SchedStmt>) 
+        -> TopLevel:TopLevel::SchedulingFunc {
+            name: name,
+            input: input,
+            output: output.unwrap_or_default(),
+            specs: specs,
+            statements: statements
+        });
 
     struct_variant_factory!(extern_func(device: String, name: String, input: Vec<(Option<String>, DataType)>, 
-        output: Option<NamedOutput<DataType>>, def: Option<ExternDef>) -> ClassMembers:ClassMembers::Extern {
+        output: Option<Vec<NamedOutput<DataType>>>, def: Option<ExternDef>) -> ClassMembers:ClassMembers::Extern {
             device: device,
             def: def,
             name: name,
             input: input,
-            output: output,
+            output: output.unwrap_or_default(),
             pure: false
         });
 
     struct_variant_factory!(extern_pure_func(device: String, name: String, input: Vec<(Option<String>, DataType)>, 
-        output: Option<NamedOutput<DataType>>, def: Option<ExternDef>) -> ClassMembers:ClassMembers::Extern {
+        output: Option<Vec<NamedOutput<DataType>>>, def: Option<ExternDef>) -> ClassMembers:ClassMembers::Extern {
             device: device,
             def: def,
             name: name,
             input: input,
-            output: output,
+            output: output.unwrap_or_default(),
             pure: true
         });
     

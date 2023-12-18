@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use crate::{
     enum_cast,
     parse::ast::{
-        Binop, ClassMembers, DataType, NestedExpr, SpecLiteral, SpecStmt, SpecTerm, TopLevel,
+        Binop, ClassMembers, DataType, NestedExpr, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
+        TopLevel,
     },
 };
 use caiman::{assembly::ast as asm, ir};
 
-use super::{binop_to_str, data_type_to_local_type, global_context::Context};
+use super::{binop_to_str, data_type_to_local_type, global_context::Context, tuple_id};
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm) -> asm::Node {
@@ -41,7 +42,7 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
 
 /// Lowers a spec call into caiman assembly call and extract.
 fn lower_spec_call(
-    lhs: String,
+    lhs: Vec<String>,
     function: &NestedExpr<SpecTerm>,
     args: Vec<NestedExpr<SpecTerm>>,
 ) -> Vec<asm::Hole<asm::Command>> {
@@ -52,31 +53,32 @@ fn lower_spec_call(
         enum_cast!(NestedExpr::Term, function)
     )
     .clone();
-    let tuple_id = format!("_t{lhs}");
-    vec![
-        Some(asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(tuple_id.clone())),
-            node: asm::Node::CallFunctionClass {
-                function_id: Some(asm::FunctionClassId(function)),
-                arguments: Some(
-                    args.into_iter()
-                        .map(|x| {
-                            let t = enum_cast!(NestedExpr::Term, x);
-                            let v = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-                            Some(asm::NodeId(v))
-                        })
-                        .collect(),
-                ),
-            },
-        })),
-        Some(asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(lhs)),
+    let tuple_id = tuple_id(&lhs);
+    let mut r = vec![Some(asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(tuple_id.clone())),
+        node: asm::Node::CallFunctionClass {
+            function_id: Some(asm::FunctionClassId(function)),
+            arguments: Some(
+                args.into_iter()
+                    .map(|x| {
+                        let t = enum_cast!(NestedExpr::Term, x);
+                        let v = enum_cast!(SpecTerm::Var { name, .. }, name, t);
+                        Some(asm::NodeId(v))
+                    })
+                    .collect(),
+            ),
+        },
+    }))];
+    for (i, name) in lhs.into_iter().enumerate() {
+        r.push(Some(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(name)),
             node: asm::Node::ExtractResult {
-                node_id: Some(asm::NodeId(tuple_id)),
-                index: Some(0),
+                node_id: Some(asm::NodeId(tuple_id.clone())),
+                index: Some(i),
             },
-        })),
-    ]
+        })));
+    }
+    r
 }
 
 /// Converts a term to its node name, assuming that the term is a variable
@@ -90,6 +92,7 @@ fn term_to_name(t: NestedExpr<SpecTerm>) -> String {
     )
 }
 
+/// Lowers a binary operation into a caiman assembly call and extract.
 fn lower_binop(
     dest: String,
     op: Binop,
@@ -99,7 +102,7 @@ fn lower_binop(
 ) -> Vec<asm::Hole<asm::Command>> {
     let op_lhs = term_to_name(op_lhs);
     let op_rhs = term_to_name(op_rhs);
-    let temp = format!("_{dest}_t");
+    let temp = tuple_id(&[dest.clone()]);
     vec![
         Some(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(temp.clone())),
@@ -129,7 +132,7 @@ fn lower_binop(
 /// Panics if the rhs expression is not flattened
 /// (i.e. contains a nested expression, or constants outside of direct assignments)
 fn lower_spec_assign(
-    lhs: String,
+    mut lhs: Vec<String>,
     e: NestedExpr<SpecTerm>,
     global_ctx: &Context,
     spec_name: &str,
@@ -141,11 +144,12 @@ fn lower_spec_assign(
             guard,
             ..
         } => {
+            assert_eq!(lhs.len(), 1);
             let guard_id = term_to_name(*guard);
             let true_id = term_to_name(*if_true);
             let false_id = term_to_name(*if_false);
             vec![Some(asm::Command::Node(asm::NamedNode {
-                name: Some(asm::NodeId(lhs)),
+                name: Some(asm::NodeId(lhs.swap_remove(0))),
                 node: asm::Node::Select {
                     condition: Some(asm::NodeId(guard_id)),
                     true_case: Some(asm::NodeId(true_id)),
@@ -157,9 +161,10 @@ fn lower_spec_assign(
             lower_spec_call(lhs, &function, args)
         }
         NestedExpr::Term(t) => {
+            assert_eq!(lhs.len(), 1);
             let node = lower_spec_term(t);
             vec![Some(asm::Command::Node(asm::NamedNode {
-                name: Some(asm::NodeId(lhs)),
+                name: Some(asm::NodeId(lhs.swap_remove(0))),
                 node,
             }))]
         }
@@ -168,13 +173,16 @@ fn lower_spec_assign(
             lhs: op_lhs,
             rhs: op_rhs,
             ..
-        } => lower_binop(
-            lhs,
-            op,
-            *op_lhs,
-            *op_rhs,
-            &global_ctx.value_types[spec_name],
-        ),
+        } => {
+            assert_eq!(lhs.len(), 1);
+            lower_binop(
+                lhs.swap_remove(0),
+                op,
+                *op_lhs,
+                *op_rhs,
+                &global_ctx.value_types[spec_name],
+            )
+        }
         NestedExpr::Uop { .. } => todo!(),
     }
 }
@@ -187,15 +195,34 @@ fn lower_spec_stmts(
     let mut res = vec![];
     for stmt in stmts {
         match stmt {
-            SpecStmt::Assign { mut lhs, rhs, .. } => {
-                assert_eq!(lhs.len(), 1);
-                res.extend(lower_spec_assign(lhs.swap_remove(0).0, rhs, ctx, spec_name));
+            SpecStmt::Assign { lhs, rhs, .. } => {
+                res.extend(lower_spec_assign(
+                    lhs.into_iter().map(|x| x.0).collect(),
+                    rhs,
+                    ctx,
+                    spec_name,
+                ));
             }
             SpecStmt::Returns(_, e) => {
-                let v = term_to_name(e);
-                res.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
-                    return_values: Some(vec![Some(asm::NodeId(v))]),
-                })));
+                if let SpecExpr::Term(SpecTerm::Lit {
+                    lit: SpecLiteral::Tuple(names),
+                    ..
+                }) = e
+                {
+                    res.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
+                        return_values: Some(
+                            names
+                                .into_iter()
+                                .map(|x| Some(asm::NodeId(term_to_name(x))))
+                                .collect(),
+                        ),
+                    })));
+                } else {
+                    let v = term_to_name(e);
+                    res.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
+                        return_values: Some(vec![Some(asm::NodeId(v))]),
+                    })));
+                }
             }
         }
     }
@@ -215,7 +242,7 @@ fn lower_spec_stmts(
 fn lower_spec_funclet(
     name: &str,
     input: Vec<(String, DataType)>,
-    output: Option<(Option<String>, DataType)>,
+    output: Vec<(Option<String>, DataType)>,
     statements: Vec<SpecStmt>,
     class_name: Option<&str>,
     ctx: &Context,
@@ -295,7 +322,7 @@ pub fn lower_timeline_funclet(f: TopLevel, ctx: &Context) -> asm::Funclet {
         (name, input, output, statements),
         f
     );
-    let (header, commands) = lower_spec_funclet(&name, input, Some(output), statements, None, ctx);
+    let (header, commands) = lower_spec_funclet(&name, input, vec![output], statements, None, ctx);
     asm::Funclet {
         kind: ir::FuncletKind::Timeline,
         header,
@@ -318,7 +345,7 @@ pub fn lower_spatial_funclet(f: TopLevel, ctx: &Context) -> asm::Funclet {
         (name, input, output, statements),
         f
     );
-    let (header, commands) = lower_spec_funclet(&name, input, Some(output), statements, None, ctx);
+    let (header, commands) = lower_spec_funclet(&name, input, vec![output], statements, None, ctx);
     asm::Funclet {
         kind: ir::FuncletKind::Spatial,
         header,

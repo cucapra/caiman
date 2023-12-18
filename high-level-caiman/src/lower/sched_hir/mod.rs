@@ -55,7 +55,7 @@ impl Specs {
 struct FuncInfo {
     name: String,
     input: Vec<Arg<FullType>>,
-    output: Arg<FullType>,
+    output: Vec<FullType>,
 }
 
 /// The funclets of a scheduling function.
@@ -84,7 +84,7 @@ impl<'a> Funclet<'a> {
     /// Gets the next blocks in the cfg as `FuncletIds`
     pub fn next_blocks(&self) -> Vec<asm::Hole<asm::FuncletId>> {
         match &self.block.terminator {
-            Terminator::FinalReturn => vec![],
+            Terminator::FinalReturn(_) => vec![],
             Terminator::Select(..) => {
                 let mut e = self
                     .parent
@@ -127,20 +127,9 @@ impl<'a> Funclet<'a> {
     /// A vector where captured variables will come before non-captured variables.
     /// The returned vector of strings do not contain duplicates and each part of the
     /// result (the captures and non-captures) is sorted alphabetically.
-    fn input_vars(&self) -> Vec<&String> {
+    fn input_vars(&self) -> Vec<String> {
         let preds = self.parent.cfg.predecessors(self.id());
-        let captures = preds
-            .iter()
-            .filter_map(|id| self.parent.captured_out.get(id))
-            .flatten()
-            .collect::<BTreeSet<_>>();
-        assert!(captures.is_empty() || preds.len() == 1);
-        let returns: BTreeSet<_> = preds
-            .iter()
-            .flat_map(|id| self.parent.live_vars.get_out_fact(*id).live_set().iter())
-            .filter(|v| !captures.contains(*v))
-            .collect();
-        captures.into_iter().chain(returns).collect()
+        self.parent.exiting_vars(&preds)
     }
 
     /// Gets the output arguments of this funclet based on the live out variables
@@ -153,10 +142,19 @@ impl<'a> Funclet<'a> {
         // must match the returns of the funclet.
 
         if self.id() == FINAL_BLOCK_ID {
-            return vec![(
-                RET_VAR.to_string(),
-                TagInfo::from(&self.parent.finfo.output.1, &self.parent.specs).tag_info_default(),
-            )];
+            return self
+                .parent
+                .finfo
+                .output
+                .iter()
+                .enumerate()
+                .map(|(idx, out)| {
+                    (
+                        format!("{RET_VAR}{idx}"),
+                        TagInfo::from(out, &self.parent.specs).tag_info_default(),
+                    )
+                })
+                .collect();
         }
 
         match self.block.terminator {
@@ -165,48 +163,33 @@ impl<'a> Funclet<'a> {
                 self.parent.get_funclet(continuation).output_vars()
             }
             Terminator::Return(_) if self.is_final_return() => {
+                // final return is a jump to final basic block
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
-            Terminator::FinalReturn
+            Terminator::FinalReturn(_)
             | Terminator::None
             | Terminator::Next(_)
-            | Terminator::Return(_) => {
-                let captures = self
-                    .parent
-                    .captured_out
-                    .get(&self.id())
-                    .cloned()
-                    .unwrap_or_default();
-                let normal_rets: BTreeSet<_> = self
-                    .parent
-                    .live_vars
-                    .get_out_fact(self.id())
-                    .live_set()
-                    .iter()
-                    .filter(|x| !captures.contains(*x))
-                    .cloned()
-                    .collect();
-                captures
-                    .into_iter()
-                    .chain(normal_rets)
-                    .map(|v| {
-                        (
-                            v.clone(),
-                            self.parent
-                                .type_info
-                                .get_out_fact(self.id())
-                                .get_tag(&v)
-                                .unwrap_or_else(|| {
-                                    panic!(
-                                        "{}: An output tag must be specified for {v}",
-                                        self.block.src_loc
-                                    )
-                                }),
-                        )
-                    })
-                    .collect()
-            }
+            | Terminator::Return(_) => self
+                .parent
+                .exiting_vars(&[self.id()])
+                .into_iter()
+                .map(|v| {
+                    (
+                        v.clone(),
+                        self.parent
+                            .type_info
+                            .get_out_fact(self.id())
+                            .get_tag(&v)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "{}: An output tag must be specified for {v}",
+                                    self.block.src_loc
+                                )
+                            }),
+                    )
+                })
+                .collect(),
         }
     }
 
@@ -221,21 +204,23 @@ impl<'a> Funclet<'a> {
                 .map(hlc_arg_to_asm_arg)
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
-            vec![asm::FuncletArgument {
-                name: Some(asm::NodeId(RET_VAR.to_string())),
-                typ: self
-                    .parent
-                    .types
-                    .get(RET_VAR)
-                    .unwrap_or_else(|| panic!("{}: Missing type for {RET_VAR}", self.block.src_loc))
-                    .clone(),
-                tags: TagInfo::from(&self.parent.finfo.output.1, &self.parent.specs)
-                    .tags_vec_default(),
-            }]
+            // final block is just for type conversion
+            // final block input and output are the same as the function
+            self.parent
+                .finfo
+                .output
+                .iter()
+                .enumerate()
+                .map(|(idx, out)| asm::FuncletArgument {
+                    name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
+                    typ: data_type_to_local_type(&out.base.base),
+                    tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
+                })
+                .collect()
         } else {
             self.input_vars()
                 .iter()
-                .map(|&var| asm::FuncletArgument {
+                .map(|var| asm::FuncletArgument {
                     name: Some(asm::NodeId(var.clone())),
                     typ: self
                         .parent
@@ -280,18 +265,17 @@ impl<'a> Funclet<'a> {
     /// Gets the return arguments of a funclet based on the block's live out variables
     pub fn outputs(&self) -> Vec<asm::FuncletArgument> {
         if self.id() == cfg::FINAL_BLOCK_ID {
-            // TODO: look at this
-            vec![asm::FuncletArgument {
-                name: Some(asm::NodeId(RET_VAR.to_string())),
-                typ: self
-                    .parent
-                    .types
-                    .get(RET_VAR)
-                    .unwrap_or_else(|| panic!("{}: Missing type for {RET_VAR}", self.block.src_loc))
-                    .clone(),
-                tags: TagInfo::from(&self.parent.finfo.output.1, &self.parent.specs)
-                    .tags_vec_default(),
-            }]
+            self.parent
+                .finfo
+                .output
+                .iter()
+                .enumerate()
+                .map(|(idx, out)| asm::FuncletArgument {
+                    name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
+                    typ: data_type_to_local_type(&out.base.base),
+                    tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
+                })
+                .collect()
         } else {
             // TODO: re-evaluate if this is correct for the general case
             self.output_vars()
@@ -450,7 +434,7 @@ impl Funclets {
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
-        let mut cfg = Cfg::new(f.statements);
+        let mut cfg = Cfg::new(f.statements, f.output.len());
         let mut types = Self::collect_types(&cfg, &f.input, &f.output);
         op_transform_pass(&mut cfg, &types);
         deref_transform_pass(&mut cfg, &mut types);
@@ -460,10 +444,7 @@ impl Funclets {
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,
-            output: (
-                String::new(),
-                f.output.expect("Functions must return values for now"),
-            ),
+            output: f.output,
         };
         Self {
             cfg,
@@ -484,14 +465,16 @@ impl Funclets {
     fn collect_types(
         cfg: &Cfg,
         f_in: &[(String, FullType)],
-        f_out: &Option<FullType>,
+        f_out: &[FullType],
     ) -> HashMap<String, asm::TypeId> {
         use std::collections::hash_map::Entry;
         let mut types = HashMap::new();
-        types.insert(
-            String::from(RET_VAR),
-            data_type_to_local_type(&f_out.as_ref().unwrap().base.base),
-        );
+        for (out_idx, out) in f_out.iter().enumerate() {
+            types.insert(
+                format!("{RET_VAR}{out_idx}"),
+                data_type_to_local_type(&out.base.base),
+            );
+        }
         for (var, typ) in f_in {
             types.insert(var.to_string(), data_type_to_local_type(&typ.base.base));
         }
@@ -559,6 +542,56 @@ impl Funclets {
         } else {
             format!("_{}{block_id}", self.finfo.name)
         }
+    }
+
+    /// Get's the terminator for a basic block with the given ID
+    #[inline]
+    fn terminator(&self, block_id: usize) -> &Terminator {
+        &self.cfg.blocks[&block_id].terminator
+    }
+
+    /// Gets the definitions of a terminator for a basic block
+    fn terminator_dests(&self, block_id: usize) -> Vec<String> {
+        self.terminator(block_id)
+            .get_defs()
+            .map(|args| args.into_iter().map(|arg| arg.0).collect())
+            .unwrap_or_default()
+    }
+
+    /// Gets the list of variables that exit a block.
+    /// The returned list of variable names have 3 sections. The first section is
+    /// the captured variables in alphabetical order. The second section is the
+    /// terminator destinations ordered how they are passed around in the program,
+    /// and the final section are other returns, ordered alphabetically.
+    fn exiting_vars(&self, block_ids: &[usize]) -> Vec<String> {
+        let captures: BTreeSet<_> = block_ids
+            .iter()
+            .filter_map(|id| self.captured_out.get(id))
+            .flatten()
+            .cloned()
+            .collect();
+        assert!(captures.is_empty() || block_ids.len() == 1);
+        let term_dests: Vec<_> = block_ids
+            .iter()
+            .flat_map(|id| self.terminator_dests(*id))
+            .collect();
+        assert!(term_dests.is_empty() || block_ids.len() == 1);
+        let returns: BTreeSet<_> = block_ids
+            .iter()
+            .flat_map(|id| self.live_vars.get_out_fact(*id).live_set().iter())
+            .filter(|v| !captures.contains(*v) && !term_dests.contains(*v))
+            .cloned()
+            .collect();
+        assert!(
+            term_dests.is_empty() && !returns.is_empty()
+                || returns.is_empty() && !term_dests.is_empty()
+                || returns.is_empty() && term_dests.is_empty()
+        );
+        captures
+            .into_iter()
+            .chain(term_dests.into_iter())
+            .chain(returns)
+            .collect()
     }
 }
 

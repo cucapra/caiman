@@ -70,7 +70,7 @@ TopLevel: TopLevel = {
         <Id>
     "}" <@R> => astf.pipeline(<>),
 
-    <@L> "fn" <Id> "(" <CommaList<Arg<FullType>>> ")" <("->" <FullType>)?>
+    <@L> "fn" <Id> "(" <CommaList<Arg<FullType>>> ")" <("->" <MultiType>)?>
         "impls" <CommaList<Id>>
     "{"
         <SchedStmt*>
@@ -86,7 +86,7 @@ TopLevel: TopLevel = {
 // Function class members. Value functlets or extern funclets
 ClassMembers: ClassMembers = {
     <@L>
-    "val" <Id> "(" <CommaList<Arg<BaseType>>> ")" <("->" <MaybeNamed<BaseType>>)?>
+    "val" <Id> "(" <CommaList<Arg<BaseType>>> ")" <("->" <MultiNamedBaseType>)?>
     "{"
         <SpecStmt*>
     "}"
@@ -94,12 +94,12 @@ ClassMembers: ClassMembers = {
 
     <@L>
     "extern" "(" <Id> ")" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 
-        <("->" <MaybeNamed<BaseType>>)?> <ExternDef?>
+        <("->" <MultiNamedBaseType>)?> <ExternDef?>
     <@R> => astf.extern_func(<>),
 
     <@L>
     "extern" "(" <Id> ")" "pure" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 
-        <("->" <MaybeNamed<BaseType>>)?> <ExternDef?>
+        <("->" <MultiNamedBaseType>)?> <ExternDef?>
     <@R> => astf.extern_pure_func(<>),
 }
 
@@ -137,14 +137,21 @@ BaseType: DataType = {
     "Event" => DataType::Event,
     "BufferSpace" => DataType::BufferSpace,
     <n: Id> => DataType::UserDefined(String::from(n)),
-    "(" <TupleCommaList<BaseType>> ")" => DataType::Tuple(<>),
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
     "&" <BaseType> => DataType::Ref(Box::new(<>)),
 }
 
+<<<<<<< HEAD
 // Full type: base type with flags and settings and an optional tag
+=======
+MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
+    "(" <TupleCommaList<MaybeNamed<BaseType>>> ")" => <>,
+    <MaybeNamed<BaseType>> => vec![<>],
+}
+
+>>>>>>> 85f4c6c (Multiple outputs)
 FullType: FullType = {
     <FlaggedType> => FullType {
         base: <>,
@@ -154,6 +161,11 @@ FullType: FullType = {
         base: b,
         tags: t,
     },
+}
+
+MultiType: Vec<FullType> = {
+    "(" <TupleCommaList<FullType>> ")" => <>,
+    <FullType> => vec![<>],
 }
 
 TagOp: Vec<Tag> = {
@@ -192,6 +204,10 @@ QuotRef: Option<QuotientReference> = {
     <a: Id> "." <b: Id> => Some(QuotientReference {
         spec_name: String::from(a),
         spec_var: Some(String::from(b)),
+    }),
+    <a: Id> "." "(" <b: TupleCommaList<Id>> ")" => Some(QuotientReference {
+        spec_name: String::from(a),
+        spec_var: Some(format!("_{}", b.join("_"))),
     }),
     <a: Id> => Some(QuotientReference {
         spec_name: String::from(a),

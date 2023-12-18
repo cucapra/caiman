@@ -150,12 +150,14 @@ pub struct TagAnalysis {
 
 impl TagAnalysis {
     /// Constructs a new top element
-    pub fn top(specs: &Specs, input: &[(String, FullType)], out: &Option<FullType>) -> Self {
+    pub fn top(specs: &Specs, input: &[(String, FullType)], out: &[FullType]) -> Self {
         let mut tags = HashMap::new();
-        tags.insert(
-            String::from(RET_VAR),
-            TagInfo::from(out.as_ref().unwrap(), specs),
-        );
+        for (out_idx, out_type) in out.iter().enumerate() {
+            tags.insert(
+                format!("{RET_VAR}{out_idx}"),
+                TagInfo::from(out_type, specs),
+            );
+        }
         for (arg_name, arg_type) in input {
             tags.insert(arg_name.clone(), TagInfo::from(arg_type, specs));
         }
@@ -331,16 +333,17 @@ impl Fact for TagAnalysis {
                     );
                 }
             }
-            HirInstr::Tail(Terminator::Return(Some(r))) => {
-                let tag = self.tags.get(r).cloned().unwrap();
-                self.tags.insert(RET_VAR.to_string(), tag);
+            HirInstr::Tail(Terminator::Return(v)) => {
+                for (idx, out) in v.iter().enumerate() {
+                    let tag = self.tags.get(out).cloned().unwrap();
+                    self.tags.insert(format!("{RET_VAR}{idx}"), tag);
+                }
             }
             HirInstr::Tail(
                 Terminator::None
                 | Terminator::Next(..)
-                | Terminator::FinalReturn
-                | Terminator::Select(..)
-                | Terminator::Return(None),
+                | Terminator::FinalReturn(_)
+                | Terminator::Select(..),
             ) => (),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }

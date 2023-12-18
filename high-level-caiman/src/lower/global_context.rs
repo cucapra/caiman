@@ -441,7 +441,7 @@ pub fn gen_context(tl: &[TopLevel]) -> Context {
                                 name.to_string(),
                                 (
                                     input.iter().map(|x| x.1.clone()).collect(),
-                                    output.as_ref().map_or_else(Vec::new, |x| vec![x.1.clone()]),
+                                    output.iter().map(|x| x.1.clone()).collect(),
                                 ),
                             );
                         }
@@ -456,7 +456,7 @@ pub fn gen_context(tl: &[TopLevel]) -> Context {
                                 name.to_string(),
                                 (
                                     input.iter().map(|x| x.1.clone()).collect(),
-                                    output.as_ref().map_or_else(Vec::new, |x| vec![x.1.clone()]),
+                                    output.iter().map(|x| x.1.clone()).collect(),
                                 ),
                             );
                         }
@@ -484,9 +484,7 @@ pub fn gen_context(tl: &[TopLevel]) -> Context {
                     name.to_string(),
                     (
                         input.iter().map(|x| x.1.base.base.clone()).collect(),
-                        output
-                            .as_ref()
-                            .map_or_else(Vec::new, |x| vec![x.base.base.clone()]),
+                        output.iter().map(|x| x.base.base.clone()).collect(),
                     ),
                 );
             }

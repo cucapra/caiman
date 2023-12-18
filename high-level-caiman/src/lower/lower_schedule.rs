@@ -15,6 +15,7 @@ use caiman::ir;
 use super::{
     global_context::{Context, SpecType},
     sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, RET_VAR},
+    tuple_id,
 };
 
 /// A vector of commands with holes.
@@ -249,7 +250,8 @@ fn get_quotient_opt(
     None
 }
 
-/// Changes the remote node id to the remote id of the result of the call
+/// Changes the remote node id to the remote id of the result of the call, before
+/// extracing the result
 fn unextract_quotient(q: Hole<asm::Quotient>) -> Hole<asm::Quotient> {
     match q {
         Hole::Some(
@@ -267,7 +269,7 @@ fn unextract_quotient(q: Hole<asm::Quotient>) -> Hole<asm::Quotient> {
             })),
         ) => Hole::Some(asm::Quotient::Node(Some(asm::RemoteNodeId {
             funclet,
-            node: Some(asm::NodeId(format!("_{}_t", node.0))),
+            node: Some(asm::NodeId(tuple_id(&[node.0]))),
         }))),
         x => x,
     }
@@ -301,21 +303,21 @@ fn get_tuple_quot(t: Option<asm::Tag>) -> asm::Hole<asm::Quotient> {
             node: Some(node),
         })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
             funclet,
-            node: Some(asm::NodeId(format!("_t{}", node.0))),
+            node: Some(asm::NodeId(tuple_id(&[node.0]))),
         })),
         asm::Quotient::Input(Some(asm::RemoteNodeId {
             funclet,
             node: Some(node),
         })) => asm::Quotient::Input(Some(asm::RemoteNodeId {
             funclet,
-            node: Some(asm::NodeId(format!("_t{}", node.0))),
+            node: Some(asm::NodeId(tuple_id(&[node.0]))),
         })),
         asm::Quotient::Output(Some(asm::RemoteNodeId {
             funclet,
             node: Some(node),
         })) => asm::Quotient::Output(Some(asm::RemoteNodeId {
             funclet,
-            node: Some(asm::NodeId(format!("_t{}", node.0))),
+            node: Some(asm::NodeId(tuple_id(&[node.0]))),
         })),
         x => x,
     })
@@ -392,7 +394,7 @@ fn lower_func_call(
 /// * `f` - the funclet that contains the return
 /// # Returns
 /// A tuple containing the commands that implement the return
-fn lower_ret(ret: &str, temp_id: usize, f: &Funclet) -> CommandVec {
+fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
     if f.is_final_return() {
         let djoin_id = temp_id;
         let djoin_name = temp_var_name(djoin_id);
@@ -413,13 +415,13 @@ fn lower_ret(ret: &str, temp_id: usize, f: &Funclet) -> CommandVec {
                 },
             })),
             Some(asm::Command::TailEdge(asm::TailEdge::Jump {
-                arguments: Some(vec![Some(asm::NodeId(ret.to_string()))]),
+                arguments: Some(rets.iter().map(|x| Some(asm::NodeId(x.clone()))).collect()),
                 join: Some(asm::NodeId(join_var)),
             })),
         ]
     } else {
         vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-            return_values: Some(vec![Some(asm::NodeId(ret.to_string()))]),
+            return_values: Some(rets.iter().map(|x| Some(asm::NodeId(x.clone()))).collect()),
         }))]
     }
 }
@@ -432,17 +434,20 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
     // we do not return the new `temp_id` because this is the last instruction
     // in the block
     match t {
-        Terminator::Return(Some(name)) => lower_ret(name, temp_id, f),
+        Terminator::Return(rets) => lower_ret(rets, temp_id, f),
         Terminator::Next(vars) => {
             vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
                 return_values: Some(vars.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),
             }))]
         }
-        Terminator::FinalReturn => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-            return_values: Some(vec![Some(asm::NodeId(String::from(RET_VAR)))]),
+        Terminator::FinalReturn(n) => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
+            return_values: Some(
+                (0..*n)
+                    .map(|idx| Some(asm::NodeId(format!("{RET_VAR}{idx}"))))
+                    .collect(),
+            ),
         }))],
         Terminator::Select(guard_name, tags) => lower_select(guard_name, tags, temp_id, f),
-        Terminator::Return(_) => panic!("Return not flattened or its a void return!"),
         // TODO: review this
         Terminator::None => panic!("None terminator not replaced by Next"),
         Terminator::Call(..) => panic!("Call not replaced by CaptureCall"),

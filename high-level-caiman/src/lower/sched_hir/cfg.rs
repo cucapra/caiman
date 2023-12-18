@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use crate::{
     enum_cast,
     error::Info,
-    parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedStmt, SchedTerm},
+    parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm},
 };
 
 use super::{analysis::compute_coninuations, stmts_to_hir, HirBody, Terminator};
@@ -41,6 +41,7 @@ pub enum Edge {
 }
 
 impl Edge {
+    /// Gets a vector of node ids that this edge connects to
     pub fn targets(&self) -> Vec<usize> {
         match self {
             Self::Next(id) => vec![*id],
@@ -49,6 +50,16 @@ impl Edge {
                 false_branch,
             } => vec![*true_branch, *false_branch],
             Self::None => vec![],
+        }
+    }
+
+    /// Gets the number of nodes that this edge connects to
+    #[allow(dead_code)]
+    pub const fn num_targets(&self) -> usize {
+        match self {
+            Self::Next(_) => 1,
+            Self::Select { .. } => 2,
+            Self::None => 0,
         }
     }
 }
@@ -156,7 +167,7 @@ fn handle_return(
         make_block(
             cur_id,
             cur_stmts,
-            Terminator::Return(Some(expr_to_node_id(sched_expr))),
+            Terminator::Return(expr_to_multi_node_id(sched_expr)),
             None,
             info,
         ),
@@ -383,14 +394,14 @@ fn make_child_blocks(
 
 impl Cfg {
     /// Create a new CFG from a list of scheduling statements
-    pub fn new(stmts: Vec<SchedStmt>) -> Self {
+    pub fn new(stmts: Vec<SchedStmt>, output_len: usize) -> Self {
         let mut blocks = HashMap::new();
         blocks.insert(
             FINAL_BLOCK_ID,
             BasicBlock {
                 id: FINAL_BLOCK_ID,
                 stmts: vec![],
-                terminator: Terminator::FinalReturn,
+                terminator: Terminator::FinalReturn(output_len),
                 ret_block: None,
                 src_loc: Info::default(),
             },
@@ -510,4 +521,18 @@ impl Cfg {
 fn expr_to_node_id(e: SchedExpr) -> String {
     let t = enum_cast!(SchedExpr::Term, e);
     enum_cast!(SchedTerm::Var { name, .. }, name, t)
+}
+
+/// Converts an expression to a list of node Ids, assuming the expression is just a variable
+/// or a tuple of variables
+fn expr_to_multi_node_id(e: SchedExpr) -> Vec<String> {
+    if let SchedExpr::Term(SchedTerm::Lit {
+        lit: SchedLiteral::Tuple(lits),
+        ..
+    }) = e
+    {
+        lits.into_iter().map(expr_to_node_id).collect()
+    } else {
+        vec![expr_to_node_id(e)]
+    }
 }

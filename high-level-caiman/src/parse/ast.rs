@@ -35,7 +35,6 @@ pub enum DataType {
     Bool,
     BufferSpace,
     Event,
-    Tuple(Vec<DataType>),
     Array(Box<DataType>, Box<SpecExpr>),
     Slice(Box<DataType>),
     UserDefined(String),
@@ -47,7 +46,6 @@ impl PartialEq for DataType {
         match (self, other) {
             (Self::Int(l0), Self::Int(r0)) => l0 == r0,
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
-            (Self::Tuple(l0), Self::Tuple(r0)) => l0 == r0,
             (Self::Array(..), Self::Array(..)) => todo!(),
             (Self::Slice(l0), Self::Slice(r0)) | (Self::Ref(l0), Self::Ref(r0)) => l0 == r0,
             (Self::UserDefined(l0), Self::UserDefined(r0)) => l0 == r0,
@@ -64,7 +62,6 @@ impl std::hash::Hash for DataType {
         match self {
             Self::Int(nt) => nt.hash(state),
             Self::Float(nt) => nt.hash(state),
-            Self::Tuple(types) => types.hash(state),
             Self::Array(..) => todo!(),
             Self::Slice(dt) | Self::Ref(dt) => dt.hash(state),
             Self::UserDefined(name) => name.hash(state),
@@ -82,24 +79,6 @@ impl Display for DataType {
             Self::Bool => write!(f, "bool"),
             Self::BufferSpace => write!(f, "BufferSpace"),
             Self::Event => write!(f, "Event"),
-            Self::Tuple(types) => {
-                if f.alternate() {
-                    write!(f, "_t{}", types.len())?;
-                    for typ in types.iter() {
-                        write!(f, "_{typ}")?;
-                    }
-                    Ok(())
-                } else {
-                    write!(f, "(")?;
-                    for (i, typ) in types.iter().enumerate() {
-                        if i != 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{typ}")?;
-                    }
-                    write!(f, ")")
-                }
-            }
             Self::Array(..) => todo!(),
             Self::Slice(typ) => {
                 if f.alternate() {
@@ -443,7 +422,7 @@ pub struct SchedulingFunc {
     pub info: Info,
     pub name: String,
     pub input: Vec<Arg<FullType>>,
-    pub output: Option<FullType>,
+    pub output: Vec<FullType>,
     pub specs: Vec<String>,
     pub statements: Vec<SchedStmt>,
 }
@@ -534,7 +513,7 @@ pub enum ClassMembers {
         info: Info,
         name: String,
         input: Vec<Arg<DataType>>,
-        output: Option<(Option<String>, DataType)>,
+        output: Vec<(Option<String>, DataType)>,
         statements: Vec<SpecStmt>,
     },
     Extern {
@@ -543,7 +522,7 @@ pub enum ClassMembers {
         device: String,
         pure: bool,
         input: Vec<(Option<String>, DataType)>,
-        output: Option<(Option<String>, DataType)>,
+        output: Vec<(Option<String>, DataType)>,
         def: Option<ExternDef>,
     },
 }
@@ -607,7 +586,7 @@ pub enum TopLevel {
         info: Info,
         name: String,
         input: Vec<Arg<FullType>>,
-        output: Option<FullType>,
+        output: Vec<FullType>,
         specs: Vec<String>,
         statements: Vec<SchedStmt>,
     },

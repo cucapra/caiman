@@ -206,3 +206,15 @@ const fn binop_name(op: Binop) -> &'static str {
 fn binop_to_str(op: Binop, type_left: &str, type_right: &str) -> String {
     format!("_{}_{type_left}_{type_right}", binop_name(op))
 }
+
+/// Gets the id of the direct result of an operation or call that results in `names`.
+fn tuple_id(names: &[String]) -> String {
+    assert!(names
+        .iter()
+        .all(|n| !n.is_empty() && !char::is_digit(n.chars().next().unwrap(), 10)));
+    if names.len() == 1 {
+        format!("_t{}", names[0])
+    } else {
+        format!("_t_{}", names.join("_"))
+    }
+}

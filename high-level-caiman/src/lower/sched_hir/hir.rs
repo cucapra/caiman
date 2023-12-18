@@ -151,11 +151,11 @@ pub enum Terminator {
     /// A return statement with an optional node.
     /// Modeled as an assignment to the special `_out` variable and transition to
     /// the final basic block.
-    Return(Option<String>),
+    Return(Vec<String>),
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
     /// for the canonical CFG.
-    FinalReturn,
+    FinalReturn(usize),
     /// No terminator, continue to the next block. A `None` terminator is just
     /// a temporary value until live vars and tag analysis can be done to know
     /// what the output variables are for the `Next` terminator
@@ -208,8 +208,12 @@ impl Hir for Terminator {
                     })
                     .collect(),
             ),
-            Self::Return(..) => Some(vec![(RET_VAR.to_string(), None)]),
-            Self::Select(..) | Self::FinalReturn | Self::None | Self::Next(..) => None,
+            Self::Return(v) => Some(
+                (0..v.len())
+                    .map(|i| (format!("{RET_VAR}{i}"), None))
+                    .collect(),
+            ),
+            Self::Select(..) | Self::FinalReturn(_) | Self::None | Self::Next(..) => None,
         }
     }
 
@@ -223,13 +227,17 @@ impl Hir for Terminator {
             Self::Select(guard, ..) => {
                 uses.insert(guard.clone());
             }
-            Self::Return(Some(node)) => {
-                uses.insert(node.clone());
+            Self::Return(v) => {
+                for node in v {
+                    uses.insert(node.clone());
+                }
             }
-            Self::FinalReturn => {
-                uses.insert(RET_VAR.to_string());
+            Self::FinalReturn(n) => {
+                for i in 0..*n {
+                    uses.insert(format!("{RET_VAR}{i}"));
+                }
             }
-            Self::Return(None) | Self::None | Self::Next(..) => (),
+            Self::None | Self::Next(..) => (),
         }
     }
 
@@ -243,10 +251,12 @@ impl Hir for Terminator {
             Self::Select(guard, ..) => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Return(Some(node)) => {
-                *node = f(node, UseType::Read);
+            Self::Return(v) => {
+                for node in v {
+                    *node = f(node, UseType::Read);
+                }
             }
-            Self::FinalReturn | Self::Return(None) | Self::None | Self::Next(..) => (),
+            Self::FinalReturn(_) | Self::None | Self::Next(..) => (),
         }
     }
 }
