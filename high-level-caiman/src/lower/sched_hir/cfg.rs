@@ -195,11 +195,7 @@ fn handle_select(
         parent_id,
         join_id: *cur_id,
         true_block,
-        false_block: if false_block.is_empty() {
-            None
-        } else {
-            Some(false_block)
-        },
+        false_block: Some(false_block),
     });
 }
 

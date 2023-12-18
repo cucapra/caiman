@@ -1,7 +1,7 @@
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_imports)]
-#![allow(clippy::unused_self)]
+#![allow(clippy::unused_self, clippy::option_option)]
 use std::iter;
 
 use lalrpop_util::{ParseError, lexer::Token};

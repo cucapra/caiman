@@ -53,27 +53,22 @@ fn add2_impl(a: i64 @ input(add2.a)-usable,
 }
 
 
-fn main_impl() -> i64 @ node(main.c)-usable
+fn main_impl() -> i64 @ node(main.r)-usable
     impls main, time, space
 {
     let cond: bool @ node(main.cond) = false;
-    var r: i64 @ none(main);
+    let a: i64 @ node(main.a) = 3;
     if @ node(main.r) cond {
-        let a: i64 @ node(main.a) = 3;
         let b: i64 @ node(main.b) = 5;
         let c: i64 @ node(main.c) = 7;
         let j: i64 @ node(main.j) = add1_impl(a, b, c) @ node(main.j);
-        r = j;
+        return j;
     } else {
-        let a: i64 @ node(main.a) = 3;
         let b: i64 @ node(main.b) = 5;
         let d: i64 @ node(main.d) = 9;
         let k: i64 @ node(main.k) = add2_impl(a, b, d) @ node(main.k);
-        r = k;
+        return k;
     }
-    @in {r: [node(main.r)-usable, none(space)-save]};
-    return r;
-    
 }
 
 pipeline main { main_impl }

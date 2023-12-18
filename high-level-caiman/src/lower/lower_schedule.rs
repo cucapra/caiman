@@ -5,7 +5,7 @@ use caiman::assembly::ast::{self as asm, FuncletArgument, Hole};
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
-    lower::data_type_to_ffi_type,
+    lower::{data_type_to_ffi_type, sched_hir::TagInfo},
     parse::ast::{
         Arg, DataType, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
     },
@@ -79,6 +79,7 @@ fn lower_var_decl(
     dest_tag: &Option<FullType>,
     rhs: &Option<SchedTerm>,
     temp_id: usize,
+    f: &Funclet,
 ) -> (CommandVec, usize) {
     let dest_tag = dest_tag
         .as_ref()
@@ -92,14 +93,15 @@ fn lower_var_decl(
         },
     }))];
     if let Some(SchedTerm::Lit { tag: rhs_tag, .. }) = rhs {
-        let rhs_tag = rhs_tag
-            .as_ref()
-            .expect("We require all variables to have type annotations");
-        assert!(!rhs_tag.is_empty());
+        let rhs_tag = rhs_tag.as_ref().map_or_else(
+            || TagInfo::from(dest_tag, f.specs()),
+            |rhs_tag| TagInfo::from_tags(rhs_tag, f.specs()),
+        );
+        assert!(rhs_tag.value.is_some());
         result.push(Some(asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalDoBuiltin {
-                operation: Some(tag_to_quot(&rhs_tag[0])),
+                operation: Some(rhs_tag.value.as_ref().unwrap().quot.clone()),
                 // no inputs
                 inputs: Some(Vec::new()),
                 outputs: Some(vec![Some(asm::NodeId(dest.to_string()))]),
@@ -204,7 +206,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id),
         HirBody::VarDecl {
             lhs, lhs_tag, rhs, ..
-        } => lower_var_decl(lhs, lhs_tag, rhs, temp_id),
+        } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f),
         HirBody::RefStore { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
         HirBody::RefLoad { dest, src, typ } => lower_load(dest, typ, src, temp_id),
         // annotations don't lower to anything
@@ -332,7 +334,6 @@ fn lower_func_call(
     temp_id: usize,
     f: &Funclet,
 ) -> CommandVec {
-    use crate::lower::sched_hir::TagInfo;
     let djoin_id = temp_id;
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;

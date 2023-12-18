@@ -220,9 +220,9 @@ impl TagAnalysis {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
                     }
-                    if info.spatial.is_none() {
-                        info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));
-                    }
+                }
+                if info.spatial.is_none() {
+                    info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));
                 }
                 self.tags.insert(lhs.clone(), info);
             }
