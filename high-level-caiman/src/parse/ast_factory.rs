@@ -100,10 +100,20 @@ macro_rules! struct_variant_factory {
     }
 }
 
+/// The `ASTFactory` is responsible for constructing AST nodes for each
+/// parser state. The Factory keeps track of the byte offsets of each line
+/// so it can convert the byte offsets that lalrpop gives us to line
+/// and column numbers.
+/// 
+/// Each factory function in the `ASTFactory` takes the byte offset of the starting
+/// and ending byte offsets and converts them into starting and ending line and column
+/// numbers. Macros are used to define these functions to avoid repeating the 
+/// same passing along of source location information
 pub struct ASTFactory {
     line_ending_byte_offsets: Vec<usize>,
 }
 
+/// LALRpop parsing error using our custom error type, `CustomParsingError`
 type ParserError = ParseError<usize, Token<'static>, CustomParsingError>;
 
 impl ASTFactory {
@@ -139,7 +149,9 @@ impl ASTFactory {
             )
     }
 
-    /// Construct an info struct from a start and end byte offset
+    /// Construct an `Info` struct from a start and end byte offset
+    /// 
+    /// The `Info` struct contains the line and column number of the start and end
     pub fn info(&self, l: usize, r: usize) -> Info {
         Info {
             start_ln_and_col: self.line_and_column(l), 
@@ -538,6 +550,7 @@ impl ASTFactory {
             pure: true
         });
     
+    /// Constructs a function class for a single class member (value or external function)
     pub fn singleton_function_class(&self, member: ClassMembers) -> TopLevel {
         TopLevel::FunctionClass { info: member.get_info(), name: member.get_name(), members: vec![member] }
     }
@@ -546,10 +559,14 @@ impl ASTFactory {
 
     struct_variant_factory!(type_def(name: Name, typ: FlaggedType) -> TopLevel:TopLevel::Typedef);
 
+    /// Constructs a constant definition from a name and expression. Checks that
+    /// the expression is a valid constant expression and returns an error if not
     pub fn const_def(&self, l: usize, name: Name, expr: SchedExpr, r: usize) -> Result<TopLevel, ParserError> {
         self.const_expr(Self::sched_to_spec_expr(expr)?).map(|expr| TopLevel::Const { info: self.info(l, r), name, expr })
     }
 
+    /// Constructs a program from a list of top level declarations, checking the
+    /// version string and returning an error if it is invalid
     pub fn program(&self, maj_min: &str, patch: &str, prog: Program) -> Result<Program, ParserError> {
         let split_maj_min: Vec<_> = maj_min.split('.').collect();
         if split_maj_min.len() != 2 {
