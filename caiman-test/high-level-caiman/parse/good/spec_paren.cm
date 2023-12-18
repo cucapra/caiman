@@ -1,0 +1,7 @@
+#version 0.1.0
+
+val main() -> i64
+{
+    mdpt :- p if 1 else (g if 2 else (4 + h) * N)
+    k :- f[(1 if a else 2) .. b.len()]
+}

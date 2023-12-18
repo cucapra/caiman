@@ -1,0 +1,2 @@
+Error: At missing_extern_def.cm:2:40, 
+  Parsing Error: Extern definition at 2:40 - 10:2 missing field "dimensions"

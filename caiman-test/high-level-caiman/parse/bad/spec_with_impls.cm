@@ -1,0 +1,4 @@
+#version 0.1.0
+val f(a: i32) impls a {
+    x :- foo(a)
+}

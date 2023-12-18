@@ -1,0 +1,8 @@
+#version 0.1.0
+
+val foo(a: i32) -> i64 {
+    b :- a + 10 * a
+    c :- (10 + 2) / b - a
+    d :- a <= 10 && c > b || true && false
+    returns a + a + a * c - d
+}

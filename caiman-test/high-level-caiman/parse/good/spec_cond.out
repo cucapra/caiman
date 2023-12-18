@@ -1,0 +1,1612 @@
+[
+    FunctionClass {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                19,
+                2,
+            ),
+        },
+        name: "find_closest",
+        members: [
+            ValueFunclet {
+                info: Info {
+                    start_ln_and_col: (
+                        3,
+                        1,
+                    ),
+                    end_ln_and_col: (
+                        19,
+                        2,
+                    ),
+                },
+                name: "find_closest",
+                input: [
+                    (
+                        "p",
+                        Tuple(
+                            [
+                                UserDefined(
+                                    "f32",
+                                ),
+                                UserDefined(
+                                    "f32",
+                                ),
+                            ],
+                        ),
+                    ),
+                    (
+                        "pts",
+                        Array(
+                            Tuple(
+                                [
+                                    UserDefined(
+                                        "f32",
+                                    ),
+                                    UserDefined(
+                                        "f32",
+                                    ),
+                                ],
+                            ),
+                            Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            3,
+                                            51,
+                                        ),
+                                        end_ln_and_col: (
+                                            3,
+                                            52,
+                                        ),
+                                    },
+                                    name: "N",
+                                },
+                            ),
+                        ),
+                    ),
+                    (
+                        "start",
+                        Num(
+                            I64,
+                        ),
+                    ),
+                    (
+                        "end",
+                        Num(
+                            I64,
+                        ),
+                    ),
+                    (
+                        "idx",
+                        Num(
+                            I64,
+                        ),
+                    ),
+                ],
+                output: Some(
+                    (
+                        None,
+                        Tuple(
+                            [
+                                UserDefined(
+                                    "f32",
+                                ),
+                                UserDefined(
+                                    "f32",
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+                statements: [
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                6,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                6,
+                                30,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "mdpt",
+                                None,
+                            ),
+                        ],
+                        rhs: Binop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    6,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    6,
+                                    30,
+                                ),
+                            },
+                            op: Div,
+                            lhs: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        14,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        25,
+                                    ),
+                                },
+                                op: Add,
+                                lhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                6,
+                                                14,
+                                            ),
+                                            end_ln_and_col: (
+                                                6,
+                                                19,
+                                            ),
+                                        },
+                                        name: "start",
+                                    },
+                                ),
+                                rhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                6,
+                                                22,
+                                            ),
+                                            end_ln_and_col: (
+                                                6,
+                                                25,
+                                            ),
+                                        },
+                                        name: "end",
+                                    },
+                                ),
+                            },
+                            rhs: Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            6,
+                                            29,
+                                        ),
+                                        end_ln_and_col: (
+                                            6,
+                                            30,
+                                        ),
+                                    },
+                                    lit: Int(
+                                        "2",
+                                    ),
+                                },
+                            ),
+                        },
+                    },
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                31,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "nxt_idx",
+                                None,
+                            ),
+                        ],
+                        rhs: Conditional {
+                            info: Info {
+                                start_ln_and_col: (
+                                    7,
+                                    16,
+                                ),
+                                end_ln_and_col: (
+                                    7,
+                                    31,
+                                ),
+                            },
+                            if_true: Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            7,
+                                            16,
+                                        ),
+                                        end_ln_and_col: (
+                                            7,
+                                            17,
+                                        ),
+                                    },
+                                    lit: Int(
+                                        "0",
+                                    ),
+                                },
+                            ),
+                            guard: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            7,
+                                            21,
+                                        ),
+                                        end_ln_and_col: (
+                                            7,
+                                            24,
+                                        ),
+                                    },
+                                    name: "idx",
+                                },
+                            ),
+                            if_false: Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            7,
+                                            30,
+                                        ),
+                                        end_ln_and_col: (
+                                            7,
+                                            31,
+                                        ),
+                                    },
+                                    lit: Int(
+                                        "1",
+                                    ),
+                                },
+                            ),
+                        },
+                    },
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                8,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                8,
+                                23,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "len",
+                                None,
+                            ),
+                        ],
+                        rhs: Binop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    8,
+                                    12,
+                                ),
+                                end_ln_and_col: (
+                                    8,
+                                    23,
+                                ),
+                            },
+                            op: Sub,
+                            lhs: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            8,
+                                            12,
+                                        ),
+                                        end_ln_and_col: (
+                                            8,
+                                            15,
+                                        ),
+                                    },
+                                    name: "end",
+                                },
+                            ),
+                            rhs: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            8,
+                                            18,
+                                        ),
+                                        end_ln_and_col: (
+                                            8,
+                                            23,
+                                        ),
+                                    },
+                                    name: "start",
+                                },
+                            ),
+                        },
+                    },
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                10,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                12,
+                                35,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "nxt_start",
+                                None,
+                            ),
+                        ],
+                        rhs: Conditional {
+                            info: Info {
+                                start_ln_and_col: (
+                                    10,
+                                    18,
+                                ),
+                                end_ln_and_col: (
+                                    12,
+                                    35,
+                                ),
+                            },
+                            if_true: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        10,
+                                        18,
+                                    ),
+                                    end_ln_and_col: (
+                                        10,
+                                        26,
+                                    ),
+                                },
+                                op: Sub,
+                                lhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                18,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                22,
+                                            ),
+                                        },
+                                        name: "mdpt",
+                                    },
+                                ),
+                                rhs: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                25,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                26,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "1",
+                                        ),
+                                    },
+                                ),
+                            },
+                            guard: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        10,
+                                        30,
+                                    ),
+                                    end_ln_and_col: (
+                                        11,
+                                        61,
+                                    ),
+                                },
+                                op: Lor,
+                                lhs: Binop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            10,
+                                            30,
+                                        ),
+                                        end_ln_and_col: (
+                                            10,
+                                            62,
+                                        ),
+                                    },
+                                    op: Land,
+                                    lhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                30,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                38,
+                                            ),
+                                        },
+                                        op: Eq,
+                                        lhs: Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        10,
+                                                        30,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        10,
+                                                        33,
+                                                    ),
+                                                },
+                                                name: "idx",
+                                            },
+                                        ),
+                                        rhs: Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        10,
+                                                        37,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        10,
+                                                        38,
+                                                    ),
+                                                },
+                                                lit: Int(
+                                                    "0",
+                                                ),
+                                            },
+                                        ),
+                                    },
+                                    rhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                42,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                62,
+                                            ),
+                                        },
+                                        op: Geq,
+                                        lhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    10,
+                                                    42,
+                                                ),
+                                                end_ln_and_col: (
+                                                    10,
+                                                    46,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            10,
+                                                            42,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            10,
+                                                            43,
+                                                        ),
+                                                    },
+                                                    name: "p",
+                                                },
+                                            ),
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            10,
+                                                            44,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            10,
+                                                            46,
+                                                        ),
+                                                    },
+                                                    name: "t0",
+                                                },
+                                            ),
+                                        },
+                                        rhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    10,
+                                                    50,
+                                                ),
+                                                end_ln_and_col: (
+                                                    10,
+                                                    62,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Binop {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        10,
+                                                        50,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        10,
+                                                        59,
+                                                    ),
+                                                },
+                                                op: Index,
+                                                lhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                10,
+                                                                50,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                10,
+                                                                53,
+                                                            ),
+                                                        },
+                                                        name: "pts",
+                                                    },
+                                                ),
+                                                rhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                10,
+                                                                54,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                10,
+                                                                58,
+                                                            ),
+                                                        },
+                                                        name: "mdpt",
+                                                    },
+                                                ),
+                                            },
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            10,
+                                                            60,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            10,
+                                                            62,
+                                                        ),
+                                                    },
+                                                    name: "t0",
+                                                },
+                                            ),
+                                        },
+                                    },
+                                },
+                                rhs: Binop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            11,
+                                            29,
+                                        ),
+                                        end_ln_and_col: (
+                                            11,
+                                            61,
+                                        ),
+                                    },
+                                    op: Land,
+                                    lhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                11,
+                                                29,
+                                            ),
+                                            end_ln_and_col: (
+                                                11,
+                                                37,
+                                            ),
+                                        },
+                                        op: Eq,
+                                        lhs: Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        11,
+                                                        29,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        11,
+                                                        32,
+                                                    ),
+                                                },
+                                                name: "idx",
+                                            },
+                                        ),
+                                        rhs: Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        11,
+                                                        36,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        11,
+                                                        37,
+                                                    ),
+                                                },
+                                                lit: Int(
+                                                    "1",
+                                                ),
+                                            },
+                                        ),
+                                    },
+                                    rhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                11,
+                                                41,
+                                            ),
+                                            end_ln_and_col: (
+                                                11,
+                                                61,
+                                            ),
+                                        },
+                                        op: Geq,
+                                        lhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    11,
+                                                    41,
+                                                ),
+                                                end_ln_and_col: (
+                                                    11,
+                                                    45,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            11,
+                                                            41,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            11,
+                                                            42,
+                                                        ),
+                                                    },
+                                                    name: "p",
+                                                },
+                                            ),
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            11,
+                                                            43,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            11,
+                                                            45,
+                                                        ),
+                                                    },
+                                                    name: "t1",
+                                                },
+                                            ),
+                                        },
+                                        rhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    11,
+                                                    49,
+                                                ),
+                                                end_ln_and_col: (
+                                                    11,
+                                                    61,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Binop {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        11,
+                                                        49,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        11,
+                                                        58,
+                                                    ),
+                                                },
+                                                op: Index,
+                                                lhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                11,
+                                                                49,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                11,
+                                                                52,
+                                                            ),
+                                                        },
+                                                        name: "pts",
+                                                    },
+                                                ),
+                                                rhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                11,
+                                                                53,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                11,
+                                                                57,
+                                                            ),
+                                                        },
+                                                        name: "mdpt",
+                                                    },
+                                                ),
+                                            },
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            11,
+                                                            59,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            11,
+                                                            61,
+                                                        ),
+                                                    },
+                                                    name: "t1",
+                                                },
+                                            ),
+                                        },
+                                    },
+                                },
+                            },
+                            if_false: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            12,
+                                            30,
+                                        ),
+                                        end_ln_and_col: (
+                                            12,
+                                            35,
+                                        ),
+                                    },
+                                    name: "start",
+                                },
+                            ),
+                        },
+                    },
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                13,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                15,
+                                29,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "nxt_end",
+                                None,
+                            ),
+                        ],
+                        rhs: Conditional {
+                            info: Info {
+                                start_ln_and_col: (
+                                    13,
+                                    16,
+                                ),
+                                end_ln_and_col: (
+                                    15,
+                                    29,
+                                ),
+                            },
+                            if_true: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        13,
+                                        16,
+                                    ),
+                                    end_ln_and_col: (
+                                        13,
+                                        24,
+                                    ),
+                                },
+                                op: Add,
+                                lhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                13,
+                                                16,
+                                            ),
+                                            end_ln_and_col: (
+                                                13,
+                                                20,
+                                            ),
+                                        },
+                                        name: "mdpt",
+                                    },
+                                ),
+                                rhs: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                13,
+                                                23,
+                                            ),
+                                            end_ln_and_col: (
+                                                13,
+                                                24,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "1",
+                                        ),
+                                    },
+                                ),
+                            },
+                            guard: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        13,
+                                        28,
+                                    ),
+                                    end_ln_and_col: (
+                                        14,
+                                        56,
+                                    ),
+                                },
+                                op: Lor,
+                                lhs: Binop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            13,
+                                            28,
+                                        ),
+                                        end_ln_and_col: (
+                                            13,
+                                            59,
+                                        ),
+                                    },
+                                    op: Land,
+                                    lhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                13,
+                                                28,
+                                            ),
+                                            end_ln_and_col: (
+                                                13,
+                                                36,
+                                            ),
+                                        },
+                                        op: Eq,
+                                        lhs: Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        13,
+                                                        28,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        13,
+                                                        31,
+                                                    ),
+                                                },
+                                                name: "idx",
+                                            },
+                                        ),
+                                        rhs: Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        13,
+                                                        35,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        13,
+                                                        36,
+                                                    ),
+                                                },
+                                                lit: Int(
+                                                    "0",
+                                                ),
+                                            },
+                                        ),
+                                    },
+                                    rhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                13,
+                                                40,
+                                            ),
+                                            end_ln_and_col: (
+                                                13,
+                                                59,
+                                            ),
+                                        },
+                                        op: Lt,
+                                        lhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    13,
+                                                    40,
+                                                ),
+                                                end_ln_and_col: (
+                                                    13,
+                                                    44,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            13,
+                                                            40,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            13,
+                                                            41,
+                                                        ),
+                                                    },
+                                                    name: "p",
+                                                },
+                                            ),
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            13,
+                                                            42,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            13,
+                                                            44,
+                                                        ),
+                                                    },
+                                                    name: "t0",
+                                                },
+                                            ),
+                                        },
+                                        rhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    13,
+                                                    47,
+                                                ),
+                                                end_ln_and_col: (
+                                                    13,
+                                                    59,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Binop {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        13,
+                                                        47,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        13,
+                                                        56,
+                                                    ),
+                                                },
+                                                op: Index,
+                                                lhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                13,
+                                                                47,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                13,
+                                                                50,
+                                                            ),
+                                                        },
+                                                        name: "pts",
+                                                    },
+                                                ),
+                                                rhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                13,
+                                                                51,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                13,
+                                                                55,
+                                                            ),
+                                                        },
+                                                        name: "mdpt",
+                                                    },
+                                                ),
+                                            },
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            13,
+                                                            57,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            13,
+                                                            59,
+                                                        ),
+                                                    },
+                                                    name: "t0",
+                                                },
+                                            ),
+                                        },
+                                    },
+                                },
+                                rhs: Binop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            14,
+                                            25,
+                                        ),
+                                        end_ln_and_col: (
+                                            14,
+                                            56,
+                                        ),
+                                    },
+                                    op: Land,
+                                    lhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                14,
+                                                25,
+                                            ),
+                                            end_ln_and_col: (
+                                                14,
+                                                33,
+                                            ),
+                                        },
+                                        op: Eq,
+                                        lhs: Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        14,
+                                                        25,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        14,
+                                                        28,
+                                                    ),
+                                                },
+                                                name: "idx",
+                                            },
+                                        ),
+                                        rhs: Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        14,
+                                                        32,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        14,
+                                                        33,
+                                                    ),
+                                                },
+                                                lit: Int(
+                                                    "1",
+                                                ),
+                                            },
+                                        ),
+                                    },
+                                    rhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                14,
+                                                37,
+                                            ),
+                                            end_ln_and_col: (
+                                                14,
+                                                56,
+                                            ),
+                                        },
+                                        op: Lt,
+                                        lhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    14,
+                                                    37,
+                                                ),
+                                                end_ln_and_col: (
+                                                    14,
+                                                    41,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            14,
+                                                            37,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            14,
+                                                            38,
+                                                        ),
+                                                    },
+                                                    name: "p",
+                                                },
+                                            ),
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            14,
+                                                            39,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            14,
+                                                            41,
+                                                        ),
+                                                    },
+                                                    name: "t1",
+                                                },
+                                            ),
+                                        },
+                                        rhs: Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    14,
+                                                    44,
+                                                ),
+                                                end_ln_and_col: (
+                                                    14,
+                                                    56,
+                                                ),
+                                            },
+                                            op: Dot,
+                                            lhs: Binop {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        14,
+                                                        44,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        14,
+                                                        53,
+                                                    ),
+                                                },
+                                                op: Index,
+                                                lhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                14,
+                                                                44,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                14,
+                                                                47,
+                                                            ),
+                                                        },
+                                                        name: "ptr",
+                                                    },
+                                                ),
+                                                rhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                14,
+                                                                48,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                14,
+                                                                52,
+                                                            ),
+                                                        },
+                                                        name: "mdpt",
+                                                    },
+                                                ),
+                                            },
+                                            rhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            14,
+                                                            54,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            14,
+                                                            56,
+                                                        ),
+                                                    },
+                                                    name: "t1",
+                                                },
+                                            ),
+                                        },
+                                    },
+                                },
+                            },
+                            if_false: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            15,
+                                            26,
+                                        ),
+                                        end_ln_and_col: (
+                                            15,
+                                            29,
+                                        ),
+                                    },
+                                    name: "end",
+                                },
+                            ),
+                        },
+                    },
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                16,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                17,
+                                48,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "res",
+                                None,
+                            ),
+                        ],
+                        rhs: Conditional {
+                            info: Info {
+                                start_ln_and_col: (
+                                    16,
+                                    12,
+                                ),
+                                end_ln_and_col: (
+                                    17,
+                                    48,
+                                ),
+                            },
+                            if_true: Term(
+                                Call {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            16,
+                                            12,
+                                        ),
+                                        end_ln_and_col: (
+                                            16,
+                                            61,
+                                        ),
+                                    },
+                                    function: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    16,
+                                                    12,
+                                                ),
+                                                end_ln_and_col: (
+                                                    16,
+                                                    24,
+                                                ),
+                                            },
+                                            name: "find_closest",
+                                        },
+                                    ),
+                                    args: [
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        16,
+                                                        25,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        16,
+                                                        26,
+                                                    ),
+                                                },
+                                                name: "p",
+                                            },
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        16,
+                                                        28,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        16,
+                                                        31,
+                                                    ),
+                                                },
+                                                name: "pts",
+                                            },
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        16,
+                                                        33,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        16,
+                                                        42,
+                                                    ),
+                                                },
+                                                name: "nxt_start",
+                                            },
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        16,
+                                                        44,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        16,
+                                                        51,
+                                                    ),
+                                                },
+                                                name: "nxt_end",
+                                            },
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        16,
+                                                        53,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        16,
+                                                        60,
+                                                    ),
+                                                },
+                                                name: "nxt_idx",
+                                            },
+                                        ),
+                                    ],
+                                    template: None,
+                                },
+                            ),
+                            guard: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        16,
+                                        65,
+                                    ),
+                                    end_ln_and_col: (
+                                        16,
+                                        73,
+                                    ),
+                                },
+                                op: Gt,
+                                lhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                16,
+                                                65,
+                                            ),
+                                            end_ln_and_col: (
+                                                16,
+                                                68,
+                                            ),
+                                        },
+                                        name: "len",
+                                    },
+                                ),
+                                rhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                16,
+                                                71,
+                                            ),
+                                            end_ln_and_col: (
+                                                16,
+                                                73,
+                                            ),
+                                        },
+                                        name: "LN",
+                                    },
+                                ),
+                            },
+                            if_false: Term(
+                                Call {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            17,
+                                            13,
+                                        ),
+                                        end_ln_and_col: (
+                                            17,
+                                            48,
+                                        ),
+                                    },
+                                    function: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    17,
+                                                    13,
+                                                ),
+                                                end_ln_and_col: (
+                                                    17,
+                                                    26,
+                                                ),
+                                            },
+                                            name: "closest_point",
+                                        },
+                                    ),
+                                    args: [
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        17,
+                                                        27,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        17,
+                                                        28,
+                                                    ),
+                                                },
+                                                name: "p",
+                                            },
+                                        ),
+                                        Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    17,
+                                                    30,
+                                                ),
+                                                end_ln_and_col: (
+                                                    17,
+                                                    47,
+                                                ),
+                                            },
+                                            op: Index,
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            17,
+                                                            30,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            17,
+                                                            33,
+                                                        ),
+                                                    },
+                                                    name: "pts",
+                                                },
+                                            ),
+                                            rhs: Binop {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        17,
+                                                        34,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        17,
+                                                        46,
+                                                    ),
+                                                },
+                                                op: Range,
+                                                lhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                17,
+                                                                34,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                17,
+                                                                39,
+                                                            ),
+                                                        },
+                                                        name: "start",
+                                                    },
+                                                ),
+                                                rhs: Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                17,
+                                                                43,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                17,
+                                                                46,
+                                                            ),
+                                                        },
+                                                        name: "end",
+                                                    },
+                                                ),
+                                            },
+                                        },
+                                    ],
+                                    template: None,
+                                },
+                            ),
+                        },
+                    },
+                    Returns(
+                        Info {
+                            start_ln_and_col: (
+                                18,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                18,
+                                16,
+                            ),
+                        },
+                        Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        18,
+                                        13,
+                                    ),
+                                    end_ln_and_col: (
+                                        18,
+                                        16,
+                                    ),
+                                },
+                                name: "res",
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ],
+    },
+]

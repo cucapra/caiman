@@ -1,0 +1,5 @@
+Error: At bad_arr_expr.cm:2:16, 
+  Parsing Error: Unrecognized token: '-', expected one of [
+    "r#\"[0-9]+\"#",
+    "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
+]

@@ -1,0 +1,4 @@
+#version 0.1.0
+const FOO = 10;
+const BAZ = [[true, false], (10 + 20 + 30 + FOO, FOO * FOO)]
+const Z = FOO / FOO * BAZ

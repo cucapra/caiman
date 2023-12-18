@@ -1,0 +1,2 @@
+Error: At extern_resource_double_io.cm:5:5, 
+  Parsing Error: Resource at 5:5 - 10:6 must have exactly one input or output field
