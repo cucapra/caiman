@@ -7,6 +7,10 @@ if [ "$1" != "-t" ]; then
     if [ $? != 0 ]; then
         exit 1
     fi
+    cargo test --all
+    if [ $? != 0 ]; then
+        exit 1
+    fi
 fi
 
 find ./high-level-caiman/turnt -name "*.cm" | xargs turnt --diff -v

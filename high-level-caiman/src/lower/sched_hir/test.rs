@@ -47,14 +47,16 @@ fn cfg_gen() {
                     is_const: true,
                 }],
             }],
-            false_block: vec![SchedStmt::Return(
-                Info::default(),
-                SchedExpr::Term(SchedTerm::Var {
+            false_block: vec![SchedStmt::Decl {
+                info: Info::default(),
+                lhs: vec![("x".to_string(), None)],
+                expr: Some(SchedExpr::Term(SchedTerm::Lit {
                     info: Info::default(),
-                    name: "x".to_string(),
+                    lit: SchedLiteral::Int(3.to_string()),
                     tag: None,
-                }),
-            )],
+                })),
+                is_const: true,
+            }],
         },
         SchedStmt::Assign {
             info: Info::default(),
@@ -66,6 +68,14 @@ fn cfg_gen() {
                 tag: None,
             }),
         },
+        SchedStmt::Return(
+            Info::default(),
+            SchedExpr::Term(SchedTerm::Var {
+                info: Info::default(),
+                name: String::from("x"),
+                tag: None,
+            }),
+        ),
     ];
     let cfg = Cfg::new(stmts, 1);
     let mut ordered_graph = BTreeMap::new();
@@ -76,40 +86,54 @@ fn cfg_gen() {
         format!("{ordered_graph:?}"),
         "{0: None, 1: Select { true_branch: 3, false_branch: 7 }, 2: Next(0), \
             3: Select { true_branch: 5, false_branch: 6 }, 4: Next(2), \
-            5: Next(4), 6: Next(4), 7: Next(0)}"
+            5: Next(4), 6: Next(4), 7: Next(2)}"
     );
 }
 
 #[test]
 fn if_gen() {
-    let stmts = vec![SchedStmt::If {
-        guard: NestedExpr::Term(SchedTerm::Var {
-            info: Info::default(),
-            name: "x".to_string(),
-            tag: None,
-        }),
-        tag: None,
-        info: Info::default(),
-        true_block: vec![SchedStmt::Return(
-            Info::default(),
-            SchedExpr::Term(SchedTerm::Var {
+    let stmts = vec![
+        SchedStmt::If {
+            guard: NestedExpr::Term(SchedTerm::Var {
                 info: Info::default(),
                 name: "x".to_string(),
                 tag: None,
             }),
-        )],
-        false_block: vec![SchedStmt::Block(
-            Info::default(),
-            vec![SchedStmt::Return(
-                Info::default(),
-                SchedExpr::Term(SchedTerm::Var {
+            tag: None,
+            info: Info::default(),
+            true_block: vec![SchedStmt::Assign {
+                info: Info::default(),
+                tag: None,
+                lhs: String::from("x"),
+                rhs: SchedExpr::Term(SchedTerm::Lit {
                     info: Info::default(),
-                    name: "x".to_string(),
+                    lit: SchedLiteral::Int(String::from("1")),
                     tag: None,
                 }),
+            }],
+            false_block: vec![SchedStmt::Block(
+                Info::default(),
+                vec![SchedStmt::Assign {
+                    info: Info::default(),
+                    tag: None,
+                    lhs: String::from("x"),
+                    rhs: SchedExpr::Term(SchedTerm::Lit {
+                        info: Info::default(),
+                        lit: SchedLiteral::Int(String::from("2")),
+                        tag: None,
+                    }),
+                }],
             )],
-        )],
-    }];
+        },
+        SchedStmt::Return(
+            Info::default(),
+            SchedExpr::Term(SchedTerm::Var {
+                info: Info::default(),
+                name: String::from("x"),
+                tag: None,
+            }),
+        ),
+    ];
     let cfg = Cfg::new(stmts, 1);
     let mut ordered_graph = BTreeMap::new();
     for (id, edge) in cfg.graph {
@@ -118,7 +142,7 @@ fn if_gen() {
     assert_eq!(
         format!("{ordered_graph:?}"),
         "{0: None, 1: Select { true_branch: 3, false_branch: 4 }, \
-            3: Next(0), 4: Next(0)}"
+            2: Next(0), 3: Next(2), 4: Next(2)}"
     );
 }
 

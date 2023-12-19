@@ -154,7 +154,8 @@ pub enum Terminator {
     Return(Vec<String>),
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
-    /// for the canonical CFG.
+    /// for the canonical CFG. Takes an argument which is how many return values
+    /// there are.
     FinalReturn(usize),
     /// No terminator, continue to the next block. A `None` terminator is just
     /// a temporary value until live vars and tag analysis can be done to know

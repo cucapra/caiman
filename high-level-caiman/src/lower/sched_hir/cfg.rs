@@ -105,11 +105,14 @@ fn make_block(
 }
 
 /// A pending child block to be processed and converted into a sequence of basic
-/// blocks.
+/// blocks. This is used to process blocks in a BFS manner.
 struct PendingChild {
     parent_id: usize,
+    /// The id of the block that will run when the children are done.
     join_id: usize,
+    /// Left child (true branch)
     true_block: Vec<SchedStmt>,
+    /// Right child (false branch). May be `None` if the parent is not an `if`
     false_block: Option<Vec<SchedStmt>>,
 }
 
@@ -139,7 +142,8 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
     res
 }
 
-/// Handles a return statement by constructing a new block with the return as the terminator.
+/// Handles a return statement by constructing a new block with the return as the terminator
+/// and incrementing the id counter.
 /// # Arguments
 /// * `cur_id` - The id of the next block. For every new block created, this is incremented
 ///   and thus always is the id of the next block.
@@ -175,6 +179,21 @@ fn handle_return(
     edges.insert(old_id, Edge::Next(FINAL_BLOCK_ID));
 }
 
+/// Handles a select statement by constructing a new block with the select as the terminator
+/// and incrementing the id counter.
+/// # Arguments
+/// * `cur_id` - The id of the next block. For every new block created, this is incremented
+///   and thus always is the id of the next block.
+/// * `blocks` - The list of blocks to add to. New blocks are appended to the end.
+/// * `cur_stmts` - The list of scheduling statements to convert to blocks.
+/// * `guard` - The guard expression for the select statement.
+/// * `tag` - The tag for the select statement.
+/// * `true_block` - The list of scheduling statements for the true branch of the select.
+/// * `false_block` - The list of scheduling statements for the false branch of the select.
+/// * `end_info` - The source location of the select statement.
+/// * `children` - The list of pending children to add to that will queue up the
+///  children of this block to be processed in the next BFS level.
+// TODO: cleanup
 #[allow(clippy::too_many_arguments)]
 fn handle_select(
     cur_id: &mut usize,
@@ -202,6 +221,8 @@ fn handle_select(
             info,
         ),
     );
+    //  `cur_id` incremented in `make_block`, so it currently points to the
+    // next block (continuation)
     children.push(PendingChild {
         parent_id,
         join_id: *cur_id,
@@ -210,7 +231,8 @@ fn handle_select(
     });
 }
 
-/// Handles a call statement by constructing a new block with the call as the terminator.
+/// Handles a call statement by constructing a new block with the call as the terminator
+/// and incrementing the id counter.
 /// # Arguments
 /// * `edges` - The list of edges to add to. Edges for new blocks are added to this map.
 /// * `blocks` - The list of blocks to add to. New blocks are appended to the end.
@@ -262,7 +284,6 @@ fn handle_call(
 /// * `edges` - The list of edges to add to. Edges for new blocks are added to this map.
 /// * `stmts` - The list of scheduling statements to convert to blocks.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
-// TODO: cleanup
 fn make_blocks(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
@@ -273,12 +294,14 @@ fn make_blocks(
     let mut cur_stmts = vec![];
     let root_id = *cur_id;
     // we do a BFS on the graph, this is the queue of children
+
+    // we do BFS so that we know the continuation of a block before we
+    // process the children of the block
     let mut children = vec![];
+    // if the last statement is a return or call then we don't need to make another
+    // empty block for the continuation
     let ends_with_tail = stmts.last().map_or(false, |x| {
-        matches!(
-            x,
-            SchedStmt::Return(..) | SchedStmt::Call(..) | SchedStmt::If { .. }
-        )
+        matches!(x, SchedStmt::Return(..) | SchedStmt::Call(..))
     });
     let mut last_info = Info::default();
     for stmt in stmts {
@@ -331,6 +354,7 @@ fn make_blocks(
                     end,
                 );
             }
+            // not a tail edge
             other => cur_stmts.push(other),
         }
     }
@@ -398,6 +422,9 @@ fn make_child_blocks(
 
 impl Cfg {
     /// Create a new CFG from a list of scheduling statements
+    /// # Arguments
+    /// * `stmts` - The list of scheduling statements to convert to blocks.
+    /// * `output_len` - The number of outputs of the scheduling function.
     pub fn new(stmts: Vec<SchedStmt>, output_len: usize) -> Self {
         let mut blocks = HashMap::new();
         blocks.insert(

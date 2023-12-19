@@ -169,6 +169,8 @@ fn broadcast_out_facts<T: Fact>(
     if out_fact.is_empty() {
         // do nothing (meet w/ top)
     } else {
+        // This must be changed if we support conditional dataflow
+        // analyses
         assert_eq!(out_fact.len(), 1);
         for neighbor in adj_lst.get(&block).unwrap() {
             in_facts.insert(

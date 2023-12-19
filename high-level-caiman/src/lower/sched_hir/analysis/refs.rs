@@ -161,6 +161,8 @@ fn deref_transform_instr(
                     insert_deref_if_needed(last_deref, names, types, insertions, id, name);
                     get_cur_name(name, names)
                 } else if ut == UseType::Write {
+                    // writes can only occur to references, so we need to rename
+                    // the variable to the reference version
                     format!("_{name}_ref")
                 } else {
                     name.to_string()
@@ -168,6 +170,7 @@ fn deref_transform_instr(
             });
             if let HirBody::VarDecl { lhs, .. } = stmt {
                 let old_lhs = lhs.clone();
+                // rename the lhs to the reference version
                 *lhs = format!("_{lhs}_ref");
                 types.insert(lhs.clone(), types[&old_lhs].clone());
             }
