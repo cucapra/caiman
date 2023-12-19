@@ -147,11 +147,18 @@ pub enum Terminator {
     /// A select statement with a guard node. If the guard is true
     /// we transition to the `true_branch` of the outgoing edge of this block
     /// in the CFG. Otherwise, we transition to the `false_branch`.
-    Select(String, Option<Tags>),
+    Select {
+        dests: Vec<(String, Option<FullType>)>,
+        guard: String,
+        tag: Option<Tags>,
+    },
     /// A return statement with an optional node.
     /// Modeled as an assignment to the special `_out` variable and transition to
     /// the final basic block.
-    Return(Vec<String>),
+    Return {
+        dests: Vec<(String, Option<FullType>)>,
+        rets: Vec<String>,
+    },
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
     /// for the canonical CFG. Takes an argument which is how many return values
@@ -199,7 +206,9 @@ pub trait Hir {
 impl Hir for Terminator {
     fn get_defs(&self) -> Option<Args> {
         match self {
-            Self::Call(defs, ..) | Self::CaptureCall { dests: defs, .. } => Some(
+            Self::Call(defs, ..)
+            | Self::CaptureCall { dests: defs, .. }
+            | Self::Return { dests: defs, .. } => Some(
                 defs.iter()
                     .map(|(d, t)| {
                         (
@@ -209,12 +218,9 @@ impl Hir for Terminator {
                     })
                     .collect(),
             ),
-            Self::Return(v) => Some(
-                (0..v.len())
-                    .map(|i| (format!("{RET_VAR}{i}"), None))
-                    .collect(),
-            ),
-            Self::Select(..) | Self::FinalReturn(_) | Self::None | Self::Next(..) => None,
+            // we don't consider the defs of a select to be defs of this terminator,
+            // but rather they are the defs of the left and right funclets
+            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => None,
         }
     }
 
@@ -225,11 +231,11 @@ impl Hir for Terminator {
                     uses.insert(arg.clone());
                 }
             }
-            Self::Select(guard, ..) => {
+            Self::Select { guard, .. } => {
                 uses.insert(guard.clone());
             }
-            Self::Return(v) => {
-                for node in v {
+            Self::Return { rets, .. } => {
+                for node in rets {
                     uses.insert(node.clone());
                 }
             }
@@ -249,11 +255,11 @@ impl Hir for Terminator {
                     *arg = f(arg, UseType::Read);
                 }
             }
-            Self::Select(guard, ..) => {
+            Self::Select { guard, .. } => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Return(v) => {
-                for node in v {
+            Self::Return { rets, .. } => {
+                for node in rets {
                     *node = f(node, UseType::Read);
                 }
             }
@@ -360,6 +366,7 @@ impl HirBody {
             SchedStmt::Return(..)
             | SchedStmt::Block(..)
             | SchedStmt::If { .. }
+            | SchedStmt::Seq { .. }
             | SchedStmt::Call(..) => {
                 panic!("Unexpected stmt")
             }

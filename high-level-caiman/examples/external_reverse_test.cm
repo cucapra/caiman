@@ -18,14 +18,14 @@ val main() -> i64 {
 fn foo() -> i64 
     impls time, space
 {
-    return op(2, 10);
+    op(2, 10)
 }
 
 
 fn bar() -> i64
     impls time, space
 {
-    return op2(2, 10);
+    op2(2, 10)
 }
 
 pipeline main { foo }

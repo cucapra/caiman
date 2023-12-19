@@ -87,7 +87,7 @@
                     ),
                     end_ln_and_col: (
                         20,
-                        14,
+                        6,
                     ),
                 },
                 Term(
@@ -95,11 +95,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 20,
-                                12,
+                                5,
                             ),
                             end_ln_and_col: (
                                 20,
-                                13,
+                                6,
                             ),
                         },
                         name: "x",

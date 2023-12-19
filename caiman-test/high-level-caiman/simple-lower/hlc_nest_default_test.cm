@@ -43,7 +43,7 @@ fn foo() -> i64 @ node(main.z)-usable
         @in { v: [node(main.right)-usable, none(space)-save] };
     }
     @in { v: [node(main.z)-usable, none(space)-save] };
-    return v;
+    v
 }
 
 pipeline main { foo }

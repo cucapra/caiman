@@ -1,0 +1,7 @@
+#version 0.1.0
+fn foo() -> i64 impls a {
+    let z = if true {
+        10
+    };
+    z
+}

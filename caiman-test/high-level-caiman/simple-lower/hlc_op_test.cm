@@ -24,7 +24,7 @@ fn main_impl() -> i64 @ node(main.k)-usable
     let e: i64 @ node(main.e) = d - c;
     let t: i64 @ node(main.t) = 3;
     let k: i64 @ node(main.k) = e / t;
-    return k;
+    k
     
 }
 

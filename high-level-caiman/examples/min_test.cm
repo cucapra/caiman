@@ -10,11 +10,13 @@ val min(a: i32, b: i32) -> i32 {
 fn min(a: i32, b: i32) -> i32 
     impls min, time, space
 {
+    var res;
     if a < b {
-        return a;
+        res = a;
     } else {
-        return b;
+        res = b;
     }
+    res
 }
 
 pipeline main { min }

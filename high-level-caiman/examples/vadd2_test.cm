@@ -28,7 +28,7 @@ fn vadd2_extern(v1: [i32; N], v2: [i32; N], v3: [i32; N]) -> [i32; N]
 {
     let tmp = vadd_extern(v1, v2);
     let result = vadd_extern(tmp, v3);
-    return result;
+    result
 }
 
 sptl alloc_space(bs: BufferSpace) -> BufferSpace {
@@ -58,7 +58,7 @@ fn vadd_host_rec(v1: [i32; N], v2: [i32; N], result: [i32; N]) -> [i32; N]
         ???;
         result = vadd_host_rec(?, ?, ?);
     }
-    return result;
+    result
 }
 
 pipeline main {

@@ -32,7 +32,7 @@ fn main_func() -> i64 @ node(main.four)-usable impls main, time, space  {
         nine: i64 @ node(main.nine), ten: i64 @ node(main.ten) 
         = nums_func(a) 
         @ node(main.(one, two, three, four, five, six, seven, eight, nine, ten));
-    return four;
+    four
 }
 
 fn nums_func(a: i64 @ input(nums.a)-usable) 
@@ -52,7 +52,7 @@ fn nums_func(a: i64 @ input(nums.a)-usable)
     let eight: i64 @ node(nums.eight) = 8;
     let nine: i64 @ node(nums.nine) = 9;
     let ten: i64 @ node(nums.ten) = 10;
-    return (one, two, three, four, five, six, seven, eight, nine, ten);
+    (one, two, three, four, five, six, seven, eight, nine, ten)
 }
 
 pipeline main { main_func }

@@ -20,13 +20,13 @@ fn main_func() -> i64 @ node(main.x)-usable impls main, time, space  {
     let r: i64 @ node(main.r)-usable = id_func(c) @ node(main.r);
     @in { c2: node(main.c)-usable };
     let x: i64 @ node(main.x)-usable = c2 + r;
-    return x;
+    x
 }
 
 fn id_func(a: i64 @ input(id.a)-usable) -> i64 @ output(id.a)-usable  
     impls id, time, space
 {
-    return a;
+    a
 }
 
 pipeline main { main_func }
