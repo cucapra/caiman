@@ -143,15 +143,12 @@ BaseType: DataType = {
     "&" <BaseType> => DataType::Ref(Box::new(<>)),
 }
 
-<<<<<<< HEAD
-// Full type: base type with flags and settings and an optional tag
-=======
 MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
     "(" <TupleCommaList<MaybeNamed<BaseType>>> ")" => <>,
     <MaybeNamed<BaseType>> => vec![<>],
 }
 
->>>>>>> 85f4c6c (Multiple outputs)
+// Full type: base type with flags and settings and an optional tag
 FullType: FullType = {
     <FlaggedType> => FullType {
         base: <>,
@@ -216,10 +213,7 @@ QuotRef: Option<QuotientReference> = {
     "?" => None,
 }
 
-<<<<<<< HEAD
 // Flagged type: base type with flags and settings
-=======
->>>>>>> 45ddf6c (Op names)
 FlaggedType: FlaggedType = {
     <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> => astf.flagged_type(<>)
 }

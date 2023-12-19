@@ -120,7 +120,7 @@ pub struct ASTFactory {
     line_ending_byte_offsets: Vec<usize>,
 }
 
-/// LALRpop parsing error using our custom error type, `CustomParsingError`
+/// `LALRpop` parsing error using our custom error type, `CustomParsingError`
 type ParserError = ParseError<usize, Token<'static>, CustomParsingError>;
 
 impl ASTFactory {
@@ -161,6 +161,7 @@ impl ASTFactory {
     /// Construct an `Info` struct from a start and end byte offset
     /// 
     /// The `Info` struct contains the line and column number of the start and end
+    #[must_use]
     pub fn info(&self, l: usize, r: usize) -> Info {
         Info {
             start_ln_and_col: self.line_and_column(l), 
