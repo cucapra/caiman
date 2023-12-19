@@ -1,2 +1,11 @@
-Error: At tag_in_spec.cm:3:10, 
-  Parsing Error: A tag cannot occur in this context
+Error: At tag_in_spec.cm:2:10, 
+  Parsing Error: Unrecognized token: '(', expected one of [
+    "\"&\"",
+    "\"BufferSpace\"",
+    "\"Event\"",
+    "\"[\"",
+    "\"bool\"",
+    "\"i32\"",
+    "\"i64\"",
+    "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
+]

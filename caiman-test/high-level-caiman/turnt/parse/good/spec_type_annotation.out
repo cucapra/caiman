@@ -25,7 +25,7 @@
                 },
                 name: "foo",
                 input: [],
-                output: None,
+                output: [],
                 statements: [
                     Assign {
                         info: Info {

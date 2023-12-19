@@ -36,7 +36,7 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         Some(
                             "out",
@@ -45,7 +45,7 @@
                             I32,
                         ),
                     ),
-                ),
+                ],
                 def: Some(
                     ExternDef {
                         path: "gpu_external.comp",
@@ -105,14 +105,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I32,
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -536,7 +536,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -557,7 +557,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "foo",
             "foo_time",

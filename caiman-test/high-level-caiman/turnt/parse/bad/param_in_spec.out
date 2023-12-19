@@ -1,15 +1,11 @@
-Error: At param_in_spec.cm:3:12, 
-  Parsing Error: Unrecognized token: ':', expected one of [
-    "\"!\"",
+Error: At param_in_spec.cm:2:11, 
+  Parsing Error: Unrecognized token: '(', expected one of [
     "\"&\"",
-    "\"(\"",
-    "\"-\"",
-    "\"?\"",
+    "\"BufferSpace\"",
+    "\"Event\"",
     "\"[\"",
-    "\"false\"",
-    "\"true\"",
-    "\"~\"",
-    "r#\"[0-9]+\"#",
-    "r#\"[0-9]+[.][0-9]+\"#",
+    "\"bool\"",
+    "\"i32\"",
+    "\"i64\"",
     "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
 ]

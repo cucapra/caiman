@@ -12,7 +12,7 @@
         },
         name: "foo",
         input: [],
-        output: None,
+        output: [],
         specs: [
             "a",
             "b",

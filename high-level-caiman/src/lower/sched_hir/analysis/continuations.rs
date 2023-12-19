@@ -1,14 +1,15 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
-use crate::lower::sched_hir::cfg::{Cfg, Edge, START_BLOCK_ID};
+use crate::lower::sched_hir::cfg::{Cfg, Edge};
 
 struct Succs {
     /// A map from each block to the transitive closure of nodes that are
-    /// successors of the key. We consider a block to be a successor of itself.
+    /// successors of the key. We consider a block to be a successor of itself
+    /// in this map.
     pub succs: HashMap<usize, HashSet<usize>>,
     /// A map from each block to the transitive closure of nodes that are
     /// predecessors of the key. We consider a block to be a predecessor of
-    /// itself.
+    /// itself in this map.
     #[allow(dead_code)]
     pub preds: HashMap<usize, HashSet<usize>>,
 }
@@ -74,11 +75,11 @@ fn compute_sucessors(cfg: &Cfg, preds: &HashMap<usize, BTreeSet<usize>>) -> Succ
 ///
 /// # Returns
 /// * A map from each node to the length of the shortest path to it.
-fn shortest_path(cfg: &Cfg) -> HashMap<usize, usize> {
+fn shortest_path(cfg: &Cfg, start_id: usize) -> HashMap<usize, usize> {
     // BFS
     let mut res = HashMap::new();
     let mut queue = VecDeque::new();
-    queue.push_back((START_BLOCK_ID, 0));
+    queue.push_back((start_id, 0));
     while let Some((block, dist)) = queue.pop_front() {
         if res.contains_key(&block) {
             // Already visited, so we've already found the shortest path
@@ -103,9 +104,14 @@ fn shortest_path(cfg: &Cfg) -> HashMap<usize, usize> {
 
 /// Computes the continuation of each block in the CFG. A block with no
 /// continuation has no successors.
+///
+/// We compute continuations as a second pass to support any
+/// structure changes of the CFG. Right now, this is needed for the basic
+/// arbitrary returns, which will likely get removed. If the CFG structure
+/// never changes, the the continuations determined by frontend CFG gen
+/// will work fine.
 pub fn compute_coninuations(mut cfg: Cfg) -> Cfg {
     let succs = compute_sucessors(&cfg, &cfg.transpose_graph);
-    let paths = shortest_path(&cfg);
 
     // The continuation is a the successor that is a successor of all of the
     // block's successors such that the path to that successor is the shortest
@@ -121,6 +127,7 @@ pub fn compute_coninuations(mut cfg: Cfg) -> Cfg {
                     .collect();
             }
         }
+        let paths = shortest_path(&cfg, *block_id);
         let mut ordered_doms: Vec<usize> = successors.iter().copied().collect();
         ordered_doms.sort_by_key(|x| paths.get(x).unwrap());
         cfg.blocks.get_mut(block_id).unwrap().ret_block = ordered_doms.first().copied();

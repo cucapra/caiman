@@ -144,14 +144,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 def: None,
             },
             Extern {
@@ -182,14 +182,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 def: None,
             },
         ],
@@ -220,14 +220,14 @@
                 },
                 name: "main",
                 input: [],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Returns(
                         Info {
@@ -390,7 +390,7 @@
         },
         name: "foo",
         input: [],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -411,7 +411,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "time",
             "space",
@@ -518,7 +518,7 @@
         },
         name: "bar",
         input: [],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -539,7 +539,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "time",
             "space",

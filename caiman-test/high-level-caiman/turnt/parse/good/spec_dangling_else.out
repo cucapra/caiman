@@ -25,14 +25,14 @@
                 },
                 name: "baz",
                 input: [],
-                output: Some(
+                output: [
                     (
                         None,
                         UserDefined(
                             "custom_type",
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {

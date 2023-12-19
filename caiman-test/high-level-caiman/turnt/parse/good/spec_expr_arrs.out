@@ -52,36 +52,19 @@
                     ),
                     (
                         "b",
-                        Tuple(
-                            [
-                                Int(
-                                    I32,
-                                ),
-                                Int(
-                                    I32,
-                                ),
-                                Bool,
-                            ],
-                        ),
+                        Bool,
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Slice(
-                            Tuple(
-                                [
-                                    Int(
-                                        I32,
-                                    ),
-                                    Int(
-                                        I32,
-                                    ),
-                                ],
+                            Int(
+                                I32,
                             ),
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -526,16 +509,12 @@
                 input: [
                     (
                         "a",
-                        Tuple(
-                            [
-                                Int(
-                                    I32,
-                                ),
-                            ],
+                        Int(
+                            I32,
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Array(
@@ -547,11 +526,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             9,
-                                            28,
+                                            25,
                                         ),
                                         end_ln_and_col: (
                                             9,
-                                            31,
+                                            28,
                                         ),
                                     },
                                     lit: Int(
@@ -561,7 +540,7 @@
                             ),
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Returns(
                         Info {

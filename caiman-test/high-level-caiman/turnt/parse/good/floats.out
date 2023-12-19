@@ -25,7 +25,7 @@
                 },
                 name: "f",
                 input: [],
-                output: None,
+                output: [],
                 statements: [
                     Assign {
                         info: Info {
@@ -176,7 +176,7 @@
         },
         name: "g",
         input: [],
-        output: None,
+        output: [],
         specs: [
             "f",
         ],

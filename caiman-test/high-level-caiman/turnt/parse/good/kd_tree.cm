@@ -2,7 +2,7 @@
 const N = 102400
 const LN = 1024
 
-type gbuf = [(f32, f32)]'<map_read, map_write, copy_src, 
+type gbuf = [f32]'<map_read, map_write, copy_src, 
     copy_dst, storage, alignment_bits = 512, byte_size = 6553600>
 
 val min(a: i64, b: i64) -> i64 {
@@ -19,20 +19,20 @@ fn min(a: i64, b: i64) -> i64
     }
 }
 
-val dist2(a: (f32, f32), b: (f32, f32)) -> f32 {
+val dist2(a: f32, b: f32) -> f32 {
     a0, a1 :- a
     b0, b1 :- b
     returns (a0 - b0) * (a0 - b0) + (a1 - b1) * (a1 - b1)
 }
 
-fn dist2(a: (f32, f32), b: (f32, f32)) -> f32 
+fn dist2(a: f32, b: f32) -> f32 
     impls dist2, simple_tmln, simple_sptl {
     ???;
 }
 
 feq closest_point {
-    extern(gpu) closest_point_gpu(p: (f32, f32), a: [(f32, f32)]) 
-        -> out: (f32, f32) 
+    extern(gpu) closest_point_gpu(p: f32, a: [f32]) 
+        -> out: f32 
     {
         path : "kd_tree.comp",
         entry : "main",
@@ -54,7 +54,7 @@ feq closest_point {
         }
     }
 
-    val closest_point_host(p: (f32, f32), a: [(f32, f32)]) -> (f32, f32)
+    val closest_point_host(p: f32, a: [f32]) -> f32
     {
         empty :- a.len() <= 0
         a_hd, a_tl :- split(a)
@@ -62,8 +62,8 @@ feq closest_point {
     }
 }
 
-val closest_point_host_rec(p: (f32, f32), a: [(f32, f32)], min_dist: (f32, f32)) 
-    -> (f32, f32) 
+val closest_point_host_rec(p: f32, a: [f32], min_dist: f32) 
+    -> f32 
 {
     a_hd, a_tl :- split(a)
     min :- a_hd if dist2(p, a_hd) < dist2(p, min_dist) else min_dist
@@ -71,8 +71,8 @@ val closest_point_host_rec(p: (f32, f32), a: [(f32, f32)], min_dist: (f32, f32))
     returns closest_point_host_rec(p, a_tl, min) if rec else min_dist
 }
 
-fn closest_point_host_rec(p: (f32, f32), a: [(f32, f32)], min_dist: (f32, f32)) 
-    -> (f32, f32) impls closest_point_host_rec, simple_sptl, simple_tmln
+fn closest_point_host_rec(p: f32, a: [f32], min_dist: f32) 
+    -> f32 impls closest_point_host_rec, simple_sptl, simple_tmln
 {
     if a.len() > 0 {
         let a_hd, a_tl = split(a);
@@ -84,7 +84,7 @@ fn closest_point_host_rec(p: (f32, f32), a: [(f32, f32)], min_dist: (f32, f32))
 
 }
 
-fn closest_point_host(p: (f32, f32), a: [(f32, f32)]) -> (f32, f32)
+fn closest_point_host(p: f32, a: [f32]) -> f32
     impls closest_point_host, simple_sptl, simple_tmln
 {
     if a.len() <= 0 {
@@ -99,8 +99,8 @@ fn closest_point_host(p: (f32, f32), a: [(f32, f32)]) -> (f32, f32)
 tmln simple_tmln(e: Event) -> Event { returns e }
 sptl simple_sptl(b: BufferSpace) -> BufferSpace { returns b }
 
-val find_closest(p: (f32, f32), pts: [(f32, f32); N], start: i64, end: i64, idx: i64) 
-    -> (f32, f32) 
+val find_closest(p: f32, pts: [f32; N], start: i64, end: i64, idx: i64) 
+    -> f32 
 {
     mdpt :- (start + end) / 2
     nxt_idx :- 0 if idx else 1
@@ -128,8 +128,8 @@ sptl sp(bs: BufferSpace) -> BufferSpace {
     returns bs
 }
 
-fn find_closest(p: (f32, f32), pts: [(f32, f32); N], start: i64, 
-    end: i64, idx: i64) -> (f32, f32) impls find_closest, tm, sp
+fn find_closest(p: f32, pts: [f32; N], start: i64, 
+    end: i64, idx: i64) -> f32 impls find_closest, tm, sp
 {
     if end - start <= LN {
         let e = create_gpu_encoder();
@@ -162,12 +162,12 @@ fn find_closest(p: (f32, f32), pts: [(f32, f32); N], start: i64,
     }
 }
 
-val find_closest_point(p: (f32, f32), a: [(f32, f32); N]) -> (f32, f32) {
+val find_closest_point(p: f32, a: [f32; N]) -> f32 {
     returns find_closest(p, a, 0, N, 0)
 }
 
-fn find_closest_point(p: (f32, f32), a: [(f32, f32); N]) 
-    -> (f32, f32) impls find_closest_point, simple_tmln, simple_sptl 
+fn find_closest_point(p: f32, a: [f32; N]) 
+    -> f32 impls find_closest_point, simple_tmln, simple_sptl 
 {
     return find_closest(p, a, 0, N, 0);
 

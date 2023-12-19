@@ -27,40 +27,26 @@
                 input: [
                     (
                         "p",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                     (
                         "pts",
                         Array(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                             Term(
                                 Var {
                                     info: Info {
                                         start_ln_and_col: (
                                             3,
-                                            51,
+                                            37,
                                         ),
                                         end_ln_and_col: (
                                             3,
-                                            52,
+                                            38,
                                         ),
                                     },
                                     name: "N",
@@ -87,21 +73,20 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
-                ),
+                    (
+                        None,
+                        UserDefined(
+                            "f32",
+                        ),
+                    ),
+                ],
                 statements: [
                     Assign {
                         info: Info {

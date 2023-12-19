@@ -61,7 +61,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -107,7 +107,7 @@
                     },
                 ],
             },
-        ),
+        ],
         specs: [
             "main",
             "time",

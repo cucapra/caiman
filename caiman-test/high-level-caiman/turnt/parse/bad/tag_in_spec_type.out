@@ -1,5 +1,11 @@
-Error: At tag_in_spec_type.cm:2:17, 
-  Parsing Error: Unrecognized token: '@', expected one of [
-    "\")\"",
-    "\",\"",
+Error: At tag_in_spec_type.cm:2:10, 
+  Parsing Error: Unrecognized token: '(', expected one of [
+    "\"&\"",
+    "\"BufferSpace\"",
+    "\"Event\"",
+    "\"[\"",
+    "\"bool\"",
+    "\"i32\"",
+    "\"i64\"",
+    "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
 ]

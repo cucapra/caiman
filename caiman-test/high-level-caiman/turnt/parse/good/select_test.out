@@ -129,14 +129,14 @@
                 },
                 name: "main",
                 input: [],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -263,7 +263,7 @@
         },
         name: "foo",
         input: [],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -284,7 +284,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "main",
             "time",

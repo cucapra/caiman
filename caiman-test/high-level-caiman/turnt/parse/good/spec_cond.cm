@@ -1,6 +1,6 @@
 #version 0.1.0
 
-val find_closest(p: (f32, f32), pts: [(f32, f32); N], start: i64, end: i64, idx: i64) 
+val find_closest(p: f32, pts: [f32; N], start: i64, end: i64, idx: i64) 
     -> (f32, f32) 
 {
     mdpt :- (start + end) / 2

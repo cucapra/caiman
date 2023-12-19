@@ -83,15 +83,8 @@
                 ),
             },
             base: Slice(
-                Tuple(
-                    [
-                        UserDefined(
-                            "f32",
-                        ),
-                        UserDefined(
-                            "f32",
-                        ),
-                    ],
+                UserDefined(
+                    "f32",
                 ),
             ),
             flags: [
@@ -152,14 +145,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Returns(
                         Info {
@@ -322,7 +315,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -343,7 +336,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "min",
             "simple_tmln",
@@ -512,39 +505,25 @@
                 input: [
                     (
                         "a",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                     (
                         "b",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         UserDefined(
                             "f32",
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -871,18 +850,11 @@
                             ),
                             end_ln_and_col: (
                                 28,
-                                23,
+                                16,
                             ),
                         },
-                        base: Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
@@ -897,22 +869,15 @@
                         info: Info {
                             start_ln_and_col: (
                                 28,
-                                28,
+                                21,
                             ),
                             end_ln_and_col: (
                                 28,
-                                38,
+                                24,
                             ),
                         },
-                        base: Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
@@ -921,17 +886,17 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
                         start_ln_and_col: (
                             28,
-                            43,
+                            29,
                         ),
                         end_ln_and_col: (
                             28,
-                            46,
+                            32,
                         ),
                     },
                     base: UserDefined(
@@ -942,7 +907,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "dist2",
             "simple_tmln",
@@ -995,15 +960,8 @@
                         Some(
                             "p",
                         ),
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                     (
@@ -1011,36 +969,22 @@
                             "a",
                         ),
                         Slice(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         Some(
                             "out",
                         ),
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
-                ),
+                ],
                 def: Some(
                     ExternDef {
                         path: "kd_tree.comp",
@@ -1087,48 +1031,27 @@
                 input: [
                     (
                         "p",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                     (
                         "a",
                         Slice(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -1502,61 +1425,33 @@
                 input: [
                     (
                         "p",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                     (
                         "a",
                         Slice(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                         ),
                     ),
                     (
                         "min_dist",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -2090,18 +1985,11 @@
                             ),
                             end_ln_and_col: (
                                 74,
-                                40,
+                                33,
                             ),
                         },
-                        base: Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
@@ -2116,23 +2004,16 @@
                         info: Info {
                             start_ln_and_col: (
                                 74,
-                                45,
+                                38,
                             ),
                             end_ln_and_col: (
                                 74,
-                                57,
+                                43,
                             ),
                         },
                         base: Slice(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                         ),
                         flags: [],
@@ -2148,22 +2029,15 @@
                         info: Info {
                             start_ln_and_col: (
                                 74,
-                                69,
+                                55,
                             ),
                             end_ln_and_col: (
                                 74,
-                                79,
+                                58,
                             ),
                         },
-                        base: Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
@@ -2172,7 +2046,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -2182,25 +2056,18 @@
                         ),
                         end_ln_and_col: (
                             75,
-                            18,
+                            11,
                         ),
                     },
-                    base: Tuple(
-                        [
-                            UserDefined(
-                                "f32",
-                            ),
-                            UserDefined(
-                                "f32",
-                            ),
-                        ],
+                    base: UserDefined(
+                        "f32",
                     ),
                     flags: [],
                     settings: [],
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "closest_point_host_rec",
             "simple_sptl",
@@ -2784,18 +2651,11 @@
                             ),
                             end_ln_and_col: (
                                 87,
-                                36,
+                                29,
                             ),
                         },
-                        base: Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
@@ -2810,23 +2670,16 @@
                         info: Info {
                             start_ln_and_col: (
                                 87,
-                                41,
+                                34,
                             ),
                             end_ln_and_col: (
                                 87,
-                                53,
+                                39,
                             ),
                         },
                         base: Slice(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                         ),
                         flags: [],
@@ -2836,35 +2689,28 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
                         start_ln_and_col: (
                             87,
-                            58,
+                            44,
                         ),
                         end_ln_and_col: (
                             87,
-                            68,
+                            47,
                         ),
                     },
-                    base: Tuple(
-                        [
-                            UserDefined(
-                                "f32",
-                            ),
-                            UserDefined(
-                                "f32",
-                            ),
-                        ],
+                    base: UserDefined(
+                        "f32",
                     ),
                     flags: [],
                     settings: [],
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "closest_point_host",
             "simple_sptl",
@@ -3373,40 +3219,26 @@
                 input: [
                     (
                         "p",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                     (
                         "pts",
                         Array(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                             Term(
                                 Var {
                                     info: Info {
                                         start_ln_and_col: (
                                             102,
-                                            51,
+                                            37,
                                         ),
                                         end_ln_and_col: (
                                             102,
-                                            52,
+                                            38,
                                         ),
                                     },
                                     name: "N",
@@ -3433,21 +3265,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -5314,18 +5139,11 @@
                             ),
                             end_ln_and_col: (
                                 131,
-                                30,
+                                23,
                             ),
                         },
-                        base: Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
@@ -5340,34 +5158,27 @@
                         info: Info {
                             start_ln_and_col: (
                                 131,
-                                37,
+                                30,
                             ),
                             end_ln_and_col: (
                                 131,
-                                52,
+                                38,
                             ),
                         },
                         base: Array(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                             Term(
                                 Var {
                                     info: Info {
                                         start_ln_and_col: (
                                             131,
-                                            50,
+                                            36,
                                         ),
                                         end_ln_and_col: (
                                             131,
-                                            51,
+                                            37,
                                         ),
                                     },
                                     name: "N",
@@ -5387,11 +5198,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 131,
-                                61,
+                                47,
                             ),
                             end_ln_and_col: (
                                 131,
-                                64,
+                                50,
                             ),
                         },
                         base: Int(
@@ -5450,7 +5261,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -5460,25 +5271,18 @@
                         ),
                         end_ln_and_col: (
                             132,
-                            38,
+                            31,
                         ),
                     },
-                    base: Tuple(
-                        [
-                            UserDefined(
-                                "f32",
-                            ),
-                            UserDefined(
-                                "f32",
-                            ),
-                        ],
+                    base: UserDefined(
+                        "f32",
                     ),
                     flags: [],
                     settings: [],
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "find_closest",
             "tm",
@@ -7740,40 +7544,26 @@
                 input: [
                     (
                         "p",
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
                     (
                         "a",
                         Array(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                             Term(
                                 Var {
                                     info: Info {
                                         start_ln_and_col: (
                                             165,
-                                            55,
+                                            41,
                                         ),
                                         end_ln_and_col: (
                                             165,
-                                            56,
+                                            42,
                                         ),
                                     },
                                     name: "N",
@@ -7782,21 +7572,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
-                        Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        UserDefined(
+                            "f32",
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Returns(
                         Info {
@@ -7949,18 +7732,11 @@
                             ),
                             end_ln_and_col: (
                                 169,
-                                36,
+                                29,
                             ),
                         },
-                        base: Tuple(
-                            [
-                                UserDefined(
-                                    "f32",
-                                ),
-                                UserDefined(
-                                    "f32",
-                                ),
-                            ],
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
@@ -7975,34 +7751,27 @@
                         info: Info {
                             start_ln_and_col: (
                                 169,
-                                41,
+                                34,
                             ),
                             end_ln_and_col: (
                                 169,
-                                56,
+                                42,
                             ),
                         },
                         base: Array(
-                            Tuple(
-                                [
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                    UserDefined(
-                                        "f32",
-                                    ),
-                                ],
+                            UserDefined(
+                                "f32",
                             ),
                             Term(
                                 Var {
                                     info: Info {
                                         start_ln_and_col: (
                                             169,
-                                            54,
+                                            40,
                                         ),
                                         end_ln_and_col: (
                                             169,
-                                            55,
+                                            41,
                                         ),
                                     },
                                     name: "N",
@@ -8016,7 +7785,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -8026,25 +7795,18 @@
                         ),
                         end_ln_and_col: (
                             170,
-                            18,
+                            11,
                         ),
                     },
-                    base: Tuple(
-                        [
-                            UserDefined(
-                                "f32",
-                            ),
-                            UserDefined(
-                                "f32",
-                            ),
-                        ],
+                    base: UserDefined(
+                        "f32",
                     ),
                     flags: [],
                     settings: [],
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "find_closest_point",
             "simple_tmln",

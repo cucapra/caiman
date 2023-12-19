@@ -44,14 +44,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 def: Some(
                     ExternDef {
                         path: "test.comp",
@@ -116,14 +116,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 def: Some(
                     ExternDef {
                         path: "test.comp",

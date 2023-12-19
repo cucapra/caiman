@@ -32,12 +32,12 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Bool,
                     ),
-                ),
+                ],
                 statements: [
                     Returns(
                         Info {

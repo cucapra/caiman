@@ -44,7 +44,7 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         Some(
                             "out",
@@ -53,7 +53,7 @@
                             I64,
                         ),
                     ),
-                ),
+                ],
                 def: Some(
                     ExternDef {
                         path: "../../test.comp",

@@ -25,14 +25,14 @@
                 },
                 name: "main",
                 input: [],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I32,
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -106,14 +106,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -191,14 +191,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 def: None,
             },
         ],
@@ -248,14 +248,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 statements: [],
             },
             Extern {
@@ -298,14 +298,14 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I64,
                         ),
                     ),
-                ),
+                ],
                 def: None,
             },
         ],

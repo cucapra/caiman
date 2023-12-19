@@ -25,14 +25,14 @@
                 },
                 name: "main",
                 input: [],
-                output: Some(
+                output: [
                     (
                         None,
                         Int(
                             I32,
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {

@@ -102,28 +102,21 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
                         start_ln_and_col: (
                             3,
-                            8,
+                            9,
                         ),
                         end_ln_and_col: (
                             3,
-                            28,
+                            22,
                         ),
                     },
-                    base: Tuple(
-                        [
-                            Int(
-                                I32,
-                            ),
-                            Int(
-                                I32,
-                            ),
-                        ],
+                    base: Int(
+                        I32,
                     ),
                     flags: [
                         "storage",
@@ -135,11 +128,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 3,
-                                32,
+                                26,
                             ),
                             end_ln_and_col: (
                                 3,
-                                43,
+                                37,
                             ),
                         },
                         quot: Some(
@@ -157,11 +150,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 3,
-                                45,
+                                39,
                             ),
                             end_ln_and_col: (
                                 3,
-                                54,
+                                48,
                             ),
                         },
                         quot: Some(
@@ -179,11 +172,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 3,
-                                56,
+                                50,
                             ),
                             end_ln_and_col: (
                                 3,
-                                71,
+                                65,
                             ),
                         },
                         quot: Some(
@@ -201,7 +194,27 @@
                     },
                 ],
             },
-        ),
+            FullType {
+                base: FlaggedType {
+                    info: Info {
+                        start_ln_and_col: (
+                            3,
+                            68,
+                        ),
+                        end_ln_and_col: (
+                            3,
+                            71,
+                        ),
+                    },
+                    base: Int(
+                        I32,
+                    ),
+                    flags: [],
+                    settings: [],
+                },
+                tags: [],
+            },
+        ],
         specs: [
             "n",
             "v",

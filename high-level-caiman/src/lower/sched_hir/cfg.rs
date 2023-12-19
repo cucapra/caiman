@@ -275,7 +275,10 @@ fn make_blocks(
     // we do a BFS on the graph, this is the queue of children
     let mut children = vec![];
     let ends_with_tail = stmts.last().map_or(false, |x| {
-        matches!(x, SchedStmt::Return(..) | SchedStmt::Call(..))
+        matches!(
+            x,
+            SchedStmt::Return(..) | SchedStmt::Call(..) | SchedStmt::If { .. }
+        )
     });
     let mut last_info = Info::default();
     for stmt in stmts {
@@ -387,6 +390,7 @@ fn make_child_blocks(
                 },
             );
         } else {
+            // if false branch is none, then this isn't an `if`
             edges.insert(parent_id, Edge::Next(true_branch));
         }
     }

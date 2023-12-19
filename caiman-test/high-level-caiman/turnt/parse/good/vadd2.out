@@ -229,7 +229,7 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Array(
@@ -253,7 +253,7 @@
                             ),
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -544,7 +544,7 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Array(
@@ -568,7 +568,7 @@
                             ),
                         ),
                     ),
-                ),
+                ],
                 def: None,
             },
             ValueFunclet {
@@ -631,7 +631,7 @@
                         ),
                     ),
                 ],
-                output: Some(
+                output: [
                     (
                         None,
                         Array(
@@ -655,7 +655,7 @@
                             ),
                         ),
                     ),
-                ),
+                ],
                 statements: [
                     Assign {
                         info: Info {
@@ -1240,7 +1240,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -1278,7 +1278,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "vadd2",
             "tm",
@@ -1808,7 +1808,7 @@
                 },
             ),
         ],
-        output: None,
+        output: [],
         specs: [
             "vadd",
             "time",
@@ -2206,7 +2206,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -2244,7 +2244,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "vadd",
             "time",

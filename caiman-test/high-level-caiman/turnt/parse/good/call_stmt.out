@@ -12,7 +12,7 @@
         },
         name: "f",
         input: [],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -33,7 +33,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "a",
             "b",

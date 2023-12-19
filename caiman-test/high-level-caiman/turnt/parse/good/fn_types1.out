@@ -7,7 +7,7 @@
             ),
             end_ln_and_col: (
                 2,
-                84,
+                71,
             ),
         },
         name: "gbuf",
@@ -19,20 +19,12 @@
                 ),
                 end_ln_and_col: (
                     2,
-                    84,
+                    71,
                 ),
             },
             base: Slice(
-                Tuple(
-                    [
-                        Int(
-                            I32,
-                        ),
-                        Int(
-                            I32,
-                        ),
-                        Bool,
-                    ],
+                Int(
+                    I32,
                 ),
             ),
             flags: [
@@ -179,7 +171,7 @@
                 },
             ),
         ],
-        output: Some(
+        output: [
             FullType {
                 base: FlaggedType {
                     info: Info {
@@ -200,7 +192,7 @@
                 },
                 tags: [],
             },
-        ),
+        ],
         specs: [
             "v",
             "tm",
