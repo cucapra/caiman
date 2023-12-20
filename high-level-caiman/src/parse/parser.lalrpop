@@ -29,12 +29,15 @@ match {
   _, // Everything else
 }
 
+// TOP LEVEL
 
+// Start symbol -> version identifier followed by one or more top level items
 pub Program: Program = { 
     "#version" <maj_min: r"[0-9]+[.][0-9]+"> "." <patch: r"[0-9]+">
     <tls: TopLevel*> =>? astf.program(maj_min, patch, tls), 
 }
 
+// Top level statements and declarations
 TopLevel: TopLevel = {
     <ClassMembers> => astf.singleton_function_class(<>),
     <@L> 
@@ -74,6 +77,7 @@ TopLevel: TopLevel = {
     <r: @R> => astf.type_def(l, n, t, r),
 }
 
+// Function class members. Value functlets or extern funclets
 ClassMembers: ClassMembers = {
     <@L>
     "val" <Id> "(" <CommaList<Arg<BaseType>>> ")" <("->" <MaybeNamed<BaseType>>)?>
@@ -93,18 +97,21 @@ ClassMembers: ClassMembers = {
     <@R> => astf.extern_pure_func(<>),
 }
 
+// Extern definitions: mapping of extern property names to values
 ExternDef: ExternDef = {
     <@L>"{" 
         <CommaList<ExternDefMembers>>
     "}" <@R> =>? astf.extern_def(<>),
 }
 
+// Resource members: key value pairs of resource properties
 ResMembers: ResourceMembers = {
     <k: Id> ":" <n: r"[0-9]+"> => ResourceMembers::Numeric(String::from(k), String::from(n)),
     "input" ":" <v: Id> => ResourceMembers::Input(String::from(v)),
     "output" ":" <v: Id> => ResourceMembers::Output(String::from(v)),
 }
 
+// a member of an extern definition. Key value pairs of extern properties
 ExternDefMembers: ExternDefMembers = {
     <l: @L> <f: Id> "{" 
         <d: CommaList<ResMembers>> 
@@ -130,6 +137,7 @@ BaseType: DataType = {
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
 }
 
+// Full type: base type with flags and settings and an optional tag
 FullType: FullType = {
     <FlaggedType> => FullType {
         base: <>,
@@ -166,6 +174,8 @@ Flow: Option<Flow> = {
     "?" => None,
 }
 
+// Quotient reference: the part of the quotient which refers to a specific node
+// in a spec
 QuotRef: Option<QuotientReference> = {
     <a: Id> "." <b: Id> => Some(QuotientReference {
         spec_name: String::from(a),
@@ -178,10 +188,12 @@ QuotRef: Option<QuotientReference> = {
     "?" => None,
 }
 
+// Flagged type: base type with flags and settings
 FlaggedType: FlaggedType = {
     <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> => astf.flagged_type(<>)
 }
 
+// Flag or setting. A flag is a name with no value. A setting is a name with a value
 FlagOrSetting: (String, Option<String>) = {
     <n: Id> => (String::from(n), None),
     <n: Id> "=" <v: StringLiteral> => (String::from(n), Some(String::from(v))),
@@ -190,6 +202,7 @@ FlagOrSetting: (String, Option<String>) = {
 
 // SPEC LANGUAGE SECTION
 
+// we use scheduling expressions and then sanitize with factory functions
 SpecStmt: SpecStmt = {
     <@L> <CommaList<MaybeArg<BaseType>>> ":-" <SchedExpr> <@R> =>? astf.spec_decl(<>),
     <@L> "returns" <SchedExpr> <@R> =>? astf.spec_returns(<>),
@@ -197,6 +210,7 @@ SpecStmt: SpecStmt = {
 
 // SCHEDULE LANGUAGE SECTION
 
+// Top level scheduling statements
 SchedStmt: SchedStmt = {
     <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
     <@L> "var" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_var_decl(<>),
@@ -206,6 +220,8 @@ SchedStmt: SchedStmt = {
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
 }
+
+// IFs and dangling else 
 
 Block: SchedStmt = {
     <MatchedIf> => <>,
@@ -220,6 +236,8 @@ MatchedIf: SchedStmt = {
     <@L> "if" <SchedExpr> "{" <SchedStmt*> "}" "else" <MatchedIf> <@R> => astf.sched_matched_if(<>),
     <@L> "{" <SchedStmt*> "}" <@R> => astf.sched_block(<>),
 }
+
+// Scheduling specific expressions
 
 #[inline]
 SchedTerm: SchedTerm = {
@@ -238,6 +256,10 @@ SchedCallStmt: SchedFuncCall = {
         <TagOp?> => astf.sched_encode(<>),
 }
 
+// parameterize on the literal type (number or no number)
+// to prevent confusion between 0.0 being a float or
+// Dot(0, 0). This method prevents numbers from being the
+// immediate right hand side of a dot op
 #[inline]
 SchedAtom<L>: SchedTerm = {
     <@L> "?" <@R> => astf.sched_hole_expr(<>),
@@ -250,12 +272,15 @@ SchedExpr: SchedExpr = {
     <Conditional>
 }
 
+
+// Template arguments to scheduling calls
 TemplateArgs: TemplateArgs = {
     "'" "<" <CommaList<Arith>> ">" =>? astf.template_args(<>),
     "'" <FlaggedType>  => TemplateArgs::Type(<>),
 
 }
 
+// Encoded scheduling statements which are sent to a device
 EncodedStmt: EncodedStmt = {
     <@L> <CommaList<MaybeArg<FlaggedType>>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
 } 
@@ -263,6 +288,7 @@ EncodedStmt: EncodedStmt = {
 
 // MISC
 
+// An argument is an identifier followed by a production of `T`
 Arg<T>: Arg<T> = { <i: Id> ":" <t: T> => (i, t) }
 
 // argument with optional type
@@ -311,7 +337,7 @@ TupleCommaList<T>: Vec<T> = {
     }
 }
 
-// Generalized Expressions
+// GENERAL EXPRESSIONS
 
 //  Precedence (Ordered lowest to highest)
 //     Conditional
@@ -403,7 +429,7 @@ Atom<L>: SchedExpr = {
     "(" <Conditional> ")",
 }
 
-// Operators
+// OPERATORS
 
 ConsOp: Binop = {
     "::" => Binop::Cons,
@@ -464,6 +490,8 @@ UnOp: Uop = {
     "!" => Uop::LNot,
     "~" => Uop::Not,
 }
+
+// LITERALS
 
 Literal: SchedLiteral = {
     <l: @L> <n: r"[0-9]+"> <r: @R> => SchedLiteral::Int(String::from(n)),
