@@ -280,7 +280,7 @@ pub struct FlaggedType {
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct FullType {
-    pub base: FlaggedType,
+    pub base: Option<FlaggedType>,
     /// Tags, can be empty
     pub tags: Vec<Tag>,
 }

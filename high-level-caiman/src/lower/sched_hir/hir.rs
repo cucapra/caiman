@@ -214,7 +214,8 @@ impl Hir for Terminator {
                     .map(|(d, t)| {
                         (
                             d.clone(),
-                            t.as_ref().map(|dt| data_type_to_local_type(&dt.base.base)),
+                            t.as_ref()
+                                .map(|dt| data_type_to_local_type(&dt.base.as_ref().unwrap().base)),
                         )
                     })
                     .collect(),
@@ -413,7 +414,7 @@ impl Hir for HirBody {
                     lhs.clone(),
                     lhs_tag
                         .as_ref()
-                        .map(|tag| data_type_to_local_type(&tag.base.base)),
+                        .map(|tag| data_type_to_local_type(&tag.base.as_ref().unwrap().base)),
                 )])
             }
             Self::VarDecl { lhs, lhs_tag, ..} => {
@@ -421,7 +422,7 @@ impl Hir for HirBody {
                     lhs.clone(),
                     lhs_tag
                         .as_ref()
-                        .map(|tag| make_ref(data_type_to_local_type(&tag.base.base))),
+                        .map(|tag| make_ref(data_type_to_local_type(&tag.base.as_ref().unwrap().base))),
                 )])
             }
             Self::RefLoad { dest: lhs, typ, .. } => {
@@ -436,7 +437,7 @@ impl Hir for HirBody {
             | Self::OutAnnotation(..) => None,
             Self::Op { dest, dest_tag, .. } => Some(vec![(
                 dest.clone(),
-                dest_tag.as_ref().map(|tag| data_type_to_local_type(&tag.base.base)),
+                dest_tag.as_ref().map(|tag| data_type_to_local_type(&tag.base.as_ref().unwrap().base)),
             )]),
         }
     }

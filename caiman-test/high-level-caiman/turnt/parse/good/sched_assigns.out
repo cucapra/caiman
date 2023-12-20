@@ -15,46 +15,50 @@
             (
                 "a",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                2,
-                                11,
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    2,
+                                    11,
+                                ),
+                                end_ln_and_col: (
+                                    2,
+                                    14,
+                                ),
+                            },
+                            base: Int(
+                                I32,
                             ),
-                            end_ln_and_col: (
-                                2,
-                                14,
-                            ),
+                            flags: [],
+                            settings: [],
                         },
-                        base: Int(
-                            I32,
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "b",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                2,
-                                19,
-                            ),
-                            end_ln_and_col: (
-                                2,
-                                33,
-                            ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    2,
+                                    19,
+                                ),
+                                end_ln_and_col: (
+                                    2,
+                                    33,
+                                ),
+                            },
+                            base: Bool,
+                            flags: [
+                                "storage",
+                            ],
+                            settings: [],
                         },
-                        base: Bool,
-                        flags: [
-                            "storage",
-                        ],
-                        settings: [],
-                    },
+                    ),
                     tags: [
                         Tag {
                             info: Info {
@@ -104,25 +108,27 @@
         ],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            3,
-                            9,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                9,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                22,
+                            ),
+                        },
+                        base: Int(
+                            I32,
                         ),
-                        end_ln_and_col: (
-                            3,
-                            22,
-                        ),
+                        flags: [
+                            "storage",
+                        ],
+                        settings: [],
                     },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [
-                        "storage",
-                    ],
-                    settings: [],
-                },
+                ),
                 tags: [
                     Tag {
                         info: Info {
@@ -195,23 +201,25 @@
                 ],
             },
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            3,
-                            68,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                68,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                71,
+                            ),
+                        },
+                        base: Int(
+                            I32,
                         ),
-                        end_ln_and_col: (
-                            3,
-                            71,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],

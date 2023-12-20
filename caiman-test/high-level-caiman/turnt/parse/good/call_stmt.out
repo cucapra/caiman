@@ -14,23 +14,25 @@
         input: [],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            2,
-                            11,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                2,
+                                11,
+                            ),
+                            end_ln_and_col: (
+                                2,
+                                14,
+                            ),
+                        },
+                        base: Int(
+                            I32,
                         ),
-                        end_ln_and_col: (
-                            2,
-                            14,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],

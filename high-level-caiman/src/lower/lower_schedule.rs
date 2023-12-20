@@ -9,11 +9,11 @@ use crate::{
     parse::ast::{
         Arg, DataType, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
     },
+    typing::{Context, SpecType},
 };
 use caiman::ir;
 
 use super::{
-    global_context::{Context, SpecType},
     sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, RET_VAR},
     tuple_id,
 };
@@ -49,7 +49,7 @@ fn lower_flat_decl(
             node: asm::Node::AllocTemporary {
                 place: Some(ir::Place::Local),
                 buffer_flags: Some(ir::BufferFlags::new()),
-                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
+                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
             },
         });
         let mv = asm::Command::Node(asm::NamedNode {
@@ -65,7 +65,7 @@ fn lower_flat_decl(
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
                 source: Some(asm::NodeId(temp_node_name)),
-                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
+                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
             },
         });
         (vec![Some(temp), Some(mv), Some(rd_ref)], temp_id + 1)
@@ -90,7 +90,7 @@ fn lower_var_decl(
         node: asm::Node::AllocTemporary {
             place: Some(ir::Place::Local),
             buffer_flags: Some(ir::BufferFlags::new()),
-            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
+            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
         },
     }))];
     if let Some(SchedTerm::Lit { tag: rhs_tag, .. }) = rhs {
@@ -153,7 +153,7 @@ fn lower_op(
         node: asm::Node::AllocTemporary {
             place: Some(ir::Place::Local),
             buffer_flags: Some(ir::BufferFlags::new()),
-            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
+            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
         },
     });
     let mut inputs = vec![];
@@ -174,7 +174,7 @@ fn lower_op(
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
             source: Some(asm::NodeId(temp_node_name)),
-            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.base)),
+            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
         },
     });
     (
@@ -561,7 +561,7 @@ pub fn hlc_arg_to_asm_arg(arg: &Arg<FullType>) -> FuncletArgument {
     let ft = &arg.1;
     FuncletArgument {
         name: Some(asm::NodeId(arg.0.to_string())),
-        typ: super::data_type_to_local_type(&ft.base.base),
+        typ: super::data_type_to_local_type(&ft.base.as_ref().unwrap().base),
         tags: ft.tags.iter().map(tag_to_tag).collect(),
     }
 }
@@ -608,7 +608,7 @@ pub fn lower_schedule(
         return Err(type_error(func.info, "Too many specs"));
     }
     for spec in &func.specs {
-        match ctx.specs.get(spec) {
+        match ctx.specs.get(spec).map(|s| s.typ) {
             Some(SpecType::Value) => val = Some(spec.to_string()),
             Some(SpecType::Timeline) => timeline = Some(spec.to_string()),
             Some(SpecType::Spatial) => spatial = Some(spec.to_string()),
@@ -626,6 +626,6 @@ pub fn lower_schedule(
             .map(asm::FuncletId)
             .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
     };
-    let blocks = Funclets::new(func, specs);
+    let blocks = Funclets::new(func, specs, ctx);
     Ok(blocks.funclets().iter().map(lower_block).collect())
 }

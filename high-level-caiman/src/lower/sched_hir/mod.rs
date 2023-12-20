@@ -9,6 +9,7 @@ pub use hir::*;
 use crate::{
     lower::data_type_to_local_type,
     parse::ast::{Arg, FullType, SchedulingFunc},
+    typing::{Context, SpecType},
 };
 use caiman::assembly::ast as asm;
 
@@ -19,7 +20,7 @@ use self::{
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
 };
 
-use super::{global_context::SpecType, lower_schedule::hlc_arg_to_asm_arg};
+use super::lower_schedule::hlc_arg_to_asm_arg;
 pub use analysis::TagInfo;
 mod analysis;
 #[cfg(test)]
@@ -60,10 +61,10 @@ struct FuncInfo {
 
 /// The funclets of a scheduling function.
 /// Combines the scheduling function's CFG with its analysis information
-pub struct Funclets {
+pub struct Funclets<'a> {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
-    type_info: analysis::InOutFacts<TagAnalysis>,
+    type_info: analysis::InOutFacts<TagAnalysis<'a>>,
     /// Mapping from variable names to their base types
     types: HashMap<String, asm::TypeId>,
     finfo: FuncInfo,
@@ -76,7 +77,7 @@ pub struct Funclets {
 /// A specific funclet in a scheduling function.
 /// Combines the funclet's basic block with is analysis information.
 pub struct Funclet<'a> {
-    parent: &'a Funclets,
+    parent: &'a Funclets<'a>,
     block: &'a BasicBlock,
 }
 
@@ -213,7 +214,7 @@ impl<'a> Funclet<'a> {
                 .enumerate()
                 .map(|(idx, out)| asm::FuncletArgument {
                     name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
-                    typ: data_type_to_local_type(&out.base.base),
+                    typ: data_type_to_local_type(&out.base.as_ref().unwrap().base),
                     tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
                 })
                 .collect()
@@ -272,7 +273,7 @@ impl<'a> Funclet<'a> {
                 .enumerate()
                 .map(|(idx, out)| asm::FuncletArgument {
                     name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
-                    typ: data_type_to_local_type(&out.base.base),
+                    typ: data_type_to_local_type(&out.base.as_ref().unwrap().base),
                     tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
                 })
                 .collect()
@@ -371,7 +372,7 @@ impl<'a> Funclet<'a> {
     }
 }
 
-impl Funclets {
+impl<'a> Funclets<'a> {
     /// Updates terminators by replacing temporary terminators with their respective
     /// versions which contain more information computed by analyses.
     ///
@@ -433,14 +434,17 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
+    pub fn new(f: SchedulingFunc, specs: Specs, ctx: &'a Context) -> Self {
         let mut cfg = Cfg::new(f.statements, &f.output);
         let mut types = Self::collect_types(&cfg, &f.input, &f.output);
         op_transform_pass(&mut cfg, &types);
         deref_transform_pass(&mut cfg, &mut types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.input, &f.output));
+        let type_info = analyze(
+            &mut cfg,
+            &TagAnalysis::top(&specs, &f.input, &f.output, ctx),
+        );
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,
@@ -472,11 +476,14 @@ impl Funclets {
         for (out_idx, out) in f_out.iter().enumerate() {
             types.insert(
                 format!("{RET_VAR}{out_idx}"),
-                data_type_to_local_type(&out.base.base),
+                data_type_to_local_type(&out.base.as_ref().unwrap().base),
             );
         }
         for (var, typ) in f_in {
-            types.insert(var.to_string(), data_type_to_local_type(&typ.base.base));
+            types.insert(
+                var.to_string(),
+                data_type_to_local_type(&typ.base.as_ref().unwrap().base),
+            );
         }
         for bb in cfg.blocks.values() {
             for stmt in bb

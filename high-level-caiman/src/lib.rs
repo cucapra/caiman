@@ -5,3 +5,4 @@ pub mod lower;
 pub mod parse;
 
 pub mod error;
+pub mod typing;

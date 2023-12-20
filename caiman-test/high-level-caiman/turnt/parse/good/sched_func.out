@@ -47,25 +47,27 @@
             (
                 "a",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                4,
-                                11,
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    4,
+                                    11,
+                                ),
+                                end_ln_and_col: (
+                                    4,
+                                    27,
+                                ),
+                            },
+                            base: UserDefined(
+                                "gint",
                             ),
-                            end_ln_and_col: (
-                                4,
-                                27,
-                            ),
+                            flags: [
+                                "map_write",
+                            ],
+                            settings: [],
                         },
-                        base: UserDefined(
-                            "gint",
-                        ),
-                        flags: [
-                            "map_write",
-                        ],
-                        settings: [],
-                    },
+                    ),
                     tags: [
                         Tag {
                             info: Info {
@@ -88,51 +90,55 @@
             (
                 "b",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                5,
-                                11,
-                            ),
-                            end_ln_and_col: (
-                                5,
-                                15,
-                            ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    5,
+                                    11,
+                                ),
+                                end_ln_and_col: (
+                                    5,
+                                    15,
+                                ),
+                            },
+                            base: Bool,
+                            flags: [],
+                            settings: [],
                         },
-                        base: Bool,
-                        flags: [],
-                        settings: [],
-                    },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "c",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                6,
-                                11,
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    6,
+                                    11,
+                                ),
+                                end_ln_and_col: (
+                                    6,
+                                    47,
+                                ),
+                            },
+                            base: Int(
+                                I64,
                             ),
-                            end_ln_and_col: (
-                                6,
-                                47,
-                            ),
+                            flags: [
+                                "map_read",
+                            ],
+                            settings: [
+                                (
+                                    "alignment_bits",
+                                    "512",
+                                ),
+                            ],
                         },
-                        base: Int(
-                            I64,
-                        ),
-                        flags: [
-                            "map_read",
-                        ],
-                        settings: [
-                            (
-                                "alignment_bits",
-                                "512",
-                            ),
-                        ],
-                    },
+                    ),
                     tags: [
                         Tag {
                             info: Info {
@@ -201,26 +207,28 @@
         ],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            7,
-                            11,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                11,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                35,
+                            ),
+                        },
+                        base: Int(
+                            I32,
                         ),
-                        end_ln_and_col: (
-                            7,
-                            35,
-                        ),
+                        flags: [
+                            "storage",
+                            "map_write",
+                        ],
+                        settings: [],
                     },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [
-                        "storage",
-                        "map_write",
-                    ],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -246,25 +254,27 @@
                         "x",
                         Some(
                             FullType {
-                                base: FlaggedType {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            10,
-                                            12,
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                12,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                26,
+                                            ),
+                                        },
+                                        base: Int(
+                                            I32,
                                         ),
-                                        end_ln_and_col: (
-                                            10,
-                                            26,
-                                        ),
+                                        flags: [
+                                            "map_read",
+                                        ],
+                                        settings: [],
                                     },
-                                    base: Int(
-                                        I32,
-                                    ),
-                                    flags: [
-                                        "map_read",
-                                    ],
-                                    settings: [],
-                                },
+                                ),
                                 tags: [
                                     Tag {
                                         info: Info {

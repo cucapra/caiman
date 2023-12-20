@@ -56,48 +56,52 @@
             (
                 "a",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                4,
-                                11,
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    4,
+                                    11,
+                                ),
+                                end_ln_and_col: (
+                                    4,
+                                    15,
+                                ),
+                            },
+                            base: UserDefined(
+                                "gbuf",
                             ),
-                            end_ln_and_col: (
-                                4,
-                                15,
-                            ),
+                            flags: [],
+                            settings: [],
                         },
-                        base: UserDefined(
-                            "gbuf",
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "b",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                4,
-                                20,
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    4,
+                                    20,
+                                ),
+                                end_ln_and_col: (
+                                    4,
+                                    29,
+                                ),
+                            },
+                            base: Int(
+                                I32,
                             ),
-                            end_ln_and_col: (
-                                4,
-                                29,
-                            ),
+                            flags: [
+                                "gpu",
+                            ],
+                            settings: [],
                         },
-                        base: Int(
-                            I32,
-                        ),
-                        flags: [
-                            "gpu",
-                        ],
-                        settings: [],
-                    },
+                    ),
                     tags: [
                         Tag {
                             info: Info {
@@ -173,23 +177,25 @@
         ],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            4,
-                            78,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                4,
+                                78,
+                            ),
+                            end_ln_and_col: (
+                                4,
+                                81,
+                            ),
+                        },
+                        base: Int(
+                            I32,
                         ),
-                        end_ln_and_col: (
-                            4,
-                            81,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],

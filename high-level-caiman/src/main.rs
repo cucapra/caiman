@@ -4,6 +4,7 @@ extern crate clap;
 mod error;
 mod lower;
 mod parse;
+mod typing;
 
 use clap::Parser;
 use lower::lower;

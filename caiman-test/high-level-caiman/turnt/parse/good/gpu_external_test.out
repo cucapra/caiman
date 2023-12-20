@@ -515,15 +515,41 @@
             (
                 "x",
                 FullType {
-                    base: FlaggedType {
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    30,
+                                    16,
+                                ),
+                                end_ln_and_col: (
+                                    30,
+                                    19,
+                                ),
+                            },
+                            base: Int(
+                                I32,
+                            ),
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
+                    tags: [],
+                },
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
                                 30,
-                                16,
+                                24,
                             ),
                             end_ln_and_col: (
                                 30,
-                                19,
+                                27,
                             ),
                         },
                         base: Int(
@@ -532,29 +558,7 @@
                         flags: [],
                         settings: [],
                     },
-                    tags: [],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            30,
-                            24,
-                        ),
-                        end_ln_and_col: (
-                            30,
-                            27,
-                        ),
-                    },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -580,25 +584,27 @@
                         "c",
                         Some(
                             FullType {
-                                base: FlaggedType {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            33,
-                                            13,
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                33,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                33,
+                                                26,
+                                            ),
+                                        },
+                                        base: Int(
+                                            I32,
                                         ),
-                                        end_ln_and_col: (
-                                            33,
-                                            26,
-                                        ),
+                                        flags: [
+                                            "storage",
+                                        ],
+                                        settings: [],
                                     },
-                                    base: Int(
-                                        I32,
-                                    ),
-                                    flags: [
-                                        "storage",
-                                    ],
-                                    settings: [],
-                                },
+                                ),
                                 tags: [],
                             },
                         ),

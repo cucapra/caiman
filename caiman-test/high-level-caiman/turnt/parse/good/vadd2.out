@@ -1122,95 +1122,142 @@
             (
                 "v1",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                25,
-                                21,
-                            ),
-                            end_ln_and_col: (
-                                25,
-                                29,
-                            ),
-                        },
-                        base: Array(
-                            Int(
-                                I32,
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            25,
-                                            27,
-                                        ),
-                                        end_ln_and_col: (
-                                            25,
-                                            28,
-                                        ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    25,
+                                    21,
+                                ),
+                                end_ln_and_col: (
+                                    25,
+                                    29,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                25,
+                                                27,
+                                            ),
+                                            end_ln_and_col: (
+                                                25,
+                                                28,
+                                            ),
+                                        },
+                                        name: "N",
                                     },
-                                    name: "N",
-                                },
+                                ),
                             ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "v2",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                25,
-                                35,
-                            ),
-                            end_ln_and_col: (
-                                25,
-                                43,
-                            ),
-                        },
-                        base: Array(
-                            Int(
-                                I32,
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            25,
-                                            41,
-                                        ),
-                                        end_ln_and_col: (
-                                            25,
-                                            42,
-                                        ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    25,
+                                    35,
+                                ),
+                                end_ln_and_col: (
+                                    25,
+                                    43,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                25,
+                                                41,
+                                            ),
+                                            end_ln_and_col: (
+                                                25,
+                                                42,
+                                            ),
+                                        },
+                                        name: "N",
                                     },
-                                    name: "N",
-                                },
+                                ),
                             ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "v3",
                 FullType {
-                    base: FlaggedType {
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    25,
+                                    49,
+                                ),
+                                end_ln_and_col: (
+                                    25,
+                                    57,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                25,
+                                                55,
+                                            ),
+                                            end_ln_and_col: (
+                                                25,
+                                                56,
+                                            ),
+                                        },
+                                        name: "N",
+                                    },
+                                ),
+                            ),
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
+                    tags: [],
+                },
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
                                 25,
-                                49,
+                                62,
                             ),
                             end_ln_and_col: (
                                 25,
-                                57,
+                                70,
                             ),
                         },
                         base: Array(
@@ -1222,11 +1269,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             25,
-                                            55,
+                                            68,
                                         ),
                                         end_ln_and_col: (
                                             25,
-                                            56,
+                                            69,
                                         ),
                                     },
                                     name: "N",
@@ -1236,46 +1283,7 @@
                         flags: [],
                         settings: [],
                     },
-                    tags: [],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            25,
-                            62,
-                        ),
-                        end_ln_and_col: (
-                            25,
-                            70,
-                        ),
-                    },
-                    base: Array(
-                        Int(
-                            I32,
-                        ),
-                        Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        25,
-                                        68,
-                                    ),
-                                    end_ln_and_col: (
-                                        25,
-                                        69,
-                                    ),
-                                },
-                                name: "N",
-                            },
-                        ),
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -1730,80 +1738,84 @@
             (
                 "v1",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                39,
-                                18,
-                            ),
-                            end_ln_and_col: (
-                                39,
-                                26,
-                            ),
-                        },
-                        base: Array(
-                            Int(
-                                I32,
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            39,
-                                            24,
-                                        ),
-                                        end_ln_and_col: (
-                                            39,
-                                            25,
-                                        ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    39,
+                                    18,
+                                ),
+                                end_ln_and_col: (
+                                    39,
+                                    26,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                39,
+                                                24,
+                                            ),
+                                            end_ln_and_col: (
+                                                39,
+                                                25,
+                                            ),
+                                        },
+                                        name: "N",
                                     },
-                                    name: "N",
-                                },
+                                ),
                             ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "v2",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                39,
-                                32,
-                            ),
-                            end_ln_and_col: (
-                                39,
-                                40,
-                            ),
-                        },
-                        base: Array(
-                            Int(
-                                I32,
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            39,
-                                            38,
-                                        ),
-                                        end_ln_and_col: (
-                                            39,
-                                            39,
-                                        ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    39,
+                                    32,
+                                ),
+                                end_ln_and_col: (
+                                    39,
+                                    40,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                39,
+                                                38,
+                                            ),
+                                            end_ln_and_col: (
+                                                39,
+                                                39,
+                                            ),
+                                        },
+                                        name: "N",
                                     },
-                                    name: "N",
-                                },
+                                ),
                             ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
                     tags: [],
                 },
             ),
@@ -1831,40 +1843,42 @@
                         "new_array",
                         Some(
                             FullType {
-                                base: FlaggedType {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            42,
-                                            20,
-                                        ),
-                                        end_ln_and_col: (
-                                            42,
-                                            28,
-                                        ),
-                                    },
-                                    base: Array(
-                                        Int(
-                                            I32,
-                                        ),
-                                        Term(
-                                            Var {
-                                                info: Info {
-                                                    start_ln_and_col: (
-                                                        42,
-                                                        26,
-                                                    ),
-                                                    end_ln_and_col: (
-                                                        42,
-                                                        27,
-                                                    ),
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                42,
+                                                20,
+                                            ),
+                                            end_ln_and_col: (
+                                                42,
+                                                28,
+                                            ),
+                                        },
+                                        base: Array(
+                                            Int(
+                                                I32,
+                                            ),
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            42,
+                                                            26,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            42,
+                                                            27,
+                                                        ),
+                                                    },
+                                                    name: "N",
                                                 },
-                                                name: "N",
-                                            },
+                                            ),
                                         ),
-                                    ),
-                                    flags: [],
-                                    settings: [],
-                                },
+                                        flags: [],
+                                        settings: [],
+                                    },
+                                ),
                                 tags: [],
                             },
                         ),
@@ -2088,95 +2102,142 @@
             (
                 "v1",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                48,
-                                22,
-                            ),
-                            end_ln_and_col: (
-                                48,
-                                30,
-                            ),
-                        },
-                        base: Array(
-                            Int(
-                                I32,
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            48,
-                                            28,
-                                        ),
-                                        end_ln_and_col: (
-                                            48,
-                                            29,
-                                        ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    48,
+                                    22,
+                                ),
+                                end_ln_and_col: (
+                                    48,
+                                    30,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                48,
+                                                28,
+                                            ),
+                                            end_ln_and_col: (
+                                                48,
+                                                29,
+                                            ),
+                                        },
+                                        name: "N",
                                     },
-                                    name: "N",
-                                },
+                                ),
                             ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "v2",
                 FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                48,
-                                36,
-                            ),
-                            end_ln_and_col: (
-                                48,
-                                44,
-                            ),
-                        },
-                        base: Array(
-                            Int(
-                                I32,
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            48,
-                                            42,
-                                        ),
-                                        end_ln_and_col: (
-                                            48,
-                                            43,
-                                        ),
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    48,
+                                    36,
+                                ),
+                                end_ln_and_col: (
+                                    48,
+                                    44,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                48,
+                                                42,
+                                            ),
+                                            end_ln_and_col: (
+                                                48,
+                                                43,
+                                            ),
+                                        },
+                                        name: "N",
                                     },
-                                    name: "N",
-                                },
+                                ),
                             ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
                     tags: [],
                 },
             ),
             (
                 "result",
                 FullType {
-                    base: FlaggedType {
+                    base: Some(
+                        FlaggedType {
+                            info: Info {
+                                start_ln_and_col: (
+                                    48,
+                                    54,
+                                ),
+                                end_ln_and_col: (
+                                    48,
+                                    62,
+                                ),
+                            },
+                            base: Array(
+                                Int(
+                                    I32,
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                48,
+                                                60,
+                                            ),
+                                            end_ln_and_col: (
+                                                48,
+                                                61,
+                                            ),
+                                        },
+                                        name: "N",
+                                    },
+                                ),
+                            ),
+                            flags: [],
+                            settings: [],
+                        },
+                    ),
+                    tags: [],
+                },
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
                                 48,
-                                54,
+                                67,
                             ),
                             end_ln_and_col: (
                                 48,
-                                62,
+                                75,
                             ),
                         },
                         base: Array(
@@ -2188,11 +2249,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             48,
-                                            60,
+                                            73,
                                         ),
                                         end_ln_and_col: (
                                             48,
-                                            61,
+                                            74,
                                         ),
                                     },
                                     name: "N",
@@ -2202,46 +2263,7 @@
                         flags: [],
                         settings: [],
                     },
-                    tags: [],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            48,
-                            67,
-                        ),
-                        end_ln_and_col: (
-                            48,
-                            75,
-                        ),
-                    },
-                    base: Array(
-                        Int(
-                            I32,
-                        ),
-                        Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        48,
-                                        73,
-                                    ),
-                                    end_ln_and_col: (
-                                        48,
-                                        74,
-                                    ),
-                                },
-                                name: "N",
-                            },
-                        ),
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
