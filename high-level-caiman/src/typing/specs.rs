@@ -102,10 +102,12 @@ fn collect_spec_assign_call(
 
         for ((name, annot), typ) in lhs.iter().zip(output_types.iter()) {
             if let Some(a) = annot {
-                return Err(type_error(
-                    info,
-                    &format!("Annotation of {name} conflicts with return type of {func_name}",),
-                ));
+                if a != typ {
+                    return Err(type_error(
+                        info,
+                        &format!("Annotation of {name} conflicts with return type of {func_name}",),
+                    ));
+                }
             }
             ctx.add_dtype_constraint(name, typ.clone(), info)?;
         }
@@ -270,6 +272,56 @@ fn collect_spec_sig(ctx: &mut SpecInfo) -> Result<(), LocalError> {
     Ok(())
 }
 
+fn collect_spec_returns(ctx: &mut SpecInfo, e: &SpecExpr, info: Info) -> Result<bool, LocalError> {
+    match e {
+        SpecExpr::Term(SpecTerm::Var { name, .. }) => {
+            if ctx.sig.output.len() != 1 {
+                return Err(type_error(
+                    info,
+                    &format!(
+                        "Wrong number of return values: expected {}, got {}",
+                        ctx.sig.output.len(),
+                        1,
+                    ),
+                ));
+            }
+            ctx.add_dtype_constraint(name, ctx.sig.output[0].clone(), info)?;
+            Ok(false)
+        }
+        SpecExpr::Term(
+            SpecTerm::Lit {
+                lit: SpecLiteral::Tuple(rets),
+                ..
+            },
+            ..,
+        ) => {
+            if rets.len() != ctx.sig.output.len() {
+                return Err(type_error(
+                    info,
+                    &format!(
+                        "Wrong number of return values: expected {}, got {}",
+                        ctx.sig.output.len(),
+                        rets.len(),
+                    ),
+                ));
+            }
+            let mut constraints = vec![];
+            for (r, out) in rets.iter().zip(ctx.sig.output.iter()) {
+                if let SpecExpr::Term(SpecTerm::Var { name, .. }) = r {
+                    constraints.push((name, out.clone()));
+                } else {
+                    panic!("Not lowered")
+                }
+            }
+            for (name, typ) in constraints {
+                ctx.add_dtype_constraint(name, typ, info)?;
+            }
+            Ok(false)
+        }
+        _ => panic!("Not lowered"),
+    }
+}
+
 /// Collects all extern operations used in a given spec and collects all types
 /// of variables used in the spec.
 /// # Arguments
@@ -340,7 +392,14 @@ pub(super) fn collect_spec(
                     }
                     SpecExpr::Uop { .. } => todo!(),
                 },
-                SpecStmt::Returns(..) => (),
+                SpecStmt::Returns(info, e) => match collect_spec_returns(ctx, e, *info) {
+                    Ok(true) => {
+                        skipped = true;
+                        continue;
+                    }
+                    Ok(false) => (),
+                    Err(e) => return Err(e),
+                },
             }
         }
     }
