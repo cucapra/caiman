@@ -6,6 +6,9 @@ pub use specs::sched_lit_to_str;
 
 use crate::parse::ast::{Binop, DataType};
 use caiman::assembly::ast as asm;
+#[cfg(test)]
+mod test;
+mod unification;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
