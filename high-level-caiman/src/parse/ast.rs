@@ -8,13 +8,13 @@ pub type Arg<T> = (String, T);
 pub type NamedOutput<T> = (Option<String>, T);
 
 /// A numeric data type
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub enum IntSize {
     I32,
     I64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub enum FloatSize {
     F64,
 }

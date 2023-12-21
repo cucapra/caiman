@@ -3,25 +3,30 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 type NodePtr<T, A> = Rc<RefCell<Node<T, A>>>;
 
 /// A component of a type expression
-pub trait Kind: Clone + PartialEq + Eq {}
+pub trait Kind: Clone + PartialEq + Eq + std::fmt::Debug {}
 
 /// A node in a type expression. Nodes are agnostic to the actual type
 /// system being used.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 enum Node<T, A>
 where
     T: Kind,
     A: Kind,
 {
+    /// A type variable
     Var {
-        set: Option<NodePtr<T, A>>,
+        /// The parent of a node in the union-find algorithm.
+        parent: Option<NodePtr<T, A>>,
         id: usize,
     },
+    /// A term/operator of a type expression
     Term {
-        set: Option<NodePtr<T, A>>,
+        /// The parent of a node in the union-find algorithm.
+        parent: Option<NodePtr<T, A>>,
         op: T,
         args: Vec<NodePtr<T, A>>,
     },
+    /// A concrete base type
     Atom(A),
 }
 
@@ -31,7 +36,7 @@ impl<T: Kind, A: Kind> Node<T, A> {
     /// Panics if the node is an atom.
     fn parent(&mut self) -> &mut Option<NodePtr<T, A>> {
         match self {
-            Self::Var { ref mut set, .. } | Self::Term { ref mut set, .. } => set,
+            Self::Var { ref mut parent, .. } | Self::Term { ref mut parent, .. } => parent,
             Self::Atom(_) => panic!("Atoms have no parent"),
         }
     }
@@ -47,13 +52,16 @@ impl<T: Kind, A: Kind> Node<T, A> {
 fn representative<T: Kind, A: Kind>(n: &NodePtr<T, A>) -> NodePtr<T, A> {
     match &mut *n.borrow_mut() {
         Node::Var {
-            set: Some(next_id), ..
+            parent: Some(next_id),
+            ..
         } => {
             *next_id = representative(next_id);
             next_id.clone()
         }
-        Node::Var { set: None, .. } | Node::Atom(_) => n.clone(),
-        Node::Term { set, args, .. } => {
+        Node::Var { parent: None, .. } | Node::Atom(_) => n.clone(),
+        Node::Term {
+            parent: set, args, ..
+        } => {
             for a in args {
                 *a = representative(a);
             }
@@ -151,6 +159,12 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
     }
 }
 
+/// A constraint for type unification. Constraints are agnostic to the actual
+/// type system being used.
+///
+/// # Parameters
+/// - `T`: The type of terms/operators in the type system.
+/// - `A`: The type of atoms in the type system.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Constraint<T: Kind, A: Kind> {
     Atom(A),
@@ -159,7 +173,6 @@ pub enum Constraint<T: Kind, A: Kind> {
 }
 
 impl<T: Kind, A: Kind> Constraint<T, A> {
-    #[allow(dead_code)]
     fn instantiate(self, temps: &HashMap<String, String>) -> Self {
         match self {
             Self::Atom(_) => self,
@@ -183,17 +196,17 @@ impl<T: Kind, A: Kind> Constraint<T, A> {
 }
 
 /// A polymorphic constraint with universally quantified type variables.
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 struct Polymorphic<T: Kind, A: Kind> {
     constraint: Constraint<T, A>,
     quantified: Vec<String>,
 }
 
 /// A typing environment.
+#[derive(Debug, Clone)]
 pub struct Env<T: Kind, A: Kind> {
     temp_id: usize,
     nodes: HashMap<String, NodePtr<T, A>>,
-    #[allow(dead_code)]
     polymorphic_constraints: HashMap<String, Polymorphic<T, A>>,
 }
 
@@ -202,7 +215,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
     fn new_var(&mut self) -> NodePtr<T, A> {
         let id = self.temp_id;
         self.temp_id += 1;
-        Rc::new(RefCell::new(Node::Var { set: None, id }))
+        Rc::new(RefCell::new(Node::Var { parent: None, id }))
     }
 
     /// Creates a fresh type variable for a name. This will overwrite any existing
@@ -231,13 +244,21 @@ impl<T: Kind, A: Kind> Env<T, A> {
     /// type variable, it will be instantiated.
     /// # Errors
     /// Returns `Err` if the constraint cannot be added (unification fails)
-    pub fn add_constraint(&mut self, var: &str, constraint: &Constraint<T, A>) -> Result<(), ()> {
+    pub fn add_constraint(
+        &mut self,
+        var: &str,
+        constraint: &Constraint<T, A>,
+    ) -> Result<(), String> {
         let c = self.contraint_to_node(constraint);
         let var = self.get_or_make_node(var);
         if unify(&var, &c) {
             Ok(())
         } else {
-            Err(())
+            Err(format!(
+                "{:?} != {:?}",
+                representative(&var),
+                representative(&c)
+            ))
         }
     }
 
@@ -271,7 +292,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
         match constraint {
             Constraint::Atom(a) => Rc::new(RefCell::new(Node::Atom(a.clone()))),
             Constraint::Term(op, args) => Rc::new(RefCell::new(Node::Term {
-                set: None,
+                parent: None,
                 op: op.clone(),
                 args: args
                     .iter()

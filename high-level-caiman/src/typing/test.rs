@@ -4,14 +4,11 @@ use super::unification::{Constraint, Env, Kind};
 enum BaseType {
     I32,
     I64,
-    Bool,
-    F64,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum CompoundType {
     Int,
-    Float,
     Fn,
     Array,
     Tuple,

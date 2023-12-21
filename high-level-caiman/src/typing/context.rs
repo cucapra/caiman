@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::error::{type_error, LocalError};
 use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
 use crate::{
     lower::BOOL_FFI_TYPE,
@@ -9,7 +10,9 @@ use caiman::assembly::ast as asm;
 use caiman::ir;
 
 use super::specs::collect_spec;
-use super::{Context, SpecInfo, SpecNode, SpecType, TypedBinop};
+use super::{
+    sig_match, Context, NamedSignature, Signature, SpecInfo, SpecMap, SpecType, TypedBinop,
+};
 
 fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
     // collect used types
@@ -81,7 +84,7 @@ fn collect_sched_types(stmts: &Vec<SchedStmt>, types: &mut HashMap<String, DataT
 /// # Returns
 /// * A list of extern declarations needed for a given program.
 /// * A map from spec names to a map from variable names to their types.
-fn collect_top_level(tl: &[TopLevel], mut ctx: Context) -> Context {
+fn collect_top_level(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     let mut existing_externs = HashSet::new();
     // TODO: do we need to scan schedules?
     for decl in tl {
@@ -91,7 +94,6 @@ fn collect_top_level(tl: &[TopLevel], mut ctx: Context) -> Context {
                     statements,
                     input,
                     name,
-                    output,
                     ..
                 } = m
                 {
@@ -99,26 +101,49 @@ fn collect_top_level(tl: &[TopLevel], mut ctx: Context) -> Context {
                     for (name, typ) in input {
                         spec.types.insert(name.clone(), typ.clone());
                     }
-                    for (name, _) in input.iter() {
-                        spec.nodes
-                            .insert(name.clone(), SpecNode::Input(name.clone()));
-                    }
-                    for name in output.iter().filter_map(|x| x.0.as_ref()) {
-                        spec.nodes
-                            .insert(name.clone(), SpecNode::Output(name.clone()));
-                    }
-                    collect_spec(
-                        statements,
-                        &mut existing_externs,
-                        ctx.specs.get_mut(name).unwrap(),
-                        &ctx.signatures,
-                    );
+                    // for (name, _) in input.iter() {
+                    //     spec.nodes
+                    //         .insert(name.clone(), SpecNode::Input(name.clone()));
+                    // }
+                    // for name in output.iter().filter_map(|x| x.0.as_ref()) {
+                    //     spec.nodes
+                    //         .insert(name.clone(), SpecNode::Output(name.clone()));
+                    // }
+                    existing_externs.extend(collect_spec(statements, spec, &ctx.signatures)?);
                 }
             }
         }
     }
     ctx.type_decls
         .append(&mut get_extern_decls(&existing_externs));
+    Ok(add_ext_ops(&existing_externs, ctx))
+}
+
+/// Adds extern info for a given set of typed operators.
+fn add_ext_ops(externs: &HashSet<TypedBinop>, mut ctx: Context) -> Context {
+    for TypedBinop {
+        op,
+        op_l,
+        op_r,
+        ret,
+    } in externs
+    {
+        let op_name = binop_to_str(*op, &format!("{op_l:#}"), &format!("{op_r:#}")).to_string();
+        let sig = Signature {
+            input: vec![op_l.clone(), op_r.clone()],
+            output: vec![ret.clone()],
+        };
+        ctx.signatures.insert(op_name.clone(), sig.clone());
+        ctx.scheds.insert(
+            op_name,
+            SpecMap {
+                value: String::new(),
+                spatial: String::new(),
+                timeline: String::new(),
+                data_sched: sig,
+            },
+        );
+    }
     ctx
 }
 
@@ -173,7 +198,7 @@ fn collect_class_signatures(
     members: &[ClassMembers],
     mut ctx: Context,
     class_name: &str,
-) -> Context {
+) -> Result<Context, LocalError> {
     let mut member_sig = None;
     for m in members {
         match m {
@@ -181,38 +206,48 @@ fn collect_class_signatures(
                 name,
                 input,
                 output,
+                info,
                 ..
             } => {
-                let sig = (
-                    input.iter().map(|x| x.1.clone()).collect(),
-                    output.iter().map(|x| x.1.clone()).collect(),
-                );
+                let sig = NamedSignature {
+                    input: input.clone(),
+                    output: output.iter().map(|x| x.1.clone()).collect::<Vec<_>>(),
+                };
                 if let Some(member_sig) = &member_sig {
-                    assert_eq!(
-                        &sig, member_sig,
-                        "All members of function class {class_name} must have the same signature"
-                    );
+                    if !sig_match(member_sig, &sig) {
+                        return Err(type_error(
+                            *info,
+                            &format!(
+                                "Function class {class_name} has inconsistent signatures for member {name}",
+                            ),
+                        ));
+                    }
                 } else {
-                    member_sig = Some(sig.clone());
+                    member_sig = Some(From::from(&sig));
                 }
                 ctx.specs
-                    .insert(name.to_string(), SpecInfo::new(SpecType::Value, sig));
+                    .insert(name.to_string(), SpecInfo::new(SpecType::Value, sig, *info));
             }
             ClassMembers::Extern {
                 name,
                 input,
                 output,
+                info,
                 ..
             } => {
-                let sig = (
-                    input.iter().map(|x| x.1.clone()).collect(),
-                    output.iter().map(|x| x.1.clone()).collect(),
-                );
+                let sig = Signature {
+                    input: input.iter().map(|x| x.1.clone()).collect::<Vec<_>>(),
+                    output: output.iter().map(|x| x.1.clone()).collect::<Vec<_>>(),
+                };
                 if let Some(member_sig) = &member_sig {
-                    assert_eq!(
-                        &sig, member_sig,
-                        "All members of function class {class_name} must have the same signature"
-                    );
+                    if member_sig != &sig {
+                        return Err(type_error(
+                            *info,
+                            &format!(
+                                "Function class {class_name} has inconsistent signatures for member {name}",
+                            ),
+                        ));
+                    }
                 } else {
                     member_sig = Some(sig.clone());
                 }
@@ -225,27 +260,35 @@ fn collect_class_signatures(
         member_sig
             .unwrap_or_else(|| panic!("Function class {class_name} must have at least one member")),
     );
-    ctx
+    Ok(ctx)
 }
 
-fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Context {
+fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     for decl in tl {
         match decl {
-            TopLevel::SpatialFunclet { name, .. } => {
+            TopLevel::SpatialFunclet { name, info, .. } => {
                 ctx.specs.insert(
                     name.to_string(),
                     super::SpecInfo::new(
                         SpecType::Spatial,
-                        (vec![DataType::BufferSpace], vec![DataType::BufferSpace]),
+                        NamedSignature {
+                            input: vec![(String::from("bs"), DataType::BufferSpace)],
+                            output: vec![DataType::BufferSpace],
+                        },
+                        *info,
                     ),
                 );
             }
-            TopLevel::TimelineFunclet { name, .. } => {
+            TopLevel::TimelineFunclet { name, info, .. } => {
                 ctx.specs.insert(
                     name.to_string(),
                     super::SpecInfo::new(
                         SpecType::Timeline,
-                        (vec![DataType::Event], vec![DataType::Event]),
+                        NamedSignature {
+                            input: vec![(String::from("e"), DataType::Event)],
+                            output: vec![DataType::Event],
+                        },
+                        *info,
                     ),
                 );
             }
@@ -254,52 +297,66 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Context {
                 members,
                 ..
             } => {
-                ctx = collect_class_signatures(members, ctx, class_name);
-            }
-            TopLevel::SchedulingFunc {
-                name,
-                input,
-                output,
-                statements,
-                ..
-            } => {
-                let mut types = HashMap::new();
-                for (name, typ) in input {
-                    types.insert(name.clone(), typ.base.as_ref().unwrap().base.clone());
-                }
-                collect_sched_types(statements, &mut types);
-                ctx.sched_types.insert(name.to_string(), types);
-                ctx.signatures.insert(
-                    name.to_string(),
-                    (
-                        input
-                            .iter()
-                            .map(|x| x.1.base.as_ref().unwrap().base.clone())
-                            .collect(),
-                        output
-                            .iter()
-                            .map(|x| x.base.as_ref().unwrap().base.clone())
-                            .collect(),
-                    ),
-                );
+                ctx = collect_class_signatures(members, ctx, class_name)?;
             }
             _ => (),
         }
     }
-    ctx
+    Ok(ctx)
+}
+
+/// Collects spec info for scheduling functions.
+fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
+    for s in tl {
+        if let TopLevel::SchedulingFunc {
+            name,
+            input,
+            statements,
+            specs,
+            info,
+            ..
+        } = s
+        {
+            let mut types = HashMap::new();
+            for (name, typ) in input {
+                types.insert(name.clone(), typ.base.as_ref().unwrap().base.clone());
+            }
+            collect_sched_types(statements, &mut types);
+            ctx.sched_types.insert(name.to_string(), types);
+            ctx.scheds.insert(
+                name.to_string(),
+                SpecMap::new(
+                    specs.clone().try_into().map_err(|_| {
+                        type_error(
+                            *info,
+                            &format!(
+                                "{info}: Scheduling function {name} must have exactly 3 specs"
+                            ),
+                        )
+                    })?,
+                    &ctx,
+                    info,
+                )?,
+            );
+        }
+    }
+    Ok(ctx)
 }
 
 impl Context {
     /// Creates a global context from a list of top-level declarations.
-    #[must_use]
-    pub fn new(tl: &[TopLevel]) -> Self {
+    /// # Errors
+    /// Caused by type errors in the program.
+    pub fn new(tl: &[TopLevel]) -> Result<Self, LocalError> {
         let ctx = Self {
             specs: HashMap::new(),
             type_decls: gen_type_decls(tl).into_iter().collect(),
             signatures: HashMap::new(),
             sched_types: HashMap::new(),
+            scheds: HashMap::new(),
         };
-        let ctx = collect_type_signatures(tl, ctx);
+        let ctx = collect_type_signatures(tl, ctx)?;
+        let ctx = collect_sched_signatures(tl, ctx)?;
         collect_top_level(tl, ctx)
     }
 }

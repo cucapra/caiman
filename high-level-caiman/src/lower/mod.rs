@@ -108,7 +108,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
         },
         declarations: Vec::new(),
     };
-    let ctx = Context::new(&hlc);
+    let ctx = Context::new(&hlc)?;
     asm.declarations.extend(ctx.type_decls.iter().cloned());
     for top in hlc {
         match top {

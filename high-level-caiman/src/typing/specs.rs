@@ -2,27 +2,32 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     enum_cast,
-    lower::{binop_to_str, tuple_id},
-    parse::ast::{
-        Binop, DataType, FloatSize, IntSize, SchedLiteral, SpecExpr, SpecLiteral, SpecStmt,
-        SpecTerm,
-    },
+    error::{type_error, Info, LocalError},
+    parse::ast::{Binop, DataType, SchedLiteral, SpecExpr, SpecLiteral, SpecStmt, SpecTerm},
 };
 
-use super::{op_output_type, SpecInfo, SpecNode, TypedBinop};
+use super::{
+    binop_to_contraints, types::DTypeConstraint, Signature, SpecInfo, TypedBinop,
+    UnresolvedTypedBinop,
+};
 
-/// Collects all names defined in a given spec.
-fn collect_spec_names(stmts: &Vec<SpecStmt>) -> HashSet<String> {
+/// Collects all names defined in a given spec, including inputs and outputs
+fn collect_spec_names(stmts: &Vec<SpecStmt>, ctx: &SpecInfo) -> HashSet<String> {
     let mut res = HashSet::new();
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, .. } => {
                 for (name, _) in lhs {
+                    assert!(!res.contains(name), "Duplicate node: {name}");
                     res.insert(name.clone());
                 }
             }
             SpecStmt::Returns(..) => (),
         }
+    }
+    for (name, _) in &ctx.sig.input {
+        assert!(!res.contains(name), "Duplicate node: {name}");
+        res.insert(name.clone());
     }
     res
 }
@@ -56,12 +61,15 @@ fn collect_spec_assign_call(
     function: &SpecExpr,
     args: &[SpecExpr],
     ctx: &mut SpecInfo,
-    signatures: &HashMap<String, (Vec<DataType>, Vec<DataType>)>,
-) {
+    signatures: &HashMap<String, Signature>,
+    info: Info,
+) -> Result<(), LocalError> {
     if let SpecExpr::Term(SpecTerm::Var {
         name: func_name, ..
     }) = function
     {
+        let input_types = signatures.get(func_name).unwrap().input.clone();
+        let output_types = signatures.get(func_name).unwrap().output.clone();
         #[allow(clippy::needless_collect)]
         let arg_nodes: Vec<_> = args
             .iter()
@@ -71,26 +79,40 @@ fn collect_spec_assign_call(
                 name.to_string()
             })
             .collect();
-        let mut nodes = vec![];
-        let tuple_name = tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>());
-        ctx.nodes.insert(
-            tuple_name.clone(),
-            SpecNode::Op(func_name.clone(), arg_nodes),
-        );
-        for (idx, ((name, annot), typ)) in lhs
-            .iter()
-            .zip(signatures.get(func_name).unwrap().1.iter())
-            .enumerate()
-        {
+        if arg_nodes.len() != input_types.len() {
+            return Err(type_error(
+                info,
+                &format!(
+                    "Wrong number of arguments to function {func_name}: expected {}, got {}",
+                    input_types.len(),
+                    arg_nodes.len(),
+                ),
+            ));
+        }
+        if lhs.len() != output_types.len() {
+            return Err(type_error(
+                info,
+                &format!(
+                    "Wrong number of return values from function {func_name}: expected {}, got {}",
+                    output_types.len(),
+                    lhs.len(),
+                ),
+            ));
+        }
+
+        for ((name, annot), typ) in lhs.iter().zip(output_types.iter()) {
             if let Some(a) = annot {
-                assert_eq!(a, typ);
+                return Err(type_error(
+                    info,
+                    &format!("Annotation of {name} conflicts with return type of {func_name}",),
+                ));
             }
-            ctx.types.insert(name.clone(), typ.clone());
-            nodes.push((name.clone(), SpecNode::Extract(tuple_name.clone(), idx)));
+            ctx.add_dtype_constraint(name, typ.clone(), info)?;
         }
-        for (name, node) in nodes {
-            ctx.nodes.insert(name, node);
+        for (arg_name, arg_type) in arg_nodes.iter().zip(input_types.iter()) {
+            ctx.add_dtype_constraint(arg_name, arg_type.clone(), info)?;
         }
+        Ok(())
     } else {
         panic!("Not lowered")
     }
@@ -98,40 +120,41 @@ fn collect_spec_assign_call(
 
 /// Collects all types of variables used in a given statement for an assignment
 /// `lhs :- t`
+/// # Returns
+/// `true` if the collection failed and should be retried at the next iteration.
 fn collect_spec_assign_term(
     t: &SpecTerm,
     lhs: &[(String, Option<DataType>)],
     ctx: &mut SpecInfo,
-    signatures: &HashMap<String, (Vec<DataType>, Vec<DataType>)>,
-) -> bool {
+    signatures: &HashMap<String, Signature>,
+) -> Result<bool, LocalError> {
     match t {
-        SpecTerm::Lit { lit, .. } => match lit {
-            SpecLiteral::Int(_) => {
-                ctx.types
-                    .insert(lhs[0].0.clone(), DataType::Int(IntSize::I64));
-                ctx.nodes
-                    .insert(lhs[0].0.clone(), SpecNode::Lit(spec_lit_to_str(lit)));
-                false
+        SpecTerm::Lit { lit, info } => {
+            if let Some(annot) = lhs[0].1.as_ref() {
+                ctx.add_dtype_constraint(&lhs[0].0, annot.clone(), *info)?;
+            } else {
+                ctx.add_constraint(
+                    &lhs[0].0,
+                    match lit {
+                        SpecLiteral::Int(_) => DTypeConstraint::Int(None),
+                        SpecLiteral::Bool(_) => DTypeConstraint::Bool,
+                        SpecLiteral::Float(_) => DTypeConstraint::Float(None),
+                        _ => todo!(),
+                    },
+                    *info,
+                )?;
             }
-            SpecLiteral::Bool(_) => {
-                ctx.types.insert(lhs[0].0.clone(), DataType::Bool);
-                ctx.nodes
-                    .insert(lhs[0].0.clone(), SpecNode::Lit(spec_lit_to_str(lit)));
-                false
-            }
-            SpecLiteral::Float(_) => {
-                ctx.types
-                    .insert(lhs[0].0.clone(), DataType::Float(FloatSize::F64));
-                ctx.nodes
-                    .insert(lhs[0].0.clone(), SpecNode::Lit(spec_lit_to_str(lit)));
-                false
-            }
-            _ => todo!(),
-        },
+            Ok(false)
+        }
         SpecTerm::Var { .. } => todo!(),
-        SpecTerm::Call { function, args, .. } => {
-            collect_spec_assign_call(lhs, function, args, ctx, signatures);
-            false
+        SpecTerm::Call {
+            function,
+            args,
+            info,
+            ..
+        } => {
+            collect_spec_assign_call(lhs, function, args, ctx, signatures, *info)?;
+            Ok(false)
         }
     }
 }
@@ -149,41 +172,28 @@ fn collect_spec_assign_if(
     if_true: &SpecExpr,
     if_false: &SpecExpr,
     guard: &SpecExpr,
-    names: &HashSet<String>,
     ctx: &mut SpecInfo,
-) -> bool {
+    info: Info,
+) -> Result<bool, LocalError> {
     if let (
         SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
         SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
-        SpecExpr::Term(SpecTerm::Var { name: guard, .. }),
+        SpecExpr::Term(SpecTerm::Var {
+            name: guard,
+            info: g_info,
+        }),
     ) = (if_true, if_false, guard)
     {
-        if !ctx.types.contains_key(guard)
-            || !ctx.types.contains_key(name1)
-            || !ctx.types.contains_key(name2)
-        {
-            assert!(names.contains(guard), "Undefined node: {guard}");
-            assert!(names.contains(name1), "Undefined node: {name1}");
-            assert!(names.contains(name2), "Undefined node: {name2}");
-            return true;
+        ctx.add_dtype_constraint(guard, DataType::Bool, *g_info)?;
+        ctx.add_var_equiv(name1, name2, info)?;
+        ctx.add_var_equiv(&lhs[0].0, name1, info)?;
+        if let Some(t) = lhs[0].1.as_ref() {
+            ctx.add_dtype_constraint(&lhs[0].0, t.clone(), info)?;
         }
-        assert_eq!(ctx.types[guard], DataType::Bool);
-        assert_eq!(
-            ctx.types[name1], ctx.types[name2],
-            "Conditional types must be equal"
-        );
-        ctx.types.insert(lhs[0].0.clone(), ctx.types[name1].clone());
-        ctx.nodes.insert_or_remove_if_dup(
-            lhs[0].0.clone(),
-            SpecNode::Op(
-                "if".to_string(),
-                vec![guard.clone(), name1.clone(), name2.clone()],
-            ),
-        );
     } else {
         panic!("Not lowered")
     }
-    false
+    Ok(false)
 }
 
 /// Collects all types of variables used in a given statement for an assignment
@@ -198,44 +208,66 @@ fn collect_spec_assign_bop(
     op_l: &SpecExpr,
     op_r: &SpecExpr,
     op: Binop,
-    externs: &mut HashSet<TypedBinop>,
+    externs: &mut HashSet<UnresolvedTypedBinop>,
     lhs: &[(String, Option<DataType>)],
-    names: &HashSet<String>,
     ctx: &mut SpecInfo,
-) -> bool {
+    info: Info,
+) -> Result<bool, LocalError> {
     if let (
         SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
         SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
     ) = (op_l, op_r)
     {
-        if !ctx.types.contains_key(name1) || !ctx.types.contains_key(name2) {
-            assert!(names.contains(name1), "Undefined node: {name1}");
-            assert!(names.contains(name2), "Undefined node: {name2}");
-            return true;
+        let (left_constraint, right_constraint, ret_constraint) =
+            binop_to_contraints(op, &mut ctx.env);
+        ctx.add_raw_constraint(&lhs[0].0, &ret_constraint, info)?;
+        if let Some(annot) = &lhs[0].1 {
+            ctx.add_dtype_constraint(&lhs[0].0, annot.clone(), info)?;
         }
-        let ret = op_output_type(op, &ctx.types[name1], &ctx.types[name2]);
-        ctx.types.insert(lhs[0].0.clone(), ret.clone());
-        ctx.nodes.insert_or_remove_if_dup(
-            lhs[0].0.clone(),
-            SpecNode::Op(
-                binop_to_str(
-                    op,
-                    &format!("{}", ctx.types[name1]),
-                    &format!("{}", ctx.types[name2]),
-                ),
-                vec![name1.clone(), name2.clone()],
-            ),
-        );
-        externs.insert(TypedBinop {
+        ctx.add_raw_constraint(name1, &left_constraint, info)?;
+        ctx.add_raw_constraint(name2, &right_constraint, info)?;
+        externs.insert(UnresolvedTypedBinop {
             op,
-            op_l: ctx.types[name1].clone(),
-            op_r: ctx.types[name2].clone(),
-            ret,
+            op_l: name1.clone(),
+            op_r: name2.clone(),
+            ret: lhs[0].0.clone(),
         });
     } else {
         panic!("Not lowered")
     }
-    false
+    Ok(false)
+}
+
+/// Resolves all types for defined variables in a given spec.
+fn resolve_types(ctx: &mut SpecInfo, names: &HashSet<String>) -> Result<(), LocalError> {
+    for name in names {
+        match ctx.env.get_type(name) {
+            Some(c) => {
+                let dt = DTypeConstraint::try_from(c.clone()).map_err(|e| {
+                    type_error(
+                        ctx.info,
+                        &format!("Failed to resolve type of variable {name}: {e}"),
+                    )
+                })?;
+                ctx.types.insert(name.clone(), dt.into());
+            }
+            None => {
+                return Err(type_error(
+                    ctx.info,
+                    &format!("Undefined variable {name} in spec",),
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collect_spec_sig(ctx: &mut SpecInfo) -> Result<(), LocalError> {
+    let info = ctx.info;
+    for (arg, typ) in ctx.sig.input.clone() {
+        ctx.add_dtype_constraint(&arg, typ, info)?;
+    }
+    Ok(())
 }
 
 /// Collects all extern operations used in a given spec and collects all types
@@ -249,11 +281,12 @@ fn collect_spec_assign_bop(
 /// * `signatures` - a map from spec names to their signatures
 pub(super) fn collect_spec(
     stmts: &Vec<SpecStmt>,
-    externs: &mut HashSet<TypedBinop>,
     ctx: &mut SpecInfo,
-    signatures: &HashMap<String, (Vec<DataType>, Vec<DataType>)>,
-) {
-    let names = collect_spec_names(stmts);
+    signatures: &HashMap<String, Signature>,
+) -> Result<HashSet<TypedBinop>, LocalError> {
+    let mut unresolved_externs = HashSet::new();
+    let names = collect_spec_names(stmts, ctx);
+    collect_spec_sig(ctx)?;
     let mut skipped = true;
     // specs are unordered, so iterate until no change.
     while skipped {
@@ -261,32 +294,48 @@ pub(super) fn collect_spec(
         for stmt in stmts {
             match stmt {
                 SpecStmt::Assign { lhs, rhs, .. } => match rhs {
-                    SpecExpr::Term(t) => {
-                        if collect_spec_assign_term(t, lhs, ctx, signatures) {
+                    SpecExpr::Term(t) => match collect_spec_assign_term(t, lhs, ctx, signatures) {
+                        Ok(true) => {
                             skipped = true;
                             continue;
                         }
-                    }
+                        Ok(false) => (),
+                        Err(e) => return Err(e),
+                    },
                     SpecExpr::Conditional {
                         if_true,
                         guard,
                         if_false,
-                        ..
-                    } => {
-                        if collect_spec_assign_if(lhs, if_true, if_false, guard, &names, ctx) {
+                        info,
+                    } => match collect_spec_assign_if(lhs, if_true, if_false, guard, ctx, *info) {
+                        Ok(true) => {
                             skipped = true;
                             continue;
                         }
-                    }
+                        Ok(false) => (),
+                        Err(e) => return Err(e),
+                    },
                     SpecExpr::Binop {
                         op,
                         lhs: op_l,
                         rhs: op_r,
-                        ..
+                        info,
                     } => {
-                        if collect_spec_assign_bop(op_l, op_r, *op, externs, lhs, &names, ctx) {
-                            skipped = true;
-                            continue;
+                        match collect_spec_assign_bop(
+                            op_l,
+                            op_r,
+                            *op,
+                            &mut unresolved_externs,
+                            lhs,
+                            ctx,
+                            *info,
+                        ) {
+                            Ok(true) => {
+                                skipped = true;
+                                continue;
+                            }
+                            Ok(false) => (),
+                            Err(e) => return Err(e),
                         }
                     }
                     SpecExpr::Uop { .. } => todo!(),
@@ -295,4 +344,14 @@ pub(super) fn collect_spec(
             }
         }
     }
+    resolve_types(ctx, &names)?;
+    Ok(unresolved_externs
+        .into_iter()
+        .map(|u| TypedBinop {
+            op: u.op,
+            op_l: ctx.types[&u.op_l].clone(),
+            op_r: ctx.types[&u.op_r].clone(),
+            ret: ctx.types[&u.ret].clone(),
+        })
+        .collect::<HashSet<_>>())
 }
