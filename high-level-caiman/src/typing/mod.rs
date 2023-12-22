@@ -111,7 +111,7 @@ impl DTypeEnv {
         self.env.add_constraint(name, &c).map_err(|e| {
             type_error(
                 info,
-                &format!("Failed to unify type constraints of variable {name}: {e}"),
+                &format!("Failed to unify type constraints of variable {name}"),
             )
         })
     }
@@ -138,7 +138,7 @@ impl DTypeEnv {
             .map_err(|e| {
                 type_error(
                     info,
-                    &format!("Failed to unify type constraints of variable {name}: {e}"),
+                    &format!("Failed to unify type constraints of variable {name}"),
                 )
             })
     }
@@ -155,7 +155,7 @@ impl DTypeEnv {
         self.env.add_constraint(name, constraint).map_err(|e| {
             type_error(
                 info,
-                &format!("Failed to unify type constraints of variable {name}: {e}"),
+                &format!("Failed to unify type constraints of variable {name}"),
             )
         })
     }

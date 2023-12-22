@@ -14,53 +14,55 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: Some(
-                        FlaggedType {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    12,
-                                ),
-                                end_ln_and_col: (
-                                    3,
-                                    15,
-                                ),
-                            },
-                            base: Int(
-                                I64,
-                            ),
-                            flags: [],
-                            settings: [],
-                        },
-                    ),
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    18,
-                                ),
-                                end_ln_and_col: (
-                                    3,
-                                    30,
-                                ),
-                            },
-                            quot: Some(
-                                Node,
-                            ),
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "main",
-                                    spec_var: Some(
-                                        "f",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        12,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        15,
                                     ),
                                 },
-                            ),
-                            flow: None,
-                        },
-                    ],
-                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        18,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        30,
+                                    ),
+                                },
+                                quot: Some(
+                                    Node,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "main",
+                                        spec_var: Some(
+                                            "f",
+                                        ),
+                                    },
+                                ),
+                                flow: None,
+                            },
+                        ],
+                    },
+                ),
             ),
         ],
         output: [

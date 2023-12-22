@@ -1,0 +1,30 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    a :- 2
+    b :- 1
+    c :- 3
+    r :- b if a else c
+    returns r
+}
+
+fn main_impl() -> i64 @ node(main.r)-usable
+    impls main, time, space
+{
+    let a @ node(main.a) = 2;
+    var v @ none(main);
+    if @ node(main.r) a {
+        let b @ node(main.b) = 1;
+        v = b;
+    } else {
+        let c @ node(main.c) = 3;
+        v = c;
+    }
+    v
+    
+}
+
+pipeline main { main_impl }

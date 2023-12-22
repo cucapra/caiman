@@ -14,126 +14,132 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: Some(
-                        FlaggedType {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    11,
-                                ),
-                                end_ln_and_col: (
-                                    3,
-                                    14,
-                                ),
-                            },
-                            base: Int(
-                                I64,
-                            ),
-                            flags: [],
-                            settings: [],
-                        },
-                    ),
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    17,
-                                ),
-                                end_ln_and_col: (
-                                    3,
-                                    28,
-                                ),
-                            },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "main",
-                                    spec_var: None,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        14,
+                                    ),
                                 },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                    ],
-                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        17,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        28,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "main",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                        ],
+                    },
+                ),
             ),
             (
                 "b",
-                FullType {
-                    base: Some(
-                        FlaggedType {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    33,
-                                ),
-                                end_ln_and_col: (
-                                    3,
-                                    36,
-                                ),
-                            },
-                            base: Int(
-                                I64,
-                            ),
-                            flags: [],
-                            settings: [],
-                        },
-                    ),
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    39,
-                                ),
-                                end_ln_and_col: (
-                                    3,
-                                    52,
-                                ),
-                            },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "main",
-                                    spec_var: Some(
-                                        "x",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        33,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        36,
                                     ),
                                 },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                    ],
-                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        39,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        52,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "main",
+                                        spec_var: Some(
+                                            "x",
+                                        ),
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                        ],
+                    },
+                ),
             ),
             (
                 "c",
-                FullType {
-                    base: Some(
-                        FlaggedType {
-                            info: Info {
-                                start_ln_and_col: (
-                                    3,
-                                    57,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        57,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        60,
+                                    ),
+                                },
+                                base: Int(
+                                    I32,
                                 ),
-                                end_ln_and_col: (
-                                    3,
-                                    60,
-                                ),
+                                flags: [],
+                                settings: [],
                             },
-                            base: Int(
-                                I32,
-                            ),
-                            flags: [],
-                            settings: [],
-                        },
-                    ),
-                    tags: [],
-                },
+                        ),
+                        tags: [],
+                    },
+                ),
             ),
         ],
         output: [

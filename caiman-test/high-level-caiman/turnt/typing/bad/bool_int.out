@@ -1,0 +1,2 @@
+Error: At bool_int.cm:10:15, 
+  Type Error: Failed to unify type constraints of variable a

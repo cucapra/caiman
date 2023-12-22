@@ -14,96 +14,100 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: Some(
-                        FlaggedType {
-                            info: Info {
-                                start_ln_and_col: (
-                                    2,
-                                    11,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        14,
+                                    ),
+                                },
+                                base: Int(
+                                    I32,
                                 ),
-                                end_ln_and_col: (
-                                    2,
-                                    14,
-                                ),
+                                flags: [],
+                                settings: [],
                             },
-                            base: Int(
-                                I32,
-                            ),
-                            flags: [],
-                            settings: [],
-                        },
-                    ),
-                    tags: [],
-                },
+                        ),
+                        tags: [],
+                    },
+                ),
             ),
             (
                 "b",
-                FullType {
-                    base: Some(
-                        FlaggedType {
-                            info: Info {
-                                start_ln_and_col: (
-                                    2,
-                                    19,
-                                ),
-                                end_ln_and_col: (
-                                    2,
-                                    33,
-                                ),
-                            },
-                            base: Bool,
-                            flags: [
-                                "storage",
-                            ],
-                            settings: [],
-                        },
-                    ),
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    2,
-                                    37,
-                                ),
-                                end_ln_and_col: (
-                                    2,
-                                    43,
-                                ),
-                            },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "v",
-                                    spec_var: None,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        19,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        33,
+                                    ),
                                 },
-                            ),
-                            flow: None,
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    2,
-                                    45,
+                                base: Bool,
+                                flags: [
+                                    "storage",
+                                ],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        37,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        43,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "v",
+                                        spec_var: None,
+                                    },
                                 ),
-                                end_ln_and_col: (
-                                    2,
-                                    57,
+                                flow: None,
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        45,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        57,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "sp",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
                                 ),
                             },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "sp",
-                                    spec_var: None,
-                                },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                    ],
-                },
+                        ],
+                    },
+                ),
             ),
         ],
         output: [

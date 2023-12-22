@@ -1,0 +1,2 @@
+Error: At missing_spec.cm:12:1, 
+  Type Error: 12:1 - 18:2: Scheduling function main_impl must have exactly 3 specs

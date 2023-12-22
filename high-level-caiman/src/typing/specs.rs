@@ -12,13 +12,18 @@ use super::{
 };
 
 /// Collects all names defined in a given spec, including inputs and outputs
-fn collect_spec_names(stmts: &Vec<SpecStmt>, ctx: &SpecInfo) -> HashSet<String> {
+fn collect_spec_names(
+    stmts: &Vec<SpecStmt>,
+    ctx: &SpecInfo,
+) -> Result<HashSet<String>, LocalError> {
     let mut res = HashSet::new();
     for stmt in stmts {
         match stmt {
-            SpecStmt::Assign { lhs, .. } => {
+            SpecStmt::Assign { lhs, info, .. } => {
                 for (name, _) in lhs {
-                    assert!(!res.contains(name), "Duplicate node: {name}");
+                    if res.contains(name) {
+                        return Err(type_error(*info, &format!("Duplicate node: {name}")));
+                    }
                     res.insert(name.clone());
                 }
             }
@@ -26,10 +31,12 @@ fn collect_spec_names(stmts: &Vec<SpecStmt>, ctx: &SpecInfo) -> HashSet<String> 
         }
     }
     for (name, _) in &ctx.sig.input {
-        assert!(!res.contains(name), "Duplicate node: {name}");
+        if res.contains(name) {
+            return Err(type_error(ctx.info, &format!("Duplicate node: {name}")));
+        }
         res.insert(name.clone());
     }
-    res
+    Ok(res)
 }
 
 /// Converts a spec literal to a string.
@@ -350,7 +357,7 @@ pub(super) fn collect_spec(
     signatures: &HashMap<String, Signature>,
 ) -> Result<HashSet<TypedBinop>, LocalError> {
     let mut unresolved_externs = HashSet::new();
-    let names = collect_spec_names(stmts, ctx);
+    let names = collect_spec_names(stmts, ctx)?;
     let mut env = DTypeEnv::new();
     collect_spec_sig(&mut env, ctx)?;
     for stmt in stmts {

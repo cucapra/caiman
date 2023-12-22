@@ -1,0 +1,2 @@
+Error: At mismatch_spec2.cm:11:1, 
+  Type Error: Function input a_0 of main_impl does not match the spec i64

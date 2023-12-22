@@ -514,28 +514,30 @@
         input: [
             (
                 "x",
-                FullType {
-                    base: Some(
-                        FlaggedType {
-                            info: Info {
-                                start_ln_and_col: (
-                                    30,
-                                    16,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        30,
+                                        16,
+                                    ),
+                                    end_ln_and_col: (
+                                        30,
+                                        19,
+                                    ),
+                                },
+                                base: Int(
+                                    I32,
                                 ),
-                                end_ln_and_col: (
-                                    30,
-                                    19,
-                                ),
+                                flags: [],
+                                settings: [],
                             },
-                            base: Int(
-                                I32,
-                            ),
-                            flags: [],
-                            settings: [],
-                        },
-                    ),
-                    tags: [],
-                },
+                        ),
+                        tags: [],
+                    },
+                ),
             ),
         ],
         output: [
