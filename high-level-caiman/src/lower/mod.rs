@@ -80,7 +80,7 @@ macro_rules! enum_cast {
 /// Returns an error if the program is not well-typed or flattened.
 /// # Panics
 /// If lowering something with currently unsupported language features.
-pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
+pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, error::LocalError> {
     // Preprocessing: (before this function)
     // 1. Match literals to literals in the spec
     // 2. Constant fold constants
@@ -108,8 +108,8 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
         },
         declarations: Vec::new(),
     };
-    let ctx = Context::new(&hlc)?;
-    asm.declarations.extend(ctx.type_decls.iter().cloned());
+    asm.declarations
+        .extend(typing_ctx.type_decls.iter().cloned());
     for top in hlc {
         match top {
             TopLevel::Pipeline { name, entry, .. } => {
@@ -130,7 +130,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 for f in members {
                     match f {
                         ClassMembers::ValueFunclet { .. } => {
-                            let funclet = lower_val_funclet(f, &name, &ctx);
+                            let funclet = lower_val_funclet(f, &name, typing_ctx);
                             asm.declarations.push(asm::Declaration::Funclet(funclet));
                         }
                         ClassMembers::Extern { .. } => todo!(),
@@ -139,12 +139,18 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 asm.declarations
                     .push(asm::Declaration::FunctionClass(class));
             }
-            sf @ TopLevel::SpatialFunclet { .. } => asm
-                .declarations
-                .push(asm::Declaration::Funclet(lower_spatial_funclet(sf, &ctx))),
-            tf @ TopLevel::TimelineFunclet { .. } => asm
-                .declarations
-                .push(asm::Declaration::Funclet(lower_timeline_funclet(tf, &ctx))),
+            sf @ TopLevel::SpatialFunclet { .. } => {
+                asm.declarations
+                    .push(asm::Declaration::Funclet(lower_spatial_funclet(
+                        sf, typing_ctx,
+                    )));
+            }
+            tf @ TopLevel::TimelineFunclet { .. } => {
+                asm.declarations
+                    .push(asm::Declaration::Funclet(lower_timeline_funclet(
+                        tf, typing_ctx,
+                    )));
+            }
             TopLevel::SchedulingFunc {
                 name,
                 input,
@@ -154,7 +160,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 info,
             } => {
                 let res = lower_schedule(
-                    &ctx,
+                    typing_ctx,
                     SchedulingFunc {
                         info,
                         name,

@@ -323,7 +323,7 @@ impl Fact for LiveVars {
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
         if let Some(defs) = stmt.get_defs() {
-            for (var, _) in defs {
+            for var in defs {
                 self.live_set.remove(&var);
             }
         }

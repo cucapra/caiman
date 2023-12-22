@@ -587,7 +587,7 @@ impl ASTFactory {
     struct_variant_factory!(function_class(name: String, members: Vec<ClassMembers>) 
         -> TopLevel:TopLevel::FunctionClass);
 
-    struct_variant_factory!(sched_function(name: String, input: Vec<Arg<FullType>>, 
+    struct_variant_factory!(sched_function(name: String, input: Vec<MaybeArg<FullType>>, 
         output: Option<Vec<FullType>>, specs: Vec<String>, statements: Vec<SchedStmt>) 
         -> TopLevel:TopLevel::SchedulingFunc {
             name: name,

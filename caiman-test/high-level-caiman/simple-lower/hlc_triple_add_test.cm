@@ -64,10 +64,10 @@ fn main_impl() -> i64 @ node(main.r)-usable
         let j: i64 @ node(main.j) = add1_impl(a, b, c) @ node(main.j);
         j
     } else {
-        let bb: i64 @ node(main.b) = 5;
-        let dd: i64 @ node(main.d) = 9;
-        let kk: i64 @ node(main.k) = add2_impl(a, bb, dd) @ node(main.k);
-        kk
+        let b: i64 @ node(main.b) = 5;
+        let d: i64 @ node(main.d) = 9;
+        let k: i64 @ node(main.k) = add2_impl(a, b, d) @ node(main.k);
+        k
     };
     r
 }

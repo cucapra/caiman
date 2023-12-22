@@ -70,7 +70,7 @@ TopLevel: TopLevel = {
         <Id>
     "}" <@R> => astf.pipeline(<>),
 
-    <@L> "fn" <Id> "(" <CommaList<Arg<FullType>>> ")" <("->" <MultiType>)?>
+    <@L> "fn" <Id> "(" <CommaList<MaybeArgFullType>> ")" <("->" <MultiType>)?>
         "impls" <CommaList<Id>>
     "{"
         <Sequence>

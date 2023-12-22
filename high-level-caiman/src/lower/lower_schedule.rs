@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 
-use caiman::assembly::ast::{self as asm, FuncletArgument, Hole};
+use caiman::assembly::ast::{self as asm, Hole};
 
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
     lower::{data_type_to_ffi_type, sched_hir::TagInfo},
     parse::ast::{
-        Arg, DataType, Flow, FullType, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag,
+        DataType, Flow, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag, Tags,
     },
     typing::{Context, SpecType},
 };
@@ -34,28 +34,29 @@ fn temp_var_name(temp_id: usize) -> String {
 /// and the next available temporary id
 fn lower_flat_decl(
     dest: &str,
-    dest_tag: &Option<FullType>,
+    dest_tag: &Option<Tags>,
     rhs: &SchedTerm,
     temp_id: usize,
+    f: &Funclet,
 ) -> (CommandVec, usize) {
     if let SchedTerm::Lit { .. } = rhs {
         let dest_tag = dest_tag
             .as_ref()
-            .expect("We require all variables to have type annotations");
-        assert!(!dest_tag.tags.is_empty());
+            .expect("We require all variables to have tag annotations");
+        assert!(!dest_tag.is_empty());
         let temp_node_name = temp_var_name(temp_id);
         let temp = asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(temp_node_name.clone())),
             node: asm::Node::AllocTemporary {
                 place: Some(ir::Place::Local),
                 buffer_flags: Some(ir::BufferFlags::new()),
-                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
+                storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
             },
         });
         let mv = asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalDoBuiltin {
-                operation: Some(tag_to_quot(&dest_tag.tags[0])),
+                operation: Some(tag_to_quot(&dest_tag[0])),
                 // no inputs
                 inputs: Some(Vec::new()),
                 outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
@@ -65,7 +66,7 @@ fn lower_flat_decl(
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
                 source: Some(asm::NodeId(temp_node_name)),
-                storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
+                storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
             },
         });
         (vec![Some(temp), Some(mv), Some(rd_ref)], temp_id + 1)
@@ -77,7 +78,7 @@ fn lower_flat_decl(
 /// Lowers a variable declaration
 fn lower_var_decl(
     dest: &str,
-    dest_tag: &Option<FullType>,
+    dest_tag: &Option<Tags>,
     rhs: &Option<SchedTerm>,
     temp_id: usize,
     f: &Funclet,
@@ -90,12 +91,12 @@ fn lower_var_decl(
         node: asm::Node::AllocTemporary {
             place: Some(ir::Place::Local),
             buffer_flags: Some(ir::BufferFlags::new()),
-            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
+            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     }))];
     if let Some(SchedTerm::Lit { tag: rhs_tag, .. }) = rhs {
         let rhs_tag = rhs_tag.as_ref().map_or_else(
-            || TagInfo::from(dest_tag, f.specs()),
+            || TagInfo::from_tags(dest_tag, f.specs()),
             |rhs_tag| TagInfo::from_tags(rhs_tag, f.specs()),
         );
         assert!(rhs_tag.value.is_some());
@@ -138,7 +139,7 @@ fn lower_store(lhs: &str, rhs: &SchedTerm, temp_id: usize, f: &Funclet) -> (Comm
 /// Lowers an operation into a local-do-external and read-ref
 fn lower_op(
     dest: &str,
-    dest_tag: &Option<FullType>,
+    dest_tag: &Option<Tags>,
     op: &str,
     args: &[SchedTerm],
     temp_id: usize,
@@ -153,7 +154,7 @@ fn lower_op(
         node: asm::Node::AllocTemporary {
             place: Some(ir::Place::Local),
             buffer_flags: Some(ir::BufferFlags::new()),
-            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
+            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     });
     let mut inputs = vec![];
@@ -164,7 +165,7 @@ fn lower_op(
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
         node: asm::Node::LocalDoExternal {
-            operation: unextract_quotient(get_quotient(f.specs(), &dest_tag.tags, SpecType::Value)),
+            operation: unextract_quotient(get_quotient(f.specs(), dest_tag, SpecType::Value)),
             inputs: Some(inputs),
             outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
             external_function_id: Some(asm::ExternalFunctionId(op.to_string())),
@@ -174,7 +175,7 @@ fn lower_op(
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
             source: Some(asm::NodeId(temp_node_name)),
-            storage_type: Some(data_type_to_ffi_type(&dest_tag.base.as_ref().unwrap().base)),
+            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     });
     (
@@ -204,7 +205,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
     match s {
         HirBody::ConstDecl {
             lhs, rhs, lhs_tag, ..
-        } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id),
+        } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id, f),
         HirBody::VarDecl {
             lhs, lhs_tag, rhs, ..
         } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f),
@@ -340,7 +341,7 @@ fn lower_func_call(
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
     let join_var = temp_var_name(join);
-    let tags = TagInfo::from_maybe_tags(&call.tag, f.specs());
+    let tags = TagInfo::from_maybe(&call.tag, f.specs());
     vec![
         Some(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(djoin_name.clone())),
@@ -553,16 +554,6 @@ pub fn tag_to_tag(t: &Tag) -> asm::Tag {
             Flow::Usable => ir::Flow::Usable,
             Flow::Save => ir::Flow::Save,
         }),
-    }
-}
-
-/// Converts a high level caiman function argument into a funclet argument
-pub fn hlc_arg_to_asm_arg(arg: &Arg<FullType>) -> FuncletArgument {
-    let ft = &arg.1;
-    FuncletArgument {
-        name: Some(asm::NodeId(arg.0.to_string())),
-        typ: super::data_type_to_local_type(&ft.base.as_ref().unwrap().base),
-        tags: ft.tags.iter().map(tag_to_tag).collect(),
     }
 }
 

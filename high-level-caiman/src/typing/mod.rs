@@ -188,6 +188,12 @@ impl SpecInfo {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mutability {
+    Const,
+    Mut,
+}
+
 #[derive(Debug, Clone)]
 /// Information about a schedule.
 pub struct SchedInfo {
@@ -202,8 +208,8 @@ pub struct SchedInfo {
     /// Map from variable name to type.
     pub types: HashMap<String, DataType>,
     /// Set of defined names and mapping from defined name to
-    /// whether it is a constant.
-    pub defined_names: HashMap<String, bool>,
+    /// whether it is a constant. Non-constants are references.
+    pub defined_names: HashMap<String, Mutability>,
 }
 
 #[derive(Debug, Clone)]

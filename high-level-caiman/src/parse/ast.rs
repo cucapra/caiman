@@ -5,6 +5,7 @@ use crate::error::Info;
 pub type Name = String;
 
 pub type Arg<T> = (String, T);
+pub type MaybeArg<T> = (String, Option<T>);
 pub type NamedOutput<T> = (Option<String>, T);
 
 /// A numeric data type
@@ -460,7 +461,7 @@ impl SchedStmt {
 pub struct SchedulingFunc {
     pub info: Info,
     pub name: String,
-    pub input: Vec<Arg<FullType>>,
+    pub input: Vec<MaybeArg<FullType>>,
     pub output: Vec<FullType>,
     pub specs: Vec<String>,
     pub statements: Vec<SchedStmt>,
@@ -624,7 +625,7 @@ pub enum TopLevel {
     SchedulingFunc {
         info: Info,
         name: String,
-        input: Vec<Arg<FullType>>,
+        input: Vec<MaybeArg<FullType>>,
         output: Vec<FullType>,
         specs: Vec<String>,
         statements: Vec<SchedStmt>,

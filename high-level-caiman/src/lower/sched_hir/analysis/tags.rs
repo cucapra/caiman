@@ -57,7 +57,7 @@ impl TagInfo {
     }
 
     /// Constructs a `TagInfo` from an optional vector of tags. If `t` is `None`
-    pub fn from_maybe_tags(t: &Option<Tags>, specs: &Specs) -> Self {
+    pub fn from_maybe(t: &Option<Tags>, specs: &Specs) -> Self {
         t.as_ref().map_or_else(
             || Self {
                 value: None,
@@ -177,7 +177,7 @@ impl<'a> TagAnalysis<'a> {
     /// Constructs a new top element
     pub fn top(
         specs: &Specs,
-        input: &[(String, FullType)],
+        input: &[(String, Option<FullType>)],
         out: &[FullType],
         ctx: &'a Context,
     ) -> Self {
@@ -189,7 +189,10 @@ impl<'a> TagAnalysis<'a> {
             );
         }
         for (arg_name, arg_type) in input {
-            tags.insert(arg_name.clone(), TagInfo::from(arg_type, specs));
+            tags.insert(
+                arg_name.clone(),
+                TagInfo::from(arg_type.as_ref().unwrap(), specs),
+            );
         }
         Self {
             tags,
@@ -240,15 +243,13 @@ impl<'a> TagAnalysis<'a> {
         use std::collections::hash_map::Entry;
         match stmt {
             HirBody::ConstDecl { lhs, lhs_tag, .. } => {
-                self.tags.insert(
-                    lhs.clone(),
-                    TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs),
-                );
+                self.tags
+                    .insert(lhs.clone(), TagInfo::from_maybe(lhs_tag, &self.specs));
             }
             HirBody::VarDecl {
                 lhs, lhs_tag, rhs, ..
             } => {
-                let mut info = TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs);
+                let mut info = TagInfo::from_maybe(lhs_tag, &self.specs);
                 if rhs.is_none() {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
@@ -284,10 +285,8 @@ impl<'a> TagAnalysis<'a> {
             }
             HirBody::Hole(_) => todo!(),
             HirBody::Op { dest, dest_tag, .. } => {
-                self.tags.insert(
-                    dest.clone(),
-                    TagInfo::from(dest_tag.as_ref().unwrap(), &self.specs),
-                );
+                self.tags
+                    .insert(dest.clone(), TagInfo::from_maybe(dest_tag, &self.specs));
             }
             HirBody::OutAnnotation(_, tags) => {
                 for (v, tag) in tags {

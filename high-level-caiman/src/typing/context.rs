@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, LocalError};
 use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
+use crate::parse::ast::FullType;
 use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
@@ -13,8 +14,8 @@ use super::sched::{collect_sched_names, collect_schedule};
 use super::specs::collect_spec;
 use super::types::DTypeConstraint;
 use super::{
-    sig_match, Context, DTypeEnv, NamedSignature, SchedInfo, SchedOrExtern, Signature, SpecInfo,
-    SpecType, TypedBinop,
+    sig_match, Context, DTypeEnv, Mutability, NamedSignature, SchedInfo, SchedOrExtern, Signature,
+    SpecInfo, SpecType, TypedBinop,
 };
 
 /// Gets a list of type declarations for the base types used in the program.
@@ -125,7 +126,7 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
 fn resolve_types(
     env: &DTypeEnv,
     types: &mut HashMap<String, DataType>,
-    names: &HashMap<String, bool>,
+    names: &HashMap<String, Mutability>,
 ) {
     for name in names.keys() {
         if let Some(dt) = env.env.get_type(name) {
@@ -163,7 +164,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                 ));
             }
             for ((decl_name, decl_typ), (_, spec_typ)) in input.iter().zip(val_sig.input.iter()) {
-                if let Some(dt) = decl_typ.base.as_ref() {
+                if let Some(FullType { base: Some(dt), .. }) = decl_typ {
                     if dt.base != *spec_typ {
                         return Err(type_error(
                             *info,
@@ -178,6 +179,12 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             let outs = val_sig.output.clone();
             collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
+            for (in_name, _) in input {
+                // TODO: pass references
+                sched_info
+                    .defined_names
+                    .insert(in_name.clone(), Mutability::Const);
+            }
             collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
             resolve_types(&env, &mut sched_info.types, &sched_info.defined_names);
         }
@@ -367,17 +374,9 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
 fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     for s in tl {
         if let TopLevel::SchedulingFunc {
-            name,
-            input,
-            specs,
-            info,
-            ..
+            name, specs, info, ..
         } = s
         {
-            let mut types = HashMap::new();
-            for (name, typ) in input {
-                types.insert(name.clone(), typ.base.as_ref().unwrap().base.clone());
-            }
             ctx.scheds.insert(
                 name.to_string(),
                 SchedOrExtern::Sched(SchedInfo::new(
@@ -393,7 +392,6 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
                     info,
                 )?),
             );
-            ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut().types = types;
         }
     }
     Ok(ctx)

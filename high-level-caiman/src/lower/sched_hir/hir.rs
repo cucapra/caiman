@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 
 use crate::{
     enum_cast,
-    lower::data_type_to_local_type,
     parse::ast::{ArgsOrEnc, Binop, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags, Uop},
 };
 use caiman::assembly::ast as asm;
@@ -44,14 +43,14 @@ pub enum HirBody {
     ConstDecl {
         info: Info,
         lhs: Name,
-        lhs_tag: Hole<FullType>,
+        lhs_tag: Hole<Tags>,
         rhs: SchedTerm,
     },
     /// Declaration of a mutable variable (reference)
     VarDecl {
         info: Info,
         lhs: Name,
-        lhs_tag: Hole<FullType>,
+        lhs_tag: Hole<Tags>,
         rhs: Option<SchedTerm>,
     },
     Hole(Info),
@@ -59,7 +58,7 @@ pub enum HirBody {
     Op {
         info: Info,
         dest: Name,
-        dest_tag: Hole<FullType>,
+        dest_tag: Hole<Tags>,
         op: HirOp,
         args: Vec<SchedTerm>,
     },
@@ -180,8 +179,6 @@ pub enum UseType {
     Read,
 }
 
-pub type Args = Vec<(String, Option<asm::TypeId>)>;
-
 /// A generalized HIR instruction which is either a body statement or a terminator.
 pub trait Hir {
     /// Get the variables used by this statement.
@@ -190,7 +187,7 @@ pub trait Hir {
 
     /// Get the name and type of the variables defined by this statement, if any.
     /// A def is a **NEW** variable, not a write to an existing variable.
-    fn get_defs(&self) -> Option<Args>;
+    fn get_defs(&self) -> Option<Vec<String>>;
 
     /// Renames all uses in this statement using the given function which is
     /// passed the name of the variable and the type of use.
@@ -205,21 +202,13 @@ pub trait Hir {
 }
 
 impl Hir for Terminator {
-    fn get_defs(&self) -> Option<Args> {
+    fn get_defs(&self) -> Option<Vec<String>> {
         match self {
             Self::Call(defs, ..)
             | Self::CaptureCall { dests: defs, .. }
-            | Self::Return { dests: defs, .. } => Some(
-                defs.iter()
-                    .map(|(d, t)| {
-                        (
-                            d.clone(),
-                            t.as_ref()
-                                .map(|dt| data_type_to_local_type(&dt.base.as_ref().unwrap().base)),
-                        )
-                    })
-                    .collect(),
-            ),
+            | Self::Return { dests: defs, .. } => {
+                Some(defs.iter().map(|(d, _)| d.clone()).collect())
+            }
             // we don't consider the defs of a select to be defs of this terminator,
             // but rather they are the defs of the left and right funclets
             Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => None,
@@ -329,7 +318,7 @@ impl HirBody {
                 SchedExpr::Term(rhs) => Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
-                    lhs_tag: lhs[0].1.clone(),
+                    lhs_tag: lhs[0].1.as_ref().map(|x| x.tags.clone()),
                     rhs,
                 },
                 SchedExpr::Binop {
@@ -343,7 +332,7 @@ impl HirBody {
                     Self::Op {
                         info,
                         dest: lhs[0].0.clone(),
-                        dest_tag: lhs[0].1.clone(),
+                        dest_tag: lhs[0].1.as_ref().map(|x| x.tags.clone()),
                         op: HirOp::Binary(op),
                         args: vec![lhs_term.clone(), rhs_term.clone()],
                     }
@@ -360,7 +349,7 @@ impl HirBody {
                 Self::VarDecl {
                     info,
                     lhs: lhs[0].0.clone(),
-                    lhs_tag: lhs[0].1.clone(),
+                    lhs_tag: lhs[0].1.as_ref().map(|x| x.tags.clone()),
                     rhs,
                 }
             }
@@ -407,26 +396,11 @@ impl Hir for HirBody {
         }
     }
 
-    fn get_defs(&self) -> Option<Args> {
+    fn get_defs(&self) -> Option<Vec<String>> {
         match self {
-            Self::ConstDecl { lhs, lhs_tag, .. } => {
-                Some(vec![(
-                    lhs.clone(),
-                    lhs_tag
-                        .as_ref()
-                        .map(|tag| data_type_to_local_type(&tag.base.as_ref().unwrap().base)),
-                )])
-            }
-            Self::VarDecl { lhs, lhs_tag, ..} => {
-                Some(vec![(
-                    lhs.clone(),
-                    lhs_tag
-                        .as_ref()
-                        .map(|tag| make_ref(data_type_to_local_type(&tag.base.as_ref().unwrap().base))),
-                )])
-            }
-            Self::RefLoad { dest: lhs, typ, .. } => {
-                Some(vec![(lhs.clone(), Some(data_type_to_local_type(typ)))])
+            Self::ConstDecl { lhs,  .. } | Self::VarDecl { lhs, .. } 
+            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} => {
+                Some(vec![lhs.clone()])
             }
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
@@ -435,10 +409,6 @@ impl Hir for HirBody {
             | Self::RefStore { .. }
             | Self::InAnnotation(..)
             | Self::OutAnnotation(..) => None,
-            Self::Op { dest, dest_tag, .. } => Some(vec![(
-                dest.clone(),
-                dest_tag.as_ref().map(|tag| data_type_to_local_type(&tag.base.as_ref().unwrap().base)),
-            )]),
         }
     }
 
@@ -495,7 +465,7 @@ fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
 
 /// Makes the base type of this type into a reference to the existing type
 /// Does not check against references to references
-fn make_ref(typ: asm::TypeId) -> asm::TypeId {
+pub(super) fn make_ref(typ: asm::TypeId) -> asm::TypeId {
     match typ {
         asm::TypeId::Local(type_name) => asm::TypeId::Local(format!("&{type_name}")),
         asm::TypeId::FFI(_) => todo!(),
