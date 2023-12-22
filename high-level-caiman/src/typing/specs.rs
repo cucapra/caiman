@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::{
-    binop_to_contraints, types::DTypeConstraint, Signature, SpecInfo, TypedBinop,
+    binop_to_contraints, types::DTypeConstraint, DTypeEnv, Signature, SpecInfo, TypedBinop,
     UnresolvedTypedBinop,
 };
 
@@ -60,7 +60,7 @@ fn collect_spec_assign_call(
     lhs: &[(String, Option<DataType>)],
     function: &SpecExpr,
     args: &[SpecExpr],
-    ctx: &mut SpecInfo,
+    ctx: &mut DTypeEnv,
     signatures: &HashMap<String, Signature>,
     info: Info,
 ) -> Result<(), LocalError> {
@@ -127,13 +127,13 @@ fn collect_spec_assign_call(
 fn collect_spec_assign_term(
     t: &SpecTerm,
     lhs: &[(String, Option<DataType>)],
-    ctx: &mut SpecInfo,
+    ctx: &mut DTypeEnv,
     signatures: &HashMap<String, Signature>,
-) -> Result<bool, LocalError> {
+) -> Result<(), LocalError> {
     match t {
         SpecTerm::Lit { lit, info } => {
             if let Some(annot) = lhs[0].1.as_ref() {
-                ctx.add_dtype_constraint(&lhs[0].0, annot.clone(), *info)?;
+                ctx.add_dtype_constraint(&lhs[0].0, annot.clone(), *info)
             } else {
                 ctx.add_constraint(
                     &lhs[0].0,
@@ -144,9 +144,8 @@ fn collect_spec_assign_term(
                         _ => todo!(),
                     },
                     *info,
-                )?;
+                )
             }
-            Ok(false)
         }
         SpecTerm::Var { .. } => todo!(),
         SpecTerm::Call {
@@ -154,10 +153,7 @@ fn collect_spec_assign_term(
             args,
             info,
             ..
-        } => {
-            collect_spec_assign_call(lhs, function, args, ctx, signatures, *info)?;
-            Ok(false)
-        }
+        } => collect_spec_assign_call(lhs, function, args, ctx, signatures, *info),
     }
 }
 
@@ -174,9 +170,9 @@ fn collect_spec_assign_if(
     if_true: &SpecExpr,
     if_false: &SpecExpr,
     guard: &SpecExpr,
-    ctx: &mut SpecInfo,
+    ctx: &mut DTypeEnv,
     info: Info,
-) -> Result<bool, LocalError> {
+) -> Result<(), LocalError> {
     if let (
         SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
         SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
@@ -195,7 +191,7 @@ fn collect_spec_assign_if(
     } else {
         panic!("Not lowered")
     }
-    Ok(false)
+    Ok(())
 }
 
 /// Collects all types of variables used in a given statement for an assignment
@@ -212,9 +208,9 @@ fn collect_spec_assign_bop(
     op: Binop,
     externs: &mut HashSet<UnresolvedTypedBinop>,
     lhs: &[(String, Option<DataType>)],
-    ctx: &mut SpecInfo,
+    ctx: &mut DTypeEnv,
     info: Info,
-) -> Result<bool, LocalError> {
+) -> Result<(), LocalError> {
     if let (
         SpecExpr::Term(SpecTerm::Var { name: name1, .. }),
         SpecExpr::Term(SpecTerm::Var { name: name2, .. }),
@@ -237,13 +233,17 @@ fn collect_spec_assign_bop(
     } else {
         panic!("Not lowered")
     }
-    Ok(false)
+    Ok(())
 }
 
 /// Resolves all types for defined variables in a given spec.
-fn resolve_types(ctx: &mut SpecInfo, names: &HashSet<String>) -> Result<(), LocalError> {
+fn resolve_types(
+    env: &DTypeEnv,
+    names: &HashSet<String>,
+    ctx: &mut SpecInfo,
+) -> Result<(), LocalError> {
     for name in names {
-        match ctx.env.get_type(name) {
+        match env.env.get_type(name) {
             Some(c) => {
                 let dt = DTypeConstraint::try_from(c.clone()).map_err(|e| {
                     type_error(
@@ -251,7 +251,15 @@ fn resolve_types(ctx: &mut SpecInfo, names: &HashSet<String>) -> Result<(), Loca
                         &format!("Failed to resolve type of variable {name}: {e}"),
                     )
                 })?;
-                ctx.types.insert(name.clone(), dt.into());
+                ctx.types.insert(
+                    name.clone(),
+                    dt.try_into().map_err(|_| {
+                        type_error(
+                            ctx.info,
+                            &format!("Failed to resolve type of variable {name}. Not enough constraints."),
+                        )
+                    })?,
+                );
             }
             None => {
                 return Err(type_error(
@@ -264,15 +272,20 @@ fn resolve_types(ctx: &mut SpecInfo, names: &HashSet<String>) -> Result<(), Loca
     Ok(())
 }
 
-fn collect_spec_sig(ctx: &mut SpecInfo) -> Result<(), LocalError> {
+fn collect_spec_sig(env: &mut DTypeEnv, ctx: &SpecInfo) -> Result<(), LocalError> {
     let info = ctx.info;
     for (arg, typ) in ctx.sig.input.clone() {
-        ctx.add_dtype_constraint(&arg, typ, info)?;
+        env.add_dtype_constraint(&arg, typ, info)?;
     }
     Ok(())
 }
 
-fn collect_spec_returns(ctx: &mut SpecInfo, e: &SpecExpr, info: Info) -> Result<bool, LocalError> {
+fn collect_spec_returns(
+    env: &mut DTypeEnv,
+    ctx: &SpecInfo,
+    e: &SpecExpr,
+    info: Info,
+) -> Result<(), LocalError> {
     match e {
         SpecExpr::Term(SpecTerm::Var { name, .. }) => {
             if ctx.sig.output.len() != 1 {
@@ -285,8 +298,8 @@ fn collect_spec_returns(ctx: &mut SpecInfo, e: &SpecExpr, info: Info) -> Result<
                     ),
                 ));
             }
-            ctx.add_dtype_constraint(name, ctx.sig.output[0].clone(), info)?;
-            Ok(false)
+            env.add_dtype_constraint(name, ctx.sig.output[0].clone(), info)?;
+            Ok(())
         }
         SpecExpr::Term(
             SpecTerm::Lit {
@@ -314,9 +327,9 @@ fn collect_spec_returns(ctx: &mut SpecInfo, e: &SpecExpr, info: Info) -> Result<
                 }
             }
             for (name, typ) in constraints {
-                ctx.add_dtype_constraint(name, typ, info)?;
+                env.add_dtype_constraint(name, typ, info)?;
             }
-            Ok(false)
+            Ok(())
         }
         _ => panic!("Not lowered"),
     }
@@ -338,72 +351,39 @@ pub(super) fn collect_spec(
 ) -> Result<HashSet<TypedBinop>, LocalError> {
     let mut unresolved_externs = HashSet::new();
     let names = collect_spec_names(stmts, ctx);
-    collect_spec_sig(ctx)?;
-    let mut skipped = true;
-    // specs are unordered, so iterate until no change.
-    while skipped {
-        skipped = false;
-        for stmt in stmts {
-            match stmt {
-                SpecStmt::Assign { lhs, rhs, .. } => match rhs {
-                    SpecExpr::Term(t) => match collect_spec_assign_term(t, lhs, ctx, signatures) {
-                        Ok(true) => {
-                            skipped = true;
-                            continue;
-                        }
-                        Ok(false) => (),
-                        Err(e) => return Err(e),
-                    },
-                    SpecExpr::Conditional {
-                        if_true,
-                        guard,
-                        if_false,
-                        info,
-                    } => match collect_spec_assign_if(lhs, if_true, if_false, guard, ctx, *info) {
-                        Ok(true) => {
-                            skipped = true;
-                            continue;
-                        }
-                        Ok(false) => (),
-                        Err(e) => return Err(e),
-                    },
-                    SpecExpr::Binop {
-                        op,
-                        lhs: op_l,
-                        rhs: op_r,
-                        info,
-                    } => {
-                        match collect_spec_assign_bop(
-                            op_l,
-                            op_r,
-                            *op,
-                            &mut unresolved_externs,
-                            lhs,
-                            ctx,
-                            *info,
-                        ) {
-                            Ok(true) => {
-                                skipped = true;
-                                continue;
-                            }
-                            Ok(false) => (),
-                            Err(e) => return Err(e),
-                        }
-                    }
-                    SpecExpr::Uop { .. } => todo!(),
-                },
-                SpecStmt::Returns(info, e) => match collect_spec_returns(ctx, e, *info) {
-                    Ok(true) => {
-                        skipped = true;
-                        continue;
-                    }
-                    Ok(false) => (),
-                    Err(e) => return Err(e),
-                },
-            }
+    let mut env = DTypeEnv::new();
+    collect_spec_sig(&mut env, ctx)?;
+    for stmt in stmts {
+        match stmt {
+            SpecStmt::Assign { lhs, rhs, .. } => match rhs {
+                SpecExpr::Term(t) => collect_spec_assign_term(t, lhs, &mut env, signatures)?,
+                SpecExpr::Conditional {
+                    if_true,
+                    guard,
+                    if_false,
+                    info,
+                } => collect_spec_assign_if(lhs, if_true, if_false, guard, &mut env, *info)?,
+                SpecExpr::Binop {
+                    op,
+                    lhs: op_l,
+                    rhs: op_r,
+                    info,
+                } => collect_spec_assign_bop(
+                    op_l,
+                    op_r,
+                    *op,
+                    &mut unresolved_externs,
+                    lhs,
+                    &mut env,
+                    *info,
+                )?,
+
+                SpecExpr::Uop { .. } => todo!(),
+            },
+            SpecStmt::Returns(info, e) => collect_spec_returns(&mut env, ctx, e, *info)?,
         }
     }
-    resolve_types(ctx, &names)?;
+    resolve_types(&env, &names, ctx)?;
     Ok(unresolved_externs
         .into_iter()
         .map(|u| TypedBinop {

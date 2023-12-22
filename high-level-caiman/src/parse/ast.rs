@@ -294,6 +294,13 @@ pub enum ArgsOrEnc {
     Encode(EncodedStmt),
 }
 
+impl ArgsOrEnc {
+    #[must_use]
+    pub const fn is_args(&self) -> bool {
+        matches!(self, Self::Args(_))
+    }
+}
+
 /// A list of expressions or a type
 /// Used for template arguments
 #[derive(Clone, Debug)]
@@ -308,12 +315,37 @@ pub type Tags = Vec<Tag>;
 /// Can be a procedure (no return value) or a function (has a return value).
 /// Can be an encoded statement or have a list of arguments.
 #[derive(Clone, Debug)]
-#[allow(unused)]
 pub struct SchedFuncCall {
     pub target: Box<SchedExpr>,
     pub templates: Option<TemplateArgs>,
     pub args: Box<ArgsOrEnc>,
     pub tag: Option<Tags>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SchedLocalCall<'a> {
+    pub target: &'a SchedExpr,
+    pub templates: &'a Option<TemplateArgs>,
+    pub args: &'a [SchedExpr],
+    pub tag: &'a Option<Tags>,
+}
+
+impl SchedFuncCall {
+    /// Unwraps the call into a local call
+    /// # Panics
+    /// If the call is an encoded statement
+    #[must_use]
+    pub fn unwrap_local_call(&self) -> SchedLocalCall {
+        match &*self.args {
+            ArgsOrEnc::Args(args) => SchedLocalCall {
+                target: &self.target,
+                templates: &self.templates,
+                args,
+                tag: &self.tag,
+            },
+            ArgsOrEnc::Encode(..) => panic!("Expected local call"),
+        }
+    }
 }
 
 /// A term (bottom level) of a scheduling expression

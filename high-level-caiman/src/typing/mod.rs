@@ -14,6 +14,7 @@ use self::{
     types::{ADataType, CDataType, DTypeConstraint},
     unification::{Constraint, Env},
 };
+mod sched;
 #[cfg(test)]
 mod test;
 mod types;
@@ -80,34 +81,23 @@ impl NodeMap {
     }
 }
 
+/// A data type typing environment.
 #[derive(Debug, Clone)]
-pub struct SpecInfo {
-    /// Type of the spec
-    pub typ: SpecType,
-    /// Type signature
-    pub sig: NamedSignature,
-    /// Map from variable name to node and node to variable name.
-    // pub nodes: NodeMap,
-    /// Map from variable name to type.
-    pub types: HashMap<String, DataType>,
-    /// Typing environemnt
+pub struct DTypeEnv {
     env: Env<CDataType, ADataType>,
-    pub info: Info,
 }
 
-impl SpecInfo {
-    #[must_use]
-    pub fn new(typ: SpecType, sig: NamedSignature, info: Info) -> Self {
-        Self {
-            typ,
-            sig,
-            // nodes: NodeMap::default(),
-            types: HashMap::new(),
-            env: Env::new(),
-            info,
-        }
+impl Default for DTypeEnv {
+    fn default() -> Self {
+        Self { env: Env::new() }
     }
+}
 
+impl DTypeEnv {
+    #[must_use]
+    pub fn new() -> Self {
+        Self { env: Env::new() }
+    }
     /// Adds a constraint that a variable must adhere to a certain type.
     /// # Errors
     /// Returns an error if unification fails.
@@ -171,16 +161,90 @@ impl SpecInfo {
     }
 }
 
+/// Information about a specification.
 #[derive(Debug, Clone)]
-/// A map from spec type to spec name.
-pub struct SpecMap {
-    pub value: String,
-    pub timeline: String,
-    pub spatial: String,
-    pub data_sched: Signature,
+pub struct SpecInfo {
+    /// Type of the spec
+    pub typ: SpecType,
+    /// Type signature
+    pub sig: NamedSignature,
+    /// Map from variable name to node and node to variable name.
+    // pub nodes: NodeMap,
+    /// Map from variable name to type.
+    pub types: HashMap<String, DataType>,
+    pub info: Info,
 }
 
-impl SpecMap {
+impl SpecInfo {
+    #[must_use]
+    pub fn new(typ: SpecType, sig: NamedSignature, info: Info) -> Self {
+        Self {
+            typ,
+            sig,
+            // nodes: NodeMap::default(),
+            types: HashMap::new(),
+            info,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Information about a schedule.
+pub struct SchedInfo {
+    /// Name of the value spec.
+    pub value: String,
+    /// Name of the timeline spec.
+    pub timeline: String,
+    /// Name of the spatial spec.
+    pub spatial: String,
+    /// The type signature of the schedule.
+    pub dtype_sig: Signature,
+    /// Map from variable name to type.
+    pub types: HashMap<String, DataType>,
+    /// Set of defined names and mapping from defined name to
+    /// whether it is a constant.
+    pub defined_names: HashMap<String, bool>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SchedOrExtern {
+    Sched(SchedInfo),
+    Extern(Signature),
+}
+
+impl SchedOrExtern {
+    #[must_use]
+    pub const fn sig(&self) -> &Signature {
+        match self {
+            Self::Sched(s) => &s.dtype_sig,
+            Self::Extern(s) => s,
+        }
+    }
+
+    /// Unwraps the schedule info.
+    /// # Panics
+    /// If this is an extern.
+    #[must_use]
+    pub fn unwrap_sched(&self) -> &SchedInfo {
+        match self {
+            Self::Sched(s) => s,
+            Self::Extern(_) => panic!("Expected schedule, got extern"),
+        }
+    }
+
+    /// Unwraps the schedule info.
+    /// # Panics
+    /// If this is an extern.
+    #[must_use]
+    pub fn unwrap_sched_mut(&mut self) -> &mut SchedInfo {
+        match self {
+            Self::Sched(s) => s,
+            Self::Extern(_) => panic!("Expected schedule, got extern"),
+        }
+    }
+}
+
+impl SchedInfo {
     /// Creates a new spec map from a list of spec names.
     /// # Errors
     /// If any of the spec names are not present in the context or
@@ -242,15 +306,15 @@ impl SpecMap {
             return Err(type_error(*info, &format!("{info}: Missing spatial spec")));
         }
         Ok(Self {
-            data_sched: std::iter::once(
-                &ctx.specs.get(val.as_ref().unwrap()).as_ref().unwrap().sig,
-            )
-            .map(Signature::from)
-            .next()
-            .unwrap(),
+            dtype_sig: std::iter::once(&ctx.specs.get(val.as_ref().unwrap()).as_ref().unwrap().sig)
+                .map(Signature::from)
+                .next()
+                .unwrap(),
             value: val.unwrap(),
             timeline: timeline.unwrap(),
             spatial: spatial.unwrap(),
+            types: HashMap::new(),
+            defined_names: HashMap::new(),
         })
     }
 }
@@ -291,6 +355,7 @@ impl PartialEq for NamedSignature {
 
 impl Eq for NamedSignature {}
 
+/// Returns true if the two signatures match, ignoring the names of the inputs.
 fn sig_match(sig1: &Signature, sig2: &NamedSignature) -> bool {
     sig1.input.len() == sig2.input.len()
         && sig1
@@ -304,16 +369,14 @@ fn sig_match(sig1: &Signature, sig2: &NamedSignature) -> bool {
 /// A global context for a caiman program. This contains information about constants,
 /// type aliases, and function signatures.
 pub struct Context {
+    /// Required type declarations for the program.
     pub type_decls: Vec<asm::Declaration>,
     /// Signatures of function classes. Map from class name to (input types, output types).
     pub signatures: HashMap<String, Signature>,
-    /// Map from sched function name to a map from variable name to type.
-    /// The variables in this map are the ones present at the source level ONLY.
-    pub sched_types: HashMap<String, HashMap<String, DataType>>,
     /// Map from spec name to spec info.
     pub specs: HashMap<String, SpecInfo>,
     /// Map from function name to specs it implements.
-    pub scheds: HashMap<String, SpecMap>,
+    pub scheds: HashMap<String, SchedOrExtern>,
 }
 
 /// A typed binary operation.

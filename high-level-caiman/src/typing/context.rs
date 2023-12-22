@@ -4,16 +4,20 @@ use crate::error::{type_error, LocalError};
 use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
 use crate::{
     lower::BOOL_FFI_TYPE,
-    parse::ast::{ClassMembers, DataType, SchedStmt, TopLevel},
+    parse::ast::{ClassMembers, DataType, TopLevel},
 };
 use caiman::assembly::ast as asm;
 use caiman::ir;
 
+use super::sched::{collect_sched_names, collect_schedule};
 use super::specs::collect_spec;
+use super::types::DTypeConstraint;
 use super::{
-    sig_match, Context, NamedSignature, Signature, SpecInfo, SpecMap, SpecType, TypedBinop,
+    sig_match, Context, DTypeEnv, NamedSignature, SchedInfo, SchedOrExtern, Signature, SpecInfo,
+    SpecType, TypedBinop,
 };
 
+/// Gets a list of type declarations for the base types used in the program.
 fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
     // collect used types
     vec![
@@ -72,35 +76,17 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
     ]
 }
 
-/// Collects a mapping between high-level variables and their types.
-fn collect_sched_types(stmts: &Vec<SchedStmt>, types: &mut HashMap<String, DataType>) {
-    for s in stmts {
-        match s {
-            SchedStmt::Decl { lhs, .. } => {
-                for (name, tag) in lhs {
-                    tag.as_ref()
-                        .map(|t| types.insert(name.clone(), t.base.as_ref().unwrap().base.clone()));
-                }
-            }
-            SchedStmt::Block(_, stmts) => {
-                collect_sched_types(stmts, types);
-            }
-            _ => (),
-        }
-    }
-}
-
 /// Collects a context for top level declarations.
-/// Generates a list of extern declarations needed for a given program.
+/// Generates a list of extern declarations needed for a given program and type
+/// checks the specs.
 /// # Arguments
 /// * `tl` - the top-level declarations to scan
 /// * `ctx` - the context to update with node definitions for each spec
 /// # Returns
 /// * A list of extern declarations needed for a given program.
 /// * A map from spec names to a map from variable names to their types.
-fn collect_top_level(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
+fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     let mut existing_externs = HashSet::new();
-    // TODO: do we need to scan schedules?
     for decl in tl {
         if let TopLevel::FunctionClass { members, .. } = decl {
             for m in members {
@@ -133,6 +119,72 @@ fn collect_top_level(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Local
     Ok(add_ext_ops(&existing_externs, ctx))
 }
 
+/// Adds all base types to the scheduling info struct for all defined names that
+/// can be resolved. There is no error of a name cannot be resolved. This is
+/// bc the schedule may contain holes.
+fn resolve_types(
+    env: &DTypeEnv,
+    types: &mut HashMap<String, DataType>,
+    names: &HashMap<String, bool>,
+) {
+    for name in names.keys() {
+        if let Some(dt) = env.env.get_type(name) {
+            if let Ok(dt) = DTypeConstraint::try_from(dt) {
+                if let Ok(dt) = DataType::try_from(dt) {
+                    types.insert(name.clone(), dt);
+                }
+            }
+        }
+    }
+}
+
+/// Collects type constraints for scheduling functions.
+/// Should be called after spec signatures are collected.
+/// # Returns
+/// * Updated context
+fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
+    for decl in tl {
+        if let TopLevel::SchedulingFunc {
+            name,
+            input,
+            output,
+            statements,
+            info,
+            ..
+        } = decl
+        {
+            let mut env = DTypeEnv::new();
+            let spec_name = &ctx.scheds[name].unwrap_sched().value;
+            let val_sig = &ctx.specs[spec_name].sig;
+            if input.len() != val_sig.input.len() {
+                return Err(type_error(
+                    *info,
+                    &format!("Function inputs of {name} do not match the spec {spec_name}"),
+                ));
+            }
+            for ((decl_name, decl_typ), (_, spec_typ)) in input.iter().zip(val_sig.input.iter()) {
+                if let Some(dt) = decl_typ.base.as_ref() {
+                    if dt.base != *spec_typ {
+                        return Err(type_error(
+                            *info,
+                            &format!(
+                                "Function input {decl_name} of {name} does not match the spec {spec_typ}",
+                            ),
+                        ));
+                    }
+                }
+                env.add_dtype_constraint(decl_name, spec_typ.clone(), *info)?;
+            }
+            let outs = val_sig.output.clone();
+            collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
+            let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
+            collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
+            resolve_types(&env, &mut sched_info.types, &sched_info.defined_names);
+        }
+    }
+    Ok(ctx)
+}
+
 /// Adds extern info for a given set of typed operators.
 fn add_ext_ops(externs: &HashSet<TypedBinop>, mut ctx: Context) -> Context {
     for TypedBinop {
@@ -148,15 +200,7 @@ fn add_ext_ops(externs: &HashSet<TypedBinop>, mut ctx: Context) -> Context {
             output: vec![ret.clone()],
         };
         ctx.signatures.insert(op_name.clone(), sig.clone());
-        ctx.scheds.insert(
-            op_name,
-            SpecMap {
-                value: String::new(),
-                spatial: String::new(),
-                timeline: String::new(),
-                data_sched: sig,
-            },
-        );
+        ctx.scheds.insert(op_name, SchedOrExtern::Extern(sig));
     }
     ctx
 }
@@ -325,7 +369,6 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
         if let TopLevel::SchedulingFunc {
             name,
             input,
-            statements,
             specs,
             info,
             ..
@@ -335,11 +378,9 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
             for (name, typ) in input {
                 types.insert(name.clone(), typ.base.as_ref().unwrap().base.clone());
             }
-            collect_sched_types(statements, &mut types);
-            ctx.sched_types.insert(name.to_string(), types);
             ctx.scheds.insert(
                 name.to_string(),
-                SpecMap::new(
+                SchedOrExtern::Sched(SchedInfo::new(
                     specs.clone().try_into().map_err(|_| {
                         type_error(
                             *info,
@@ -350,8 +391,9 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
                     })?,
                     &ctx,
                     info,
-                )?,
+                )?),
             );
+            ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut().types = types;
         }
     }
     Ok(ctx)
@@ -366,11 +408,11 @@ impl Context {
             specs: HashMap::new(),
             type_decls: gen_type_decls(tl).into_iter().collect(),
             signatures: HashMap::new(),
-            sched_types: HashMap::new(),
             scheds: HashMap::new(),
         };
         let ctx = collect_type_signatures(tl, ctx)?;
         let ctx = collect_sched_signatures(tl, ctx)?;
-        collect_top_level(tl, ctx)
+        let ctx = type_check_spec(tl, ctx)?;
+        type_check_schedules(tl, ctx)
     }
 }

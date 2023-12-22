@@ -38,10 +38,10 @@ fn foo() -> i64 @ node(main.z)-usable
         let two: i64 @ node(main.two) = 2;
         v = two;
 
-        let b: bool @ node(main.b) = true;
-        if @ node(main.left) b {
-            let a: bool @ node(main.a) = true;
-            if @ node(main.left_left) a {
+        let bb: bool @ node(main.b) = true;
+        if @ node(main.left) bb {
+            let aa: bool @ node(main.a) = true;
+            if @ node(main.left_left) aa {
                 let one: i64 @ node(main.one) = 1;
                 v = one;
             }
@@ -59,8 +59,8 @@ fn foo() -> i64 @ node(main.z)-usable
             
             let cond: bool @ node(main.b) = false;
             if @ node(main.right_right) cond {
-                let three: i64 @ node(main.three) = 3;
-                v = three;
+                let three1: i64 @ node(main.three) = 3;
+                v = three1;
             }
             @in { v: [node(main.right_right)-usable, none(space)-save] };
         }

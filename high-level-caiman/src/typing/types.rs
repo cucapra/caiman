@@ -131,20 +131,20 @@ impl DTypeConstraint {
 const DEFAULT_INT_SIZE: IntSize = IntSize::I64;
 const DEFAULT_FLOAT_SIZE: FloatSize = FloatSize::F64;
 
-impl From<DTypeConstraint> for DataType {
-    fn from(dt: DTypeConstraint) -> Self {
+impl TryFrom<DTypeConstraint> for DataType {
+    type Error = ();
+    fn try_from(dt: DTypeConstraint) -> Result<Self, ()> {
         match dt {
-            DTypeConstraint::Int(Some(x)) => Self::Int(x),
+            DTypeConstraint::Int(Some(x)) => Ok(Self::Int(x)),
             // if there's no size constraint, use the default size
-            DTypeConstraint::Int(None) | DTypeConstraint::Num | DTypeConstraint::Any => {
-                Self::Int(DEFAULT_INT_SIZE)
-            }
-            DTypeConstraint::Float(Some(x)) => Self::Float(x),
+            DTypeConstraint::Int(None) | DTypeConstraint::Num => Ok(Self::Int(DEFAULT_INT_SIZE)),
+            DTypeConstraint::Float(Some(x)) => Ok(Self::Float(x)),
             // if there's no size constraint, use the default size
-            DTypeConstraint::Float(None) => Self::Float(DEFAULT_FLOAT_SIZE),
-            DTypeConstraint::Bool => Self::Bool,
-            DTypeConstraint::BufferSpace => Self::BufferSpace,
-            DTypeConstraint::Event => Self::Event,
+            DTypeConstraint::Float(None) => Ok(Self::Float(DEFAULT_FLOAT_SIZE)),
+            DTypeConstraint::Bool => Ok(Self::Bool),
+            DTypeConstraint::BufferSpace => Ok(Self::BufferSpace),
+            DTypeConstraint::Event => Ok(Self::Event),
+            DTypeConstraint::Any => Err(()),
         }
     }
 }
@@ -179,6 +179,7 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                     _ => unreachable!(),
                 }
             }
+            Constraint::Var(_) => Ok(Self::Any),
             _ => todo!(),
         }
     }
