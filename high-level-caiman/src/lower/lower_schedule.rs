@@ -221,6 +221,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             ..
         } => lower_op(dest, dest_tag, &op.lower(), args, temp_id, f),
         x @ HirBody::Hole(_) => todo!("{x:?}"),
+        HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
     }
 }
 

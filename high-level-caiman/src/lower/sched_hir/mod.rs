@@ -16,7 +16,8 @@ use caiman::assembly::ast as asm;
 
 use self::{
     analysis::{
-        analyze, deref_transform_pass, op_transform_pass, InOutFacts, LiveVars, TagAnalysis,
+        analyze, deref_transform_pass, op_transform_pass, transform_out_ssa, transform_to_ssa,
+        InOutFacts, LiveVars, TagAnalysis,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
 };
@@ -460,6 +461,8 @@ impl Funclets {
         deref_transform_pass(&mut cfg, &mut types, &mut data_types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
+        cfg = transform_to_ssa(cfg, &live_vars);
+        cfg = transform_out_ssa(cfg);
         let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.input, &f.output));
         let finfo = FuncInfo {
             name: f.name,

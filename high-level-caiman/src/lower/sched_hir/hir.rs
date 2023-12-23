@@ -1,5 +1,5 @@
 #![allow(clippy::module_name_repetitions)]
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::{
     enum_cast,
@@ -10,7 +10,7 @@ pub use caiman::assembly::ast::Hole;
 
 use crate::{
     error::Info,
-    parse::ast::{FullType, Name, SchedStmt, SchedTerm},
+    parse::ast::{Name, SchedStmt, SchedTerm},
 };
 
 use super::RET_VAR;
@@ -64,6 +64,14 @@ pub enum HirBody {
     },
     InAnnotation(Info, Vec<(String, Tags)>),
     OutAnnotation(Info, Vec<(String, Tags)>),
+    Phi {
+        dest: Name,
+        /// Map from incoming block id to the incoming variable name 
+        /// from that block
+        inputs: HashMap<usize, Name>,
+        /// original name of the variable
+        original: Name,
+    },
 }
 
 /// A high level IR operation.
@@ -134,12 +142,12 @@ pub enum Terminator {
     /// return values in. The destinations are **NEW** variables, not writes to
     /// existing variables. This terminator is replaced by a `CaptureCall` terminator
     /// when analyses are complete.
-    Call(Vec<(String, Option<FullType>)>, HirFuncCall),
+    Call(Vec<(String, Option<Tags>)>, HirFuncCall),
     /// A call to an internal function with a list of destinations to store the
     /// return values in and a list of variables to capture. The destinations are
     /// **NEW** variables, not writes to existing variables.
     CaptureCall {
-        dests: Vec<(String, Option<FullType>)>,
+        dests: Vec<(String, Option<Tags>)>,
         call: HirFuncCall,
         captures: BTreeSet<String>,
     },
@@ -147,7 +155,7 @@ pub enum Terminator {
     /// we transition to the `true_branch` of the outgoing edge of this block
     /// in the CFG. Otherwise, we transition to the `false_branch`.
     Select {
-        dests: Vec<(String, Option<FullType>)>,
+        dests: Vec<(String, Option<Tags>)>,
         guard: String,
         tag: Option<Tags>,
     },
@@ -156,7 +164,7 @@ pub enum Terminator {
     /// For returning from the function, the destination variables are
     /// `_out0`, `_out1`, etc.
     Return {
-        dests: Vec<(String, Option<FullType>)>,
+        dests: Vec<(String, Option<Tags>)>,
         rets: Vec<String>,
     },
     /// The final return statement in the final basic block. This is **NOT**
@@ -193,6 +201,10 @@ pub trait Hir {
     /// passed the name of the variable and the type of use.
     fn rename_uses(&mut self, f: &mut dyn FnMut(&str, UseType) -> String);
 
+    /// Renames all defs in this statement using the given function which is
+    /// passed the name of the variable.
+    fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String);
+
     /// Get the variables used by this statement.
     fn get_use_set(&self) -> BTreeSet<String> {
         let mut res = BTreeSet::new();
@@ -225,7 +237,7 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 uses.insert(guard.clone());
             }
-            Self::Return { rets, .. } => {
+            Self::Return { rets, .. } | Self::Next(rets) => {
                 for node in rets {
                     uses.insert(node.clone());
                 }
@@ -235,7 +247,7 @@ impl Hir for Terminator {
                     uses.insert(format!("{RET_VAR}{i}"));
                 }
             }
-            Self::None | Self::Next(..) => (),
+            Self::None => (),
         }
     }
 
@@ -249,12 +261,25 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Return { rets, .. } => {
+            Self::Return { rets, .. } | Self::Next(rets) => {
                 for node in rets {
                     *node = f(node, UseType::Read);
                 }
             }
-            Self::FinalReturn(_) | Self::None | Self::Next(..) => (),
+            Self::FinalReturn(_) | Self::None => (),
+        }
+    }
+
+    fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String) {
+        match self {
+            Self::Call(defs, ..)
+            | Self::CaptureCall { dests: defs, .. }
+            | Self::Return { dests: defs, .. } => {
+                for (dest, _) in defs {
+                    *dest = f(dest);
+                }
+            }
+            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => (),
         }
     }
 }
@@ -393,13 +418,17 @@ impl Hir for HirBody {
                 }
             }
             Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::Hole(..) => (),
+            Self::Phi {inputs, ..} => {
+                res.extend(inputs.iter().map(|(_, name)| name.clone()));
+            }
         }
     }
 
     fn get_defs(&self) -> Option<Vec<String>> {
         match self {
             Self::ConstDecl { lhs,  .. } | Self::VarDecl { lhs, .. } 
-            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} => {
+            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} |
+            Self::Phi { dest: lhs, ..}=> {
                 Some(vec![lhs.clone()])
             }
             // TODO: re-evaluate the move instruction.
@@ -409,6 +438,20 @@ impl Hir for HirBody {
             | Self::RefStore { .. }
             | Self::InAnnotation(..)
             | Self::OutAnnotation(..) => None,
+        }
+    }
+
+    fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String) {
+        match self {
+            Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } 
+            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} |
+            Self::Phi { dest: lhs, ..} => {
+                *lhs = f(lhs);
+            }
+            Self::Hole(..)
+            | Self::RefStore { .. }
+            | Self::InAnnotation(..)
+            | Self::OutAnnotation(..) => (),
         }
     }
 
@@ -429,9 +472,16 @@ impl Hir for HirBody {
             Self::RefLoad { src, .. } => {
                 *src = f(src, UseType::Read);
             }
+            Self::Phi { .. } => {
+                // don't rename uses of phi nodes
+
+            },
+            Self::InAnnotation(_, annots) | Self::OutAnnotation(_, annots) => {
+                for (name, _) in annots {
+                    *name = f(name, UseType::Read);
+                }
+            }
             Self::Hole(..)
-            | Self::InAnnotation(..)
-            | Self::OutAnnotation(..)
             | Self::VarDecl { rhs: None, .. } => (),
         }
     }

@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use crate::{
     enum_cast,
     error::Info,
-    parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm},
+    parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, Tags},
 };
 
 use super::{analysis::compute_coninuations, stmts_to_hir, HirBody, Terminator};
@@ -115,7 +115,7 @@ struct PendingChild {
     /// Right child (false branch). May be `None` if the parent is not an `if`
     false_block: Option<Vec<SchedStmt>>,
     /// The names of the return variables that the children blocks will return.
-    ret_names: Vec<(String, Option<FullType>)>,
+    ret_names: Vec<(String, Option<Tags>)>,
 }
 
 /// Removes all Blocks from a list of scheduling statements and flattens them into
@@ -213,7 +213,7 @@ fn handle_return(
     sched_expr: SchedExpr,
     join_edge: Edge,
     end: Info,
-    ret_names: Vec<(String, Option<FullType>)>,
+    ret_names: Vec<(String, Option<Tags>)>,
 ) {
     let old_id = *cur_id;
     let info = Info::new_range(
@@ -262,7 +262,7 @@ fn handle_select(
     false_block: Vec<SchedStmt>,
     end_info: Info,
     children: &mut Vec<PendingChild>,
-    dests: Vec<(String, Option<FullType>)>,
+    dests: Vec<(String, Option<Tags>)>,
 ) {
     let parent_id = *cur_id;
     let info = Info::new_range(
@@ -330,7 +330,12 @@ fn handle_call(
         make_block(
             cur_id,
             cur_stmts,
-            Terminator::Call(lhs, call.try_into().unwrap()),
+            Terminator::Call(
+                lhs.into_iter()
+                    .map(|(n, t)| (n, t.map(|t| t.tags)))
+                    .collect(),
+                call.try_into().unwrap(),
+            ),
             Some(*cur_id + 1),
             info,
         ),
@@ -375,6 +380,10 @@ fn handle_seq(
             || true_block.last().map_or(&if_info, |s| s.get_info()),
             |s| s.get_info(),
         );
+        let dests: Vec<_> = dests
+            .into_iter()
+            .map(|(s, t)| (s, t.map(|t| t.tags)))
+            .collect();
         handle_select(
             cur_id,
             blocks,
@@ -395,7 +404,7 @@ fn handle_seq(
             info: Info::default(),
             tags: dests
                 .into_iter()
-                .map(|(var, typ)| (var, typ.map(|typ| typ.tags).unwrap_or_default()))
+                .filter_map(|(s, t)| t.map(|t| (s, t)))
                 .collect(),
         });
     } else {
@@ -422,7 +431,7 @@ fn make_blocks(
     edges: &mut HashMap<usize, Edge>,
     stmts: Vec<SchedStmt>,
     join_edge: Edge,
-    ret_names: &[(String, Option<FullType>)],
+    ret_names: &[(String, Option<Tags>)],
 ) -> usize {
     let mut cur_stmts = vec![];
     let root_id = *cur_id;
@@ -613,7 +622,7 @@ impl Cfg {
             &outputs
                 .iter()
                 .enumerate()
-                .map(|(id, typ)| (format!("{RET_VAR}{id}"), Some(typ.clone())))
+                .map(|(id, typ)| (format!("{RET_VAR}{id}"), Some(typ.tags.clone())))
                 .collect::<Vec<_>>(),
         );
         compute_coninuations(

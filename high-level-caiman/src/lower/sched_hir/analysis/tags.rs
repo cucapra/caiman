@@ -290,6 +290,7 @@ impl TagAnalysis {
                     }
                 }
             }
+            HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
         }
     }
 }
@@ -320,7 +321,7 @@ impl Fact for TagAnalysis {
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
-                        TagInfo::from_tags(&dest_tags.as_ref().unwrap().tags, &self.specs),
+                        TagInfo::from_tags(dest_tags.as_ref().unwrap(), &self.specs),
                     );
                 }
             }
@@ -330,7 +331,7 @@ impl Fact for TagAnalysis {
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
-                        TagInfo::from_tags(&dest_tags.as_ref().unwrap().tags, &self.specs),
+                        TagInfo::from_tags(dest_tags.as_ref().unwrap(), &self.specs),
                     );
                 }
                 for cap in captures.iter() {
