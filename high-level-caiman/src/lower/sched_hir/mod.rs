@@ -61,10 +61,10 @@ struct FuncInfo {
 
 /// The funclets of a scheduling function.
 /// Combines the scheduling function's CFG with its analysis information
-pub struct Funclets<'a> {
+pub struct Funclets {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
-    type_info: analysis::InOutFacts<TagAnalysis<'a>>,
+    type_info: analysis::InOutFacts<TagAnalysis>,
     /// Mapping from variable names to their local type. The local type of a variable
     /// is a reference
     types: HashMap<String, asm::TypeId>,
@@ -80,7 +80,7 @@ pub struct Funclets<'a> {
 /// A specific funclet in a scheduling function.
 /// Combines the funclet's basic block with is analysis information.
 pub struct Funclet<'a> {
-    parent: &'a Funclets<'a>,
+    parent: &'a Funclets,
     block: &'a BasicBlock,
 }
 
@@ -390,7 +390,7 @@ impl<'a> Funclet<'a> {
     }
 }
 
-impl<'a> Funclets<'a> {
+impl Funclets {
     /// Updates terminators by replacing temporary terminators with their respective
     /// versions which contain more information computed by analyses.
     ///
@@ -452,7 +452,7 @@ impl<'a> Funclets<'a> {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: Specs, ctx: &'a Context) -> Self {
+    pub fn new(f: SchedulingFunc, specs: Specs, ctx: &Context) -> Self {
         let mut cfg = Cfg::new(f.statements, &f.output);
         let (mut types, mut data_types) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
@@ -460,10 +460,7 @@ impl<'a> Funclets<'a> {
         deref_transform_pass(&mut cfg, &mut types, &mut data_types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        let type_info = analyze(
-            &mut cfg,
-            &TagAnalysis::top(&specs, &f.input, &f.output, ctx),
-        );
+        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.input, &f.output));
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,

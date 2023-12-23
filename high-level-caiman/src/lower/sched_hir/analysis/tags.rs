@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::lower::lower_schedule::tag_to_tag;
 use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator};
 use crate::parse::ast::{FullType, SchedTerm, Tag, Tags};
-use crate::typing::{Context, SpecType};
+use crate::typing::SpecType;
 
 use super::{Fact, Forwards, RET_VAR};
 
@@ -139,48 +139,26 @@ impl TagInfo {
 /// Tag analysis for determining tags
 /// Top: empty set
 /// Meet: union
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub struct TagAnalysis<'a> {
+pub struct TagAnalysis {
     tags: HashMap<String, TagInfo>,
     specs: Rc<Specs>,
     /// For an output fact, thse are the input tags to be overridden
     input_overrides: HashMap<String, Vec<Tag>>,
-    ctx: &'a Context,
 }
 
-impl<'a> std::fmt::Debug for TagAnalysis<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut tags = self.tags.iter().collect::<Vec<_>>();
-        tags.sort_by_key(|(k, _)| (*k).clone());
-        writeln!(f, "Tags:")?;
-        for (k, v) in tags {
-            writeln!(f, "  {k}: {v:?}")?;
-        }
-        writeln!(f, "Input overrides:")?;
-        for (k, v) in &self.input_overrides {
-            writeln!(f, "  {k}: {v:?}")?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a> PartialEq for TagAnalysis<'a> {
+impl PartialEq for TagAnalysis {
     fn eq(&self, other: &Self) -> bool {
         self.tags == other.tags && self.input_overrides == other.input_overrides
     }
 }
 
-impl<'a> Eq for TagAnalysis<'a> {}
+impl Eq for TagAnalysis {}
 
-impl<'a> TagAnalysis<'a> {
+impl TagAnalysis {
     /// Constructs a new top element
-    pub fn top(
-        specs: &Specs,
-        input: &[(String, Option<FullType>)],
-        out: &[FullType],
-        ctx: &'a Context,
-    ) -> Self {
+    pub fn top(specs: &Specs, input: &[(String, Option<FullType>)], out: &[FullType]) -> Self {
         let mut tags = HashMap::new();
         for (out_idx, out_type) in out.iter().enumerate() {
             tags.insert(
@@ -198,7 +176,6 @@ impl<'a> TagAnalysis<'a> {
             tags,
             specs: Rc::new(specs.clone()),
             input_overrides: HashMap::new(),
-            ctx,
         }
     }
 
@@ -237,7 +214,7 @@ fn set_remote_node_id(q: &mut asm::Quotient, id: asm::Hole<asm::RemoteNodeId>) {
     }
 }
 
-impl<'a> TagAnalysis<'a> {
+impl TagAnalysis {
     /// Transfer function for an HIR body statement
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
@@ -317,7 +294,7 @@ impl<'a> TagAnalysis<'a> {
     }
 }
 
-impl<'a> Fact for TagAnalysis<'a> {
+impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;

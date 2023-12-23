@@ -1,4 +1,4 @@
-use crate::parse::ast::{DataType, FloatSize, IntSize};
+use crate::parse::ast::{Binop, DataType, FloatSize, IntSize};
 
 use super::unification::{Constraint, Env, Kind};
 
@@ -195,6 +195,161 @@ impl From<DataType> for DTypeConstraint {
             DataType::BufferSpace => Self::BufferSpace,
             DataType::Event => Self::Event,
             _ => todo!(),
+        }
+    }
+}
+
+/// A type metavariable. Either a class name or a variable name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MetaVar(String);
+
+impl MetaVar {
+    pub fn starts_with(&self, c: char) -> bool {
+        self.0.starts_with(c)
+    }
+
+    pub fn new_class_name(s: &String) -> Self {
+        Self(format!("${s}"))
+    }
+}
+
+/// A constraint on a value quotient
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ValQuot {
+    Int(String),
+    Float(String),
+    Bool(bool),
+    Input(String),
+    Output(String),
+    Call(String, Vec<MetaVar>),
+    Extract(MetaVar, usize),
+    Bop(Binop, MetaVar, MetaVar),
+    Select {
+        guard: MetaVar,
+        true_id: MetaVar,
+        false_id: MetaVar,
+    },
+}
+
+impl ValQuot {
+    /// Returns true if the value quotient matches the other value quotient
+    /// up to variable wildcards
+    /// # Arguments
+    /// * `other` - The other value quotient to match against
+    /// * `is_wildcard_name` - A function that returns true if the given metavariable
+    ///                       is a wildcard metavariable
+    pub fn matches<F: Fn(&MetaVar) -> bool>(&self, other: &Self, is_wildcard_name: F) -> bool {
+        match (self, other) {
+            (Self::Float(x), Self::Float(y))
+            | (Self::Int(x), Self::Int(y))
+            | (Self::Input(x), Self::Input(y))
+            | (Self::Output(x), Self::Output(y)) => x == y,
+            (Self::Bool(x), Self::Bool(y)) => x == y,
+            (Self::Call(f1, args1), Self::Call(f2, args2)) => {
+                f1 == f2
+                    && args1.len() == args2.len()
+                    && args1
+                        .iter()
+                        .zip(args2.iter())
+                        .all(|(x, y)| x == y || is_wildcard_name(x) || is_wildcard_name(y))
+            }
+            (Self::Extract(x, i), Self::Extract(y, j)) => {
+                i == j && (x == y || is_wildcard_name(x) || is_wildcard_name(y))
+            }
+            (Self::Bop(op1, x1, y1), Self::Bop(op2, x2, y2)) => {
+                op1 == op2
+                    && (x1 == x2 || is_wildcard_name(x1) || is_wildcard_name(x2))
+                    && (y1 == y2 || is_wildcard_name(y1) || is_wildcard_name(y2))
+            }
+            (
+                Self::Select {
+                    guard: g1,
+                    true_id: t1,
+                    false_id: f1,
+                },
+                Self::Select {
+                    guard: g2,
+                    true_id: t2,
+                    false_id: f2,
+                },
+            ) => {
+                (g1 == g2 || is_wildcard_name(g1) || is_wildcard_name(g2))
+                    && (t1 == t2 || is_wildcard_name(t1) || is_wildcard_name(t2))
+                    && (f1 == f2 || is_wildcard_name(f1) || is_wildcard_name(f2))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns the type of the value quotient
+    pub fn get_type(&self) -> VQType {
+        self.into()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum VQType {
+    Int(String),
+    Float(String),
+    Bool(bool),
+    Input(String),
+    Output(String),
+    Call(String),
+    Extract(usize),
+    Bop(Binop),
+    Select,
+}
+
+impl From<&ValQuot> for VQType {
+    fn from(value: &ValQuot) -> Self {
+        match value {
+            ValQuot::Int(i) => Self::Int(i.clone()),
+            ValQuot::Float(f) => Self::Float(f.clone()),
+            ValQuot::Bool(b) => Self::Bool(*b),
+            ValQuot::Input(i) => Self::Input(i.clone()),
+            ValQuot::Output(o) => Self::Output(o.clone()),
+            ValQuot::Call(f, _) => Self::Call(f.clone()),
+            ValQuot::Extract(_, j) => Self::Extract(*j),
+            ValQuot::Bop(op, _, _) => Self::Bop(*op),
+            ValQuot::Select { .. } => Self::Select,
+        }
+    }
+}
+
+impl Kind for VQType {}
+impl Kind for () {}
+
+impl From<&ValQuot> for Constraint<VQType, ()> {
+    fn from(value: &ValQuot) -> Self {
+        match value {
+            ValQuot::Int(i) => Self::Term(VQType::Int(i.clone()), vec![]),
+            ValQuot::Float(f) => Self::Term(VQType::Float(f.clone()), vec![]),
+            ValQuot::Bool(b) => Self::Term(VQType::Bool(*b), vec![]),
+            ValQuot::Input(i) => Self::Term(VQType::Input(i.clone()), vec![]),
+            ValQuot::Output(o) => Self::Term(VQType::Output(o.clone()), vec![]),
+            ValQuot::Call(f, args) => Self::Term(
+                VQType::Call(f.clone()),
+                args.iter().map(|x| Self::Var(x.0.clone())).collect(),
+            ),
+            ValQuot::Extract(tuple, j) => {
+                Self::Term(VQType::Extract(*j), vec![Self::Var(tuple.0.clone())])
+            }
+            ValQuot::Bop(op, x, y) => Self::Term(
+                VQType::Bop(*op),
+                vec![Self::Var(x.0.clone()), Self::Var(y.0.clone())],
+            ),
+            ValQuot::Select {
+                guard,
+                true_id,
+                false_id,
+            } => Self::Term(
+                VQType::Select,
+                vec![
+                    Self::Var(guard.0.clone()),
+                    Self::Var(true_id.0.clone()),
+                    Self::Var(false_id.0.clone()),
+                ],
+            ),
         }
     }
 }
