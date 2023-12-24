@@ -1,6 +1,7 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+#![allow(clippy::module_name_repetitions)]
+use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::lower::sched_hir::cfg::{Cfg, Edge};
+use crate::lower::sched_hir::cfg::{Cfg, NextSet};
 
 struct Succs {
     /// A map from each block to the transitive closure of nodes that are
@@ -30,41 +31,48 @@ impl Succs {
 
 /// Computes ALL successors and predecessors of each block in the CFG
 /// # Arguments
-/// * `cfg` - The CFG
+/// * `cfg` - The forward graph
+/// * `preds` - A map from each block to its predecessors
 /// # Panics
 #[must_use]
 #[allow(clippy::module_name_repetitions)]
-fn compute_sucessors(cfg: &Cfg, preds: &HashMap<usize, BTreeSet<usize>>) -> Succs {
+fn compute_sucessors<T, U>(cfg: &Cfg, graph: &HashMap<usize, U>, preds: &HashMap<usize, T>) -> Succs
+where
+    T: NextSet,
+    U: NextSet,
+{
     // Same way as computing dominators except we use union instead of intersection
     // and we start with the empty set instead of the set of all nodes.
 
     // Map from each block to nodes that can reach it
     let mut pred_map: HashMap<_, HashSet<_>> = HashMap::new();
-    for block in cfg.graph.keys() {
+    for block in graph.keys() {
         let mut h = HashSet::new();
         h.insert(*block);
         pred_map.insert(*block, h);
     }
     let mut changed = true;
-    let default_preds = BTreeSet::new();
     while changed {
         changed = false;
         for block in cfg.blocks.keys() {
-            let mut pred_iter = preds.get(block).unwrap_or(&default_preds).iter();
-            let mut new_preds: HashSet<usize> = pred_iter
-                .next()
-                .map(|x| pred_map.get(x).unwrap().clone())
-                .unwrap_or_default();
-            for pred in pred_iter {
-                new_preds = new_preds
-                    .union(pred_map.get(pred).unwrap())
-                    .copied()
-                    .collect();
-            }
-            new_preds.insert(*block);
-            if new_preds != *pred_map.get(block).unwrap_or(&HashSet::new()) {
-                pred_map.insert(*block, new_preds);
-                changed = true;
+            if let Some(preds) = preds.get(block) {
+                let preds = preds.next_set();
+                let mut pred_iter = preds.into_iter();
+                let mut new_preds: HashSet<usize> = pred_iter
+                    .next()
+                    .map(|x| pred_map.get(&x).unwrap().clone())
+                    .unwrap_or_default();
+                for pred in pred_iter {
+                    new_preds = new_preds
+                        .union(pred_map.get(&pred).unwrap())
+                        .copied()
+                        .collect();
+                }
+                new_preds.insert(*block);
+                if new_preds != *pred_map.get(block).unwrap_or(&HashSet::new()) {
+                    pred_map.insert(*block, new_preds);
+                    changed = true;
+                }
             }
         }
     }
@@ -75,7 +83,7 @@ fn compute_sucessors(cfg: &Cfg, preds: &HashMap<usize, BTreeSet<usize>>) -> Succ
 ///
 /// # Returns
 /// * A map from each node to the length of the shortest path to it.
-fn shortest_path(cfg: &Cfg, start_id: usize) -> HashMap<usize, usize> {
+fn shortest_path<T: NextSet>(graph: &HashMap<usize, T>, start_id: usize) -> HashMap<usize, usize> {
     // BFS
     let mut res = HashMap::new();
     let mut queue = VecDeque::new();
@@ -87,37 +95,60 @@ fn shortest_path(cfg: &Cfg, start_id: usize) -> HashMap<usize, usize> {
             continue;
         }
         res.insert(block, dist);
-        match cfg.graph.get(&block).unwrap() {
-            Edge::Next(next) => queue.push_back((*next, dist + 1)),
-            Edge::Select {
-                true_branch,
-                false_branch,
-            } => {
-                queue.push_back((*true_branch, dist + 1));
-                queue.push_back((*false_branch, dist + 1));
-            }
-            Edge::None => {}
+        for next in graph.get(&block).as_ref().unwrap().next_set() {
+            queue.push_back((next, dist + 1));
         }
     }
     res
 }
 
-/// Computes the continuation of each block in the CFG. A block with no
+/// Computes the continuation of each block in the CFG and stores this
+/// in the `ret_block` field of every basic block. A block with no
 /// continuation has no successors.
 ///
 /// We compute continuations as a second pass to support any
-/// structure changes of the CFG. Right now, this is needed for the basic
-/// arbitrary returns, which will likely get removed. If the CFG structure
+/// structure changes of the CFG. If the CFG structure
 /// never changes, the the continuations determined by frontend CFG gen
 /// will work fine.
-pub fn compute_coninuations(mut cfg: Cfg) -> Cfg {
-    let succs = compute_sucessors(&cfg, &cfg.transpose_graph);
+#[must_use]
+pub fn compute_continuations(mut cfg: Cfg) -> Cfg {
+    let merge_points = compute_merge_points(&cfg, &cfg.graph, &cfg.transpose_graph);
+    for (block_id, block) in &mut cfg.blocks {
+        block.ret_block = merge_points.get(block_id).copied();
+    }
+    cfg
+}
+
+/// Returns a map from block id, `A`, to the id of the block, `B` such that
+/// `A` is the continuation of `B`.
+#[must_use]
+pub fn compute_pretinuations(cfg: &Cfg) -> HashMap<usize, usize> {
+    compute_merge_points(cfg, &cfg.transpose_graph, &cfg.graph)
+}
+
+/// Computes "merge points" of every block in the CFG. A merge point is the
+/// block that is the successor of all of the block's successors such that the
+/// path to that successor is the shortest.
+///
+/// In this definition, by successor we consider a block to be its own successor.
+///
+/// # Arguments
+/// * `cfg` - The CFG
+/// * `graph` - The forward graph (map from each block to its immediate successors)
+/// * `preds` - A map from each block to its immediate predecessors
+fn compute_merge_points<T: NextSet, U: NextSet>(
+    cfg: &Cfg,
+    graph: &HashMap<usize, T>,
+    preds: &HashMap<usize, U>,
+) -> HashMap<usize, usize> {
+    let succs = compute_sucessors(cfg, graph, preds);
+    let mut res = HashMap::new();
 
     // The continuation is a the successor that is a successor of all of the
     // block's successors such that the path to that successor is the shortest
-    for (block_id, edge) in &cfg.graph {
+    for (block_id, edge) in graph {
         let mut successors = HashSet::new();
-        for succ in edge.targets() {
+        for succ in edge.next_set() {
             if successors.is_empty() {
                 successors = succs.succs.get(&succ).unwrap().clone();
             } else {
@@ -127,11 +158,12 @@ pub fn compute_coninuations(mut cfg: Cfg) -> Cfg {
                     .collect();
             }
         }
-        let paths = shortest_path(&cfg, *block_id);
-        let mut ordered_doms: Vec<usize> = successors.iter().copied().collect();
-        ordered_doms.sort_by_key(|x| paths.get(x).unwrap());
-        cfg.blocks.get_mut(block_id).unwrap().ret_block = ordered_doms.first().copied();
+        let paths = shortest_path(graph, *block_id);
+        let mut ordered_succs: Vec<usize> = successors.iter().copied().collect();
+        ordered_succs.sort_by_key(|x| paths.get(x).unwrap());
+        if let Some(cont_id) = ordered_succs.first() {
+            res.insert(*block_id, *cont_id);
+        }
     }
-
-    cfg
+    res
 }

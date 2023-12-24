@@ -3,6 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 mod continuations;
 mod dominators;
 mod op_transform;
+mod quot_typing;
 mod refs;
 mod ssa;
 mod tags;
@@ -12,8 +13,9 @@ use super::{
     hir::HirInstr,
 };
 
-pub use continuations::compute_coninuations;
+pub use continuations::compute_continuations;
 pub use op_transform::op_transform_pass;
+pub use quot_typing::deduce_val_quots;
 pub use refs::deref_transform_pass;
 pub use ssa::transform_out_ssa;
 pub use ssa::transform_to_ssa;

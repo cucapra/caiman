@@ -2,22 +2,25 @@ pub mod cfg;
 #[allow(clippy::module_inception)]
 mod hir;
 
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    rc::Rc,
+};
 
 pub use hir::*;
 
 use crate::{
     lower::data_type_to_local_type,
     normalize::original_name,
-    parse::ast::{DataType, FullType, MaybeArg, SchedulingFunc},
-    typing::{Context, Mutability, SchedInfo, SpecType},
+    parse::ast::{DataType, SchedulingFunc},
+    typing::{Context, Mutability, SchedInfo},
 };
 use caiman::assembly::ast as asm;
 
 use self::{
     analysis::{
-        analyze, deref_transform_pass, op_transform_pass, transform_out_ssa, transform_to_ssa,
-        InOutFacts, LiveVars, TagAnalysis,
+        analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_out_ssa,
+        transform_to_ssa, InOutFacts, LiveVars, TagAnalysis,
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
 };
@@ -37,27 +40,11 @@ pub struct Specs {
     pub spatial: asm::FuncletId,
 }
 
-impl Specs {
-    /// Gets the type of spec the funclet with `spec_name` is or `None`
-    /// if it is not a spec funclet.
-    pub fn get_spec_type(&self, spec_name: &str) -> Option<SpecType> {
-        if spec_name == self.value.0 {
-            Some(SpecType::Value)
-        } else if spec_name == self.spatial.0 {
-            Some(SpecType::Spatial)
-        } else if spec_name == self.timeline.0 {
-            Some(SpecType::Timeline)
-        } else {
-            None
-        }
-    }
-}
-
 /// Information about a high level caiman function
 struct FuncInfo {
     name: String,
-    input: Vec<MaybeArg<FullType>>,
-    output: Vec<FullType>,
+    input: Vec<(String, TripleTag)>,
+    output: Vec<TripleTag>,
 }
 
 /// The funclets of a scheduling function.
@@ -72,7 +59,7 @@ pub struct Funclets {
     /// Mapping from variable names to their data type
     data_types: HashMap<String, DataType>,
     finfo: FuncInfo,
-    specs: Specs,
+    specs: Rc<Specs>,
     /// Map from block id to the set of output variables captured by a
     /// function call
     captured_out: HashMap<usize, BTreeSet<String>>,
@@ -156,7 +143,7 @@ impl<'a> Funclet<'a> {
                 .map(|(idx, out)| {
                     (
                         format!("{RET_VAR}{idx}"),
-                        TagInfo::from(out, &self.parent.specs).tag_info_default(),
+                        TagInfo::from(out).tag_info_default(),
                     )
                 })
                 .collect();
@@ -191,7 +178,8 @@ impl<'a> Funclet<'a> {
                                     "{}: An output tag must be specified for {v}",
                                     self.block.src_loc
                                 )
-                            }),
+                            })
+                            .clone(),
                     )
                 })
                 .collect(),
@@ -209,8 +197,7 @@ impl<'a> Funclet<'a> {
                 .map(|(name, annot)| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
                     typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
-                    tags: TagInfo::from_tags(&annot.as_ref().unwrap().tags, &self.parent.specs)
-                        .tags_vec_default(),
+                    tags: TagInfo::from(annot).tags_vec_default(),
                 })
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
@@ -221,10 +208,13 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| asm::FuncletArgument {
-                    name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
-                    typ: data_type_to_local_type(&out.base.as_ref().unwrap().base),
-                    tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
+                .map(|(idx, out)| {
+                    let name = format!("{RET_VAR}{idx}");
+                    asm::FuncletArgument {
+                        name: Some(asm::NodeId(name.clone())),
+                        typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
+                        tags: TagInfo::from(out).tags_vec_default(),
+                    }
                 })
                 .collect()
         } else {
@@ -258,16 +248,21 @@ impl<'a> Funclet<'a> {
             .parent
             .type_info
             .get_out_fact(self.id())
-            .get_input_override(var);
+            .get_input_override(var)
+            .cloned();
         match (
-            self.parent.type_info.get_in_fact(self.id()).get_tag(var),
+            self.parent
+                .type_info
+                .get_in_fact(self.id())
+                .get_tag(var)
+                .cloned(),
             ovr,
         ) {
             (orig, None) => orig,
-            (None, Some(ovr)) => Some(TagInfo::from_tags(&ovr, self.specs())),
+            (None, Some(ovr)) => Some(ovr),
             (Some(mut orig), Some(ovr)) => {
-                orig.update(self.specs(), &ovr);
-                Some(orig)
+                orig.update_info(ovr);
+                Some(orig.clone())
             }
         }
     }
@@ -280,10 +275,13 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| asm::FuncletArgument {
-                    name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
-                    typ: data_type_to_local_type(&out.base.as_ref().unwrap().base),
-                    tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
+                .map(|(idx, out)| {
+                    let name = format!("{RET_VAR}{idx}");
+                    asm::FuncletArgument {
+                        name: Some(asm::NodeId(name.clone())),
+                        typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
+                        tags: TagInfo::from(out).tags_vec_default(),
+                    }
                 })
                 .collect()
         } else {
@@ -348,7 +346,7 @@ impl<'a> Funclet<'a> {
 
     /// Gets the specs of this funclet
     #[inline]
-    pub const fn specs(&self) -> &Specs {
+    pub const fn specs(&self) -> &Rc<Specs> {
         &self.parent.specs
     }
 
@@ -380,7 +378,7 @@ impl<'a> Funclet<'a> {
 
     /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
-    pub fn get_out_tag(&self, var: &str) -> Option<TagInfo> {
+    pub fn get_out_tag(&self, var: &str) -> Option<&TagInfo> {
         self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
 
@@ -453,21 +451,44 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: Specs, ctx: &Context) -> Self {
-        let mut cfg = Cfg::new(f.statements, &f.output);
+    pub fn new(mut f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
+        let mut cfg = Cfg::new(f.statements, &f.output, specs);
         let (mut types, mut data_types) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
+
         op_transform_pass(&mut cfg, &types);
         deref_transform_pass(&mut cfg, &mut types, &mut data_types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         cfg = transform_to_ssa(cfg, &live_vars);
+        let specs_rc = Rc::new(specs.clone());
+        let hir_inputs: Vec<_> = f
+            .input
+            .iter()
+            .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ, &specs_rc)))
+            .collect();
+        let hir_outputs: Vec<_> = f
+            .output
+            .iter()
+            .map(|typ| TripleTag::from_fulltype(typ, &specs_rc))
+            .collect();
+
+        deduce_val_quots(
+            &mut f.input,
+            &mut f.output,
+            &mut cfg,
+            &ctx.specs[&specs.value.0],
+            ctx,
+        );
         cfg = transform_out_ssa(cfg);
-        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.input, &f.output));
+        let type_info = analyze(
+            &mut cfg,
+            &TagAnalysis::top(specs, &hir_inputs, &hir_outputs),
+        );
         let finfo = FuncInfo {
             name: f.name,
-            input: f.input,
-            output: f.output,
+            input: hir_inputs,
+            output: hir_outputs,
         };
         Self {
             cfg,
@@ -476,7 +497,7 @@ impl Funclets {
             types,
             data_types,
             finfo,
-            specs,
+            specs: specs_rc,
             captured_out,
         }
     }
