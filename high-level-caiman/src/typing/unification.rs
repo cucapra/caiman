@@ -412,13 +412,10 @@ impl<T: Kind, A: Kind> Env<T, A> {
         if unify(var, &c) {
             Ok(())
         } else {
-            let v_r = representative(var);
-            let c_r = representative(&c);
-            assert_ne!(v_r, c_r, "WTF");
             Err(format!(
                 "variable {:#?} != constraint {:#?}",
-                *v_r.borrow(),
-                *c_r.borrow()
+                *representative(var).borrow(),
+                *c.borrow()
             ))
         }
     }
