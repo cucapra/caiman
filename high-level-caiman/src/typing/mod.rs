@@ -1,5 +1,5 @@
 pub mod context;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 mod specs;
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
 use caiman::assembly::ast::{self as asm};
 
 use self::{
-    types::{ADataType, CDataType, DTypeConstraint, MetaVar, VQType, ValQuot},
+    types::{ADataType, CDataType, DTypeConstraint},
     unification::{Constraint, Env},
 };
 mod sched;
@@ -17,6 +17,8 @@ mod sched;
 mod test;
 mod types;
 mod unification;
+
+pub use types::{MetaVar, VQType, ValQuot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
@@ -31,7 +33,7 @@ pub struct NodeEnv {
     env: Env<VQType, ()>,
     /// Map of quotient type to a map between quotients and their equivalence
     /// class names.
-    spec_nodes: HashMap<VQType, HashMap<ValQuot, String>>,
+    spec_nodes: HashMap<VQType, HashMap<ValQuot, HashSet<String>>>,
     /// List of input node class names.
     inputs: Vec<String>,
     /// List of output node class names.
@@ -73,12 +75,19 @@ impl NodeEnv {
         self.spec_nodes
             .entry(constraint.get_type())
             .or_default()
-            .insert(constraint, class_name);
+            .entry(constraint)
+            .or_default()
+            .insert(class_name);
     }
 
     /// Sets the qotient classes of the outputs.
     pub fn set_output_classes(&mut self, classes: &[String]) {
         self.outputs = classes.iter().map(|x| format!("${x}")).collect();
+    }
+
+    #[must_use]
+    pub fn get_output_classes(&self) -> &[String] {
+        &self.outputs
     }
 
     /// Returns true if the name is a wildcard name
@@ -97,22 +106,54 @@ impl NodeEnv {
         assert!(!name.contains('$'));
         self.env.add_constraint(name, &From::from(constraint))?;
         if let Some(matches) = self.spec_nodes.get(&constraint.get_type()) {
-            let mut unique_match = None;
-            for (possible_match, match_class) in matches {
+            let mut last_match_classes = None;
+            for (possible_match, match_classes) in matches {
                 if possible_match.matches(constraint, Self::is_wildcard_name) {
-                    if unique_match.is_some() {
-                        unique_match = None;
-                    } else {
-                        unique_match = Some(match_class);
+                    if last_match_classes.is_some() {
+                        return Ok(()); // Not a unique match
                     }
+                    last_match_classes = Some(match_classes);
                 }
             }
-            if let Some(unique) = unique_match {
-                self.env
-                    .add_class_constraint(unique, &Constraint::Var(name.to_string()))?;
+            if let Some(last_match_classes) = last_match_classes {
+                if last_match_classes.len() == 1 {
+                    self.env.add_class_constraint(
+                        last_match_classes.iter().next().unwrap(),
+                        &Constraint::Var(name.to_string()),
+                    )?;
+                }
             }
         }
         Ok(())
+    }
+
+    /// Adds a constraint to the type variable `name` with another variable.
+    /// # Errors
+    /// Returns an error if unification fails.
+    /// # Panics
+    /// If the name contains a `$` or if the equiv contains a `$`.
+    pub fn add_var_eq(&mut self, name: &str, equiv: &str) -> Result<(), String> {
+        assert!(!name.contains('$'));
+        assert!(!equiv.contains('$'));
+        self.env
+            .add_constraint(name, &Constraint::Var(equiv.to_string()))
+    }
+
+    /// Adds an equivalence between variable `name` and spec node name `class_name`.
+    /// # Panics
+    /// If the name contains a `$` or if the class name contains a `$`.
+    /// # Errors
+    /// Returns an error if unification fails.
+    pub fn add_node_eq(&mut self, name: &str, class_name: &str) -> Result<(), String> {
+        assert!(!name.contains('$'));
+        let class_name = if class_name.starts_with('$') {
+            class_name.to_string()
+        } else {
+            format!("${class_name}")
+        };
+        assert_eq!(class_name.chars().filter(|x| *x == '$').count(), 1);
+        self.env
+            .add_class_constraint(&class_name, &Constraint::Var(name.to_string()))
     }
 
     /// Returns the variable's matching node name in the spec if it has one.
@@ -121,6 +162,12 @@ impl NodeEnv {
         self.env
             .get_class_id(name)
             .map(|x| x.trim_matches('$').to_string())
+    }
+
+    /// Returns the classes of the input variables
+    #[must_use]
+    pub fn get_input_classes(&self) -> &[String] {
+        &self.inputs
     }
 }
 
@@ -217,17 +264,20 @@ pub struct SpecInfo {
     pub types: HashMap<String, DataType>,
     /// Source-level starting and ending line and column number.
     pub info: Info,
+    /// The function class if the spec is a value spec.
+    pub feq: Option<String>,
 }
 
 impl SpecInfo {
     #[must_use]
-    pub fn new(typ: SpecType, sig: NamedSignature, info: Info) -> Self {
+    pub fn new(typ: SpecType, sig: NamedSignature, info: Info, class_name: Option<&str>) -> Self {
         Self {
             typ,
             sig,
             types: HashMap::new(),
             info,
             nodes: NodeEnv::new(),
+            feq: class_name.map(ToString::to_string),
         }
     }
 }

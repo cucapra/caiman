@@ -12,7 +12,7 @@ use crate::{
 use caiman::ir;
 
 use super::{
-    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag, RET_VAR},
+    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag},
     tuple_id,
 };
 
@@ -229,7 +229,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             lhs, lhs_tag, rhs, ..
         } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f),
         HirBody::RefStore { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
-        HirBody::RefLoad { dest, src, typ } => lower_load(dest, typ, src, temp_id),
+        HirBody::RefLoad { dest, src, typ, .. } => lower_load(dest, typ, src, temp_id),
         // annotations don't lower to anything
         HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) => (vec![], temp_id),
         HirBody::Op {
@@ -242,34 +242,6 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         x @ HirBody::Hole(_) => todo!("{x:?}"),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
     }
-}
-
-/// Changes the remote node id to the remote id of the result of the call
-fn get_tuple_quot(t: Option<asm::Tag>) -> asm::Hole<asm::Quotient> {
-    t.map(|t| match t.quot {
-        asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        asm::Quotient::Input(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Input(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        asm::Quotient::Output(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Output(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        x => x,
-    })
 }
 
 /// Lowers a function call into a caiman assembly command.
@@ -320,7 +292,7 @@ fn lower_func_call(
                 || tags.default_tag(SpecType::Spatial).quot,
                 |x| x.quot.clone(),
             )),
-            value_operation: get_tuple_quot(tags.value),
+            value_operation: tags.value.map(|t| t.quot),
             callee_funclet_id: Some(asm::FuncletId(call.target.clone())),
             callee_arguments: Some(
                 call.args
@@ -390,11 +362,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
             }))]
         }
         Terminator::FinalReturn(n) => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-            return_values: Some(
-                (0..*n)
-                    .map(|idx| Some(asm::NodeId(format!("{RET_VAR}{idx}"))))
-                    .collect(),
-            ),
+            return_values: Some(n.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),
         }))],
         Terminator::Select { guard, tag, .. } => lower_select(guard, tag, temp_id, f),
         // TODO: review this

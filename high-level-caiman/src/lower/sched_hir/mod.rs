@@ -479,7 +479,9 @@ impl Funclets {
             &mut cfg,
             &ctx.specs[&specs.value.0],
             ctx,
-        );
+            &specs_rc,
+        )
+        .unwrap();
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,

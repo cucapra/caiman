@@ -3,7 +3,7 @@ use std::{collections::{BTreeSet, HashMap}, rc::Rc};
 
 use crate::{
     enum_cast,
-    parse::ast::{ArgsOrEnc, Binop, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags, Uop, Tag, QuotientReference, FullType},
+    parse::ast::{ArgsOrEnc, Binop, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags, Uop, Tag, QuotientReference, FullType}, lower::tuple_id,
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -13,7 +13,7 @@ use crate::{
     parse::ast::{Name, SchedStmt, SchedTerm},
 };
 
-use super::{RET_VAR, Specs};
+use super::Specs;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TripleTag {
@@ -209,11 +209,20 @@ impl HirFuncCall {
                 return Self {
                     target: name,
                     args,
-                    tag: TripleTag::from_opt(&value.tag, specs),
+                    tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag, specs)),
                 };
             }
         }
         panic!("Invalid internal function call")
+    }
+
+    fn to_tuple_tag(mut tag: TripleTag) -> TripleTag {
+        if let Some(val) = tag.value.as_mut() {
+            if let Some(qv) = val.quot_var.as_mut() {
+                qv.spec_var = qv.spec_var.as_ref().map(|sv| tuple_id(&[sv.clone()]));
+            }
+        }
+        tag
     }
 }
 
@@ -248,14 +257,16 @@ pub enum Terminator {
     /// For returning from the function, the destination variables are
     /// `_out0`, `_out1`, etc.
     Return {
+        /// The destination names and tags for the return values in the **parent** scope
         dests: Vec<(String, TripleTag)>,
+        /// The returned variables in the child scope
         rets: Vec<String>,
     },
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
     /// for final block in the canonical CFG. Takes an argument which is
-    /// how many return values there are. Essentially returns `_out0` to `_out{n-1}`
-    FinalReturn(usize),
+    /// the names of the return values. Essentially returns `_out0` to `_out{n-1}`
+    FinalReturn(Vec<String>),
     /// No terminator, continue to the next block. A `None` terminator is just
     /// a temporary value until live vars and tag analysis can be done to know
     /// what the output variables are for the `Next` terminator
@@ -326,10 +337,8 @@ impl Hir for Terminator {
                     uses.insert(node.clone());
                 }
             }
-            Self::FinalReturn(n) => {
-                for i in 0..*n {
-                    uses.insert(format!("{RET_VAR}{i}"));
-                }
+            Self::FinalReturn(names) => {
+                uses.extend(names.iter().cloned());
             }
             Self::None => (),
         }
@@ -345,12 +354,12 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Return { rets, .. } | Self::Next(rets) => {
+            Self::Return { rets, .. } | Self::Next(rets) | Self::FinalReturn(rets) => {
                 for node in rets {
                     *node = f(node, UseType::Read);
                 }
             }
-            Self::FinalReturn(_) | Self::None => (),
+            Self::None => (),
         }
     }
 

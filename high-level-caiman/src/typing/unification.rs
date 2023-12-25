@@ -7,7 +7,7 @@ pub trait Kind: Clone + PartialEq + Eq + std::fmt::Debug {}
 
 /// A node in a type expression. Nodes are agnostic to the actual type
 /// system being used.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 enum Node<T, A>
 where
     T: Kind,
@@ -32,6 +32,44 @@ where
     },
     /// A concrete base type
     Atom(A),
+}
+
+impl<T: Kind, A: Kind> std::fmt::Debug for Node<T, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var {
+                parent,
+                id,
+                class_id,
+            } => {
+                write!(f, "({id}")?;
+                if let Some(id) = class_id {
+                    write!(f, ":{id}, ")?;
+                } else {
+                    write!(f, ", ")?;
+                }
+                write!(f, "parent: {parent:?}")
+            }
+            Self::Term {
+                parent,
+                op,
+                args,
+                class_id,
+            } => {
+                write!(f, "({op:?}")?;
+                if let Some(id) = class_id {
+                    write!(f, ":{id}, ")?;
+                } else {
+                    write!(f, ", ")?;
+                }
+                for a in args {
+                    write!(f, "{:?}, ", a.borrow())?;
+                }
+                write!(f, "parent: {parent:?})")
+            }
+            Self::Atom(a) => write!(f, "{a:?}"),
+        }
+    }
 }
 
 impl<T: Kind, A: Kind> Node<T, A> {
@@ -161,6 +199,10 @@ fn union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
         (Node::Atom(_), _) | (_, Node::Atom(_))
     ) {
         if a.borrow().get_class().is_some() {
+            assert!(
+                b.borrow().get_class().is_none()
+                    || b.borrow().get_class() == a.borrow().get_class()
+            );
             *b.borrow_mut().get_class_mut() = a.borrow().get_class().clone();
         } else {
             *a.borrow_mut().get_class_mut() = b.borrow().get_class().clone();
@@ -228,10 +270,12 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
             },
         ) => {
             if op_a != op_b || a_args.len() != b_args.len() {
+                //panic!("Unification failed");
                 return false;
             }
             for (a, b) in a_args.iter().zip(b_args.iter()) {
                 if !unify(a, b) {
+                    //panic!("Unification failed");
                     return false;
                 }
             }
@@ -363,14 +407,18 @@ impl<T: Kind, A: Kind> Env<T, A> {
         var: &NodePtr<T, A>,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
+        #![allow(clippy::similar_names)]
         let c = self.contraint_to_node(constraint);
         if unify(var, &c) {
             Ok(())
         } else {
+            let v_r = representative(var);
+            let c_r = representative(&c);
+            assert_ne!(v_r, c_r, "WTF");
             Err(format!(
-                "{:?} != {:?}",
-                representative(var),
-                representative(&c)
+                "variable {:#?} != constraint {:#?}",
+                *v_r.borrow(),
+                *c_r.borrow()
             ))
         }
     }

@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    analysis::compute_continuations, stmts_to_hir, HirBody, HirFuncCall, Specs, Terminator,
-    TripleTag,
+    analysis::{compute_continuations, Succs},
+    stmts_to_hir, HirBody, HirFuncCall, Specs, Terminator, TripleTag,
 };
 
 /// The id of the final block of the canonicalized CFG.
@@ -94,6 +94,7 @@ pub struct Cfg {
     pub blocks: HashMap<usize, BasicBlock>,
     pub(super) graph: HashMap<usize, Edge>,
     pub(super) transpose_graph: HashMap<usize, BTreeSet<usize>>,
+    pub(super) succs: Succs,
 }
 
 /// Make a basic block from the current statements, giving it the next id
@@ -672,7 +673,11 @@ impl Cfg {
             BasicBlock {
                 id: FINAL_BLOCK_ID,
                 stmts: vec![],
-                terminator: Terminator::FinalReturn(outputs.len()),
+                terminator: Terminator::FinalReturn(
+                    (0..outputs.len())
+                        .map(|id| format!("{RET_VAR}{id}"))
+                        .collect(),
+                ),
                 ret_block: None,
                 src_loc: Info::default(),
             },
@@ -698,6 +703,7 @@ impl Cfg {
                 blocks,
                 transpose_graph: Self::transpose(&edges),
                 graph: edges,
+                succs: Succs::default(),
             }
             .remove_unreachable(),
         )
@@ -707,6 +713,7 @@ impl Cfg {
     fn transpose(graph: &HashMap<usize, Edge>) -> HashMap<usize, BTreeSet<usize>> {
         let mut res = HashMap::new();
         for (id, edge) in graph {
+            res.entry(*id).or_insert_with(BTreeSet::new);
             match edge {
                 Edge::Next(next) => {
                     res.entry(*next).or_insert_with(BTreeSet::new).insert(*id);

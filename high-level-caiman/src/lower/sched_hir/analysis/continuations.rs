@@ -3,7 +3,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::lower::sched_hir::cfg::{Cfg, NextSet};
 
-struct Succs {
+/// Successor information. We consider a block to be a successor of itself
+/// in this data structure.
+#[derive(Debug, Clone, Default)]
+pub struct Succs {
     /// A map from each block to the transitive closure of nodes that are
     /// successors of the key. We consider a block to be a successor of itself
     /// in this map.
@@ -112,10 +115,11 @@ fn shortest_path<T: NextSet>(graph: &HashMap<usize, T>, start_id: usize) -> Hash
 /// will work fine.
 #[must_use]
 pub fn compute_continuations(mut cfg: Cfg) -> Cfg {
-    let merge_points = compute_merge_points(&cfg, &cfg.graph, &cfg.transpose_graph);
+    let (merge_points, succs) = compute_merge_points(&cfg, &cfg.graph, &cfg.transpose_graph);
     for (block_id, block) in &mut cfg.blocks {
         block.ret_block = merge_points.get(block_id).copied();
     }
+    cfg.succs = succs;
     cfg
 }
 
@@ -123,7 +127,7 @@ pub fn compute_continuations(mut cfg: Cfg) -> Cfg {
 /// `A` is the continuation of `B`.
 #[must_use]
 pub fn compute_pretinuations(cfg: &Cfg) -> HashMap<usize, usize> {
-    compute_merge_points(cfg, &cfg.transpose_graph, &cfg.graph)
+    compute_merge_points(cfg, &cfg.transpose_graph, &cfg.graph).0
 }
 
 /// Computes "merge points" of every block in the CFG. A merge point is the
@@ -140,7 +144,7 @@ fn compute_merge_points<T: NextSet, U: NextSet>(
     cfg: &Cfg,
     graph: &HashMap<usize, T>,
     preds: &HashMap<usize, U>,
-) -> HashMap<usize, usize> {
+) -> (HashMap<usize, usize>, Succs) {
     let succs = compute_sucessors(cfg, graph, preds);
     let mut res = HashMap::new();
 
@@ -165,5 +169,5 @@ fn compute_merge_points<T: NextSet, U: NextSet>(
             res.insert(*block_id, *cont_id);
         }
     }
-    res
+    (res, succs)
 }

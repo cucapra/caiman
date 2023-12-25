@@ -204,12 +204,22 @@ impl From<DataType> for DTypeConstraint {
 pub struct MetaVar(String);
 
 impl MetaVar {
+    /// Returns true if the metavariable starts with the given character
+    #[must_use]
     pub fn starts_with(&self, c: char) -> bool {
         self.0.starts_with(c)
     }
 
+    /// Creates a type equivalence class name
+    #[must_use]
     pub fn new_class_name(s: &String) -> Self {
         Self(format!("${s}"))
+    }
+
+    /// Creates a type variable name
+    #[must_use]
+    pub fn new_var_name(s: &String) -> Self {
+        Self(s.to_string())
     }
 }
 
@@ -282,12 +292,15 @@ impl ValQuot {
     }
 
     /// Returns the type of the value quotient
+    #[must_use]
     pub fn get_type(&self) -> VQType {
         self.into()
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Classifications of value quotients. These correspond to the nodes
+/// in the value specification resource graph.
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum VQType {
     Int(String),
     Float(String),
@@ -298,6 +311,22 @@ pub enum VQType {
     Extract(usize),
     Bop(Binop),
     Select,
+}
+
+impl std::fmt::Debug for VQType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(i) => write!(f, "Int({i})"),
+            Self::Float(i) => write!(f, "Float({i})"),
+            Self::Bool(b) => write!(f, "Bool({b})"),
+            Self::Input(i) => write!(f, "Input({i})"),
+            Self::Output(i) => write!(f, "Output({i})"),
+            Self::Call(i) => write!(f, "Call({i})"),
+            Self::Extract(i) => write!(f, "Extract({i})"),
+            Self::Bop(op) => write!(f, "Bop({op:?})"),
+            Self::Select => write!(f, "Select"),
+        }
+    }
 }
 
 impl From<&ValQuot> for VQType {

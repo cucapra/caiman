@@ -13,7 +13,7 @@ use super::{
     hir::HirInstr,
 };
 
-pub use continuations::compute_continuations;
+pub use continuations::{compute_continuations, Succs};
 pub use op_transform::op_transform_pass;
 pub use quot_typing::deduce_val_quots;
 pub use refs::deref_transform_pass;
