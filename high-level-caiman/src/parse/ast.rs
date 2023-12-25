@@ -217,7 +217,7 @@ pub enum SpecStmt {
     Returns(Info, SpecExpr),
 }
 /// AST-level quotient (once merged, we can use the ir enum)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Quotient {
     Node,
     None,
@@ -226,7 +226,7 @@ pub enum Quotient {
 }
 
 /// AST-level flow (once merged, we can use the ir enum)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Flow {
     Usable,
     Save,

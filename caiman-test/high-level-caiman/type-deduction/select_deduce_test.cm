@@ -1,0 +1,31 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    b :- false
+    one :- 1
+    two :- 2
+    r :- one if b else two
+    returns r
+}
+
+fn foo() -> i64 @ node(main.r)
+    impls main, time, space
+{
+    let b = false;
+    var v @ none(main);
+    if b {
+        let one = 1;
+        v = one;
+    } else {
+        let two = 2;
+        v = two;
+    }
+    @in { v: none(space)-save };
+    v
+}
+
+pipeline main { foo }

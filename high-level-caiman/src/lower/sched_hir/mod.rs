@@ -451,7 +451,7 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(mut f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
+    pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
         let mut cfg = Cfg::new(f.statements, &f.output, specs);
         let (mut types, mut data_types) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
@@ -462,20 +462,20 @@ impl Funclets {
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         cfg = transform_to_ssa(cfg, &live_vars);
         let specs_rc = Rc::new(specs.clone());
-        let hir_inputs: Vec<_> = f
+        let mut hir_inputs: Vec<_> = f
             .input
             .iter()
             .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ, &specs_rc)))
             .collect();
-        let hir_outputs: Vec<_> = f
+        let mut hir_outputs: Vec<_> = f
             .output
             .iter()
             .map(|typ| TripleTag::from_fulltype(typ, &specs_rc))
             .collect();
 
         deduce_val_quots(
-            &mut f.input,
-            &mut f.output,
+            &mut hir_inputs,
+            &mut hir_outputs,
             &mut cfg,
             &ctx.specs[&specs.value.0],
             ctx,

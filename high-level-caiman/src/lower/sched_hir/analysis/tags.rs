@@ -275,6 +275,10 @@ impl TagAnalysis {
     }
 }
 
+// fn meet_tag_info(a: &mut TagInfo, b: &TagInfo) {}
+
+// fn meet_tag(a: &mut Option<asm::Tag>, b: &asm::Tag) {}
+
 impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {

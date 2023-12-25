@@ -100,6 +100,32 @@ impl TripleTag {
     }
 }
 
+impl From<TripleTag> for Tags {
+    fn from(val: TripleTag) -> Self {
+        let mut tags = Self::new();
+        if let Some(value) = val.value {
+            tags.push(value);
+        }
+        if let Some(spatial) = val.spatial {
+            tags.push(spatial);
+        }
+        if let Some(timeline) = val.timeline {
+            tags.push(timeline);
+        }
+        tags
+    }
+}
+
+impl From<TripleTag> for Option<Tags> {
+    fn from(val: TripleTag) -> Self {
+        if val.is_any_specified() {
+            Some(val.into())
+        } else {
+            None
+        }
+    }
+}
+
 /// High-level caiman IR, excluding tail edges.
 ///
 /// This is an intermediary representation for going from the frontend to assembly.
