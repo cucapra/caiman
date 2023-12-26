@@ -223,6 +223,7 @@ impl MetaVar {
     }
 
     /// Returns the string representation of the metavariable
+    #[must_use]
     pub fn into_string(self) -> String {
         self.0
     }

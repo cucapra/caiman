@@ -611,13 +611,9 @@ fn fill_type_info(
                 fill_val_quotient(&selects[&block.id], tag, env, specs);
             }
             Terminator::Call(..) | Terminator::None => unreachable!(),
-            Terminator::Return { .. } => {
-                // TODO
-                // for (dest, tag) in dests {
-                //     fill_val_quotient(dest, tag, env, specs);
-                // }
-            }
-            Terminator::Next(..) | Terminator::FinalReturn(..) => {}
+            // TODO: check the return, I think this is right bc returns should be handled
+            // by Phi nodes
+            Terminator::Next(..) | Terminator::FinalReturn(..) | Terminator::Return { .. } => {}
         }
         while let Some((idx, stmt)) = insertions.pop() {
             block.stmts.insert(idx, stmt);
