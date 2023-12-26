@@ -208,6 +208,8 @@ impl TagAnalysis {
                 if rhs.is_none() {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
+                    } else {
+                        info.value = Some(none_tag(&self.specs.value, ir::Flow::Dead));
                     }
                 }
                 if info.spatial.is_none() {
@@ -275,19 +277,35 @@ impl TagAnalysis {
     }
 }
 
-// fn meet_tag_info(a: &mut TagInfo, b: &TagInfo) {}
+fn meet_tag_info(a: &mut TagInfo, b: &TagInfo) {
+    if a.value != b.value {
+        a.value = None;
+    }
 
-// fn meet_tag(a: &mut Option<asm::Tag>, b: &asm::Tag) {}
+    if a.spatial != b.spatial {
+        a.spatial = None;
+    }
+
+    if a.timeline != b.timeline {
+        a.timeline = None;
+    }
+}
 
 impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
             match self.tags.entry(k.to_string()) {
-                Entry::Occupied(old_v) => {
+                Entry::Occupied(mut old_v) => {
                     if old_v.get() != v {
                         // We can't infer the tag, require it to be specified
-                        old_v.remove_entry();
+                        meet_tag_info(old_v.get_mut(), v);
+                        if old_v.get().value.is_none()
+                            && old_v.get().spatial.is_none()
+                            && old_v.get().timeline.is_none()
+                        {
+                            old_v.remove_entry();
+                        }
                     }
                     // assert_eq!(old_v.get(), v, "Duplicate key {k} with unequal values");
                 }

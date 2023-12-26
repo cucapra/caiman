@@ -16,7 +16,7 @@ fn foo() -> i64 @ node(main.r)
     impls main, time, space
 {
     let b = false;
-    var v @ none(main);
+    var v;
     if b {
         let one = 1;
         v = one;
@@ -24,7 +24,6 @@ fn foo() -> i64 @ node(main.r)
         let two = 2;
         v = two;
     }
-    @in { v: none(space)-save };
     v
 }
 

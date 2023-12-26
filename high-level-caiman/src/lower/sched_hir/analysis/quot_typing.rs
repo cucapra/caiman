@@ -647,7 +647,19 @@ fn fill_io_type_info(
             if quot.is_none() {
                 *quot = Some(Quotient::Output);
             }
+        } else {
+            tag.value = Some(Tag {
+                info: Info::default(),
+                quot: Some(Quotient::Output),
+                quot_var: None,
+                flow: None,
+            });
         }
-        fill_val_quotient(&output_class, tag, env, specs);
+        fill_val_quotient(
+            &MetaVar::new_class_name(&output_class).into_string(),
+            tag,
+            env,
+            specs,
+        );
     }
 }

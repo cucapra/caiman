@@ -679,7 +679,7 @@ Program {
                                 name: None,
                                 node: LocalDoBuiltin {
                                     operation: Some(
-                                        None(
+                                        Node(
                                             Some(
                                                 RemoteNodeId {
                                                     funclet: Some(
@@ -687,7 +687,11 @@ Program {
                                                             "main",
                                                         ),
                                                     ),
-                                                    node: None,
+                                                    node: Some(
+                                                        NodeId(
+                                                            "b",
+                                                        ),
+                                                    ),
                                                 },
                                             ),
                                         ),
@@ -1197,7 +1201,7 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: None(
+                                    quot: Node(
                                         Some(
                                             RemoteNodeId {
                                                 funclet: Some(
@@ -1205,7 +1209,11 @@ Program {
                                                         "main",
                                                     ),
                                                 ),
-                                                node: None,
+                                                node: Some(
+                                                    NodeId(
+                                                        "one",
+                                                    ),
+                                                ),
                                             },
                                         ),
                                     ),
@@ -1303,7 +1311,7 @@ Program {
                                 name: None,
                                 node: LocalDoBuiltin {
                                     operation: Some(
-                                        None(
+                                        Node(
                                             Some(
                                                 RemoteNodeId {
                                                     funclet: Some(
@@ -1311,7 +1319,11 @@ Program {
                                                             "main",
                                                         ),
                                                     ),
-                                                    node: None,
+                                                    node: Some(
+                                                        NodeId(
+                                                            "one",
+                                                        ),
+                                                    ),
                                                 },
                                             ),
                                         ),
@@ -1361,7 +1373,7 @@ Program {
                                 name: None,
                                 node: LocalDoBuiltin {
                                     operation: Some(
-                                        None(
+                                        Node(
                                             Some(
                                                 RemoteNodeId {
                                                     funclet: Some(
@@ -1369,7 +1381,11 @@ Program {
                                                             "main",
                                                         ),
                                                     ),
-                                                    node: None,
+                                                    node: Some(
+                                                        NodeId(
+                                                            "one",
+                                                        ),
+                                                    ),
                                                 },
                                             ),
                                         ),
@@ -1482,7 +1498,7 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: None(
+                                    quot: Node(
                                         Some(
                                             RemoteNodeId {
                                                 funclet: Some(
@@ -1490,7 +1506,11 @@ Program {
                                                         "main",
                                                     ),
                                                 ),
-                                                node: None,
+                                                node: Some(
+                                                    NodeId(
+                                                        "two",
+                                                    ),
+                                                ),
                                             },
                                         ),
                                     ),
@@ -1588,7 +1608,7 @@ Program {
                                 name: None,
                                 node: LocalDoBuiltin {
                                     operation: Some(
-                                        None(
+                                        Node(
                                             Some(
                                                 RemoteNodeId {
                                                     funclet: Some(
@@ -1596,7 +1616,11 @@ Program {
                                                             "main",
                                                         ),
                                                     ),
-                                                    node: None,
+                                                    node: Some(
+                                                        NodeId(
+                                                            "two",
+                                                        ),
+                                                    ),
                                                 },
                                             ),
                                         ),
@@ -1646,7 +1670,7 @@ Program {
                                 name: None,
                                 node: LocalDoBuiltin {
                                     operation: Some(
-                                        None(
+                                        Node(
                                             Some(
                                                 RemoteNodeId {
                                                     funclet: Some(
@@ -1654,7 +1678,11 @@ Program {
                                                             "main",
                                                         ),
                                                     ),
-                                                    node: None,
+                                                    node: Some(
+                                                        NodeId(
+                                                            "two",
+                                                        ),
+                                                    ),
                                                 },
                                             ),
                                         ),

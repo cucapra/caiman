@@ -34,9 +34,9 @@ pub struct NodeEnv {
     /// Map of quotient type to a map between quotients and their equivalence
     /// class names.
     spec_nodes: HashMap<VQType, HashMap<ValQuot, HashSet<String>>>,
-    /// List of input node class names.
+    /// List of input node class names, without the leading `$` symbol.
     inputs: Vec<String>,
-    /// List of output node class names.
+    /// List of output node class names, without the leading `$` symbol.
     outputs: Vec<String>,
 }
 
@@ -65,10 +65,10 @@ impl NodeEnv {
     /// be added to the environment.
     pub fn add_quotient(&mut self, class_name: &str, constraint: ValQuot) {
         assert!(!class_name.contains('$'));
-        let class_name = format!("${class_name}");
         if let ValQuot::Input(_) = &constraint {
             self.inputs.push(class_name.to_string());
         }
+        let class_name = format!("${class_name}");
         self.env
             .add_class_constraint(&class_name, &From::from(&constraint))
             .unwrap();
@@ -81,10 +81,14 @@ impl NodeEnv {
     }
 
     /// Sets the qotient classes of the outputs.
+    /// # Panics
+    /// If any of the class names contain a `$`.
     pub fn set_output_classes(&mut self, classes: &[String]) {
-        self.outputs = classes.iter().map(|x| format!("${x}")).collect();
+        assert!(classes.iter().all(|x| !x.contains('$')));
+        self.outputs = classes.to_vec();
     }
 
+    /// Gets the output classes, without the leading `$` symbol.
     #[must_use]
     pub fn get_output_classes(&self) -> &[String] {
         &self.outputs

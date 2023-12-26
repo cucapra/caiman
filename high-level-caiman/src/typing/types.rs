@@ -221,6 +221,11 @@ impl MetaVar {
     pub fn new_var_name(s: &String) -> Self {
         Self(s.to_string())
     }
+
+    /// Returns the string representation of the metavariable
+    pub fn into_string(self) -> String {
+        self.0
+    }
 }
 
 /// A constraint on a value quotient
