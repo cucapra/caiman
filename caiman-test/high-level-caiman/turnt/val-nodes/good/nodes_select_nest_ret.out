@@ -1,0 +1,3215 @@
+Program {
+    path: "",
+    version: Version {
+        major: 0,
+        minor: 0,
+        detailed: 2,
+    },
+    declarations: [
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "BufferSpace",
+                    data: BufferSpace,
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "Event",
+                    data: Event,
+                },
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                I64,
+            ),
+        ),
+        TypeDecl(
+            FFI(
+                I32,
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "bool",
+                    data: NativeValue {
+                        storage_type: FFI(
+                            I32,
+                        ),
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "&bool",
+                    data: Ref {
+                        storage_type: FFI(
+                            I32,
+                        ),
+                        storage_place: Local,
+                        buffer_flags: BufferFlags {
+                            map_read: false,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: false,
+                            storage: false,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i64",
+                    data: NativeValue {
+                        storage_type: FFI(
+                            I64,
+                        ),
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "&i64",
+                    data: Ref {
+                        storage_type: FFI(
+                            I64,
+                        ),
+                        storage_place: Local,
+                        buffer_flags: BufferFlags {
+                            map_read: false,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: false,
+                            storage: false,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "i32",
+                    data: NativeValue {
+                        storage_type: FFI(
+                            I32,
+                        ),
+                    },
+                },
+            ),
+        ),
+        TypeDecl(
+            Local(
+                LocalType {
+                    name: "&i32",
+                    data: Ref {
+                        storage_type: FFI(
+                            I32,
+                        ),
+                        storage_place: Local,
+                        buffer_flags: BufferFlags {
+                            map_read: false,
+                            map_write: false,
+                            copy_src: false,
+                            copy_dst: false,
+                            storage: false,
+                            uniform: false,
+                        },
+                    },
+                },
+            ),
+        ),
+        Funclet(
+            Funclet {
+                kind: Timeline,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "time",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "e",
+                                ),
+                            ),
+                            typ: Local(
+                                "Event",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "Event",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    binding: None,
+                },
+                commands: [
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "e",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: Spatial,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "space",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "bs",
+                                ),
+                            ),
+                            typ: Local(
+                                "BufferSpace",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "BufferSpace",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    binding: None,
+                },
+                commands: [
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "bs",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: Value,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "main",
+                    ),
+                    args: [],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [],
+                        },
+                    ],
+                    binding: ValueBinding(
+                        FunctionClassBinding {
+                            default: false,
+                            function_class: FunctionClassId(
+                                "main",
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f0",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Some(
+                                        "0",
+                                    ),
+                                    type_id: Some(
+                                        Local(
+                                            "bool",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f1",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Some(
+                                        "1",
+                                    ),
+                                    type_id: Some(
+                                        Local(
+                                            "bool",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f2",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Some(
+                                        "1",
+                                    ),
+                                    type_id: Some(
+                                        Local(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f3",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Some(
+                                        "2",
+                                    ),
+                                    type_id: Some(
+                                        Local(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f4",
+                                    ),
+                                ),
+                                node: Select {
+                                    condition: Some(
+                                        NodeId(
+                                            "_f1",
+                                        ),
+                                    ),
+                                    true_case: Some(
+                                        NodeId(
+                                            "_f2",
+                                        ),
+                                    ),
+                                    false_case: Some(
+                                        NodeId(
+                                            "_f3",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f5",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Some(
+                                        "0",
+                                    ),
+                                    type_id: Some(
+                                        Local(
+                                            "bool",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f6",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Some(
+                                        "3",
+                                    ),
+                                    type_id: Some(
+                                        Local(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f7",
+                                    ),
+                                ),
+                                node: Constant {
+                                    value: Some(
+                                        "4",
+                                    ),
+                                    type_id: Some(
+                                        Local(
+                                            "i64",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f8",
+                                    ),
+                                ),
+                                node: Select {
+                                    condition: Some(
+                                        NodeId(
+                                            "_f5",
+                                        ),
+                                    ),
+                                    true_case: Some(
+                                        NodeId(
+                                            "_f6",
+                                        ),
+                                    ),
+                                    false_case: Some(
+                                        NodeId(
+                                            "_f7",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f9",
+                                    ),
+                                ),
+                                node: Select {
+                                    condition: Some(
+                                        NodeId(
+                                            "_f0",
+                                        ),
+                                    ),
+                                    true_case: Some(
+                                        NodeId(
+                                            "_f4",
+                                        ),
+                                    ),
+                                    false_case: Some(
+                                        NodeId(
+                                            "_f8",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_f9",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "main",
+                ),
+                input_types: [],
+                output_types: [
+                    Local(
+                        "i64",
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo0",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Output(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f9",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Output(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f9",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_out0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "foo",
+                    ),
+                    args: [],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Output(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f9",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I32,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f0",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f0_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I32,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: DefaultJoin,
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                                node: InlineJoin {
+                                    funclet: Some(
+                                        FuncletId(
+                                            "_foo2",
+                                        ),
+                                    ),
+                                    captures: Some(
+                                        [],
+                                    ),
+                                    continuation: Some(
+                                        NodeId(
+                                            "_t1",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            ScheduleSelect {
+                                value_operation: Some(
+                                    Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f9",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                timeline_operation: Some(
+                                    None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                spatial_operation: Some(
+                                    None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                condition: Some(
+                                    NodeId(
+                                        "_f0_0",
+                                    ),
+                                ),
+                                callee_funclet_ids: Some(
+                                    [
+                                        Some(
+                                            FuncletId(
+                                                "_foo3",
+                                            ),
+                                        ),
+                                        Some(
+                                            FuncletId(
+                                                "_foo7",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                callee_arguments: Some(
+                                    [],
+                                ),
+                                continuation_join: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo2",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v_2",
+                                ),
+                            ),
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f9",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Output(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f9",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: DefaultJoin,
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: InlineJoin {
+                                    funclet: Some(
+                                        FuncletId(
+                                            "_foo0",
+                                        ),
+                                    ),
+                                    captures: Some(
+                                        [],
+                                    ),
+                                    continuation: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            Jump {
+                                join: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                arguments: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "v_2",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo3",
+                    ),
+                    args: [],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f4",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I32,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f1",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f1_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I32,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: DefaultJoin,
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                                node: InlineJoin {
+                                    funclet: Some(
+                                        FuncletId(
+                                            "_foo4",
+                                        ),
+                                    ),
+                                    captures: Some(
+                                        [],
+                                    ),
+                                    continuation: Some(
+                                        NodeId(
+                                            "_t1",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            ScheduleSelect {
+                                value_operation: Some(
+                                    Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f4",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                timeline_operation: Some(
+                                    None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                spatial_operation: Some(
+                                    None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                condition: Some(
+                                    NodeId(
+                                        "_f1_0",
+                                    ),
+                                ),
+                                callee_funclet_ids: Some(
+                                    [
+                                        Some(
+                                            FuncletId(
+                                                "_foo5",
+                                            ),
+                                        ),
+                                        Some(
+                                            FuncletId(
+                                                "_foo6",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                callee_arguments: Some(
+                                    [],
+                                ),
+                                continuation_join: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo4",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "v_0",
+                                ),
+                            ),
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f4",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f4",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "v_0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo5",
+                    ),
+                    args: [],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f2",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f2",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f2_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_f2_0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo6",
+                    ),
+                    args: [],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f3",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f3",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f3_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_f3_0",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo7",
+                    ),
+                    args: [],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f8",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Save,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_v_1_ref",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I32,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f5",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f4_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I32,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t1",
+                                    ),
+                                ),
+                                node: DefaultJoin,
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                                node: InlineJoin {
+                                    funclet: Some(
+                                        FuncletId(
+                                            "_foo8",
+                                        ),
+                                    ),
+                                    captures: Some(
+                                        [],
+                                    ),
+                                    continuation: Some(
+                                        NodeId(
+                                            "_t1",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            ScheduleSelect {
+                                value_operation: Some(
+                                    Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f8",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                timeline_operation: Some(
+                                    None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                spatial_operation: Some(
+                                    None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                ),
+                                condition: Some(
+                                    NodeId(
+                                        "_f4_0",
+                                    ),
+                                ),
+                                callee_funclet_ids: Some(
+                                    [
+                                        Some(
+                                            FuncletId(
+                                                "_foo9",
+                                            ),
+                                        ),
+                                        Some(
+                                            FuncletId(
+                                                "_foo10",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                callee_arguments: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_v_1_ref",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                continuation_join: Some(
+                                    NodeId(
+                                        "_t2",
+                                    ),
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo8",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_v_1_ref",
+                                ),
+                            ),
+                            typ: Local(
+                                "&i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f8",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Save,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f8",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Save,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_0v_1",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_v_1_ref",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_0v_1",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo9",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_v_1_ref",
+                                ),
+                            ),
+                            typ: Local(
+                                "&i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Dead,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Save,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "&i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f6",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Save,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f6",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f5_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f6",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_v_1_ref",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_v_1_ref",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Funclet(
+            Funclet {
+                kind: ScheduleExplicit,
+                header: FuncletHeader {
+                    name: FuncletId(
+                        "_foo10",
+                    ),
+                    args: [
+                        FuncletArgument {
+                            name: Some(
+                                NodeId(
+                                    "_v_1_ref",
+                                ),
+                            ),
+                            typ: Local(
+                                "&i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Dead,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Save,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    ret: [
+                        FuncletArgument {
+                            name: None,
+                            typ: Local(
+                                "&i64",
+                            ),
+                            tags: [
+                                Tag {
+                                    quot: Node(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "main",
+                                                    ),
+                                                ),
+                                                node: Some(
+                                                    NodeId(
+                                                        "_f7",
+                                                    ),
+                                                ),
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "space",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Save,
+                                },
+                                Tag {
+                                    quot: None(
+                                        Some(
+                                            RemoteNodeId {
+                                                funclet: Some(
+                                                    FuncletId(
+                                                        "time",
+                                                    ),
+                                                ),
+                                                node: None,
+                                            },
+                                        ),
+                                    ),
+                                    flow: Usable,
+                                },
+                            ],
+                        },
+                    ],
+                    binding: ScheduleBinding(
+                        ScheduleBinding {
+                            implicit_tags: None,
+                            value: Some(
+                                FuncletId(
+                                    "main",
+                                ),
+                            ),
+                            timeline: Some(
+                                FuncletId(
+                                    "time",
+                                ),
+                            ),
+                            spatial: Some(
+                                FuncletId(
+                                    "space",
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                commands: [
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_t0",
+                                    ),
+                                ),
+                                node: AllocTemporary {
+                                    place: Some(
+                                        Local,
+                                    ),
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    buffer_flags: Some(
+                                        BufferFlags {
+                                            map_read: false,
+                                            map_write: false,
+                                            copy_src: false,
+                                            copy_dst: false,
+                                            storage: false,
+                                            uniform: false,
+                                        },
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f7",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_t0",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "_f6_0",
+                                    ),
+                                ),
+                                node: ReadRef {
+                                    storage_type: Some(
+                                        FFI(
+                                            I64,
+                                        ),
+                                    ),
+                                    source: Some(
+                                        NodeId(
+                                            "_t0",
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: LocalDoBuiltin {
+                                    operation: Some(
+                                        Node(
+                                            Some(
+                                                RemoteNodeId {
+                                                    funclet: Some(
+                                                        FuncletId(
+                                                            "main",
+                                                        ),
+                                                    ),
+                                                    node: Some(
+                                                        NodeId(
+                                                            "_f7",
+                                                        ),
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                    inputs: Some(
+                                        [],
+                                    ),
+                                    outputs: Some(
+                                        [
+                                            Some(
+                                                NodeId(
+                                                    "_v_1_ref",
+                                                ),
+                                            ),
+                                        ],
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Some(
+                        TailEdge(
+                            Return {
+                                return_values: Some(
+                                    [
+                                        Some(
+                                            NodeId(
+                                                "_v_1_ref",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ),
+        Pipeline(
+            Pipeline {
+                name: "main",
+                funclet: FuncletId(
+                    "foo",
+                ),
+            },
+        ),
+    ],
+}

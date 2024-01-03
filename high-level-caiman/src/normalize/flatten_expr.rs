@@ -706,11 +706,12 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
             } => {
                 let (mut block, new_temp_num) = flatten_sched_rec(vec![*block], temp_num);
                 temp_num = new_temp_num;
-                assert_eq!(block.len(), 1);
+                let last = block.pop().unwrap();
+                res.extend(block);
                 res.push(SchedStmt::Seq {
                     info,
                     dests,
-                    block: Box::new(block.pop().unwrap()),
+                    block: Box::new(last),
                     is_const,
                 });
             }
