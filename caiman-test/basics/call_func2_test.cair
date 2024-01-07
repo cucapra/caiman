@@ -31,7 +31,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_head<none($time.%e)-usable, none($time.%e)-usable>() ->
-    [%out : none($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
+    [%out : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
 {
     %x_ref = alloc-temporary local [] i64;
     local-do-builtin node($val.%x)() -> %x_ref;
@@ -47,8 +47,8 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_ret<none($time.%e)-usable, none($time.%e)-usable>
-    (%y : none($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64) ->
-    [%out : none($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
+    (%y : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64) ->
+    [%out : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
 {
 
     return %y;
@@ -64,7 +64,7 @@ value[impl default @foo] %foo(%i : %ni64) -> i64 {
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_impl<none($time.%e)-usable, none($time.%e)-usable>
     (%arg : input($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
-    [%out : none($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64]
+    [%out : output($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64]
 {
     return %arg;
 }

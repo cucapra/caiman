@@ -1,0 +1,19 @@
+#version 0.1.0
+
+val find_closest(p: f32, pts: [f32; N], start: i64, end: i64, idx: i64) 
+    -> (f32, f32) 
+{
+    mdpt :- (start + end) / 2
+    nxt_idx :- 0 if idx else 1
+    len :- end - start
+    // mdpt +/- 1 so that we can also pick up the closest point on the other side of the border
+    nxt_start :- mdpt - 1 if idx == 0 && p.t0 >= pts[mdpt].t0 || 
+                            idx == 1 && p.t1 >= pts[mdpt].t1
+                        else start
+    nxt_end :- mdpt + 1 if idx == 0 && p.t0 < pts[mdpt].t0 ||
+                        idx == 1 && p.t1 < ptr[mdpt].t1
+                    else end
+    res :- find_closest(p, pts, nxt_start, nxt_end, nxt_idx) if len > LN else 
+            closest_point(p, pts[start .. end])
+    returns res
+}

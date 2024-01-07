@@ -1,4 +1,0 @@
-[envs.parse]
-command = """
-    ../../../../target/debug/hlc --parse {filename} 2>&1 > /dev/null \
-    | sed -n '/Error/,$p' | grep ."""

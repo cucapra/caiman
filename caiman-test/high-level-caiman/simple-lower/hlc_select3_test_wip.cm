@@ -1,0 +1,28 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    b :- true
+    one :- 1
+    two :- 2
+    r :- one if b else two
+    returns r
+}
+
+fn foo() -> i64 @ node(main.r)-usable 
+    impls main, time, space
+{
+    let b: bool @ node(main.b)-usable = false;
+    if @ node(main.r)-? b {
+        let one: i64 @ node(main.one)-usable = 1;
+        return one;
+    } else {
+        let two: i64 @ node(main.two)-usable = 2;
+        return two;
+    }
+}
+
+pipeline main { foo }

@@ -14,3 +14,6 @@ caiman-test/src/*
 # IDE
 *.sublime-project
 *.sublime-workspace
+
+# Generated parser files
+high-level-caiman/src/parse/parser.rs

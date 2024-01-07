@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)]
 use std::fmt;
 
 /// Struct containing information about a token's starting and ending
@@ -6,6 +7,18 @@ use std::fmt;
 pub struct Info {
     pub start_ln_and_col: (usize, usize),
     pub end_ln_and_col: (usize, usize),
+}
+
+impl Info {
+    /// Constructs a new `Info` struct that represents a range of characters
+    /// from `start` to `end`
+    #[must_use]
+    pub const fn new_range(start: &Self, end: &Self) -> Self {
+        Self {
+            start_ln_and_col: start.start_ln_and_col,
+            end_ln_and_col: end.end_ln_and_col,
+        }
+    }
 }
 
 impl std::fmt::Display for Info {
@@ -25,7 +38,7 @@ pub struct CustomParsingError {
 /// Constructs a custom parsing error
 /// ## Arguments
 /// * `$loc` - The location of the error
-/// * ...format_args - the arguments to the format macro which will format a message to display
+/// * ...`format_args` - the arguments to the format macro which will format a message to display
 #[macro_export]
 macro_rules! custom_parse_error {
     ($loc:expr, $($msg:expr),*) => {
@@ -45,12 +58,19 @@ pub trait HasInfo {
 pub enum ErrorKind {
     SyntaxParsing(String),
     IO(String),
+    TypeError(String),
 }
 
 pub enum ErrorLocation {
     // (Line, Column)
     Single(usize, usize),
     Double(Info),
+}
+
+impl From<Info> for ErrorLocation {
+    fn from(info: Info) -> Self {
+        Self::Double(info)
+    }
 }
 
 /// An error that occurs in a single file
@@ -77,21 +97,31 @@ impl fmt::Display for Error {
             }
         }
         match &self.error.kind {
-            ErrorKind::SyntaxParsing(e) => write!(f, "Parsing Error: {}", e),
-            ErrorKind::IO(e) => write!(f, "IO Error: {}", e),
+            ErrorKind::SyntaxParsing(e) => write!(f, "Parsing Error: {e}"),
+            ErrorKind::IO(e) => write!(f, "IO Error: {e}"),
+            ErrorKind::TypeError(e) => write!(f, "Type Error: {e}"),
         }
     }
 }
 
 impl std::process::Termination for Error {
     fn report(self) -> std::process::ExitCode {
-        eprintln!("{}", self);
+        eprintln!("{self}");
         std::process::ExitCode::FAILURE
     }
 }
 
 impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
+    }
+}
+
+/// Constructs a type error
+#[must_use]
+pub fn type_error(info: Info, msg: &str) -> LocalError {
+    LocalError {
+        kind: ErrorKind::TypeError(msg.to_string()),
+        location: info.into(),
     }
 }

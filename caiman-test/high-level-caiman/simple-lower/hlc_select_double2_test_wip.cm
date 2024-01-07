@@ -1,0 +1,53 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    b :- false
+    c :- true
+    d :- false
+    one :- 1
+    two :- 2
+    r :- c if b else d
+    z :- two if r else one
+    returns z
+}
+
+fn foo() -> i64 @ node(main.z)-usable 
+    impls main, time, space
+{
+    let b: bool @ node(main.b)-usable = false;
+    var v: i64 @ none(main)-dead;
+    if @ node(main.r)-? b {
+        var r: bool @ none(main)-dead;
+        let c: bool @ node(main.c)-usable = true;
+        r @ node(main.r)-usable = c;
+        if @ node(main.z)-? r {
+            let two: i64 @ node(main.two)-usable = 2;
+            v = two;
+        } else {
+            let one: i64 @ node(main.one)-usable = 1;
+            v = one;
+        }
+        @in { v: [node(main.z)-usable, none(space)-save] };
+        @out { v: [node(main.z)-usable, none(space)-save] };
+    } else {
+        var r: bool @ none(main)-dead;
+        let d: bool @ node(main.d)-usable = false;
+        r @ node(main.r)-usable = d;
+        if @ node(main.z)-? r {
+            let two: i64 @ node(main.two)-usable = 2;
+            v = two;
+        } else {
+            let one: i64 @ node(main.one)-usable = 1;
+            v = one;
+        }
+        @in { v: [node(main.z)-usable, none(space)-save] };
+        @out { v: [node(main.z)-usable, none(space)-save] };
+    }
+    return v;
+}
+
+pipeline main { foo }

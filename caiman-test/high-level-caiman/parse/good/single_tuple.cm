@@ -1,4 +1,0 @@
-#version 0.1.0
-val f(a: (i32,)) -> (f32,) {
-    returns a.t0
-}

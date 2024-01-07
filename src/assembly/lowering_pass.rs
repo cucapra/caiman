@@ -117,6 +117,17 @@ pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient
         let funclet_id = reject_hole(remote_id.funclet.as_ref());
         context.remote_node_id(funclet_id, node_id)
     }
+    fn get_output_node(remote_id: &ast::RemoteNodeId, context: &Context) -> usize {
+        let node_id = reject_hole(remote_id.node.as_ref());
+        let funclet_id = reject_hole(remote_id.funclet.as_ref());
+        context.variable_map[funclet_id]
+            .returns
+            .get_index(node_id)
+            .expect(&format!(
+                "Output node '{:?}' not found for funclet {:?}",
+                node_id, funclet_id
+            ))
+    }
     match quot {
         ast::Quotient::None(_) => ir::Quotient::None,
         ast::Quotient::Node(r) => ir::Quotient::Node {
@@ -126,7 +137,7 @@ pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient
             index: get_node(reject_hole(r.as_ref()), context),
         },
         ast::Quotient::Output(r) => ir::Quotient::Output {
-            index: get_node(reject_hole(r.as_ref()), context),
+            index: get_output_node(reject_hole(r.as_ref()), context),
         },
     }
 }
@@ -492,7 +503,12 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
             outputs,
         } => ir::Node::LocalDoExternal {
             operation: ir_quotient_node(reject_hole(operation.as_ref()), context),
-            external_function_id: Default::default(),
+            external_function_id: reject_hole(
+                context
+                    .funclet_indices
+                    .get_funclet(reject_hole(external_function_id.as_ref().map(|x| &x.0)))
+                    .map(ffi::ExternalFunctionId),
+            ),
             inputs: reject_hole(inputs.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
@@ -532,7 +548,12 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         } => ir::Node::EncodeDoExternal {
             encoder: context.node_id(reject_hole(encoder.as_ref())),
             operation: ir_quotient_node(reject_hole(operation.as_ref()), context),
-            external_function_id: Default::default(),
+            external_function_id: reject_hole(
+                context
+                    .funclet_indices
+                    .get_funclet(reject_hole(external_function_id.as_ref().map(|x| &x.0)))
+                    .map(ffi::ExternalFunctionId),
+            ),
             inputs: reject_hole(inputs.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))
@@ -649,11 +670,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
                 .collect(),
         },
         ast::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-            join: context
-                .funclet_indices
-                .get_funclet(&reject_hole(join.as_ref()).0)
-                .unwrap()
-                .clone(),
+            join: context.node_id(reject_hole(join.as_ref())),
             arguments: reject_hole(arguments.as_ref())
                 .iter()
                 .map(|n| context.node_id(reject_hole(n.as_ref())))

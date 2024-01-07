@@ -161,9 +161,18 @@ with_operations!(make_nodes);
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Quotient {
     None,
-    Node { node_id: usize },
-    Input { index: usize },
-    Output { index: usize },
+    Node {
+        /// Node id
+        node_id: usize,
+    },
+    Input {
+        index: usize,
+    },
+    /// Output quotient holding the index into the funclet's output array
+    Output {
+        /// The index into the funclet's output array
+        index: usize,
+    },
 }
 
 impl Default for Quotient {
@@ -176,10 +185,10 @@ impl Default for Quotient {
 // Encodes the "sign" of the data (this can be made more formal categorically as the interaction of adjunction pairs with a chirality structure)
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Flow {
-    Dead, // Does not transform, can only be discarded and not read
+    Dead,   // Does not transform, can only be discarded and not read
     Usable, // Transforms forwards with state changes
-    Need, // Transforms backwards with state changes
-    Save,  // Usable has met Need and associated state will not change, but can still be read
+    Need,   // Transforms backwards with state changes
+    Save,   // Usable has met Need and associated state will not change, but can still be read
 }
 
 // Save is a zero value that cannot be discarded or duplicated

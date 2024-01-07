@@ -1,0 +1,5 @@
+#version 0.1.0
+
+fn main() -> i64 impls f {
+    let usable = 10;
+}

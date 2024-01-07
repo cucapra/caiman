@@ -1,0 +1,15 @@
+[
+    Import {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                3,
+                15,
+            ),
+        },
+        path: "std_ops",
+    },
+]

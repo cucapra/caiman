@@ -35,7 +35,7 @@ value[impl @foo] %foo(%x : i32) -> i32 {
     return %y;
 }
 
-timeline %foo_time(%e : %event0) -> %event0 {
+timeline %foo_time(%e : %event0) -> [%e: %event0] {
     %enc = encoding-event %e [];
     %enc1 = extract %enc 0;
     %enc2 = extract %enc 1;

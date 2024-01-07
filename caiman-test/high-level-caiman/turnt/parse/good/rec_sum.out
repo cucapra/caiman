@@ -1,0 +1,1047 @@
+[
+    TimelineFunclet {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                3,
+                41,
+            ),
+        },
+        name: "tm",
+        input: [
+            (
+                "e",
+                Event,
+            ),
+        ],
+        output: (
+            None,
+            Event,
+        ),
+        statements: [
+            Returns(
+                Info {
+                    start_ln_and_col: (
+                        3,
+                        30,
+                    ),
+                    end_ln_and_col: (
+                        3,
+                        39,
+                    ),
+                },
+                Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                38,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                39,
+                            ),
+                        },
+                        name: "e",
+                    },
+                ),
+            ),
+        ],
+    },
+    SpatialFunclet {
+        info: Info {
+            start_ln_and_col: (
+                4,
+                1,
+            ),
+            end_ln_and_col: (
+                4,
+                55,
+            ),
+        },
+        name: "sp",
+        input: [
+            (
+                "bs",
+                BufferSpace,
+            ),
+        ],
+        output: (
+            None,
+            BufferSpace,
+        ),
+        statements: [
+            Returns(
+                Info {
+                    start_ln_and_col: (
+                        4,
+                        43,
+                    ),
+                    end_ln_and_col: (
+                        4,
+                        53,
+                    ),
+                },
+                Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                4,
+                                51,
+                            ),
+                            end_ln_and_col: (
+                                4,
+                                53,
+                            ),
+                        },
+                        name: "bs",
+                    },
+                ),
+            ),
+        ],
+    },
+    FunctionClass {
+        info: Info {
+            start_ln_and_col: (
+                6,
+                1,
+            ),
+            end_ln_and_col: (
+                8,
+                2,
+            ),
+        },
+        name: "main",
+        members: [
+            ValueFunclet {
+                info: Info {
+                    start_ln_and_col: (
+                        6,
+                        1,
+                    ),
+                    end_ln_and_col: (
+                        8,
+                        2,
+                    ),
+                },
+                name: "main",
+                input: [],
+                output: [
+                    (
+                        None,
+                        Int(
+                            I64,
+                        ),
+                    ),
+                ],
+                statements: [
+                    Returns(
+                        Info {
+                            start_ln_and_col: (
+                                7,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                24,
+                            ),
+                        },
+                        Term(
+                            Call {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        7,
+                                        13,
+                                    ),
+                                    end_ln_and_col: (
+                                        7,
+                                        24,
+                                    ),
+                                },
+                                function: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                7,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                7,
+                                                20,
+                                            ),
+                                        },
+                                        name: "rec_sum",
+                                    },
+                                ),
+                                args: [
+                                    Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    7,
+                                                    21,
+                                                ),
+                                                end_ln_and_col: (
+                                                    7,
+                                                    23,
+                                                ),
+                                            },
+                                            lit: Int(
+                                                "10",
+                                            ),
+                                        },
+                                    ),
+                                ],
+                                template: None,
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ],
+    },
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                10,
+                1,
+            ),
+            end_ln_and_col: (
+                15,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [],
+        output: [
+            FullType {
+                base: FlaggedType {
+                    info: Info {
+                        start_ln_and_col: (
+                            10,
+                            13,
+                        ),
+                        end_ln_and_col: (
+                            10,
+                            16,
+                        ),
+                    },
+                    base: Int(
+                        I64,
+                    ),
+                    flags: [],
+                    settings: [],
+                },
+                tags: [],
+            },
+        ],
+        specs: [
+            "main",
+            "tm",
+            "sp",
+        ],
+        statements: [
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        13,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        13,
+                        16,
+                    ),
+                },
+                lhs: [
+                    (
+                        "x",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    13,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    13,
+                                    15,
+                                ),
+                            },
+                            lit: Int(
+                                "10",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Return(
+                Info {
+                    start_ln_and_col: (
+                        14,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        14,
+                        20,
+                    ),
+                },
+                Term(
+                    Call(
+                        Info {
+                            start_ln_and_col: (
+                                14,
+                                12,
+                            ),
+                            end_ln_and_col: (
+                                14,
+                                19,
+                            ),
+                        },
+                        SchedFuncCall {
+                            target: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            14,
+                                            12,
+                                        ),
+                                        end_ln_and_col: (
+                                            14,
+                                            16,
+                                        ),
+                                    },
+                                    name: "head",
+                                    tag: None,
+                                },
+                            ),
+                            templates: None,
+                            args: Args(
+                                [
+                                    Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    14,
+                                                    17,
+                                                ),
+                                                end_ln_and_col: (
+                                                    14,
+                                                    18,
+                                                ),
+                                            },
+                                            name: "x",
+                                            tag: None,
+                                        },
+                                    ),
+                                ],
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            ),
+        ],
+    },
+    FunctionClass {
+        info: Info {
+            start_ln_and_col: (
+                17,
+                1,
+            ),
+            end_ln_and_col: (
+                21,
+                2,
+            ),
+        },
+        name: "rec_sum",
+        members: [
+            ValueFunclet {
+                info: Info {
+                    start_ln_and_col: (
+                        17,
+                        1,
+                    ),
+                    end_ln_and_col: (
+                        21,
+                        2,
+                    ),
+                },
+                name: "rec_sum",
+                input: [
+                    (
+                        "a",
+                        Int(
+                            I64,
+                        ),
+                    ),
+                ],
+                output: [
+                    (
+                        None,
+                        Int(
+                            I64,
+                        ),
+                    ),
+                ],
+                statements: [
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                18,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                18,
+                                30,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "rec",
+                                None,
+                            ),
+                        ],
+                        rhs: Binop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    18,
+                                    12,
+                                ),
+                                end_ln_and_col: (
+                                    18,
+                                    30,
+                                ),
+                            },
+                            op: Add,
+                            lhs: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            18,
+                                            12,
+                                        ),
+                                        end_ln_and_col: (
+                                            18,
+                                            13,
+                                        ),
+                                    },
+                                    name: "a",
+                                },
+                            ),
+                            rhs: Term(
+                                Call {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            18,
+                                            16,
+                                        ),
+                                        end_ln_and_col: (
+                                            18,
+                                            30,
+                                        ),
+                                    },
+                                    function: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    18,
+                                                    16,
+                                                ),
+                                                end_ln_and_col: (
+                                                    18,
+                                                    23,
+                                                ),
+                                            },
+                                            name: "rec_sum",
+                                        },
+                                    ),
+                                    args: [
+                                        Binop {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    18,
+                                                    24,
+                                                ),
+                                                end_ln_and_col: (
+                                                    18,
+                                                    29,
+                                                ),
+                                            },
+                                            op: Sub,
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            18,
+                                                            24,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            18,
+                                                            25,
+                                                        ),
+                                                    },
+                                                    name: "a",
+                                                },
+                                            ),
+                                            rhs: Term(
+                                                Lit {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            18,
+                                                            28,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            18,
+                                                            29,
+                                                        ),
+                                                    },
+                                                    lit: Int(
+                                                        "1",
+                                                    ),
+                                                },
+                                            ),
+                                        },
+                                    ],
+                                    template: None,
+                                },
+                            ),
+                        },
+                    },
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                19,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                19,
+                                29,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "b",
+                                None,
+                            ),
+                        ],
+                        rhs: Conditional {
+                            info: Info {
+                                start_ln_and_col: (
+                                    19,
+                                    10,
+                                ),
+                                end_ln_and_col: (
+                                    19,
+                                    29,
+                                ),
+                            },
+                            if_true: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            19,
+                                            10,
+                                        ),
+                                        end_ln_and_col: (
+                                            19,
+                                            13,
+                                        ),
+                                    },
+                                    name: "rec",
+                                },
+                            ),
+                            guard: Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        19,
+                                        17,
+                                    ),
+                                    end_ln_and_col: (
+                                        19,
+                                        22,
+                                    ),
+                                },
+                                op: Gt,
+                                lhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                19,
+                                                17,
+                                            ),
+                                            end_ln_and_col: (
+                                                19,
+                                                18,
+                                            ),
+                                        },
+                                        name: "a",
+                                    },
+                                ),
+                                rhs: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                19,
+                                                21,
+                                            ),
+                                            end_ln_and_col: (
+                                                19,
+                                                22,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "0",
+                                        ),
+                                    },
+                                ),
+                            },
+                            if_false: Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            19,
+                                            28,
+                                        ),
+                                        end_ln_and_col: (
+                                            19,
+                                            29,
+                                        ),
+                                    },
+                                    lit: Int(
+                                        "0",
+                                    ),
+                                },
+                            ),
+                        },
+                    },
+                    Returns(
+                        Info {
+                            start_ln_and_col: (
+                                20,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                20,
+                                14,
+                            ),
+                        },
+                        Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        20,
+                                        13,
+                                    ),
+                                    end_ln_and_col: (
+                                        20,
+                                        14,
+                                    ),
+                                },
+                                name: "b",
+                            },
+                        ),
+                    ),
+                ],
+            },
+        ],
+    },
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                24,
+                1,
+            ),
+            end_ln_and_col: (
+                32,
+                2,
+            ),
+        },
+        name: "head",
+        input: [
+            (
+                "a",
+                FullType {
+                    base: FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                24,
+                                12,
+                            ),
+                            end_ln_and_col: (
+                                24,
+                                15,
+                            ),
+                        },
+                        base: Int(
+                            I64,
+                        ),
+                        flags: [],
+                        settings: [],
+                    },
+                    tags: [
+                        Tag {
+                            info: Info {
+                                start_ln_and_col: (
+                                    24,
+                                    19,
+                                ),
+                                end_ln_and_col: (
+                                    24,
+                                    42,
+                                ),
+                            },
+                            quot: Some(
+                                Input,
+                            ),
+                            quot_var: Some(
+                                QuotientReference {
+                                    spec_name: "rec_sum",
+                                    spec_var: Some(
+                                        "a",
+                                    ),
+                                },
+                            ),
+                            flow: Some(
+                                Usable,
+                            ),
+                        },
+                        Tag {
+                            info: Info {
+                                start_ln_and_col: (
+                                    24,
+                                    44,
+                                ),
+                                end_ln_and_col: (
+                                    24,
+                                    59,
+                                ),
+                            },
+                            quot: Some(
+                                None,
+                            ),
+                            quot_var: Some(
+                                QuotientReference {
+                                    spec_name: "tm",
+                                    spec_var: None,
+                                },
+                            ),
+                            flow: Some(
+                                Usable,
+                            ),
+                        },
+                        Tag {
+                            info: Info {
+                                start_ln_and_col: (
+                                    24,
+                                    61,
+                                ),
+                                end_ln_and_col: (
+                                    24,
+                                    76,
+                                ),
+                            },
+                            quot: Some(
+                                None,
+                            ),
+                            quot_var: Some(
+                                QuotientReference {
+                                    spec_name: "sp",
+                                    spec_var: None,
+                                },
+                            ),
+                            flow: Some(
+                                Usable,
+                            ),
+                        },
+                    ],
+                },
+            ),
+        ],
+        output: [
+            FullType {
+                base: FlaggedType {
+                    info: Info {
+                        start_ln_and_col: (
+                            24,
+                            82,
+                        ),
+                        end_ln_and_col: (
+                            24,
+                            85,
+                        ),
+                    },
+                    base: Int(
+                        I64,
+                    ),
+                    flags: [],
+                    settings: [],
+                },
+                tags: [],
+            },
+        ],
+        specs: [
+            "rec_sum",
+            "tm",
+            "sp",
+        ],
+        statements: [
+            If {
+                info: Info {
+                    start_ln_and_col: (
+                        27,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        31,
+                        6,
+                    ),
+                },
+                guard: Binop {
+                    info: Info {
+                        start_ln_and_col: (
+                            27,
+                            8,
+                        ),
+                        end_ln_and_col: (
+                            27,
+                            13,
+                        ),
+                    },
+                    op: Gt,
+                    lhs: Term(
+                        Var {
+                            info: Info {
+                                start_ln_and_col: (
+                                    27,
+                                    8,
+                                ),
+                                end_ln_and_col: (
+                                    27,
+                                    9,
+                                ),
+                            },
+                            name: "a",
+                            tag: None,
+                        },
+                    ),
+                    rhs: Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    27,
+                                    12,
+                                ),
+                                end_ln_and_col: (
+                                    27,
+                                    13,
+                                ),
+                            },
+                            lit: Int(
+                                "0",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                },
+                tag: None,
+                true_block: [
+                    Return(
+                        Info {
+                            start_ln_and_col: (
+                                28,
+                                9,
+                            ),
+                            end_ln_and_col: (
+                                28,
+                                32,
+                            ),
+                        },
+                        Binop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    28,
+                                    16,
+                                ),
+                                end_ln_and_col: (
+                                    28,
+                                    31,
+                                ),
+                            },
+                            op: Add,
+                            lhs: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            28,
+                                            16,
+                                        ),
+                                        end_ln_and_col: (
+                                            28,
+                                            17,
+                                        ),
+                                    },
+                                    name: "a",
+                                    tag: None,
+                                },
+                            ),
+                            rhs: Term(
+                                Call(
+                                    Info {
+                                        start_ln_and_col: (
+                                            28,
+                                            20,
+                                        ),
+                                        end_ln_and_col: (
+                                            28,
+                                            31,
+                                        ),
+                                    },
+                                    SchedFuncCall {
+                                        target: Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        28,
+                                                        20,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        28,
+                                                        24,
+                                                    ),
+                                                },
+                                                name: "head",
+                                                tag: None,
+                                            },
+                                        ),
+                                        templates: None,
+                                        args: Args(
+                                            [
+                                                Binop {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            28,
+                                                            25,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            28,
+                                                            30,
+                                                        ),
+                                                    },
+                                                    op: Sub,
+                                                    lhs: Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    28,
+                                                                    25,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    28,
+                                                                    26,
+                                                                ),
+                                                            },
+                                                            name: "a",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    rhs: Term(
+                                                        Lit {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    28,
+                                                                    29,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    28,
+                                                                    30,
+                                                                ),
+                                                            },
+                                                            lit: Int(
+                                                                "1",
+                                                            ),
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                },
+                                            ],
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            ),
+                        },
+                    ),
+                ],
+                false_block: [
+                    Block(
+                        Info {
+                            start_ln_and_col: (
+                                29,
+                                12,
+                            ),
+                            end_ln_and_col: (
+                                31,
+                                6,
+                            ),
+                        },
+                        [
+                            Return(
+                                Info {
+                                    start_ln_and_col: (
+                                        30,
+                                        9,
+                                    ),
+                                    end_ln_and_col: (
+                                        30,
+                                        18,
+                                    ),
+                                },
+                                Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                30,
+                                                16,
+                                            ),
+                                            end_ln_and_col: (
+                                                30,
+                                                17,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "0",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
+            },
+        ],
+    },
+    Pipeline {
+        info: Info {
+            start_ln_and_col: (
+                34,
+                1,
+            ),
+            end_ln_and_col: (
+                34,
+                22,
+            ),
+        },
+        name: "main",
+        entry: "foo",
+    },
+]

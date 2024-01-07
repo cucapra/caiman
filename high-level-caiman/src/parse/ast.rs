@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::error::Info;
 
 pub type Name = String;
@@ -6,10 +8,15 @@ pub type Arg<T> = (String, T);
 pub type NamedOutput<T> = (Option<String>, T);
 
 /// A numeric data type
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NumberType {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IntSize {
     I32,
     I64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FloatSize {
+    F64,
 }
 
 /// A core data type available in the value and scheduling languages
@@ -18,20 +25,82 @@ pub enum NumberType {
 /// Not all of these types can be used in every function, however I think
 /// it will be easier to essentially perform AST-level type checking
 /// rather than trying to do it at the parsing level
+///
+/// Can be converted to a mangled string using the alternate formatter
+/// for `Display`
 #[derive(Clone, Debug)]
 pub enum DataType {
-    Num(NumberType),
+    Int(IntSize),
+    Float(FloatSize),
     Bool,
     BufferSpace,
     Event,
-    Tuple(Vec<DataType>),
     Array(Box<DataType>, Box<SpecExpr>),
     Slice(Box<DataType>),
     UserDefined(String),
+    Ref(Box<DataType>),
+}
+
+impl PartialEq for DataType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Int(l0), Self::Int(r0)) => l0 == r0,
+            (Self::Float(l0), Self::Float(r0)) => l0 == r0,
+            (Self::Array(..), Self::Array(..)) => todo!(),
+            (Self::Slice(l0), Self::Slice(r0)) | (Self::Ref(l0), Self::Ref(r0)) => l0 == r0,
+            (Self::UserDefined(l0), Self::UserDefined(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Eq for DataType {}
+
+impl std::hash::Hash for DataType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Int(nt) => nt.hash(state),
+            Self::Float(nt) => nt.hash(state),
+            Self::Array(..) => todo!(),
+            Self::Slice(dt) | Self::Ref(dt) => dt.hash(state),
+            Self::UserDefined(name) => name.hash(state),
+            _ => {}
+        }
+    }
+}
+
+impl Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(IntSize::I32) => write!(f, "i32"),
+            Self::Int(IntSize::I64) => write!(f, "i64"),
+            Self::Float(FloatSize::F64) => write!(f, "f64"),
+            Self::Bool => write!(f, "bool"),
+            Self::BufferSpace => write!(f, "BufferSpace"),
+            Self::Event => write!(f, "Event"),
+            Self::Array(..) => todo!(),
+            Self::Slice(typ) => {
+                if f.alternate() {
+                    write!(f, "_a_{typ}")
+                } else {
+                    write!(f, "[{typ}]")
+                }
+            }
+            Self::UserDefined(name) => write!(f, "{name}"),
+            Self::Ref(typ) => {
+                if f.alternate() {
+                    write!(f, "_r_{typ}")
+                } else {
+                    write!(f, "&{typ}")
+                }
+            }
+        }
+    }
 }
 
 /// Binary operators in the value and scheduling languages
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Copy)]
 pub enum Binop {
     Dot,
     Add,
@@ -59,11 +128,12 @@ pub enum Binop {
 }
 
 /// Unary operators in the value and scheduling languages
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub enum Uop {
     Neg,
     LNot,
     Not,
+    Ref,
 }
 
 /// A literal in the spec languages
@@ -146,7 +216,7 @@ pub enum SpecStmt {
     Returns(Info, SpecExpr),
 }
 /// AST-level quotient (once merged, we can use the ir enum)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Quotient {
     Node,
     None,
@@ -155,7 +225,7 @@ pub enum Quotient {
 }
 
 /// AST-level flow (once merged, we can use the ir enum)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Flow {
     Usable,
     Save,
@@ -166,7 +236,7 @@ pub enum Flow {
 /// The part of a type annotation referring to a specific variable in a spec
 /// Ex: `i64<storage, map_write, align=8> @ [node(val.x)-usable, node(space.y)-usable, none(time.x)-usable]`
 /// `val.x` is a spec var
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuotientReference {
     /// Name of the spec
     pub spec_name: String,
@@ -182,6 +252,14 @@ pub struct Tag {
     pub quot_var: Option<QuotientReference>,
     pub flow: Option<Flow>,
 }
+
+impl PartialEq for Tag {
+    fn eq(&self, other: &Self) -> bool {
+        self.quot == other.quot && self.quot_var == other.quot_var && self.flow == other.flow
+    }
+}
+
+impl Eq for Tag {}
 
 /// A flagged type is a base type parameterized by an optional set of WGPU
 /// flags and settings
@@ -255,6 +333,20 @@ pub enum SchedTerm {
     Hole(Info),
 }
 
+impl SchedTerm {
+    /// Gets the tags of this term if they are specified, otherwise returns `None`
+    #[must_use]
+    #[allow(dead_code)]
+    pub const fn get_tags(&self) -> Option<&Tags> {
+        match self {
+            Self::Lit { tag, .. }
+            | Self::Var { tag, .. }
+            | Self::Call(_, SchedFuncCall { tag, .. }) => tag.as_ref(),
+            Self::Hole(_) => None,
+        }
+    }
+}
+
 /// A scheduling expression
 pub type SchedExpr = NestedExpr<SchedTerm>;
 
@@ -267,7 +359,7 @@ pub enum EncodedStmt {
         lhs: Vec<(Name, Option<FlaggedType>)>,
         rhs: SchedExpr,
     },
-    Invoke(Info, SchedFuncCall),
+    // Invoke(Info, SchedFuncCall),
 }
 
 /// Statements for the scheduling language
@@ -277,23 +369,51 @@ pub enum SchedStmt {
         info: Info,
         lhs: Vec<(Name, Option<FullType>)>,
         is_const: bool,
-        expr: SchedExpr,
+        expr: Option<SchedExpr>,
     },
     Assign {
         info: Info,
+        tag: Option<Tags>,
         lhs: Name,
         rhs: SchedExpr,
     },
     If {
         info: Info,
         guard: SchedExpr,
+        tag: Option<Tags>,
         true_block: Vec<SchedStmt>,
-        false_block: Option<Box<SchedStmt>>,
+        false_block: Vec<SchedStmt>,
+    },
+    InEdgeAnnotation {
+        info: Info,
+        tags: Vec<Arg<Tags>>,
+    },
+    OutEdgeAnnotation {
+        info: Info,
+        tags: Vec<Arg<Tags>>,
     },
     Block(Info, Vec<SchedStmt>),
     Return(Info, SchedExpr),
     Hole(Info),
     Call(Info, SchedFuncCall),
+}
+
+impl SchedStmt {
+    /// Gets the src line and column info of this statement
+    #[must_use]
+    pub const fn get_info(&self) -> &Info {
+        match self {
+            Self::Decl { info, .. }
+            | Self::Assign { info, .. }
+            | Self::If { info, .. }
+            | Self::InEdgeAnnotation { info, .. }
+            | Self::OutEdgeAnnotation { info, .. }
+            | Self::Block(info, _)
+            | Self::Return(info, _)
+            | Self::Hole(info)
+            | Self::Call(info, _) => info,
+        }
+    }
 }
 
 /// A scheduling function
@@ -302,7 +422,7 @@ pub struct SchedulingFunc {
     pub info: Info,
     pub name: String,
     pub input: Vec<Arg<FullType>>,
-    pub output: FullType,
+    pub output: Vec<FullType>,
     pub specs: Vec<String>,
     pub statements: Vec<SchedStmt>,
 }
@@ -333,12 +453,12 @@ pub enum ResourceMembers {
 impl std::fmt::Display for ResourceMembers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResourceMembers::Numeric(name, val) => write!(f, "{}: {}", name, val),
-            ResourceMembers::Input(val) => {
-                write!(f, "input: {}", val)
+            Self::Numeric(name, val) => write!(f, "{name}: {val}"),
+            Self::Input(val) => {
+                write!(f, "input: {val}")
             }
-            ResourceMembers::Output(val) => {
-                write!(f, "output: {}", val)
+            Self::Output(val) => {
+                write!(f, "output: {val}")
             }
         }
     }
@@ -347,7 +467,7 @@ impl std::fmt::Display for ResourceMembers {
 /// Definition of an extern function
 /// Ex:
 ///
-/// ```
+/// ```ignore
 /// path : "gpu_external.comp",
 /// entry : "main",
 /// dimensionality : 3,
@@ -380,9 +500,8 @@ pub enum ExternDefMembers {
 impl std::fmt::Display for ExternDefMembers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExternDefMembers::StrVal(name, val) => write!(f, "{}: {}", name, val),
-            ExternDefMembers::Dimensions(name, val) => write!(f, "{}: {}", name, val),
-            _ => Result::Ok(()),
+            Self::Dimensions(name, val) | Self::StrVal(name, val) => write!(f, "{name}: {val}"),
+            Self::Resource(_) => Result::Ok(()),
         }
     }
 }
@@ -394,7 +513,7 @@ pub enum ClassMembers {
         info: Info,
         name: String,
         input: Vec<Arg<DataType>>,
-        output: Option<(Option<String>, DataType)>,
+        output: Vec<(Option<String>, DataType)>,
         statements: Vec<SpecStmt>,
     },
     Extern {
@@ -403,25 +522,40 @@ pub enum ClassMembers {
         device: String,
         pure: bool,
         input: Vec<(Option<String>, DataType)>,
-        output: Option<(Option<String>, DataType)>,
+        output: Vec<(Option<String>, DataType)>,
         def: Option<ExternDef>,
     },
 }
 
 impl ClassMembers {
     /// Get's the name of the function
+    #[must_use]
     pub fn get_name(&self) -> String {
         match self {
-            ClassMembers::ValueFunclet { name, .. } => name.clone(),
-            ClassMembers::Extern { name, .. } => name.clone(),
+            Self::ValueFunclet { name, .. } | Self::Extern { name, .. } => name.clone(),
         }
     }
 
     /// Get's the source info of the function
-    pub fn get_info(&self) -> Info {
+    #[must_use]
+    pub const fn get_info(&self) -> Info {
         match self {
-            ClassMembers::ValueFunclet { info, .. } => *info,
-            ClassMembers::Extern { info, .. } => *info,
+            Self::ValueFunclet { info, .. } | Self::Extern { info, .. } => *info,
+        }
+    }
+
+    /// Gets a tuple of the input and output types of the function
+    #[must_use]
+    pub fn get_type_signature(&self) -> (Vec<DataType>, Vec<DataType>) {
+        match self {
+            Self::Extern { input, output, .. } => (
+                input.iter().map(|(_, typ)| typ.clone()).collect(),
+                output.iter().map(|(_, typ)| typ.clone()).collect(),
+            ),
+            Self::ValueFunclet { input, output, .. } => (
+                input.iter().map(|(_, typ)| typ.clone()).collect(),
+                output.iter().map(|(_, typ)| typ.clone()).collect(),
+            ),
         }
     }
 }
@@ -452,7 +586,7 @@ pub enum TopLevel {
         info: Info,
         name: String,
         input: Vec<Arg<FullType>>,
-        output: Option<FullType>,
+        output: Vec<FullType>,
         specs: Vec<String>,
         statements: Vec<SchedStmt>,
     },
@@ -470,6 +604,10 @@ pub enum TopLevel {
         info: Info,
         name: String,
         expr: SpecExpr,
+    },
+    Import {
+        info: Info,
+        path: String,
     },
 }
 

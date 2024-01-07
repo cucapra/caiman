@@ -1,0 +1,6 @@
+#version 0.1.0
+val foo(a: [i32; 10], b: bool) -> (i32, i32) {
+    c :- -a.len()
+    d :- -10
+    e :- --10
+}

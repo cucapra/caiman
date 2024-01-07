@@ -1,4 +1,0 @@
-Error: At bad_single_tuple.cm:2:14, 
-  Parsing Error: Unrecognized token: ')', expected one of [
-    "\",\"",
-]

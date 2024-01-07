@@ -1,6 +1,8 @@
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 use super::ast::*;
 use super::ast_factory::ASTFactory;
 use crate::error::CustomParsingError;
+
 
 grammar(astf: &ASTFactory);
 
@@ -18,13 +20,15 @@ match {
   "val", "feq", "fn", "tmln", "pipeline", "extern", "sptl", "type", "impls", "const",
   "let", "returns", "return", "var", "if", "else",
   "i32", "i64", "bool", "Event", "BufferSpace",
-  "true", "false",
+  "true", "false", "import",
   "pure",
   "node","none","input","output","usable","save","need","dead",
 
 
   r"\s*" => { }, // Whitespace
   r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
+  // From: https://stackoverflow.com/questions/13014947/regex-to-match-a-c-style-multiline-comment
+  r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { }, // Multiline (non-nested) comments
 
   _, // Everything else
 }
@@ -66,7 +70,7 @@ TopLevel: TopLevel = {
         <Id>
     "}" <@R> => astf.pipeline(<>),
 
-    <@L> "fn" <Id> "(" <CommaList<Arg<FullType>>> ")" <("->" <FullType>)?>
+    <@L> "fn" <Id> "(" <CommaList<Arg<FullType>>> ")" <("->" <MultiType>)?>
         "impls" <CommaList<Id>>
     "{"
         <SchedStmt*>
@@ -75,12 +79,14 @@ TopLevel: TopLevel = {
     <l: @L>
     "type" <n: Id> "=" <t: FlaggedType> <u: (";")?>
     <r: @R> => astf.type_def(l, n, t, r),
+
+    <l: @L> "import" <i: Id> <u: (";")?> <r: @R> => astf.import(l, i, r),
 }
 
 // Function class members. Value functlets or extern funclets
 ClassMembers: ClassMembers = {
     <@L>
-    "val" <Id> "(" <CommaList<Arg<BaseType>>> ")" <("->" <MaybeNamed<BaseType>>)?>
+    "val" <Id> "(" <CommaList<Arg<BaseType>>> ")" <("->" <MultiNamedBaseType>)?>
     "{"
         <SpecStmt*>
     "}"
@@ -88,12 +94,12 @@ ClassMembers: ClassMembers = {
 
     <@L>
     "extern" "(" <Id> ")" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 
-        <("->" <MaybeNamed<BaseType>>)?> <ExternDef?>
+        <("->" <MultiNamedBaseType>)?> <ExternDef?>
     <@R> => astf.extern_func(<>),
 
     <@L>
     "extern" "(" <Id> ")" "pure" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 
-        <("->" <MaybeNamed<BaseType>>)?> <ExternDef?>
+        <("->" <MultiNamedBaseType>)?> <ExternDef?>
     <@R> => astf.extern_pure_func(<>),
 }
 
@@ -125,16 +131,21 @@ ExternDefMembers: ExternDefMembers = {
 // TYPES
 
 BaseType: DataType = {
-    "i32"  => DataType::Num(NumberType::I32),
-    "i64"  => DataType::Num(NumberType::I64),
+    "i32"  => DataType::Int(IntSize::I32),
+    "i64"  => DataType::Int(IntSize::I64),
     "bool" => DataType::Bool,
     "Event" => DataType::Event,
     "BufferSpace" => DataType::BufferSpace,
     <n: Id> => DataType::UserDefined(String::from(n)),
-    "(" <TupleCommaList<BaseType>> ")" => DataType::Tuple(<>),
     "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
     "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
     "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
+    "&" <BaseType> => DataType::Ref(Box::new(<>)),
+}
+
+MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
+    "(" <TupleCommaList<MaybeNamed<BaseType>>> ")" => <>,
+    <MaybeNamed<BaseType>> => vec![<>],
 }
 
 // Full type: base type with flags and settings and an optional tag
@@ -149,13 +160,23 @@ FullType: FullType = {
     },
 }
 
+MultiType: Vec<FullType> = {
+    "(" <TupleCommaList<FullType>> ")" => <>,
+    <FullType> => vec![<>],
+}
+
 TagOp: Vec<Tag> = {
     "@" "[" <CommaList<Tag>> "]" => <>,
     "@"  <Tag> => vec![<>],
 }
 
+Tags: Vec<Tag> = {
+    <Tag> => vec![<>],
+    "[" <CommaList<Tag>> "]" => <>,
+}
+
 Tag: Tag = {
-    <@L> <Quotient> "(" <QuotRef> ")" "-" <Flow> <@R> => astf.tag(<>),
+    <@L> <Quotient> "(" <QuotRef> ")" <Flow?> <@R> => astf.tag(<>),
 }
 
 Quotient: Option<Quotient> = {
@@ -167,11 +188,11 @@ Quotient: Option<Quotient> = {
 }
 
 Flow: Option<Flow> = {
-    "usable" => Some(Flow::Usable),
-    "save" => Some(Flow::Save),
-    "need" => Some(Flow::Need),
-    "dead" => Some(Flow::Dead),
-    "?" => None,
+    "-usable" => Some(Flow::Usable),
+    "-save" => Some(Flow::Save),
+    "-need" => Some(Flow::Need),
+    "-dead" => Some(Flow::Dead),
+    "-?" => None,
 }
 
 // Quotient reference: the part of the quotient which refers to a specific node
@@ -180,6 +201,10 @@ QuotRef: Option<QuotientReference> = {
     <a: Id> "." <b: Id> => Some(QuotientReference {
         spec_name: String::from(a),
         spec_var: Some(String::from(b)),
+    }),
+    <a: Id> "." "(" <b: TupleCommaList<Id>> ")" => Some(QuotientReference {
+        spec_name: String::from(a),
+        spec_var: Some(format!("_{}", b.join("_"))),
     }),
     <a: Id> => Some(QuotientReference {
         spec_name: String::from(a),
@@ -213,12 +238,14 @@ SpecStmt: SpecStmt = {
 // Top level scheduling statements
 SchedStmt: SchedStmt = {
     <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
-    <@L> "var" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_var_decl(<>),
-    <@L> <Id> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
+    <@L> "var" <CommaList<MaybeArg<FullType>>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
+    <@L> <Id> <TagOp?> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
     <Block> => <>,
     <@L> "return" <SchedExpr> ";" <@R> => astf.sched_return(<>),
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
+    <@L> "@in" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
+    <@L> "@out" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
 }
 
 // IFs and dangling else 
@@ -229,11 +256,11 @@ Block: SchedStmt = {
 }
 
 UnmatchedIf: SchedStmt = {
-    <@L> "if" <SchedExpr> "{" <SchedStmt*> "}" <("else" <UnmatchedIf>)?> <@R> => astf.sched_if(<>),
+    <@L> "if" <TagOp?> <SchedExpr> "{" <SchedStmt*> "}" <("else" <UnmatchedIf>)?> <@R> => astf.sched_if(<>),
 }
 
 MatchedIf: SchedStmt = {
-    <@L> "if" <SchedExpr> "{" <SchedStmt*> "}" "else" <MatchedIf> <@R> => astf.sched_matched_if(<>),
+    <@L> "if" <TagOp?> <SchedExpr> "{" <SchedStmt*> "}" "else" <MatchedIf> <@R> => astf.sched_matched_if(<>),
     <@L> "{" <SchedStmt*> "}" <@R> => astf.sched_block(<>),
 }
 
@@ -489,6 +516,7 @@ UnOp: Uop = {
     "-" => Uop::Neg,
     "!" => Uop::LNot,
     "~" => Uop::Not,
+    "&" => Uop::Ref,
 }
 
 // LITERALS

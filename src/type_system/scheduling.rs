@@ -958,9 +958,14 @@ impl<'program> FuncletChecker<'program> {
                         function_id,
                         arguments,
                     } => {
-                        assert!(self.program.function_classes[*function_id]
-                            .external_function_ids
-                            .contains(external_function_id));
+                        assert!(
+                            self.program.function_classes[*function_id]
+                                .external_function_ids
+                                .contains(external_function_id),
+                            "External function ids: {:?} missing {:?}",
+                            self.program.function_classes[*function_id].external_function_ids,
+                            external_function_id
+                        );
                         let function = &self.program.native_interface.external_functions
                             [external_function_id.0];
                         let cpu_operation = function.get_cpu_pure_operation().unwrap();

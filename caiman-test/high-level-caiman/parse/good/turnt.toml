@@ -1,2 +1,0 @@
-[envs.parse]
-command = "../../../../target/debug/hlc --parse {filename}"
