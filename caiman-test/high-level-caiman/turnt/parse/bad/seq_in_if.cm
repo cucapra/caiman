@@ -1,0 +1,11 @@
+# version 0.1.0
+fn foo() -> i64 impls a {
+    if true {
+        10
+    } else {
+        20
+    }
+
+    let x = r;
+    r
+}

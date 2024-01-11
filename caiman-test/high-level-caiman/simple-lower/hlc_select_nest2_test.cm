@@ -5,6 +5,8 @@ sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
 
 val main() -> i64 {
+    pass :- 10
+
     b :- true
     c :- false
     d :- false
@@ -12,8 +14,14 @@ val main() -> i64 {
     two :- 2
     three :- 3
     four :- 4
-    left :- one if b else two
-    right :- three if c else four
+
+    ll :- one + pass
+    lr :- two + pass
+    rl :- three + pass
+    rr:- four + pass
+
+    left :- ll if b else lr
+    right :- rl if c else rr
     z :- left if d else right
     returns z
 }
@@ -22,31 +30,32 @@ fn foo() -> i64 @ node(main.z)-usable
     impls main, time, space
 {
     let d: bool @ node(main.d) = false;
-    var v: i64 @ none(main)-dead;
-    if @ node(main.z) d {
+    let pass: i64 @ node(main.pass) = 10;
+    let v: i64 @ node(main.z) = if @ node(main.z) d {
         let b: bool @ node(main.b) = true;
-        if @ node(main.left) b {
+        let r: i64 @ node(main.left) = if @ node(main.left) b {
             let one: i64 @ node(main.one) = 1;
-            v = one;
+            let ll: i64 @ node(main.ll) = one + pass;
+            ll
         } else {
             let two: i64 @ node(main.two) = 2;
-            v = two;
-        }
-        @in { v: [node(main.left)-usable, none(space)-save] };
-        @out { v: [node(main.left)-usable, none(space)-save] };
+            let lr: i64 @ node(main.lr) = two + pass;
+            lr
+        };
+        r
     } else {
         let c: bool @ node(main.c) = false;
-        if @ node(main.right) c {
+        let r: i64 @ node(main.right) = if @ node(main.right) c {
             let three: i64 @ node(main.three) = 3;
-            v = three;
+            let rl: i64 @ node(main.rl) = three + pass;
+            rl
         } else {
             let four: i64 @ node(main.four) = 4;
-            v = four;
-        }
-        @in { v: [node(main.right)-usable, none(space)-save] };
-        @out { v: [node(main.right)-usable, none(space)-save] };
-    }
-    @in { v: [node(main.z)-usable, none(space)-save] };
+            let rr: i64 @ node(main.rr) = four + pass;
+            rr
+        };
+        r    
+    };
     v
 }
 

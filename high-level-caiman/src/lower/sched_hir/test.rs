@@ -77,7 +77,7 @@ fn cfg_gen() {
             }),
         ),
     ];
-    let cfg = Cfg::new(stmts, 1);
+    let cfg = Cfg::new(stmts, &[]);
     let mut ordered_graph = BTreeMap::new();
     for (id, edge) in cfg.graph {
         ordered_graph.insert(id, edge);
@@ -134,7 +134,7 @@ fn if_gen() {
             }),
         ),
     ];
-    let cfg = Cfg::new(stmts, 1);
+    let cfg = Cfg::new(stmts, &[]);
     let mut ordered_graph = BTreeMap::new();
     for (id, edge) in cfg.graph {
         ordered_graph.insert(id, edge);
@@ -196,7 +196,7 @@ fn if_ret() {
             }),
         ),
     ];
-    let cfg = Cfg::new(stmts, 1);
+    let cfg = Cfg::new(stmts, &[]);
     let mut ordered_graph = BTreeMap::new();
     for (id, edge) in cfg.graph {
         ordered_graph.insert(id, edge);

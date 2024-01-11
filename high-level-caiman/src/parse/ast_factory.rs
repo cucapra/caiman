@@ -544,6 +544,20 @@ impl ASTFactory {
             lhs: lhs
         });
 
+    struct_variant_factory!(sched_const_seq(lhs: Vec<(String, Option<FullType>)>, rhs: SchedStmt) 
+        -> SchedStmt:SchedStmt::Seq {
+            dests: lhs,
+            block: Box::new(rhs),
+            is_const: true
+        });
+
+    struct_variant_factory!(sched_var_seq(lhs: Vec<(String, Option<FullType>)>, rhs: SchedStmt)
+        -> SchedStmt:SchedStmt::Seq {
+            dests: lhs,
+            block: Box::new(rhs),
+            is_const: false
+        });
+
     struct_variant_factory!(encoded_stmt(lhs: Vec<(String, Option<FlaggedType>)>, rhs: SchedExpr) -> EncodedStmt:EncodedStmt::Move);
     // TOP-Level:
 

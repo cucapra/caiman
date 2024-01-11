@@ -1,0 +1,7 @@
+fn foo() -> i64 impls a {
+    let v = 10;
+    v
+
+    let z = 20;
+    z
+}

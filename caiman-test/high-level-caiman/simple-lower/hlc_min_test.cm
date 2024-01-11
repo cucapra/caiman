@@ -26,7 +26,7 @@ fn min_impl() -> i64
         v = b;
     }
     @in { v: [node(min.ret)-usable, none(space)-save] };
-    return v;
+    v
 }
 
 pipeline main { min_impl }

@@ -85,7 +85,7 @@ impl<'a> Funclet<'a> {
     pub fn next_blocks(&self) -> Vec<asm::Hole<asm::FuncletId>> {
         match &self.block.terminator {
             Terminator::FinalReturn(_) => vec![],
-            Terminator::Select(..) => {
+            Terminator::Select { .. } => {
                 let mut e = self
                     .parent
                     .cfg
@@ -103,7 +103,7 @@ impl<'a> Funclet<'a> {
                 res
             }
             Terminator::None
-            | Terminator::Return(..)
+            | Terminator::Return { .. }
             | Terminator::Next(_)
             | Terminator::Call(..)
             | Terminator::CaptureCall { .. } => {
@@ -158,11 +158,11 @@ impl<'a> Funclet<'a> {
         }
 
         match self.block.terminator {
-            Terminator::Call(..) | Terminator::CaptureCall { .. } | Terminator::Select(..) => {
+            Terminator::Call(..) | Terminator::CaptureCall { .. } | Terminator::Select { .. } => {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
-            Terminator::Return(_) if self.is_final_return() => {
+            Terminator::Return { .. } if self.is_final_return() => {
                 // final return is a jump to final basic block
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
@@ -170,7 +170,7 @@ impl<'a> Funclet<'a> {
             Terminator::FinalReturn(_)
             | Terminator::None
             | Terminator::Next(_)
-            | Terminator::Return(_) => self
+            | Terminator::Return { .. } => self
                 .parent
                 .exiting_vars(&[self.id()])
                 .into_iter()
@@ -434,7 +434,7 @@ impl Funclets {
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
-        let mut cfg = Cfg::new(f.statements, f.output.len());
+        let mut cfg = Cfg::new(f.statements, &f.output);
         let mut types = Self::collect_types(&cfg, &f.input, &f.output);
         op_transform_pass(&mut cfg, &types);
         deref_transform_pass(&mut cfg, &mut types);
@@ -573,15 +573,17 @@ impl Funclets {
         assert!(captures.is_empty() || block_ids.len() == 1);
         let term_dests: Vec<_> = block_ids
             .iter()
-            .flat_map(|id| self.terminator_dests(*id))
+            .map(|id| self.terminator_dests(*id))
             .collect();
-        assert!(term_dests.is_empty() || block_ids.len() == 1);
+        assert!(term_dests.windows(2).all(|wnd| wnd[0] == wnd[1]));
+        let term_dests = term_dests.into_iter().next().unwrap_or_default();
         let returns: BTreeSet<_> = block_ids
             .iter()
             .flat_map(|id| self.live_vars.get_out_fact(*id).live_set().iter())
             .filter(|v| !captures.contains(*v) && !term_dests.contains(*v))
             .cloned()
             .collect();
+        let _debug: Vec<_> = returns.iter().collect();
         assert!(
             term_dests.is_empty() && !returns.is_empty()
                 || returns.is_empty() && !term_dests.is_empty()

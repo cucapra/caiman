@@ -6,7 +6,7 @@
                 1,
             ),
             end_ln_and_col: (
-                10,
+                9,
                 2,
             ),
         },
@@ -121,7 +121,7 @@
                         5,
                     ),
                     end_ln_and_col: (
-                        9,
+                        8,
                         6,
                     ),
                 },
@@ -257,34 +257,6 @@
                             ),
                         ),
                     },
-                    Return(
-                        Info {
-                            start_ln_and_col: (
-                                8,
-                                9,
-                            ),
-                            end_ln_and_col: (
-                                8,
-                                18,
-                            ),
-                        },
-                        Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        8,
-                                        16,
-                                    ),
-                                    end_ln_and_col: (
-                                        8,
-                                        17,
-                                    ),
-                                },
-                                name: "g",
-                                tag: None,
-                            },
-                        ),
-                    ),
                 ],
                 false_block: [],
             },

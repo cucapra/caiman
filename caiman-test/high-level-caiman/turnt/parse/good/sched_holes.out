@@ -60,18 +60,18 @@
                     ),
                     end_ln_and_col: (
                         6,
-                        18,
+                        10,
                     ),
                 },
                 Binop {
                     info: Info {
                         start_ln_and_col: (
                             6,
-                            12,
+                            5,
                         ),
                         end_ln_and_col: (
                             6,
-                            17,
+                            10,
                         ),
                     },
                     op: Mul,
@@ -80,11 +80,11 @@
                             Info {
                                 start_ln_and_col: (
                                     6,
-                                    12,
+                                    5,
                                 ),
                                 end_ln_and_col: (
                                     6,
-                                    13,
+                                    6,
                                 ),
                             },
                         ),
@@ -94,11 +94,11 @@
                             Info {
                                 start_ln_and_col: (
                                     6,
-                                    16,
+                                    9,
                                 ),
                                 end_ln_and_col: (
                                     6,
-                                    17,
+                                    10,
                                 ),
                             },
                         ),

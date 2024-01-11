@@ -5,6 +5,5 @@ fn main(a: i64 @ node(main.f)) -> i64 @ output(main.g)
 {
     if @ node(main.r) true {
         let g = foo() @ node(main.c);
-        return g;
     }
 }

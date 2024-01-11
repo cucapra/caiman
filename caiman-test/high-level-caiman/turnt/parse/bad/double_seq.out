@@ -1,0 +1,4 @@
+Error: At double_seq.cm:1:0, 
+  Parsing Error: Unrecognized token: 'fn', expected one of [
+    "\"#version\"",
+]

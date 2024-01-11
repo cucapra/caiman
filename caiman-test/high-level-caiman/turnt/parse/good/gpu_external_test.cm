@@ -39,7 +39,7 @@ fn foo_main(x: i32) -> i32
 
     let y = await(f);
     let result = y.y_gpu;
-    return result;
+    result
 
 }
 

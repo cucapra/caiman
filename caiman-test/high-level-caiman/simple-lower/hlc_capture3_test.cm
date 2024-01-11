@@ -35,7 +35,7 @@ fn add1_impl(a: i64 @ input(add1.a)-usable,
 {
     let t: i64 @ node(add1.t) = a + b;
     let p: i64 @ node(add1.t2) = t + c;
-    return p;
+    p
 }
 
 fn add2_impl(a: i64 @ input(add2.a)-usable, 
@@ -45,7 +45,7 @@ fn add2_impl(a: i64 @ input(add2.a)-usable,
 {
     let t: i64 @ node(add2.t) = b + c;
     let p: i64 @ node(add2.t2) = a + t;
-    return p;
+    p
 }
 
 
@@ -67,7 +67,7 @@ fn main_impl() -> i64 @ node(main.r)-usable
     // j is usable bc addition is pure
     let k: i64 @ node(main.k)-usable = add2_impl(a2, b2, c2) @ node(main.k);
     let r: i64 @ node(main.r) = j + k;
-    return r;
+    r
     
 }
 

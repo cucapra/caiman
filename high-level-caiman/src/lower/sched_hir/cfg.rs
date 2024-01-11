@@ -114,6 +114,8 @@ struct PendingChild {
     true_block: Vec<SchedStmt>,
     /// Right child (false branch). May be `None` if the parent is not an `if`
     false_block: Option<Vec<SchedStmt>>,
+    /// The names of the return variables that the children blocks will return.
+    ret_names: Vec<(String, Option<FullType>)>,
 }
 
 /// Removes all Blocks from a list of scheduling statements and flattens them into
@@ -136,6 +138,54 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
                 false_block: flatten_stmts(false_block),
                 info,
             }),
+            SchedStmt::Seq {
+                info,
+                dests,
+                block,
+                is_const,
+            } => {
+                match *block {
+                    SchedStmt::Block(_, mut stmts) => {
+                        if !stmts.is_empty()
+                            && matches!(stmts.last().as_ref().unwrap(), SchedStmt::Return(..))
+                        {
+                            // TODO: rename to avoid redeclaration of variables
+                            if let SchedStmt::Return(info, ret_expr) = stmts.pop().unwrap() {
+                                res.extend(flatten_stmts(stmts));
+                                res.push(SchedStmt::Decl {
+                                    info,
+                                    lhs: dests,
+                                    is_const,
+                                    expr: Some(ret_expr),
+                                });
+                            } else {
+                                unreachable!()
+                            }
+                        } else {
+                            panic!("{info}: Empty block assigned to variables {dests:?}");
+                        }
+                    }
+                    SchedStmt::If {
+                        guard,
+                        tag,
+                        true_block,
+                        false_block,
+                        info: if_info,
+                    } => res.push(SchedStmt::Seq {
+                        info,
+                        dests,
+                        block: Box::new(SchedStmt::If {
+                            guard,
+                            tag,
+                            true_block: flatten_stmts(true_block),
+                            false_block: flatten_stmts(false_block),
+                            info: if_info,
+                        }),
+                        is_const,
+                    }),
+                    _ => panic!("{info}: Sequence block is neither a Block or If"),
+                }
+            }
             other => res.push(other),
         }
     }
@@ -153,13 +203,17 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
 /// * `sched_expr` - The expression to return.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
 /// * `end` - The source location of the return statement.
+/// * `ret_names` - The names of the return variables to write to
+#[allow(clippy::too_many_arguments)]
 fn handle_return(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
     cur_stmts: &mut Vec<SchedStmt>,
     sched_expr: SchedExpr,
+    join_edge: Edge,
     end: Info,
+    ret_names: Vec<(String, Option<FullType>)>,
 ) {
     let old_id = *cur_id;
     let info = Info::new_range(
@@ -171,12 +225,15 @@ fn handle_return(
         make_block(
             cur_id,
             cur_stmts,
-            Terminator::Return(expr_to_multi_node_id(sched_expr)),
+            Terminator::Return {
+                dests: ret_names,
+                rets: expr_to_multi_node_id(sched_expr),
+            },
             None,
             info,
         ),
     );
-    edges.insert(old_id, Edge::Next(FINAL_BLOCK_ID));
+    edges.insert(old_id, join_edge);
 }
 
 /// Handles a select statement by constructing a new block with the select as the terminator
@@ -205,18 +262,24 @@ fn handle_select(
     false_block: Vec<SchedStmt>,
     end_info: Info,
     children: &mut Vec<PendingChild>,
+    dests: Vec<(String, Option<FullType>)>,
 ) {
     let parent_id = *cur_id;
     let info = Info::new_range(
         cur_stmts.first().map_or(&end_info, |x| x.get_info()),
         &end_info,
     );
+    let ret_names = dests.clone();
     blocks.insert(
         *cur_id,
         make_block(
             cur_id,
             cur_stmts,
-            Terminator::Select(expr_to_node_id(guard), tag),
+            Terminator::Select {
+                dests,
+                guard: expr_to_node_id(guard),
+                tag,
+            },
             Some(*cur_id + 1),
             info,
         ),
@@ -228,6 +291,7 @@ fn handle_select(
         join_id: *cur_id,
         true_block,
         false_block: Some(false_block),
+        ret_names,
     });
 }
 
@@ -273,6 +337,72 @@ fn handle_call(
     );
 }
 
+/// Handles a sequence statement by constructing a new block with the sequence as the terminator
+/// and incrementing the id counter. This also adds an in edge annotation to the continuation
+/// block (the resulting `cur_stmts`).
+/// # Arguments
+/// * `block` - The sequence statement to handle.
+/// * `cur_stmts` - The list of scheduling statements to convert to blocks. Will be
+/// cleared for the continuation block.
+/// * `info` - The source location of the sequence statement.
+/// * `dests` - The list of variables to assign the return values to.
+/// * `cur_id` - The id of the next block. For every new block created, this is incremented
+///   and thus always is the id of the next block.
+/// * `blocks` - The list of blocks to add to. New blocks are appended to the end.
+/// * `children` - The list of pending children to add to that will queue up the
+/// children of this block to be processed in the next BFS level.
+/// * `last_info` - Will become the source location of the last statement in the sequence.
+#[allow(clippy::too_many_arguments)]
+fn handle_seq(
+    block: Box<SchedStmt>,
+    cur_stmts: &mut Vec<SchedStmt>,
+    info: Info,
+    dests: Vec<(String, Option<FullType>)>,
+    cur_id: &mut usize,
+    blocks: &mut HashMap<usize, BasicBlock>,
+    children: &mut Vec<PendingChild>,
+    last_info: &mut Info,
+) {
+    if let SchedStmt::If {
+        guard,
+        tag,
+        true_block,
+        false_block,
+        info: if_info,
+    } = *block
+    {
+        *last_info = *false_block.last().map_or_else(
+            || true_block.last().map_or(&if_info, |s| s.get_info()),
+            |s| s.get_info(),
+        );
+        handle_select(
+            cur_id,
+            blocks,
+            cur_stmts,
+            guard,
+            tag,
+            true_block,
+            false_block,
+            if_info,
+            children,
+            dests.clone(),
+        );
+        // add an in edge annotation to the continuation block
+        // the destination of the select is a meet point, so we need to add
+        // an in edge annotation to the continuation block
+        assert!(cur_stmts.is_empty());
+        cur_stmts.push(SchedStmt::InEdgeAnnotation {
+            info: Info::default(),
+            tags: dests
+                .into_iter()
+                .map(|(var, typ)| (var, typ.map(|typ| typ.tags).unwrap_or_default()))
+                .collect(),
+        });
+    } else {
+        panic!("{info}: Flattened sequence is not an If");
+    }
+}
+
 /// Makes one or more basic blocks from a list of scheduling statements. Adds the
 /// blocks to the list of blocks and adds edges to the edge map. Also updates the
 /// id counter so that the counter stores the value for the next available id.
@@ -284,12 +414,15 @@ fn handle_call(
 /// * `edges` - The list of edges to add to. Edges for new blocks are added to this map.
 /// * `stmts` - The list of scheduling statements to convert to blocks.
 /// * `join_edge` - The edge to use for a basic block to join back to the parent.
+/// * `ret_names` - The names of the return variables to write to in order to return
+///  from the current scope.
 fn make_blocks(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
     stmts: Vec<SchedStmt>,
     join_edge: Edge,
+    ret_names: &[(String, Option<FullType>)],
 ) -> usize {
     let mut cur_stmts = vec![];
     let root_id = *cur_id;
@@ -308,7 +441,16 @@ fn make_blocks(
         match stmt {
             SchedStmt::Return(end, sched_expr) => {
                 last_info = end;
-                handle_return(cur_id, blocks, edges, &mut cur_stmts, sched_expr, end);
+                handle_return(
+                    cur_id,
+                    blocks,
+                    edges,
+                    &mut cur_stmts,
+                    sched_expr,
+                    join_edge,
+                    end,
+                    ret_names.to_vec(),
+                );
             }
             SchedStmt::If {
                 guard,
@@ -331,6 +473,25 @@ fn make_blocks(
                     false_block,
                     end_info,
                     &mut children,
+                    vec![],
+                );
+            }
+            SchedStmt::Seq {
+                info,
+                dests,
+                block,
+                is_const: _,
+            } => {
+                // TODO: handle variable writes
+                handle_seq(
+                    block,
+                    &mut cur_stmts,
+                    info,
+                    dests,
+                    cur_id,
+                    blocks,
+                    &mut children,
+                    &mut last_info,
                 );
             }
             SchedStmt::Decl {
@@ -400,11 +561,13 @@ fn make_child_blocks(
         join_id,
         true_block,
         false_block,
+        ret_names,
     } in children
     {
         let join_edge = Edge::Next(join_id);
-        let true_branch = make_blocks(cur_id, blocks, edges, true_block, join_edge);
-        let false_branch = false_block.map(|f| make_blocks(cur_id, blocks, edges, f, join_edge));
+        let true_branch = make_blocks(cur_id, blocks, edges, true_block, join_edge, &ret_names);
+        let false_branch =
+            false_block.map(|f| make_blocks(cur_id, blocks, edges, f, join_edge, &ret_names));
         if let Some(false_branch) = false_branch {
             edges.insert(
                 parent_id,
@@ -425,14 +588,15 @@ impl Cfg {
     /// # Arguments
     /// * `stmts` - The list of scheduling statements to convert to blocks.
     /// * `output_len` - The number of outputs of the scheduling function.
-    pub fn new(stmts: Vec<SchedStmt>, output_len: usize) -> Self {
+    pub fn new(stmts: Vec<SchedStmt>, outputs: &[FullType]) -> Self {
+        use crate::lower::sched_hir::RET_VAR;
         let mut blocks = HashMap::new();
         blocks.insert(
             FINAL_BLOCK_ID,
             BasicBlock {
                 id: FINAL_BLOCK_ID,
                 stmts: vec![],
-                terminator: Terminator::FinalReturn(output_len),
+                terminator: Terminator::FinalReturn(outputs.len()),
                 ret_block: None,
                 src_loc: Info::default(),
             },
@@ -446,6 +610,11 @@ impl Cfg {
             &mut edges,
             flatten_stmts(stmts),
             Edge::Next(FINAL_BLOCK_ID),
+            &outputs
+                .iter()
+                .enumerate()
+                .map(|(id, typ)| (format!("{RET_VAR}{id}"), Some(typ.clone())))
+                .collect::<Vec<_>>(),
         );
         compute_coninuations(
             Self {

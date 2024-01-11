@@ -18,10 +18,10 @@ fn foo() -> i64 @ node(main.r)-usable
     let b: bool @ node(main.b)-usable = false;
     if @ node(main.r)-? b {
         let one: i64 @ node(main.one)-usable = 1;
-        return one;
+        one
     } else {
         let two: i64 @ node(main.two)-usable = 2;
-        return two;
+        two
     }
 }
 
