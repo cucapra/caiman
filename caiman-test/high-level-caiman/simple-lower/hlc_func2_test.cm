@@ -20,7 +20,7 @@ fn calc_impl(a: i64 @ input(calc.a)-usable) -> i64 @ output(calc.c)-usable
 {
     let b: i64 @ node(calc.b) = a * a;
     let c: i64 @ node(calc.c)-usable = b ^ a;
-    return c;
+    c
 }
 
 fn main_impl() -> i64 @ node(main.c)-usable
@@ -28,7 +28,7 @@ fn main_impl() -> i64 @ node(main.c)-usable
 {
     let a: i64 @ node(main.a)-usable = 2;
     let c: i64 @ node(main.c)-usable = calc_impl(a) @ node(main.c);
-    return c;
+    c
     
 }
 

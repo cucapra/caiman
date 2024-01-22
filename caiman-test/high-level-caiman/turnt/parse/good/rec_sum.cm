@@ -11,7 +11,7 @@ fn foo() -> i64
     impls main, tm, sp
 {
     let x = 10;
-    return head(x);
+    head(x)
 }
 
 val rec_sum(a: i64) -> i64 {
@@ -24,11 +24,12 @@ val rec_sum(a: i64) -> i64 {
 fn head(a: i64 @ [input(rec_sum.a)-usable, none(tm)-usable, none(sp)-usable]) -> i64 
     impls rec_sum, tm, sp
 {
-    if a > 0 {
-        return a + head(a - 1);
+    let c = if a > 0 {
+        a + head(a - 1)
     } else {
-        return 0;
-    }
+        0
+    };
+    c
 }
 
 pipeline main { foo }

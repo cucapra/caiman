@@ -73,7 +73,7 @@ TopLevel: TopLevel = {
     <@L> "fn" <Id> "(" <CommaList<Arg<FullType>>> ")" <("->" <MultiType>)?>
         "impls" <CommaList<Id>>
     "{"
-        <SchedStmt*>
+        <Sequence>
     "}" <@R> => astf.sched_function(<>),
 
     <l: @L>
@@ -235,17 +235,46 @@ SpecStmt: SpecStmt = {
 
 // SCHEDULE LANGUAGE SECTION
 
-// Top level scheduling statements
+// Scheduling statements
 SchedStmt: SchedStmt = {
     <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
     <@L> "var" <CommaList<MaybeArg<FullType>>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
     <@L> <Id> <TagOp?> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
-    <Block> => <>,
-    <@L> "return" <SchedExpr> ";" <@R> => astf.sched_return(<>),
+    <BlockSeq> => <>,
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
     <@L> "@in" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
     <@L> "@out" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
+}
+
+// A sequence of scheduling statements which may end with an expression that
+// is returned to the parent
+//
+// This is the top level scheduling statement production for a list
+// of scheduling statements that may return a value to the parent
+Sequence: Vec<SchedStmt> = {
+    <mut s: SchedStmt*> <l: @L> <ret: SchedExpr?> <r: @R> => match ret {
+        None => s,
+        Some(ret) => {
+            s.push(astf.sched_return(l, ret, r));
+            s
+        },
+    }
+}
+
+// IF expressions
+
+BlockSeq: SchedStmt = {
+    <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SequenceIf> ";" <@R> => astf.sched_const_seq(<>),
+    <@L> "var" <CommaList<MaybeArg<FullType>>> "=" <SequenceIf> ";" <@R> => astf.sched_var_seq(<>),
+    <Block> => <>,
+}
+
+// An matched if block where each block may end with an expression that is returned
+// to the parent
+SequenceIf: SchedStmt = {
+    <@L> "if" <TagOp?> <SchedExpr> "{" <Sequence> "}" "else" <SequenceIf> <@R> => astf.sched_matched_if(<>),
+    <@L> "{" <Sequence> "}" <@R> => astf.sched_block(<>),
 }
 
 // IFs and dangling else 
@@ -255,6 +284,7 @@ Block: SchedStmt = {
     <UnmatchedIf> => <>,
 }
 
+// an if or if-else that's missing the final else
 UnmatchedIf: SchedStmt = {
     <@L> "if" <TagOp?> <SchedExpr> "{" <SchedStmt*> "}" <("else" <UnmatchedIf>)?> <@R> => astf.sched_if(<>),
 }

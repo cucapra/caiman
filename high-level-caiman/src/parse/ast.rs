@@ -396,6 +396,12 @@ pub enum SchedStmt {
     Return(Info, SchedExpr),
     Hole(Info),
     Call(Info, SchedFuncCall),
+    Seq {
+        info: Info,
+        dests: Vec<(Name, Option<FullType>)>,
+        block: Box<SchedStmt>,
+        is_const: bool,
+    },
 }
 
 impl SchedStmt {
@@ -411,7 +417,8 @@ impl SchedStmt {
             | Self::Block(info, _)
             | Self::Return(info, _)
             | Self::Hole(info)
-            | Self::Call(info, _) => info,
+            | Self::Call(info, _)
+            | Self::Seq { info, .. } => info,
         }
     }
 }

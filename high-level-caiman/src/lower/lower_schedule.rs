@@ -434,7 +434,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
     // we do not return the new `temp_id` because this is the last instruction
     // in the block
     match t {
-        Terminator::Return(rets) => lower_ret(rets, temp_id, f),
+        Terminator::Return { rets, .. } => lower_ret(rets, temp_id, f),
         Terminator::Next(vars) => {
             vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
                 return_values: Some(vars.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),
@@ -447,7 +447,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
                     .collect(),
             ),
         }))],
-        Terminator::Select(guard_name, tags) => lower_select(guard_name, tags, temp_id, f),
+        Terminator::Select { guard, tag, .. } => lower_select(guard, tag, temp_id, f),
         // TODO: review this
         Terminator::None => panic!("None terminator not replaced by Next"),
         Terminator::Call(..) => panic!("Call not replaced by CaptureCall"),

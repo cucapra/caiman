@@ -10,11 +10,12 @@ val main() -> i64 {
 fn foo() -> i64 impls main, time, space
 {
     let b = true;
-    if b {
-        return 1;
+    let c = if b {
+        1
     } else {
-        return 2;
-    }
+        2
+    };
+    c
 }
 
 pipeline main { foo }

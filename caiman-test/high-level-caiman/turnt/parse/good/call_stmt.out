@@ -268,7 +268,7 @@
                     ),
                     end_ln_and_col: (
                         7,
-                        16,
+                        8,
                     ),
                 },
                 Term(
@@ -276,11 +276,11 @@
                         Info {
                             start_ln_and_col: (
                                 7,
-                                12,
+                                5,
                             ),
                             end_ln_and_col: (
                                 7,
-                                15,
+                                8,
                             ),
                         },
                         SchedFuncCall {
@@ -289,11 +289,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             7,
-                                            12,
+                                            5,
                                         ),
                                         end_ln_and_col: (
                                             7,
-                                            13,
+                                            6,
                                         ),
                                     },
                                     name: "f",

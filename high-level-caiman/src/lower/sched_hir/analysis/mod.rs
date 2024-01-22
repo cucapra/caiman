@@ -309,7 +309,8 @@ impl LiveVars {
     }
 }
 
-/// The name of the special variable for return variables
+/// The stem of the special variables used for return values. Each return variable
+/// will have a number appended to this stem.
 pub const RET_VAR: &str = "_out";
 
 impl Fact for LiveVars {

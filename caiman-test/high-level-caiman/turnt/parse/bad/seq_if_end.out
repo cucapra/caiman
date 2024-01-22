@@ -1,0 +1,7 @@
+Error: At seq_if_end.cm:5:5, 
+  Parsing Error: Unrecognized token: '}', expected one of [
+    "\"'\"",
+    "\"(\"",
+    "\".\"",
+    "\"[\"",
+]

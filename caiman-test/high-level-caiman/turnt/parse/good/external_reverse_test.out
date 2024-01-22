@@ -425,7 +425,7 @@
                     ),
                     end_ln_and_col: (
                         20,
-                        22,
+                        14,
                     ),
                 },
                 Term(
@@ -433,11 +433,11 @@
                         Info {
                             start_ln_and_col: (
                                 20,
-                                12,
+                                5,
                             ),
                             end_ln_and_col: (
                                 20,
-                                21,
+                                14,
                             ),
                         },
                         SchedFuncCall {
@@ -446,11 +446,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             20,
-                                            12,
+                                            5,
                                         ),
                                         end_ln_and_col: (
                                             20,
-                                            14,
+                                            7,
                                         ),
                                     },
                                     name: "op",
@@ -465,11 +465,11 @@
                                             info: Info {
                                                 start_ln_and_col: (
                                                     20,
-                                                    15,
+                                                    8,
                                                 ),
                                                 end_ln_and_col: (
                                                     20,
-                                                    16,
+                                                    9,
                                                 ),
                                             },
                                             lit: Int(
@@ -483,11 +483,11 @@
                                             info: Info {
                                                 start_ln_and_col: (
                                                     20,
-                                                    18,
+                                                    11,
                                                 ),
                                                 end_ln_and_col: (
                                                     20,
-                                                    20,
+                                                    13,
                                                 ),
                                             },
                                             lit: Int(
@@ -553,7 +553,7 @@
                     ),
                     end_ln_and_col: (
                         27,
-                        23,
+                        15,
                     ),
                 },
                 Term(
@@ -561,11 +561,11 @@
                         Info {
                             start_ln_and_col: (
                                 27,
-                                12,
+                                5,
                             ),
                             end_ln_and_col: (
                                 27,
-                                22,
+                                15,
                             ),
                         },
                         SchedFuncCall {
@@ -574,11 +574,11 @@
                                     info: Info {
                                         start_ln_and_col: (
                                             27,
-                                            12,
+                                            5,
                                         ),
                                         end_ln_and_col: (
                                             27,
-                                            15,
+                                            8,
                                         ),
                                     },
                                     name: "op2",
@@ -593,11 +593,11 @@
                                             info: Info {
                                                 start_ln_and_col: (
                                                     27,
-                                                    16,
+                                                    9,
                                                 ),
                                                 end_ln_and_col: (
                                                     27,
-                                                    17,
+                                                    10,
                                                 ),
                                             },
                                             lit: Int(
@@ -611,11 +611,11 @@
                                             info: Info {
                                                 start_ln_and_col: (
                                                     27,
-                                                    19,
+                                                    12,
                                                 ),
                                                 end_ln_and_col: (
                                                     27,
-                                                    21,
+                                                    14,
                                                 ),
                                             },
                                             lit: Int(

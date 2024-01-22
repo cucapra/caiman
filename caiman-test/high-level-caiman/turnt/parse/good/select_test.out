@@ -257,7 +257,7 @@
                 1,
             ),
             end_ln_and_col: (
-                18,
+                19,
                 2,
             ),
         },
@@ -330,7 +330,7 @@
                     ),
                 ),
             },
-            If {
+            Seq {
                 info: Info {
                     start_ln_and_col: (
                         13,
@@ -338,115 +338,162 @@
                     ),
                     end_ln_and_col: (
                         17,
+                        7,
+                    ),
+                },
+                dests: [
+                    (
+                        "c",
+                        None,
+                    ),
+                ],
+                block: If {
+                    info: Info {
+                        start_ln_and_col: (
+                            13,
+                            13,
+                        ),
+                        end_ln_and_col: (
+                            17,
+                            6,
+                        ),
+                    },
+                    guard: Term(
+                        Var {
+                            info: Info {
+                                start_ln_and_col: (
+                                    13,
+                                    16,
+                                ),
+                                end_ln_and_col: (
+                                    13,
+                                    17,
+                                ),
+                            },
+                            name: "b",
+                            tag: None,
+                        },
+                    ),
+                    tag: None,
+                    true_block: [
+                        Return(
+                            Info {
+                                start_ln_and_col: (
+                                    14,
+                                    9,
+                                ),
+                                end_ln_and_col: (
+                                    14,
+                                    10,
+                                ),
+                            },
+                            Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            14,
+                                            9,
+                                        ),
+                                        end_ln_and_col: (
+                                            14,
+                                            10,
+                                        ),
+                                    },
+                                    lit: Int(
+                                        "1",
+                                    ),
+                                    tag: None,
+                                },
+                            ),
+                        ),
+                    ],
+                    false_block: [
+                        Block(
+                            Info {
+                                start_ln_and_col: (
+                                    15,
+                                    12,
+                                ),
+                                end_ln_and_col: (
+                                    17,
+                                    6,
+                                ),
+                            },
+                            [
+                                Return(
+                                    Info {
+                                        start_ln_and_col: (
+                                            16,
+                                            9,
+                                        ),
+                                        end_ln_and_col: (
+                                            16,
+                                            10,
+                                        ),
+                                    },
+                                    Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    16,
+                                                    9,
+                                                ),
+                                                end_ln_and_col: (
+                                                    16,
+                                                    10,
+                                                ),
+                                            },
+                                            lit: Int(
+                                                "2",
+                                            ),
+                                            tag: None,
+                                        },
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ],
+                },
+                is_const: true,
+            },
+            Return(
+                Info {
+                    start_ln_and_col: (
+                        18,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        18,
                         6,
                     ),
                 },
-                guard: Term(
+                Term(
                     Var {
                         info: Info {
                             start_ln_and_col: (
-                                13,
-                                8,
-                            ),
-                            end_ln_and_col: (
-                                13,
-                                9,
-                            ),
-                        },
-                        name: "b",
-                        tag: None,
-                    },
-                ),
-                tag: None,
-                true_block: [
-                    Return(
-                        Info {
-                            start_ln_and_col: (
-                                14,
-                                9,
-                            ),
-                            end_ln_and_col: (
-                                14,
                                 18,
-                            ),
-                        },
-                        Term(
-                            Lit {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        14,
-                                        16,
-                                    ),
-                                    end_ln_and_col: (
-                                        14,
-                                        17,
-                                    ),
-                                },
-                                lit: Int(
-                                    "1",
-                                ),
-                                tag: None,
-                            },
-                        ),
-                    ),
-                ],
-                false_block: [
-                    Block(
-                        Info {
-                            start_ln_and_col: (
-                                15,
-                                12,
+                                5,
                             ),
                             end_ln_and_col: (
-                                17,
+                                18,
                                 6,
                             ),
                         },
-                        [
-                            Return(
-                                Info {
-                                    start_ln_and_col: (
-                                        16,
-                                        9,
-                                    ),
-                                    end_ln_and_col: (
-                                        16,
-                                        18,
-                                    ),
-                                },
-                                Term(
-                                    Lit {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                16,
-                                                16,
-                                            ),
-                                            end_ln_and_col: (
-                                                16,
-                                                17,
-                                            ),
-                                        },
-                                        lit: Int(
-                                            "2",
-                                        ),
-                                        tag: None,
-                                    },
-                                ),
-                            ),
-                        ],
-                    ),
-                ],
-            },
+                        name: "c",
+                        tag: None,
+                    },
+                ),
+            ),
         ],
     },
     Pipeline {
         info: Info {
             start_ln_and_col: (
-                20,
+                21,
                 1,
             ),
             end_ln_and_col: (
-                20,
+                21,
                 22,
             ),
         },

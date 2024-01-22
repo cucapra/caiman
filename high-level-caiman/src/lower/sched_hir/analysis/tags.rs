@@ -309,7 +309,7 @@ impl Fact for TagAnalysis {
 
     fn transfer_instr(&mut self, stmt: HirInstr<'_>, _: usize) {
         match stmt {
-            HirInstr::Tail(Terminator::Call(dests, _)) => {
+            HirInstr::Tail(Terminator::Call(dests, _) | Terminator::Select { dests, .. }) => {
                 for (dest, dest_tags) in dests {
                     self.tags.insert(
                         dest.clone(),
@@ -333,17 +333,15 @@ impl Fact for TagAnalysis {
                     );
                 }
             }
-            HirInstr::Tail(Terminator::Return(v)) => {
-                for (idx, out) in v.iter().enumerate() {
+            HirInstr::Tail(Terminator::Return { dests, rets }) => {
+                assert_eq!(dests.len(), rets.len());
+                for ((idx, _), out) in dests.iter().zip(rets.iter()) {
                     let tag = self.tags.get(out).cloned().unwrap();
-                    self.tags.insert(format!("{RET_VAR}{idx}"), tag);
+                    self.tags.insert(idx.clone(), tag);
                 }
             }
             HirInstr::Tail(
-                Terminator::None
-                | Terminator::Next(..)
-                | Terminator::FinalReturn(_)
-                | Terminator::Select(..),
+                Terminator::None | Terminator::Next(..) | Terminator::FinalReturn(_),
             ) => (),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }

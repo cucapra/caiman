@@ -12,11 +12,11 @@ val min(a: i64, b: i64) -> i64 {
 fn min(a: i64, b: i64) -> i64 
     impls min, simple_tmln, simple_sptl
 {
-    if a < b {
-        return a;
+    let c = if a < b {
+        a
     } else {
-        return b;
-    }
+        b
+    };
 }
 
 val dist2(a: f32, b: f32) -> f32 {
@@ -74,25 +74,27 @@ val closest_point_host_rec(p: f32, a: [f32], min_dist: f32)
 fn closest_point_host_rec(p: f32, a: [f32], min_dist: f32) 
     -> f32 impls closest_point_host_rec, simple_sptl, simple_tmln
 {
-    if a.len() > 0 {
+    let c = if a.len() > 0 {
         let a_hd, a_tl = split(a);
         let min = a_hd if dist2(p, a_hd) < dist2(p, min_dist) else min_dist;
-        return closest_point_host_rec(p, a_tl, min);
+        closest_point_host_rec(p, a_tl, min)
     } else {
-        return min_dist;
-    }
+        min_dist
+    };
+    c
 
 }
 
-fn closest_point_host(p: f32, a: [f32]) -> f32
+fn closest_point_host(p: f32, a: [f32]) -> (f32, f32)
     impls closest_point_host, simple_sptl, simple_tmln
 {
-    if a.len() <= 0 {
-        return (F32_NAN, F32_NAN);
+    let c = if a.len() <= 0 {
+        (F32_NAN, F32_NAN)
     } else {
         let a_hd, a_tl = split(a);
-        return closest_point_host_rec(p, a_tl, a_hd);
-    }
+        closest_point_host_rec(p, a_tl, a_hd)
+    };
+    c
 }
 
 
@@ -131,7 +133,7 @@ sptl sp(bs: BufferSpace) -> BufferSpace {
 fn find_closest(p: f32, pts: [f32; N], start: i64, 
     end: i64, idx: i64) -> f32 impls find_closest, tm, sp
 {
-    if end - start <= LN {
+    let r = if end - start <= LN {
         let e = create_gpu_encoder();
         e.encode_copy[slice: gbuf <- pts[start .. end]];
         e.encode_copy[p_gpu <- p];
@@ -139,7 +141,7 @@ fn find_closest(p: f32, pts: [f32; N], start: i64,
 
         let f = e.submit();
         let res = await(f);
-        return res.r;
+        res.r
     } else {
         let mdpt = (start + end) / 2;
 
@@ -158,8 +160,9 @@ fn find_closest(p: f32, pts: [f32; N], start: i64,
             nxt_idx = 1;
         }
 
-        return find_closest(p, pts, next_start, nxt_end, nxt_idx);
-    }
+        find_closest(p, pts, next_start, nxt_end, nxt_idx)
+    };
+    r
 }
 
 val find_closest_point(p: f32, a: [f32; N]) -> f32 {
@@ -169,7 +172,7 @@ val find_closest_point(p: f32, a: [f32; N]) -> f32 {
 fn find_closest_point(p: f32, a: [f32; N]) 
     -> f32 impls find_closest_point, simple_tmln, simple_sptl 
 {
-    return find_closest(p, a, 0, N, 0);
+    find_closest(p, a, 0, N, 0)
 
 }
 

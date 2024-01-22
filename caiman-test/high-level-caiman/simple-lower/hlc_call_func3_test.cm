@@ -27,7 +27,7 @@ fn calc2_impl(t: i64 @ input(calc2.t)-usable)
 {
     let n: i64 @ node(calc2.nine) = 9;
     let r: i64 @ node(calc2.res) = t % n;
-    return r;
+    r
 }
 
 fn calc_impl(a: i64 @ input(calc.a)-usable, b: i64 @ input(calc.b)-usable) 
@@ -35,7 +35,7 @@ fn calc_impl(a: i64 @ input(calc.a)-usable, b: i64 @ input(calc.b)-usable)
 {
     let res: i64 @ node(calc.res) = a * b;
     let res2: i64 @ node(calc.res2) = calc2_impl(res) @ node(calc.res2);
-    return res2;
+    res2
 }
 
 fn main_impl() -> i64 @ node(main.c)-usable
@@ -44,7 +44,7 @@ fn main_impl() -> i64 @ node(main.c)-usable
     let a: i64 @ node(main.a)-usable = 3;
     let b: i64 @ node(main.b) = 5;
     let c: i64 @ node(main.c)-usable = calc_impl(a, b) @ node(main.c);
-    return c;
+    c
     
 }
 

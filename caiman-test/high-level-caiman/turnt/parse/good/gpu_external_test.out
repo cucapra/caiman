@@ -1229,7 +1229,7 @@
                     ),
                     end_ln_and_col: (
                         42,
-                        19,
+                        11,
                     ),
                 },
                 Term(
@@ -1237,11 +1237,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 42,
-                                12,
+                                5,
                             ),
                             end_ln_and_col: (
                                 42,
-                                18,
+                                11,
                             ),
                         },
                         name: "result",

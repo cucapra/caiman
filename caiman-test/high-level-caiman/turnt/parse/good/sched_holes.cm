@@ -3,5 +3,5 @@ fn foo() -> i32
     impls a, b, c
 {
     ???;
-    return ? * ?;
+    ? * ?
 }
