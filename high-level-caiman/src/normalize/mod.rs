@@ -1,25 +1,32 @@
 mod flatten_expr;
+mod if_to_seq;
 mod sched_rename;
 
-use crate::parse::ast::{ClassMembers, Program, TopLevel};
+use crate::{
+    error::LocalError,
+    parse::ast::{ClassMembers, Program, TopLevel},
+};
 
 use self::{
     flatten_expr::{flatten_schedule, flatten_spec},
+    if_to_seq::final_if_to_seq,
     sched_rename::rename_vars,
 };
 pub use sched_rename::original_name;
 
 /// Normalizes the AST by renaming schedule variables and flattening nested
 /// expressions.
-#[must_use]
+/// # Errors
+/// If there is a type error in the AST caught during normalization.
 #[allow(clippy::module_name_repetitions)]
-pub fn normalize_ast(mut p: Program) -> Program {
+pub fn normalize_ast(mut p: Program) -> Result<Program, LocalError> {
     for decl in &mut p {
         match decl {
             TopLevel::SchedulingFunc {
                 statements, input, ..
             } => {
-                *statements = flatten_schedule(std::mem::take(statements));
+                let stmts = final_if_to_seq(std::mem::take(statements))?;
+                *statements = flatten_schedule(stmts);
                 rename_vars(statements, input);
             }
             TopLevel::FunctionClass { members, .. } => {
@@ -33,5 +40,5 @@ pub fn normalize_ast(mut p: Program) -> Program {
             _ => (),
         }
     }
-    p
+    Ok(p)
 }
