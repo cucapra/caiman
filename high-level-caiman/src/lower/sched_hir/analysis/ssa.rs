@@ -6,6 +6,9 @@
 //! refer to it independently from the version of the variable before the
 //! store.
 //!
+//! Mostly taken from
+//! [here](https://github.com/stephenverderame/cs6120-bril/blob/main/ssa/src/main.rs)
+//!
 //! ## Why two SSA passes?
 //! Please see the comment in high-level-caiman/src/normalize/sched_rename.rs
 

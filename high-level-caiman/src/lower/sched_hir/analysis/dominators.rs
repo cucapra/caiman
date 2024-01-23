@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::lower::sched_hir::cfg::Cfg;
 
-/// A node in the dominator tree
+/// A node in the dominator tree.
 pub struct DomNode {
     /// The block id
     #[allow(dead_code)]
@@ -29,7 +29,8 @@ impl DomNode {
     }
 }
 
-/// A dominator tree
+/// A dominator tree. The dominator tree is a tree where each node
+/// immediately dominates its children.
 pub struct DomTree {
     /// A map from each block id to `DomTree` node
     nodes: HashMap<usize, DomNode>,
@@ -119,7 +120,7 @@ impl DomTree {
 /// # Arguments
 /// * `cfg` - The CFG
 /// # Returns
-/// * A map from each block to nodes that dominate it
+/// * A dominator tree
 /// # Panics
 #[must_use]
 #[allow(clippy::module_name_repetitions)]

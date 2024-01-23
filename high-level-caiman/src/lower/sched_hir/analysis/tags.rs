@@ -171,28 +171,6 @@ impl TagAnalysis {
     }
 }
 
-/// Gets the remote node id of `q`
-#[allow(dead_code)]
-const fn remote_node_id(q: &asm::Quotient) -> &asm::Hole<asm::RemoteNodeId> {
-    match q {
-        asm::Quotient::None(r)
-        | asm::Quotient::Node(r)
-        | asm::Quotient::Input(r)
-        | asm::Quotient::Output(r) => r,
-    }
-}
-
-/// Sets the remote node id of `q` to `id`
-#[allow(dead_code)]
-fn set_remote_node_id(q: &mut asm::Quotient, id: asm::Hole<asm::RemoteNodeId>) {
-    match q {
-        asm::Quotient::None(r)
-        | asm::Quotient::Node(r)
-        | asm::Quotient::Input(r)
-        | asm::Quotient::Output(r) => *r = id,
-    }
-}
-
 impl TagAnalysis {
     /// Transfer function for an HIR body statement
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {

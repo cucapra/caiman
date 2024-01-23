@@ -1,3 +1,7 @@
+//! Lowers a scheduling function into caiman assembly.
+//! Invokes the AST -> HIR transformation and all related passes
+//! for this, then applies syntax-directed lowering of HIR to Caiman Assembly.
+
 use std::collections::BTreeSet;
 
 use caiman::assembly::ast::{self as asm, Hole};

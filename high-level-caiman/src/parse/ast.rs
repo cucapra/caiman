@@ -366,20 +366,6 @@ pub enum SchedTerm {
     Hole(Info),
 }
 
-impl SchedTerm {
-    /// Gets the tags of this term if they are specified, otherwise returns `None`
-    #[must_use]
-    #[allow(dead_code)]
-    pub const fn get_tags(&self) -> Option<&Tags> {
-        match self {
-            Self::Lit { tag, .. }
-            | Self::Var { tag, .. }
-            | Self::Call(_, SchedFuncCall { tag, .. }) => tag.as_ref(),
-            Self::Hole(_) => None,
-        }
-    }
-}
-
 /// A scheduling expression
 pub type SchedExpr = NestedExpr<SchedTerm>;
 

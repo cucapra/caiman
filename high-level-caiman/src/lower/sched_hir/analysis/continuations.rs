@@ -23,7 +23,6 @@ pub struct Succs {
     /// A map from each block to the transitive closure of nodes that are
     /// predecessors of the key. We consider a block to be a predecessor of
     /// itself in this map.
-    #[allow(dead_code)]
     pub preds: HashMap<usize, HashSet<usize>>,
 }
 

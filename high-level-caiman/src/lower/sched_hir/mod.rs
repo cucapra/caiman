@@ -369,13 +369,6 @@ impl<'a> Funclet<'a> {
             && self.parent.cfg.predecessors(FINAL_BLOCK_ID).first() == Some(&self.id())
     }
 
-    /// Gets the local type of the specified variable.
-    #[inline]
-    #[allow(dead_code)]
-    pub fn get_local_type(&self, var: &str) -> Option<asm::TypeId> {
-        self.parent.types.get(var).cloned()
-    }
-
     /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
     pub fn get_out_tag(&self, var: &str) -> Option<&TagInfo> {

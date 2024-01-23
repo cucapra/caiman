@@ -1,3 +1,5 @@
+//! Simple tests of generating the cfg from the source AST.
+
 use std::collections::BTreeMap;
 
 use caiman::assembly::ast::FuncletId;

@@ -58,16 +58,6 @@ impl Edge {
             Self::None => vec![],
         }
     }
-
-    /// Gets the number of nodes that this edge connects to
-    #[allow(dead_code)]
-    pub const fn num_targets(&self) -> usize {
-        match self {
-            Self::Next(_) => 1,
-            Self::Select { .. } => 2,
-            Self::None => 0,
-        }
-    }
 }
 
 /// Something which can be converted to a collection of block ids.
