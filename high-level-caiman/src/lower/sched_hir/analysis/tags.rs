@@ -151,11 +151,11 @@ pub struct TagAnalysis<'a> {
 
 impl<'a> std::fmt::Debug for TagAnalysis<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut tags = self.tags.iter().collect::<Vec<_>>();
-        tags.sort_by_key(|(k, _)| (*k).clone());
+        let mut tag_keys = self.tags.keys().collect::<Vec<_>>();
+        tag_keys.sort();
         writeln!(f, "Tags:")?;
-        for (k, v) in tags {
-            writeln!(f, "  {k}: {v:?}")?;
+        for k in tag_keys {
+            writeln!(f, "  {k}: {:?}", self.tags.get(k).unwrap())?;
         }
         writeln!(f, "Input overrides:")?;
         for (k, v) in &self.input_overrides {
