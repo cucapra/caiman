@@ -1,3 +1,20 @@
+//! ## Unification Algorithm
+//! This uses a somewhat standard version of unification using a union-find
+//! with path compression. The main difference is that it supports
+//! named equivalence classes (class names). These names are
+//! essentially the canonical representation of an equivalence class. This'
+//! allows us to not only query if two nodes are equivalent and get
+//! a representative of the class, but it also allows us to query the
+//! *name* of the class if it has one. Essentially, this allows
+//! a metavariable to become a secondary canonical representation of a class.
+//!
+//! Because we use unification for type deduction and quotient
+//! deduction, the API is agnostic to the actual type system being used.
+//! It does this by working in terms of abstract nodes which are
+//! simply metavariables, terms (trees of nodes), or atoms (leaves).
+//! Different instantiations of the unification problem must map their
+//! constraints onto this simple format.
+
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 type NodePtr<T, A> = Rc<RefCell<Node<T, A>>>;

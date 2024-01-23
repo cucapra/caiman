@@ -1,3 +1,6 @@
+//! Computes dominators of a CFG.
+//! Mostly taken from
+//! [here](https://github.com/stephenverderame/cs6120-bril/blob/main/cfg/src/analysis/dominators.rs)
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::lower::sched_hir::cfg::Cfg;

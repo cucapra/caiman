@@ -1,3 +1,12 @@
+//! Contains functions to compute continuations and *pretinuations* of each block
+//! in the CFG. Given a block `B`, the continuation of `B` is the block that
+//! is a common successor to all successors of `B` such that the path from
+//! `B` to the continuation is the shortest out of all such common successors.
+//!
+//! The *pretinuation* of a block is basically the continuation in the inverse
+//! CFG. Given a block `B`, the pretinuation of `B` is a block, `C`, such that
+//! `B` is the continuation of `C`.
+
 #![allow(clippy::module_name_repetitions)]
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -130,9 +139,9 @@ pub fn compute_pretinuations(cfg: &Cfg) -> HashMap<usize, usize> {
     compute_merge_points(cfg, &cfg.transpose_graph, &cfg.graph).0
 }
 
-/// Computes "merge points" of every block in the CFG. A merge point is the
-/// block that is the successor of all of the block's successors such that the
-/// path to that successor is the shortest.
+/// Computes "merge points" of every block in the CFG. Given a block `B`, a
+/// merge point is the block that is the successor of all of the `B`'s successors
+/// such that the path from `B` to that successor is the shortest.
 ///
 /// In this definition, by successor we consider a block to be its own successor.
 ///

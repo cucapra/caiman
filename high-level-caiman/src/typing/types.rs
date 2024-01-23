@@ -223,6 +223,8 @@ impl MetaVar {
     }
 
     /// Returns the string representation of the metavariable
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
     pub fn into_string(self) -> String {
         self.0
     }

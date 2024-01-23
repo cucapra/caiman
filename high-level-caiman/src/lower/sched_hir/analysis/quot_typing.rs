@@ -1,3 +1,60 @@
+//! This module contains functions for deducing the value quotients of variables.
+//! The general idea is that each value in the value spec can be seen as a tree
+//! of operations that have been computed to result in that value. For example,
+//!
+//! ```text
+//! a :- 1
+//! b :- 2
+//! c :- a + b
+//! ```
+//!
+//! can be thought of as the tree:
+//!
+//! ```text
+//! 1   2
+//! |   |
+//! a   b
+//!  \ /
+//!   + = c
+//! ```
+//!
+//! A similar computation in the schedule can be mapped to an isomorphic tree.
+//!
+//! So, in the spec we compute and return some results whose computation tree
+//! we can build from the operations that yielded those results in the spec. In
+//! the schedule, we also have some results whose computation tree we can build
+//! from the various operations that yielded those results.
+//!
+//! The idea is that we can unify the spec forest with the schedule forest,
+//! matching the nodes in the schedule to the nodes in the spec.
+//!
+//! Right now, this approach works for pretty much everything that exists in the
+//! language right now. I suspect that down the line, there might be some
+//! black-box operation in the schedule that disconnects a schedule tree.
+//! In the previous example, this would like not being able to infer that `c` is
+//! the result of `a + b`.
+//!
+//! I'm not sure if any kind of black-box operation would ever come up, but to
+//! hedge my bets, the algorithm will also immediately unify any subtrees in the
+//! schedule that unambiguously matches a subtree in the spec. For example, if
+//! there is only one `1` in the spec, and only one `1` in the schedule, then
+//! the algorithm will immediately unify those two nodes.
+//!
+//! Unification is technically Big-O exponential, but in practice with path
+//! compression, it's linear.
+//! TODO: once explication is added, add a timeout that will chuck anything
+//! that takes too long to unify to the explicator.
+//!
+//! Right now, the algorithm will keep trying for eternity to unify the trees.
+//! Also, although not implemented right now, any thing that doesn't get a
+//! concrete type after unification (perhaps due to future black-box operations)
+//! will be sent to the explicator.
+//!
+//! The way we do unification is to add *class names* to the equivalence classes
+//! in the union-find data structure. The class names are the names of the
+//! value spec nodes that the schedule nodes are equivalent to. This allows us
+//! to get the canonical representative (spec node id) of any equivalence class.
+
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
@@ -87,7 +144,7 @@ fn add_var_constraint(
     Ok(env)
 }
 
-/// Adds a node with the given name to match the class name
+/// Adds a node with the given name to match the class name (spec node id)
 /// # Arguments
 /// * `name` - The name of the type variable
 /// * `class_name` - The name of the class that the type variable must match with
@@ -481,16 +538,18 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
     Ok((env, selects))
 }
 
-/// Fills the value quotient information in `tag` for `name`. If the quotient is unspecified,
+/// Fills the value quotient spec node id in `tag` for `name`. If the quotient is unspecified,
 /// The deduced quotient will always be `node` unless the variable is an input,
 /// in which case it will be `input`.
+///
+/// Does nothing if the environement does not contain `name`.
 /// # Arguments
 /// * `name` - The name of the variable
 /// * `tag` - The tag to fill
 /// * `env` - The current environment
 /// * `specs` - The specs
 /// # Panics
-/// If the value quotient information is already filled with a value that
+/// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
 fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, specs: &Specs) {
     if let Some(node) = env.get_node_name(name) {
@@ -551,6 +610,17 @@ fn construct_new_tag(name: &str, env: &NodeEnv, specs: &Rc<Specs>) -> TripleTag 
     )
 }
 
+/// Fills the value quotient spec ids in the tags for the all variables in
+/// the cfg, with the result of the unification. If the quotient deduction
+/// could not deduce a spec id for a particular variable, the spec id will
+/// not be changed. The quotients will always be `node` unless the variable
+/// is an input, in which case it will be `input`.
+/// # Arguments
+/// * `env` - The current environment and result of the unification
+/// * `cfg` - The cfg (mutated)
+/// * `specs` - The specs
+/// * `selects` - A map from each block with a select node to the name of the spec variable
+/// which maps to the select node.
 fn fill_type_info(
     env: &NodeEnv,
     cfg: &mut Cfg,
@@ -611,13 +681,10 @@ fn fill_type_info(
                 fill_val_quotient(&selects[&block.id], tag, env, specs);
             }
             Terminator::Call(..) | Terminator::None => unreachable!(),
-            Terminator::Return { .. } => {
-                // TODO
-                // for (dest, tag) in dests {
-                //     fill_val_quotient(dest, tag, env, specs);
-                // }
-            }
-            Terminator::Next(..) | Terminator::FinalReturn(..) => {}
+            // TODO: rexamine return
+            // I think we can do nothing here because the parent we are passing
+            // values back to must have already filled in the quotient information
+            Terminator::Next(..) | Terminator::FinalReturn(..) | Terminator::Return { .. } => {}
         }
         while let Some((idx, stmt)) = insertions.pop() {
             block.stmts.insert(idx, stmt);

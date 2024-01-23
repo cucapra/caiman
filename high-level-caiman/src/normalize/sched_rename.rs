@@ -1,3 +1,64 @@
+//! This module contains functions for renaming constants at the source (AST) level
+//! of a scheduling function. We rename variables so that variabls in differnt scopes
+//! (which are semantically different variables) have different names. This is done
+//! so that type deduction, which happens globally at the AST level, can distinguish
+//! between variables in different scopes.
+//!
+//! For example:
+//!
+//! ```text
+//! let x = 1;
+//! var v;
+//! if x > 0 {
+//!    let x = x + 1;
+//!    let c = x < 2;
+//!    v = x;
+//! } else {
+//!     let x = x - 1;
+//!     let c = x * 2;
+//!     v = x;
+//! }
+//! ```
+//! becomes:
+//!
+//! ```text
+//! let x_0 = 1;
+//! var v_0;
+//! if x_0 > 0 {
+//!     let x_1 = x_0 + 1;
+//!     let c_0 = x_1 < 2;
+//!     v_0 = x_1;
+//! } else {
+//!     let x_2 = x_0 - 1;
+//!     let c_1 = x_2 * 2;
+//!     v_0 = x_2;
+//! }
+//! ```
+//!
+//! Note that there is only one instance of `v`, since although it's been reassigned,
+//! it is still the same variable. Also note that `c` now has two versions, and
+//! each version has a differnt base type.
+//!
+//! ## Why two SSA passes?
+//!
+//! You may notice that there are two passes of SSA renaming. The first pass
+//! (this one) is done at the AST level, and the second pass is done at the
+//! HIR level. This pass supports datatype deduction, which happens at the AST
+//! level, and the second supports quotient deduction which happens at the HIR
+//! level. I decided to do this because when/if we add more complicated datatypes
+//! that don't really exist in the caiman IR such as tuples, slices, etc. we'd
+//! probably want to type check/deduce them at this level of abstraction and
+//! then lower them to something else in the HIR (convert a tuple argument into
+//! multiple arguments, for example).
+//!
+//! We do quotient deduction at the HIR level because at that level, the schedule
+//! can be more closely matched to the spec (no nested expressions, no if blocks, etc.)
+//! It's also worth noting that the second SSA pass also affects references so that
+//! updated references become new variables. This is required because updating
+//! a reference may change it's quotient, but it won't change it's datatype,
+//! hence why we don't do that here.
+//!
+
 use std::collections::HashMap;
 
 use regex::Regex;

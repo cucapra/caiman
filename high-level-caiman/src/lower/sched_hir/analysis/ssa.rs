@@ -1,3 +1,14 @@
+//! This module provides functions for transforming a cfg into SSA form.
+//! Our SSA form is a bit different from the standard SSA form in that
+//! we consider a reference store to be a definition of the variable being
+//! stored to. This is because a reference store may change the quotient
+//! of a variable, and thus, we want it to have a different name so we can
+//! refer to it independently from the version of the variable before the
+//! store.
+//!
+//! ## Why two SSA passes?
+//! Please see the comment in high-level-caiman/src/normalize/sched_rename.rs
+
 #![allow(clippy::module_name_repetitions)]
 use std::collections::HashMap;
 
@@ -199,11 +210,47 @@ fn ssa_rename_vars(
 }
 
 /// Transforms a cfg into SSA form. For our purposes, we consider a reference
-/// store to be a definition of the variable being stored to.
+/// store to be a definition of the variable being stored to. This is because
+/// a reference store may change the quotient of a variable, and thus, we want
+/// it to have a different name so we can refer to it independently from the
+/// version of the variable before the store.
 ///
 /// Each SSA variable is named `{original}.{id}` where `{id}` is the number of
 /// times the variable has been defined in the function. Each definition in SSA
 /// form is a version of a variable which may have different quotients.
+///
+/// ## Example (from a source-level representation)
+///
+/// ```text
+/// let x = 1;
+/// var v;
+/// if x > 0 {
+///    let x = x + 1;
+///    let c = x < 2;
+///    v = x;
+/// } else {
+///     let x = x - 1;
+///     let c = x * 2;
+///     v = x;
+/// }
+/// ```
+///
+/// becomes:
+///
+/// ```text
+/// let x.0 = 1;
+/// var v.0;
+/// if x.0 > 0 {
+///     let x.1 = x.0 + 1;
+///     let c.0 = x.1 < 2;
+///     v.1 = x.1;
+/// } else {
+///     let x.2 = x.0 - 1;
+///     let c.1 = x.2 * 2;
+///     v.2 = x.2;
+/// }
+/// v.3 = phi(v.1, v.2);
+/// ```
 #[must_use]
 pub fn transform_to_ssa(mut cfg: Cfg, live_vars: &InOutFacts<LiveVars>) -> Cfg {
     let doms = compute_dominators(&cfg);
@@ -231,6 +278,39 @@ fn original_name(name: &str) -> String {
 ///
 /// Therefore, we assume that SSA form is used only for analysis, and
 /// no transformations are done on the SSA form.
+///
+/// # Example (from a source-level representation)
+///
+/// ```text
+/// let x.0 = 1;
+/// var v.0;
+/// if x.0 > 0 {
+///     let x.1 = x.0 + 1;
+///     let c.0 = x.1 < 2;
+///     v.1 = x.1;
+/// } else {
+///     let x.2 = x.0 - 1;
+///     let c.1 = x.2 * 2;
+///     v.2 = x.2;
+/// }
+/// v.3 = phi(v.1, v.2);
+/// ```
+///
+/// becomes:
+///
+/// ```text
+/// let x = 1;
+/// var v;
+/// if x > 0 {
+///    let x = x + 1;
+///    let c = x < 2;
+///    v = x;
+/// } else {
+///     let x = x - 1;
+///     let c = x * 2;
+///     v = x;
+/// }
+/// ```
 #[must_use]
 pub fn transform_out_ssa(mut cfg: Cfg) -> Cfg {
     for bb in cfg.blocks.values_mut() {
