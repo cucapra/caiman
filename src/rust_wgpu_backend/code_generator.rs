@@ -62,7 +62,9 @@ enum VariableKind {
 struct VariableTracker {
     id_generator: IdGenerator,
     variable_kinds: HashMap<VarId, VariableKind>,
-    //variable_types: HashMap<VarId, ffi::TypeId>,
+    variable_types: HashMap<VarId, ffi::TypeId>,
+    /// variables allocated via alloc_temporary
+    allocated_temps: HashSet<VarId>,
 }
 
 impl VariableTracker {
@@ -70,7 +72,8 @@ impl VariableTracker {
         Self {
             id_generator: IdGenerator::new(),
             variable_kinds: HashMap::<VarId, VariableKind>::new(),
-            //variable_types: HashMap::<VarId, ffi::TypeId>::new(),
+            variable_types: HashMap::<VarId, ffi::TypeId>::new(),
+            allocated_temps: HashSet::<VarId>::new(),
         }
     }
 
@@ -81,12 +84,20 @@ impl VariableTracker {
     fn create(&mut self, kind: VariableKind, type_id: Option<ffi::TypeId>) -> VarId {
         let id = self.generate();
         self.variable_kinds.insert(id, kind);
-        //self.variable_types.insert(id, type_id);
+        if let Some(type_id) = type_id {
+            self.variable_types.insert(id, type_id);
+        }
         id
     }
 
     fn create_local_data(&mut self, type_id: Option<ffi::TypeId>) -> VarId {
         let id = self.create(VariableKind::LocalData, type_id);
+        id
+    }
+
+    fn create_local_alloc(&mut self, type_id: Option<ffi::TypeId>) -> VarId {
+        let id = self.create_local_data(type_id);
+        self.allocated_temps.insert(id);
         id
     }
 
@@ -108,8 +119,9 @@ impl VariableTracker {
         self.variable_kinds[&variable_id]
     }
 
-    fn get_var_name(&self, variable_id: VarId) -> String {
-        format!("var_{}", variable_id.0)
+    // Returns if the variable was created by alloc temporary
+    fn is_temp(&self, variable_id: VarId) -> bool {
+        self.allocated_temps.contains(&variable_id)
     }
 }
 
@@ -243,6 +255,18 @@ impl<'program> CodeGenerator<'program> {
         self.type_code_writer.finish()
             + self.state_code_writer.finish().as_str()
             + self.code_writer.finish().as_str()
+    }
+
+    fn get_var_name(&self, variable_id: VarId) -> String {
+        // if self.variable_tracker.allocated_temps.contains(&variable_id) {
+        //     format!(
+        //         "&mut unsafe {{ *(instance.state.get_var({}) as *const {}) }}",
+        //         variable_id.0,
+        //         self.get_type_name(self.variable_tracker.variable_types[&variable_id])
+        //     )
+        // } else {
+        format!("var_{}", variable_id.0)
+        //}
     }
 
     fn get_tuple_definition_string(&self, type_ids: &[ffi::TypeId]) -> String {
@@ -398,7 +422,7 @@ impl<'program> CodeGenerator<'program> {
             self.code_writer.write(format!(
                 "wgpu::BindGroupEntry {{binding : {}, resource : {}.as_binding_resource() }}, ",
                 binding,
-                self.variable_tracker.get_var_name(variable_id.unwrap())
+                self.get_var_name(variable_id.unwrap())
             ));
         }
         self.code_writer.write("];\n".to_string());
@@ -487,7 +511,7 @@ impl<'program> CodeGenerator<'program> {
         for output_index in 0..kernel.output_types.len() {
             let var_id = output_vars[output_index];
             self.code_writer
-                .write(format!("{}, ", self.variable_tracker.get_var_name(var_id)));
+                .write(format!("{}, ", self.get_var_name(var_id),));
         }
         self.code_writer.write(format!(") = "));
 
@@ -499,7 +523,7 @@ impl<'program> CodeGenerator<'program> {
             .write("compute_pass.set_pipeline(& pipeline);\n".to_string());
         self.code_writer
             .write("compute_pass.set_bind_group(0, & bind_group, & []);\n".to_string());
-        self.code_writer.write(format!("compute_pass.dispatch_workgroups({}.try_into().unwrap(), {}.try_into().unwrap(), {}.try_into().unwrap());\n", self.variable_tracker.get_var_name(dimension_vars[0]), self.variable_tracker.get_var_name(dimension_vars[1]), self.variable_tracker.get_var_name(dimension_vars[2])));
+        self.code_writer.write(format!("compute_pass.dispatch_workgroups({}.try_into().unwrap(), {}.try_into().unwrap(), {}.try_into().unwrap());\n", self.get_var_name(dimension_vars[0]), self.get_var_name(dimension_vars[1]), self.get_var_name(dimension_vars[2])));
         self.code_writer.write_str("}\n");
 
         let mut output_temp_variables = Vec::<VarId>::new();
@@ -518,10 +542,8 @@ impl<'program> CodeGenerator<'program> {
 
         self.code_writer.write(format!("("));
         for output_temp_var_id in output_temp_variables.iter() {
-            self.code_writer.write(format!(
-                "{}, ",
-                self.variable_tracker.get_var_name(*output_temp_var_id)
-            ));
+            self.code_writer
+                .write(format!("{}, ", self.get_var_name(*output_temp_var_id)));
         }
         self.code_writer.write(format!(")"));
 
@@ -578,7 +600,7 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} = Some(submission_index_{});\n",
-            self.variable_tracker.get_var_name(recv_var_id),
+            self.get_var_name(recv_var_id),
             self.submission_queue.last_submission_id_opt.unwrap().0
         );
 
@@ -586,7 +608,7 @@ impl<'program> CodeGenerator<'program> {
     }
 
     pub fn sync_gpu_fence(&mut self, recv_var_id: VarId) {
-        write!(self.code_writer, "instance.state.get_device_mut().poll(if let Some(id) = {} {{ wgpu::Maintain::WaitForSubmissionIndex(id) }} else {{ wgpu::Maintain::Wait }});\n", self.variable_tracker.get_var_name(recv_var_id));
+        write!(self.code_writer, "instance.state.get_device_mut().poll(if let Some(id) = {} {{ wgpu::Maintain::WaitForSubmissionIndex(id) }} else {{ wgpu::Maintain::Wait }});\n", self.get_var_name(recv_var_id));
     }
 
     pub fn insert_comment(&mut self, comment_string: &str) {
@@ -695,13 +717,13 @@ impl<'program> CodeGenerator<'program> {
             if is_mutable {
                 self.code_writer.write(format!(
                     "mut {} : {}",
-                    self.variable_tracker.get_var_name(variable_id),
+                    self.get_var_name(variable_id),
                     type_name
                 ));
             } else {
                 self.code_writer.write(format!(
                     "{} : {}",
-                    self.variable_tracker.get_var_name(variable_id),
+                    self.get_var_name(variable_id),
                     type_name
                 ));
             }
@@ -1043,11 +1065,7 @@ impl<'program> CodeGenerator<'program> {
         );
         write!(self.code_writer, "(instance, join_stack");
         for (argument_index, var_id) in argument_var_ids.iter().enumerate() {
-            write!(
-                self.code_writer,
-                ", {}",
-                self.variable_tracker.get_var_name(*var_id)
-            );
+            write!(self.code_writer, ", {}", self.get_var_name(*var_id));
         }
         write!(self.code_writer, ")\n");
     }
@@ -1064,21 +1082,13 @@ impl<'program> CodeGenerator<'program> {
             );
             write!(self.code_writer, "(instance, join_stack");
             for (return_index, var_id) in output_var_ids.iter().enumerate() {
-                write!(
-                    self.code_writer,
-                    ", {}",
-                    self.variable_tracker.get_var_name(*var_id)
-                );
+                write!(self.code_writer, ", {}", self.get_var_name(*var_id));
             }
             write!(self.code_writer, ") }}");
         }
         write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{instance, phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((");
         for (return_index, var_id) in output_var_ids.iter().enumerate() {
-            write!(
-                self.code_writer,
-                "{}, ",
-                self.variable_tracker.get_var_name(*var_id)
-            );
+            write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
         }
         write!(self.code_writer, "))}};");
     }
@@ -1090,11 +1100,7 @@ impl<'program> CodeGenerator<'program> {
     ) {
         write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{instance, phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Yield{}{{ yielded : (", yield_point_id.0);
         for (return_index, var_id) in yielded_var_ids.iter().enumerate() {
-            write!(
-                self.code_writer,
-                "{}, ",
-                self.variable_tracker.get_var_name(*var_id)
-            );
+            write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
         }
         write!(self.code_writer, ") }} }};");
     }
@@ -1276,7 +1282,7 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} : {} = {};\n",
-            self.variable_tracker.get_var_name(variable_id),
+            self.get_var_name(variable_id),
             self.get_type_name(type_id),
             value
         );
@@ -1288,7 +1294,7 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} : {} = {};\n",
-            self.variable_tracker.get_var_name(variable_id),
+            self.get_var_name(variable_id),
             self.get_type_name(type_id),
             value
         );
@@ -1300,7 +1306,7 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} : {} = {};\n",
-            self.variable_tracker.get_var_name(variable_id),
+            self.get_var_name(variable_id),
             self.get_type_name(type_id),
             value
         );
@@ -1327,10 +1333,10 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} = if {} != 0 {{ {} }} else {{ {} }};\n",
-            self.variable_tracker.get_var_name(variable_id),
-            self.variable_tracker.get_var_name(condition_var_id),
-            self.variable_tracker.get_var_name(true_case_var_id),
-            self.variable_tracker.get_var_name(false_case_var_id)
+            self.get_var_name(variable_id),
+            self.get_var_name(condition_var_id),
+            self.get_var_name(true_case_var_id),
+            self.get_var_name(false_case_var_id)
         );
         variable_id
     }
@@ -1348,7 +1354,7 @@ impl<'program> CodeGenerator<'program> {
         let mut var_types = Vec::<String>::new();
         for (i, type_id) in output_type_ids.iter().enumerate() {
             let var_id = self.variable_tracker.create_local_data(Some(*type_id));
-            var_names.push(self.variable_tracker.get_var_name(var_id));
+            var_names.push(self.get_var_name(var_id));
             var_types.push(self.get_type_name(*type_id));
             var_ids.push(var_id);
         }
@@ -1373,8 +1379,8 @@ impl<'program> CodeGenerator<'program> {
 
         write!(
             self.code_writer,
-            " ) = if {} !=0 {{ ",
-            self.variable_tracker.get_var_name(condition_var_id)
+            ") = if {} !=0 {{ ",
+            self.get_var_name(condition_var_id)
         );
 
         var_ids.into_boxed_slice()
@@ -1386,11 +1392,7 @@ impl<'program> CodeGenerator<'program> {
 
         write!(self.code_writer, " ( ");
         for (i, var_id) in output_var_ids.iter().enumerate() {
-            write!(
-                self.code_writer,
-                "{}",
-                self.variable_tracker.get_var_name(*var_id)
-            );
+            write!(self.code_writer, "{}", self.get_var_name(*var_id));
             if i < output_var_ids.len() - 1 {
                 write!(self.code_writer, ", ");
             }
@@ -1401,11 +1403,7 @@ impl<'program> CodeGenerator<'program> {
     pub fn end_else(&mut self, output_var_ids: &[VarId]) {
         write!(self.code_writer, " ( ");
         for (i, var_id) in output_var_ids.iter().enumerate() {
-            write!(
-                self.code_writer,
-                "{}",
-                self.variable_tracker.get_var_name(*var_id)
-            );
+            write!(self.code_writer, "{}", self.get_var_name(*var_id));
             if i < output_var_ids.len() - 1 {
                 write!(self.code_writer, ", ");
             }
@@ -1428,15 +1426,14 @@ impl<'program> CodeGenerator<'program> {
         let call_result_var = self.variable_tracker.generate();
         let mut argument_string = String::new();
         for (index, argument) in argument_vars.iter().enumerate() {
-            argument_string +=
-                format!("{}", self.variable_tracker.get_var_name(*argument)).as_str();
+            argument_string += format!("{}", self.get_var_name(*argument)).as_str();
             if index + 1 < argument_vars.len() {
                 argument_string += ", ";
             }
         }
         self.code_writer.write(format!(
             "let {} = instance.cpu_functions.{}(instance.state, {});\n",
-            self.variable_tracker.get_var_name(call_result_var),
+            self.get_var_name(call_result_var),
             external_cpu_function.name,
             argument_string
         ));
@@ -1446,8 +1443,8 @@ impl<'program> CodeGenerator<'program> {
             output_variables.push(var);
             self.code_writer.write(format!(
                 "let {} = {}.{};\n",
-                self.variable_tracker.get_var_name(var),
-                self.variable_tracker.get_var_name(call_result_var),
+                self.get_var_name(var),
+                self.get_var_name(call_result_var),
                 i
             ));
         }
@@ -1462,7 +1459,7 @@ impl<'program> CodeGenerator<'program> {
         let variable_id = self.variable_tracker.create_buffer(Some(type_id));
         let type_binding_info = self.get_type_binding_info(type_id);
         let type_name = self.get_type_name(type_id);
-        write!(self.code_writer, "let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage: wgpu::BufferUsages::empty()", self.variable_tracker.get_var_name(variable_id), type_binding_info.size);
+        write!(self.code_writer, "let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage: wgpu::BufferUsages::empty()", self.get_var_name(variable_id), type_binding_info.size);
         if buffer_flags.map_read {
             write!(self.code_writer, " | wgpu::BufferUsages::MAP_READ");
         }
@@ -1482,7 +1479,7 @@ impl<'program> CodeGenerator<'program> {
             write!(self.code_writer, " | wgpu::BufferUsages::UNIFORM");
         }
         write!(self.code_writer, ", mapped_at_creation : false}});\n");
-        //self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
+        //self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.get_var_name(variable_id), type_binding_info.size));
         variable_id
     }
 
@@ -1498,10 +1495,10 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} = caiman_rt::GpuBufferRef::<'_, {}>::new(& {}, {});\n",
-            self.variable_tracker.get_var_name(variable_id),
+            self.get_var_name(variable_id),
             type_name,
-            self.variable_tracker.get_var_name(buffer_var_id),
-            self.variable_tracker.get_var_name(offset_var_id)
+            self.get_var_name(buffer_var_id),
+            self.get_var_name(offset_var_id)
         );
         variable_id
     }
@@ -1517,8 +1514,8 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} = {}.suballocate_ref::<'callee, {}>().unwrap();\n",
-            self.variable_tracker.get_var_name(variable_id),
-            self.variable_tracker.get_var_name(buffer_allocator_var_id),
+            self.get_var_name(variable_id),
+            self.get_var_name(buffer_allocator_var_id),
             type_name
         );
         variable_id
@@ -1536,10 +1533,10 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} = {}.suballocate_slice::<'callee, {}>({}).unwrap();\n",
-            self.variable_tracker.get_var_name(variable_id),
-            self.variable_tracker.get_var_name(buffer_allocator_var_id),
+            self.get_var_name(variable_id),
+            self.get_var_name(buffer_allocator_var_id),
             type_name,
-            self.variable_tracker.get_var_name(count_var_id)
+            self.get_var_name(count_var_id)
         );
         variable_id
     }
@@ -1563,7 +1560,7 @@ impl<'program> CodeGenerator<'program> {
                 write!(
                     element_counts_string,
                     "Some({}), ",
-                    self.variable_tracker.get_var_name(*count_var_id)
+                    self.get_var_name(*count_var_id)
                 );
             } else {
                 write!(element_counts_string, "None, ");
@@ -1574,8 +1571,8 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} = {}.test_suballocate_many(&[{}], &[{}]);\n",
-            self.variable_tracker.get_var_name(success_var_id),
-            self.variable_tracker.get_var_name(buffer_allocator_var_id),
+            self.get_var_name(success_var_id),
+            self.get_var_name(buffer_allocator_var_id),
             layouts_string,
             element_counts_string
         );
@@ -1607,11 +1604,7 @@ impl<'program> CodeGenerator<'program> {
             capture_types.len()
         );
         for var_id in capture_var_ids.iter() {
-            write!(
-                self.code_writer,
-                "{}, ",
-                self.variable_tracker.get_var_name(*var_id)
-            );
+            write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
         }
         write!(self.code_writer, "); let closure_header = ClosureHeader::Funclet{}Capturing{}; unsafe {{ join_stack.push_unsafe_unaligned(join_data).expect(\"Ran out of memory while serializing join\"); join_stack.push_unsafe_unaligned(closure_header).expect(\"Ran out of memory while serializing join\"); }}", funclet_id, capture_types.len());
 
@@ -1636,31 +1629,31 @@ impl<'program> CodeGenerator<'program> {
 
         self.code_writer.write(format!(
             "let {} = {}.slice();\n",
-            self.variable_tracker.get_var_name(slice_var_id),
-            self.variable_tracker.get_var_name(source_var)
+            self.get_var_name(slice_var_id),
+            self.get_var_name(source_var)
         ));
         self.code_writer.write(format!(
             "let ({0}_send, {0}_recv) = futures::channel::oneshot::channel::<()>();\n",
-            self.variable_tracker.get_var_name(future_var_id)
+            self.get_var_name(future_var_id)
         ));
-        self.code_writer.write(format!("{1}.map_async(wgpu::MapMode::Read, |res| {{res.unwrap(); {0}_send.send(()).unwrap(); }});\n", self.variable_tracker.get_var_name(future_var_id), self.variable_tracker.get_var_name(slice_var_id)));
+        self.code_writer.write(format!("{1}.map_async(wgpu::MapMode::Read, |res| {{res.unwrap(); {0}_send.send(()).unwrap(); }});\n", self.get_var_name(future_var_id), self.get_var_name(slice_var_id)));
         self.code_writer.write(format!(
             "instance.state.get_device_mut().poll(wgpu::Maintain::Wait);\n"
         ));
         self.code_writer.write(format!(
             "futures::executor::block_on({}_recv);\n",
-            self.variable_tracker.get_var_name(future_var_id)
+            self.get_var_name(future_var_id)
         ));
         self.code_writer.write(format!(
             "let {} = {}.get_mapped_range();\n",
-            self.variable_tracker.get_var_name(range_var_id),
-            self.variable_tracker.get_var_name(slice_var_id)
+            self.get_var_name(range_var_id),
+            self.get_var_name(slice_var_id)
         ));
         self.code_writer.write(format!(
             "let {} = * unsafe {{ std::mem::transmute::<* const u8, & {}>({}.as_ptr()) }};\n",
-            self.variable_tracker.get_var_name(output_var_id),
+            self.get_var_name(output_var_id),
             type_name,
-            self.variable_tracker.get_var_name(range_var_id)
+            self.get_var_name(range_var_id)
         ));
         return output_var_id;
     }
@@ -1668,7 +1661,7 @@ impl<'program> CodeGenerator<'program> {
     /// Returns a string representing variable `var` as a slice of little-endian bytes.
     fn local_as_le_bytes(&self, var: VarId, var_type_id: ffi::TypeId) -> String {
         use ffi::Type::*;
-        let var_name = self.variable_tracker.get_var_name(var);
+        let var_name = self.get_var_name(var);
         //let var_type_id = self.variable_tracker.get_type_id(var);
         let var_type = self.native_interface.types.get(var_type_id.0).unwrap();
 
@@ -1688,7 +1681,7 @@ impl<'program> CodeGenerator<'program> {
 
     fn local_ref_content_as_le_bytes(&self, var: VarId, var_type_id: ffi::TypeId) -> String {
         use ffi::Type::*;
-        let var_name = self.variable_tracker.get_var_name(var);
+        let var_name = self.get_var_name(var);
         //let var_type_id = self.variable_tracker.get_type_id(var);
         let var_type = self.native_interface.types.get(var_type_id.0).unwrap();
         let data_type_id = match var_type {
@@ -1718,7 +1711,7 @@ impl<'program> CodeGenerator<'program> {
         source_var: VarId,
         type_id: ffi::TypeId,
     ) {
-        let buffer_view_var_name = self.variable_tracker.get_var_name(destination_var);
+        let buffer_view_var_name = self.get_var_name(destination_var);
         let source_bytes = self.local_as_le_bytes(source_var, type_id);
         self.code_writer.write(format!(
             "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, {});\n",
@@ -1739,8 +1732,8 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "command_encoder.copy_buffer_to_buffer(& {}, 0, & {}, 0, {});\n",
-            self.variable_tracker.get_var_name(destination_var),
-            self.variable_tracker.get_var_name(source_var),
+            self.get_var_name(destination_var),
+            self.get_var_name(source_var),
             type_binding_info.size
         );
         let command_buffer_id = self.end_command_encoding();
@@ -1750,9 +1743,9 @@ impl<'program> CodeGenerator<'program> {
     /*fn build_create_buffer_with_data(&mut self, data_var: VarId, type_id: ffi::TypeId, buffer_flags : ir::BufferFlags) -> VarId {
         let variable_id = self.variable_tracker.generate();
         let type_binding_info = self.get_type_binding_info(type_id);
-        let buffer_view_var_name = self.variable_tracker.get_var_name(variable_id);
+        let buffer_view_var_name = self.get_var_name(variable_id);
         let data_bytes = self.local_as_le_bytes(data_var, type_id);
-        self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
+        self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.get_var_name(variable_id), type_binding_info.size));
         self.code_writer.write(format!(
             "instance.state.get_queue_mut().write_buffer(& {}.buffer, {}.base_address, {} );\n",
             buffer_view_var_name, buffer_view_var_name, data_bytes
@@ -1769,14 +1762,14 @@ impl<'program> CodeGenerator<'program> {
         let variable_id = self.variable_tracker.generate();
         let type_binding_info = self.get_type_binding_info(type_id);
         let type_name = self.get_type_name(type_id);
-        self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.variable_tracker.get_var_name(variable_id), type_binding_info.size));
+        self.code_writer.write(format!("let mut {} = instance.state.get_device_mut().create_buffer(& wgpu::BufferDescriptor {{ label : None, size : {}, usage : wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE, mapped_at_creation : false}});\n", self.get_var_name(variable_id), type_binding_info.size));
         write!(self.code_writer, "{{\n");
         self.code_writer.write("let mut command_encoder = instance.state.get_device_mut().create_command_encoder(& wgpu::CommandEncoderDescriptor {label : None});\n".to_string());
         write!(
             self.code_writer,
             "command_encoder.copy_buffer_to_buffer(& {}, 0, & {}, 0, {});\n",
-            self.variable_tracker.get_var_name(data_var),
-            self.variable_tracker.get_var_name(variable_id),
+            self.get_var_name(data_var),
+            self.get_var_name(variable_id),
             type_binding_info.size
         );
         self.code_writer
@@ -1807,44 +1800,75 @@ impl<'program> CodeGenerator<'program> {
         self.generate_compute_dispatch(kernel, dimension_vars, argument_vars, output_vars);
     }
 
+    /// Gets the type name of a local variable
+    /// # Panics
+    /// Panics if the variable id was not created by an alloc temporary
+    fn get_local_var_type_name(&self, var: VarId) -> String {
+        self.get_type_name(self.variable_tracker.variable_types[&var])
+    }
+
     pub fn build_alloc_temp_local_ref(&mut self, type_id: ffi::TypeId) -> VarId {
-        let variable_id = self.variable_tracker.create_local_data(Some(type_id));
+        let variable_id = self.variable_tracker.create_local_alloc(Some(type_id));
         let temp_var_id = self.variable_tracker.generate();
         //let type_binding_info = self.get_type_binding_info(type_id);
         let type_name = self.get_type_name(type_id);
         write!(
             self.code_writer,
-            "let mut {} : {} = std::default::Default::default();\n",
-            self.variable_tracker.get_var_name(temp_var_id),
-            type_name
+            "let {} = instance.state.alloc_var({}, std::mem::size_of::<{type_name}>(), \
+            std::mem::align_of::<{type_name}>()) as *mut {type_name};\n",
+            self.get_var_name(temp_var_id),
+            variable_id.0
         );
+        // // this should be safe bc of the caiman type system
         write!(
             self.code_writer,
-            "let {} = &mut {};\n",
-            self.variable_tracker.get_var_name(variable_id),
-            self.variable_tracker.get_var_name(temp_var_id)
+            "let {} = &mut unsafe {{ *{} }};\n",
+            self.get_var_name(variable_id),
+            self.get_var_name(temp_var_id)
         );
         variable_id
     }
 
     pub fn build_write_local_ref(&mut self, dst_ref_var_id: VarId, src_var_id: VarId) {
-        write!(
-            self.code_writer,
-            "* {} = {};\n",
-            self.variable_tracker.get_var_name(dst_ref_var_id),
-            self.variable_tracker.get_var_name(src_var_id)
-        );
+        if self.variable_tracker.is_temp(dst_ref_var_id) {
+            // this should be safe bc of the caiman type system
+            write!(
+                self.code_writer,
+                "unsafe {{ *(instance.state.get_var_mut({}) as *mut {})  = {} }};\n",
+                dst_ref_var_id.0,
+                self.get_local_var_type_name(dst_ref_var_id),
+                self.get_var_name(src_var_id),
+            );
+        } else {
+            write!(
+                self.code_writer,
+                "*{} = {};\n",
+                self.get_var_name(dst_ref_var_id),
+                self.get_var_name(src_var_id),
+            );
+        }
     }
 
     pub fn build_read_local_ref(&mut self, src_ref_var_id: VarId, type_id: ffi::TypeId) -> VarId {
         let variable_id = self.variable_tracker.create_local_data(Some(type_id));
         let type_name = self.get_type_name(type_id);
-        write!(
-            self.code_writer,
-            "let {} = * {};\n",
-            self.variable_tracker.get_var_name(variable_id),
-            self.variable_tracker.get_var_name(src_ref_var_id)
-        );
+        if self.variable_tracker.is_temp(src_ref_var_id) {
+            // safe bc of the caiman type system
+            write!(
+                self.code_writer,
+                "let {} = unsafe {{ *(instance.state.get_var({}) as *const {}) }};\n",
+                self.get_var_name(variable_id),
+                src_ref_var_id.0,
+                self.get_local_var_type_name(src_ref_var_id),
+            );
+        } else {
+            write!(
+                self.code_writer,
+                "let {} = *{};\n",
+                self.get_var_name(variable_id),
+                self.get_var_name(src_ref_var_id),
+            );
+        }
         variable_id
     }
 
@@ -1854,8 +1878,8 @@ impl<'program> CodeGenerator<'program> {
         write!(
             self.code_writer,
             "let {} = & {};\n",
-            self.variable_tracker.get_var_name(variable_id),
-            self.variable_tracker.get_var_name(src_var_id)
+            self.get_var_name(variable_id),
+            self.get_var_name(src_var_id)
         );
         variable_id
     }

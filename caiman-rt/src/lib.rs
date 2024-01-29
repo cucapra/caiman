@@ -1,23 +1,106 @@
 #![allow(warnings)]
+
+use core::slice;
+use std::{alloc::Layout, collections::HashMap, fmt::Alignment, os::raw::c_void};
 pub extern crate bytemuck;
 pub extern crate wgpu;
 
 // None = waits on whole queue
 pub type GpuFence = Option<wgpu::SubmissionIndex>;
 
+// BumpAllocator
+struct BumpAllocator {
+    next_address: usize,
+    buffer: Box<[u8]>,
+    address_map: HashMap<usize, BumpAddr>,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct BumpAddr(usize);
+
+const MAX_ALIGN: usize = 16;
+
+impl BumpAllocator {
+    fn new(size: usize) -> Self {
+        Self {
+            next_address: 0,
+            buffer: unsafe {
+                Box::from_raw(slice::from_raw_parts_mut(
+                    std::alloc::alloc_zeroed(Layout::from_size_align(size, MAX_ALIGN).unwrap()),
+                    size,
+                ))
+            },
+            address_map: HashMap::new(),
+        }
+    }
+
+    /// Allocates a new variable with the given id, size, and alignment.
+    /// The alignment must be less than or equal to `MAX_ALIGN`.
+    fn alloc(&mut self, id: usize, size: usize, align: usize) -> *mut u8 {
+        assert!(align <= MAX_ALIGN);
+        let next_aligned_addr = (self.next_address + align - 1) & !(align - 1);
+        assert!(next_aligned_addr + size <= self.buffer.len());
+        self.next_address = next_aligned_addr + size;
+        let addr = BumpAddr(next_aligned_addr);
+        self.address_map.insert(id, addr);
+        unsafe {
+            self.buffer
+                .as_mut_ptr()
+                .offset(next_aligned_addr.try_into().unwrap())
+        }
+    }
+
+    /// Gets a pointer to the start of the allocation for the given id.
+    /// Requires that the allocation exists and that usage of the pointer is safe.
+    fn get_ptr(&self, id: usize) -> *const u8 {
+        let address = self.address_map.get(&id).unwrap();
+        unsafe { self.buffer.as_ptr().offset(address.0.try_into().unwrap()) }
+    }
+
+    /// Gets a pointer to the start of the allocation for the given id.
+    /// Requires that the allocation exists and that usage of the pointer is safe.
+    fn get_ptr_mut(&mut self, id: usize) -> *mut u8 {
+        let address = self.address_map.get(&id).unwrap();
+        unsafe {
+            self.buffer
+                .as_mut_ptr()
+                .offset(address.0.try_into().unwrap())
+        }
+    }
+
+    /// Resets the allocator to the empty state.
+    fn reset(&mut self) {
+        self.next_address = 0;
+    }
+}
+
 pub trait State {
     fn get_device_mut(&mut self) -> &mut wgpu::Device;
     fn get_queue_mut(&mut self) -> &mut wgpu::Queue;
+    /// Gets a mutable pointer to the start of the allocation for the given id.
+    /// The allocation must have already been created with `alloc_var`
+    fn get_var_mut(&mut self, id: usize) -> *mut c_void;
+    /// Gets a const pointer to the start of the allocation for the given id.
+    /// The allocation must have already been created with `alloc_var`
+    fn get_var(&self, id: usize) -> *const c_void;
+    /// Allocates a local variable with the given id, size, and alignment.
+    /// The alignment must be less than or equal to `MAX_ALIGN`.
+    fn alloc_var(&mut self, id: usize, size: usize, align: usize) -> *mut c_void;
 }
 
 pub struct RootState<'device, 'queue> {
     device: &'device mut wgpu::Device,
     queue: &'queue mut wgpu::Queue,
+    local_storage: BumpAllocator,
 }
 
 impl<'device, 'queue> RootState<'device, 'queue> {
     pub fn new(device: &'device mut wgpu::Device, queue: &'queue mut wgpu::Queue) -> Self {
-        Self { device, queue }
+        Self {
+            device,
+            queue,
+            local_storage: BumpAllocator::new(4096 * 4),
+        }
     }
 }
 
@@ -28,6 +111,19 @@ impl<'device, 'queue> State for RootState<'device, 'queue> {
 
     fn get_queue_mut(&mut self) -> &mut wgpu::Queue {
         self.queue
+    }
+
+    fn get_var_mut(&mut self, id: usize) -> *mut c_void {
+        self.local_storage.get_ptr_mut(id) as *mut c_void
+    }
+
+    fn get_var(&self, id: usize) -> *const c_void {
+        self.local_storage.get_ptr(id) as *const c_void
+    }
+
+    fn alloc_var(&mut self, id: usize, size: usize, align: usize) -> *mut c_void {
+        assert!(align <= MAX_ALIGN);
+        self.local_storage.alloc(id, size, align) as *mut c_void
     }
 }
 
