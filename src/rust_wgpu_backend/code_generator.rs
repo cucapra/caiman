@@ -1830,45 +1830,45 @@ impl<'program> CodeGenerator<'program> {
     }
 
     pub fn build_write_local_ref(&mut self, dst_ref_var_id: VarId, src_var_id: VarId) {
-        if self.variable_tracker.is_temp(dst_ref_var_id) {
-            // this should be safe bc of the caiman type system
-            write!(
-                self.code_writer,
-                "unsafe {{ *(instance.state.get_var_mut({}) as *mut {})  = {} }};\n",
-                dst_ref_var_id.0,
-                self.get_local_var_type_name(dst_ref_var_id),
-                self.get_var_name(src_var_id),
-            );
-        } else {
-            write!(
-                self.code_writer,
-                "*{} = {};\n",
-                self.get_var_name(dst_ref_var_id),
-                self.get_var_name(src_var_id),
-            );
-        }
+        // if self.variable_tracker.is_temp(dst_ref_var_id) {
+        //     // this should be safe bc of the caiman type system
+        //     write!(
+        //         self.code_writer,
+        //         "unsafe {{ *(instance.state.get_var_mut({}) as *mut {})  = {} }};\n",
+        //         dst_ref_var_id.0,
+        //         self.get_local_var_type_name(dst_ref_var_id),
+        //         self.get_var_name(src_var_id),
+        //     );
+        // } else {
+        write!(
+            self.code_writer,
+            "*{} = {};\n",
+            self.get_var_name(dst_ref_var_id),
+            self.get_var_name(src_var_id),
+        );
+        //}
     }
 
     pub fn build_read_local_ref(&mut self, src_ref_var_id: VarId, type_id: ffi::TypeId) -> VarId {
         let variable_id = self.variable_tracker.create_local_data(Some(type_id));
         let type_name = self.get_type_name(type_id);
-        if self.variable_tracker.is_temp(src_ref_var_id) {
-            // safe bc of the caiman type system
-            write!(
-                self.code_writer,
-                "let {} = unsafe {{ *(instance.state.get_var({}) as *const {}) }};\n",
-                self.get_var_name(variable_id),
-                src_ref_var_id.0,
-                self.get_local_var_type_name(src_ref_var_id),
-            );
-        } else {
-            write!(
-                self.code_writer,
-                "let {} = *{};\n",
-                self.get_var_name(variable_id),
-                self.get_var_name(src_ref_var_id),
-            );
-        }
+        // if self.variable_tracker.is_temp(src_ref_var_id) {
+        //     // safe bc of the caiman type system
+        //     write!(
+        //         self.code_writer,
+        //         "let {} = unsafe {{ *(instance.state.get_var({}) as *const {}) }};\n",
+        //         self.get_var_name(variable_id),
+        //         src_ref_var_id.0,
+        //         self.get_local_var_type_name(src_ref_var_id),
+        //     );
+        // } else {
+        write!(
+            self.code_writer,
+            "let {} = *{};\n",
+            self.get_var_name(variable_id),
+            self.get_var_name(src_ref_var_id),
+        );
+        //}
         variable_id
     }
 
