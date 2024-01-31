@@ -258,15 +258,7 @@ impl<'program> CodeGenerator<'program> {
     }
 
     fn get_var_name(&self, variable_id: VarId) -> String {
-        // if self.variable_tracker.allocated_temps.contains(&variable_id) {
-        //     format!(
-        //         "&mut unsafe {{ *(instance.state.get_var({}) as *const {}) }}",
-        //         variable_id.0,
-        //         self.get_type_name(self.variable_tracker.variable_types[&variable_id])
-        //     )
-        // } else {
         format!("var_{}", variable_id.0)
-        //}
     }
 
     fn get_tuple_definition_string(&self, type_ids: &[ffi::TypeId]) -> String {
@@ -523,7 +515,14 @@ impl<'program> CodeGenerator<'program> {
             .write("compute_pass.set_pipeline(& pipeline);\n".to_string());
         self.code_writer
             .write("compute_pass.set_bind_group(0, & bind_group, & []);\n".to_string());
-        self.code_writer.write(format!("compute_pass.dispatch_workgroups({}.try_into().unwrap(), {}.try_into().unwrap(), {}.try_into().unwrap());\n", self.get_var_name(dimension_vars[0]), self.get_var_name(dimension_vars[1]), self.get_var_name(dimension_vars[2])));
+        self.code_writer.write(format!(
+            "compute_pass.dispatch_workgroups(({}).try_into().unwrap(), \
+        ({}).try_into().unwrap(), \
+        ({}).try_into().unwrap());\n",
+            self.access_val_str(dimension_vars[0]),
+            self.access_val_str(dimension_vars[1]),
+            self.access_val_str(dimension_vars[2])
+        ));
         self.code_writer.write_str("}\n");
 
         let mut output_temp_variables = Vec::<VarId>::new();
@@ -636,6 +635,7 @@ impl<'program> CodeGenerator<'program> {
         self.code_writer.begin_module(pipeline_name);
         write!(self.code_writer, "use caiman_rt::wgpu;\n");
         write!(self.code_writer, "use caiman_rt::bytemuck;\n");
+        write!(self.code_writer, "use caiman_rt::LocalVars;\n");
 
         self.code_writer.begin_module("outputs");
         {
@@ -702,8 +702,9 @@ impl<'program> CodeGenerator<'program> {
         let mut next_trait_index = 0usize;
 
         let mut argument_variable_ids = Vec::<VarId>::new();
-        write!(self.code_writer, "fn funclet{}_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut caiman_rt::JoinStack<'callee>", funclet_id);
+        write!(self.code_writer, "fn funclet{}_func<'state,  'cpu_functions, 'callee, Callbacks : CpuFunctions>(mut instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut caiman_rt::JoinStack<'callee>", funclet_id);
 
+        let mut inputs = Vec::new();
         for (input_index, input_type) in input_types.iter().enumerate() {
             write!(self.code_writer, ", ");
 
@@ -714,6 +715,7 @@ impl<'program> CodeGenerator<'program> {
                 ffi::Type::GpuBufferAllocator => true,
                 _ => false,
             };
+            inputs.push((variable_id, input_type));
             if is_mutable {
                 self.code_writer.write(format!(
                     "mut {} : {}",
@@ -823,7 +825,8 @@ impl<'program> CodeGenerator<'program> {
         write!(self.code_writer, "}}");
 
         // Write the instance state
-        write!(self.code_writer, "pub struct Instance<'state, 'cpu_functions, F : CpuFunctions>{{state : & 'state mut dyn caiman_rt::State, cpu_functions : & 'cpu_functions F");
+        write!(self.code_writer, "pub struct Instance<'state, 'cpu_functions, F : CpuFunctions>{{\
+            state : & 'state mut dyn caiman_rt::State, cpu_functions : & 'cpu_functions F, locals : LocalVars");
 
         for (shader_module_key, shader_module) in self.shader_modules.iter() {
             write!(
@@ -882,7 +885,7 @@ impl<'program> CodeGenerator<'program> {
             self.code_writer,
             "{}",
             "
-				Self{state, cpu_functions"
+				Self{state, cpu_functions, locals: LocalVars::new()"
         );
 
         for (shader_module_key, shader_module) in self.shader_modules.iter() {
@@ -1186,6 +1189,17 @@ impl<'program> CodeGenerator<'program> {
         self.native_interface.calculate_type_binding_info(type_id)
     }
 
+    /// Returns true if the type is a reference type
+    fn is_ref(&self, type_id: ffi::TypeId) -> bool {
+        match &self.native_interface.types[type_id.0] {
+            ffi::Type::ConstRef { .. }
+            | ffi::Type::MutRef { .. }
+            | ffi::Type::ConstSlice { .. }
+            | ffi::Type::MutSlice { .. } => true,
+            _ => false,
+        }
+    }
+
     fn get_type_name(&self, type_id: ffi::TypeId) -> String {
         match &self.native_interface.types[type_id.0] {
             ffi::Type::F32 => "f32".to_string(),
@@ -1227,6 +1241,16 @@ impl<'program> CodeGenerator<'program> {
             ffi::Type::GpuFence => format!("caiman_rt::GpuFence"),
             _ => format!("type_{}", type_id.0),
         }
+    }
+
+    fn get_stripped_type_name(&self, type_id: ffi::TypeId) -> String {
+        let t = self.get_type_name(type_id);
+        t.replace("&mut", "").replace("&", "")
+    }
+
+    fn get_stripped_var_type_name(&self, var_id: VarId) -> String {
+        let type_id = self.variable_tracker.variable_types[&var_id];
+        self.get_stripped_type_name(type_id)
     }
 
     pub fn create_ffi_type(&mut self, typ: ffi::Type) -> ffi::TypeId {
@@ -1277,40 +1301,22 @@ impl<'program> CodeGenerator<'program> {
         }
     }
 
-    pub fn build_constant_integer(&mut self, value: i64, type_id: ffi::TypeId) -> VarId {
-        let variable_id = self.variable_tracker.create_local_data(Some(type_id));
+    fn build_const_int(&mut self, value: String, typ: &str, type_id: ffi::TypeId) -> VarId {
+        let variable_id = self.variable_tracker.create_local_alloc(Some(type_id));
         write!(
             self.code_writer,
-            "let {} : {} = {};\n",
-            self.get_var_name(variable_id),
-            self.get_type_name(type_id),
-            value
+            "instance.locals.calloc::<{typ}>({}, {value});\n",
+            variable_id.0
         );
         variable_id
     }
 
-    pub fn build_constant_i32(&mut self, value: i32, type_id: ffi::TypeId) -> VarId {
-        let variable_id = self.variable_tracker.create_local_data(Some(type_id));
-        write!(
-            self.code_writer,
-            "let {} : {} = {};\n",
-            self.get_var_name(variable_id),
-            self.get_type_name(type_id),
-            value
-        );
-        variable_id
-    }
-
-    pub fn build_constant_unsigned_integer(&mut self, value: u64, type_id: ffi::TypeId) -> VarId {
-        let variable_id = self.variable_tracker.create_local_data(Some(type_id));
-        write!(
-            self.code_writer,
-            "let {} : {} = {};\n",
-            self.get_var_name(variable_id),
-            self.get_type_name(type_id),
-            value
-        );
-        variable_id
+    pub fn build_constant_int<T: ToString>(&mut self, value: T, type_id: ffi::TypeId) -> VarId {
+        self.build_const_int(
+            value.to_string(),
+            &self.get_stripped_type_name(type_id),
+            type_id,
+        )
     }
 
     pub fn build_select_hack(
@@ -1353,29 +1359,32 @@ impl<'program> CodeGenerator<'program> {
         let mut var_names = Vec::<String>::new();
         let mut var_types = Vec::<String>::new();
         for (i, type_id) in output_type_ids.iter().enumerate() {
-            let var_id = self.variable_tracker.create_local_data(Some(*type_id));
-            var_names.push(self.get_var_name(var_id));
-            var_types.push(self.get_type_name(*type_id));
+            let var_id = self.variable_tracker.create_local_alloc(Some(*type_id));
+            var_types.push(self.get_stripped_type_name(*type_id));
             var_ids.push(var_id);
         }
 
-        write!(self.code_writer, "let ( ");
+        write!(self.code_writer, "( ");
 
-        for (i, var_name) in var_names.iter().enumerate() {
-            write!(self.code_writer, "{}", var_name);
+        for (i, (var_id, var_type)) in var_ids.iter().zip(var_types).enumerate() {
+            write!(
+                self.code_writer,
+                "*instance.locals.malloc::<{var_type}>({})",
+                var_id.0,
+            );
             if i < output_type_ids.len() - 1 {
                 write!(self.code_writer, ", ");
             }
         }
 
-        write!(self.code_writer, " ) : ( ");
+        // write!(self.code_writer, " ) : ( ");
 
-        for (i, var_type) in var_types.iter().enumerate() {
-            write!(self.code_writer, "{}", var_type);
-            if i < output_type_ids.len() - 1 {
-                write!(self.code_writer, ", ");
-            }
-        }
+        // for (i, var_type) in var_types.iter().enumerate() {
+        //     write!(self.code_writer, "{}", var_type);
+        //     if i < output_type_ids.len() - 1 {
+        //         write!(self.code_writer, ", ");
+        //     }
+        // }
 
         write!(
             self.code_writer,
@@ -1392,7 +1401,9 @@ impl<'program> CodeGenerator<'program> {
 
         write!(self.code_writer, " ( ");
         for (i, var_id) in output_var_ids.iter().enumerate() {
-            write!(self.code_writer, "{}", self.get_var_name(*var_id));
+            let typ_name =
+                self.get_stripped_type_name(self.variable_tracker.variable_types[var_id]);
+            write!(self.code_writer, "{}", self.access_val_str(*var_id));
             if i < output_var_ids.len() - 1 {
                 write!(self.code_writer, ", ");
             }
@@ -1403,7 +1414,9 @@ impl<'program> CodeGenerator<'program> {
     pub fn end_else(&mut self, output_var_ids: &[VarId]) {
         write!(self.code_writer, " ( ");
         for (i, var_id) in output_var_ids.iter().enumerate() {
-            write!(self.code_writer, "{}", self.get_var_name(*var_id));
+            let typ_name =
+                self.get_stripped_type_name(self.variable_tracker.variable_types[var_id]);
+            write!(self.code_writer, "{}", self.access_val_str(*var_id));
             if i < output_var_ids.len() - 1 {
                 write!(self.code_writer, ", ");
             }
@@ -1426,7 +1439,12 @@ impl<'program> CodeGenerator<'program> {
         let call_result_var = self.variable_tracker.generate();
         let mut argument_string = String::new();
         for (index, argument) in argument_vars.iter().enumerate() {
-            argument_string += format!("{}", self.get_var_name(*argument)).as_str();
+            let src = if self.variable_tracker.is_temp(*argument) {
+                format!("{}", self.access_val_str(*argument),)
+            } else {
+                format!("{}", self.get_var_name(*argument))
+            };
+            argument_string += &src;
             if index + 1 < argument_vars.len() {
                 argument_string += ", ";
             }
@@ -1439,11 +1457,12 @@ impl<'program> CodeGenerator<'program> {
         ));
         let mut output_variables = Vec::<VarId>::new();
         for (i, output_type) in external_cpu_function.output_types.iter().enumerate() {
-            let var = self.variable_tracker.create_local_data(Some(*output_type));
+            let var = self.variable_tracker.create_local_alloc(Some(*output_type));
             output_variables.push(var);
             self.code_writer.write(format!(
-                "let {} = {}.{};\n",
-                self.get_var_name(var),
+                "*instance.locals.calloc::<{}>({}, {}.{});\n",
+                self.get_stripped_type_name(*output_type),
+                var.0,
                 self.get_var_name(call_result_var),
                 i
             ));
@@ -1498,7 +1517,7 @@ impl<'program> CodeGenerator<'program> {
             self.get_var_name(variable_id),
             type_name,
             self.get_var_name(buffer_var_id),
-            self.get_var_name(offset_var_id)
+            self.access_val_str(offset_var_id)
         );
         variable_id
     }
@@ -1661,7 +1680,6 @@ impl<'program> CodeGenerator<'program> {
     /// Returns a string representing variable `var` as a slice of little-endian bytes.
     fn local_as_le_bytes(&self, var: VarId, var_type_id: ffi::TypeId) -> String {
         use ffi::Type::*;
-        let var_name = self.get_var_name(var);
         //let var_type_id = self.variable_tracker.get_type_id(var);
         let var_type = self.native_interface.types.get(var_type_id.0).unwrap();
 
@@ -1669,12 +1687,12 @@ impl<'program> CodeGenerator<'program> {
         // doing the bare minimum to get this working
         match var_type {
             F32 | F64 | U8 | U16 | U32 | U64 | USize | I8 | I16 | I32 | I64 => {
-                return format!("&{}.to_le_bytes()", var_name)
+                return format!("&{}.to_le_bytes()", self.access_val_str(var),)
             }
             Array {
                 element_type,
                 length,
-            } => return format!("bytemuck::cast_slice(&{})", var_name),
+            } => return format!("bytemuck::cast_slice(&{})", self.access_val_str(var)),
             _ => panic!("type {:?} not yet supported", var_type),
         }
     }
@@ -1800,75 +1818,98 @@ impl<'program> CodeGenerator<'program> {
         self.generate_compute_dispatch(kernel, dimension_vars, argument_vars, output_vars);
     }
 
-    /// Gets the type name of a local variable
-    /// # Panics
-    /// Panics if the variable id was not created by an alloc temporary
-    fn get_local_var_type_name(&self, var: VarId) -> String {
-        self.get_type_name(self.variable_tracker.variable_types[&var])
-    }
-
     pub fn build_alloc_temp_local_ref(&mut self, type_id: ffi::TypeId) -> VarId {
         let variable_id = self.variable_tracker.create_local_alloc(Some(type_id));
-        let temp_var_id = self.variable_tracker.generate();
-        //let type_binding_info = self.get_type_binding_info(type_id);
-        let type_name = self.get_type_name(type_id);
+        let type_name = self.get_stripped_type_name(type_id);
         write!(
             self.code_writer,
-            "let {} = instance.state.alloc_var({}, std::mem::size_of::<{type_name}>(), \
-            std::mem::align_of::<{type_name}>()) as *mut {type_name};\n",
-            self.get_var_name(temp_var_id),
-            variable_id.0
-        );
-        // // this should be safe bc of the caiman type system
-        write!(
-            self.code_writer,
-            "let {} = &mut unsafe {{ *{} }};\n",
-            self.get_var_name(variable_id),
-            self.get_var_name(temp_var_id)
+            "instance.locals.malloc::<{type_name}>({});\n",
+            variable_id.0,
         );
         variable_id
     }
 
     pub fn build_write_local_ref(&mut self, dst_ref_var_id: VarId, src_var_id: VarId) {
-        // if self.variable_tracker.is_temp(dst_ref_var_id) {
-        //     // this should be safe bc of the caiman type system
-        //     write!(
-        //         self.code_writer,
-        //         "unsafe {{ *(instance.state.get_var_mut({}) as *mut {})  = {} }};\n",
-        //         dst_ref_var_id.0,
-        //         self.get_local_var_type_name(dst_ref_var_id),
-        //         self.get_var_name(src_var_id),
-        //     );
-        // } else {
-        write!(
-            self.code_writer,
-            "*{} = {};\n",
-            self.get_var_name(dst_ref_var_id),
-            self.get_var_name(src_var_id),
-        );
-        //}
+        let src = if self.variable_tracker.is_temp(src_var_id) {
+            // safe bc of the caiman type system
+            format!(
+                "*instance.locals.get::<{}>({})",
+                self.get_stripped_var_type_name(src_var_id),
+                src_var_id.0,
+            )
+        } else {
+            self.get_var_name(src_var_id)
+        };
+        if self.variable_tracker.is_temp(dst_ref_var_id) {
+            // this should be safe bc of the caiman type system
+            write!(
+                self.code_writer,
+                "*instance.locals.get_mut::<{}>({}) = {};\n",
+                self.get_stripped_var_type_name(dst_ref_var_id),
+                dst_ref_var_id.0,
+                src,
+            );
+        } else {
+            write!(
+                self.code_writer,
+                "*{} = {};\n",
+                self.get_var_name(dst_ref_var_id),
+                src,
+            );
+        }
+    }
+
+    /// Returns a string that is the code that can access the reference to a variable
+    fn access_ref_str(&self, var_id: VarId) -> String {
+        if self.variable_tracker.is_temp(var_id) {
+            // safe bc of the caiman type system
+            format!(
+                "instance.locals.get::<{}>({})",
+                self.get_stripped_var_type_name(var_id),
+                var_id.0,
+            )
+        } else if self.variable_tracker.variable_types.contains_key(&var_id)
+            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+        {
+            self.get_var_name(var_id)
+        } else {
+            format!("(&{})", self.get_var_name(var_id))
+        }
+    }
+
+    /// Returns a string that is the code which can accesss the value of a variable
+    fn access_val_str(&self, var_id: VarId) -> String {
+        if self.variable_tracker.is_temp(var_id) {
+            // safe bc of the caiman type system
+            format!(
+                "(*instance.locals.get::<{}>({}))",
+                self.get_stripped_var_type_name(var_id),
+                var_id.0,
+            )
+        } else if self.variable_tracker.variable_types.contains_key(&var_id)
+            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+        {
+            format!("(*{})", self.get_var_name(var_id))
+        } else {
+            self.get_var_name(var_id)
+        }
     }
 
     pub fn build_read_local_ref(&mut self, src_ref_var_id: VarId, type_id: ffi::TypeId) -> VarId {
         let variable_id = self.variable_tracker.create_local_data(Some(type_id));
-        let type_name = self.get_type_name(type_id);
-        // if self.variable_tracker.is_temp(src_ref_var_id) {
-        //     // safe bc of the caiman type system
-        //     write!(
-        //         self.code_writer,
-        //         "let {} = unsafe {{ *(instance.state.get_var({}) as *const {}) }};\n",
-        //         self.get_var_name(variable_id),
-        //         src_ref_var_id.0,
-        //         self.get_local_var_type_name(src_ref_var_id),
-        //     );
-        // } else {
         write!(
             self.code_writer,
-            "let {} = *{};\n",
+            "let {} = {};\n",
             self.get_var_name(variable_id),
-            self.get_var_name(src_ref_var_id),
+            self.access_val_str(src_ref_var_id)
         );
-        //}
+        write!(
+            self.code_writer,
+            "instance.locals.calloc::<{}>({}, {});\n",
+            self.get_stripped_type_name(type_id),
+            variable_id.0,
+            self.get_var_name(variable_id)
+        );
         variable_id
     }
 

@@ -1,7 +1,10 @@
 #![allow(warnings)]
 
 use core::slice;
-use std::{alloc::Layout, collections::HashMap, fmt::Alignment, os::raw::c_void};
+use std::{
+    alloc::Layout, any::Any, collections::HashMap, fmt::Alignment, mem::MaybeUninit,
+    os::raw::c_void,
+};
 pub extern crate bytemuck;
 pub extern crate wgpu;
 
@@ -77,15 +80,6 @@ impl BumpAllocator {
 pub trait State {
     fn get_device_mut(&mut self) -> &mut wgpu::Device;
     fn get_queue_mut(&mut self) -> &mut wgpu::Queue;
-    /// Gets a mutable pointer to the start of the allocation for the given id.
-    /// The allocation must have already been created with `alloc_var`
-    fn get_var_mut(&mut self, id: usize) -> *mut c_void;
-    /// Gets a const pointer to the start of the allocation for the given id.
-    /// The allocation must have already been created with `alloc_var`
-    fn get_var(&self, id: usize) -> *const c_void;
-    /// Allocates a local variable with the given id, size, and alignment.
-    /// The alignment must be less than or equal to `MAX_ALIGN`.
-    fn alloc_var(&mut self, id: usize, size: usize, align: usize) -> *mut c_void;
 }
 
 pub struct RootState<'device, 'queue> {
@@ -112,18 +106,96 @@ impl<'device, 'queue> State for RootState<'device, 'queue> {
     fn get_queue_mut(&mut self) -> &mut wgpu::Queue {
         self.queue
     }
+}
 
-    fn get_var_mut(&mut self, id: usize) -> *mut c_void {
-        self.local_storage.get_ptr_mut(id) as *mut c_void
+pub struct LocalVars {
+    storage: BumpAllocator,
+    type_ids: HashMap<usize, std::any::TypeId>,
+}
+
+impl LocalVars {
+    pub fn new() -> Self {
+        Self {
+            storage: BumpAllocator::new(4096 * 4),
+            type_ids: HashMap::new(),
+        }
     }
 
-    fn get_var(&self, id: usize) -> *const c_void {
-        self.local_storage.get_ptr(id) as *const c_void
-    }
-
-    fn alloc_var(&mut self, id: usize, size: usize, align: usize) -> *mut c_void {
+    fn alloc_uninit<T: Sized + Any>(&mut self, id: usize) -> &mut std::mem::MaybeUninit<T> {
+        let align = std::mem::align_of::<T>();
+        let size = std::mem::size_of::<T>();
         assert!(align <= MAX_ALIGN);
-        self.local_storage.alloc(id, size, align) as *mut c_void
+        let type_id = std::any::TypeId::of::<T>();
+        self.type_ids.insert(id, type_id);
+        let mut r = unsafe {
+            (self.storage.alloc(id, size, align) as *mut c_void)
+                .cast::<std::mem::MaybeUninit<T>>()
+                .as_mut()
+                .unwrap()
+        };
+        r
+    }
+
+    pub fn calloc<T: Sized + Any>(&mut self, id: usize, val: T) -> &mut T {
+        let mut r = self.alloc_uninit::<T>(id);
+        r.write(val);
+        unsafe { r.assume_init_mut() }
+    }
+
+    /// Allocates a local variable with the given id, size, and alignment.
+    /// The alignment must be less than or equal to `MAX_ALIGN`.
+    pub fn malloc<T: Sized + Any + Default>(&mut self, id: usize) -> &mut T {
+        self.calloc(id, Default::default())
+    }
+
+    /// Gets a mutable pointer to the start of the allocation for the given id.
+    /// The allocation must have already been created with `alloc_var`
+    pub fn get_mut<T: Sized + Any>(&mut self, id: usize) -> &mut T {
+        assert_eq!(
+            self.type_ids.get(&id).unwrap(),
+            &std::any::TypeId::of::<T>()
+        );
+        unsafe {
+            (self.storage.get_ptr_mut(id) as *mut c_void)
+                .cast::<T>()
+                .as_mut()
+                .unwrap()
+        }
+    }
+    /// Gets a const pointer to the start of the allocation for the given id.
+    /// The allocation must have already been created with `alloc_var`
+    pub fn get<T: Sized + Any>(&self, id: usize) -> &T {
+        assert_eq!(
+            self.type_ids.get(&id).unwrap(),
+            &std::any::TypeId::of::<T>()
+        );
+        unsafe {
+            (self.storage.get_ptr(id) as *const c_void)
+                .cast::<T>()
+                .as_ref()
+                .unwrap()
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.storage.reset();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_allocator() {
+        let mut alloc = super::LocalVars::new();
+        let a = alloc.malloc::<i32>(0);
+        *alloc.get_mut(0) = 5;
+        assert_eq!(*alloc.get::<i32>(0), 5);
+        alloc.calloc(1, 6_u64);
+        assert_eq!(*alloc.get::<u64>(1), 6);
+        *alloc.malloc(2) = 7_i64;
+        assert_eq!(*alloc.get::<i64>(2), 7);
+        *alloc.malloc(3) = 8_i32;
+        assert_eq!(*alloc.get::<i32>(3), 8);
     }
 }
 

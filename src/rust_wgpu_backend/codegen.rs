@@ -514,7 +514,7 @@ impl<'program> CodeGen<'program> {
                     for i in dimension_var_ids.len()..3 {
                         dimension_var_ids.push(
                             self.code_generator
-                                .build_constant_unsigned_integer(1, self.default_usize_ffi_type_id),
+                                .build_constant_int(1, self.default_usize_ffi_type_id),
                         );
                     }
                 }
@@ -563,13 +563,13 @@ impl<'program> CodeGen<'program> {
                 let variable_id = match value {
                     ir::Constant::I64(value) => self
                         .code_generator
-                        .build_constant_integer(*value, storage_type_id),
+                        .build_constant_int(*value, storage_type_id),
                     ir::Constant::U64(value) => self
                         .code_generator
-                        .build_constant_unsigned_integer(*value, storage_type_id),
+                        .build_constant_int(*value, storage_type_id),
                     ir::Constant::I32(value) => self
                         .code_generator
-                        .build_constant_i32(*value, storage_type_id),
+                        .build_constant_int(*value, storage_type_id),
                 };
                 check_storage_type_implements_value_type(&self.program, storage_type_id, *type_id);
 
@@ -1305,6 +1305,7 @@ impl<'program> CodeGen<'program> {
         funclet_scoped_state: &FuncletScopedState,
         inputs: &[ir::NodeId],
     ) -> Box<[VarId]> {
+        todo!("Collect local inputs");
         let mut input_var_ids = Vec::<VarId>::new();
         for input in inputs.iter() {
             let node_result = funclet_scoped_state.get_node_result(*input).unwrap();
@@ -1416,7 +1417,7 @@ impl<'program> CodeGen<'program> {
                             .build_create_buffer(*storage_type, *buffer_flags);
                         let offset_var_id = self
                             .code_generator
-                            .build_constant_unsigned_integer(0, self.default_u64_ffi_type_id);
+                            .build_constant_int(0, self.default_u64_ffi_type_id);
                         let var_id = self.code_generator.build_buffer_ref(
                             buffer_var_id,
                             offset_var_id,
