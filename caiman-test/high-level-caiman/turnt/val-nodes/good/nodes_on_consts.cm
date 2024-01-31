@@ -15,11 +15,14 @@ val main() -> i64 {
 fn foo() -> i64 @ node(main.r)-usable 
     impls main, time, space
 {
-    let b: bool @ node(main.b)-usable = false;
-    var v: i64 @ node(main.two) = 2;
+    let b @ main-? = false @ node(main.b);
+    var v @ none(main);
     if @ node(main.r) b {
-        let one: i64 @ node(main.one)-usable = 1;
+        let one @ main-? = 1 @ node(main.one);
         v = one;
+    } else {
+        let two @ main-? = 2 @ node(main.two);
+        v = two;
     }
     @in { v: [node(main.r)-usable, none(space)-save] };
     v

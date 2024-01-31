@@ -3,12 +3,14 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType, SchedLiteral, SpecExpr, SpecLiteral, SpecStmt, SpecTerm},
+    lower::tuple_id,
+    parse::ast::{Binop, DataType, SpecExpr, SpecLiteral, SpecStmt, SpecTerm},
 };
 
 use super::{
-    binop_to_contraints, types::DTypeConstraint, DTypeEnv, Signature, SpecInfo, TypedBinop,
-    UnresolvedTypedBinop,
+    binop_to_contraints,
+    types::{DTypeConstraint, MetaVar, ValQuot},
+    DTypeEnv, NodeEnv, Signature, SpecInfo, TypedBinop, UnresolvedTypedBinop,
 };
 
 /// Collects all names defined in a given spec, including inputs and outputs
@@ -39,35 +41,12 @@ fn collect_spec_names(
     Ok(res)
 }
 
-/// Converts a spec literal to a string.
-pub fn spec_lit_to_str(s: &SpecLiteral) -> String {
-    match s {
-        SpecLiteral::Int(i) => i.clone(),
-        SpecLiteral::Bool(b) => b.to_string(),
-        SpecLiteral::Float(f) => format!("{f}f"),
-        _ => todo!(),
-    }
-}
-
-/// Converts a sched literal to a string.
-/// # Panics
-/// Panics if the literal is not a sched literal.
-#[must_use]
-pub fn sched_lit_to_str(s: &SchedLiteral) -> String {
-    match s {
-        SchedLiteral::Int(i) => i.clone(),
-        SchedLiteral::Bool(b) => b.to_string(),
-        SchedLiteral::Float(f) => format!("{f}f"),
-        _ => todo!(),
-    }
-}
-
 /// Collects types and nodes for a given assignment `lhs :- function(args)`.
 fn collect_spec_assign_call(
     lhs: &[(String, Option<DataType>)],
     function: &SpecExpr,
     args: &[SpecExpr],
-    ctx: &mut DTypeEnv,
+    ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
     info: Info,
 ) -> Result<(), LocalError> {
@@ -107,7 +86,15 @@ fn collect_spec_assign_call(
             ));
         }
 
-        for ((name, annot), typ) in lhs.iter().zip(output_types.iter()) {
+        let tuple_name = tuple_id(&lhs.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>());
+        ctx.nodes.add_quotient(
+            &tuple_name,
+            ValQuot::Call(
+                func_name.clone(),
+                arg_nodes.iter().map(MetaVar::new_class_name).collect(),
+            ),
+        );
+        for (idx, ((name, annot), typ)) in lhs.iter().zip(output_types.iter()).enumerate() {
             if let Some(a) = annot {
                 if a != typ {
                     return Err(type_error(
@@ -116,10 +103,15 @@ fn collect_spec_assign_call(
                     ));
                 }
             }
-            ctx.add_dtype_constraint(name, typ.clone(), info)?;
+            ctx.types.add_dtype_constraint(name, typ.clone(), info)?;
+            ctx.nodes.add_quotient(
+                name,
+                ValQuot::Extract(MetaVar::new_class_name(&tuple_name), idx),
+            );
         }
         for (arg_name, arg_type) in arg_nodes.iter().zip(input_types.iter()) {
-            ctx.add_dtype_constraint(arg_name, arg_type.clone(), info)?;
+            ctx.types
+                .add_dtype_constraint(arg_name, arg_type.clone(), info)?;
         }
         Ok(())
     } else {
@@ -134,15 +126,25 @@ fn collect_spec_assign_call(
 fn collect_spec_assign_term(
     t: &SpecTerm,
     lhs: &[(String, Option<DataType>)],
-    ctx: &mut DTypeEnv,
+    ctx: &mut SpecEnvs,
     signatures: &HashMap<String, Signature>,
 ) -> Result<(), LocalError> {
     match t {
         SpecTerm::Lit { lit, info } => {
+            ctx.nodes.add_quotient(
+                &lhs[0].0,
+                match lit {
+                    SpecLiteral::Int(i) => ValQuot::Int(i.clone()),
+                    SpecLiteral::Bool(b) => ValQuot::Bool(*b),
+                    SpecLiteral::Float(f) => ValQuot::Float(f.clone()),
+                    _ => todo!(),
+                },
+            );
             if let Some(annot) = lhs[0].1.as_ref() {
-                ctx.add_dtype_constraint(&lhs[0].0, annot.clone(), *info)
+                ctx.types
+                    .add_dtype_constraint(&lhs[0].0, annot.clone(), *info)
             } else {
-                ctx.add_constraint(
+                ctx.types.add_constraint(
                     &lhs[0].0,
                     match lit {
                         SpecLiteral::Int(_) => DTypeConstraint::Int(None),
@@ -177,7 +179,7 @@ fn collect_spec_assign_if(
     if_true: &SpecExpr,
     if_false: &SpecExpr,
     guard: &SpecExpr,
-    ctx: &mut DTypeEnv,
+    ctx: &mut SpecEnvs,
     info: Info,
 ) -> Result<(), LocalError> {
     if let (
@@ -189,12 +191,21 @@ fn collect_spec_assign_if(
         }),
     ) = (if_true, if_false, guard)
     {
-        ctx.add_dtype_constraint(guard, DataType::Bool, *g_info)?;
-        ctx.add_var_equiv(name1, name2, info)?;
-        ctx.add_var_equiv(&lhs[0].0, name1, info)?;
+        ctx.types
+            .add_dtype_constraint(guard, DataType::Bool, *g_info)?;
+        ctx.types.add_var_equiv(name1, name2, info)?;
+        ctx.types.add_var_equiv(&lhs[0].0, name1, info)?;
         if let Some(t) = lhs[0].1.as_ref() {
-            ctx.add_dtype_constraint(&lhs[0].0, t.clone(), info)?;
+            ctx.types.add_dtype_constraint(&lhs[0].0, t.clone(), info)?;
         }
+        ctx.nodes.add_quotient(
+            &lhs[0].0,
+            ValQuot::Select {
+                guard: MetaVar::new_class_name(guard),
+                true_id: MetaVar::new_class_name(name1),
+                false_id: MetaVar::new_class_name(name2),
+            },
+        );
     } else {
         panic!("Not lowered")
     }
@@ -215,7 +226,7 @@ fn collect_spec_assign_bop(
     op: Binop,
     externs: &mut HashSet<UnresolvedTypedBinop>,
     lhs: &[(String, Option<DataType>)],
-    ctx: &mut DTypeEnv,
+    ctx: &mut SpecEnvs,
     info: Info,
 ) -> Result<(), LocalError> {
     if let (
@@ -224,19 +235,31 @@ fn collect_spec_assign_bop(
     ) = (op_l, op_r)
     {
         let (left_constraint, right_constraint, ret_constraint) =
-            binop_to_contraints(op, &mut ctx.env);
-        ctx.add_raw_constraint(&lhs[0].0, &ret_constraint, info)?;
+            binop_to_contraints(op, &mut ctx.types.env);
+        ctx.types
+            .add_raw_constraint(&lhs[0].0, &ret_constraint, info)?;
         if let Some(annot) = &lhs[0].1 {
-            ctx.add_dtype_constraint(&lhs[0].0, annot.clone(), info)?;
+            ctx.types
+                .add_dtype_constraint(&lhs[0].0, annot.clone(), info)?;
         }
-        ctx.add_raw_constraint(name1, &left_constraint, info)?;
-        ctx.add_raw_constraint(name2, &right_constraint, info)?;
+        ctx.types
+            .add_raw_constraint(name1, &left_constraint, info)?;
+        ctx.types
+            .add_raw_constraint(name2, &right_constraint, info)?;
         externs.insert(UnresolvedTypedBinop {
             op,
             op_l: name1.clone(),
             op_r: name2.clone(),
             ret: lhs[0].0.clone(),
         });
+        ctx.nodes.add_quotient(
+            &lhs[0].0,
+            ValQuot::Bop(
+                op,
+                MetaVar::new_class_name(name1),
+                MetaVar::new_class_name(name2),
+            ),
+        );
     } else {
         panic!("Not lowered")
     }
@@ -279,16 +302,17 @@ fn resolve_types(
     Ok(())
 }
 
-fn collect_spec_sig(env: &mut DTypeEnv, ctx: &SpecInfo) -> Result<(), LocalError> {
+fn collect_spec_sig(env: &mut SpecEnvs, ctx: &SpecInfo) -> Result<(), LocalError> {
     let info = ctx.info;
     for (arg, typ) in ctx.sig.input.clone() {
-        env.add_dtype_constraint(&arg, typ, info)?;
+        env.types.add_dtype_constraint(&arg, typ, info)?;
+        env.nodes.add_quotient(&arg, ValQuot::Input(arg.clone()));
     }
     Ok(())
 }
 
 fn collect_spec_returns(
-    env: &mut DTypeEnv,
+    env: &mut SpecEnvs,
     ctx: &SpecInfo,
     e: &SpecExpr,
     info: Info,
@@ -305,7 +329,9 @@ fn collect_spec_returns(
                     ),
                 ));
             }
-            env.add_dtype_constraint(name, ctx.sig.output[0].clone(), info)?;
+            env.types
+                .add_dtype_constraint(name, ctx.sig.output[0].clone(), info)?;
+            env.nodes.set_output_classes(&[name.clone()]);
             Ok(())
         }
         SpecExpr::Term(
@@ -333,12 +359,32 @@ fn collect_spec_returns(
                     panic!("Not lowered")
                 }
             }
+            env.nodes.set_output_classes(
+                &constraints
+                    .iter()
+                    .map(|(name, _)| (*name).clone())
+                    .collect::<Vec<_>>(),
+            );
             for (name, typ) in constraints {
-                env.add_dtype_constraint(name, typ, info)?;
+                env.types.add_dtype_constraint(name, typ, info)?;
             }
             Ok(())
         }
         _ => panic!("Not lowered"),
+    }
+}
+
+struct SpecEnvs {
+    pub types: DTypeEnv,
+    pub nodes: NodeEnv,
+}
+
+impl SpecEnvs {
+    fn new() -> Self {
+        Self {
+            types: DTypeEnv::new(),
+            nodes: NodeEnv::new(),
+        }
     }
 }
 
@@ -358,7 +404,7 @@ pub(super) fn collect_spec(
 ) -> Result<HashSet<TypedBinop>, LocalError> {
     let mut unresolved_externs = HashSet::new();
     let names = collect_spec_names(stmts, ctx)?;
-    let mut env = DTypeEnv::new();
+    let mut env = SpecEnvs::new();
     collect_spec_sig(&mut env, ctx)?;
     for stmt in stmts {
         match stmt {
@@ -390,7 +436,8 @@ pub(super) fn collect_spec(
             SpecStmt::Returns(info, e) => collect_spec_returns(&mut env, ctx, e, *info)?,
         }
     }
-    resolve_types(&env, &names, ctx)?;
+    resolve_types(&env.types, &names, ctx)?;
+    ctx.nodes = env.nodes;
     Ok(unresolved_externs
         .into_iter()
         .map(|u| TypedBinop {

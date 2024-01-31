@@ -38,7 +38,7 @@ fn foo() -> i64 @ node(main.z)-usable
         let two: i64 @ node(main.two) = 2;
         v = two;
 
-        let b: bool @ node(main.b) = true;
+        let b: bool @ node(main.b) = false;
         if @ node(main.left) b {
             let aa: bool @ node(main.a) = true;
             if @ node(main.left_left) aa {

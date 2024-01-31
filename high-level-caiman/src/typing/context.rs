@@ -290,8 +290,10 @@ fn collect_class_signatures(
                 } else {
                     member_sig = Some(From::from(&sig));
                 }
-                ctx.specs
-                    .insert(name.to_string(), SpecInfo::new(SpecType::Value, sig, *info));
+                ctx.specs.insert(
+                    name.to_string(),
+                    SpecInfo::new(SpecType::Value, sig, *info, Some(class_name)),
+                );
             }
             ClassMembers::Extern {
                 name,
@@ -341,6 +343,7 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
                             output: vec![DataType::BufferSpace],
                         },
                         *info,
+                        None,
                     ),
                 );
             }
@@ -354,6 +357,7 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
                             output: vec![DataType::Event],
                         },
                         *info,
+                        None,
                     ),
                 );
             }
