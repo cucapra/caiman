@@ -1,9 +1,9 @@
 use crate::{
     error,
     parse::ast::{Binop, ClassMembers, DataType, FloatSize, IntSize, SchedulingFunc, TopLevel},
+    typing::Context,
 };
 use caiman::assembly::ast as asm;
-mod global_context;
 mod lower_schedule;
 mod lower_spec;
 mod sched_hir;
@@ -13,7 +13,7 @@ use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funcle
 
 // TODO: only i32, i64, and u64 are currently supported in the IR
 // change this to u8 or i8 once we support those types
-const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
+pub(crate) const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
 
 /// Converts a high-level caiman data type to a caiman assembly type id.
 fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
@@ -32,18 +32,17 @@ fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
 /// For types that have FFI equivalents, convert a high-level caiman data type
 /// to the caiman assembly type id for the corresponding FFI type. For types
 /// that do not have FFI equivalents, this is the same as `data_type_to_local_type`.
-fn data_type_to_ffi_type(dt: &DataType) -> asm::TypeId {
+#[must_use]
+pub fn data_type_to_ffi_type(dt: &DataType) -> asm::TypeId {
     use asm::TypeId;
-    match dt {
-        dt if data_type_to_ffi(dt).is_some() => TypeId::FFI(data_type_to_ffi(dt).unwrap()),
-        dt => data_type_to_local_type(dt),
-    }
+    data_type_to_ffi(dt).map_or_else(|| data_type_to_local_type(dt), TypeId::FFI)
 }
 
 /// For types that have FFI equivalents, convert a high-level caiman data type
 /// to the caiman assembly type for the corresponding FFI type. For types
 /// that do not have FFI equivalents, return `None`.
-const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
+#[must_use]
+pub const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
     use asm::FFIType;
     match dt {
         DataType::Bool => Some(BOOL_FFI_TYPE),
@@ -81,7 +80,7 @@ macro_rules! enum_cast {
 /// Returns an error if the program is not well-typed or flattened.
 /// # Panics
 /// If lowering something with currently unsupported language features.
-pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
+pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, error::LocalError> {
     // Preprocessing: (before this function)
     // 1. Match literals to literals in the spec
     // 2. Constant fold constants
@@ -109,8 +108,8 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
         },
         declarations: Vec::new(),
     };
-    let ctx = global_context::gen_context(&hlc);
-    asm.declarations.extend(ctx.type_decls.iter().cloned());
+    asm.declarations
+        .extend(typing_ctx.type_decls.iter().cloned());
     for top in hlc {
         match top {
             TopLevel::Pipeline { name, entry, .. } => {
@@ -131,7 +130,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 for f in members {
                     match f {
                         ClassMembers::ValueFunclet { .. } => {
-                            let funclet = lower_val_funclet(f, &name, &ctx);
+                            let funclet = lower_val_funclet(f, &name, typing_ctx);
                             asm.declarations.push(asm::Declaration::Funclet(funclet));
                         }
                         ClassMembers::Extern { .. } => todo!(),
@@ -140,12 +139,18 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 asm.declarations
                     .push(asm::Declaration::FunctionClass(class));
             }
-            sf @ TopLevel::SpatialFunclet { .. } => asm
-                .declarations
-                .push(asm::Declaration::Funclet(lower_spatial_funclet(sf, &ctx))),
-            tf @ TopLevel::TimelineFunclet { .. } => asm
-                .declarations
-                .push(asm::Declaration::Funclet(lower_timeline_funclet(tf, &ctx))),
+            sf @ TopLevel::SpatialFunclet { .. } => {
+                asm.declarations
+                    .push(asm::Declaration::Funclet(lower_spatial_funclet(
+                        sf, typing_ctx,
+                    )));
+            }
+            tf @ TopLevel::TimelineFunclet { .. } => {
+                asm.declarations
+                    .push(asm::Declaration::Funclet(lower_timeline_funclet(
+                        tf, typing_ctx,
+                    )));
+            }
             TopLevel::SchedulingFunc {
                 name,
                 input,
@@ -155,7 +160,7 @@ pub fn lower(hlc: Vec<TopLevel>) -> Result<asm::Program, error::LocalError> {
                 info,
             } => {
                 let res = lower_schedule(
-                    &ctx,
+                    typing_ctx,
                     SchedulingFunc {
                         info,
                         name,
@@ -203,12 +208,16 @@ const fn binop_name(op: Binop) -> &'static str {
 }
 
 /// Converts a high-level caiman data type to an extern funclet id.
-fn binop_to_str(op: Binop, type_left: &str, type_right: &str) -> String {
+#[must_use]
+pub fn binop_to_str(op: Binop, type_left: &str, type_right: &str) -> String {
     format!("_{}_{type_left}_{type_right}", binop_name(op))
 }
 
 /// Gets the id of the direct result of an operation or call that results in `names`.
-fn tuple_id(names: &[String]) -> String {
+/// # Panics
+/// Panics if `names` starts with a digit or is empty.
+#[must_use]
+pub fn tuple_id(names: &[String]) -> String {
     assert!(names
         .iter()
         .all(|n| !n.is_empty() && !char::is_digit(n.chars().next().unwrap(), 10)));

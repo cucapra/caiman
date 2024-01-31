@@ -19,15 +19,23 @@ fn is_ref_type(name: &str, types: &HashMap<String, TypeId>) -> bool {
 
 /// Transforms uses of references into uses of values by inserting deref instructions.
 /// This should be the first pass run (before live vars, etc.)
-pub fn deref_transform_pass(cfg: &mut Cfg, types: &mut HashMap<String, TypeId>) {
+pub fn deref_transform_pass(
+    cfg: &mut Cfg,
+    types: &mut HashMap<String, TypeId>,
+    data_types: &mut HashMap<String, DataType>,
+) {
     for bb in cfg.blocks.values_mut() {
-        deref_transform_block(bb, types);
+        deref_transform_block(bb, types, data_types);
     }
 }
 
 /// Transforms uses of references into uses of values by inserting deref instructions
 /// for a single block.
-fn deref_transform_block(bb: &mut BasicBlock, types: &mut HashMap<String, TypeId>) {
+fn deref_transform_block(
+    bb: &mut BasicBlock,
+    types: &mut HashMap<String, TypeId>,
+    data_types: &mut HashMap<String, DataType>,
+) {
     let mut insertions = Vec::new();
     let mut last_deref = HashMap::new();
     let mut names = HashMap::new();
@@ -45,6 +53,7 @@ fn deref_transform_block(bb: &mut BasicBlock, types: &mut HashMap<String, TypeId
             types,
             &mut insertions,
             &mut last_deref,
+            data_types,
         );
     }
 
@@ -96,11 +105,13 @@ fn insert_deref_if_needed(
     insertions: &mut Vec<(usize, HirBody)>,
     id: usize,
     name: &str,
+    data_types: &mut HashMap<String, DataType>,
 ) {
     if last_deref.get(name).is_none() || last_deref[name] != names[name] {
         let typ = unref_type(&types[name]);
         let dest = get_cur_name(name, names);
         types.insert(dest.clone(), make_deref(&types[name]));
+        data_types.insert(dest.clone(), typ.clone());
         insertions.push((
             id,
             HirBody::RefLoad {
@@ -131,6 +142,7 @@ fn deref_transform_instr(
     types: &mut HashMap<String, TypeId>,
     insertions: &mut Vec<(usize, HirBody)>,
     last_deref: &mut HashMap<String, u16>,
+    data_types: &mut HashMap<String, DataType>,
 ) {
     match instr {
         // TODO: generalize terminator usage
@@ -138,7 +150,7 @@ fn deref_transform_instr(
             // TODO: return references
             t.rename_uses(&mut |u, ut| {
                 if is_ref_type(u, types) && ut == UseType::Read {
-                    insert_deref_if_needed(last_deref, names, types, insertions, id, u);
+                    insert_deref_if_needed(last_deref, names, types, insertions, id, u, data_types);
                     get_cur_name(u, names)
                 } else {
                     u.to_string()
@@ -158,7 +170,9 @@ fn deref_transform_instr(
         HirInstr::Stmt(stmt) => {
             stmt.rename_uses(&mut |name, ut| {
                 if is_ref_type(name, types) && ut == UseType::Read {
-                    insert_deref_if_needed(last_deref, names, types, insertions, id, name);
+                    insert_deref_if_needed(
+                        last_deref, names, types, insertions, id, name, data_types,
+                    );
                     get_cur_name(name, names)
                 } else if ut == UseType::Write {
                     // writes can only occur to references, so we need to rename
@@ -173,6 +187,7 @@ fn deref_transform_instr(
                 // rename the lhs to the reference version
                 *lhs = format!("_{lhs}_ref");
                 types.insert(lhs.clone(), types[&old_lhs].clone());
+                data_types.insert(lhs.clone(), data_types[&old_lhs].clone());
             }
             if let HirBody::VarDecl { lhs, .. } | HirBody::RefStore { lhs, .. } = stmt {
                 match names.entry(lhs.clone()) {

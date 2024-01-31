@@ -1,15 +1,14 @@
-use std::collections::HashMap;
-
 use crate::{
     enum_cast,
     parse::ast::{
         Binop, ClassMembers, DataType, NestedExpr, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
         TopLevel,
     },
+    typing::{Context, SpecInfo},
 };
 use caiman::{assembly::ast as asm, ir};
 
-use super::{binop_to_str, data_type_to_local_type, global_context::Context, tuple_id};
+use super::{binop_to_str, data_type_to_local_type, tuple_id};
 
 /// Lower a spec term into a caiman assembly node.
 fn lower_spec_term(t: SpecTerm) -> asm::Node {
@@ -97,7 +96,7 @@ fn lower_binop(
     op: Binop,
     op_lhs: NestedExpr<SpecTerm>,
     op_rhs: NestedExpr<SpecTerm>,
-    type_ctx: &HashMap<String, DataType>,
+    type_ctx: &SpecInfo,
 ) -> Vec<asm::Hole<asm::Command>> {
     let op_lhs = term_to_name(op_lhs);
     let op_rhs = term_to_name(op_rhs);
@@ -108,8 +107,8 @@ fn lower_binop(
             node: asm::Node::CallFunctionClass {
                 function_id: Some(asm::FunctionClassId(binop_to_str(
                     op,
-                    &format!("{:#}", type_ctx.get(&op_lhs).unwrap()),
-                    &format!("{:#}", type_ctx.get(&op_rhs).unwrap()),
+                    &format!("{:#}", type_ctx.types.get(&op_lhs).unwrap()),
+                    &format!("{:#}", type_ctx.types.get(&op_rhs).unwrap()),
                 ))),
                 arguments: Some(vec![Some(asm::NodeId(op_lhs)), Some(asm::NodeId(op_rhs))]),
             },
@@ -179,7 +178,7 @@ fn lower_spec_assign(
                 op,
                 *op_lhs,
                 *op_rhs,
-                &global_ctx.value_types[spec_name],
+                &global_ctx.specs[spec_name],
             )
         }
         NestedExpr::Uop { .. } => todo!(),

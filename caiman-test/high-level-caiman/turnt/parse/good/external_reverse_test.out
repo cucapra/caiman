@@ -392,23 +392,25 @@
         input: [],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            17,
-                            13,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                17,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                17,
+                                16,
+                            ),
+                        },
+                        base: Int(
+                            I64,
                         ),
-                        end_ln_and_col: (
-                            17,
-                            16,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I64,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -520,23 +522,25 @@
         input: [],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            24,
-                            13,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                24,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                24,
+                                16,
+                            ),
+                        },
+                        base: Int(
+                            I64,
                         ),
-                        end_ln_and_col: (
-                            24,
-                            16,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I64,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],

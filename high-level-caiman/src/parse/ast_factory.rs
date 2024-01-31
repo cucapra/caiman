@@ -331,6 +331,12 @@ impl ASTFactory {
         flow: flow.flatten()
     });
 
+    struct_variant_factory!(flow_tag(quot_var: Option<QuotientReference>, flow: Option<Flow>) -> Tag:Tag {
+        quot: None,
+        quot_var: quot_var,
+        flow: flow
+    });
+
     struct_variant_factory!(import(path: String) -> TopLevel:TopLevel::Import);
 
     /// Converts a scheduling expression to a specification expression or
@@ -581,7 +587,7 @@ impl ASTFactory {
     struct_variant_factory!(function_class(name: String, members: Vec<ClassMembers>) 
         -> TopLevel:TopLevel::FunctionClass);
 
-    struct_variant_factory!(sched_function(name: String, input: Vec<Arg<FullType>>, 
+    struct_variant_factory!(sched_function(name: String, input: Vec<MaybeArg<FullType>>, 
         output: Option<Vec<FullType>>, specs: Vec<String>, statements: Vec<SchedStmt>) 
         -> TopLevel:TopLevel::SchedulingFunc {
             name: name,

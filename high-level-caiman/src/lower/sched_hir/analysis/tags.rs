@@ -2,10 +2,10 @@ use caiman::{assembly::ast as asm, ir};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::lower::global_context::SpecType;
 use crate::lower::lower_schedule::tag_to_tag;
 use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator};
 use crate::parse::ast::{FullType, SchedTerm, Tag, Tags};
+use crate::typing::{Context, SpecType};
 
 use super::{Fact, Forwards, RET_VAR};
 
@@ -57,7 +57,7 @@ impl TagInfo {
     }
 
     /// Constructs a `TagInfo` from an optional vector of tags. If `t` is `None`
-    pub fn from_maybe_tags(t: &Option<Tags>, specs: &Specs) -> Self {
+    pub fn from_maybe(t: &Option<Tags>, specs: &Specs) -> Self {
         t.as_ref().map_or_else(
             || Self {
                 value: None,
@@ -139,18 +139,48 @@ impl TagInfo {
 /// Tag analysis for determining tags
 /// Top: empty set
 /// Meet: union
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub struct TagAnalysis {
+pub struct TagAnalysis<'a> {
     tags: HashMap<String, TagInfo>,
     specs: Rc<Specs>,
     /// For an output fact, thse are the input tags to be overridden
     input_overrides: HashMap<String, Vec<Tag>>,
+    ctx: &'a Context,
 }
 
-impl TagAnalysis {
+impl<'a> std::fmt::Debug for TagAnalysis<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut tag_keys = self.tags.keys().collect::<Vec<_>>();
+        tag_keys.sort();
+        writeln!(f, "Tags:")?;
+        for k in tag_keys {
+            writeln!(f, "  {k}: {:?}", self.tags.get(k).unwrap())?;
+        }
+        writeln!(f, "Input overrides:")?;
+        for (k, v) in &self.input_overrides {
+            writeln!(f, "  {k}: {v:?}")?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> PartialEq for TagAnalysis<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.tags == other.tags && self.input_overrides == other.input_overrides
+    }
+}
+
+impl<'a> Eq for TagAnalysis<'a> {}
+
+impl<'a> TagAnalysis<'a> {
     /// Constructs a new top element
-    pub fn top(specs: &Specs, input: &[(String, FullType)], out: &[FullType]) -> Self {
+    pub fn top(
+        specs: &Specs,
+        input: &[(String, Option<FullType>)],
+        out: &[FullType],
+        ctx: &'a Context,
+    ) -> Self {
         let mut tags = HashMap::new();
         for (out_idx, out_type) in out.iter().enumerate() {
             tags.insert(
@@ -159,12 +189,16 @@ impl TagAnalysis {
             );
         }
         for (arg_name, arg_type) in input {
-            tags.insert(arg_name.clone(), TagInfo::from(arg_type, specs));
+            tags.insert(
+                arg_name.clone(),
+                TagInfo::from(arg_type.as_ref().unwrap(), specs),
+            );
         }
         Self {
             tags,
             specs: Rc::new(specs.clone()),
             input_overrides: HashMap::new(),
+            ctx,
         }
     }
 
@@ -203,21 +237,19 @@ fn set_remote_node_id(q: &mut asm::Quotient, id: asm::Hole<asm::RemoteNodeId>) {
     }
 }
 
-impl TagAnalysis {
+impl<'a> TagAnalysis<'a> {
     /// Transfer function for an HIR body statement
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
         match stmt {
             HirBody::ConstDecl { lhs, lhs_tag, .. } => {
-                self.tags.insert(
-                    lhs.clone(),
-                    TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs),
-                );
+                self.tags
+                    .insert(lhs.clone(), TagInfo::from_maybe(lhs_tag, &self.specs));
             }
             HirBody::VarDecl {
                 lhs, lhs_tag, rhs, ..
             } => {
-                let mut info = TagInfo::from(lhs_tag.as_ref().unwrap(), &self.specs);
+                let mut info = TagInfo::from_maybe(lhs_tag, &self.specs);
                 if rhs.is_none() {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
@@ -253,10 +285,8 @@ impl TagAnalysis {
             }
             HirBody::Hole(_) => todo!(),
             HirBody::Op { dest, dest_tag, .. } => {
-                self.tags.insert(
-                    dest.clone(),
-                    TagInfo::from(dest_tag.as_ref().unwrap(), &self.specs),
-                );
+                self.tags
+                    .insert(dest.clone(), TagInfo::from_maybe(dest_tag, &self.specs));
             }
             HirBody::OutAnnotation(_, tags) => {
                 for (v, tag) in tags {
@@ -287,7 +317,7 @@ impl TagAnalysis {
     }
 }
 
-impl Fact for TagAnalysis {
+impl<'a> Fact for TagAnalysis<'a> {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;

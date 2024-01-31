@@ -53,23 +53,25 @@
                         "b",
                         Some(
                             FullType {
-                                base: FlaggedType {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            5,
-                                            12,
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                5,
+                                                12,
+                                            ),
+                                            end_ln_and_col: (
+                                                5,
+                                                15,
+                                            ),
+                                        },
+                                        base: Int(
+                                            I64,
                                         ),
-                                        end_ln_and_col: (
-                                            5,
-                                            15,
-                                        ),
+                                        flags: [],
+                                        settings: [],
                                     },
-                                    base: Int(
-                                        I64,
-                                    ),
-                                    flags: [],
-                                    settings: [],
-                                },
+                                ),
                                 tags: [
                                     Tag {
                                         info: Info {
@@ -121,23 +123,25 @@
                         "d",
                         Some(
                             FullType {
-                                base: FlaggedType {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            6,
-                                            12,
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                6,
+                                                12,
+                                            ),
+                                            end_ln_and_col: (
+                                                6,
+                                                15,
+                                            ),
+                                        },
+                                        base: Int(
+                                            I64,
                                         ),
-                                        end_ln_and_col: (
-                                            6,
-                                            15,
-                                        ),
+                                        flags: [],
+                                        settings: [],
                                     },
-                                    base: Int(
-                                        I64,
-                                    ),
-                                    flags: [],
-                                    settings: [],
-                                },
+                                ),
                                 tags: [
                                     Tag {
                                         info: Info {

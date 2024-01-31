@@ -40,8 +40,8 @@ fn foo() -> i64 @ node(main.z)-usable
 
         let b: bool @ node(main.b) = true;
         if @ node(main.left) b {
-            let a: bool @ node(main.a) = true;
-            if @ node(main.left_left) a {
+            let aa: bool @ node(main.a) = true;
+            if @ node(main.left_left) aa {
                 let one: i64 @ node(main.one) = 1;
                 v = one;
             }

@@ -8,7 +8,9 @@ pub use hir::*;
 
 use crate::{
     lower::data_type_to_local_type,
-    parse::ast::{Arg, FullType, SchedulingFunc},
+    normalize::original_name,
+    parse::ast::{DataType, FullType, MaybeArg, SchedulingFunc},
+    typing::{Context, Mutability, SchedInfo, SpecType},
 };
 use caiman::assembly::ast as asm;
 
@@ -19,7 +21,6 @@ use self::{
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
 };
 
-use super::{global_context::SpecType, lower_schedule::hlc_arg_to_asm_arg};
 pub use analysis::TagInfo;
 mod analysis;
 #[cfg(test)]
@@ -54,18 +55,21 @@ impl Specs {
 /// Information about a high level caiman function
 struct FuncInfo {
     name: String,
-    input: Vec<Arg<FullType>>,
+    input: Vec<MaybeArg<FullType>>,
     output: Vec<FullType>,
 }
 
 /// The funclets of a scheduling function.
 /// Combines the scheduling function's CFG with its analysis information
-pub struct Funclets {
+pub struct Funclets<'a> {
     cfg: Cfg,
     live_vars: analysis::InOutFacts<LiveVars>,
-    type_info: analysis::InOutFacts<TagAnalysis>,
-    /// Mapping from variable names to their base types
+    type_info: analysis::InOutFacts<TagAnalysis<'a>>,
+    /// Mapping from variable names to their local type. The local type of a variable
+    /// is a reference
     types: HashMap<String, asm::TypeId>,
+    /// Mapping from variable names to their data type
+    data_types: HashMap<String, DataType>,
     finfo: FuncInfo,
     specs: Specs,
     /// Map from block id to the set of output variables captured by a
@@ -76,7 +80,7 @@ pub struct Funclets {
 /// A specific funclet in a scheduling function.
 /// Combines the funclet's basic block with is analysis information.
 pub struct Funclet<'a> {
-    parent: &'a Funclets,
+    parent: &'a Funclets<'a>,
     block: &'a BasicBlock,
 }
 
@@ -201,7 +205,12 @@ impl<'a> Funclet<'a> {
                 .finfo
                 .input
                 .iter()
-                .map(hlc_arg_to_asm_arg)
+                .map(|(name, annot)| asm::FuncletArgument {
+                    name: Some(asm::NodeId(name.clone())),
+                    typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
+                    tags: TagInfo::from_tags(&annot.as_ref().unwrap().tags, &self.parent.specs)
+                        .tags_vec_default(),
+                })
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
             // final block is just for type conversion
@@ -213,7 +222,7 @@ impl<'a> Funclet<'a> {
                 .enumerate()
                 .map(|(idx, out)| asm::FuncletArgument {
                     name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
-                    typ: data_type_to_local_type(&out.base.base),
+                    typ: data_type_to_local_type(&out.base.as_ref().unwrap().base),
                     tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
                 })
                 .collect()
@@ -272,7 +281,7 @@ impl<'a> Funclet<'a> {
                 .enumerate()
                 .map(|(idx, out)| asm::FuncletArgument {
                     name: Some(asm::NodeId(format!("{RET_VAR}{idx}"))),
-                    typ: data_type_to_local_type(&out.base.base),
+                    typ: data_type_to_local_type(&out.base.as_ref().unwrap().base),
                     tags: TagInfo::from(out, &self.parent.specs).tags_vec_default(),
                 })
                 .collect()
@@ -287,7 +296,11 @@ impl<'a> Funclet<'a> {
                         .types
                         .get(&var)
                         .unwrap_or_else(|| {
-                            panic!("{}: Missing base type for {var}", self.block.src_loc)
+                            panic!(
+                                "{}: Missing base type for {}",
+                                self.block.src_loc,
+                                original_name(&var)
+                            )
                         })
                         .clone(),
                     tags: tag.tags_vec_default(),
@@ -369,9 +382,15 @@ impl<'a> Funclet<'a> {
     pub fn get_out_tag(&self, var: &str) -> Option<TagInfo> {
         self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
+
+    /// Gets the data type of the specified variable
+    #[inline]
+    pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
+        self.parent.data_types.get(var)
+    }
 }
 
-impl Funclets {
+impl<'a> Funclets<'a> {
     /// Updates terminators by replacing temporary terminators with their respective
     /// versions which contain more information computed by analyses.
     ///
@@ -433,14 +452,18 @@ impl Funclets {
 
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
-    pub fn new(f: SchedulingFunc, specs: Specs) -> Self {
+    pub fn new(f: SchedulingFunc, specs: Specs, ctx: &'a Context) -> Self {
         let mut cfg = Cfg::new(f.statements, &f.output);
-        let mut types = Self::collect_types(&cfg, &f.input, &f.output);
+        let (mut types, mut data_types) =
+            Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
         op_transform_pass(&mut cfg, &types);
-        deref_transform_pass(&mut cfg, &mut types);
+        deref_transform_pass(&mut cfg, &mut types, &mut data_types);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
-        let type_info = analyze(&mut cfg, &TagAnalysis::top(&specs, &f.input, &f.output));
+        let type_info = analyze(
+            &mut cfg,
+            &TagAnalysis::top(&specs, &f.input, &f.output, ctx),
+        );
         let finfo = FuncInfo {
             name: f.name,
             input: f.input,
@@ -451,63 +474,36 @@ impl Funclets {
             live_vars,
             type_info,
             types,
+            data_types,
             finfo,
             specs,
             captured_out,
         }
     }
 
-    /// Collects a map of variable names to their base types.
+    /// Collects a map of variable names to their base types as local types,
+    /// including the output variables (ex. `_out0`)
+    /// The base type of a variable is the reference type if the variable.
     /// # Arguments
-    /// * `cfg` - The canonical CFG of the scheduling function
-    /// * `f_in` - The input arguments of the scheduling function
-    /// * `f_out` - The output argument of the scheduling function
-    fn collect_types(
-        cfg: &Cfg,
-        f_in: &[(String, FullType)],
-        f_out: &[FullType],
-    ) -> HashMap<String, asm::TypeId> {
-        use std::collections::hash_map::Entry;
+    /// * `f` - The scheduling function information to collect types from
+    /// # Returns
+    /// A tuple of the map of variable names to their local types and the map of
+    /// variable names to their data types.
+    fn collect_types(f: &SchedInfo) -> (HashMap<String, asm::TypeId>, HashMap<String, DataType>) {
         let mut types = HashMap::new();
-        for (out_idx, out) in f_out.iter().enumerate() {
-            types.insert(
-                format!("{RET_VAR}{out_idx}"),
-                data_type_to_local_type(&out.base.base),
-            );
-        }
-        for (var, typ) in f_in {
-            types.insert(var.to_string(), data_type_to_local_type(&typ.base.base));
-        }
-        for bb in cfg.blocks.values() {
-            for stmt in bb
-                .stmts
-                .iter()
-                .map(|x| x as &dyn Hir)
-                .chain(std::iter::once(&bb.terminator as &dyn Hir))
-            {
-                if let Some(dests) = stmt.get_defs() {
-                    for (var, typ) in dests {
-                        if let Some(local_type) = typ {
-                            match types.entry(var.clone()) {
-                                Entry::Occupied(t) => assert_eq!(
-                                    t.get(),
-                                    &local_type,
-                                    "{}: Type mismatch for {var}: {:?} != {local_type:?}",
-                                    bb.src_loc,
-                                    t.get()
-                                ),
-                                Entry::Vacant(v) => {
-                                    v.insert(local_type);
-                                }
-                            }
-                        } else {
-                            assert!(types.contains_key(&var), "Missing type for {var}");
-                        }
-                    }
-                }
+        for (var, typ) in &f.types {
+            if f.defined_names.get(var) == Some(&Mutability::Mut) {
+                types.insert(var.to_string(), make_ref(data_type_to_local_type(typ)));
+            } else {
+                types.insert(var.to_string(), data_type_to_local_type(typ));
             }
         }
-        types
+        let mut data_types = f.types.clone();
+        for (id, out_ty) in f.dtype_sig.output.iter().enumerate() {
+            data_types.insert(format!("{RET_VAR}{id}"), out_ty.clone());
+            types.insert(format!("{RET_VAR}{id}"), data_type_to_local_type(out_ty));
+        }
+        (types, data_types)
     }
 
     /// Gets the funclet with the given id
@@ -552,10 +548,7 @@ impl Funclets {
 
     /// Gets the definitions of a terminator for a basic block
     fn terminator_dests(&self, block_id: usize) -> Vec<String> {
-        self.terminator(block_id)
-            .get_defs()
-            .map(|args| args.into_iter().map(|arg| arg.0).collect())
-            .unwrap_or_default()
+        self.terminator(block_id).get_defs().unwrap_or_default()
     }
 
     /// Gets the list of variables that exit a block.

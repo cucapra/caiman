@@ -55,141 +55,151 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                4,
-                                11,
-                            ),
-                            end_ln_and_col: (
-                                4,
-                                15,
-                            ),
-                        },
-                        base: UserDefined(
-                            "gbuf",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        15,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "gbuf",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
             (
                 "b",
-                FullType {
-                    base: FlaggedType {
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        20,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        29,
+                                    ),
+                                },
+                                base: Int(
+                                    I32,
+                                ),
+                                flags: [
+                                    "gpu",
+                                ],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        33,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        43,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "foo",
+                                        spec_var: Some(
+                                            "x",
+                                        ),
+                                    },
+                                ),
+                                flow: None,
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        45,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        60,
+                                    ),
+                                },
+                                quot: Some(
+                                    None,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "tm",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        62,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        72,
+                                    ),
+                                },
+                                quot: Some(
+                                    None,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "sp",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: None,
+                            },
+                        ],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
                                 4,
-                                20,
+                                78,
                             ),
                             end_ln_and_col: (
                                 4,
-                                29,
+                                81,
                             ),
                         },
                         base: Int(
                             I32,
                         ),
-                        flags: [
-                            "gpu",
-                        ],
+                        flags: [],
                         settings: [],
                     },
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    4,
-                                    33,
-                                ),
-                                end_ln_and_col: (
-                                    4,
-                                    43,
-                                ),
-                            },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "foo",
-                                    spec_var: Some(
-                                        "x",
-                                    ),
-                                },
-                            ),
-                            flow: None,
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    4,
-                                    45,
-                                ),
-                                end_ln_and_col: (
-                                    4,
-                                    60,
-                                ),
-                            },
-                            quot: Some(
-                                None,
-                            ),
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "tm",
-                                    spec_var: None,
-                                },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    4,
-                                    62,
-                                ),
-                                end_ln_and_col: (
-                                    4,
-                                    72,
-                                ),
-                            },
-                            quot: Some(
-                                None,
-                            ),
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "sp",
-                                    spec_var: None,
-                                },
-                            ),
-                            flow: None,
-                        },
-                    ],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            4,
-                            78,
-                        ),
-                        end_ln_and_col: (
-                            4,
-                            81,
-                        ),
-                    },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],

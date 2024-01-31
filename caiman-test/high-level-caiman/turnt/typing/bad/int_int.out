@@ -1,0 +1,2 @@
+Error: At int_int.cm:7:5, 
+  Type Error: Failed to unify type constraints of variable a
