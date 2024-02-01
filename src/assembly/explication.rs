@@ -5,23 +5,12 @@ mod util;
 
 use crate::assembly::ast;
 use crate::assembly::explication::util::reject_hole;
-use context::Context;
+use context::{InState, StaticContext};
 
-fn explicate_commands(funclet: &ast::FuncletId, context: &mut Context) -> bool {
-    context.enter_funclet(funclet.clone());
-    for node in context.static_command_ids(funclet) {
-        // we need to clone so we can potentially update the node in the context
-        explicator::explicate_command(funclet.clone(), node, context);
-    }
-    dbg!(&context);
-    todo!();
-    // explicator::explicate_tail_edge(&funclet, context);
-    // context.exit_funclet()
-}
-
-fn explicate_funclets(context: &mut Context) {
-    for funclet in context.static_schedule_funclet_ids() {
-        explicate_commands(&funclet, context);
+fn explicate_funclets(context: StaticContext) -> Vec<ast::Declaration> {
+    for funclet in context.schedule_funclet_ids() {
+        let state = InState::new(funclet);
+        explicator::explicate_funclet(state, &context);
     }
 }
 
@@ -31,9 +20,9 @@ fn explicate_funclets(context: &mut Context) {
 //   seems cool, but probably too much work
 // arguably this pass should be on the lowered AST rather than on the frontend
 //   but debugging explication is gonna be even harder without names...
-pub fn explicate(program: &mut ast::Program) {
-    let mut context = Context::new(program);
-    explicate_funclets(&mut context);
+pub fn explicate(mut program: ast::Program) -> ast::Program {
+    give_names(&mut program);
+    explicate_funclets(StaticContext::new(program));
 
     // dbg!(&context);
     todo!()

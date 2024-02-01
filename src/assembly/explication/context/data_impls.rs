@@ -68,6 +68,27 @@ impl LocalTypeDeclaration {
 }
 
 impl ScheduleScopeData {
+    pub fn new(funclet: FuncletId) -> ScheduleScopeData {
+        ScheduleScopeData::new_inner(funclet, HashMap::Default(), HashMap::Default())
+    }
+
+    pub fn new_inner(funclet: FuncletId, 
+        instantiations: HashMap<Location, Vec<(ir::Place, NodeId)>>,
+        allocations: HashMap<OpCode, Vec<NodeId>>) 
+        -> ScheduleScopeData {
+            ScheduleScopeData {
+                funclet,
+                node: None,
+                instantiations,
+                allocations,
+                explication_hole: false
+            }
+        }
+
+    pub fn next_node(&mut self) {
+        self.node += 1
+    }
+
     pub fn add_instantiation(&mut self, schedule_node: NodeId, location: Location, place: ir::Place) {
         self.instantiations
             .entry(location)
@@ -75,9 +96,9 @@ impl ScheduleScopeData {
             .push((place, schedule_node));
     }
 
-    pub fn add_operation(&mut self, node: NodeId, operation: OpCode) {
+    pub fn add_allocation(&mut self, node: NodeId, operation: OpCode) {
         let vec = self
-            .available_operations
+            .allocations
             .entry(operation)
             .or_insert_with(|| Vec::new());
         // safety check that the algorithm isn't reinserting operations
@@ -103,13 +124,3 @@ macro_rules! op_code_initialization {
 }
 
 with_operations!(op_code_initialization);
-
-impl MetaData {
-    pub fn new() -> MetaData {
-        MetaData { name_index: 0 }
-    }
-    pub fn next_name(&mut self) -> String {
-        self.name_index += 1;
-        format!("~{}", self.name_index)
-    }
-}

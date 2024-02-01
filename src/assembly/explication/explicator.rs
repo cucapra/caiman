@@ -134,6 +134,10 @@ fn explicate_local_do_builtin(
     }
     let operation = Some(ast::Quotient::Node(Some(deduced_op)));
 
+} 
+
+fn explicate_hold(state: InState, context: &Context) {
+
 }
 
 // initially setup a node that hasn't yet been read
@@ -215,26 +219,7 @@ fn explicate_node(location: Location, context: &mut Context) {
     context.replace_node_hole(&location.funclet, &location.node, result);
 }
 
-pub fn explicate_command(funclet: ast::FuncletId, command: ast::NodeId, context: &mut Context) {
-    let location = Location {
-        funclet,
-        node: command,
-    };
-    match context.get_command(&location.funclet, &location.node) {
-        ast::Command::Hole => context.add_explication_hole(location.node.clone()),
-        ast::Command::Node(n) => {
-            explicate_node(location, context);
-        }
-        ast::Command::TailEdge(_) => {
-            unreachable!("Tail Edges are explicated separately")
-        }
-        ast::Command::ExplicationHole => {
-            unreachable!("Should not be attempting to explicate an explication hole as a command")
-        }
-    }
-}
-
-pub fn explicate_tail_edge(funclet: &ast::FuncletId, context: &mut Context) {
+fn explicate_tail_edge(state: InState, context: &Context) -> FuncletOutState {
     match context.get_tail_edge(funclet) {
         None => {
             todo!()
@@ -249,4 +234,48 @@ pub fn explicate_tail_edge(funclet: &ast::FuncletId, context: &mut Context) {
         },
     }
     todo!()
+}
+
+fn explicate_command(mut state: InState, context: &Context) -> Option<FuncletOutState> {
+    let location = Location {
+        state.,
+        node: command,
+    };
+    match context.get_command(&location.funclet, &location.node) {
+        ast::Command::Hole => {
+            state.add_explication_hole();
+            state.get_latest_scope_mut().advance_node();
+            explicate_command(state, context)
+        },
+        ast::Command::Node(n) => {
+            explicate_node(state, context)
+        }
+        ast::Command::TailEdge(_) => {
+            explicate_tail_edge(state, context)
+        }
+        ast::Command::ExplicationHole => {
+            unreachable!("Should not be attempting to explicate an explication hole as a command")
+        }
+    }
+}
+
+pub fn explicate_funclet(kind: ir::FuncletKind, 
+    header: ast::FuncletHeader,
+    state: InState, 
+    context: &Context) 
+    -> ast::Funclet 
+    {
+    match explicate_command(state, context) {
+        None => panic!("No explication solution found for {:?}", 
+            state.get_latest_scope().funclet_name),
+        Some(result) => {
+            assert!(result.allocation_requests.emptied());
+            assert!(result.to_fill.emptied());
+            ast::Funclet {
+                kind,
+                header,
+                commands: result.commands.drain().collect()
+            }
+        }
+    }
 }

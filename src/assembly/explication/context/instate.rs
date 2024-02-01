@@ -1,21 +1,24 @@
 use super::*;
 use crate::assembly::explication::util::*;
-use paste::paste;
-use std::collections::hash_map::Entry;
-use std::fmt::Debug;
 
-impl<'context> Context<'context> {
-    pub fn enter_funclet(&mut self, funclet: FuncletId) {
-        // updates the location and the scope vec
-        let scope = ScheduleScopeData {
-            name: funclet,
-            instantiations: Default::default(),
-            available_operations: Default::default(),
-            explication_hole: None,
-        };
-        self.scopes.push(scope);
+impl InState {
+    pub fn new(funclet: FuncletId) -> InState {
+        let scopes = vec![ScopeFuncletData::new(funclet)];
+        InState {
+            schedule_explication_data: HashMap::Default(),
+            scopes,
+        }
     }
 
+    // most of these functions are mutable
+    // note that we are expected to clone the instate for each recursion
+    // this way we avoid _problems_
+
+    pub fn enter_funclet(&mut self, funclet: FuncletId) {
+        let instantiations = self.scopes.last().cloned().map(|le| le.instantiations).unwrap_or(HashMap::default());
+        let allocations = self.scopes.last().cloned().map(|le| le.allocations).unwrap_or(HashMap::default());
+        self.scopes.push(ScheduleScopeData::new(funclet, instantiations, allocations));
+    }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the last element of the scope
         match self.scopes.pop() {
@@ -24,7 +27,6 @@ impl<'context> Context<'context> {
         }
         self.scopes.len() == 0
     }
-
     pub fn add_instantiation(
         &mut self,
         schedule_node: NodeId,
@@ -50,54 +52,20 @@ impl<'context> Context<'context> {
             .insert(schedule_node, instantiated);
     }
 
+    pub fn get_latest_scope(&self) {
+        self.scopes.last().unwrap()
+    }
+
+    pub fn get_latest_scope_mut(&mut self) {
+        self.scopes.last().unwrap()
+    }
+
     pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
-        self.get_latest_scope()
-            .add_operation(schedule_node, operation)
+        self.get_latest_scope_mut().add_operation(schedule_node, operation)
     }
 
     pub fn add_explication_hole(&mut self, node: NodeId) {
-        self.get_latest_scope().add_explication_hole(node)
-    }
-
-    // extract a given node from the program and return it
-    // leaves a hole behind, which must be filled
-    pub fn extract_node(&mut self, funclet: &FuncletId, name: &NodeId) -> ast::Node {
-        let mut commands = &mut self.get_funclet_mut(&funclet).commands;
-        for command in commands.iter_mut() {
-            if command.name.as_ref().unwrap() == name {
-                let mut to_return = ast::Command::ExplicationHole;
-                std::mem::swap(&mut to_return, &mut command.command);
-                match to_return {
-                    ast::Command::Node(n) => {
-                        return n;
-                    }
-                    unexpected => {
-                        panic!("Expected a node, got {:?}", unexpected);
-                    }
-                }
-            }
-        }
-        panic!("Unknown command {:?} in funclet {:?}", name, funclet);
-    }
-
-    pub fn replace_node_hole(&mut self, funclet: &FuncletId, name: &NodeId, node: ast::Node) {
-        let mut commands = &mut self.get_funclet_mut(&funclet).commands;
-        for command in commands.iter_mut() {
-            if command.name.as_ref().unwrap() == name {
-                match command.command {
-                    ast::Command::ExplicationHole => {}
-                    _ => {
-                        unreachable!("Can only replace previously extracted nodes");
-                    }
-                }
-                command.command = ast::Command::Node(node);
-                return;
-            }
-        }
-        panic!(
-            "No node {:?} found while attempting to fill an extracted hole",
-            name
-        );
+        self.get_latest_scope_mut().add_explication_hole(node)
     }
 
     // Returns an instantiation if one is available in any scope (most to least recent)
@@ -134,6 +102,7 @@ impl<'context> Context<'context> {
     }
 
     // Pops and returns the best match for the given list of operations (if one exists)
+    // Returns as an index to make recursion more clear
     // Finds the operation with the following preferences (higher numbers are tiebreakers):
     //   1. maximum matching heuristic value
     //   2. inner-most scope
@@ -141,7 +110,7 @@ impl<'context> Context<'context> {
     //   4. most recently added node
     // if no such operation exists, returns the most recent explication hole
     // if there is also no explication hole, panics
-    pub fn pop_best_operation(&mut self, nodes: &Vec<&ast::Node>) -> Location {
+    pub fn pop_best_operation(&mut self, nodes: &Vec<&ast::Node>) -> usize {
         struct HeuristicResults {
             pub opcode: OpCode,
             pub scope_index: usize,
