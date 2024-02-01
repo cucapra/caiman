@@ -30,9 +30,9 @@ feq add_three {
     }
 }
 
-fn add1_impl(a @ input(add1.a)-usable, 
-             b @ input(add1.b)-usable, 
-             c @ input(add1.c)-usable)
+fn add1_impl(a: i64 @ input(add1.a)-usable, 
+             b: i64 @ input(add1.b)-usable, 
+             c: i64 @ input(add1.c)-usable)
     -> i64 @ output(add1.t2)-usable impls add1, time, space
 {
     let t @ node(add1.t) = a + b;
@@ -40,9 +40,9 @@ fn add1_impl(a @ input(add1.a)-usable,
     p
 }
 
-fn add2_impl(a @ input(add2.a)-usable, 
-             b @ input(add2.b)-usable, 
-             c @ input(add2.c)-usable)
+fn add2_impl(a: i64 @ input(add2.a)-usable, 
+             b: i64 @ input(add2.b)-usable, 
+             c: i64 @ input(add2.c)-usable)
     -> i64 @ output(add2.t2)-usable impls add2, time, space
 {
     let t @ node(add2.t) = b + c;

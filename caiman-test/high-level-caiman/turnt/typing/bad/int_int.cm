@@ -7,7 +7,7 @@ val main(a: i32) -> i64 {
     returns a
 }
 
-fn main_impl(a @ input(main.a)) -> i64 @ node(main.a)-usable
+fn main_impl(a: i32 @ input(main.a)) -> i64 @ node(main.a)-usable
     impls main, time, space
 {
     a

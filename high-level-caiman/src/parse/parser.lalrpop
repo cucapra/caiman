@@ -589,6 +589,7 @@ UnOp: Uop = {
     "!" => Uop::LNot,
     "~" => Uop::Not,
     "&" => Uop::Ref,
+    "*" => Uop::Deref,
 }
 
 // LITERALS

@@ -7,6 +7,7 @@ pub enum CDataType {
     Num,
     Int,
     Float,
+    Ref,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,7 +27,7 @@ impl Kind for ADataType {}
 /// constraint are universally quantified. To get multiple
 /// copies of the same constraint, clone the constraint
 /// after instantiating it.
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DTypeConstraint {
     Int(Option<IntSize>),
     Float(Option<FloatSize>),
@@ -37,6 +38,13 @@ pub enum DTypeConstraint {
     Num,
     /// Any type.
     Any,
+    /// A reference constraint which contains an already instantiated
+    /// data type constraint. This is done for greater flexibility
+    /// so that each reference constraint need not have a unique base type.
+    Ref(Constraint<CDataType, ADataType>),
+    /// A reference constraint which contains a dtype constraint
+    /// that will be instantiated to a new inner data type constraint.
+    RefN(Box<DTypeConstraint>),
 }
 
 impl From<IntSize> for ADataType {
@@ -124,6 +132,8 @@ impl DTypeConstraint {
             Self::Bool => Constraint::Atom(ADataType::Bool),
             Self::BufferSpace => Constraint::Atom(ADataType::BufferSpace),
             Self::Event => Constraint::Atom(ADataType::Event),
+            Self::Ref(x) => Constraint::Term(CDataType::Ref, vec![x]),
+            Self::RefN(x) => Constraint::Term(CDataType::Ref, vec![x.instantiate(env)]),
         }
     }
 }
@@ -145,6 +155,10 @@ impl TryFrom<DTypeConstraint> for DataType {
             DTypeConstraint::BufferSpace => Ok(Self::BufferSpace),
             DTypeConstraint::Event => Ok(Self::Event),
             DTypeConstraint::Any => Err(()),
+            DTypeConstraint::Ref(x) => Ok(Self::Ref(Box::new(Self::try_from(
+                DTypeConstraint::try_from(x).map_err(|_| ())?,
+            )?))),
+            DTypeConstraint::RefN(x) => Ok(Self::Ref(Box::new(Self::try_from(*x)?))),
         }
     }
 }
@@ -179,6 +193,11 @@ impl TryFrom<Constraint<CDataType, ADataType>> for DTypeConstraint {
                     _ => unreachable!(),
                 }
             }
+            Constraint::Term(CDataType::Ref, mut v) => {
+                assert_eq!(v.len(), 1, "Ref constraint should have exactly one child");
+                let d = v.swap_remove(0);
+                Ok(Self::Ref(d))
+            }
             Constraint::Var(_) => Ok(Self::Any),
             _ => todo!(),
         }
@@ -194,6 +213,7 @@ impl From<DataType> for DTypeConstraint {
             DataType::Bool => Self::Bool,
             DataType::BufferSpace => Self::BufferSpace,
             DataType::Event => Self::Event,
+            DataType::Ref(x) => Self::RefN(Box::new(Self::from(*x))),
             _ => todo!(),
         }
     }

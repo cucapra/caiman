@@ -4,7 +4,7 @@ mod specs;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType},
+    parse::ast::{Binop, DataType, Uop},
 };
 use caiman::assembly::ast::{self as asm};
 
@@ -355,7 +355,12 @@ impl SchedInfo {
     /// we don't have a value, timeline, and spatial spec.
     /// # Panics
     /// Internal error
-    pub fn new(specs: [String; 3], ctx: &Context, info: &Info) -> Result<Self, LocalError> {
+    pub fn new(
+        specs: [String; 3],
+        ctx: &Context,
+        sig: Signature,
+        info: &Info,
+    ) -> Result<Self, LocalError> {
         let mut val = None;
         let mut timeline = None;
         let mut spatial = None;
@@ -410,10 +415,7 @@ impl SchedInfo {
             return Err(type_error(*info, &format!("{info}: Missing spatial spec")));
         }
         Ok(Self {
-            dtype_sig: std::iter::once(&ctx.specs.get(val.as_ref().unwrap()).as_ref().unwrap().sig)
-                .map(Signature::from)
-                .next()
-                .unwrap(),
+            dtype_sig: sig,
             value: val.unwrap(),
             timeline: timeline.unwrap(),
             spatial: spatial.unwrap(),
@@ -553,5 +555,46 @@ fn binop_to_contraints(
             (a.clone(), a.clone(), a)
         }
         Binop::Dot | Binop::Range | Binop::Index | Binop::Cons => todo!(),
+    }
+}
+
+/// Returns constraints on the type of the operand and the result of a unary operation.
+/// # Returns
+/// A tuple of (operand constraint, result constraint).
+fn uop_to_contraints(
+    op: Uop,
+    env: &mut Env<CDataType, ADataType>,
+) -> (
+    Constraint<CDataType, ADataType>,
+    Constraint<CDataType, ADataType>,
+) {
+    match op {
+        Uop::Neg => {
+            let a = DTypeConstraint::Num;
+            let a = a.instantiate(env);
+            (a.clone(), a)
+        }
+        Uop::LNot => {
+            let a = DTypeConstraint::Bool;
+            let a = a.instantiate(env);
+            (a.clone(), a)
+        }
+        Uop::Ref => {
+            let a = DTypeConstraint::Any;
+            let a = a.instantiate(env);
+            let r = DTypeConstraint::Ref(a.clone());
+            (a, r.instantiate(env))
+        }
+        Uop::Deref => {
+            let any = DTypeConstraint::Any.instantiate(env);
+            let a = DTypeConstraint::Ref(any.clone());
+            let a = a.instantiate(env);
+            (a, any)
+        }
+        Uop::Not => {
+            let a = DTypeConstraint::Int(None);
+            let a = a.instantiate(env);
+            (a.clone(), a)
+        }
     }
 }

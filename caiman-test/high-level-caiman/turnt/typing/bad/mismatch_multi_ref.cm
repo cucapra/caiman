@@ -1,0 +1,29 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val main() -> i64 {
+    c :- 1
+    returns id(c)
+}
+
+val id(a: i64) -> i64 {
+    returns a
+}
+
+fn main_func() -> i64 impls main, time, space  
+{
+    var c = 1;
+    let r = &(&(&(&(&(&c)))));
+    id_func(*(*(*r)))
+}
+
+fn id_func(a: i64) -> i64
+    impls id, time, space
+{
+    a
+}
+
+
+pipeline main { main_func }
