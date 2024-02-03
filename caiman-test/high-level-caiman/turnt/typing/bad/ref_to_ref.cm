@@ -15,8 +15,8 @@ val id(a: i64) -> i64 {
 fn main_func() -> i64 impls main, time, space  
 {
     var c = 1;
-    let r = &(&(&(&(&(&c)))));
-    id_func(*(*(*(*(*(*r))))))
+    let r = &(&c);
+    id_func(**r)
 }
 
 fn id_func(a: i64) -> i64

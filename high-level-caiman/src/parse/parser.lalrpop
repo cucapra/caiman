@@ -584,6 +584,7 @@ DotOp: Binop = {
     "." => Binop::Dot,
 }
 
+#[inline]
 UnOp: Uop = {
     "-" => Uop::Neg,
     "!" => Uop::LNot,

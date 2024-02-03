@@ -3,7 +3,7 @@ pub mod cfg;
 mod hir;
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
 
@@ -453,11 +453,11 @@ impl Funclets {
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
         let mut cfg = Cfg::new(f.statements, &f.output, specs);
-        let (mut types, mut data_types) =
+        let (mut types, mut data_types, mut variables) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
         op_transform_pass(&mut cfg, &types);
-        deref_transform_pass(&mut cfg, &mut types, &mut data_types);
+        deref_transform_pass(&mut cfg, &mut types, &mut data_types, &mut variables);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         cfg = transform_to_ssa(cfg, &live_vars);
@@ -511,12 +511,20 @@ impl Funclets {
     /// * `f` - The scheduling function information to collect types from
     /// # Returns
     /// A tuple of the map of variable names to their local types and the map of
-    /// variable names to their data types.
-    fn collect_types(f: &SchedInfo) -> (HashMap<String, asm::TypeId>, HashMap<String, DataType>) {
+    /// variable names to their data types, and a set of mutable variables
+    fn collect_types(
+        f: &SchedInfo,
+    ) -> (
+        HashMap<String, asm::TypeId>,
+        HashMap<String, DataType>,
+        HashSet<String>,
+    ) {
         let mut types = HashMap::new();
+        let mut variables = HashSet::new();
         for (var, typ) in &f.types {
             if f.defined_names.get(var) == Some(&Mutability::Mut) {
                 types.insert(var.to_string(), make_ref(data_type_to_local_type(typ)));
+                variables.insert(var.to_string());
             } else {
                 types.insert(var.to_string(), data_type_to_local_type(typ));
             }
@@ -526,7 +534,7 @@ impl Funclets {
             data_types.insert(format!("{RET_VAR}{id}"), out_ty.clone());
             types.insert(format!("{RET_VAR}{id}"), data_type_to_local_type(out_ty));
         }
-        (types, data_types)
+        (types, data_types, variables)
     }
 
     /// Gets the funclet with the given id

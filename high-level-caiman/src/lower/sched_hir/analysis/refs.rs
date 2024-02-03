@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use caiman::assembly::ast as asm;
 use caiman::assembly::ast::TypeId;
@@ -17,15 +17,17 @@ fn is_ref_type(name: &str, types: &HashMap<String, TypeId>) -> bool {
     types.get(name).map_or(false, is_ref)
 }
 
-/// Transforms uses of references into uses of values by inserting deref instructions.
-/// This should be the first pass run (before live vars, etc.)
+/// Transforms uses of variables into uses of values by inserting deref instructions.
+/// After this pass, all deref and ref operators will be removed and replaced with
+/// deref instructions when needed.
 pub fn deref_transform_pass(
     cfg: &mut Cfg,
     types: &mut HashMap<String, TypeId>,
     data_types: &mut HashMap<String, DataType>,
+    variables: &HashSet<String>,
 ) {
     for bb in cfg.blocks.values_mut() {
-        deref_transform_block(bb, types, data_types);
+        deref_transform_block(bb, types, data_types, variables);
     }
 }
 
@@ -35,6 +37,7 @@ fn deref_transform_block(
     bb: &mut BasicBlock,
     types: &mut HashMap<String, TypeId>,
     data_types: &mut HashMap<String, DataType>,
+    variables: &HashSet<String>,
 ) {
     let mut insertions = Vec::new();
     let mut last_deref = HashMap::new();
@@ -54,6 +57,7 @@ fn deref_transform_block(
             &mut insertions,
             &mut last_deref,
             data_types,
+            variables,
         );
     }
 
@@ -135,6 +139,7 @@ fn insert_deref_if_needed(
 /// tuples of the insertion index (wrt the unmodified list of instructions)
 /// and the instruction to insert.
 /// * `last_deref` - the last derefed version for each variable
+#[allow(clippy::too_many_arguments)]
 fn deref_transform_instr(
     id: usize,
     instr: HirInstr,
@@ -143,13 +148,14 @@ fn deref_transform_instr(
     insertions: &mut Vec<(usize, HirBody)>,
     last_deref: &mut HashMap<String, u16>,
     data_types: &mut HashMap<String, DataType>,
+    variables: &HashSet<String>,
 ) {
     match instr {
         // TODO: generalize terminator usage
         HirInstr::Tail(t) => {
             // TODO: return references
             t.rename_uses(&mut |u, ut| {
-                if is_ref_type(u, types) && ut == UseType::Read {
+                if variables.contains(u) && ut == UseType::Read {
                     insert_deref_if_needed(last_deref, names, types, insertions, id, u, data_types);
                     get_cur_name(u, names)
                 } else {
@@ -162,14 +168,14 @@ fn deref_transform_instr(
             HirBody::InAnnotation(_, annotations) | HirBody::OutAnnotation(_, annotations),
         ) => {
             for (name, _) in annotations {
-                if is_ref_type(name, types) {
+                if variables.contains(name) {
                     *name = format!("_{name}_ref");
                 }
             }
         }
         HirInstr::Stmt(stmt) => {
             stmt.rename_uses(&mut |name, ut| {
-                if is_ref_type(name, types) && ut == UseType::Read {
+                if variables.contains(name) && ut == UseType::Read {
                     insert_deref_if_needed(
                         last_deref, names, types, insertions, id, name, data_types,
                     );

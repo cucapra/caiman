@@ -1,6 +1,8 @@
 use crate::{
     error,
-    parse::ast::{Binop, ClassMembers, DataType, FloatSize, IntSize, SchedulingFunc, TopLevel},
+    parse::ast::{
+        Binop, ClassMembers, DataType, FloatSize, IntSize, SchedulingFunc, TopLevel, Uop,
+    },
     typing::Context,
 };
 use caiman::assembly::ast as asm;
@@ -207,10 +209,25 @@ const fn binop_name(op: Binop) -> &'static str {
     }
 }
 
+const fn uop_name(op: Uop) -> &'static str {
+    match op {
+        Uop::Neg => "neg",
+        Uop::Not => "not",
+        Uop::LNot => "lnot",
+        Uop::Deref => "deref",
+        Uop::Ref => "ref",
+    }
+}
+
 /// Converts a high-level caiman data type to an extern funclet id.
 #[must_use]
 pub fn binop_to_str(op: Binop, type_left: &str, type_right: &str) -> String {
     format!("_{}_{type_left}_{type_right}", binop_name(op))
+}
+
+#[must_use]
+pub fn uop_to_str(op: Uop, type_in: &str) -> String {
+    format!("_{}_{type_in}", uop_name(op))
 }
 
 /// Gets the id of the direct result of an operation or call that results in `names`.

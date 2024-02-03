@@ -431,6 +431,7 @@ impl ASTFactory {
         op: op,
         expr: Box::new(expr)
     });
+    
     struct_variant_factory!(conditional<T: LangTerm>(if_true: NestedExpr<T>, guard: NestedExpr<T>, 
         if_false: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Conditional 
     {

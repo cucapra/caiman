@@ -1,0 +1,10 @@
+#version 0.1.0
+
+fn foo() impls a {
+    var c = 2;
+    var z = **y;
+    let b = !!!!!false;
+    let j = ~~~~0;
+    let k = ***h;
+    let p = -----5;
+}

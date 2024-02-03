@@ -121,22 +121,39 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
 }
 
 /// Adds all base types to the scheduling info struct for all defined names that
-/// can be resolved. There is no error of a name cannot be resolved. This is
+/// can be resolved. There is no error if a name cannot be resolved. This is
 /// bc the schedule may contain holes.
+///
+/// Also  performs final cleanup checks such as making sure there are no
+/// references to references.
+/// # Arguments
+/// * `env` - the type environment to use for resolving types
+/// * `types` - the map to add types to
+/// * `names` - the map of names to mutabilities
+/// # Returns
+/// * Ok if all types are resolved
+/// * Err if a post-processing check fails
 fn resolve_types(
     env: &DTypeEnv,
     types: &mut HashMap<String, DataType>,
     names: &HashMap<String, Mutability>,
-) {
+) -> Result<(), LocalError> {
     for name in names.keys() {
         if let Some(dt) = env.env.get_type(name) {
             if let Ok(dt) = DTypeConstraint::try_from(dt) {
                 if let Ok(dt) = DataType::try_from(dt) {
+                    if matches!(&dt, DataType::Ref(inner) if matches!(**inner, DataType::Ref(_))) {
+                        return Err(type_error(
+                            Info::default(),
+                            &format!("Reference to reference types are not allowed. Found: {dt}",),
+                        ));
+                    }
                     types.insert(name.clone(), dt);
                 }
             }
         }
     }
+    Ok(())
 }
 
 /// Collects type constraints for scheduling functions.
@@ -189,7 +206,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     .insert(in_name.clone(), Mutability::Const);
             }
             collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
-            resolve_types(&env, &mut sched_info.types, &sched_info.defined_names);
+            resolve_types(&env, &mut sched_info.types, &sched_info.defined_names)?;
         }
     }
     Ok(ctx)

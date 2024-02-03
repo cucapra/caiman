@@ -11,11 +11,14 @@ use crate::{
             cfg::{BasicBlock, Cfg},
             HirBody, HirInstr, HirOp,
         },
+        uop_to_str,
     },
-    parse::ast::SchedTerm,
+    parse::ast::{SchedTerm, Uop},
 };
 
-/// Transforms binary operations into external FFI calls
+/// Transforms binary and unary operations into external FFI calls.
+/// After this pass, all binary and unary operators, except references and
+/// dereferences, will be replaced with external FFI calls.
 #[allow(clippy::module_name_repetitions)]
 pub fn op_transform_pass(cfg: &mut Cfg, types: &HashMap<String, TypeId>) {
     for bb in cfg.blocks.values_mut() {
@@ -53,15 +56,24 @@ fn type_to_str(t: &TypeId) -> String {
 /// Transforms an instruction by replacing binary operations with external FFI calls
 fn op_transform_instr(instr: &mut HirInstr, types: &HashMap<String, asm::TypeId>) {
     if let HirInstr::Stmt(HirBody::Op { op, args, .. }) = instr {
-        if let HirOp::Binary(bin) = op {
-            assert_eq!(args.len(), 2);
-            let arg_l = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
-            let arg_r = enum_cast!(SchedTerm::Var { name, .. }, name, &args[1]);
-            *op = HirOp::FFI(binop_to_str(
-                *bin,
-                &type_to_str(&types[arg_l.as_str()]),
-                &type_to_str(&types[arg_r.as_str()]),
-            ));
+        match op {
+            HirOp::Binary(bin) => {
+                assert_eq!(args.len(), 2);
+                let arg_l = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
+                let arg_r = enum_cast!(SchedTerm::Var { name, .. }, name, &args[1]);
+                *op = HirOp::FFI(binop_to_str(
+                    *bin,
+                    &type_to_str(&types[arg_l]),
+                    &type_to_str(&types[arg_r]),
+                ));
+            }
+            HirOp::Unary(unary @ (Uop::Neg | Uop::Not | Uop::LNot)) => {
+                assert_eq!(args.len(), 1);
+                let arg = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
+                *op = HirOp::FFI(uop_to_str(*unary, &type_to_str(&types[arg])));
+            }
+            HirOp::Unary(Uop::Deref | Uop::Ref) => (),
+            HirOp::FFI(_) => panic!("Unexpected FFI op"),
         }
     }
 }

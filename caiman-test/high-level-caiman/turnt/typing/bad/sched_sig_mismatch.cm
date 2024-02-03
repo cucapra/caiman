@@ -5,7 +5,11 @@ sptl space(s: BufferSpace) -> BufferSpace { returns s }
 
 val main() -> i64 {
     c :- 1
-    returns id(c)
+    returns one(c) + id(c)
+}
+
+val one(a: i64) -> i64 {
+    returns 1
 }
 
 val id(a: i64) -> i64 {
@@ -15,8 +19,8 @@ val id(a: i64) -> i64 {
 fn main_func() -> i64 impls main, time, space  
 {
     var c = 1;
-    let r = &(&(&(&(&(&c)))));
-    id_func(*(*(*r)))
+    let g = 2;
+    one_func(2) + id_func(c)
 }
 
 fn id_func(a: i64) -> i64
@@ -25,5 +29,10 @@ fn id_func(a: i64) -> i64
     a
 }
 
+fn one_func(a: i32) -> i64 
+    impls one, time, space
+{
+    1
+}
 
 pipeline main { main_func }
