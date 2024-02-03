@@ -18,20 +18,46 @@ value[impl default @main] %foo() -> i64 {
     %y = constant %ni64 5;
     %z = constant %ni64 -3;
 
-    %y_t = call @mult(%x);
-    %y = extract %y_t 0;
+    %x_t = call @mult(%y, %z);
+
+    %y_t = call @sub(%x, %x_t);
+
+    %r = extract %y_t 0;
     return %y;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %bar<input($time.%e)-usable, output($time.%e)-usable>() ->
 [%out : %ni64] {
+    //initialize x 
     %x_ref = alloc-temporary local [storage, map_write] i64;
-    %y_ref = alloc-temporary local [storage, map_write] i64;
+    //put 10 into x 
     local-do-builtin node($val.%x)() -> %x_ref;
+    //alias x_ref as x
     %x = read-ref i64 %x_ref;
-    local-do-external %op node($val.%y_t)(%x) -> %y_ref;
-    %result = read-ref i64 %y_ref;
+
+    //initialize y
+    %y_ref = alloc-temporary local [storage, map_write] i64;
+    //put 5 into y
+    local-do-builtin node($val.%y)() -> %y_ref;
+    //alias y_ref as y
+    %y = read-ref i64 %y_ref;
+
+    //initialize z
+    %z_ref = alloc-temporary local [storage, map_write] i64;
+    //put -3 into z
+    local-do-builtin node($val.%z)() -> %z_ref;
+    //alias z_ref into z
+    %z = read-ref i64 %z_ref;
+
+    //put into x_t the result of mult y, z and place it in y_ref
+    local-do-external %op mult($val.%x_t)(%y)(%z) -> %y_ref;
+
+    //put into y_t the result of sub x and x_t and place it in z_ref 
+    local-do-external %op sub($val.%y_t)(%x)(%y) -> %z_ref;
+
+    //result should be in z ref 
+    %result = read-ref i64 %z_ref;
     return %result;
 }
 
