@@ -13,6 +13,22 @@ mod sched_hir;
 use lower_schedule::lower_schedule;
 use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funclet};
 
+#[macro_export]
+macro_rules! enum_cast {
+    ($p:path, $e:expr) => {
+        match $e {
+            $p(x) => x,
+            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
+        }
+    };
+    ($p:pat, $r:expr, $e:expr) => {
+        match $e {
+            $p => $r,
+            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
+        }
+    };
+}
+
 // TODO: only i32, i64, and u64 are currently supported in the IR
 // change this to u8 or i8 once we support those types
 pub const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
@@ -27,6 +43,10 @@ fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
         DataType::BufferSpace => TypeId::Local(String::from("BufferSpace")),
         DataType::Event => TypeId::Local(String::from("Event")),
         DataType::UserDefined(name) => TypeId::Local(name.clone()),
+        DataType::Ref(t) => TypeId::Local(format!(
+            "&{}",
+            enum_cast!(TypeId::Local, data_type_to_local_type(t))
+        )),
         _ => todo!("TODO"),
     }
 }
@@ -58,22 +78,6 @@ pub const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
 /// Convert a high-level caiman data type to a caiman assembly type.
 fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
     dts.iter().map(data_type_to_local_type).collect()
-}
-
-#[macro_export]
-macro_rules! enum_cast {
-    ($p:path, $e:expr) => {
-        match $e {
-            $p(x) => x,
-            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
-        }
-    };
-    ($p:pat, $r:expr, $e:expr) => {
-        match $e {
-            $p => $r,
-            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
-        }
-    };
 }
 
 /// Lower a high-level caiman program to caiman assembly.

@@ -141,10 +141,9 @@ impl<'a> Funclet<'a> {
                 .iter()
                 .enumerate()
                 .map(|(idx, out)| {
-                    (
-                        format!("{RET_VAR}{idx}"),
-                        TagInfo::from(out).tag_info_default(),
-                    )
+                    let s = format!("{RET_VAR}{idx}");
+                    let dt = self.parent.data_types.get(&s).unwrap();
+                    (s, TagInfo::from(out).tag_info_default(dt))
                 })
                 .collect();
         }
@@ -197,7 +196,7 @@ impl<'a> Funclet<'a> {
                 .map(|(name, annot)| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
                     typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
-                    tags: TagInfo::from(annot).tags_vec_default(),
+                    tags: TagInfo::from(annot).tags_vec_default(&self.parent.data_types[name]),
                 })
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
@@ -213,7 +212,7 @@ impl<'a> Funclet<'a> {
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(),
+                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
                     }
                 })
                 .collect()
@@ -236,7 +235,7 @@ impl<'a> Funclet<'a> {
                                 self.block.src_loc
                             )
                         })
-                        .tags_vec_default(),
+                        .tags_vec_default(&self.parent.data_types[var]),
                 })
                 .collect()
         }
@@ -280,7 +279,7 @@ impl<'a> Funclet<'a> {
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(),
+                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
                     }
                 })
                 .collect()
@@ -302,7 +301,7 @@ impl<'a> Funclet<'a> {
                             )
                         })
                         .clone(),
-                    tags: tag.tags_vec_default(),
+                    tags: tag.tags_vec_default(&self.parent.data_types[&var]),
                 })
                 .collect()
         }
@@ -453,11 +452,11 @@ impl Funclets {
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
         let mut cfg = Cfg::new(f.statements, &f.output, specs);
-        let (mut types, mut data_types, mut variables) =
+        let (mut types, mut data_types, variables) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
-        op_transform_pass(&mut cfg, &types);
-        deref_transform_pass(&mut cfg, &mut types, &mut data_types, &mut variables);
+        op_transform_pass(&mut cfg, &types, &data_types);
+        deref_transform_pass(&mut cfg, &mut types, &mut data_types, &variables);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         cfg = transform_to_ssa(cfg, &live_vars);
@@ -485,7 +484,7 @@ impl Funclets {
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,
-            &TagAnalysis::top(specs, &hir_inputs, &hir_outputs),
+            &TagAnalysis::top(specs, &hir_inputs, &hir_outputs, &data_types),
         );
         let finfo = FuncInfo {
             name: f.name,
@@ -619,13 +618,4 @@ impl Funclets {
             .chain(returns)
             .collect()
     }
-}
-
-/// Returns true if the type is a reference
-pub fn is_ref(typ: &asm::TypeId) -> bool {
-    matches!(typ, asm::TypeId::Local(s) if s.starts_with('&'))
-        || matches!(
-            typ,
-            asm::TypeId::FFI(asm::FFIType::ConstRef(_) | asm::FFIType::MutRef(_))
-        )
 }

@@ -514,7 +514,7 @@ pub fn collect_schedule(
             base: Some(anot), ..
         } = fn_t
         {
-            if &anot.base != sig_t {
+            if !anot.base.refines(sig_t) {
                 return Err(type_error(
                     info,
                     &format!(
@@ -522,8 +522,10 @@ pub fn collect_schedule(
                     ),
                 ));
             }
+            env.add_dtype_constraint(ret_name, anot.base.clone(), info)?;
+        } else {
+            panic!("Function return type has no base type");
         }
-        env.add_dtype_constraint(ret_name, sig_t.clone(), info)?;
     }
     Ok(())
 }

@@ -459,11 +459,15 @@ pub fn tag_to_quot(t: &Tag) -> asm::Quotient {
 
 /// Converts a hlc tag to a tag in the assembly
 pub fn tag_to_tag(t: &Tag) -> asm::Tag {
+    tag_to_tag_def(t, ir::Flow::Usable)
+}
+
+/// Converts a hlc tag to a tag in the assembly, using a default flow
+/// if the tag does not specify a flow
+pub fn tag_to_tag_def(t: &Tag, default_flow: ir::Flow) -> asm::Tag {
     asm::Tag {
         quot: tag_to_quot(t),
-        // TODO: this is a mistake in the IR/assembly, the flow should be able
-        // to be a hole
-        flow: t.flow.as_ref().map_or(ir::Flow::Usable, |f| match f {
+        flow: t.flow.as_ref().map_or(default_flow, |f| match f {
             Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
             Flow::Usable => ir::Flow::Usable,

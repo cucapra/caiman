@@ -4,18 +4,15 @@ use caiman::assembly::ast as asm;
 use caiman::assembly::ast::TypeId;
 
 use crate::{
+    enum_cast,
     lower::sched_hir::{
         cfg::{BasicBlock, Cfg},
-        make_deref, Hir, HirBody, HirInstr, UseType,
+        make_deref, Hir, HirBody, HirInstr, HirOp, UseType,
     },
-    parse::ast::{DataType, IntSize},
+    parse::ast::{DataType, IntSize, SchedTerm, Uop},
 };
 
-/// Determines if the given variable has a reference type.
-fn is_ref_type(name: &str, types: &HashMap<String, TypeId>) -> bool {
-    use crate::lower::sched_hir::is_ref;
-    types.get(name).map_or(false, is_ref)
-}
+use super::{analyze, Fact, Forwards};
 
 /// Transforms uses of variables into uses of values by inserting deref instructions.
 /// After this pass, all deref and ref operators will be removed and replaced with
@@ -28,6 +25,73 @@ pub fn deref_transform_pass(
 ) {
     for bb in cfg.blocks.values_mut() {
         deref_transform_block(bb, types, data_types, variables);
+    }
+    // we do a, maybe not the best thing, here and let analyze also
+    // replaces uses of references with the use of the original variable
+
+    // we must do the derefernce of variable uses first
+    let _ = analyze(cfg, &RefPropagation::default());
+    for bb in cfg.blocks.values_mut() {
+        remove_refs_ops(bb);
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
+struct RefPropagation {
+    aliases: HashMap<String, String>,
+}
+
+impl Fact for RefPropagation {
+    fn meet(mut self, other: &Self) -> Self {
+        for (k, v) in &other.aliases {
+            assert!(!self.aliases.contains_key(k));
+            self.aliases.insert(k.clone(), v.clone());
+        }
+        self
+    }
+
+    fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize) {
+        // assume single assignment
+        stmt.rename_uses(&mut |name, ut| {
+            if ut == UseType::Read {
+                self.aliases
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| name.to_string())
+            } else {
+                name.to_string()
+            }
+        });
+        if let HirInstr::Stmt(HirBody::Op {
+            op: HirOp::Unary(Uop::Ref),
+            dest,
+            args,
+            ..
+        }) = stmt
+        {
+            assert!(args.len() == 1);
+            let src = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
+            self.aliases.insert(dest.clone(), src.clone());
+        }
+    }
+
+    type Dir = Forwards;
+}
+
+/// Removes all unary reference operators from a basic block
+fn remove_refs_ops(bb: &mut BasicBlock) {
+    let mut to_remove = Vec::new();
+    for (idx, instr) in bb.stmts.iter().enumerate() {
+        if let HirBody::Op {
+            op: HirOp::Unary(Uop::Ref),
+            ..
+        } = instr
+        {
+            to_remove.push(idx);
+        }
+    }
+    for idx in to_remove.into_iter().rev() {
+        bb.stmts.remove(idx);
     }
 }
 
@@ -163,13 +227,30 @@ fn deref_transform_instr(
                 }
             });
         }
-        HirInstr::Stmt(HirBody::RefLoad { .. }) => panic!("Already inserted deref"),
+        HirInstr::Stmt(HirBody::RefLoad { src, .. }) => {
+            if variables.contains(src) {
+                *src = format!("_{src}_ref");
+            }
+        }
         HirInstr::Stmt(
             HirBody::InAnnotation(_, annotations) | HirBody::OutAnnotation(_, annotations),
         ) => {
             for (name, _) in annotations {
                 if variables.contains(name) {
                     *name = format!("_{name}_ref");
+                }
+            }
+        }
+        HirInstr::Stmt(HirBody::Op {
+            op: HirOp::Unary(Uop::Ref),
+            args,
+            ..
+        }) => {
+            for arg in args {
+                if let SchedTerm::Var { name, .. } = arg {
+                    if variables.contains(name) {
+                        *name = format!("_{name}_ref");
+                    }
                 }
             }
         }

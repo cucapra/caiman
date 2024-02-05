@@ -27,15 +27,17 @@ pub fn flatten_top_level<
     I,
     D: Fn(&str, NestedExpr<T>) -> I,
     C: Fn(T, usize) -> (Vec<I>, usize, NestedExpr<T>),
+    B: Fn(NestedExpr<T>, usize) -> (Vec<I>, usize, NestedExpr<T>),
 >(
     e: NestedExpr<T>,
     mk_var: &F,
     mk_decl: &D,
     temp_num: usize,
     flatten_term: &C,
+    flatten_term_children: &B,
 ) -> (Vec<I>, usize, NestedExpr<T>) {
     match e {
-        x @ NestedExpr::Term(_) => (vec![], temp_num, x),
+        x @ NestedExpr::Term(_) => flatten_term_children(x, temp_num),
         NestedExpr::Binop { info, op, lhs, rhs } => {
             let (mut lhs_instrs, temp_num, lhs_expr) =
                 flatten_rec(*lhs, mk_var, mk_decl, temp_num, flatten_term);
@@ -189,6 +191,46 @@ pub fn flatten_rec<
     }
 }
 
+/// Flattens the arguments of a spec call to be arguments without nested expressions
+/// # Arguments
+/// * `args` - The arguments to flatten
+/// * `temp_num` - The current number of temporary variables
+/// * `info` - The info of the spec call
+/// # Returns
+/// * A tuple containing:
+///     * A list of statements that need to be added to the spec
+///     * The new arguments
+///     * The new number of temporary variables
+fn flatten_spec_call_args(
+    args: Vec<NestedExpr<SpecTerm>>,
+    temp_num: usize,
+    info: Info,
+) -> (Vec<SpecStmt>, Vec<NestedExpr<SpecTerm>>, usize) {
+    let mut instrs = vec![];
+    let mut temp_num = temp_num;
+    let mut new_args = vec![];
+    for arg in args {
+        let (arg_instrs, new_temp_num, arg_expr) = flatten_rec(
+            arg,
+            &|v| SpecTerm::Var {
+                info,
+                name: v.to_string(),
+            },
+            &|name, e| SpecStmt::Assign {
+                info,
+                lhs: vec![(name.to_string(), None)],
+                rhs: e,
+            },
+            temp_num,
+            &flatten_spec_term,
+        );
+        temp_num = new_temp_num;
+        instrs.extend(arg_instrs);
+        new_args.push(arg_expr);
+    }
+    (instrs, new_args, temp_num)
+}
+
 /// Flattens a spec call to be a statement without nested expressions
 /// # Arguments
 /// * `call` - The spec call to flatten
@@ -211,28 +253,7 @@ fn flatten_spec_call(
         template,
     } = call
     {
-        let mut instrs = vec![];
-        let mut temp_num = temp_num;
-        let mut new_args = vec![];
-        for arg in args {
-            let (arg_instrs, new_temp_num, arg_expr) = flatten_rec(
-                arg,
-                &|v| SpecTerm::Var {
-                    info,
-                    name: v.to_string(),
-                },
-                &|name, e| SpecStmt::Assign {
-                    info,
-                    lhs: vec![(name.to_string(), None)],
-                    rhs: e,
-                },
-                temp_num,
-                &flatten_spec_term,
-            );
-            temp_num = new_temp_num;
-            instrs.extend(arg_instrs);
-            new_args.push(arg_expr);
-        }
+        let (mut instrs, new_args, temp_num) = flatten_spec_call_args(args, temp_num, info);
         let (func_instrs, mut temp_num, func_expr) = flatten_rec(
             *function,
             &|v| SpecTerm::Var {
@@ -339,6 +360,34 @@ fn flatten_spec_term(t: SpecTerm, temp_num: usize) -> (Vec<SpecStmt>, usize, Nes
     }
 }
 
+/// Flattens the spec term so that all children are not nested expressions
+fn flatten_spec_term_children(
+    term: NestedExpr<SpecTerm>,
+    temp_num: usize,
+) -> (Vec<SpecStmt>, usize, NestedExpr<SpecTerm>) {
+    match term {
+        NestedExpr::Term(SpecTerm::Call {
+            args,
+            info,
+            function,
+            template,
+        }) => {
+            let (instrs, new_args, temp_num) = flatten_spec_call_args(args, temp_num, info);
+            (
+                instrs,
+                temp_num,
+                NestedExpr::Term(SpecTerm::Call {
+                    args: new_args,
+                    info,
+                    function,
+                    template,
+                }),
+            )
+        }
+        _ => (vec![], temp_num, term),
+    }
+}
+
 /// Flattens a list of spec statements to be statements without nested expressions
 pub fn flatten_spec(stmts: Vec<SpecStmt>) -> Vec<SpecStmt> {
     let mut res = vec![];
@@ -359,6 +408,7 @@ pub fn flatten_spec(stmts: Vec<SpecStmt>) -> Vec<SpecStmt> {
                     },
                     temp_num,
                     &flatten_spec_term,
+                    &flatten_spec_term_children,
                 );
                 temp_num = new_temp_num;
                 instrs.push(SpecStmt::Assign {
@@ -464,6 +514,49 @@ fn flatten_sched_term(
     }
 }
 
+/// Flattens the arguments of a call so that each argument is a term
+/// and not a nested expression
+/// # Arguments
+/// * `args` - The arguments to flatten
+/// * `temp_num` - The current number of temporary variables
+/// * `info` - The info of the call
+/// # Returns
+/// * A tuple containing:
+///     * A list of statements that need to be added to the schedule
+///     * The new arguments
+///     * The new number of temporary variables
+fn flatten_sched_call_args(
+    args: Vec<NestedExpr<SchedTerm>>,
+    temp_num: usize,
+    info: Info,
+) -> (Vec<SchedStmt>, Vec<NestedExpr<SchedTerm>>, usize) {
+    let mut instrs = vec![];
+    let mut temp_num = temp_num;
+    let mut new_args = vec![];
+    for arg in args {
+        let (arg_instrs, new_temp_num, arg_expr) = flatten_rec(
+            arg,
+            &|v| SchedTerm::Var {
+                info,
+                name: v.to_string(),
+                tag: None,
+            },
+            &|name, e| SchedStmt::Decl {
+                info,
+                lhs: vec![(name.to_string(), None)],
+                expr: Some(e),
+                is_const: true,
+            },
+            temp_num,
+            &flatten_sched_term,
+        );
+        temp_num = new_temp_num;
+        instrs.extend(arg_instrs);
+        new_args.push(arg_expr);
+    }
+    (instrs, new_args, temp_num)
+}
+
 /// Flattens a schedule call to be a statement without nested expressions
 fn flatten_sched_call(
     call: SchedFuncCall,
@@ -477,30 +570,7 @@ fn flatten_sched_call(
         tag,
     } = call;
     if let ArgsOrEnc::Args(args) = *args {
-        let mut instrs = vec![];
-        let mut temp_num = temp_num;
-        let mut new_args = vec![];
-        for arg in args {
-            let (arg_instrs, new_temp_num, arg_expr) = flatten_rec(
-                arg,
-                &|v| SchedTerm::Var {
-                    info,
-                    name: v.to_string(),
-                    tag: None,
-                },
-                &|name, e| SchedStmt::Decl {
-                    info,
-                    lhs: vec![(name.to_string(), None)],
-                    expr: Some(e),
-                    is_const: true,
-                },
-                temp_num,
-                &flatten_sched_term,
-            );
-            temp_num = new_temp_num;
-            instrs.extend(arg_instrs);
-            new_args.push(arg_expr);
-        }
+        let (mut instrs, new_args, temp_num) = flatten_sched_call_args(args, temp_num, info);
         let (func_instrs, mut temp_num, func_expr) = flatten_rec(
             *target,
             &|v| SchedTerm::Var {
@@ -548,6 +618,44 @@ fn flatten_sched_call(
     }
 }
 
+/// Flattens the schedule term so that all children are not nested expressions
+fn flatten_sched_term_children(
+    term: NestedExpr<SchedTerm>,
+    temp_num: usize,
+) -> (Vec<SchedStmt>, usize, NestedExpr<SchedTerm>) {
+    match term {
+        NestedExpr::Term(SchedTerm::Call(
+            info,
+            SchedFuncCall {
+                target,
+                templates,
+                args,
+                tag,
+            },
+        )) => {
+            if let ArgsOrEnc::Args(args) = *args {
+                let (instrs, new_args, temp_num) = flatten_sched_call_args(args, temp_num, info);
+                (
+                    instrs,
+                    temp_num,
+                    NestedExpr::Term(SchedTerm::Call(
+                        info,
+                        SchedFuncCall {
+                            args: Box::new(ArgsOrEnc::Args(new_args)),
+                            target,
+                            templates,
+                            tag,
+                        },
+                    )),
+                )
+            } else {
+                todo!()
+            }
+        }
+        _ => (vec![], temp_num, term),
+    }
+}
+
 /// Flattens a list of schedule statements to be statements without nested expressions
 /// # Arguments
 /// * `stmts` - The list of schedule statements to flatten
@@ -584,6 +692,7 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                         },
                         temp_num,
                         &flatten_sched_term,
+                        &flatten_sched_term_children,
                     );
                     temp_num = new_temp_num;
                     instrs.extend(new_instrs);
