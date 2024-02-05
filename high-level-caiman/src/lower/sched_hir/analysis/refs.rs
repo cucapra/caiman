@@ -15,6 +15,8 @@ use crate::{
 use super::{analyze, Fact, Forwards};
 
 /// Transforms uses of variables into uses of values by inserting deref instructions.
+/// Also converts reference operators into uses of the original variable that
+/// the reference points to.
 /// After this pass, all deref and ref operators will be removed and replaced with
 /// deref instructions when needed.
 pub fn deref_transform_pass(
@@ -36,6 +38,16 @@ pub fn deref_transform_pass(
     }
 }
 
+/// Reference propagation
+/// Essentially performs constant propagation for references
+/// by replacing all uses of
+/// references with the original variable name (the reference of the variable,
+/// not the value of the variable)
+///
+/// Assumes that the input cfg is in an SSA-ish form where all variables
+/// have a single assignment except for reference writes. Also assumes that
+/// the transformation inserting dereferences on variable uses has already
+/// been run.
 #[derive(Default, Clone, PartialEq, Eq, Debug)]
 struct RefPropagation {
     aliases: HashMap<String, String>,
@@ -79,6 +91,8 @@ impl Fact for RefPropagation {
 }
 
 /// Removes all unary reference operators from a basic block
+/// This should be run after reference propagation, which renders
+/// reference operators useless.
 fn remove_refs_ops(bb: &mut BasicBlock) {
     let mut to_remove = Vec::new();
     for (idx, instr) in bb.stmts.iter().enumerate() {

@@ -194,13 +194,11 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                 } else {
                     panic!("All input data types should be specified for now");
                 }
-                //env.add_dtype_constraint(decl_name, spec_typ.clone(), *info)?;
             }
             let outs = val_sig.output.clone();
             collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
             for (in_name, _) in input {
-                // TODO: pass references
                 sched_info
                     .defined_names
                     .insert(in_name.clone(), Mutability::Const);
