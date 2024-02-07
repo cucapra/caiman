@@ -2,78 +2,156 @@
 
 use core::slice;
 use std::{
-    alloc::Layout, any::Any, collections::HashMap, fmt::Alignment, mem::MaybeUninit,
-    os::raw::c_void,
+    alloc::Layout, any::Any, collections::HashMap, fmt::Alignment, marker::PhantomData,
+    mem::MaybeUninit, os::raw::c_void,
 };
+
+use wgpu::Buffer;
 pub extern crate bytemuck;
 pub extern crate wgpu;
 
 // None = waits on whole queue
 pub type GpuFence = Option<wgpu::SubmissionIndex>;
 
-// BumpAllocator
+/// Manages the allocation of variables in a contiguous buffer,
+/// respecting the alignment requirements of each variable.
 struct BumpAllocator {
+    buffer_align: usize,
+    // next available address in the buffer
     next_address: usize,
-    buffer: Box<[u8]>,
+    // map from variable ids to their starting addresses
     address_map: HashMap<usize, BumpAddr>,
+    buffer_len: usize,
 }
 
+/// An offset off of the start of the buffer.
 #[derive(Debug, Copy, Clone)]
 struct BumpAddr(usize);
 
-const MAX_ALIGN: usize = 16;
+const DEFAULT_ALIGN: usize = 16;
 
 impl BumpAllocator {
-    fn new(size: usize) -> Self {
+    /// Creates a new allocator with the given buffer size and alignment of
+    /// the buffer itself.
+    fn new(size: usize, align: usize) -> Self {
         Self {
             next_address: 0,
-            buffer: unsafe {
-                Box::from_raw(slice::from_raw_parts_mut(
-                    std::alloc::alloc_zeroed(Layout::from_size_align(size, MAX_ALIGN).unwrap()),
-                    size,
-                ))
-            },
             address_map: HashMap::new(),
+            buffer_len: size,
+            buffer_align: align,
         }
     }
 
     /// Allocates a new variable with the given id, size, and alignment.
     /// The alignment must be less than or equal to `MAX_ALIGN`.
-    fn alloc(&mut self, id: usize, size: usize, align: usize) -> *mut u8 {
-        assert!(align <= MAX_ALIGN);
-        let next_aligned_addr = (self.next_address + align - 1) & !(align - 1);
-        assert!(next_aligned_addr + size <= self.buffer.len());
+    fn alloc(&mut self, id: usize, size: usize, align: usize) -> BumpAddr {
+        let next_aligned_addr = ((self.next_address + self.buffer_align + align - 1)
+            & !(align - 1))
+            - self.buffer_align;
+        assert!(next_aligned_addr + size <= self.buffer_len);
         self.next_address = next_aligned_addr + size;
         let addr = BumpAddr(next_aligned_addr);
         self.address_map.insert(id, addr);
-        unsafe {
-            self.buffer
-                .as_mut_ptr()
-                .offset(next_aligned_addr.try_into().unwrap())
-        }
+        addr
     }
 
     /// Gets a pointer to the start of the allocation for the given id.
     /// Requires that the allocation exists and that usage of the pointer is safe.
-    fn get_ptr(&self, id: usize) -> *const u8 {
-        let address = self.address_map.get(&id).unwrap();
-        unsafe { self.buffer.as_ptr().offset(address.0.try_into().unwrap()) }
+    fn get_starting_addr(&self, id: usize) -> BumpAddr {
+        *self.address_map.get(&id).unwrap()
     }
 
-    /// Gets a pointer to the start of the allocation for the given id.
-    /// Requires that the allocation exists and that usage of the pointer is safe.
-    fn get_ptr_mut(&mut self, id: usize) -> *mut u8 {
-        let address = self.address_map.get(&id).unwrap();
-        unsafe {
-            self.buffer
-                .as_mut_ptr()
-                .offset(address.0.try_into().unwrap())
-        }
-    }
-
-    /// Resets the allocator to the empty state.
+    /// Resets the allocator to the empty state, essentially erase all allocations.
     fn reset(&mut self) {
         self.next_address = 0;
+        self.address_map.clear();
+    }
+}
+
+/// Allocates data on the CPU.
+struct CpuAllocator {
+    buffer: Box<[u8]>,
+    allocator: BumpAllocator,
+}
+
+impl CpuAllocator {
+    pub fn new(size: usize) -> Self {
+        Self {
+            buffer: unsafe {
+                Box::from_raw(slice::from_raw_parts_mut(
+                    std::alloc::alloc_zeroed(Layout::from_size_align(size, DEFAULT_ALIGN).unwrap()),
+                    size,
+                ))
+            },
+            allocator: BumpAllocator::new(size, DEFAULT_ALIGN),
+        }
+    }
+
+    /// Allocates a local variable with the given id, size, and alignment
+    /// and returns a mutable reference to it.
+    ///
+    /// Panics if the buffer is full
+    pub fn alloc(&mut self, id: usize, size: usize, align: usize) -> *mut c_void {
+        self.allocator.alloc(id, size, align);
+        self.get_ptr_mut(id)
+    }
+
+    /// Gets the starting address of the allocation for the given id.
+    pub fn get_ptr(&self, id: usize) -> *const c_void {
+        unsafe {
+            self.buffer
+                .as_ptr()
+                .add(self.allocator.get_starting_addr(id).0) as *const c_void
+        }
+    }
+
+    /// Gets the starting address of the allocation for the given id.
+    pub fn get_ptr_mut(&mut self, id: usize) -> *mut c_void {
+        unsafe {
+            self.buffer
+                .as_mut_ptr()
+                .add(self.allocator.get_starting_addr(id).0) as *mut c_void
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.allocator.reset();
+    }
+}
+
+/// Allocates data on the GPU.
+struct GpuAllocator {
+    buffer: Buffer,
+    allocator: BumpAllocator,
+}
+
+impl GpuAllocator {
+    pub fn new(state: &mut dyn State, usage: wgpu::BufferUsages) -> Self {
+        const BUFFER_SIZE: u64 = 4096;
+        Self {
+            buffer: state
+                .get_device_mut()
+                .create_buffer(&wgpu::BufferDescriptor {
+                    label: None,
+                    size: BUFFER_SIZE,
+                    usage,
+                    mapped_at_creation: false,
+                }),
+            allocator: BumpAllocator::new(BUFFER_SIZE as usize, 0),
+        }
+    }
+
+    pub fn alloc(&mut self, id: usize, size: usize, align: usize) {
+        self.allocator.alloc(id, size, align);
+    }
+
+    pub fn get_buffer_ref<T: Sized + Any>(&self, id: usize) -> GpuBufferRef<'_, T> {
+        let addr = self.allocator.get_starting_addr(id);
+        GpuBufferRef::new(&self.buffer, addr.0 as wgpu::BufferAddress)
+    }
+
+    pub fn reset(&mut self) {
+        self.allocator.reset();
     }
 }
 
@@ -85,7 +163,7 @@ pub trait State {
 pub struct RootState<'device, 'queue> {
     device: &'device mut wgpu::Device,
     queue: &'queue mut wgpu::Queue,
-    local_storage: BumpAllocator,
+    local_storage: CpuAllocator,
 }
 
 impl<'device, 'queue> RootState<'device, 'queue> {
@@ -93,7 +171,7 @@ impl<'device, 'queue> RootState<'device, 'queue> {
         Self {
             device,
             queue,
-            local_storage: BumpAllocator::new(4096 * 4),
+            local_storage: CpuAllocator::new(4096 * 4),
         }
     }
 }
@@ -108,23 +186,45 @@ impl<'device, 'queue> State for RootState<'device, 'queue> {
     }
 }
 
+/// Manages the allocation of local variables on the CPU.
+/// The variables are allocated in a contiguous buffer, respecting their alignment requirements.
 pub struct LocalVars {
-    storage: BumpAllocator,
+    storage: CpuAllocator,
+    // maps variable ids to their type ids. Used only for runtime checks
+    type_ids: HashMap<usize, std::any::TypeId>,
+}
+
+const GPU_BUFFERS: usize = 5;
+
+/// Manages the allocation of local variables on the GPU.
+/// Kept separate from `LocalVars` to make it possible to have a GPU and CPU
+/// reference live at the same time (ie. mutable borrow from two different
+/// objects instead of one).
+pub struct GpuLocals {
+    // one allocator for each buffer usage, index of buffer usage
+    // maps to the index of the allocator
+    gpu_allocators: [GpuAllocator; GPU_BUFFERS],
+    usages: [wgpu::BufferUsages; GPU_BUFFERS],
+    // maps variable ids to the index of the gpu allocator that holds them
+    alloc_map: HashMap<usize, usize>,
+    // maps variable ids to their type ids. Used only for runtime checks
     type_ids: HashMap<usize, std::any::TypeId>,
 }
 
 impl LocalVars {
     pub fn new() -> Self {
+        const LOCAL_BUF_SIZE: usize = 4096 * 4;
         Self {
-            storage: BumpAllocator::new(4096 * 4),
+            storage: CpuAllocator::new(LOCAL_BUF_SIZE),
             type_ids: HashMap::new(),
         }
     }
 
+    /// Helper function to allocate a CPU local variable with the given id, size, and alignment.
+    /// Returns a mutable reference to the allocated memory.
     fn alloc_uninit<T: Sized + Any>(&mut self, id: usize) -> &mut std::mem::MaybeUninit<T> {
         let align = std::mem::align_of::<T>();
         let size = std::mem::size_of::<T>();
-        assert!(align <= MAX_ALIGN);
         let type_id = std::any::TypeId::of::<T>();
         self.type_ids.insert(id, type_id);
         let mut r = unsafe {
@@ -136,19 +236,21 @@ impl LocalVars {
         r
     }
 
+    /// Allocates a CPU local variable with the given id, size, and alignment.
+    /// The variable is initialized with the given value.
     pub fn calloc<T: Sized + Any>(&mut self, id: usize, val: T) -> &mut T {
         let mut r = self.alloc_uninit::<T>(id);
         r.write(val);
         unsafe { r.assume_init_mut() }
     }
 
-    /// Allocates a local variable with the given id, size, and alignment.
-    /// The alignment must be less than or equal to `MAX_ALIGN`.
+    /// Allocates a CPU local variable with the given id, size, and alignment.
+    /// Initializes the variable with the default value of the type.
     pub fn malloc<T: Sized + Any + Default>(&mut self, id: usize) -> &mut T {
         self.calloc(id, Default::default())
     }
 
-    /// Gets a mutable pointer to the start of the allocation for the given id.
+    /// Gets a CPU mutable pointer to the start of the allocation for the given id.
     /// The allocation must have already been created with `alloc_var`
     pub fn get_mut<T: Sized + Any>(&mut self, id: usize) -> &mut T {
         assert_eq!(
@@ -162,7 +264,7 @@ impl LocalVars {
                 .unwrap()
         }
     }
-    /// Gets a const pointer to the start of the allocation for the given id.
+    /// Gets a CPU const pointer to the start of the allocation for the given id.
     /// The allocation must have already been created with `alloc_var`
     pub fn get<T: Sized + Any>(&self, id: usize) -> &T {
         assert_eq!(
@@ -177,25 +279,74 @@ impl LocalVars {
         }
     }
 
+    /// Clears all allocations and resets the allocator to the empty state.
     pub fn reset(&mut self) {
         self.storage.reset();
+        self.type_ids.clear();
     }
 }
 
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test_allocator() {
-        let mut alloc = super::LocalVars::new();
-        let a = alloc.malloc::<i32>(0);
-        *alloc.get_mut(0) = 5;
-        assert_eq!(*alloc.get::<i32>(0), 5);
-        alloc.calloc(1, 6_u64);
-        assert_eq!(*alloc.get::<u64>(1), 6);
-        *alloc.malloc(2) = 7_i64;
-        assert_eq!(*alloc.get::<i64>(2), 7);
-        *alloc.malloc(3) = 8_i32;
-        assert_eq!(*alloc.get::<i32>(3), 8);
+impl GpuLocals {
+    pub fn new(state: &mut dyn State) -> Self {
+        let usages = [
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_WRITE,
+            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::STORAGE,
+            wgpu::BufferUsages::MAP_READ
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        ];
+        Self {
+            gpu_allocators: [
+                GpuAllocator::new(state, usages[0]),
+                GpuAllocator::new(state, usages[1]),
+                GpuAllocator::new(state, usages[2]),
+                GpuAllocator::new(state, usages[3]),
+                GpuAllocator::new(state, usages[4]),
+            ],
+            usages,
+            alloc_map: HashMap::new(),
+            type_ids: HashMap::new(),
+        }
+    }
+
+    /// Clears all allocations and resets the allocator to the empty state.
+    pub fn reset(&mut self) {
+        self.alloc_map.clear();
+        self.type_ids.clear();
+        for gpu_alloc in self.gpu_allocators.iter_mut() {
+            gpu_alloc.reset();
+        }
+    }
+
+    /// Allocates a GPU local variable with the given id, size, and alignment.
+    pub fn alloc_gpu<T: Sized + Any>(&mut self, id: usize, usage: wgpu::BufferUsages) {
+        for (idx, u) in self.usages.iter().enumerate() {
+            if u.contains(usage) {
+                self.alloc_map.insert(id, idx);
+                self.type_ids.insert(id, std::any::TypeId::of::<T>());
+                self.gpu_allocators[idx].alloc(
+                    id,
+                    std::mem::size_of::<T>(),
+                    std::mem::align_of::<T>()
+                        .max(wgpu::Limits::default().min_storage_buffer_offset_alignment as usize),
+                );
+                return;
+            }
+        }
+        panic!("No suitable GPU buffer usage found for {:?}", usage);
+    }
+
+    /// Gets a GPU mutable pointer to the start of the allocation for the given id.
+    pub fn get_gpu_ref<T: Sized + Any>(&self, id: usize) -> GpuBufferRef<'_, T> {
+        assert_eq!(
+            self.type_ids.get(&id).unwrap(),
+            &std::any::TypeId::of::<T>()
+        );
+        let idx = self.alloc_map.get(&id).unwrap();
+        self.gpu_allocators[*idx].get_buffer_ref(id)
     }
 }
 

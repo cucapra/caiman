@@ -1414,15 +1414,10 @@ impl<'program> CodeGen<'program> {
                     ir::Place::Gpu => {
                         let buffer_var_id = self
                             .code_generator
-                            .build_create_buffer(*storage_type, *buffer_flags);
-                        let offset_var_id = self
+                            .build_alloc_temp_gpu(*storage_type, *buffer_flags);
+                        let var_id = self
                             .code_generator
-                            .build_constant_int(0, self.default_u64_ffi_type_id);
-                        let var_id = self.code_generator.build_buffer_ref(
-                            buffer_var_id,
-                            offset_var_id,
-                            *storage_type,
-                        );
+                            .build_buffer_ref(buffer_var_id, *storage_type);
 
                         funclet_scoped_state.node_results.insert(
                             current_node_id,
