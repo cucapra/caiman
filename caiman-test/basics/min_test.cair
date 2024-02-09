@@ -59,8 +59,8 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_left<none($time.%e)-usable, none($time.%e)-usable>
-    (%s_ref : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
-    [%out : node($val.%a)-usable none($space.%e)-save none($time.%e)-usable %i64l] 
+    (%s_ref : none($val.%e)-dead none($space.%e)-saved none($time.%e)-usable %i64l) ->
+    [%out : node($val.%a)-usable none($space.%e)-saved none($time.%e)-usable %i64l] 
 {
     local-do-builtin node($val.%a)() -> %s_ref;
     return %s_ref;
@@ -68,8 +68,8 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_right<none($time.%e)-usable, none($time.%e)-usable>
-    (%s_ref : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
-    [%out : node($val.%b)-usable none($space.%e)-save none($time.%e)-usable %i64l] 
+    (%s_ref : none($val.%e)-dead none($space.%e)-saved none($time.%e)-usable %i64l) ->
+    [%out : node($val.%b)-usable none($space.%e)-saved none($time.%e)-usable %i64l] 
 {
     local-do-builtin node($val.%b)() -> %s_ref;
     return %s_ref;
@@ -79,7 +79,7 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_ret<none($time.%e)-usable, none($time.%e)-usable>
-    (%s_ref : node($val.%s)-usable none($space.%e)-save none($time.%e)-usable %i64l) ->
+    (%s_ref : node($val.%s)-usable none($space.%e)-saved none($time.%e)-usable %i64l) ->
     [%out : node($val.%s)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
 {
     %s = read-ref i64 %s_ref;

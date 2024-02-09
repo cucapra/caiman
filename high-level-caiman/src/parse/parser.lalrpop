@@ -189,7 +189,7 @@ Quotient: Option<Quotient> = {
 
 Flow: Option<Flow> = {
     "-usable" => Some(Flow::Usable),
-    "-save" => Some(Flow::Save),
+    "-saved" => Some(Flow::Saved),
     "-need" => Some(Flow::Need),
     "-dead" => Some(Flow::Dead),
     "-?" => None,

@@ -113,9 +113,9 @@ schedule[value $val = %foo] %bar<none($val)-usable, none($val)-dead>(%0 : %slot0
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%scall<none($time)-usable, none($time)-save>
+%scall<none($time)-usable, none($time)-saved>
 (%abc : input($val.%x)-usable %slot0)
--> [%out : output($val.%y)-save %slot0] {
+-> [%out : output($val.%y)-saved %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
     schedule-call %bar[value input(?),
         timeline output(?),
@@ -124,9 +124,9 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 
 // value, timeline, spatial order is mandatory (though you can freely omit one of course)
 schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
-%sselect<input($time.%e)-save, output($time.%e)-usable>
-(%abc : input($time.%e)-save input($val.%x)-usable %slot0)
--> input($time.%e)-save output($val.%x)-dead %slot0 {
+%sselect<input($time.%e)-saved, output($time.%e)-usable>
+(%abc : input($time.%e)-saved input($val.%x)-usable %slot0)
+-> input($time.%e)-saved output($val.%x)-dead %slot0 {
     schedule-select %abc [%bar, %scall][value input(?),
         timeline output(?),
         spatial none($space)](%abc, %abc) %abc;

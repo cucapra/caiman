@@ -6,7 +6,7 @@ clean:
 	find . -type f -name '*.debug' -delete
 
 explicate_setup:
-	turnt $(wildcard */*_baseline.cair) -v --save
+	turnt $(wildcard */*_baseline.cair) -v --saved
 
 test:
 	turnt $(wildcard */*_test.cair) $(wildcard */*_test.ron) $(print) $(diff)

@@ -224,7 +224,7 @@ impl TagAnalysis {
                     }
                 }
                 if info.spatial.is_none() {
-                    info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));
+                    info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Saved));
                 }
                 self.tags.insert(lhs.clone(), info);
             }

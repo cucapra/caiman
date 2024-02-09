@@ -56,9 +56,9 @@ fn main_impl() -> i64 @ node(main.r)-usable
     let b: i64 @ node(main.b) = 5;
     let c: i64 @ node(main.c) = 7;
 
-    let a2: i64 @ node(main.a)-save = 3;
-    let b2: i64 @ node(main.b)-save = 5;
-    let c2: i64 @ node(main.c)-save = 7;
+    let a2: i64 @ node(main.a)-saved = 3;
+    let b2: i64 @ node(main.b)-saved = 5;
+    let c2: i64 @ node(main.c)-saved = 7;
     let j: i64 @ node(main.j)-usable = add1_impl(a, b, c) @ node(main.j);
     @in { a2: node(main.a)-usable, 
           b2: node(main.b)-usable, 

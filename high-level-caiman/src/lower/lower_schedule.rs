@@ -551,7 +551,7 @@ pub fn tag_to_tag(t: &Tag) -> asm::Tag {
             Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
             Flow::Usable => ir::Flow::Usable,
-            Flow::Save => ir::Flow::Save,
+            Flow::Saved => ir::Flow::Saved,
         }),
     }
 }

@@ -27,7 +27,7 @@ fn foo() -> i64 @ node(main.z)-usable
         let three: i64 @ node(main.three) = 3;
         v = three;
     }
-    @in { v: [node(main.right)-usable, none(space)-save] };
+    @in { v: [node(main.right)-usable, none(space)-saved] };
 
     let d: bool @ node(main.d) = false;
     if @ node(main.z) d {
@@ -38,9 +38,9 @@ fn foo() -> i64 @ node(main.z)-usable
             let one: i64 @ node(main.one) = 1;
             v = one;
         }
-        @in { v: [node(main.left)-usable, none(space)-save] };
+        @in { v: [node(main.left)-usable, none(space)-saved] };
     }
-    @in { v: [node(main.z)-usable, none(space)-save] };
+    @in { v: [node(main.z)-usable, none(space)-saved] };
     v
 }
 

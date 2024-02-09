@@ -26,7 +26,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %foo_main<none($time.%e)-usable, none($time.%e)-usable>() ->
-    [%out : node($val.%r)-usable none($space.%e)-usable none($time.%e)-usable %i64n] 
+    [%out : node($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n] 
 {
     %x_loc = alloc-temporary local [] i64;
     local-do-builtin node($val.%x)() -> %x_loc;
@@ -38,30 +38,30 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %join = inline-join %foo_ret [] %djoin;
 
     schedule-select %x_val [%foo_left, %foo_right]
-        [value node($val.%r), timeline none($time.%none), spatial none($space.%none)]
+        [value node($val.%r), timeline none($time.%e), spatial none($space.%bs)]
         (%r_loc) %join;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %foo_left<none($time.%e)-usable, none($time.%e)-usable>
-    (%r_loc : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
-    [%out : node($val.%y)-usable none($space.%e)-save none($time.%e)-usable %i64l] 
+    (%r_loc : none($val.%e)-dead none($time.%e)-usable none($space.%bs)-saved %i64l) ->
+    [%out : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-saved %i64l] 
 {
     local-do-builtin node($val.%y)() -> %r_loc;
     return %r_loc;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_right<none($time.%e)-usable, none($time.%e)-usable>(%r_loc : none($val.%e)-dead none($space.%e)-save none($time.%e)-usable %i64l) ->
-[%out : node($val.%z)-usable none($space.%e)-save none($time.%e)-usable %i64l] {
+%foo_right<none($time.%e)-usable, none($time.%e)-usable>(%r_loc : none($val.%e)-dead none($space.%bs)-saved none($time.%e)-usable %i64l) ->
+[%out : node($val.%z)-usable none($time.%e)-usable none($space.%bs)-saved %i64l] {
     local-do-builtin node($val.%z)() -> %r_loc;
     return %r_loc;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_ret<none($time.%e)-usable, none($time.%e)-usable>
-(%r_loc : node($val.%r)-usable none($space.%e)-save none($time.%e)-usable %i64l) ->
-[%out : node($val.%r)-usable none($space.%e)-usable none($time.%e)-usable %i64n] {
+(%r_loc : node($val.%r)-usable none($time.%e)-usable none($space.%bs)-saved %i64l) ->
+[%out : node($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n] {
     %r_val = read-ref i64 %r_loc;
     return %r_val;
 }

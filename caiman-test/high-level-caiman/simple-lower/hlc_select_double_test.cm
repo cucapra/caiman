@@ -27,7 +27,7 @@ fn foo() -> i64 @ node(main.z)-usable
         let d: bool @ node(main.d)-usable = false;
         r = d;
     }
-    @in { r: [node(main.r)-usable, none(space)-save] };
+    @in { r: [node(main.r)-usable, none(space)-saved] };
     
     var v: i64 @ none(main)-?;
     if @ node(main.z)-? r {
@@ -37,7 +37,7 @@ fn foo() -> i64 @ node(main.z)-usable
         let one: i64 @ node(main.one)-usable = 1;
         v = one;
     }
-    @in { v: [node(main.z)-usable, none(space)-save] };
+    @in { v: [node(main.z)-usable, none(space)-saved] };
     v
 }
 

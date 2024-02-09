@@ -216,7 +216,7 @@ impl<'program> FuncletSpecChecker<'program> {
             )?;
 
             let quot = scalar.quot;
-            self.update_scalar_node(*capture_node_id, quot, ir::Flow::Save);
+            self.update_scalar_node(*capture_node_id, quot, ir::Flow::Saved);
         }
 
         let mut remaining_input_tags = Vec::<ir::Tag>::new();
@@ -781,7 +781,7 @@ impl<'program> FuncletSpecChecker<'program> {
                     };
                 }
                 ir::Flow::Need => panic!("Flow::Need cannot advance forwards"),
-                ir::Flow::Save => panic!("Flow::Met cannot advance"),
+                ir::Flow::Saved => panic!("Flow::Met cannot advance"),
             },
             _ => (),
         }

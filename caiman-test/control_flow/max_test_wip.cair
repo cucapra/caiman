@@ -1,0 +1,116 @@
+// equivalent code:
+// max(x : i64, y : i64) -> i64 {
+//     if x > y {
+//         x
+//     } else {
+//         y
+//     }
+// }
+//
+// max_q(x : i64, y : i64, z : i64, w : i64) -> i64 {
+//     max(max(x, y), max(z, w)) 
+// }
+
+version 0.0.2
+
+type i64;
+ref %i64l : i64-local<flags=[]>;
+event %event0;
+buffer_space %buffspace;
+native_value %i64n : i64;
+
+function @max(i64, i64) -> i64;
+function @max_q(i64, i64, i64, i64) -> i64;
+function @gt(i64, i64) -> i64;
+
+external-cpu-pure[impl @gt] %gt(i64, i64) -> i64;
+
+value[impl default @max] %max(%x : i64, %y : i64) -> i64 {
+    %b_t = call @gt(%x, %y);
+    %b = extract %b_t 0;
+    %r = select %b %x %y;
+    return %r;
+}
+
+value[impl default @max_q] %max_q(%x : i64, %y : i64, %z : i64, %w : i64) -> i64 {
+    %left_t = call @max(%x, %y);
+    %left = extract %left_t 0;
+    %right_t = call @max(%z, %w);
+    %right = extract %right_t 0;
+
+    %result_t = call @max(%left_t, %right_t);
+    %result = extract %result 0;
+
+    return %result;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+// max setup
+
+schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
+    %max_main<none($time.%e)-usable, none($time.%e)-usable>
+    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
+     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n) 
+    ->
+    output($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n 
+{
+    %b_loc = alloc-temporary local [] i64;
+    local-do-external %gt node($val.%b_t)(%x, %y) -> %b_loc;
+    %b = read-ref i64 %b_loc;
+
+    %r_loc = alloc-temporary local [] i64;
+
+    %djoin = default-join;
+    %join = inline-join %max_ret [] %djoin;
+
+    schedule-select %b [%max_left, %max_right]
+        [value node($val.%r), timeline none($time.%e), spatial none($space.%bs)]
+        (%x, %y, %r_loc) %join;
+}
+
+// max branches
+
+schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
+    %max_left<none($time.%e)-usable, none($time.%e)-usable>
+    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
+     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
+     %r_loc : none($val.%r)-dead none($time.%e)-usable none($space.%bs)-saved %i64l)
+    ->
+    node($val.%x)-usable none($time.%e)-usable none($space.%bs)-saved %i64l
+{
+    write-ref i64 %x -> %r_loc;
+    return %r_loc;
+}
+
+schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
+    %max_right<none($time.%e)-usable, none($time.%e)-usable>
+    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
+     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
+     %r_loc : none($val.%r)-dead none($time.%e)-usable none($space.%bs)-saved %i64l) 
+    ->
+    node($val.%y)-usable none($time.%e)-usable none($space.%bs)-saved %i64l
+{
+    write-ref i64 %y -> %r_loc;
+    return %r_loc;
+}
+
+// max return
+
+schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
+%max_ret<none($time.%e)-usable, none($time.%e)-usable>
+    (%r_loc : node($val.%r)-usable none($time.%e)-usable none($space.%bs)-saved %i64l)
+    ->
+    node($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n
+{
+    %r = read-ref i64 %r_loc;
+    return %r;
+}
+
+pipeline "main" = %max_main;

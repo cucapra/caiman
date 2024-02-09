@@ -628,7 +628,7 @@ impl CaimanAssemblyParser {
             .and_then(|s| match s.as_str() {
                 "dead" => Ok(ir::Flow::Dead),
                 "usable" => Ok(ir::Flow::Usable),
-                "save" => Ok(ir::Flow::Save),
+                "saved" => Ok(ir::Flow::Saved),
                 "need" => Ok(ir::Flow::Need),
                 _ => unreachable!(),
             })
