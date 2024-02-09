@@ -1,9 +1,7 @@
 pub mod data_impls;
-pub mod getters;
 pub mod instate;
-mod internal_mutators;
 pub mod outstate;
-pub mod static_getters;
+pub mod staticcontext;
 
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
@@ -15,7 +13,7 @@ use crate::assembly::explication::util::*;
 use crate::assembly::table::Table;
 use crate::ir;
 use debug_ignore::DebugIgnore;
-use std::collections::{HashMap, HashSet, Deque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(Debug, Clone)]
 pub struct InState {
@@ -32,18 +30,18 @@ pub struct InState {
 #[derive(Debug, Default)]
 pub struct FuncletOutState {
     // The return type from explicating a single funclet
-    
+
     // the allocations that still need to be concretized
     // we map from funclet _index_ to the type to allocate to make recursion easier
     // note that this necessarily refers to the current state
     allocation_requests: HashMap<StorageTypeId, usize>,
 
     // The types that still need explication for this scope
-    // they (by default) will be filled in the most specific open slot
+    // they (by default) will be filled in the most "recent" open slot
     to_fill: HashSet<Location>,
 
     // commands we've built on this particular funclet of the stack
-    commands: Deque<ast::NamedCommand>
+    commands: VecDeque<ast::NamedCommand>,
 }
 
 #[derive(Debug)]
@@ -60,7 +58,7 @@ pub struct StaticContext {
     type_declarations: HashMap<String, LocalTypeDeclaration>,
 
     // information found about a given spec funclet
-    spec_explication_data: HashMap<FuncletId, SpecFuncletData>
+    spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
 }
 
 #[derive(Debug)]
@@ -98,10 +96,10 @@ pub struct InstantiatedNodes {
     pub spatial: Option<NodeId>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ScheduleFuncletData {
     // map from the scheduled allocations to what things they are instantiating (if known)
-    type_instantiations: HashMap<NodeId, InstantiatedNodes>
+    type_instantiations: HashMap<NodeId, InstantiatedNodes>,
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"
@@ -126,14 +124,19 @@ struct ScheduleScopeData {
 
     // the funclet name being worked on in this scope
     // a funclet is always named, even a generated one
-    funclet: ast::FuncletId,
+    pub funclet: ast::FuncletId,
 
     // the node of the original funclet we are working on
-    // is none precisely when we are starting a new funclet 
+    // is none precisely when we are starting a new funclet
     //   OR inside a synthesized funclet
     // note that we may want to actually have two structs here in a way
     // then we can hold the "goal" of the sub-funclet more easily?
-    node: Option<usize>,
+    node: Option<NodeId>,
+
+    // the index of the command we are building
+    // incremented by one each "step" of the recursion
+    // useful to keep track of naming and boring indexing details
+    node_index: usize,
 
     // the spec functions being implemented at this point of the stack
     spec_functions: SpecLanguages,
@@ -144,7 +147,7 @@ struct ScheduleScopeData {
     instantiations: HashMap<Location, Vec<(ir::Place, usize)>>,
 
     // map from operation code to a vector of "available" allocations
-    // for now, these consist of exactly allocations where we don't yet know the type 
+    // for now, these consist of exactly allocations where we don't yet know the type
     allocations: HashMap<OpCode, Vec<usize>>,
 
     // most recently found multiline hole, if one exists in this scope

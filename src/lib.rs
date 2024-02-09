@@ -5,6 +5,7 @@ extern crate core;
 #[macro_use]
 mod operations;
 mod assembly;
+mod explication;
 mod id_generator;
 mod ir;
 mod stable_vec;

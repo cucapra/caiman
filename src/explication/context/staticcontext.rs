@@ -5,13 +5,14 @@ use crate::ir;
 // Specifically we want things like lists of funclet names up-front or node names up-front
 
 impl StaticContext {
-    pub fn new(program: ast::Program) -> Context {
-        let mut context = Context { 
+    pub fn new(program: ast::Program) -> StaticContext {
+        let mut context = StaticContext { 
             program: DebugIgnore(program),
             type_declarations: HashMap::new(),
             spec_explication_data: HashMap::new(),
-        }
+        };
         context.initialize_declarations();
+        context
     }
 
     fn initialize_declarations(&mut self) {
@@ -123,7 +124,6 @@ impl StaticContext {
                     self.schedule_explication_data.insert(
                         funclet_name,
                         ScheduleFuncletData {
-                            specs,
                             type_instantiations: Default::default(),
                         },
                     );

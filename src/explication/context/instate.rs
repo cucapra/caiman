@@ -3,9 +3,9 @@ use crate::assembly::explication::util::*;
 
 impl InState {
     pub fn new(funclet: FuncletId) -> InState {
-        let scopes = vec![ScopeFuncletData::new(funclet)];
+        let scopes = vec![ScheduleScopeData::new(funclet)];
         InState {
-            schedule_explication_data: HashMap::Default(),
+            schedule_explication_data: HashMap::new(),
             scopes,
         }
     }
@@ -17,7 +17,7 @@ impl InState {
     pub fn enter_funclet(&mut self, funclet: FuncletId) {
         let instantiations = self.scopes.last().cloned().map(|le| le.instantiations).unwrap_or(HashMap::default());
         let allocations = self.scopes.last().cloned().map(|le| le.allocations).unwrap_or(HashMap::default());
-        self.scopes.push(ScheduleScopeData::new(funclet, instantiations, allocations));
+        self.scopes.push(ScheduleScopeData::new(funclet));
     }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the last element of the scope
@@ -44,20 +44,20 @@ impl InState {
                 place
             );
         }
-        let name = scope.name.clone();
+        let name = scope.funclet.clone();
         let explication_data = self.schedule_explication_data.get_mut(&name).unwrap();
-        let instantiated = InstantiatedNodes::new(&explication_data.specs, spec_remotes);
-        explication_data
-            .type_instantiations
-            .insert(schedule_node, instantiated);
+        // let instantiated = InstantiatedNodes::new(&explication_data.type_instantiations, spec_remotes);
+        // explication_data
+        //     .type_instantiations
+        //     .insert(schedule_node, instantiated);
     }
 
-    pub fn get_latest_scope(&self) {
+    pub fn get_latest_scope(&self) -> &ScheduleScopeData {
         self.scopes.last().unwrap()
     }
 
-    pub fn get_latest_scope_mut(&mut self) {
-        self.scopes.last().unwrap()
+    pub fn get_latest_scope_mut(&mut self) -> &mut ScheduleScopeData {
+        &mut self.scopes.last().unwrap()
     }
 
     pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {

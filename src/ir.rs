@@ -296,7 +296,7 @@ pub enum FuncletKind {
 }
 
 impl FuncletKind {
-    fn default() -> Self {
+    pub fn default() -> Self {
         FuncletKind::Unknown
     }
 }
@@ -331,7 +331,7 @@ pub enum FuncletSpecBinding {
 }
 
 impl FuncletSpecBinding {
-    fn default() -> Self {
+    pub fn default() -> Self {
         FuncletSpecBinding::None
     }
 

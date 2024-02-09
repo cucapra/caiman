@@ -1,12 +1,10 @@
-use crate::ir;
 use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use crate::explication::Hole;
 
-// Explication and frontend AST
-
-pub type Hole<T> = Option<T>;
+// frontend AST
 
 #[macro_export]
 macro_rules! def_assembly_id_type {

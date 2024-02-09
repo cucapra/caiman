@@ -1,7 +1,14 @@
 use crate::ir;
+use crate::explication;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::default::Default;
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct ExplicationDefinition {
+    pub version: (u32, u32, u32),
+    pub program: explication::expir::Program,
+}
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Definition {
@@ -98,6 +105,7 @@ pub fn explicate_caiman(
 ) -> Result<String, CompileError> {
     let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
     let mut definition = read_definition(compile_data, options.compile_mode)?;
+    definition = explication::explicate(definition);
     assert_eq!(definition.version, (0, 0, 2));
     let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
     Ok(output_string_result.unwrap())

@@ -1,14 +1,7 @@
-use crate::assembly::ast;
-use crate::assembly::ast::Hole;
-use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
-    TypeId,
-};
-use crate::assembly::explication::context::Context;
-use crate::assembly::explication::context::OpCode;
-use crate::assembly::explication::util::*;
+use crate::explication::context::{InState, FuncletOutState, StaticContext};
+use crate::explication::util::*;
 use crate::ir::Place;
-use crate::{assembly, frontend, ir};
+use crate::{explication, assembly, frontend, ir};
 
 fn quotient_id(quot: &ast::Quotient) -> &Hole<RemoteNodeId> {
     match quot {
@@ -106,22 +99,19 @@ fn explicate_local_do_builtin(
     let mut expected_inputs = Vec::new();
     let mut expected_outputs = Vec::new();
     match (&deduced_op.funclet, &deduced_op.node) {
-        Some(f), Some(n) => {
-
-        }
+        (Some(f), Some(n)) => {}
     }
 
     let outputs = match og_outputs {
         None => {
-            match
-        },
+            // match
+        }
         Some(ogo) => {
             let mut result = Vec::new();
             for output in ogo {
                 match output {
                     Some(out) => Some(out),
-                    None => {},
-
+                    None => {}
                 }
             }
             result
@@ -133,12 +123,9 @@ fn explicate_local_do_builtin(
         context.add_available_operation(location.node.clone(), OpCode::LocalDoBuiltin);
     }
     let operation = Some(ast::Quotient::Node(Some(deduced_op)));
-
-} 
-
-fn explicate_hold(state: InState, context: &Context) {
-
 }
+
+fn explicate_hold(state: InState, context: &Context) {}
 
 // initially setup a node that hasn't yet been read
 // distinct from explication in that we have no request to fulfill
@@ -236,46 +223,38 @@ fn explicate_tail_edge(state: InState, context: &Context) -> FuncletOutState {
     todo!()
 }
 
-fn explicate_command(mut state: InState, context: &Context) -> Option<FuncletOutState> {
-    let location = Location {
-        state.,
-        node: command,
-    };
-    match context.get_command(&location.funclet, &location.node) {
+fn explicate_command(mut state: InState, context: &StaticContext) -> Option<FuncletOutState> {
+    match context.get_command(&state.funclet, &location.node) {
         ast::Command::Hole => {
             state.add_explication_hole();
             state.get_latest_scope_mut().advance_node();
             explicate_command(state, context)
-        },
-        ast::Command::Node(n) => {
-            explicate_node(state, context)
         }
-        ast::Command::TailEdge(_) => {
-            explicate_tail_edge(state, context)
-        }
+        ast::Command::Node(n) => explicate_node(state, context),
+        ast::Command::TailEdge(_) => explicate_tail_edge(state, context),
         ast::Command::ExplicationHole => {
             unreachable!("Should not be attempting to explicate an explication hole as a command")
         }
     }
 }
 
-pub fn explicate_funclet(kind: ir::FuncletKind, 
+pub fn explicate_funclet(
+    kind: ir::FuncletKind,
     header: ast::FuncletHeader,
-    state: InState, 
-    context: &Context) 
-    -> ast::Funclet 
-    {
+    state: InState,
+    context: &StaticContext,
+) -> ast::Funclet {
     match explicate_command(state, context) {
-        None => panic!("No explication solution found for {:?}", 
-            state.get_latest_scope().funclet_name),
-        Some(result) => {
-            assert!(result.allocation_requests.emptied());
-            assert!(result.to_fill.emptied());
+        None => panic!(
+            "No explication solution found for {:?}",
+            state.get_latest_scope().funclet
+        ),
+        Some(result) =>  {
+            assert!(!result.has_fills_remaining());
             ast::Funclet {
-                kind,
-                header,
-                commands: result.commands.drain().collect()
-            }
-        }
+            kind,
+            header,
+            commands: result.drain_commands(),
+        }},
     }
 }
