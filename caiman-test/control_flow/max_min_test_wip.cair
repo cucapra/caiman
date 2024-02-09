@@ -1,4 +1,4 @@
-// equivalent code:
+// equivalent code (the goal is to use x twice in the final):
 // max(x : i64, y : i64) -> i64 {
 //     if x > y {
 //         x
@@ -7,8 +7,16 @@
 //     }
 // }
 //
-// max_q(x : i64, y : i64, z : i64, w : i64) -> i64 {
-//     max(max(x, y), max(z, w)) 
+// min(x : i64, y : i64) -> i64 {
+//     if x > y {
+//         y
+//     } else {
+//         x
+//     }
+// }
+//
+// min_max(x : i64, y : i64, z : i64) -> i64 {
+//     max(min(x, y), min(x, z)) 
 // }
 
 version 0.0.2
