@@ -1,0 +1,68 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    a :- 3
+    b :- 5
+    c :- 7
+    d :- 9
+
+
+    j :- add_three(a, b, c)
+    k :- add_three(a, b, d)
+    cond :- false
+
+    r :- j if cond else k
+    returns r
+}
+
+feq add_three {
+    val add1(a: i64, b: i64, c: i64) -> i64 {
+        t :- a + b
+        t2 :- t + c
+        returns t2
+    }
+
+    val add2(a: i64, b: i64, c: i64) -> i64 {
+        t :- b + c
+        t2 :- a + t
+        returns t2
+    }
+}
+
+fn add1_impl(a, b, c) -> i64 impls add1, time, space
+{
+    let t = a + b;
+    let p = t + c;
+    p
+}
+
+fn add2_impl(a, b, c) -> i64 impls add2, time, space
+{
+    let t = b + c;
+    let p = a + t;
+    p
+}
+
+
+fn main_impl() -> i64 impls main, time, space
+{
+    let cond = false;
+    let a  = 3;
+    let r = if cond {
+        let b = 5;
+        let c = 7;
+        let j = add1_impl(a, b, c);
+        j
+    } else {
+        let b = 5;
+        let d = 9;
+        let k = add2_impl(a, b, d);
+        k
+    };
+    r
+}
+
+pipeline main { main_impl }

@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lower::lower_schedule::tag_to_tag;
-use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator};
-use crate::parse::ast::{FullType, SchedTerm, Tag, Tags};
-use crate::typing::{Context, SpecType};
+use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator, TripleTag};
+use crate::parse::ast::SchedTerm;
+use crate::typing::SpecType;
 
 use super::{Fact, Forwards, RET_VAR};
 
@@ -15,7 +15,30 @@ pub struct TagInfo {
     pub value: Option<asm::Tag>,
     pub spatial: Option<asm::Tag>,
     pub timeline: Option<asm::Tag>,
-    specs: Specs,
+    specs: Rc<Specs>,
+}
+
+impl From<&TripleTag> for TagInfo {
+    fn from(t: &TripleTag) -> Self {
+        Self {
+            value: t.value.as_ref().map(tag_to_tag),
+            spatial: t.spatial.as_ref().map(tag_to_tag),
+            timeline: t.timeline.as_ref().map(tag_to_tag),
+            specs: t.specs.clone(),
+        }
+    }
+}
+
+impl From<&mut TripleTag> for TagInfo {
+    fn from(t: &mut TripleTag) -> Self {
+        From::from(&*t)
+    }
+}
+
+impl From<TripleTag> for TagInfo {
+    fn from(t: TripleTag) -> Self {
+        From::from(&t)
+    }
 }
 
 /// Creates a tag with a none quotient for the given spec and flow
@@ -30,67 +53,29 @@ fn none_tag(spec_name: &asm::FuncletId, flow: ir::Flow) -> asm::Tag {
 }
 
 impl TagInfo {
-    /// Constructs a `TagInfo` from an AST `FullType`.
-    pub fn from(t: &FullType, specs: &Specs) -> Self {
-        Self::from_tags(&t.tags, specs)
-    }
-
-    /// Constructs a `TagInfo` from a vector of tags
-    pub fn from_tags(t: &[Tag], specs: &Specs) -> Self {
-        let mut value = None;
-        let mut spatial = None;
-        let mut timeline = None;
-        for tag in t {
-            match specs.get_spec_type(&tag.quot_var.as_ref().unwrap().spec_name) {
-                Some(SpecType::Value) => value = Some(tag_to_tag(tag)),
-                Some(SpecType::Spatial) => spatial = Some(tag_to_tag(tag)),
-                Some(SpecType::Timeline) => timeline = Some(tag_to_tag(tag)),
-                None => panic!("Unknown spec"),
-            }
-        }
-        Self {
-            value,
-            timeline,
-            spatial,
-            specs: specs.clone(),
-        }
-    }
-
-    /// Constructs a `TagInfo` from an optional vector of tags. If `t` is `None`
-    pub fn from_maybe(t: &Option<Tags>, specs: &Specs) -> Self {
-        t.as_ref().map_or_else(
-            || Self {
-                value: None,
-                timeline: None,
-                spatial: None,
-                specs: specs.clone(),
-            },
-            |t| Self::from_tags(t, specs),
-        )
-    }
-
     /// Overwrites all of this type info with the tags from `other`. If
     /// `other` does not specify a tag, the tag will NOT be updated.
-    pub fn update(&mut self, specs: &Specs, other: &Tags) {
-        let mut value = None;
-        let mut spatial = None;
-        let mut timeline = None;
-        for tag in other {
-            match specs.get_spec_type(&tag.quot_var.as_ref().unwrap().spec_name) {
-                Some(SpecType::Value) => value = Some(tag_to_tag(tag)),
-                Some(SpecType::Spatial) => spatial = Some(tag_to_tag(tag)),
-                Some(SpecType::Timeline) => timeline = Some(tag_to_tag(tag)),
-                None => panic!("Unknwon spec"),
-            }
-        }
+    pub fn update(&mut self, other: &TripleTag) {
         // TODO: re-evaluate this approach
-        if let Some(value) = value {
+        if let Some(value) = &other.value {
+            self.value = Some(tag_to_tag(value));
+        }
+        if let Some(spatial) = &other.spatial {
+            self.spatial = Some(tag_to_tag(spatial));
+        }
+        if let Some(timeline) = &other.timeline {
+            self.timeline = Some(tag_to_tag(timeline));
+        }
+    }
+
+    pub fn update_info(&mut self, other: Self) {
+        if let Some(value) = other.value {
             self.value = Some(value);
         }
-        if let Some(spatial) = spatial {
+        if let Some(spatial) = other.spatial {
             self.spatial = Some(spatial);
         }
-        if let Some(timeline) = timeline {
+        if let Some(timeline) = other.timeline {
             self.timeline = Some(timeline);
         }
     }
@@ -139,120 +124,70 @@ impl TagInfo {
 /// Tag analysis for determining tags
 /// Top: empty set
 /// Meet: union
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub struct TagAnalysis<'a> {
+pub struct TagAnalysis {
     tags: HashMap<String, TagInfo>,
     specs: Rc<Specs>,
     /// For an output fact, thse are the input tags to be overridden
-    input_overrides: HashMap<String, Vec<Tag>>,
-    ctx: &'a Context,
+    input_overrides: HashMap<String, TagInfo>,
 }
 
-impl<'a> std::fmt::Debug for TagAnalysis<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut tag_keys = self.tags.keys().collect::<Vec<_>>();
-        tag_keys.sort();
-        writeln!(f, "Tags:")?;
-        for k in tag_keys {
-            writeln!(f, "  {k}: {:?}", self.tags.get(k).unwrap())?;
-        }
-        writeln!(f, "Input overrides:")?;
-        for (k, v) in &self.input_overrides {
-            writeln!(f, "  {k}: {v:?}")?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a> PartialEq for TagAnalysis<'a> {
+impl PartialEq for TagAnalysis {
     fn eq(&self, other: &Self) -> bool {
         self.tags == other.tags && self.input_overrides == other.input_overrides
     }
 }
 
-impl<'a> Eq for TagAnalysis<'a> {}
+impl Eq for TagAnalysis {}
 
-impl<'a> TagAnalysis<'a> {
+impl TagAnalysis {
     /// Constructs a new top element
-    pub fn top(
-        specs: &Specs,
-        input: &[(String, Option<FullType>)],
-        out: &[FullType],
-        ctx: &'a Context,
-    ) -> Self {
+    pub fn top(specs: &Specs, input: &[(String, TripleTag)], out: &[TripleTag]) -> Self {
         let mut tags = HashMap::new();
         for (out_idx, out_type) in out.iter().enumerate() {
-            tags.insert(
-                format!("{RET_VAR}{out_idx}"),
-                TagInfo::from(out_type, specs),
-            );
+            tags.insert(format!("{RET_VAR}{out_idx}"), TagInfo::from(out_type));
         }
         for (arg_name, arg_type) in input {
-            tags.insert(
-                arg_name.clone(),
-                TagInfo::from(arg_type.as_ref().unwrap(), specs),
-            );
+            tags.insert(arg_name.clone(), TagInfo::from(arg_type));
         }
         Self {
             tags,
             specs: Rc::new(specs.clone()),
             input_overrides: HashMap::new(),
-            ctx,
         }
     }
 
     /// Gets the type of the specified variable or `None` if we have no concrete
     /// information about it.
-    pub fn get_tag(&self, var: &str) -> Option<TagInfo> {
-        self.tags.get(var).cloned()
+    pub fn get_tag(&self, var: &str) -> Option<&TagInfo> {
+        self.tags.get(var)
     }
 
     /// Gets the input override for the specified variable or `None` if it was not
     /// overridden
-    pub fn get_input_override(&self, var: &str) -> Option<Vec<Tag>> {
-        self.input_overrides.get(var).cloned()
+    pub fn get_input_override(&self, var: &str) -> Option<&TagInfo> {
+        self.input_overrides.get(var)
     }
 }
 
-/// Gets the remote node id of `q`
-#[allow(dead_code)]
-const fn remote_node_id(q: &asm::Quotient) -> &asm::Hole<asm::RemoteNodeId> {
-    match q {
-        asm::Quotient::None(r)
-        | asm::Quotient::Node(r)
-        | asm::Quotient::Input(r)
-        | asm::Quotient::Output(r) => r,
-    }
-}
-
-/// Sets the remote node id of `q` to `id`
-#[allow(dead_code)]
-fn set_remote_node_id(q: &mut asm::Quotient, id: asm::Hole<asm::RemoteNodeId>) {
-    match q {
-        asm::Quotient::None(r)
-        | asm::Quotient::Node(r)
-        | asm::Quotient::Input(r)
-        | asm::Quotient::Output(r) => *r = id,
-    }
-}
-
-impl<'a> TagAnalysis<'a> {
+impl TagAnalysis {
     /// Transfer function for an HIR body statement
     fn transfer_stmt(&mut self, stmt: &mut HirBody) {
         use std::collections::hash_map::Entry;
         match stmt {
             HirBody::ConstDecl { lhs, lhs_tag, .. } => {
-                self.tags
-                    .insert(lhs.clone(), TagInfo::from_maybe(lhs_tag, &self.specs));
+                self.tags.insert(lhs.clone(), TagInfo::from(lhs_tag));
             }
             HirBody::VarDecl {
                 lhs, lhs_tag, rhs, ..
             } => {
-                let mut info = TagInfo::from_maybe(lhs_tag, &self.specs);
+                let mut info = TagInfo::from(lhs_tag);
                 if rhs.is_none() {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
+                    } else {
+                        info.value = Some(none_tag(&self.specs.value, ir::Flow::Dead));
                     }
                 }
                 if info.spatial.is_none() {
@@ -264,9 +199,9 @@ impl<'a> TagAnalysis<'a> {
                 lhs, lhs_tags, rhs, ..
             } => {
                 // let quot = self.value_quotient(rhs);
-                if let Some(lhs_tags) = lhs_tags {
+                if lhs_tags.is_any_specified() {
                     let t = self.tags.get_mut(lhs).unwrap();
-                    t.update(&self.specs, lhs_tags);
+                    t.update(lhs_tags);
                 } else if let SchedTerm::Var { name, .. } = rhs {
                     // TODO: this is probably not what we want to do
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
@@ -278,54 +213,77 @@ impl<'a> TagAnalysis<'a> {
                 // t.value.quot = quot;
             }
             HirBody::RefLoad { dest, src, .. } => {
-                let tag = self.tags.get(src).cloned().unwrap_or_else(|| {
-                    TagInfo::from_tags(self.input_overrides.get(src).unwrap(), &self.specs)
-                });
+                let tag = self
+                    .tags
+                    .get(src)
+                    .cloned()
+                    .unwrap_or_else(|| self.input_overrides.get(src).cloned().unwrap());
                 self.tags.insert(dest.clone(), tag);
             }
             HirBody::Hole(_) => todo!(),
             HirBody::Op { dest, dest_tag, .. } => {
-                self.tags
-                    .insert(dest.clone(), TagInfo::from_maybe(dest_tag, &self.specs));
+                self.tags.insert(dest.clone(), TagInfo::from(dest_tag));
             }
             HirBody::OutAnnotation(_, tags) => {
                 for (v, tag) in tags {
                     match self.tags.entry(v.clone()) {
                         Entry::Occupied(mut entry) => {
-                            entry.get_mut().update(&self.specs, tag);
+                            entry.get_mut().update(tag);
                         }
                         Entry::Vacant(entry) => {
-                            entry.insert(TagInfo::from_tags(tag, &self.specs));
+                            entry.insert(TagInfo::from(tag));
                         }
                     }
                 }
             }
             HirBody::InAnnotation(_, tags) => {
                 for (v, tag) in tags {
-                    self.input_overrides.insert(v.clone(), tag.clone());
+                    self.input_overrides
+                        .insert(v.clone(), TagInfo::from(tag.clone()));
                     match self.tags.entry(v.clone()) {
                         Entry::Occupied(mut entry) => {
-                            entry.get_mut().update(&self.specs, tag);
+                            entry.get_mut().update(tag);
                         }
                         Entry::Vacant(entry) => {
-                            entry.insert(TagInfo::from_tags(tag, &self.specs));
+                            entry.insert(TagInfo::from(tag));
                         }
                     }
                 }
             }
+            HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
         }
     }
 }
 
-impl<'a> Fact for TagAnalysis<'a> {
+fn meet_tag_info(a: &mut TagInfo, b: &TagInfo) {
+    if a.value != b.value {
+        a.value = None;
+    }
+
+    if a.spatial != b.spatial {
+        a.spatial = None;
+    }
+
+    if a.timeline != b.timeline {
+        a.timeline = None;
+    }
+}
+
+impl Fact for TagAnalysis {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.tags {
             use std::collections::hash_map::Entry;
             match self.tags.entry(k.to_string()) {
-                Entry::Occupied(old_v) => {
+                Entry::Occupied(mut old_v) => {
                     if old_v.get() != v {
                         // We can't infer the tag, require it to be specified
-                        old_v.remove_entry();
+                        meet_tag_info(old_v.get_mut(), v);
+                        if old_v.get().value.is_none()
+                            && old_v.get().spatial.is_none()
+                            && old_v.get().timeline.is_none()
+                        {
+                            old_v.remove_entry();
+                        }
                     }
                     // assert_eq!(old_v.get(), v, "Duplicate key {k} with unequal values");
                 }
@@ -341,20 +299,14 @@ impl<'a> Fact for TagAnalysis<'a> {
         match stmt {
             HirInstr::Tail(Terminator::Call(dests, _) | Terminator::Select { dests, .. }) => {
                 for (dest, dest_tags) in dests {
-                    self.tags.insert(
-                        dest.clone(),
-                        TagInfo::from_tags(&dest_tags.as_ref().unwrap().tags, &self.specs),
-                    );
+                    self.tags.insert(dest.clone(), TagInfo::from(dest_tags));
                 }
             }
             HirInstr::Tail(Terminator::CaptureCall {
                 dests, captures, ..
             }) => {
                 for (dest, dest_tags) in dests {
-                    self.tags.insert(
-                        dest.clone(),
-                        TagInfo::from_tags(&dest_tags.as_ref().unwrap().tags, &self.specs),
-                    );
+                    self.tags.insert(dest.clone(), TagInfo::from(dest_tags));
                 }
                 for cap in captures.iter() {
                     assert!(

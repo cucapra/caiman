@@ -1,3 +1,20 @@
+//! ## Unification Algorithm
+//! This uses a somewhat standard version of unification using a union-find
+//! with path compression. The main difference is that it supports
+//! named equivalence classes (class names). These names are
+//! essentially the canonical representation of an equivalence class. This'
+//! allows us to not only query if two nodes are equivalent and get
+//! a representative of the class, but it also allows us to query the
+//! *name* of the class if it has one. Essentially, this allows
+//! a metavariable to become a secondary canonical representation of a class.
+//!
+//! Because we use unification for type deduction and quotient
+//! deduction, the API is agnostic to the actual type system being used.
+//! It does this by working in terms of abstract nodes which are
+//! simply metavariables, terms (trees of nodes), or atoms (leaves).
+//! Different instantiations of the unification problem must map their
+//! constraints onto this simple format.
+
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 type NodePtr<T, A> = Rc<RefCell<Node<T, A>>>;
@@ -7,7 +24,7 @@ pub trait Kind: Clone + PartialEq + Eq + std::fmt::Debug {}
 
 /// A node in a type expression. Nodes are agnostic to the actual type
 /// system being used.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 enum Node<T, A>
 where
     T: Kind,
@@ -18,6 +35,8 @@ where
         /// The parent of a node in the union-find algorithm.
         parent: Option<NodePtr<T, A>>,
         id: usize,
+        /// The unique id of the equivalence class the variable is a member of.
+        class_id: Option<String>,
     },
     /// A term/operator of a type expression
     Term {
@@ -25,9 +44,49 @@ where
         parent: Option<NodePtr<T, A>>,
         op: T,
         args: Vec<NodePtr<T, A>>,
+        /// The unique id of the equivalence class the term is a member of.
+        class_id: Option<String>,
     },
     /// A concrete base type
     Atom(A),
+}
+
+impl<T: Kind, A: Kind> std::fmt::Debug for Node<T, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var {
+                parent,
+                id,
+                class_id,
+            } => {
+                write!(f, "({id}")?;
+                if let Some(id) = class_id {
+                    write!(f, ":{id}, ")?;
+                } else {
+                    write!(f, ", ")?;
+                }
+                write!(f, "parent: {parent:?}")
+            }
+            Self::Term {
+                parent,
+                op,
+                args,
+                class_id,
+            } => {
+                write!(f, "({op:?}")?;
+                if let Some(id) = class_id {
+                    write!(f, ":{id}, ")?;
+                } else {
+                    write!(f, ", ")?;
+                }
+                for a in args {
+                    write!(f, "{:?}, ", a.borrow())?;
+                }
+                write!(f, "parent: {parent:?})")
+            }
+            Self::Atom(a) => write!(f, "{a:?}"),
+        }
+    }
 }
 
 impl<T: Kind, A: Kind> Node<T, A> {
@@ -45,6 +104,76 @@ impl<T: Kind, A: Kind> Node<T, A> {
     const fn is_var(&self) -> bool {
         matches!(self, Self::Var { .. })
     }
+
+    fn get_class_mut(&mut self) -> &mut Option<String> {
+        match self {
+            Self::Var {
+                ref mut class_id, ..
+            }
+            | Self::Term {
+                ref mut class_id, ..
+            } => class_id,
+            Self::Atom(_) => panic!("Atoms have no class"),
+        }
+    }
+
+    fn get_class(&self) -> &Option<String> {
+        match self {
+            Self::Var { class_id, .. } | Self::Term { class_id, .. } => class_id,
+            Self::Atom(_) => panic!("Atoms have no class"),
+        }
+    }
+}
+
+/// Deep copy of a node.
+/// # Arguments
+/// - `ptr`: The node to clone.
+/// - `cloned_ptrs`: A map of pointers to cloned pointers. This is used to
+///  avoid cloning the same node multiple times.
+fn deep_clone<T: Kind, A: Kind>(
+    ptr: &NodePtr<T, A>,
+    cloned_ptrs: &mut HashMap<*const Node<T, A>, NodePtr<T, A>>,
+) -> NodePtr<T, A> {
+    let key = ptr.as_ptr() as *const _;
+    if cloned_ptrs.contains_key(&key) {
+        return cloned_ptrs[&key].clone();
+    }
+    let borrow = ptr.borrow();
+    match &*borrow {
+        Node::Atom(a) => {
+            let r = Rc::new(RefCell::new(Node::Atom(a.clone())));
+            cloned_ptrs.insert(key, r.clone());
+            r
+        }
+        Node::Var {
+            id,
+            parent,
+            class_id,
+        } => {
+            let r = Rc::new(RefCell::new(Node::Var {
+                parent: parent.as_ref().map(|x| deep_clone(x, cloned_ptrs)),
+                id: *id,
+                class_id: class_id.clone(),
+            }));
+            cloned_ptrs.insert(key, r.clone());
+            r
+        }
+        Node::Term {
+            op,
+            args,
+            parent,
+            class_id,
+        } => {
+            let r = Rc::new(RefCell::new(Node::Term {
+                parent: parent.as_ref().map(|x| deep_clone(x, cloned_ptrs)),
+                op: op.clone(),
+                args: args.iter().map(|x| deep_clone(x, cloned_ptrs)).collect(),
+                class_id: class_id.clone(),
+            }));
+            cloned_ptrs.insert(key, r.clone());
+            r
+        }
+    }
 }
 
 /// Gets the representative of an equivalence class. This performs the `find`
@@ -59,16 +188,14 @@ fn representative<T: Kind, A: Kind>(n: &NodePtr<T, A>) -> NodePtr<T, A> {
             next_id.clone()
         }
         Node::Var { parent: None, .. } | Node::Atom(_) => n.clone(),
-        Node::Term {
-            parent: set, args, ..
-        } => {
+        Node::Term { parent, args, .. } => {
             for a in args {
                 *a = representative(a);
             }
             #[allow(clippy::option_if_let_else)]
-            if let Some(set) = set {
-                *set = representative(set);
-                set.clone()
+            if let Some(parent) = parent {
+                *parent = representative(parent);
+                parent.clone()
             } else {
                 n.clone()
             }
@@ -84,6 +211,21 @@ fn representative<T: Kind, A: Kind>(n: &NodePtr<T, A>) -> NodePtr<T, A> {
 fn union<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) {
     let a = representative(a);
     let b = representative(b);
+    if !matches!(
+        (&*a.borrow(), &*b.borrow()),
+        (Node::Atom(_), _) | (_, Node::Atom(_))
+    ) {
+        if a.borrow().get_class().is_some() {
+            assert!(
+                b.borrow().get_class().is_none()
+                    || b.borrow().get_class() == a.borrow().get_class()
+            );
+            *b.borrow_mut().get_class_mut() = a.borrow().get_class().clone();
+        } else {
+            *a.borrow_mut().get_class_mut() = b.borrow().get_class().clone();
+        }
+    }
+
     if a.borrow().is_var() {
         *a.borrow_mut().parent() = Some(b);
     } else {
@@ -145,10 +287,12 @@ fn unify<T: Kind, A: Kind>(a: &NodePtr<T, A>, b: &NodePtr<T, A>) -> bool {
             },
         ) => {
             if op_a != op_b || a_args.len() != b_args.len() {
+                //panic!("Unification failed");
                 return false;
             }
             for (a, b) in a_args.iter().zip(b_args.iter()) {
                 if !unify(a, b) {
+                    //panic!("Unification failed");
                     return false;
                 }
             }
@@ -173,41 +317,31 @@ pub enum Constraint<T: Kind, A: Kind> {
 }
 
 impl<T: Kind, A: Kind> Constraint<T, A> {
-    fn instantiate(self, temps: &HashMap<String, String>) -> Self {
-        match self {
-            Self::Atom(_) => self,
-            Self::Term(t, args) => {
-                let new_args = args
-                    .into_iter()
-                    .map(|c| c.instantiate(temps))
-                    .collect::<Vec<_>>();
-                Self::Term(t, new_args)
-            }
-            Self::Var(name) => temps
-                .get(&name)
-                .map_or_else(|| Self::Var(name), |new_name| Self::Var(new_name.clone())),
-        }
-    }
-
     /// Checks if a constraint is a variable.
     pub const fn is_var(&self) -> bool {
         matches!(self, Self::Var(_))
     }
 }
 
-/// A polymorphic constraint with universally quantified type variables.
-#[derive(Debug, Clone)]
-struct Polymorphic<T: Kind, A: Kind> {
-    constraint: Constraint<T, A>,
-    quantified: Vec<String>,
-}
-
 /// A typing environment.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Env<T: Kind, A: Kind> {
     temp_id: usize,
     nodes: HashMap<String, NodePtr<T, A>>,
-    polymorphic_constraints: HashMap<String, Polymorphic<T, A>>,
+}
+
+impl<T: Kind, A: Kind> Clone for Env<T, A> {
+    fn clone(&self) -> Self {
+        let mut nodes = HashMap::new();
+        let mut cloned_ptrs = HashMap::new();
+        for (name, node) in &self.nodes {
+            nodes.insert(name.clone(), deep_clone(node, &mut cloned_ptrs));
+        }
+        Self {
+            temp_id: self.temp_id,
+            nodes,
+        }
+    }
 }
 
 impl<T: Kind, A: Kind> Env<T, A> {
@@ -215,7 +349,36 @@ impl<T: Kind, A: Kind> Env<T, A> {
     fn new_var(&mut self) -> NodePtr<T, A> {
         let id = self.temp_id;
         self.temp_id += 1;
-        Rc::new(RefCell::new(Node::Var { parent: None, id }))
+        Rc::new(RefCell::new(Node::Var {
+            parent: None,
+            id,
+            class_id: None,
+        }))
+    }
+
+    /// Creates a fresh type variable that represents a named class if one
+    /// does not already exist. If a type variable already exists with the
+    /// given name, it will be reused and made into a class node.
+    /// Any new nodes will be inserted into the environment.
+    fn new_class_type(&mut self, class_name: &str) -> NodePtr<T, A> {
+        if self.nodes.contains_key(class_name) {
+            self.nodes
+                .get_mut(class_name)
+                .unwrap()
+                .borrow_mut()
+                .get_class_mut()
+                .replace(class_name.to_string());
+            return self.nodes.get(class_name).unwrap().clone();
+        }
+        let id = self.temp_id;
+        self.temp_id += 1;
+        let r = Rc::new(RefCell::new(Node::Var {
+            parent: None,
+            id,
+            class_id: Some(class_name.to_string()),
+        }));
+        self.nodes.insert(class_name.to_string(), r.clone());
+        r
     }
 
     /// Creates a fresh type variable for a name. This will overwrite any existing
@@ -235,13 +398,15 @@ impl<T: Kind, A: Kind> Env<T, A> {
 
     /// Creates a fresh type variable if one is not already associated with a given name.
     pub fn new_type_if_absent(&mut self, name: &str) {
-        if !self.nodes.contains_key(name) && !self.polymorphic_constraints.contains_key(name) {
+        if !self.nodes.contains_key(name) {
             self.new_type(name);
         }
     }
 
-    /// Adds a constraint to the environment. If the contraint contains a polymorphic
-    /// type variable, it will be instantiated.
+    /// Adds a constraint to the environment.
+    /// # Arguments
+    /// - `var`: The name of the type variable to add the constraint to.
+    /// - `constraint`: The constraint to add.
     /// # Errors
     /// Returns `Err` if the constraint cannot be added (unification fails)
     pub fn add_constraint(
@@ -249,39 +414,46 @@ impl<T: Kind, A: Kind> Env<T, A> {
         var: &str,
         constraint: &Constraint<T, A>,
     ) -> Result<(), String> {
-        let c = self.contraint_to_node(constraint);
         let var = self.get_or_make_node(var);
-        if unify(&var, &c) {
+        self.add_constraint_helper(&var, constraint)
+    }
+
+    /// Unifies the node `var` with the constraint.
+    fn add_constraint_helper(
+        &mut self,
+        var: &NodePtr<T, A>,
+        constraint: &Constraint<T, A>,
+    ) -> Result<(), String> {
+        #![allow(clippy::similar_names)]
+        let c = self.contraint_to_node(constraint);
+        if unify(var, &c) {
             Ok(())
         } else {
             Err(format!(
-                "{:?} != {:?}",
-                representative(&var),
-                representative(&c)
+                "variable {:#?} != constraint {:#?}",
+                *representative(var).borrow(),
+                *c.borrow()
             ))
         }
+    }
+
+    /// Adds a constraint to an equivalence class.
+    /// # Arguments
+    /// - `class_name`: The name of the class to add the constraint to.
+    /// - `constraint`: The constraint to add.
+    pub fn add_class_constraint(
+        &mut self,
+        class_name: &str,
+        constraint: &Constraint<T, A>,
+    ) -> Result<(), String> {
+        let class = self.new_class_type(class_name);
+        self.add_constraint_helper(&class, constraint)
     }
 
     /// Gets the node for a variable, creating it if it does not exist.
     /// If the variable is a polymorphic constraint, it will be instantiated.
     fn get_or_make_node(&mut self, name: &str) -> NodePtr<T, A> {
         if !self.nodes.contains_key(name) {
-            if self.polymorphic_constraints.contains_key(name) {
-                let mut tmps = HashMap::new();
-                let quantified = self
-                    .polymorphic_constraints
-                    .get(name)
-                    .unwrap()
-                    .quantified
-                    .clone();
-                for q in quantified {
-                    tmps.insert(q, self.new_temp_type());
-                }
-                let p = self.polymorphic_constraints.get(name).unwrap();
-                let c = p.constraint.clone().instantiate(&tmps);
-                let c = self.contraint_to_node(&c);
-                return c;
-            }
             self.new_type(name);
         }
         self.nodes.get(name).unwrap().clone()
@@ -298,6 +470,7 @@ impl<T: Kind, A: Kind> Env<T, A> {
                     .iter()
                     .map(|c| self.contraint_to_node(c))
                     .collect::<Vec<_>>(),
+                class_id: None,
             })),
             Constraint::Var(name) => self.get_or_make_node(name),
         }
@@ -324,7 +497,6 @@ impl<T: Kind, A: Kind> Env<T, A> {
         Self {
             temp_id: 0,
             nodes: HashMap::new(),
-            polymorphic_constraints: HashMap::new(),
         }
     }
 
@@ -333,15 +505,15 @@ impl<T: Kind, A: Kind> Env<T, A> {
         self.nodes.get(name).map(|n| Self::node_to_constraint(n))
     }
 
-    /// Adds a polymorphic constraint to the environment. A polymorphic constraint
-    /// is a constraint that is universally quantified over some type variables.
-    pub fn new_polymorphic(&mut self, name: &str, quantified: Vec<String>, c: Constraint<T, A>) {
-        self.polymorphic_constraints.insert(
-            name.to_string(),
-            Polymorphic {
-                constraint: c,
-                quantified,
-            },
-        );
+    /// Gets a unique identifier for the equivalence class the type variable
+    /// is a member of. Equivalence classes do not have identifiers unless
+    /// constraints were added to them via `add_class_constraint`.
+    /// # Returns
+    /// Returns `None` if the type variable is not a member of an equivalence class
+    /// or if the equivalence class does not have an identifier.
+    pub fn get_class_id(&self, name: &str) -> Option<String> {
+        self.nodes
+            .get(name)
+            .and_then(|n| representative(n).borrow().get_class().clone())
     }
 }

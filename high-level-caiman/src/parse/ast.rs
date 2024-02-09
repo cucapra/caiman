@@ -217,7 +217,7 @@ pub enum SpecStmt {
     Returns(Info, SpecExpr),
 }
 /// AST-level quotient (once merged, we can use the ir enum)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Quotient {
     Node,
     None,
@@ -226,7 +226,7 @@ pub enum Quotient {
 }
 
 /// AST-level flow (once merged, we can use the ir enum)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Flow {
     Usable,
     Save,
@@ -364,20 +364,6 @@ pub enum SchedTerm {
     },
     Call(Info, SchedFuncCall),
     Hole(Info),
-}
-
-impl SchedTerm {
-    /// Gets the tags of this term if they are specified, otherwise returns `None`
-    #[must_use]
-    #[allow(dead_code)]
-    pub const fn get_tags(&self) -> Option<&Tags> {
-        match self {
-            Self::Lit { tag, .. }
-            | Self::Var { tag, .. }
-            | Self::Call(_, SchedFuncCall { tag, .. }) => tag.as_ref(),
-            Self::Hole(_) => None,
-        }
-    }
 }
 
 /// A scheduling expression

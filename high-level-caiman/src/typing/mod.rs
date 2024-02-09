@@ -1,14 +1,12 @@
 pub mod context;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 mod specs;
-
-pub use specs::sched_lit_to_str;
 
 use crate::{
     error::{type_error, Info, LocalError},
     parse::ast::{Binop, DataType},
 };
-use caiman::assembly::ast as asm;
+use caiman::assembly::ast::{self as asm};
 
 use self::{
     types::{ADataType, CDataType, DTypeConstraint},
@@ -20,6 +18,8 @@ mod test;
 mod types;
 mod unification;
 
+pub use types::{MetaVar, VQType, ValQuot};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
 pub enum SpecType {
@@ -27,62 +27,156 @@ pub enum SpecType {
     Timeline,
     Spatial,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SpecNode {
-    Input(String),
-    Output(String),
-    Lit(String),
-    Op(String, Vec<String>),
-    Extract(String, usize),
+/// A typing environement for deducing quotients.
+#[derive(Debug, Clone)]
+pub struct NodeEnv {
+    env: Env<VQType, ()>,
+    /// Map of quotient type to a map between quotients and their equivalence
+    /// class names.
+    spec_nodes: HashMap<VQType, HashMap<ValQuot, HashSet<String>>>,
+    /// List of input node class names, without the leading `$` symbol.
+    inputs: Vec<String>,
+    /// List of output node class names, without the leading `$` symbol.
+    outputs: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct NodeMap {
-    pub nodes: HashMap<String, SpecNode>,
-    pub node_names: HashMap<SpecNode, String>,
-}
-
-impl NodeMap {
-    #[must_use]
-    pub fn get_name(&self, node: &SpecNode) -> Option<&String> {
-        self.node_names.get(node)
-    }
-
-    #[must_use]
-    pub fn get_node(&self, name: &str) -> Option<&SpecNode> {
-        self.nodes.get(name)
-    }
-
-    pub fn insert(&mut self, name: String, node: SpecNode) {
-        self.nodes.insert(name.clone(), node.clone());
-        self.node_names.insert(node, name);
-    }
-
-    /// Inserts a node if its name and value is unique. If the node is already
-    /// present, it is removed.
-    pub fn insert_or_remove_if_dup(&mut self, name: String, node: SpecNode) {
-        if self.contains(&name) || self.contains_node(&node) {
-            self.nodes.remove(&name);
-            self.node_names.remove(&node);
-        } else {
-            self.insert(name, node);
+impl Default for NodeEnv {
+    fn default() -> Self {
+        Self {
+            env: Env::new(),
+            spec_nodes: HashMap::new(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
         }
     }
+}
 
+impl NodeEnv {
     #[must_use]
-    pub fn contains(&self, name: &str) -> bool {
-        self.nodes.contains_key(name)
+    pub fn new() -> Self {
+        Self::default()
     }
 
+    /// Adds a quotient class and its constraints to the environment.
+    /// If the constraint is an input constraint, adds the class name to the
+    /// list of input class names.
+    /// # Panics
+    /// If the class name contains a `$` or if the constraint could not
+    /// be added to the environment.
+    pub fn add_quotient(&mut self, class_name: &str, constraint: ValQuot) {
+        assert!(!class_name.contains('$'));
+        if let ValQuot::Input(_) = &constraint {
+            self.inputs.push(class_name.to_string());
+        }
+        let class_name = format!("${class_name}");
+        self.env
+            .add_class_constraint(&class_name, &From::from(&constraint))
+            .unwrap();
+        self.spec_nodes
+            .entry(constraint.get_type())
+            .or_default()
+            .entry(constraint)
+            .or_default()
+            .insert(class_name);
+    }
+
+    /// Sets the qotient classes of the outputs.
+    /// # Panics
+    /// If any of the class names contain a `$`.
+    pub fn set_output_classes(&mut self, classes: &[String]) {
+        assert!(classes.iter().all(|x| !x.contains('$')));
+        self.outputs = classes.to_vec();
+    }
+
+    /// Gets the output classes, without the leading `$` symbol.
     #[must_use]
-    pub fn contains_node(&self, node: &SpecNode) -> bool {
-        self.node_names.contains_key(node)
+    pub fn get_output_classes(&self) -> &[String] {
+        &self.outputs
+    }
+
+    /// Returns true if the name is a wildcard name
+    fn is_wildcard_name(name: &MetaVar) -> bool {
+        !name.starts_with('$')
+    }
+
+    /// Adds a constraint to the type variable `name`. If the constraint
+    /// uniquely identifies a quotient class, unifies the quotient class with
+    /// the type variable.
+    /// # Errors
+    /// Returns an error if unification fails.
+    /// # Panics
+    /// If the name contains a `$`.
+    pub fn add_constraint(&mut self, name: &str, constraint: &ValQuot) -> Result<(), String> {
+        assert!(!name.contains('$'));
+        self.env.add_constraint(name, &From::from(constraint))?;
+        if let Some(matches) = self.spec_nodes.get(&constraint.get_type()) {
+            let mut last_match_classes = None;
+            for (possible_match, match_classes) in matches {
+                if possible_match.matches(constraint, Self::is_wildcard_name) {
+                    if last_match_classes.is_some() {
+                        return Ok(()); // Not a unique match
+                    }
+                    last_match_classes = Some(match_classes);
+                }
+            }
+            if let Some(last_match_classes) = last_match_classes {
+                if last_match_classes.len() == 1 {
+                    self.env.add_class_constraint(
+                        last_match_classes.iter().next().unwrap(),
+                        &Constraint::Var(name.to_string()),
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Adds a constraint to the type variable `name` with another variable.
+    /// # Errors
+    /// Returns an error if unification fails.
+    /// # Panics
+    /// If the name contains a `$` or if the equiv contains a `$`.
+    pub fn add_var_eq(&mut self, name: &str, equiv: &str) -> Result<(), String> {
+        assert!(!name.contains('$'));
+        assert!(!equiv.contains('$'));
+        self.env
+            .add_constraint(name, &Constraint::Var(equiv.to_string()))
+    }
+
+    /// Adds an equivalence between variable `name` and spec node name `class_name`.
+    /// # Panics
+    /// If the name contains a `$` or if the class name contains a `$`.
+    /// # Errors
+    /// Returns an error if unification fails.
+    pub fn add_node_eq(&mut self, name: &str, class_name: &str) -> Result<(), String> {
+        assert!(!name.contains('$'));
+        let class_name = if class_name.starts_with('$') {
+            class_name.to_string()
+        } else {
+            format!("${class_name}")
+        };
+        assert_eq!(class_name.chars().filter(|x| *x == '$').count(), 1);
+        self.env
+            .add_class_constraint(&class_name, &Constraint::Var(name.to_string()))
+    }
+
+    /// Returns the variable's matching node name in the spec if it has one.
+    #[must_use]
+    pub fn get_node_name(&self, name: &str) -> Option<String> {
+        self.env
+            .get_class_id(name)
+            .map(|x| x.trim_matches('$').to_string())
+    }
+
+    /// Returns the classes of the input variables
+    #[must_use]
+    pub fn get_input_classes(&self) -> &[String] {
+        &self.inputs
     }
 }
 
 /// A data type typing environment.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DTypeEnv {
     env: Env<CDataType, ADataType>,
 }
@@ -108,7 +202,7 @@ impl DTypeEnv {
         info: Info,
     ) -> Result<(), LocalError> {
         let c = constraint.instantiate(&mut self.env);
-        self.env.add_constraint(name, &c).map_err(|e| {
+        self.env.add_constraint(name, &c).map_err(|_| {
             type_error(
                 info,
                 &format!("Failed to unify type constraints of variable {name}"),
@@ -135,7 +229,7 @@ impl DTypeEnv {
     pub fn add_var_equiv(&mut self, name: &str, equiv: &str, info: Info) -> Result<(), LocalError> {
         self.env
             .add_constraint(name, &Constraint::Var(equiv.to_string()))
-            .map_err(|e| {
+            .map_err(|_| {
                 type_error(
                     info,
                     &format!("Failed to unify type constraints of variable {name}"),
@@ -152,7 +246,7 @@ impl DTypeEnv {
         constraint: &Constraint<CDataType, ADataType>,
         info: Info,
     ) -> Result<(), LocalError> {
-        self.env.add_constraint(name, constraint).map_err(|e| {
+        self.env.add_constraint(name, constraint).map_err(|_| {
             type_error(
                 info,
                 &format!("Failed to unify type constraints of variable {name}"),
@@ -168,22 +262,26 @@ pub struct SpecInfo {
     pub typ: SpecType,
     /// Type signature
     pub sig: NamedSignature,
-    /// Map from variable name to node and node to variable name.
-    // pub nodes: NodeMap,
+    /// Typing environment storing all nodes in the spec.
+    pub nodes: NodeEnv,
     /// Map from variable name to type.
     pub types: HashMap<String, DataType>,
+    /// Source-level starting and ending line and column number.
     pub info: Info,
+    /// The function class if the spec is a value spec.
+    pub feq: Option<String>,
 }
 
 impl SpecInfo {
     #[must_use]
-    pub fn new(typ: SpecType, sig: NamedSignature, info: Info) -> Self {
+    pub fn new(typ: SpecType, sig: NamedSignature, info: Info, class_name: Option<&str>) -> Self {
         Self {
             typ,
             sig,
-            // nodes: NodeMap::default(),
             types: HashMap::new(),
             info,
+            nodes: NodeEnv::new(),
+            feq: class_name.map(ToString::to_string),
         }
     }
 }

@@ -1,3 +1,7 @@
+//! Lowers a scheduling function into caiman assembly.
+//! Invokes the AST -> HIR transformation and all related passes
+//! for this, then applies syntax-directed lowering of HIR to Caiman Assembly.
+
 use std::collections::BTreeSet;
 
 use caiman::assembly::ast::{self as asm, Hole};
@@ -6,15 +10,13 @@ use crate::{
     enum_cast,
     error::{type_error, LocalError},
     lower::{data_type_to_ffi_type, sched_hir::TagInfo},
-    parse::ast::{
-        DataType, Flow, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag, Tags,
-    },
+    parse::ast::{DataType, Flow, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag},
     typing::{Context, SpecType},
 };
 use caiman::ir;
 
 use super::{
-    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, RET_VAR},
+    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag},
     tuple_id,
 };
 
@@ -34,16 +36,13 @@ fn temp_var_name(temp_id: usize) -> String {
 /// and the next available temporary id
 fn lower_flat_decl(
     dest: &str,
-    dest_tag: &Option<Tags>,
+    dest_tag: &TripleTag,
     rhs: &SchedTerm,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
     if let SchedTerm::Lit { .. } = rhs {
-        let dest_tag = dest_tag
-            .as_ref()
-            .expect("We require all variables to have tag annotations");
-        assert!(!dest_tag.is_empty());
+        assert!(dest_tag.is_any_specified());
         let temp_node_name = temp_var_name(temp_id);
         let temp = asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(temp_node_name.clone())),
@@ -56,7 +55,7 @@ fn lower_flat_decl(
         let mv = asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalDoBuiltin {
-                operation: Some(tag_to_quot(&dest_tag[0])),
+                operation: Some(tag_to_quot(dest_tag.value.as_ref().unwrap())),
                 // no inputs
                 inputs: Some(Vec::new()),
                 outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
@@ -78,14 +77,11 @@ fn lower_flat_decl(
 /// Lowers a variable declaration
 fn lower_var_decl(
     dest: &str,
-    dest_tag: &Option<Tags>,
+    dest_tag: &TripleTag,
     rhs: &Option<SchedTerm>,
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
-    let dest_tag = dest_tag
-        .as_ref()
-        .expect("We require all variables to have type annotations");
     let mut result = vec![Some(asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::AllocTemporary {
@@ -96,8 +92,8 @@ fn lower_var_decl(
     }))];
     if let Some(SchedTerm::Lit { tag: rhs_tag, .. }) = rhs {
         let rhs_tag = rhs_tag.as_ref().map_or_else(
-            || TagInfo::from_tags(dest_tag, f.specs()),
-            |rhs_tag| TagInfo::from_tags(rhs_tag, f.specs()),
+            || TagInfo::from(dest_tag),
+            |rhs_tag| TagInfo::from(TripleTag::from_tags(rhs_tag, f.specs())),
         );
         assert!(rhs_tag.value.is_some());
         result.push(Some(asm::Command::Node(asm::NamedNode {
@@ -122,6 +118,7 @@ fn lower_store(lhs: &str, rhs: &SchedTerm, temp_id: usize, f: &Funclet) -> (Comm
             node: asm::Node::LocalDoBuiltin {
                 operation: Some(
                     f.get_out_tag(rhs)
+                        .cloned()
                         .unwrap()
                         .value
                         .expect("Tag must be set")
@@ -136,18 +133,38 @@ fn lower_store(lhs: &str, rhs: &SchedTerm, temp_id: usize, f: &Funclet) -> (Comm
     )
 }
 
+/// Changes the remote node id to the remote id of the result of the call, before
+/// extracing the result
+fn to_tuple_quotient(q: asm::Quotient) -> asm::Quotient {
+    match q {
+        asm::Quotient::Node(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(node),
+        }))
+        | asm::Quotient::Input(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(node),
+        }))
+        | asm::Quotient::Output(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(node),
+        })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
+            funclet,
+            node: Some(asm::NodeId(tuple_id(&[node.0]))),
+        })),
+        x => x,
+    }
+}
+
 /// Lowers an operation into a local-do-external and read-ref
 fn lower_op(
     dest: &str,
-    dest_tag: &Option<Tags>,
+    dest_tag: &TripleTag,
     op: &str,
     args: &[SchedTerm],
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
-    let dest_tag = dest_tag
-        .as_ref()
-        .expect("We require all variables to have type annotations");
     let temp_node_name = temp_var_name(temp_id);
     let temp = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(temp_node_name.clone())),
@@ -165,7 +182,13 @@ fn lower_op(
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
         node: asm::Node::LocalDoExternal {
-            operation: unextract_quotient(get_quotient(f.specs(), dest_tag, SpecType::Value)),
+            operation: Some(
+                dest_tag
+                    .value
+                    .as_ref()
+                    .map(|t| to_tuple_quotient(tag_to_quot(t)))
+                    .expect("Tag must be set for now"),
+            ),
             inputs: Some(inputs),
             outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
             external_function_id: Some(asm::ExternalFunctionId(op.to_string())),
@@ -210,7 +233,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             lhs, lhs_tag, rhs, ..
         } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f),
         HirBody::RefStore { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
-        HirBody::RefLoad { dest, src, typ } => lower_load(dest, typ, src, temp_id),
+        HirBody::RefLoad { dest, src, typ, .. } => lower_load(dest, typ, src, temp_id),
         // annotations don't lower to anything
         HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) => (vec![], temp_id),
         HirBody::Op {
@@ -221,107 +244,8 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             ..
         } => lower_op(dest, dest_tag, &op.lower(), args, temp_id, f),
         x @ HirBody::Hole(_) => todo!("{x:?}"),
+        HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
     }
-}
-
-/// Gets the quotient for a particular spec type from a list of tags
-fn get_quotient_opt(
-    specs: &Specs,
-    tag: &Option<Vec<Tag>>,
-    qtype: SpecType,
-) -> asm::Hole<asm::Quotient> {
-    if let Some(tags) = tag {
-        for t in tags {
-            if let res @ Some(_) = t.quot_var.as_ref().and_then(|qr| {
-                if qr.spec_name == specs.value.0 && qtype == SpecType::Value {
-                    return Some(tag_to_quot(t));
-                }
-                if qr.spec_name == specs.timeline.0 && qtype == SpecType::Timeline {
-                    return Some(tag_to_quot(t));
-                }
-                if qr.spec_name == specs.spatial.0 && qtype == SpecType::Spatial {
-                    return Some(tag_to_quot(t));
-                }
-                None
-            }) {
-                return res;
-            }
-        }
-    }
-    None
-}
-
-/// Changes the remote node id to the remote id of the result of the call, before
-/// extracing the result
-fn unextract_quotient(q: Hole<asm::Quotient>) -> Hole<asm::Quotient> {
-    match q {
-        Hole::Some(
-            asm::Quotient::Node(Some(asm::RemoteNodeId {
-                funclet,
-                node: Some(node),
-            }))
-            | asm::Quotient::Input(Some(asm::RemoteNodeId {
-                funclet,
-                node: Some(node),
-            }))
-            | asm::Quotient::Output(Some(asm::RemoteNodeId {
-                funclet,
-                node: Some(node),
-            })),
-        ) => Hole::Some(asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        }))),
-        x => x,
-    }
-}
-
-fn get_quotient(specs: &Specs, tags: &[Tag], qtype: SpecType) -> asm::Hole<asm::Quotient> {
-    for t in tags {
-        if let res @ Some(_) = t.quot_var.as_ref().and_then(|qr| {
-            if qr.spec_name == specs.value.0 && qtype == SpecType::Value {
-                return Some(tag_to_quot(t));
-            }
-            if qr.spec_name == specs.timeline.0 && qtype == SpecType::Timeline {
-                return Some(tag_to_quot(t));
-            }
-            if qr.spec_name == specs.spatial.0 && qtype == SpecType::Spatial {
-                return Some(tag_to_quot(t));
-            }
-            None
-        }) {
-            return res;
-        }
-    }
-    None
-}
-
-/// Changes the remote node id to the remote id of the result of the call
-fn get_tuple_quot(t: Option<asm::Tag>) -> asm::Hole<asm::Quotient> {
-    t.map(|t| match t.quot {
-        asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        asm::Quotient::Input(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Input(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        asm::Quotient::Output(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Output(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        x => x,
-    })
 }
 
 /// Lowers a function call into a caiman assembly command.
@@ -341,7 +265,7 @@ fn lower_func_call(
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
     let join_var = temp_var_name(join);
-    let tags = TagInfo::from_maybe(&call.tag, f.specs());
+    let tags = TagInfo::from(&call.tag);
     vec![
         Some(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(djoin_name.clone())),
@@ -372,7 +296,7 @@ fn lower_func_call(
                 || tags.default_tag(SpecType::Spatial).quot,
                 |x| x.quot.clone(),
             )),
-            value_operation: get_tuple_quot(tags.value),
+            value_operation: tags.value.map(|t| t.quot),
             callee_funclet_id: Some(asm::FuncletId(call.target.clone())),
             callee_arguments: Some(
                 call.args
@@ -442,11 +366,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
             }))]
         }
         Terminator::FinalReturn(n) => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-            return_values: Some(
-                (0..*n)
-                    .map(|idx| Some(asm::NodeId(format!("{RET_VAR}{idx}"))))
-                    .collect(),
-            ),
+            return_values: Some(n.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),
         }))],
         Terminator::Select { guard, tag, .. } => lower_select(guard, tag, temp_id, f),
         // TODO: review this
@@ -461,12 +381,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
 /// Lowers a select terminator into a series of caiman assembly commands
 /// # Returns
 /// The commands that implement the terminator
-fn lower_select(
-    guard_name: &str,
-    tags: &Option<Vec<Tag>>,
-    temp_id: usize,
-    f: &Funclet<'_>,
-) -> CommandVec {
+fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<'_>) -> CommandVec {
     let djoin_id = temp_id;
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
@@ -489,25 +404,29 @@ fn lower_select(
         })),
         Some(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
             value_operation: Some(
-                get_quotient_opt(f.specs(), tags, SpecType::Value)
+                tags.value
+                    .as_ref()
+                    .map(tag_to_quot)
                     .expect("Selects need a value node for now"),
             ),
-            timeline_operation: Some(
-                get_quotient_opt(f.specs(), tags, SpecType::Timeline).unwrap_or_else(|| {
+            timeline_operation: Some(tags.timeline.as_ref().map_or_else(
+                || {
                     asm::Quotient::None(Some(asm::RemoteNodeId {
                         node: None,
                         funclet: Some(f.specs().timeline.clone()),
                     }))
-                }),
-            ),
-            spatial_operation: Some(
-                get_quotient_opt(f.specs(), tags, SpecType::Spatial).unwrap_or_else(|| {
+                },
+                tag_to_quot,
+            )),
+            spatial_operation: Some(tags.spatial.as_ref().map_or_else(
+                || {
                     asm::Quotient::None(Some(asm::RemoteNodeId {
                         node: None,
                         funclet: Some(f.specs().spatial.clone()),
                     }))
-                }),
-            ),
+                },
+                tag_to_quot,
+            )),
             condition: Some(asm::NodeId(guard_name.to_string())),
             callee_funclet_ids: Some(f.next_blocks()),
             callee_arguments: Some(f.output_args()),
@@ -617,6 +536,6 @@ pub fn lower_schedule(
             .map(asm::FuncletId)
             .ok_or_else(|| type_error(func.info, "Missing spatial spec"))?,
     };
-    let blocks = Funclets::new(func, specs, ctx);
+    let blocks = Funclets::new(func, &specs, ctx);
     Ok(blocks.funclets().iter().map(lower_block).collect())
 }

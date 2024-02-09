@@ -3,7 +3,7 @@ use std::fmt;
 
 /// Struct containing information about a token's starting and ending
 /// position in a file
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Info {
     pub start_ln_and_col: (usize, usize),
     pub end_ln_and_col: (usize, usize),
@@ -55,12 +55,14 @@ pub trait HasInfo {
     fn info(&self) -> Info;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorKind {
     SyntaxParsing(String),
     IO(String),
     TypeError(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorLocation {
     // (Line, Column)
     Single(usize, usize),
@@ -74,6 +76,7 @@ impl From<Info> for ErrorLocation {
 }
 
 /// An error that occurs in a single file
+#[derive(Debug)]
 pub struct LocalError {
     pub kind: ErrorKind,
     pub location: ErrorLocation,
