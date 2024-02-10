@@ -169,6 +169,33 @@ fn collect_assign_var(
     env.add_var_equiv(dest_name, var, info)
 }
 
+/// Collects constraints for the body of a sequence.
+/// The body of the sequence must be an `if` statement or a block which
+/// ends in an `if` statement.
+/// # Returns
+/// A tuple of the return values of the true and false branches of the `if`.
+/// # Panics
+/// If the body of the sequence is not an `if` statement or a block which
+/// ends in an `if` statement.
+fn collect_seq_body(
+    ctx: &Context,
+    env: &mut DTypeEnv,
+    stmt: &SchedStmt,
+) -> Result<(Vec<String>, Vec<String>), LocalError> {
+    if let SchedStmt::If {
+        true_block,
+        false_block,
+        ..
+    } = stmt
+    {
+        let true_rets = collect_sched_helper(ctx, env, true_block.iter(), true_block.len())?;
+        let false_rets = collect_sched_helper(ctx, env, false_block.iter(), false_block.len())?;
+        Ok((true_rets, false_rets))
+    } else {
+        unreachable!()
+    }
+}
+
 /// Collects constraints for a sequence of statements.
 fn collect_seq(
     ctx: &Context,
@@ -177,19 +204,7 @@ fn collect_seq(
     block: &SchedStmt,
     info: Info,
 ) -> Result<(), LocalError> {
-    let rets_a;
-    let rets_b;
-    if let SchedStmt::If {
-        true_block,
-        false_block,
-        ..
-    } = block
-    {
-        rets_a = collect_sched_helper(ctx, env, true_block.iter(), true_block.len())?;
-        rets_b = collect_sched_helper(ctx, env, false_block.iter(), false_block.len())?;
-    } else {
-        unreachable!()
-    }
+    let (rets_a, rets_b) = collect_seq_body(ctx, env, block)?;
     if dests.len() != rets_a.len() || dests.len() != rets_b.len() {
         return Err(type_error(
             info,

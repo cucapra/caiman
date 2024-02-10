@@ -189,6 +189,11 @@ impl TagAnalysis {
                     } else {
                         info.value = Some(none_tag(&self.specs.value, ir::Flow::Dead));
                     }
+                } else if let Some(SchedTerm::Var { name, .. }) = rhs {
+                    // Taken from RefStore
+                    if let Some(rhs_typ) = self.tags.get(name).cloned() {
+                        info.value = rhs_typ.value;
+                    }
                 }
                 if info.spatial.is_none() {
                     info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));

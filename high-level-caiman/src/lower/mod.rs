@@ -13,7 +13,7 @@ use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funcle
 
 // TODO: only i32, i64, and u64 are currently supported in the IR
 // change this to u8 or i8 once we support those types
-pub(crate) const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
+pub const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
 
 /// Converts a high-level caiman data type to a caiman assembly type id.
 fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {

@@ -681,9 +681,8 @@ fn fill_type_info(
                 fill_val_quotient(&selects[&block.id], tag, env, specs);
             }
             Terminator::Call(..) | Terminator::None => unreachable!(),
-            // TODO: rexamine return
-            // I think we can do nothing here because the parent we are passing
-            // values back to must have already filled in the quotient information
+            // TODO: check the return, I think this is right bc returns should be handled
+            // by Phi nodes
             Terminator::Next(..) | Terminator::FinalReturn(..) | Terminator::Return { .. } => {}
         }
         while let Some((idx, stmt)) = insertions.pop() {

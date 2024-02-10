@@ -181,10 +181,26 @@ pub enum SpecTerm {
     },
 }
 
+pub trait LangTerm: Clone + std::fmt::Debug {
+    fn is_var(&self) -> bool;
+}
+
+impl LangTerm for SpecTerm {
+    fn is_var(&self) -> bool {
+        matches!(self, Self::Var { .. })
+    }
+}
+
+impl LangTerm for SchedTerm {
+    fn is_var(&self) -> bool {
+        matches!(self, Self::Var { .. })
+    }
+}
+
 /// A nested expression is the top level of an expression tree which is agnostic
 /// to the type of expression (spec or scheduling)
 #[derive(Clone, Debug)]
-pub enum NestedExpr<T> {
+pub enum NestedExpr<T: LangTerm> {
     Binop {
         info: Info,
         op: Binop,
