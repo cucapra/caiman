@@ -98,6 +98,7 @@ impl TripleTag {
     pub const fn is_any_specified(&self) -> bool {
         self.value.is_some() || self.spatial.is_some() || self.timeline.is_some()
     }
+
 }
 
 impl From<TripleTag> for Tags {

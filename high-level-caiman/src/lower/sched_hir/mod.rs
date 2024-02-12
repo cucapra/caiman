@@ -15,7 +15,7 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-use caiman::assembly::ast as asm;
+use caiman::assembly::ast::{self as asm, Quotient};
 
 use self::{
     analysis::{
@@ -31,6 +31,8 @@ mod analysis;
 mod test;
 
 pub use analysis::RET_VAR;
+
+use super::data_type_to_ffi_type;
 
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +65,9 @@ pub struct Funclets {
     /// Map from block id to the set of output variables captured by a
     /// function call
     captured_out: HashMap<usize, BTreeSet<String>>,
+    /// Set of value quotients which are atomic (constant literals or inputs)
+    atomic_values: HashSet<String>,
+    input_values: HashSet<String>,
 }
 
 /// A specific funclet in a scheduling function.
@@ -375,6 +380,11 @@ impl<'a> Funclet<'a> {
         self.parent.types.get(var).cloned()
     }
 
+    /// Gets the storage type of the specified variable
+    pub fn get_ffi_type(&self, var: &str) -> Option<asm::TypeId> {
+        self.parent.data_types.get(var).map(data_type_to_ffi_type)
+    }
+
     /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
     pub fn get_out_tag(&self, var: &str) -> Option<&TagInfo> {
@@ -385,6 +395,28 @@ impl<'a> Funclet<'a> {
     #[inline]
     pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
         self.parent.data_types.get(var)
+    }
+
+    /// Returns true if the specified tag is an atomic node (in degree of 0)
+    /// in the value specification
+    pub fn is_atomic_value(&self, t: &Quotient) -> bool {
+        match t {
+            Quotient::Input(Some(t)) | Quotient::Node(Some(t)) | Quotient::Output(Some(t)) => t
+                .node
+                .as_ref()
+                .map_or(false, |r| self.parent.atomic_values.contains(&r.0)),
+            _ => false,
+        }
+    }
+
+    pub fn is_input_value(&self, t: &Quotient) -> bool {
+        match t {
+            Quotient::Input(Some(t)) | Quotient::Node(Some(t)) | Quotient::Output(Some(t)) => t
+                .node
+                .as_ref()
+                .map_or(false, |r| self.parent.input_values.contains(&r.0)),
+            _ => false,
+        }
     }
 }
 
@@ -455,7 +487,7 @@ impl Funclets {
         let (mut types, mut data_types, variables) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
-        op_transform_pass(&mut cfg, &types, &data_types);
+        op_transform_pass(&mut cfg, &data_types);
         deref_transform_pass(&mut cfg, &mut types, &mut data_types, &variables);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
@@ -500,6 +532,13 @@ impl Funclets {
             finfo,
             specs: specs_rc,
             captured_out,
+            atomic_values: ctx.specs[&specs.value.0].nodes.atomic_classes(),
+            input_values: ctx.specs[&specs.value.0]
+                .nodes
+                .get_input_classes()
+                .iter()
+                .cloned()
+                .collect(),
         }
     }
 

@@ -231,7 +231,6 @@ fn deref_transform_instr(
     match instr {
         // TODO: generalize terminator usage
         HirInstr::Tail(t) => {
-            // TODO: return references
             t.rename_uses(&mut |u, ut| {
                 if variables.contains(u) && ut == UseType::Read {
                     insert_deref_if_needed(last_deref, names, types, insertions, id, u, data_types);
@@ -275,21 +274,10 @@ fn deref_transform_instr(
                         last_deref, names, types, insertions, id, name, data_types,
                     );
                     get_cur_name(name, names)
-                } else if ut == UseType::Write {
-                    // writes can only occur to references, so we need to rename
-                    // the variable to the reference version
-                    format!("_{name}_ref")
                 } else {
                     name.to_string()
                 }
             });
-            if let HirBody::VarDecl { lhs, .. } = stmt {
-                let old_lhs = lhs.clone();
-                // rename the lhs to the reference version
-                *lhs = format!("_{lhs}_ref");
-                types.insert(lhs.clone(), types[&old_lhs].clone());
-                data_types.insert(lhs.clone(), data_types[&old_lhs].clone());
-            }
             if let HirBody::VarDecl { lhs, .. } | HirBody::RefStore { lhs, .. } = stmt {
                 match names.entry(lhs.clone()) {
                     Entry::Occupied(mut entry) => {
@@ -299,6 +287,19 @@ fn deref_transform_instr(
                         entry.insert(0);
                     }
                 }
+            }
+            match stmt {
+                HirBody::VarDecl { lhs, .. } => {
+                    let old_lhs = lhs.clone();
+                    // rename the lhs to the reference version
+                    *lhs = format!("_{lhs}_ref");
+                    types.insert(lhs.clone(), types[&old_lhs].clone());
+                    data_types.insert(lhs.clone(), data_types[&old_lhs].clone());
+                }
+                HirBody::RefStore { lhs, .. } => {
+                    *lhs = format!("_{lhs}_ref");
+                }
+                _ => (),
             }
         }
     }

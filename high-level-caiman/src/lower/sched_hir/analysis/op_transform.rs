@@ -1,8 +1,5 @@
 use std::collections::HashMap;
 
-use caiman::assembly::ast as asm;
-use caiman::assembly::ast::TypeId;
-
 use crate::{
     enum_cast,
     lower::{
@@ -21,39 +18,17 @@ use crate::{
 /// After this pass, all binary and unary operators, except referenceS
 /// will be replaced with external FFI calls or loads.
 #[allow(clippy::module_name_repetitions)]
-pub fn op_transform_pass(
-    cfg: &mut Cfg,
-    types: &HashMap<String, TypeId>,
-    data_types: &HashMap<String, DataType>,
-) {
+pub fn op_transform_pass(cfg: &mut Cfg, data_types: &HashMap<String, DataType>) {
     for bb in cfg.blocks.values_mut() {
-        op_transform_block(bb, types, data_types);
+        op_transform_block(bb, data_types);
     }
 }
 
 /// Transforms binary operations into external FFI calls and dereferences into
 /// `ref_load` instructions.
-fn op_transform_block(
-    bb: &mut BasicBlock,
-    types: &HashMap<String, TypeId>,
-    data_types: &HashMap<String, DataType>,
-) {
+fn op_transform_block(bb: &mut BasicBlock, data_types: &HashMap<String, DataType>) {
     for instr in &mut bb.stmts {
-        op_transform_instr(instr, types, data_types);
-    }
-}
-
-/// Converts a type id to a string
-fn type_to_str(t: &TypeId) -> String {
-    match t {
-        asm::TypeId::Local(s) => s.clone(),
-        asm::TypeId::FFI(ffi) => match ffi {
-            asm::FFIType::I32 => String::from("i32"),
-            asm::FFIType::I64 => String::from("i64"),
-            asm::FFIType::F32 => String::from("f32"),
-            asm::FFIType::F64 => String::from("f64"),
-            _ => todo!(),
-        },
+        op_transform_instr(instr, data_types);
     }
 }
 
@@ -68,11 +43,7 @@ fn deref_data_type(dt: DataType) -> DataType {
 
 /// Transforms an instruction by replacing binary operations with external FFI calls.
 /// Also replaces dereferences with `ref_load` instructions.
-fn op_transform_instr(
-    instr: &mut HirBody,
-    types: &HashMap<String, asm::TypeId>,
-    data_types: &HashMap<String, DataType>,
-) {
+fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType>) {
     match instr {
         HirBody::Op {
             op: HirOp::Unary(Uop::Deref),
@@ -95,14 +66,14 @@ fn op_transform_instr(
                 let arg_r = enum_cast!(SchedTerm::Var { name, .. }, name, &args[1]);
                 *op = HirOp::FFI(binop_to_str(
                     *bin,
-                    &type_to_str(&types[arg_l]),
-                    &type_to_str(&types[arg_r]),
+                    &format!("{}", data_types[arg_l]),
+                    &format!("{}", data_types[arg_r]),
                 ));
             }
             HirOp::Unary(unary @ (Uop::Neg | Uop::Not | Uop::LNot)) => {
                 assert_eq!(args.len(), 1);
                 let arg = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
-                *op = HirOp::FFI(uop_to_str(*unary, &type_to_str(&types[arg])));
+                *op = HirOp::FFI(uop_to_str(*unary, &format!("{}", data_types[arg])));
             }
             HirOp::Unary(Uop::Ref) => (),
             HirOp::Unary(Uop::Deref) => panic!("Unexpected deref op"),

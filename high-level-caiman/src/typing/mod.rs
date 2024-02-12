@@ -6,7 +6,7 @@ use crate::{
     error::{type_error, Info, LocalError},
     parse::ast::{Binop, DataType, Uop},
 };
-use caiman::assembly::ast::{self as asm};
+use caiman::{assembly::ast as asm, ir};
 
 use self::{
     types::{ADataType, CDataType, DTypeConstraint},
@@ -19,6 +19,16 @@ mod types;
 mod unification;
 
 pub use types::{MetaVar, VQType, ValQuot};
+
+/// WGPU flags for all frontent temporaries.
+pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
+    map_read: true,
+    map_write: true,
+    storage: false,
+    uniform: false,
+    copy_dst: false,
+    copy_src: false,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of a spec.
@@ -172,6 +182,27 @@ impl NodeEnv {
     #[must_use]
     pub fn get_input_classes(&self) -> &[String] {
         &self.inputs
+    }
+
+    /// Gets names of equivalence classes that are atomic types (constant literals
+    /// or inputs).
+    #[must_use]
+    pub fn atomic_classes(&self) -> HashSet<String> {
+        let mut res = HashSet::new();
+        for classes in self.spec_nodes.values() {
+            for (c, class) in classes {
+                if matches!(
+                    c,
+                    ValQuot::Int(_) | ValQuot::Bool(_) | ValQuot::Float(_) | ValQuot::Input(_)
+                ) {
+                    res.extend(class.iter().map(|x| x.trim_matches('$').to_string()));
+                }
+            }
+        }
+        for i in self.inputs.iter() {
+            res.insert(i.to_string());
+        }
+        res
     }
 }
 

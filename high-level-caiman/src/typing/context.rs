@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::error::{type_error, Info, LocalError};
 use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
 use crate::parse::ast::FullType;
+use crate::typing::LOCAL_TEMP_FLAGS;
 use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
@@ -43,7 +44,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::TypeId::FFI(BOOL_FFI_TYPE),
                 storage_place: ir::Place::Local,
-                buffer_flags: ir::BufferFlags::new(),
+                buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
@@ -57,7 +58,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::TypeId::FFI(asm::FFIType::I64),
                 storage_place: ir::Place::Local,
-                buffer_flags: ir::BufferFlags::new(),
+                buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
@@ -71,7 +72,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::TypeId::FFI(asm::FFIType::I32),
                 storage_place: ir::Place::Local,
-                buffer_flags: ir::BufferFlags::new(),
+                buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
     ]
@@ -142,12 +143,17 @@ fn resolve_types(
         if let Some(dt) = env.env.get_type(name) {
             if let Ok(dt) = DTypeConstraint::try_from(dt) {
                 if let Ok(dt) = DataType::try_from(dt) {
-                    if matches!(&dt, DataType::Ref(inner) if matches!(**inner, DataType::Ref(_))) {
+                    if matches!(&dt, DataType::Ref(inner) if matches!(**inner, DataType::Ref(_)))
+                        || (matches!(dt, DataType::Ref(_)) && names[name] == Mutability::Mut)
+                    {
                         return Err(type_error(
                             Info::default(),
-                            &format!("Reference to reference types are not allowed. Found: {dt}",),
+                            &format!(
+                                "Reference to reference types are not allowed. Found: {name}: {dt}",
+                            ),
                         ));
                     }
+
                     types.insert(name.clone(), dt);
                 }
             }

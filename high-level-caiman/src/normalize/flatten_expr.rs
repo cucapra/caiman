@@ -673,11 +673,45 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                 info,
                 lhs,
                 expr,
-                is_const,
+                is_const: true,
             } => {
                 let mut instrs = vec![];
+                let expr = expr.expect("Const decl without expr");
+                let (new_instrs, new_temp_num, new_rhs) = flatten_top_level(
+                    expr,
+                    &|v| SchedTerm::Var {
+                        info,
+                        name: v.to_string(),
+                        tag: None,
+                    },
+                    &|name, e| SchedStmt::Decl {
+                        info,
+                        lhs: vec![(name.to_string(), None)],
+                        expr: Some(e),
+                        is_const: true,
+                    },
+                    temp_num,
+                    &flatten_sched_term,
+                    &flatten_sched_term_children,
+                );
+                temp_num = new_temp_num;
+                instrs.extend(new_instrs);
+                instrs.push(SchedStmt::Decl {
+                    info,
+                    lhs,
+                    expr: Some(new_rhs),
+                    is_const: true,
+                });
+                res.extend(instrs);
+            }
+            SchedStmt::Decl {
+                info,
+                lhs,
+                expr,
+                is_const: false,
+            } => {
                 if let Some(expr) = expr {
-                    let (new_instrs, new_temp_num, new_rhs) = flatten_top_level(
+                    let (new_instrs, new_temp_num, new_rhs) = flatten_rec(
                         expr,
                         &|v| SchedTerm::Var {
                             info,
@@ -688,29 +722,27 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                             info,
                             lhs: vec![(name.to_string(), None)],
                             expr: Some(e),
-                            is_const,
+                            is_const: true,
                         },
                         temp_num,
                         &flatten_sched_term,
-                        &flatten_sched_term_children,
                     );
                     temp_num = new_temp_num;
-                    instrs.extend(new_instrs);
-                    instrs.push(SchedStmt::Decl {
+                    res.extend(new_instrs);
+                    res.push(SchedStmt::Decl {
                         info,
                         lhs,
                         expr: Some(new_rhs),
-                        is_const,
+                        is_const: false,
                     });
                 } else {
-                    instrs.push(SchedStmt::Decl {
+                    res.push(SchedStmt::Decl {
                         info,
                         lhs,
                         expr: None,
-                        is_const,
+                        is_const: false,
                     });
                 }
-                res.extend(instrs);
             }
             SchedStmt::Assign {
                 info,

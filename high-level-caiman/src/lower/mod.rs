@@ -18,13 +18,21 @@ macro_rules! enum_cast {
     ($p:path, $e:expr) => {
         match $e {
             $p(x) => x,
-            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
+            _x => panic!(
+                "AST Not flattened!: Expected {}, but got {:?}",
+                stringify!($p),
+                _x
+            ),
         }
     };
     ($p:pat, $r:expr, $e:expr) => {
         match $e {
             $p => $r,
-            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
+            _x => panic!(
+                "AST Not flattened!: Expected {}, but got {:?}",
+                stringify!($p),
+                _x
+            ),
         }
     };
 }

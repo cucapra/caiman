@@ -1,13 +1,13 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
-use caiman::assembly::ast::{self as asm, Hole};
+use caiman::assembly::ast::{self as asm, Hole, NodeId};
 
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
     lower::{data_type_to_ffi_type, sched_hir::TagInfo},
     parse::ast::{DataType, Flow, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag},
-    typing::{Context, SpecType},
+    typing::{Context, SpecType, LOCAL_TEMP_FLAGS},
 };
 use caiman::ir;
 
@@ -26,6 +26,68 @@ fn temp_var_name(temp_id: usize) -> String {
     format!("_t{temp_id}")
 }
 
+/// Constructs a copy from `src` to `dest` using either a local copy or a local
+/// do builtin, depending on whether `src` is atomic in the value spec.
+fn build_copy_cmd(
+    dest: &str,
+    src: &SchedTerm,
+    value_locs: &HashMap<String, NodeId>,
+    f: &Funclet,
+    backup_tag: Option<&TripleTag>,
+) -> asm::Command {
+    let val_quot = src
+        .get_tags()
+        .and_then(|t| {
+            TripleTag::from_tags(t, f.specs())
+                .value
+                .as_ref()
+                .map(tag_to_quot)
+        })
+        .or_else(|| {
+            backup_tag
+                .map(|t| &t.value)
+                .and_then(|t| t.as_ref().map(tag_to_quot))
+        })
+        .or_else(|| {
+            if let SchedTerm::Var { name, .. } = src {
+                f.get_out_tag(name)
+                    .and_then(|t| t.value.as_ref().map(|t| t.quot.clone()))
+            } else {
+                None
+            }
+        });
+    if let Some(quot) = val_quot {
+        if f.is_input_value(&quot) {
+            let src_name = enum_cast!(SchedTerm::Var { name, .. }, name, src);
+            return asm::Command::Node(asm::NamedNode {
+                name: None,
+                node: asm::Node::WriteRef {
+                    storage_type: f.get_ffi_type(dest),
+                    destination: Some(asm::NodeId(dest.to_string())),
+                    source: Some(asm::NodeId(src_name.to_string())),
+                },
+            });
+        } else if f.is_atomic_value(&quot) {
+            return asm::Command::Node(asm::NamedNode {
+                name: None,
+                node: asm::Node::LocalDoBuiltin {
+                    operation: Some(quot),
+                    inputs: Some(vec![]),
+                    outputs: Some(vec![Some(asm::NodeId(dest.to_string()))]),
+                },
+            });
+        }
+    }
+    let src = enum_cast!(SchedTerm::Var { name, .. }, name, src);
+    asm::Command::Node(asm::NamedNode {
+        name: None,
+        node: asm::Node::LocalCopy {
+            input: Some(value_locs[src].clone()),
+            output: Some(asm::NodeId(dest.to_string())),
+        },
+    })
+}
+
 /// Lowers a flattened declaration statement into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the statement
@@ -36,38 +98,47 @@ fn lower_flat_decl(
     rhs: &SchedTerm,
     temp_id: usize,
     f: &Funclet,
+    value_locs: &mut HashMap<String, NodeId>,
 ) -> (CommandVec, usize) {
-    if let SchedTerm::Lit { .. } = rhs {
-        assert!(dest_tag.is_any_specified());
-        let temp_node_name = temp_var_name(temp_id);
-        let temp = asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(temp_node_name.clone())),
-            node: asm::Node::AllocTemporary {
-                place: Some(ir::Place::Local),
-                buffer_flags: Some(ir::BufferFlags::new()),
-                storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
-            },
-        });
-        let mv = asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::LocalDoBuiltin {
-                operation: Some(tag_to_quot(dest_tag.value.as_ref().unwrap())),
-                // no inputs
-                inputs: Some(Vec::new()),
-                outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
-            },
-        });
-        let rd_ref = asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(dest.to_string())),
-            node: asm::Node::ReadRef {
-                source: Some(asm::NodeId(temp_node_name)),
-                storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
-            },
-        });
-        (vec![Some(temp), Some(mv), Some(rd_ref)], temp_id + 1)
-    } else {
-        todo!()
-    }
+    assert!(dest_tag.is_any_specified());
+    let temp_node_name = temp_var_name(temp_id);
+    let temp = asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(temp_node_name.clone())),
+        node: asm::Node::AllocTemporary {
+            place: Some(ir::Place::Local),
+            buffer_flags: Some(LOCAL_TEMP_FLAGS),
+            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+        },
+    });
+    value_locs.insert(dest.to_string(), asm::NodeId(temp_node_name.clone()));
+    // let mv = match rhs {
+    //     SchedTerm::Lit { .. } => asm::Command::Node(asm::NamedNode {
+    //         name: None,
+    //         node: asm::Node::LocalDoBuiltin {
+    //             operation: Some(tag_to_quot(dest_tag.value.as_ref().unwrap())),
+    //             // no inputs
+    //             inputs: Some(Vec::new()),
+    //             outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
+    //         },
+    //     }),
+    //     SchedTerm::Var { name: rhs_name, .. } => asm::Command::Node(asm::NamedNode {
+    //         name: None,
+    //         node: asm::Node::LocalCopy {
+    //             input: Some(value_locs[rhs_name].clone()),
+    //             output: Some(asm::NodeId(temp_node_name.clone())),
+    //         },
+    //     }),
+    //     _ => todo!(),
+    // };
+    let mv = build_copy_cmd(&temp_node_name, rhs, value_locs, f, Some(dest_tag));
+    let rd_ref = asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(dest.to_string())),
+        node: asm::Node::ReadRef {
+            source: Some(asm::NodeId(temp_node_name)),
+            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+        },
+    });
+    (vec![Some(temp), Some(mv), Some(rd_ref)], temp_id + 1)
 }
 
 /// Lowers a variable declaration
@@ -77,54 +148,77 @@ fn lower_var_decl(
     rhs: &Option<SchedTerm>,
     temp_id: usize,
     f: &Funclet,
+    value_locs: &mut HashMap<String, NodeId>,
 ) -> (CommandVec, usize) {
     let mut result = vec![Some(asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::AllocTemporary {
             place: Some(ir::Place::Local),
-            buffer_flags: Some(ir::BufferFlags::new()),
+            buffer_flags: Some(LOCAL_TEMP_FLAGS),
             storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     }))];
-    if let Some(SchedTerm::Lit { tag: rhs_tag, .. }) = rhs {
-        let rhs_tag = rhs_tag.as_ref().map_or_else(
-            || TagInfo::from(dest_tag),
-            |rhs_tag| TagInfo::from(TripleTag::from_tags(rhs_tag, f.specs())),
-        );
-        assert!(rhs_tag.value.is_some());
-        result.push(Some(asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::LocalDoBuiltin {
-                operation: Some(rhs_tag.value.as_ref().unwrap().quot.clone()),
-                // no inputs
-                inputs: Some(Vec::new()),
-                outputs: Some(vec![Some(asm::NodeId(dest.to_string()))]),
-            },
-        })));
+    value_locs.insert(dest.to_string(), asm::NodeId(dest.to_string()));
+    if let Some(rhs) = rhs {
+        //     match rhs {
+        //         SchedTerm::Lit { .. } => {
+        //             let rhs_tag = rhs.get_tags();
+        //             let rhs_tag = rhs_tag.as_ref().map_or_else(
+        //                 || TagInfo::from(dest_tag),
+        //                 |rhs_tag| TagInfo::from(TripleTag::from_tags(rhs_tag, f.specs())),
+        //             );
+        //             assert!(rhs_tag.value.is_some());
+        //             result.push(Some(asm::Command::Node(asm::NamedNode {
+        //                 name: None,
+        //                 node: asm::Node::LocalDoBuiltin {
+        //                     operation: Some(rhs_tag.value.as_ref().unwrap().quot.clone()),
+        //                     // no inputs
+        //                     inputs: Some(Vec::new()),
+        //                     outputs: Some(vec![Some(asm::NodeId(dest.to_string()))]),
+        //                 },
+        //             })));
+        //         }
+        //         SchedTerm::Var { name: rhs_name, .. } => {
+        //             result.push(Some(asm::Command::Node(asm::NamedNode {
+        //                 name: None,
+        //                 node: asm::Node::LocalCopy {
+        //                     input: Some(value_locs[rhs_name].clone()),
+        //                     output: Some(asm::NodeId(dest.to_string())),
+        //                 },
+        //             })));
+        //         }
+        //         _ => unreachable!(),
+        //     }
+        result.push(Some(build_copy_cmd(dest, rhs, value_locs, f, None)));
     }
     (result, temp_id)
 }
 
 /// Lowers a store lhs <- rhs
-fn lower_store(lhs: &str, rhs: &SchedTerm, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
-    let rhs = enum_cast!(SchedTerm::Var { name, .. }, name, rhs);
+fn lower_store(
+    lhs: &str,
+    lhs_tags: &TripleTag,
+    rhs: &SchedTerm,
+    temp_id: usize,
+    f: &Funclet,
+    value_locs: &HashMap<String, NodeId>,
+) -> (CommandVec, usize) {
+    //let rhs = enum_cast!(SchedTerm::Var { name, .. }, name, rhs);
     (
-        vec![Some(asm::Command::Node(asm::NamedNode {
-            name: None,
-            node: asm::Node::LocalDoBuiltin {
-                operation: Some(
-                    f.get_out_tag(rhs)
-                        .cloned()
-                        .unwrap()
-                        .value
-                        .expect("Tag must be set")
-                        .quot,
-                ),
-                // no inputs
-                inputs: Some(Vec::new()),
-                outputs: Some(vec![Some(asm::NodeId(lhs.to_string()))]),
-            },
-        }))],
+        // vec![Some(asm::Command::Node(asm::NamedNode {
+        //     name: None,
+        //     node: asm::Node::LocalCopy {
+        //         input: Some(value_locs[rhs].clone()),
+        //         output: Some(asm::NodeId(lhs.to_string())),
+        //     },
+        // }))],
+        vec![Some(build_copy_cmd(
+            lhs,
+            rhs,
+            value_locs,
+            f,
+            Some(lhs_tags),
+        ))],
         temp_id,
     )
 }
@@ -160,16 +254,18 @@ fn lower_op(
     args: &[SchedTerm],
     temp_id: usize,
     f: &Funclet,
+    value_locs: &mut HashMap<String, NodeId>,
 ) -> (CommandVec, usize) {
     let temp_node_name = temp_var_name(temp_id);
     let temp = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(temp_node_name.clone())),
         node: asm::Node::AllocTemporary {
             place: Some(ir::Place::Local),
-            buffer_flags: Some(ir::BufferFlags::new()),
+            buffer_flags: Some(LOCAL_TEMP_FLAGS),
             storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     });
+    value_locs.insert(dest.to_string(), asm::NodeId(temp_node_name.clone()));
     let mut inputs = vec![];
     for arg in args {
         let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
@@ -220,15 +316,22 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
 /// # Returns
 /// A tuple containing the commands that implement the statement
 /// and the next available temporary id
-fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) {
+fn lower_instr(
+    s: &HirBody,
+    temp_id: usize,
+    f: &Funclet,
+    value_locs: &mut HashMap<String, NodeId>,
+) -> (CommandVec, usize) {
     match s {
         HirBody::ConstDecl {
             lhs, rhs, lhs_tag, ..
-        } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id, f),
+        } => lower_flat_decl(lhs, lhs_tag, rhs, temp_id, f, value_locs),
         HirBody::VarDecl {
             lhs, lhs_tag, rhs, ..
-        } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f),
-        HirBody::RefStore { lhs, rhs, .. } => lower_store(lhs, rhs, temp_id, f),
+        } => lower_var_decl(lhs, lhs_tag, rhs, temp_id, f, value_locs),
+        HirBody::RefStore {
+            lhs, rhs, lhs_tags, ..
+        } => lower_store(lhs, lhs_tags, rhs, temp_id, f, value_locs),
         HirBody::RefLoad { dest, src, typ, .. } => lower_load(dest, typ, src, temp_id),
         // annotations don't lower to anything
         HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) => (vec![], temp_id),
@@ -238,7 +341,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
             op,
             args,
             ..
-        } => lower_op(dest, dest_tag, &op.lower(), args, temp_id, f),
+        } => lower_op(dest, dest_tag, &op.lower(), args, temp_id, f, value_locs),
         x @ HirBody::Hole(_) => todo!("{x:?}"),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
     }
@@ -481,8 +584,14 @@ pub fn tag_to_tag_def(t: &Tag, default_flow: ir::Flow) -> asm::Tag {
 fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
     let mut commands = vec![];
     let mut temp_id = 0;
+    let mut value_locations = HashMap::new();
+    for arg in funclet.inputs() {
+        if let Some(name) = arg.name {
+            value_locations.insert(name.0.clone(), name);
+        }
+    }
     for cmd in funclet.stmts() {
-        let (mut new_cmds, new_id) = lower_instr(cmd, temp_id, funclet);
+        let (mut new_cmds, new_id) = lower_instr(cmd, temp_id, funclet, &mut value_locations);
         temp_id = new_id;
         commands.append(&mut new_cmds);
     }
