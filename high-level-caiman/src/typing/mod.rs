@@ -184,23 +184,16 @@ impl NodeEnv {
         &self.inputs
     }
 
-    /// Gets names of equivalence classes that are atomic types (constant literals
-    /// or inputs).
+    /// Gets names of equivalence classes that are literals in the spec.
     #[must_use]
-    pub fn atomic_classes(&self) -> HashSet<String> {
+    pub fn literal_classes(&self) -> HashSet<String> {
         let mut res = HashSet::new();
         for classes in self.spec_nodes.values() {
             for (c, class) in classes {
-                if matches!(
-                    c,
-                    ValQuot::Int(_) | ValQuot::Bool(_) | ValQuot::Float(_) | ValQuot::Input(_)
-                ) {
+                if matches!(c, ValQuot::Int(_) | ValQuot::Bool(_) | ValQuot::Float(_)) {
                     res.extend(class.iter().map(|x| x.trim_matches('$').to_string()));
                 }
             }
-        }
-        for i in self.inputs.iter() {
-            res.insert(i.to_string());
         }
         res
     }

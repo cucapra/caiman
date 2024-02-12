@@ -83,6 +83,19 @@ pub const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
     }
 }
 
+/// For types that have FFI equivalents, convert a high-level caiman data type
+/// to the caiman assembly type for the corresponding FFI type. For types
+/// that do not have FFI equivalents, return `None`.
+///
+/// References are unwrapped to get the underlying type.
+#[must_use]
+pub fn data_type_to_storage_type(dt: &DataType) -> asm::TypeId {
+    match dt {
+        DataType::Ref(d) => data_type_to_storage_type(d),
+        x => data_type_to_ffi_type(x),
+    }
+}
+
 /// Convert a high-level caiman data type to a caiman assembly type.
 fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
     dts.iter().map(data_type_to_local_type).collect()

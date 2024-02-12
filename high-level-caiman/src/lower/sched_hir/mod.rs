@@ -32,8 +32,6 @@ mod test;
 
 pub use analysis::RET_VAR;
 
-use super::data_type_to_ffi_type;
-
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Specs {
@@ -65,9 +63,10 @@ pub struct Funclets {
     /// Map from block id to the set of output variables captured by a
     /// function call
     captured_out: HashMap<usize, BTreeSet<String>>,
-    /// Set of value quotients which are atomic (constant literals or inputs)
-    atomic_values: HashSet<String>,
-    input_values: HashSet<String>,
+    /// Set of value quotients which are literals in the value specification
+    literal_value_classes: HashSet<String>,
+    /// Set of variables used in the schedule
+    variables: HashSet<String>,
 }
 
 /// A specific funclet in a scheduling function.
@@ -373,50 +372,34 @@ impl<'a> Funclet<'a> {
             && self.parent.cfg.predecessors(FINAL_BLOCK_ID).first() == Some(&self.id())
     }
 
-    /// Gets the local type of the specified variable.
-    #[inline]
-    #[allow(dead_code)]
-    pub fn get_local_type(&self, var: &str) -> Option<asm::TypeId> {
-        self.parent.types.get(var).cloned()
-    }
-
-    /// Gets the storage type of the specified variable
-    pub fn get_ffi_type(&self, var: &str) -> Option<asm::TypeId> {
-        self.parent.data_types.get(var).map(data_type_to_ffi_type)
-    }
-
     /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
     pub fn get_out_tag(&self, var: &str) -> Option<&TagInfo> {
         self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
 
-    /// Gets the data type of the specified variable
+    /// Gets the data type of the specified variable. Note that
+    /// the data type of a variable will be the data type of the value,
+    /// not a reference data type
     #[inline]
     pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
         self.parent.data_types.get(var)
     }
 
-    /// Returns true if the specified tag is an atomic node (in degree of 0)
-    /// in the value specification
-    pub fn is_atomic_value(&self, t: &Quotient) -> bool {
+    /// Returns true if the specified tag is a literal node in the value specification
+    pub fn is_literal_value(&self, t: &Quotient) -> bool {
         match t {
             Quotient::Input(Some(t)) | Quotient::Node(Some(t)) | Quotient::Output(Some(t)) => t
                 .node
                 .as_ref()
-                .map_or(false, |r| self.parent.atomic_values.contains(&r.0)),
+                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0)),
             _ => false,
         }
     }
 
-    pub fn is_input_value(&self, t: &Quotient) -> bool {
-        match t {
-            Quotient::Input(Some(t)) | Quotient::Node(Some(t)) | Quotient::Output(Some(t)) => t
-                .node
-                .as_ref()
-                .map_or(false, |r| self.parent.input_values.contains(&r.0)),
-            _ => false,
-        }
+    /// Returns true if the specified variable is a mutable reference or a mutable variable
+    pub fn is_var_or_ref(&self, v: &str) -> bool {
+        self.parent.variables.contains(v) || matches!(self.get_dtype(v), Some(DataType::Ref(_)))
     }
 }
 
@@ -532,13 +515,8 @@ impl Funclets {
             finfo,
             specs: specs_rc,
             captured_out,
-            atomic_values: ctx.specs[&specs.value.0].nodes.atomic_classes(),
-            input_values: ctx.specs[&specs.value.0]
-                .nodes
-                .get_input_classes()
-                .iter()
-                .cloned()
-                .collect(),
+            literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
+            variables,
         }
     }
 
