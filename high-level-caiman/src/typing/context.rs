@@ -202,7 +202,8 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                 }
             }
             let outs = val_sig.output.clone();
-            collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
+            let must_be_mut =
+                collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
             for (in_name, _) in input {
                 sched_info
@@ -211,6 +212,16 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             }
             collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
             resolve_types(&env, &mut sched_info.types, &sched_info.defined_names)?;
+            for (var, info) in must_be_mut {
+                if !matches!(sched_info.types.get(&var), Some(DataType::Ref(_)))
+                    && !matches!(sched_info.defined_names.get(&var), Some(Mutability::Mut))
+                {
+                    return Err(type_error(
+                        info,
+                        &format!("Immutable variable {var} cannot be assigned to",),
+                    ));
+                }
+            }
         }
     }
     Ok(ctx)
