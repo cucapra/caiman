@@ -1,0 +1,29 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val min(a: i64, b: i64) -> i64 {
+    returns a if a < b else b
+}
+
+fn min_impl(a, b) -> i64
+    impls min, time, space
+{
+    let r = if a < b {
+        a
+    } else {
+        b
+    };
+    r
+}
+
+val main() -> i64 {
+    returns min(3, 4)
+}
+
+fn main_impl() -> i64 impls main, time, space {
+    min_impl(3, 4)
+}
+
+pipeline main { min_impl }

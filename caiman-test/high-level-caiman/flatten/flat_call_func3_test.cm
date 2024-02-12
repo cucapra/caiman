@@ -1,0 +1,34 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    returns calc(3, 5)
+}
+
+val calc(a: i64, b: i64) -> i64 {
+    returns calc2(a * b)
+}
+
+val calc2(t: i64) -> i64 {
+    returns t % 9
+}
+
+fn calc2_impl(t) -> i64 impls calc2, time, space
+{
+    t % 9
+}
+
+fn calc_impl(a, b) -> i64 impls calc, time, space
+{
+    calc2_impl(a * b)
+}
+
+fn main_impl() -> i64
+    impls main, time, space
+{
+    calc_impl(3, 5)
+}
+
+pipeline main { main_impl }
