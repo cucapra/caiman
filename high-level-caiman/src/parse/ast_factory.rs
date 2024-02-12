@@ -87,18 +87,18 @@ macro_rules! struct_variant_factory {
             }
         }
     };
-    ($f:ident<$($templates:ident:$constraints:path),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path) => {
+    ($f:ident<$($templates:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path) => {
         #[must_use]
-        pub fn $f<$($templates:$constraints,)*>(&self, l : usize, $($x : $t,)* r : usize) -> $rt {
+        pub fn $f<$($templates,)*>(&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
                 $($x,)*
             }
         }
     };
-    ($f:ident<$($templates:ident:$constraints:path),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path{$($g:ident:$e:expr),*}) => {
+    ($f:ident<$($templates:ident),*>( $($x:ident : $t:ty),* ) -> $rt:ty:$var:path{$($g:ident:$e:expr),*}) => {
         #[must_use]
-        pub fn $f<$($templates:$constraints,)*> (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
+        pub fn $f<$($templates,)*> (&self, l : usize, $($x : $t,)* r : usize) -> $rt {
             $var {
                 info: self.info(l, r),
                 $($g: $e,)*
@@ -417,21 +417,21 @@ impl ASTFactory {
 
     // Nested Exprs
 
-    struct_variant_factory!(binop<T: LangTerm>(lhs: NestedExpr<T>, op: Binop, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop {
+    struct_variant_factory!(binop<T>(lhs: NestedExpr<T>, op: Binop, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop {
         op: op,
         lhs: Box::new(lhs),
         rhs: Box::new(rhs)
     });
-    struct_variant_factory!(range<T: LangTerm>(lhs: NestedExpr<T>, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop { 
+    struct_variant_factory!(range<T>(lhs: NestedExpr<T>, rhs: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Binop { 
         op: Binop::Range,
         lhs: Box::new(lhs),
         rhs: Box::new(rhs)
     });
-    struct_variant_factory!(uop<T: LangTerm>(op: Uop, expr: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Uop {
+    struct_variant_factory!(uop<T>(op: Uop, expr: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Uop {
         op: op,
         expr: Box::new(expr)
     });
-    struct_variant_factory!(conditional<T: LangTerm>(if_true: NestedExpr<T>, guard: NestedExpr<T>, 
+    struct_variant_factory!(conditional<T>(if_true: NestedExpr<T>, guard: NestedExpr<T>, 
         if_false: NestedExpr<T>) -> NestedExpr<T>:NestedExpr::Conditional 
     {
         guard: Box::new(guard),

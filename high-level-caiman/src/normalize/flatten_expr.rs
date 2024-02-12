@@ -1,8 +1,8 @@
 use crate::{
     error::Info,
     parse::ast::{
-        ArgsOrEnc, LangTerm, NestedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm,
-        SpecLiteral, SpecStmt, SpecTerm,
+        ArgsOrEnc, NestedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecLiteral,
+        SpecStmt, SpecTerm,
     },
 };
 
@@ -22,7 +22,7 @@ use crate::{
 ///     * The new number of temporary variables
 ///     * The new spec term
 pub fn flatten_top_level<
-    T: LangTerm,
+    T,
     F: Fn(&str) -> T,
     I,
     D: Fn(&str, NestedExpr<T>) -> I,
@@ -110,7 +110,7 @@ pub fn flatten_top_level<
 ///    * The new number of temporary variables
 ///    * The new spec term
 pub fn flatten_rec<
-    T: LangTerm,
+    T,
     F: Fn(&str) -> T,
     I,
     D: Fn(&str, NestedExpr<T>) -> I,
@@ -184,9 +184,74 @@ pub fn flatten_rec<
             temp_num += 1;
             (guard_instrs, temp_num, NestedExpr::Term(mk_var(&temp_name)))
         }
-        NestedExpr::Term(x) if x.is_var() => (vec![], temp_num, NestedExpr::Term(x)),
         NestedExpr::Term(call) => flatten_term(call, temp_num),
     }
+}
+
+/// Constructs a variable factory for spec variables.
+/// # Arguments
+/// * `info` - The info to use for the variables
+fn build_spec_var_factory(info: Info) -> impl Fn(&str) -> SpecTerm {
+    move |v| SpecTerm::Var {
+        info,
+        name: v.to_string(),
+    }
+}
+
+/// Constructs a declaration factory for spec variables.
+/// # Arguments
+/// * `info` - The info to use for the variables
+fn build_spec_decl_factory(info: Info) -> impl Fn(&str, NestedExpr<SpecTerm>) -> SpecStmt {
+    move |name, e| SpecStmt::Assign {
+        info,
+        lhs: vec![(name.to_string(), None)],
+        rhs: e,
+    }
+}
+
+/// Flattens a call to be a statement without nested expressions
+/// # Arguments
+/// * `target` - The target of the call
+/// * `args` - The arguments of the call
+/// * `mk_var` - A function that creates a variable from a string
+/// * `mk_decl` - A function that creates a declaration from a string and an
+/// expression
+/// * `temp_num` - The current number of temporary variables
+/// * `flatten_term` - A function that flattens a term
+/// # Returns
+/// * A tuple containing:
+///     * A list of statements that need to be added
+///     * The new number of temporary variables
+///     * The flattened function expression
+///     * The flattened arguments
+fn flatten_call<
+    T,
+    F: Fn(&str) -> T,
+    I,
+    D: Fn(&str, NestedExpr<T>) -> I,
+    C: Fn(T, usize) -> (Vec<I>, usize, NestedExpr<T>),
+>(
+    target: NestedExpr<T>,
+    args: Vec<NestedExpr<T>>,
+    mk_var: &F,
+    mk_decl: &D,
+    temp_num: usize,
+    flatten_term: &C,
+) -> (Vec<I>, usize, NestedExpr<T>, Vec<NestedExpr<T>>) {
+    let mut instrs = vec![];
+    let mut temp_num = temp_num;
+    let mut new_args = vec![];
+    for arg in args {
+        let (arg_instrs, new_temp_num, arg_expr) =
+            flatten_rec(arg, mk_var, mk_decl, temp_num, flatten_term);
+        temp_num = new_temp_num;
+        instrs.extend(arg_instrs);
+        new_args.push(arg_expr);
+    }
+    let (func_instrs, temp_num, func_expr) =
+        flatten_rec(target, mk_var, mk_decl, temp_num, flatten_term);
+    instrs.extend(func_instrs);
+    (instrs, temp_num, func_expr, new_args)
 }
 
 /// Flattens a spec call to be a statement without nested expressions
@@ -211,43 +276,14 @@ fn flatten_spec_call(
         template,
     } = call
     {
-        let mut instrs = vec![];
-        let mut temp_num = temp_num;
-        let mut new_args = vec![];
-        for arg in args {
-            let (arg_instrs, new_temp_num, arg_expr) = flatten_rec(
-                arg,
-                &|v| SpecTerm::Var {
-                    info,
-                    name: v.to_string(),
-                },
-                &|name, e| SpecStmt::Assign {
-                    info,
-                    lhs: vec![(name.to_string(), None)],
-                    rhs: e,
-                },
-                temp_num,
-                &flatten_spec_term,
-            );
-            temp_num = new_temp_num;
-            instrs.extend(arg_instrs);
-            new_args.push(arg_expr);
-        }
-        let (func_instrs, mut temp_num, func_expr) = flatten_rec(
+        let (mut instrs, mut temp_num, func_expr, new_args) = flatten_call(
             *function,
-            &|v| SpecTerm::Var {
-                info,
-                name: v.to_string(),
-            },
-            &|name, e| SpecStmt::Assign {
-                info,
-                lhs: vec![(name.to_string(), None)],
-                rhs: e,
-            },
+            args,
+            &build_spec_var_factory(info),
+            &build_spec_decl_factory(info),
             temp_num,
             &flatten_spec_term,
         );
-        instrs.extend(func_instrs);
         let temp_name = format!("_f{temp_num}");
         instrs.push(SpecStmt::Assign {
             lhs: vec![(temp_name.clone(), None)],
@@ -285,7 +321,7 @@ fn flatten_spec_call(
 fn flatten_spec_term(t: SpecTerm, temp_num: usize) -> (Vec<SpecStmt>, usize, NestedExpr<SpecTerm>) {
     match t {
         SpecTerm::Call { .. } => flatten_spec_call(t, temp_num),
-        SpecTerm::Var { .. } => panic!("No need to flatten"),
+        SpecTerm::Var { .. } => (vec![], temp_num, NestedExpr::Term(t)),
         SpecTerm::Lit {
             info,
             lit: SpecLiteral::Tuple(exprs),
@@ -296,15 +332,8 @@ fn flatten_spec_term(t: SpecTerm, temp_num: usize) -> (Vec<SpecStmt>, usize, Nes
             for expr in exprs {
                 let (expr_instrs, new_temp_num, expr_expr) = flatten_rec(
                     expr,
-                    &|v| SpecTerm::Var {
-                        info,
-                        name: v.to_string(),
-                    },
-                    &|name, e| SpecStmt::Assign {
-                        info,
-                        lhs: vec![(name.to_string(), None)],
-                        rhs: e,
-                    },
+                    &build_spec_var_factory(info),
+                    &build_spec_decl_factory(info),
                     temp_num,
                     &flatten_spec_term,
                 );
@@ -348,15 +377,8 @@ pub fn flatten_spec(stmts: Vec<SpecStmt>) -> Vec<SpecStmt> {
             SpecStmt::Assign { info, lhs, rhs } => {
                 let (mut instrs, new_temp_num, new_rhs) = flatten_top_level(
                     rhs,
-                    &|v| SpecTerm::Var {
-                        info,
-                        name: v.to_string(),
-                    },
-                    &|name, e| SpecStmt::Assign {
-                        info,
-                        lhs: vec![(name.to_string(), None)],
-                        rhs: e,
-                    },
+                    &build_spec_var_factory(info),
+                    &build_spec_decl_factory(info),
                     temp_num,
                     &flatten_spec_term,
                 );
@@ -371,15 +393,8 @@ pub fn flatten_spec(stmts: Vec<SpecStmt>) -> Vec<SpecStmt> {
             SpecStmt::Returns(info, returned_expr) => {
                 let (mut instrs, new_temp_num, new_ret) = flatten_rec(
                     returned_expr,
-                    &|v| SpecTerm::Var {
-                        info,
-                        name: v.to_string(),
-                    },
-                    &|name, e| SpecStmt::Assign {
-                        info,
-                        lhs: vec![(name.to_string(), None)],
-                        rhs: e,
-                    },
+                    &build_spec_var_factory(info),
+                    &build_spec_decl_factory(info),
                     temp_num,
                     &flatten_spec_term,
                 );
@@ -392,6 +407,33 @@ pub fn flatten_spec(stmts: Vec<SpecStmt>) -> Vec<SpecStmt> {
     res
 }
 
+/// Constructs a variable factory for schedule variables.
+/// # Arguments
+/// * `info` - The info to use for the variables
+fn build_sched_var_factory(info: Info) -> impl Fn(&str) -> SchedTerm {
+    move |v| SchedTerm::Var {
+        info,
+        name: v.to_string(),
+        tag: None,
+    }
+}
+
+/// Constructs a declaration factory for schedule variables.
+/// # Arguments
+/// * `info` - The info to use for the variables
+/// * `is_const` - Whether the variable is constant
+fn build_sched_decl_factory(
+    info: Info,
+    is_const: bool,
+) -> impl Fn(&str, NestedExpr<SchedTerm>) -> SchedStmt {
+    move |name, e| SchedStmt::Decl {
+        info,
+        lhs: vec![(name.to_string(), None)],
+        expr: Some(e),
+        is_const,
+    }
+}
+
 /// Flattens a schedule term to be a statement without nested expressions
 fn flatten_sched_term(
     t: SchedTerm,
@@ -399,7 +441,7 @@ fn flatten_sched_term(
 ) -> (Vec<SchedStmt>, usize, NestedExpr<SchedTerm>) {
     match t {
         SchedTerm::Call(info, call) => flatten_sched_call(call, temp_num, info),
-        SchedTerm::Var { .. } => panic!("No need to flatten"),
+        SchedTerm::Var { .. } => (vec![], temp_num, NestedExpr::Term(t)),
         SchedTerm::Lit {
             info,
             lit: SchedLiteral::Tuple(exprs),
@@ -411,17 +453,8 @@ fn flatten_sched_term(
             for expr in exprs {
                 let (expr_instrs, new_temp_num, expr_expr) = flatten_rec(
                     expr,
-                    &|v| SchedTerm::Var {
-                        info,
-                        name: v.to_string(),
-                        tag: None,
-                    },
-                    &|name, e| SchedStmt::Decl {
-                        info,
-                        lhs: vec![(name.to_string(), None)],
-                        expr: Some(e),
-                        is_const: true,
-                    },
+                    &build_sched_var_factory(info),
+                    &build_sched_decl_factory(info, true),
                     temp_num,
                     &flatten_sched_term,
                 );
@@ -477,47 +510,14 @@ fn flatten_sched_call(
         tag,
     } = call;
     if let ArgsOrEnc::Args(args) = *args {
-        let mut instrs = vec![];
-        let mut temp_num = temp_num;
-        let mut new_args = vec![];
-        for arg in args {
-            let (arg_instrs, new_temp_num, arg_expr) = flatten_rec(
-                arg,
-                &|v| SchedTerm::Var {
-                    info,
-                    name: v.to_string(),
-                    tag: None,
-                },
-                &|name, e| SchedStmt::Decl {
-                    info,
-                    lhs: vec![(name.to_string(), None)],
-                    expr: Some(e),
-                    is_const: true,
-                },
-                temp_num,
-                &flatten_sched_term,
-            );
-            temp_num = new_temp_num;
-            instrs.extend(arg_instrs);
-            new_args.push(arg_expr);
-        }
-        let (func_instrs, mut temp_num, func_expr) = flatten_rec(
+        let (mut instrs, mut temp_num, func_expr, new_args) = flatten_call(
             *target,
-            &|v| SchedTerm::Var {
-                info,
-                name: v.to_string(),
-                tag: None,
-            },
-            &|name, e| SchedStmt::Decl {
-                info,
-                lhs: vec![(name.to_string(), None)],
-                expr: Some(e),
-                is_const: true,
-            },
+            args,
+            &build_sched_var_factory(info),
+            &build_sched_decl_factory(info, true),
             temp_num,
             &flatten_sched_term,
         );
-        instrs.extend(func_instrs);
         let temp_name = format!("_f{temp_num}");
         instrs.push(SchedStmt::Decl {
             lhs: vec![(temp_name.clone(), None)],
@@ -571,17 +571,8 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                 if let Some(expr) = expr {
                     let (new_instrs, new_temp_num, new_rhs) = flatten_top_level(
                         expr,
-                        &|v| SchedTerm::Var {
-                            info,
-                            name: v.to_string(),
-                            tag: None,
-                        },
-                        &|name, e| SchedStmt::Decl {
-                            info,
-                            lhs: vec![(name.to_string(), None)],
-                            expr: Some(e),
-                            is_const,
-                        },
+                        &build_sched_var_factory(info),
+                        &build_sched_decl_factory(info, is_const),
                         temp_num,
                         &flatten_sched_term,
                     );
@@ -611,17 +602,8 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
             } => {
                 let (mut instrs, new_temp_num, new_rhs) = flatten_rec(
                     rhs,
-                    &|v| SchedTerm::Var {
-                        info,
-                        name: v.to_string(),
-                        tag: None,
-                    },
-                    &|name, e| SchedStmt::Decl {
-                        info,
-                        lhs: vec![(name.to_string(), None)],
-                        expr: Some(e),
-                        is_const: true,
-                    },
+                    &build_sched_var_factory(info),
+                    &build_sched_decl_factory(info, true),
                     temp_num,
                     &flatten_sched_term,
                 );
@@ -637,17 +619,8 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
             SchedStmt::Return(info, returned_expr) => {
                 let (mut instrs, new_temp_num, new_ret) = flatten_rec(
                     returned_expr,
-                    &|v| SchedTerm::Var {
-                        info,
-                        name: v.to_string(),
-                        tag: None,
-                    },
-                    &|name, e| SchedStmt::Decl {
-                        info,
-                        lhs: vec![(name.to_string(), None)],
-                        expr: Some(e),
-                        is_const: true,
-                    },
+                    &build_sched_var_factory(info),
+                    &build_sched_decl_factory(info, true),
                     temp_num,
                     &flatten_sched_term,
                 );
@@ -664,17 +637,8 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
             } => {
                 let (guard_instrs, new_temp_num, guard_expr) = flatten_rec(
                     guard,
-                    &|v| SchedTerm::Var {
-                        info,
-                        name: v.to_string(),
-                        tag: None,
-                    },
-                    &|name, e| SchedStmt::Decl {
-                        info,
-                        lhs: vec![(name.to_string(), None)],
-                        expr: Some(e),
-                        is_const: true,
-                    },
+                    &build_sched_var_factory(info),
+                    &build_sched_decl_factory(info, true),
                     temp_num,
                     &flatten_sched_term,
                 );
