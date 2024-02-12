@@ -27,15 +27,17 @@ pub fn flatten_top_level<
     I,
     D: Fn(&str, NestedExpr<T>) -> I,
     C: Fn(T, usize) -> (Vec<I>, usize, NestedExpr<T>),
+    B: Fn(NestedExpr<T>, usize) -> (Vec<I>, usize, NestedExpr<T>),
 >(
     e: NestedExpr<T>,
     mk_var: &F,
     mk_decl: &D,
     temp_num: usize,
     flatten_term: &C,
+    flatten_term_children: &B,
 ) -> (Vec<I>, usize, NestedExpr<T>) {
     match e {
-        x @ NestedExpr::Term(_) => (vec![], temp_num, x),
+        x @ NestedExpr::Term(_) => flatten_term_children(x, temp_num),
         NestedExpr::Binop { info, op, lhs, rhs } => {
             let (mut lhs_instrs, temp_num, lhs_expr) =
                 flatten_rec(*lhs, mk_var, mk_decl, temp_num, flatten_term);
@@ -209,6 +211,45 @@ fn build_spec_decl_factory(info: Info) -> impl Fn(&str, NestedExpr<SpecTerm>) ->
     }
 }
 
+/// Flattens a call's arguments to be variables without nested expressions
+/// # Arguments
+/// * `args` - The arguments to flatten
+/// * `mk_var` - A function that creates a variable from a string
+/// * `mk_decl` - A function that creates a declaration from a string and an
+/// expression
+/// * `temp_num` - The current number of temporary variables
+/// * `flatten_term` - A function that flattens a term
+/// # Returns
+/// * A tuple containing:
+///     * A list of statements that need to be added
+///     * The new number of temporary variables
+///     * The flattened arguments
+fn flatten_call_args<
+    T,
+    F: Fn(&str) -> T,
+    I,
+    D: Fn(&str, NestedExpr<T>) -> I,
+    C: Fn(T, usize) -> (Vec<I>, usize, NestedExpr<T>),
+>(
+    args: Vec<NestedExpr<T>>,
+    mk_var: &F,
+    mk_decl: &D,
+    temp_num: usize,
+    flatten_term: &C,
+) -> (Vec<I>, usize, Vec<NestedExpr<T>>) {
+    let mut instrs = vec![];
+    let mut temp_num = temp_num;
+    let mut new_args = vec![];
+    for arg in args {
+        let (arg_instrs, new_temp_num, arg_expr) =
+            flatten_rec(arg, mk_var, mk_decl, temp_num, flatten_term);
+        temp_num = new_temp_num;
+        instrs.extend(arg_instrs);
+        new_args.push(arg_expr);
+    }
+    (instrs, temp_num, new_args)
+}
+
 /// Flattens a call to be a statement without nested expressions
 /// # Arguments
 /// * `target` - The target of the call
@@ -238,16 +279,8 @@ fn flatten_call<
     temp_num: usize,
     flatten_term: &C,
 ) -> (Vec<I>, usize, NestedExpr<T>, Vec<NestedExpr<T>>) {
-    let mut instrs = vec![];
-    let mut temp_num = temp_num;
-    let mut new_args = vec![];
-    for arg in args {
-        let (arg_instrs, new_temp_num, arg_expr) =
-            flatten_rec(arg, mk_var, mk_decl, temp_num, flatten_term);
-        temp_num = new_temp_num;
-        instrs.extend(arg_instrs);
-        new_args.push(arg_expr);
-    }
+    let (mut instrs, temp_num, new_args) =
+        flatten_call_args(args, mk_var, mk_decl, temp_num, flatten_term);
     let (func_instrs, temp_num, func_expr) =
         flatten_rec(target, mk_var, mk_decl, temp_num, flatten_term);
     instrs.extend(func_instrs);
@@ -368,6 +401,40 @@ fn flatten_spec_term(t: SpecTerm, temp_num: usize) -> (Vec<SpecStmt>, usize, Nes
     }
 }
 
+/// Flattens the spec term so that all children are not nested expressions
+fn flatten_spec_term_children(
+    term: NestedExpr<SpecTerm>,
+    temp_num: usize,
+) -> (Vec<SpecStmt>, usize, NestedExpr<SpecTerm>) {
+    match term {
+        NestedExpr::Term(SpecTerm::Call {
+            args,
+            info,
+            function,
+            template,
+        }) => {
+            let (instrs, temp_num, new_args) = flatten_call_args(
+                args,
+                &build_spec_var_factory(info),
+                &build_spec_decl_factory(info),
+                temp_num,
+                &flatten_spec_term,
+            );
+            (
+                instrs,
+                temp_num,
+                NestedExpr::Term(SpecTerm::Call {
+                    args: new_args,
+                    info,
+                    function,
+                    template,
+                }),
+            )
+        }
+        _ => (vec![], temp_num, term),
+    }
+}
+
 /// Flattens a list of spec statements to be statements without nested expressions
 pub fn flatten_spec(stmts: Vec<SpecStmt>) -> Vec<SpecStmt> {
     let mut res = vec![];
@@ -381,6 +448,7 @@ pub fn flatten_spec(stmts: Vec<SpecStmt>) -> Vec<SpecStmt> {
                     &build_spec_decl_factory(info),
                     temp_num,
                     &flatten_spec_term,
+                    &flatten_spec_term_children,
                 );
                 temp_num = new_temp_num;
                 instrs.push(SpecStmt::Assign {
@@ -548,6 +616,50 @@ fn flatten_sched_call(
     }
 }
 
+/// Flattens the schedule term so that all children are not nested expressions
+fn flatten_sched_term_children(
+    term: NestedExpr<SchedTerm>,
+    temp_num: usize,
+) -> (Vec<SchedStmt>, usize, NestedExpr<SchedTerm>) {
+    match term {
+        NestedExpr::Term(SchedTerm::Call(
+            info,
+            SchedFuncCall {
+                target,
+                templates,
+                args,
+                tag,
+            },
+        )) => {
+            if let ArgsOrEnc::Args(args) = *args {
+                let (instrs, temp_num, new_args) = flatten_call_args(
+                    args,
+                    &build_sched_var_factory(info),
+                    &build_sched_decl_factory(info, true),
+                    temp_num,
+                    &flatten_sched_term,
+                );
+                (
+                    instrs,
+                    temp_num,
+                    NestedExpr::Term(SchedTerm::Call(
+                        info,
+                        SchedFuncCall {
+                            args: Box::new(ArgsOrEnc::Args(new_args)),
+                            target,
+                            templates,
+                            tag,
+                        },
+                    )),
+                )
+            } else {
+                todo!()
+            }
+        }
+        _ => (vec![], temp_num, term),
+    }
+}
+
 /// Flattens a list of schedule statements to be statements without nested expressions
 /// # Arguments
 /// * `stmts` - The list of schedule statements to flatten
@@ -565,34 +677,58 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                 info,
                 lhs,
                 expr,
-                is_const,
+                is_const: true,
             } => {
                 let mut instrs = vec![];
+                let expr = expr.expect("Const decl without expr");
+                let (new_instrs, new_temp_num, new_rhs) = flatten_top_level(
+                    expr,
+                    &build_sched_var_factory(info),
+                    &build_sched_decl_factory(info, true),
+                    temp_num,
+                    &flatten_sched_term,
+                    &flatten_sched_term_children,
+                );
+                temp_num = new_temp_num;
+                instrs.extend(new_instrs);
+                instrs.push(SchedStmt::Decl {
+                    info,
+                    lhs,
+                    expr: Some(new_rhs),
+                    is_const: true,
+                });
+                res.extend(instrs);
+            }
+            SchedStmt::Decl {
+                info,
+                lhs,
+                expr,
+                is_const: false,
+            } => {
                 if let Some(expr) = expr {
-                    let (new_instrs, new_temp_num, new_rhs) = flatten_top_level(
+                    let (new_instrs, new_temp_num, new_rhs) = flatten_rec(
                         expr,
                         &build_sched_var_factory(info),
-                        &build_sched_decl_factory(info, is_const),
+                        &build_sched_decl_factory(info, true),
                         temp_num,
                         &flatten_sched_term,
                     );
                     temp_num = new_temp_num;
-                    instrs.extend(new_instrs);
-                    instrs.push(SchedStmt::Decl {
+                    res.extend(new_instrs);
+                    res.push(SchedStmt::Decl {
                         info,
                         lhs,
                         expr: Some(new_rhs),
-                        is_const,
+                        is_const: false,
                     });
                 } else {
-                    instrs.push(SchedStmt::Decl {
+                    res.push(SchedStmt::Decl {
                         info,
                         lhs,
                         expr: None,
-                        is_const,
+                        is_const: false,
                     });
                 }
-                res.extend(instrs);
             }
             SchedStmt::Assign {
                 info,

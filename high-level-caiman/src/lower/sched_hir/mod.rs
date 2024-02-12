@@ -3,7 +3,7 @@ pub mod cfg;
 mod hir;
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
 
@@ -15,7 +15,7 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-use caiman::assembly::ast as asm;
+use caiman::assembly::ast::{self as asm, Quotient};
 
 use self::{
     analysis::{
@@ -63,6 +63,10 @@ pub struct Funclets {
     /// Map from block id to the set of output variables captured by a
     /// function call
     captured_out: HashMap<usize, BTreeSet<String>>,
+    /// Set of value quotients which are literals in the value specification
+    literal_value_classes: HashSet<String>,
+    /// Set of variables used in the schedule
+    variables: HashSet<String>,
 }
 
 /// A specific funclet in a scheduling function.
@@ -141,10 +145,9 @@ impl<'a> Funclet<'a> {
                 .iter()
                 .enumerate()
                 .map(|(idx, out)| {
-                    (
-                        format!("{RET_VAR}{idx}"),
-                        TagInfo::from(out).tag_info_default(),
-                    )
+                    let s = format!("{RET_VAR}{idx}");
+                    let dt = self.parent.data_types.get(&s).unwrap();
+                    (s, TagInfo::from(out).tag_info_default(dt))
                 })
                 .collect();
         }
@@ -197,7 +200,7 @@ impl<'a> Funclet<'a> {
                 .map(|(name, annot)| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
                     typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
-                    tags: TagInfo::from(annot).tags_vec_default(),
+                    tags: TagInfo::from(annot).tags_vec_default(&self.parent.data_types[name]),
                 })
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
@@ -213,7 +216,7 @@ impl<'a> Funclet<'a> {
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(),
+                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
                     }
                 })
                 .collect()
@@ -236,7 +239,7 @@ impl<'a> Funclet<'a> {
                                 self.block.src_loc
                             )
                         })
-                        .tags_vec_default(),
+                        .tags_vec_default(&self.parent.data_types[var]),
                 })
                 .collect()
         }
@@ -280,7 +283,7 @@ impl<'a> Funclet<'a> {
                     asm::FuncletArgument {
                         name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(),
+                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
                     }
                 })
                 .collect()
@@ -302,7 +305,7 @@ impl<'a> Funclet<'a> {
                             )
                         })
                         .clone(),
-                    tags: tag.tags_vec_default(),
+                    tags: tag.tags_vec_default(&self.parent.data_types[&var]),
                 })
                 .collect()
         }
@@ -375,10 +378,28 @@ impl<'a> Funclet<'a> {
         self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
 
-    /// Gets the data type of the specified variable
+    /// Gets the data type of the specified variable. Note that
+    /// the data type of a variable will be the data type of the value,
+    /// not a reference data type
     #[inline]
     pub fn get_dtype(&self, var: &str) -> Option<&DataType> {
         self.parent.data_types.get(var)
+    }
+
+    /// Returns true if the specified tag is a literal node in the value specification
+    pub fn is_literal_value(&self, t: &Quotient) -> bool {
+        match t {
+            Quotient::Input(Some(t)) | Quotient::Node(Some(t)) | Quotient::Output(Some(t)) => t
+                .node
+                .as_ref()
+                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0)),
+            _ => false,
+        }
+    }
+
+    /// Returns true if the specified variable is a mutable reference or a mutable variable
+    pub fn is_var_or_ref(&self, v: &str) -> bool {
+        self.parent.variables.contains(v) || matches!(self.get_dtype(v), Some(DataType::Ref(_)))
     }
 }
 
@@ -446,11 +467,11 @@ impl Funclets {
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
         let mut cfg = Cfg::new(f.statements, &f.output, specs);
-        let (mut types, mut data_types) =
+        let (mut types, mut data_types, variables) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
-        op_transform_pass(&mut cfg, &types);
-        deref_transform_pass(&mut cfg, &mut types, &mut data_types);
+        op_transform_pass(&mut cfg, &data_types);
+        deref_transform_pass(&mut cfg, &mut types, &mut data_types, &variables);
         let live_vars = analyze(&mut cfg, &LiveVars::top());
         let captured_out = Self::terminator_transform_pass(&mut cfg, &live_vars);
         cfg = transform_to_ssa(cfg, &live_vars);
@@ -478,7 +499,7 @@ impl Funclets {
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,
-            &TagAnalysis::top(specs, &hir_inputs, &hir_outputs),
+            &TagAnalysis::top(specs, &hir_inputs, &hir_outputs, &data_types),
         );
         let finfo = FuncInfo {
             name: f.name,
@@ -494,6 +515,8 @@ impl Funclets {
             finfo,
             specs: specs_rc,
             captured_out,
+            literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
+            variables,
         }
     }
 
@@ -504,12 +527,20 @@ impl Funclets {
     /// * `f` - The scheduling function information to collect types from
     /// # Returns
     /// A tuple of the map of variable names to their local types and the map of
-    /// variable names to their data types.
-    fn collect_types(f: &SchedInfo) -> (HashMap<String, asm::TypeId>, HashMap<String, DataType>) {
+    /// variable names to their data types, and a set of mutable variables
+    fn collect_types(
+        f: &SchedInfo,
+    ) -> (
+        HashMap<String, asm::TypeId>,
+        HashMap<String, DataType>,
+        HashSet<String>,
+    ) {
         let mut types = HashMap::new();
+        let mut variables = HashSet::new();
         for (var, typ) in &f.types {
             if f.defined_names.get(var) == Some(&Mutability::Mut) {
                 types.insert(var.to_string(), make_ref(data_type_to_local_type(typ)));
+                variables.insert(var.to_string());
             } else {
                 types.insert(var.to_string(), data_type_to_local_type(typ));
             }
@@ -519,7 +550,7 @@ impl Funclets {
             data_types.insert(format!("{RET_VAR}{id}"), out_ty.clone());
             types.insert(format!("{RET_VAR}{id}"), data_type_to_local_type(out_ty));
         }
-        (types, data_types)
+        (types, data_types, variables)
     }
 
     /// Gets the funclet with the given id
@@ -604,13 +635,4 @@ impl Funclets {
             .chain(returns)
             .collect()
     }
-}
-
-/// Returns true if the type is a reference
-pub fn is_ref(typ: &asm::TypeId) -> bool {
-    matches!(typ, asm::TypeId::Local(s) if s.starts_with('&'))
-        || matches!(
-            typ,
-            asm::TypeId::FFI(asm::FFIType::ConstRef(_) | asm::FFIType::MutRef(_))
-        )
 }

@@ -55,6 +55,15 @@ impl PartialEq for DataType {
     }
 }
 
+impl DataType {
+    /// Returns true if `self` refines `b`, that is is the same as `b` or is a
+    /// reference to `b`
+    #[must_use]
+    pub fn refines(&self, b: &Self) -> bool {
+        self == b || matches!(self, Self::Ref(ref a) if b == a.as_ref())
+    }
+}
+
 impl Eq for DataType {}
 
 impl std::hash::Hash for DataType {
@@ -135,6 +144,7 @@ pub enum Uop {
     LNot,
     Not,
     Ref,
+    Deref,
 }
 
 /// A literal in the spec languages
@@ -364,6 +374,17 @@ pub enum SchedTerm {
     },
     Call(Info, SchedFuncCall),
     Hole(Info),
+}
+
+impl SchedTerm {
+    #[must_use]
+    pub const fn get_tags(&self) -> Option<&Tags> {
+        match self {
+            Self::Lit { tag, .. } | Self::Var { tag, .. } => tag.as_ref(),
+            Self::Call(_, call) => call.tag.as_ref(),
+            Self::Hole(_) => None,
+        }
+    }
 }
 
 /// A scheduling expression

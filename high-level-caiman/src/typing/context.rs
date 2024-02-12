@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::error::{type_error, LocalError};
+use crate::error::{type_error, Info, LocalError};
 use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
 use crate::parse::ast::FullType;
+use crate::typing::LOCAL_TEMP_FLAGS;
 use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
@@ -43,7 +44,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::TypeId::FFI(BOOL_FFI_TYPE),
                 storage_place: ir::Place::Local,
-                buffer_flags: ir::BufferFlags::new(),
+                buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
@@ -57,7 +58,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::TypeId::FFI(asm::FFIType::I64),
                 storage_place: ir::Place::Local,
-                buffer_flags: ir::BufferFlags::new(),
+                buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
         asm::Declaration::TypeDecl(asm::TypeDecl::Local(asm::LocalType {
@@ -71,7 +72,7 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
             data: asm::LocalTypeInfo::Ref {
                 storage_type: asm::TypeId::FFI(asm::FFIType::I32),
                 storage_place: ir::Place::Local,
-                buffer_flags: ir::BufferFlags::new(),
+                buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
     ]
@@ -121,22 +122,44 @@ fn type_check_spec(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalEr
 }
 
 /// Adds all base types to the scheduling info struct for all defined names that
-/// can be resolved. There is no error of a name cannot be resolved. This is
+/// can be resolved. There is no error if a name cannot be resolved. This is
 /// bc the schedule may contain holes.
+///
+/// Also  performs final cleanup checks such as making sure there are no
+/// references to references.
+/// # Arguments
+/// * `env` - the type environment to use for resolving types
+/// * `types` - the map to add types to
+/// * `names` - the map of names to mutabilities
+/// # Returns
+/// * Ok if all types are resolved
+/// * Err if a post-processing check fails
 fn resolve_types(
     env: &DTypeEnv,
     types: &mut HashMap<String, DataType>,
     names: &HashMap<String, Mutability>,
-) {
+) -> Result<(), LocalError> {
     for name in names.keys() {
         if let Some(dt) = env.env.get_type(name) {
             if let Ok(dt) = DTypeConstraint::try_from(dt) {
                 if let Ok(dt) = DataType::try_from(dt) {
+                    if matches!(&dt, DataType::Ref(inner) if matches!(**inner, DataType::Ref(_)))
+                        || (matches!(dt, DataType::Ref(_)) && names[name] == Mutability::Mut)
+                    {
+                        return Err(type_error(
+                            Info::default(),
+                            &format!(
+                                "Reference to reference types are not allowed. Found: {name}: {dt}",
+                            ),
+                        ));
+                    }
+
                     types.insert(name.clone(), dt);
                 }
             }
         }
     }
+    Ok(())
 }
 
 /// Collects type constraints for scheduling functions.
@@ -165,7 +188,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
             }
             for ((decl_name, decl_typ), (_, spec_typ)) in input.iter().zip(val_sig.input.iter()) {
                 if let Some(FullType { base: Some(dt), .. }) = decl_typ {
-                    if dt.base != *spec_typ {
+                    if !dt.base.refines(spec_typ) {
                         return Err(type_error(
                             *info,
                             &format!(
@@ -173,20 +196,21 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                             ),
                         ));
                     }
+                    env.add_dtype_constraint(decl_name, dt.base.clone(), *info)?;
+                } else {
+                    panic!("All input data types should be specified for now");
                 }
-                env.add_dtype_constraint(decl_name, spec_typ.clone(), *info)?;
             }
             let outs = val_sig.output.clone();
             collect_schedule(&ctx, &mut env, statements, output, &outs, *info, name)?;
             let sched_info = ctx.scheds.get_mut(name).unwrap().unwrap_sched_mut();
             for (in_name, _) in input {
-                // TODO: pass references
                 sched_info
                     .defined_names
                     .insert(in_name.clone(), Mutability::Const);
             }
             collect_sched_names(statements.iter(), &mut sched_info.defined_names)?;
-            resolve_types(&env, &mut sched_info.types, &sched_info.defined_names);
+            resolve_types(&env, &mut sched_info.types, &sched_info.defined_names)?;
         }
     }
     Ok(ctx)
@@ -374,13 +398,54 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
     Ok(ctx)
 }
 
+/// Converts schedule function inputs and outputs into a datatype signature.
+/// # Errors
+/// Caused if a schedule does not specify datatypes for its inputs or outputs.
+fn make_signature(
+    input: &[(String, Option<FullType>)],
+    output: &[FullType],
+    info: Info,
+) -> Result<Signature, LocalError> {
+    Ok(Signature {
+        input: input
+            .iter()
+            .map(|x| {
+                Ok(x.1
+                    .as_ref()
+                    .ok_or_else(|| type_error(info, "Schedule inputs require a type"))?
+                    .base
+                    .as_ref()
+                    .ok_or_else(|| type_error(info, "Schedule inputs require a type"))?
+                    .base
+                    .clone())
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        output: output
+            .iter()
+            .map(|x| {
+                Ok(x.base
+                    .as_ref()
+                    .ok_or_else(|| type_error(info, "Function outputs require a data type"))?
+                    .base
+                    .clone())
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
 /// Collects spec info for scheduling functions.
 fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context, LocalError> {
     for s in tl {
         if let TopLevel::SchedulingFunc {
-            name, specs, info, ..
+            name,
+            specs,
+            info,
+            input,
+            output,
+            ..
         } = s
         {
+            let sig = make_signature(input, output, *info)?;
             ctx.scheds.insert(
                 name.to_string(),
                 SchedOrExtern::Sched(SchedInfo::new(
@@ -393,6 +458,7 @@ fn collect_sched_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context
                         )
                     })?,
                     &ctx,
+                    sig,
                     info,
                 )?),
             );

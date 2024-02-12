@@ -1,0 +1,499 @@
+[
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                10,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [],
+        output: [],
+        specs: [
+            "a",
+        ],
+        statements: [
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        4,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        4,
+                        15,
+                    ),
+                },
+                lhs: [
+                    (
+                        "c",
+                        None,
+                    ),
+                ],
+                is_const: false,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    4,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    4,
+                                    14,
+                                ),
+                            },
+                            lit: Int(
+                                "2",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        5,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        5,
+                        17,
+                    ),
+                },
+                lhs: [
+                    (
+                        "z",
+                        None,
+                    ),
+                ],
+                is_const: false,
+                expr: Some(
+                    Uop {
+                        info: Info {
+                            start_ln_and_col: (
+                                5,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                5,
+                                16,
+                            ),
+                        },
+                        op: Deref,
+                        expr: Uop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    5,
+                                    14,
+                                ),
+                                end_ln_and_col: (
+                                    5,
+                                    16,
+                                ),
+                            },
+                            op: Deref,
+                            expr: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            5,
+                                            15,
+                                        ),
+                                        end_ln_and_col: (
+                                            5,
+                                            16,
+                                        ),
+                                    },
+                                    name: "y",
+                                    tag: None,
+                                },
+                            ),
+                        },
+                    },
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        6,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        6,
+                        24,
+                    ),
+                },
+                lhs: [
+                    (
+                        "b",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Uop {
+                        info: Info {
+                            start_ln_and_col: (
+                                6,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                6,
+                                23,
+                            ),
+                        },
+                        op: LNot,
+                        expr: Uop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    6,
+                                    14,
+                                ),
+                                end_ln_and_col: (
+                                    6,
+                                    23,
+                                ),
+                            },
+                            op: LNot,
+                            expr: Uop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        15,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        23,
+                                    ),
+                                },
+                                op: LNot,
+                                expr: Uop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            6,
+                                            16,
+                                        ),
+                                        end_ln_and_col: (
+                                            6,
+                                            23,
+                                        ),
+                                    },
+                                    op: LNot,
+                                    expr: Uop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                6,
+                                                17,
+                                            ),
+                                            end_ln_and_col: (
+                                                6,
+                                                23,
+                                            ),
+                                        },
+                                        op: LNot,
+                                        expr: Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        6,
+                                                        18,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        6,
+                                                        23,
+                                                    ),
+                                                },
+                                                lit: Bool(
+                                                    false,
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
+                                    },
+                                },
+                            },
+                        },
+                    },
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        7,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        7,
+                        19,
+                    ),
+                },
+                lhs: [
+                    (
+                        "j",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Uop {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                18,
+                            ),
+                        },
+                        op: Not,
+                        expr: Uop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    7,
+                                    14,
+                                ),
+                                end_ln_and_col: (
+                                    7,
+                                    18,
+                                ),
+                            },
+                            op: Not,
+                            expr: Uop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        7,
+                                        15,
+                                    ),
+                                    end_ln_and_col: (
+                                        7,
+                                        18,
+                                    ),
+                                },
+                                op: Not,
+                                expr: Uop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            7,
+                                            16,
+                                        ),
+                                        end_ln_and_col: (
+                                            7,
+                                            18,
+                                        ),
+                                    },
+                                    op: Not,
+                                    expr: Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    7,
+                                                    17,
+                                                ),
+                                                end_ln_and_col: (
+                                                    7,
+                                                    18,
+                                                ),
+                                            },
+                                            lit: Int(
+                                                "0",
+                                            ),
+                                            tag: None,
+                                        },
+                                    ),
+                                },
+                            },
+                        },
+                    },
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        8,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        8,
+                        18,
+                    ),
+                },
+                lhs: [
+                    (
+                        "k",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Uop {
+                        info: Info {
+                            start_ln_and_col: (
+                                8,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                8,
+                                17,
+                            ),
+                        },
+                        op: Deref,
+                        expr: Uop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    8,
+                                    14,
+                                ),
+                                end_ln_and_col: (
+                                    8,
+                                    17,
+                                ),
+                            },
+                            op: Deref,
+                            expr: Uop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        8,
+                                        15,
+                                    ),
+                                    end_ln_and_col: (
+                                        8,
+                                        17,
+                                    ),
+                                },
+                                op: Deref,
+                                expr: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                8,
+                                                16,
+                                            ),
+                                            end_ln_and_col: (
+                                                8,
+                                                17,
+                                            ),
+                                        },
+                                        name: "h",
+                                        tag: None,
+                                    },
+                                ),
+                            },
+                        },
+                    },
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        9,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        9,
+                        20,
+                    ),
+                },
+                lhs: [
+                    (
+                        "p",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Uop {
+                        info: Info {
+                            start_ln_and_col: (
+                                9,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                9,
+                                19,
+                            ),
+                        },
+                        op: Neg,
+                        expr: Uop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    9,
+                                    14,
+                                ),
+                                end_ln_and_col: (
+                                    9,
+                                    19,
+                                ),
+                            },
+                            op: Neg,
+                            expr: Uop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        9,
+                                        15,
+                                    ),
+                                    end_ln_and_col: (
+                                        9,
+                                        19,
+                                    ),
+                                },
+                                op: Neg,
+                                expr: Uop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            9,
+                                            16,
+                                        ),
+                                        end_ln_and_col: (
+                                            9,
+                                            19,
+                                        ),
+                                    },
+                                    op: Neg,
+                                    expr: Uop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                9,
+                                                17,
+                                            ),
+                                            end_ln_and_col: (
+                                                9,
+                                                19,
+                                            ),
+                                        },
+                                        op: Neg,
+                                        expr: Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        9,
+                                                        18,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        9,
+                                                        19,
+                                                    ),
+                                                },
+                                                lit: Int(
+                                                    "5",
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
+                                    },
+                                },
+                            },
+                        },
+                    },
+                ),
+            },
+        ],
+    },
+]

@@ -5,12 +5,14 @@ use crate::{
     error::{type_error, Info, LocalError},
     parse::ast::{
         Binop, DataType, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedLocalCall,
-        SchedStmt, SchedTerm,
+        SchedStmt, SchedTerm, Uop,
     },
 };
 use std::iter::once;
 
-use super::{binop_to_contraints, types::DTypeConstraint, Context, DTypeEnv, Mutability};
+use super::{
+    binop_to_contraints, types::DTypeConstraint, uop_to_contraints, Context, DTypeEnv, Mutability,
+};
 
 /// Collects all defined names in a spec and errors if any constants
 /// are redefined.
@@ -116,6 +118,39 @@ fn collect_bop(
     env.add_raw_constraint(dest_name, &ret_c, info)?;
     env.add_raw_constraint(lhs_name, &left_c, info)?;
     env.add_raw_constraint(rhs_name, &right_c, info)
+}
+
+fn collect_assign_uop(
+    dest: &[(String, Option<FullType>)],
+    op: Uop,
+    expr: &SchedExpr,
+    env: &mut DTypeEnv,
+    info: Info,
+) -> Result<(), LocalError> {
+    let expr_name = enum_cast!(
+        SchedTerm::Var { name, .. },
+        name,
+        enum_cast!(SchedExpr::Term, expr)
+    );
+    let (expr_c, ret_c) = uop_to_contraints(op, &mut env.env);
+    if dest.len() != 1 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: Operator {op:?} has 1 destination, found {}",
+                dest.len()
+            ),
+        ));
+    }
+    let (dest_name, dest_annot) = &dest[0];
+    if let Some(FullType {
+        base: Some(anot), ..
+    }) = dest_annot
+    {
+        env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
+    }
+    env.add_raw_constraint(dest_name, &ret_c, info)?;
+    env.add_raw_constraint(expr_name, &expr_c, info)
 }
 
 /// Collects constraints for a literal assignment.
@@ -362,6 +397,11 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => collect_bop(dest, *op, lhs, rhs, env, *info)?,
             SchedStmt::Decl {
                 lhs: dest,
+                expr: Some(SchedExpr::Uop { info, op, expr }),
+                ..
+            } => collect_assign_uop(dest, *op, expr, env, *info)?,
+            SchedStmt::Decl {
+                lhs: dest,
                 expr: Some(SchedExpr::Term(SchedTerm::Lit { lit, .. })),
                 info,
                 ..
@@ -474,7 +514,7 @@ pub fn collect_schedule(
             base: Some(anot), ..
         } = fn_t
         {
-            if &anot.base != sig_t {
+            if !anot.base.refines(sig_t) {
                 return Err(type_error(
                     info,
                     &format!(
@@ -482,8 +522,10 @@ pub fn collect_schedule(
                     ),
                 ));
             }
+            env.add_dtype_constraint(ret_name, anot.base.clone(), info)?;
+        } else {
+            panic!("Function return type has no base type");
         }
-        env.add_dtype_constraint(ret_name, sig_t.clone(), info)?;
     }
     Ok(())
 }

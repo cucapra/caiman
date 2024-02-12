@@ -98,6 +98,7 @@ impl TripleTag {
     pub const fn is_any_specified(&self) -> bool {
         self.value.is_some() || self.spatial.is_some() || self.timeline.is_some()
     }
+
 }
 
 impl From<TripleTag> for Tags {
@@ -480,8 +481,20 @@ impl HirBody {
                         op: HirOp::Binary(op),
                         args: vec![lhs_term.clone(), rhs_term.clone()],
                     }
-                }
-                _ => todo!(),
+                },
+                SchedExpr::Uop { 
+                    info, op, expr
+                } => {
+                    let term = enum_cast!(SchedExpr::Term, *expr);
+                    Self::Op {
+                        info,
+                        dest: lhs[0].0.clone(),
+                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
+                        op: HirOp::Unary(op),
+                        args: vec![term],
+                    }
+                },
+                SchedExpr::Conditional { .. } => panic!("Inline conditonal expresssions not allowed in schedule"),
             },
             SchedStmt::Decl {
                 info,

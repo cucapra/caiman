@@ -1,0 +1,154 @@
+[
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                2,
+                1,
+            ),
+            end_ln_and_col: (
+                8,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                2,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                2,
+                                16,
+                            ),
+                        },
+                        base: Int(
+                            I64,
+                        ),
+                        flags: [],
+                        settings: [],
+                    },
+                ),
+                tags: [],
+            },
+        ],
+        specs: [
+            "a",
+        ],
+        statements: [
+            If {
+                info: Info {
+                    start_ln_and_col: (
+                        3,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        7,
+                        6,
+                    ),
+                },
+                guard: Term(
+                    Lit {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                8,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                12,
+                            ),
+                        },
+                        lit: Bool(
+                            true,
+                        ),
+                        tag: None,
+                    },
+                ),
+                tag: None,
+                true_block: [
+                    Return(
+                        Info {
+                            start_ln_and_col: (
+                                4,
+                                9,
+                            ),
+                            end_ln_and_col: (
+                                4,
+                                11,
+                            ),
+                        },
+                        Term(
+                            Lit {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        9,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        11,
+                                    ),
+                                },
+                                lit: Int(
+                                    "10",
+                                ),
+                                tag: None,
+                            },
+                        ),
+                    ),
+                ],
+                false_block: [
+                    Block(
+                        Info {
+                            start_ln_and_col: (
+                                5,
+                                12,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                6,
+                            ),
+                        },
+                        [
+                            Return(
+                                Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        9,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        11,
+                                    ),
+                                },
+                                Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                6,
+                                                9,
+                                            ),
+                                            end_ln_and_col: (
+                                                6,
+                                                11,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "20",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
+            },
+        ],
+    },
+]
