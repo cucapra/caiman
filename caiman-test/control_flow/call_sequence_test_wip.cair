@@ -1,0 +1,106 @@
+// equivalent code:
+// addone(x : i64) -> i64 {
+//     x + 1
+// }
+// double(x : i64) -> i64 {
+//     x * 2
+// }
+// main(x : i64) -> i64 {
+//     double(addone(x))
+// }
+
+version 0.0.2
+
+pipeline "main" = %double_head;
+
+type i64;
+ref %i64l : i64-local<flags=[]>;
+event %event0;
+buffer_space %buffspace;
+native_value %i64n : i64;
+
+function @mult(i64, i64) -> i64;
+function @add(i64, i64) -> i64;
+function @double(i64) -> i64;
+function @addone(i64) -> i64;
+function @main(i64) -> i64;
+
+external-cpu-pure[impl @mult] %mult(i64, i64) -> i64;
+external-cpu-pure[impl @add] %add(i64, i64) -> i64;
+
+value[impl default @double] %double(%x : i64) -> i64 {
+    %two = constant %i64n 2;
+    %result_t = call @mult(%x, %two);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+value[impl default @addone] %addone(%x : i64) -> i64 {
+    %one = constant %i64n 1;
+    %result_t = call @add(%x, %one);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+value[impl default @main] %main(%x : i64) -> i64 {
+    %y_t = call @addone(%x);
+    %y = extract %y_t 0;
+
+    %result_t = call @double(%y);
+    %result = extract %result_t 0;
+
+    return %result;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %double, timeline $time = %time, spatial $space = %space] 
+%double_head
+<node($time.%e)-usable, node($time.%e)-usable>
+    (%x     : node($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+    -> 
+    node($val.%result)-usable node($time.%e)-usable none($space)-usable %i64n
+{
+    %local_ref = alloc-temporary local [storage, map_write] i64;
+
+    local-do-builtin node($val.%two)() -> %local_ref;
+    %two = read-ref i64 %local_ref;
+    local-do-external %double node($val.%result_t)(%x, %two) -> %local_ref;
+    %result = read-ref i64 %local_ref;
+
+    return %result;
+}
+
+schedule[value $val = %addone, timeline $time = %time, spatial $space = %space] 
+%addone_head
+<node($time.%e)-usable, node($time.%e)-usable>
+    (%x     : node($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+    -> 
+    node($val.%result)-usable node($time.%e)-usable none($space)-usable %i64n
+{
+    %local_ref = alloc-temporary local [storage, map_write] i64;
+
+    local-do-builtin node($val.%one)() -> %local_ref;
+    %one = read-ref i64 %local_ref;
+    local-do-external %addone node($val.%result_t)(%x, %one) -> %local_ref;
+    %result = read-ref i64 %local_ref;
+
+    return %result;
+}
+
+// value[impl default @main] %main_head(%x : i64) -> i64 {
+//     %djoin = default-join;
+//     %join = inline-join %main_second [] %djoin;
+
+//     schedule-call %min[
+//             value node($val.%left_t),
+//             timeline node($time.%e),
+//             spatial node($space.%bs)]
+//         (%x) %join;
+// }
