@@ -734,21 +734,29 @@ fn flatten_sched_rec(stmts: Vec<SchedStmt>, mut temp_num: usize) -> (Vec<SchedSt
                 info,
                 lhs,
                 rhs,
-                tag,
+                lhs_is_ref,
             } => {
-                let (mut instrs, new_temp_num, new_rhs) = flatten_rec(
-                    rhs,
+                let (mut instrs, temp_num1, new_lhs) = flatten_rec(
+                    lhs,
                     &build_sched_var_factory(info),
                     &build_sched_decl_factory(info, true),
                     temp_num,
                     &flatten_sched_term,
                 );
+                let (instrs2, new_temp_num, new_rhs) = flatten_rec(
+                    rhs,
+                    &build_sched_var_factory(info),
+                    &build_sched_decl_factory(info, true),
+                    temp_num1,
+                    &flatten_sched_term,
+                );
                 temp_num = new_temp_num;
+                instrs.extend(instrs2);
                 instrs.push(SchedStmt::Assign {
                     info,
-                    lhs,
+                    lhs: new_lhs,
                     rhs: new_rhs,
-                    tag,
+                    lhs_is_ref,
                 });
                 res.extend(instrs);
             }

@@ -65,13 +65,17 @@ fn cfg_gen() {
         },
         SchedStmt::Assign {
             info: Info::default(),
-            lhs: String::from("x"),
-            tag: None,
+            lhs: SchedExpr::Term(SchedTerm::Var {
+                name: String::from("x"),
+                info: Info::default(),
+                tag: None,
+            }),
             rhs: SchedExpr::Term(SchedTerm::Lit {
                 info: Info::default(),
                 lit: SchedLiteral::Int(5.to_string()),
                 tag: None,
             }),
+            lhs_is_ref: false,
         },
         SchedStmt::Return(
             Info::default(),
@@ -116,25 +120,33 @@ fn if_gen() {
             info: Info::default(),
             true_block: vec![SchedStmt::Assign {
                 info: Info::default(),
-                tag: None,
-                lhs: String::from("x"),
+                lhs: SchedExpr::Term(SchedTerm::Var {
+                    name: String::from("x"),
+                    info: Info::default(),
+                    tag: None,
+                }),
                 rhs: SchedExpr::Term(SchedTerm::Lit {
                     info: Info::default(),
                     lit: SchedLiteral::Int(String::from("1")),
                     tag: None,
                 }),
+                lhs_is_ref: false,
             }],
             false_block: vec![SchedStmt::Block(
                 Info::default(),
                 vec![SchedStmt::Assign {
                     info: Info::default(),
-                    tag: None,
-                    lhs: String::from("x"),
+                    lhs: SchedExpr::Term(SchedTerm::Var {
+                        name: String::from("x"),
+                        info: Info::default(),
+                        tag: None,
+                    }),
                     rhs: SchedExpr::Term(SchedTerm::Lit {
                         info: Info::default(),
                         lit: SchedLiteral::Int(String::from("2")),
                         tag: None,
                     }),
+                    lhs_is_ref: false,
                 }],
             )],
         },
@@ -186,25 +198,33 @@ fn if_ret() {
             info: Info::default(),
             true_block: vec![SchedStmt::Assign {
                 info: Info::default(),
-                tag: None,
-                lhs: String::from("x"),
+                lhs: SchedExpr::Term(SchedTerm::Var {
+                    name: String::from("x"),
+                    info: Info::default(),
+                    tag: None,
+                }),
                 rhs: SchedExpr::Term(SchedTerm::Lit {
                     info: Info::default(),
                     lit: SchedLiteral::Int(String::from("1")),
                     tag: None,
                 }),
+                lhs_is_ref: false,
             }],
             false_block: vec![SchedStmt::Block(
                 Info::default(),
                 vec![SchedStmt::Assign {
                     info: Info::default(),
-                    tag: None,
-                    lhs: String::from("x"),
+                    lhs: SchedExpr::Term(SchedTerm::Var {
+                        name: String::from("x"),
+                        info: Info::default(),
+                        tag: None,
+                    }),
                     rhs: SchedExpr::Term(SchedTerm::Lit {
                         info: Info::default(),
                         lit: SchedLiteral::Int(String::from("2")),
                         tag: None,
                     }),
+                    lhs_is_ref: false,
                 }],
             )],
         },

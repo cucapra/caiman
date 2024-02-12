@@ -96,15 +96,11 @@ impl Fact for RefPropagation {
 
     fn transfer_instr(&mut self, mut stmt: HirInstr<'_>, _: usize) {
         // assume single assignment
-        stmt.rename_uses(&mut |name, ut| {
-            if ut == UseType::Read {
-                self.aliases
-                    .get(name)
-                    .cloned()
-                    .unwrap_or_else(|| name.to_string())
-            } else {
-                name.to_string()
-            }
+        stmt.rename_uses(&mut |name, _| {
+            self.aliases
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| name.to_string())
         });
         if let HirInstr::Stmt(HirBody::Op {
             op: HirOp::Unary(Uop::Ref),
@@ -329,7 +325,9 @@ fn deref_transform_instr(
                     data_types.insert(lhs.clone(), data_types[&old_lhs].clone());
                 }
                 HirBody::RefStore { lhs, .. } => {
-                    *lhs = format!("_{lhs}_ref");
+                    if variables.contains(lhs) {
+                        *lhs = format!("_{lhs}_ref");
+                    }
                 }
                 _ => (),
             }

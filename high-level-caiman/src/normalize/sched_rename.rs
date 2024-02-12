@@ -104,7 +104,7 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
             }
             SchedStmt::Assign { lhs, rhs, .. } => {
                 rename_expr_uses(rhs, &cur_names);
-                *lhs = get_cur_name(lhs, &cur_names);
+                rename_expr_uses(lhs, &cur_names);
             }
             SchedStmt::If {
                 guard,

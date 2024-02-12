@@ -413,9 +413,10 @@ pub enum SchedStmt {
     },
     Assign {
         info: Info,
-        tag: Option<Tags>,
-        lhs: Name,
+        lhs: SchedExpr,
         rhs: SchedExpr,
+        /// whether the LHS is a reference (assignment of the form `*x = y`)
+        lhs_is_ref: bool,
     },
     If {
         info: Info,

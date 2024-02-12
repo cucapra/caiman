@@ -65,13 +65,13 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 collect_sched_names(false_block.iter(), names)?;
             }
             SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names)?,
-            SchedStmt::Assign { lhs, info, .. } => {
-                if matches!(names.get(lhs), None | Some(Mutability::Const)) {
-                    return Err(type_error(
-                        *info,
-                        &format!("Cannot assign to immutable or undefined variable {lhs}"),
-                    ));
-                }
+            SchedStmt::Assign { lhs, .. } => {
+                let lhs = enum_cast!(
+                    SchedTerm::Var { name, .. },
+                    name,
+                    enum_cast!(SchedExpr::Term, lhs)
+                );
+                assert!(names.contains_key(lhs));
             }
             _ => (),
         }
@@ -375,6 +375,7 @@ fn collect_null_decl(
 /// Unifies base types for a schedule.
 /// # Returns
 /// The type variables of the values being returned to the parent scope.
+#[allow(clippy::too_many_lines)]
 fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
     ctx: &Context,
     env: &mut DTypeEnv,
@@ -422,11 +423,19 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 collect_assign_call(ctx, env, dest, &call_info.unwrap_local_call(), *info)?;
             }
             SchedStmt::Assign {
-                lhs: dest,
+                lhs: SchedExpr::Term(SchedTerm::Var { name: dest, .. }),
                 rhs: SchedExpr::Term(SchedTerm::Var { name, .. }),
                 info,
+                lhs_is_ref,
                 ..
-            } => env.add_var_equiv(dest, name, *info)?,
+            } => {
+                if *lhs_is_ref {
+                    let x = env.env.get_type(name).unwrap();
+                    env.add_constraint(dest, DTypeConstraint::Ref(x), *info)?;
+                } else {
+                    env.add_var_equiv(dest, name, *info)?;
+                }
+            }
             SchedStmt::Block(_, b) => {
                 assert_eq!(num_stmts, 0);
                 return collect_sched_helper(ctx, env, b.iter(), b.len());

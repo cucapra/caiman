@@ -442,18 +442,22 @@ impl HirBody {
         match stmt {
             SchedStmt::Assign {
                 info,
-                tag,
                 lhs,
                 rhs,
-            } => {
-                let rhs = enum_cast!(SchedExpr::Term, rhs);
-                Self::RefStore {
-                    info,
-                    lhs_tags: TripleTag::from_opt(&tag, specs),
-                    lhs,
-                    rhs,
-                }
-            }
+                ..
+            } => {   
+                if let SchedExpr::Term(SchedTerm::Var { name, tag, ..}) = lhs {
+                        let rhs = enum_cast!(SchedExpr::Term, rhs);
+                    Self::RefStore {
+                        info,
+                        lhs_tags: TripleTag::from_opt(&tag, specs),
+                        lhs: name,
+                        rhs,
+                    }
+                } else {
+                    panic!("Invalid assignment")
+                }       
+            },
             SchedStmt::Decl {
                 info,
                 lhs,
