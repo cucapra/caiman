@@ -58,7 +58,10 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         println!("{ast:#?}");
         return Ok(());
     }
-    let ast = normalize::normalize_ast(ast);
+    let ast = normalize::normalize_ast(ast).map_err(|e| error::Error {
+        error: e,
+        filename: args.filename.clone(),
+    })?;
     if args.normalize {
         println!("{ast:#?}");
         return Ok(());
