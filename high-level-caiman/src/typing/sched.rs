@@ -126,12 +126,16 @@ fn collect_assign_uop(
     expr: &SchedExpr,
     env: &mut DTypeEnv,
     info: Info,
+    mutables: &mut HashMap<String, Info>,
 ) -> Result<(), LocalError> {
     let expr_name = enum_cast!(
         SchedTerm::Var { name, .. },
         name,
         enum_cast!(SchedExpr::Term, expr)
     );
+    if op == Uop::Ref {
+        mutables.insert(expr_name.clone(), info);
+    }
     let (expr_c, ret_c) = uop_to_contraints(op, &mut env.env);
     if dest.len() != 1 {
         return Err(type_error(
@@ -407,7 +411,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 lhs: dest,
                 expr: Some(SchedExpr::Uop { info, op, expr }),
                 ..
-            } => collect_assign_uop(dest, *op, expr, env, *info)?,
+            } => collect_assign_uop(dest, *op, expr, env, *info, mutables)?,
             SchedStmt::Decl {
                 lhs: dest,
                 expr: Some(SchedExpr::Term(SchedTerm::Lit { lit, .. })),

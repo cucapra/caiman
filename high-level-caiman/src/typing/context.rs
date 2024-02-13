@@ -218,7 +218,7 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                 {
                     return Err(type_error(
                         info,
-                        &format!("Immutable variable {var} cannot be assigned to",),
+                        &format!("Immutable variable {var} cannot be assigned to or have its reference taken",),
                     ));
                 }
             }
