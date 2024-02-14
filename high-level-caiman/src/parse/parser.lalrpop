@@ -73,7 +73,7 @@ TopLevel: TopLevel = {
     <@L> "fn" <Id> "(" <CommaList<MaybeArgFullType>> ")" <("->" <MultiType>)?>
         "impls" <CommaList<Id>>
     "{"
-        <Sequence>
+        <MaybeUnitSequence>
     "}" <@R> => astf.sched_function(<>),
 
     <l: @L>
@@ -278,14 +278,30 @@ SchedStmt: SchedStmt = {
 //
 // This is the top level scheduling statement production for a list
 // of scheduling statements that may return a value to the parent
-Sequence: Vec<SchedStmt> = {
-    <mut s: SchedStmt*> <l: @L> <ret: SchedExpr?> <r: @R> => match ret {
+MaybeUnitSequence: Vec<SchedStmt> = {
+    <mut s: SchedStmt*> <ret: RetExpr?> => match ret {
         None => s,
         Some(ret) => {
-            s.push(astf.sched_return(l, ret, r));
+            s.push(ret);
             s
         },
     }
+}
+
+// A sequence of scheduling statements which must end with an expression
+// that is returned to the parent
+NonUnitSequence: Vec<SchedStmt> = {
+    <mut s: SchedStmt*> <ret: RetExpr> => {
+        s.push(ret);
+        s
+    }
+}
+
+// An expression that can terminate a sequence. Either an if statement or an
+// expression
+RetExpr: SchedStmt = {
+    <@L> <SchedExpr> <@R> => astf.sched_return(<>),
+    <SequenceIf> => <>,
 }
 
 // IF expressions
@@ -299,8 +315,8 @@ BlockSeq: SchedStmt = {
 // An matched if block where each block may end with an expression that is returned
 // to the parent
 SequenceIf: SchedStmt = {
-    <@L> "if" <TagOp?> <SchedExpr> "{" <Sequence> "}" "else" <SequenceIf> <@R> => astf.sched_matched_if(<>),
-    <@L> "{" <Sequence> "}" <@R> => astf.sched_block(<>),
+    <@L> "if" <TagOp?> <SchedExpr> "{" <NonUnitSequence> "}" "else" <SequenceIf> <@R> => astf.sched_matched_if(<>),
+    <@L> "{" <NonUnitSequence> "}" <@R> => astf.sched_block(<>),
 }
 
 // IFs and dangling else 

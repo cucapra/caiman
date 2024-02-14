@@ -15,7 +15,7 @@ val main() -> i64 {
 fn foo() -> i64 @ node(main.r)-usable 
     impls main, time, space
 {
-    let b: bool @ node(main.b)-usable = false;
+    let b: bool @ node(main.b)-usable = true;
     let one: i64 @ node(main.one)-usable = 1;
     let two: i64 @ node(main.two)-usable = 2;
     var v: i64 @ none(main);

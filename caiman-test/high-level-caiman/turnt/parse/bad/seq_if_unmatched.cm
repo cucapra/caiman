@@ -1,0 +1,8 @@
+#version 0.1.0
+fn foo() impls a {
+    if b {
+        a
+    } else {
+        let v = 10;
+    }
+}
