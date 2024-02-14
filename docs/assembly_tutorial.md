@@ -3,6 +3,7 @@ Author: Meredith Hu
 
 ## What is Caiman?
 *This guide is for CAIMAN ASSEMBLY and not Original Caiman or Caiman Frontend. <br> <br>
+
 Caiman is a research language that is a project of CU Capra. Caiman programs consist of several "specification languages" and an "implementation" of those specification languages. The intention of this divide in responsibility is to make it easier to explore performance tradeoffs while maintaining program semantics.
 This repository contains implementations of three levels of abstraction for working with the Caiman compiler:
 
