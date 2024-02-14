@@ -11,7 +11,7 @@
 
 version 0.0.2
 
-pipeline "main" = %double_head;
+pipeline "main" = %main_head;
 
 type i64;
 ref %i64l : i64-local<flags=[]>;
@@ -21,12 +21,13 @@ native_value %i64n : i64;
 
 function @mult(i64, i64) -> i64;
 function @add(i64, i64) -> i64;
-function @double(i64) -> i64;
-function @addone(i64) -> i64;
-function @main(i64) -> i64;
 
 external-cpu-pure[impl @mult] %mult(i64, i64) -> i64;
 external-cpu-pure[impl @add] %add(i64, i64) -> i64;
+
+function @addone(i64) -> i64;
+function @double(i64) -> i64;
+function @main(i64) -> i64;
 
 value[impl default @double] %double(%x : i64) -> i64 {
     %two = constant %i64n 2;
@@ -60,22 +61,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule[value $val = %double, timeline $time = %time, spatial $space = %space] 
-%double_head
-<node($time.%e)-usable, node($time.%e)-usable>
-    (%x     : node($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
-    -> 
-    node($val.%result)-usable node($time.%e)-usable none($space)-usable %i64n
-{
-    %local_ref = alloc-temporary local [storage, map_write] i64;
-
-    local-do-builtin node($val.%two)() -> %local_ref;
-    %two = read-ref i64 %local_ref;
-    local-do-external %double node($val.%result_t)(%x, %two) -> %local_ref;
-    %result = read-ref i64 %local_ref;
-
-    return %result;
-}
+// addone definitions
 
 schedule[value $val = %addone, timeline $time = %time, spatial $space = %space] 
 %addone_head
@@ -94,13 +80,71 @@ schedule[value $val = %addone, timeline $time = %time, spatial $space = %space]
     return %result;
 }
 
-// value[impl default @main] %main_head(%x : i64) -> i64 {
-//     %djoin = default-join;
-//     %join = inline-join %main_second [] %djoin;
+// double definitions
 
-//     schedule-call %min[
-//             value node($val.%left_t),
-//             timeline node($time.%e),
-//             spatial node($space.%bs)]
-//         (%x) %join;
-// }
+schedule[value $val = %double, timeline $time = %time, spatial $space = %space] 
+%double_head
+<node($time.%e)-usable, node($time.%e)-usable>
+    (%x     : node($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+    -> 
+    node($val.%result)-usable node($time.%e)-usable none($space)-usable %i64n
+{
+    %local_ref = alloc-temporary local [storage, map_write] i64;
+
+    local-do-builtin node($val.%two)() -> %local_ref;
+    %two = read-ref i64 %local_ref;
+    local-do-external %double node($val.%result_t)(%x, %two) -> %local_ref;
+    %result = read-ref i64 %local_ref;
+
+    return %result;
+}
+
+// main definitions
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space] 
+%main_head
+<node($time.%e)-usable, node($time.%e)-usable>
+    (%x     : node($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+    -> 
+    node($val.%result)-usable node($time.%e)-usable node($space.%bs)-usable %i64n
+{
+    %x_v = local-copy %x;
+
+    %djoin = default-join;
+    %join = inline-join %main_second [] %djoin;
+
+    schedule-call %addone_head [
+            value node($val.%y_t),
+            timeline node($time.%e),
+            spatial node($space.%bs)]
+        (%x) %join;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space] 
+%main_second
+<node($time.%e)-usable, node($time.%e)-usable>
+    (%y     : node($val.%y)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+    -> 
+    node($val.%result)-usable node($time.%e)-usable node($space.%bs)-usable %i64n
+{
+    %local_ref = alloc-temporary local [storage, map_write] i64;
+
+    %djoin = default-join;
+    %join = inline-join %main_return [] %djoin;
+
+    schedule-call %double_head [
+            value node($val.%result_t),
+            timeline node($time.%e),
+            spatial node($space.%bs)]
+        (%y) %join;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space] 
+%main_return
+<node($time.%e)-usable, node($time.%e)-usable>
+    (%result     : node($val.%result)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+    -> 
+    node($val.%result)-usable node($time.%e)-usable node($space.%bs)-usable %i64n
+{
+    return %result;
+}

@@ -1,10 +1,10 @@
 struct Callbacks;
 
 impl main::CpuFunctions for Callbacks {
-    fn mult(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::op {
+    fn mult(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::mult {
         (x * y,)
     }
-    fn add(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::op {
+    fn add(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::add {
         (x + y,)
     }
 }

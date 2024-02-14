@@ -1,8 +1,8 @@
 struct Callbacks;
 
 impl main::CpuFunctions for Callbacks {
-    fn gt(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::op {
-        return ((x > y) as i64,);
+    fn lt(&self, _: &mut dyn caiman_rt::State, x: i64, y: i64) -> main::outputs::lt {
+        return ((x < y) as i64,);
     }
 }
 
