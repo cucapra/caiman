@@ -40,7 +40,11 @@ __How to create a program:__
 5. [ ] To test your code, run `python test.py run basics/<YOUR-TEST-NAME>_test.cair`.
 
 __How to debug your file:__ <br>
+<<<<<<< HEAD
 For now, debugging with Rust skills is a very practical option. You may also run the compiler with the this flag to see the translation to the intermediate representation, including any explication that was done:
+=======
+For now, debugging with Rust skills is a very practical option. You may also run the compiler with this flag after “run” to get a lot of information about the entered file:
+>>>>>>> f7b0516 (fixed formatting)
 `--explicate_only`
 
 ## Helpful Resources:
@@ -50,6 +54,9 @@ For now, debugging with Rust skills is a very practical option. You may also run
 
 ### Caiman References 
 - [ ] Working Caiman Assembly Examples ()
+<<<<<<< HEAD
 - [ ] [Diagram of Caiman Compiler](https://github.com/cucapra/caiman/blob/main/docs/compiler_structure.svg)
+=======
+>>>>>>> f7b0516 (fixed formatting)
 - [ ] [Caiman Reference Guide](https://github.com/cucapra/caiman/blob/main/caiman-spec/src/content.ron)
 - [ ] [More Caiman Reference](https://github.com/cucapra/caiman/blob/main/caiman-test/reference_untested/example.cair)
