@@ -31,15 +31,16 @@ __How to create a program:__
 4. [ ] To compile your code, do `cargo run – –input caiman-test\basics\<YOUR-TEST-NAME>_test.cair`.
 5. [ ] To test your code, run `python test.py run basics/<YOUR-TEST-NAME>_test.cair`.
 
-__How to debug your file:__
+__How to debug your file:__ <br>
 For now, debugging with Rust skills is a very practical option. You may also run the compiler with this flag after “run” to get a lot of information about the entered file:
 `--explicate_only`
 
 ## Helpful Resources:
-[ ] Rust basics help a LOT!! 
-[ ] [Basic git branching theory](https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging)
+- [ ] [Rust basics]() 
+- [ ] [Cargo basics](https://doc.rust-lang.org/rust-by-example/cargo.html)
+- [ ] [Basic git branching theory](https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging)
 
 ### Caiman References 
-[ ] Working Caiman Assembly Examples ()
-[ ] [Caiman Reference Guide](https://github.com/cucapra/caiman/blob/main/caiman-spec/src/content.ron)
-[ ] [More Caiman Reference](https://github.com/cucapra/caiman/blob/main/caiman-test/reference_untested/example.cair)
+- [ ] Working Caiman Assembly Examples ()
+- [ ] [Caiman Reference Guide](https://github.com/cucapra/caiman/blob/main/caiman-spec/src/content.ron)
+- [ ] [More Caiman Reference](https://github.com/cucapra/caiman/blob/main/caiman-test/reference_untested/example.cair)
