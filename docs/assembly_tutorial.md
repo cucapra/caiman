@@ -7,7 +7,7 @@ Caiman is a research language that is a project of CU Capra. It is a “specific
 
 Caiman Assembly reveals the differences in different implementations to the user by requiring the user to write a value codeblock and scheduling codeblock for any given program. The schedule codeblock must typecheck to the value code in order for the whole file to compile. The value code serves as a formal description of expressions a program must include to perform what it needs to, but the scheduling language actually implements this with allocations for local variables, function calls, and specification for where everything is placed. 
 
-__Important people:__ Dietrich Geisler, Oliver Daids
+__Important people:__ Dietrich Geisler, Oliver Daids <br>
 __Undergrads:__ Mia, Stephen, Sometimes me (Meredith)
 
 ## How do I set up Caiman?
