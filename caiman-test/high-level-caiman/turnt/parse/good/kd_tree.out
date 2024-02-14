@@ -6900,8 +6900,22 @@
                                                     34,
                                                 ),
                                             },
-                                            tag: None,
-                                            lhs: "nxt_start",
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            150,
+                                                            13,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            150,
+                                                            22,
+                                                        ),
+                                                    },
+                                                    name: "nxt_start",
+                                                    tag: None,
+                                                },
+                                            ),
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
@@ -6949,6 +6963,7 @@
                                                     },
                                                 ),
                                             },
+                                            lhs_is_ref: false,
                                         },
                                     ],
                                     false_block: [],
@@ -7411,8 +7426,22 @@
                                                     32,
                                                 ),
                                             },
-                                            tag: None,
-                                            lhs: "nxt_end",
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            155,
+                                                            13,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            155,
+                                                            20,
+                                                        ),
+                                                    },
+                                                    name: "nxt_end",
+                                                    tag: None,
+                                                },
+                                            ),
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
@@ -7460,6 +7489,7 @@
                                                     },
                                                 ),
                                             },
+                                            lhs_is_ref: false,
                                         },
                                     ],
                                     false_block: [],
@@ -7574,8 +7604,22 @@
                                                     25,
                                                 ),
                                             },
-                                            tag: None,
-                                            lhs: "nxt_idx",
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            160,
+                                                            13,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            160,
+                                                            20,
+                                                        ),
+                                                    },
+                                                    name: "nxt_idx",
+                                                    tag: None,
+                                                },
+                                            ),
                                             rhs: Term(
                                                 Lit {
                                                     info: Info {
@@ -7594,6 +7638,7 @@
                                                     tag: None,
                                                 },
                                             ),
+                                            lhs_is_ref: false,
                                         },
                                     ],
                                     false_block: [],

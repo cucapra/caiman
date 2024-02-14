@@ -1,6 +1,8 @@
 use crate::{
     error,
-    parse::ast::{Binop, ClassMembers, DataType, FloatSize, IntSize, SchedulingFunc, TopLevel},
+    parse::ast::{
+        Binop, ClassMembers, DataType, FloatSize, IntSize, SchedulingFunc, TopLevel, Uop,
+    },
     typing::Context,
 };
 use caiman::assembly::ast as asm;
@@ -10,6 +12,30 @@ mod sched_hir;
 
 use lower_schedule::lower_schedule;
 use lower_spec::{lower_spatial_funclet, lower_timeline_funclet, lower_val_funclet};
+
+#[macro_export]
+macro_rules! enum_cast {
+    ($p:path, $e:expr) => {
+        match $e {
+            $p(x) => x,
+            _x => panic!(
+                "AST Not flattened!: Expected {}, but got {:?}",
+                stringify!($p),
+                _x
+            ),
+        }
+    };
+    ($p:pat, $r:expr, $e:expr) => {
+        match $e {
+            $p => $r,
+            _x => panic!(
+                "AST Not flattened!: Expected {}, but got {:?}",
+                stringify!($p),
+                _x
+            ),
+        }
+    };
+}
 
 // TODO: only i32, i64, and u64 are currently supported in the IR
 // change this to u8 or i8 once we support those types
@@ -25,6 +51,10 @@ fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
         DataType::BufferSpace => TypeId::Local(String::from("BufferSpace")),
         DataType::Event => TypeId::Local(String::from("Event")),
         DataType::UserDefined(name) => TypeId::Local(name.clone()),
+        DataType::Ref(t) => TypeId::Local(format!(
+            "&{}",
+            enum_cast!(TypeId::Local, data_type_to_local_type(t))
+        )),
         _ => todo!("TODO"),
     }
 }
@@ -53,25 +83,22 @@ pub const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
     }
 }
 
+/// For types that have FFI equivalents, convert a high-level caiman data type
+/// to the caiman assembly type for the corresponding FFI type. For types
+/// that do not have FFI equivalents, return `None`.
+///
+/// References are unwrapped to get the underlying type.
+#[must_use]
+pub fn data_type_to_storage_type(dt: &DataType) -> asm::TypeId {
+    match dt {
+        DataType::Ref(d) => data_type_to_storage_type(d),
+        x => data_type_to_ffi_type(x),
+    }
+}
+
 /// Convert a high-level caiman data type to a caiman assembly type.
 fn data_types_to_local_type(dts: &[DataType]) -> Vec<asm::TypeId> {
     dts.iter().map(data_type_to_local_type).collect()
-}
-
-#[macro_export]
-macro_rules! enum_cast {
-    ($p:path, $e:expr) => {
-        match $e {
-            $p(x) => x,
-            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
-        }
-    };
-    ($p:pat, $r:expr, $e:expr) => {
-        match $e {
-            $p => $r,
-            _ => panic!("AST Not flattened!: Expected {}", stringify!($p)),
-        }
-    };
 }
 
 /// Lower a high-level caiman program to caiman assembly.
@@ -207,10 +234,25 @@ const fn binop_name(op: Binop) -> &'static str {
     }
 }
 
+const fn uop_name(op: Uop) -> &'static str {
+    match op {
+        Uop::Neg => "neg",
+        Uop::Not => "not",
+        Uop::LNot => "lnot",
+        Uop::Deref => "deref",
+        Uop::Ref => "ref",
+    }
+}
+
 /// Converts a high-level caiman data type to an extern funclet id.
 #[must_use]
 pub fn binop_to_str(op: Binop, type_left: &str, type_right: &str) -> String {
     format!("_{}_{type_left}_{type_right}", binop_name(op))
+}
+
+#[must_use]
+pub fn uop_to_str(op: Uop, type_in: &str) -> String {
+    format!("_{}_{type_in}", uop_name(op))
 }
 
 /// Gets the id of the direct result of an operation or call that results in `names`.

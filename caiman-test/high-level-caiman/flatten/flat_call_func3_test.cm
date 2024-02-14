@@ -15,12 +15,12 @@ val calc2(t: i64) -> i64 {
     returns t % 9
 }
 
-fn calc2_impl(t) -> i64 impls calc2, time, space
+fn calc2_impl(t: i64) -> i64 impls calc2, time, space
 {
     t % 9
 }
 
-fn calc_impl(a, b) -> i64 impls calc, time, space
+fn calc_impl(a: i64, b: i64) -> i64 impls calc, time, space
 {
     calc2_impl(a * b)
 }

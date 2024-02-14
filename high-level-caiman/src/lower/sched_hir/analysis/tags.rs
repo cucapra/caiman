@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::lower::lower_schedule::tag_to_tag;
 use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator, TripleTag};
-use crate::parse::ast::SchedTerm;
+use crate::parse::ast::{DataType, SchedTerm};
 use crate::typing::SpecType;
 
 use super::{Fact, Forwards, RET_VAR};
@@ -81,13 +81,21 @@ impl TagInfo {
     }
 
     /// Returns the tag vector for this type. Any unspecified tags will be
-    /// assumed to be `none()-usable`
-    pub fn tags_vec_default(self) -> Vec<asm::Tag> {
+    /// assumed to be `none()-usable` except for references, which will be
+    /// `none()-save` in the spatial dimension
+    pub fn tags_vec_default(self, dtype: &DataType) -> Vec<asm::Tag> {
         vec![
             self.value
                 .unwrap_or_else(|| none_tag(&self.specs.value, ir::Flow::Usable)),
-            self.spatial
-                .unwrap_or_else(|| none_tag(&self.specs.spatial, ir::Flow::Usable)),
+            self.spatial.unwrap_or_else(|| {
+                none_tag(
+                    &self.specs.spatial,
+                    match dtype {
+                        DataType::Ref(_) => ir::Flow::Save,
+                        _ => ir::Flow::Usable,
+                    },
+                )
+            }),
             self.timeline
                 .unwrap_or_else(|| none_tag(&self.specs.timeline, ir::Flow::Usable)),
         ]
@@ -95,14 +103,20 @@ impl TagInfo {
 
     /// Returns the indexed tag vector for this type. Any unspecified tags will be
     /// assumed to be `none()-usable`
-    pub fn tag_info_default(self) -> Self {
+    pub fn tag_info_default(self, dtype: &DataType) -> Self {
         Self {
             value: self
                 .value
                 .or_else(|| Some(none_tag(&self.specs.value, ir::Flow::Usable))),
-            spatial: self
-                .spatial
-                .or_else(|| Some(none_tag(&self.specs.spatial, ir::Flow::Usable))),
+            spatial: self.spatial.or_else(|| {
+                Some(none_tag(
+                    &self.specs.spatial,
+                    match dtype {
+                        DataType::Ref(_) => ir::Flow::Save,
+                        _ => ir::Flow::Usable,
+                    },
+                ))
+            }),
             timeline: self
                 .timeline
                 .or_else(|| Some(none_tag(&self.specs.timeline, ir::Flow::Usable))),
@@ -143,13 +157,29 @@ impl Eq for TagAnalysis {}
 
 impl TagAnalysis {
     /// Constructs a new top element
-    pub fn top(specs: &Specs, input: &[(String, TripleTag)], out: &[TripleTag]) -> Self {
+    pub fn top(
+        specs: &Specs,
+        input: &[(String, TripleTag)],
+        out: &[TripleTag],
+        data_types: &HashMap<String, DataType>,
+    ) -> Self {
         let mut tags = HashMap::new();
         for (out_idx, out_type) in out.iter().enumerate() {
             tags.insert(format!("{RET_VAR}{out_idx}"), TagInfo::from(out_type));
         }
         for (arg_name, arg_type) in input {
-            tags.insert(arg_name.clone(), TagInfo::from(arg_type));
+            let mut tg = TagInfo::from(arg_type);
+            if matches!(data_types.get(arg_name), Some(DataType::Ref(_))) {
+                // TODO: the flow itself should be able to be a hole
+                // the the future, also assume that it's save if the flow is not specified
+                // but the quotient is
+                if tg.spatial.is_none() {
+                    tg.spatial = Some(none_tag(&specs.spatial, ir::Flow::Save));
+                } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Save {
+                    panic!("Spatial tags for references must be save");
+                }
+            }
+            tags.insert(arg_name.clone(), tg);
         }
         Self {
             tags,

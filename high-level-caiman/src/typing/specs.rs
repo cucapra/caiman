@@ -54,7 +54,11 @@ fn collect_spec_assign_call(
         name: func_name, ..
     }) = function
     {
-        let input_types = signatures.get(func_name).unwrap().input.clone();
+        let input_types = signatures
+            .get(func_name)
+            .ok_or_else(|| type_error(info, &format!("Unknown spec `{func_name}` invoked")))?
+            .input
+            .clone();
         let output_types = signatures.get(func_name).unwrap().output.clone();
         #[allow(clippy::needless_collect)]
         let arg_nodes: Vec<_> = args
