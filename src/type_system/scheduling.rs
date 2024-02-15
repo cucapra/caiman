@@ -53,7 +53,9 @@ impl Buffer {
         error_context: &ErrorContext,
         storage_type: ir::StorageTypeId,
     ) -> Result<(), Error> {
-        let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
+        let Some(static_layout) = self.static_layout_opt.as_mut() else {
+            panic!("{}", error_context)
+        };
         /*// To do check alignment compatibility
         let storage_size = native_interface
             .calculate_type_byte_size(storage_type);
@@ -85,7 +87,9 @@ impl Buffer {
         error_context: &ErrorContext,
         size: usize,
     ) -> Result<ir::StaticBufferLayout, Error> {
-        let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
+        let Some(static_layout) = self.static_layout_opt.as_mut() else {
+            panic!("{}", error_context)
+        };
 
         /*let predecessor_static_layout = ir::StaticBufferLayout{byte_size : size, alignment_bits : static_layout.alignment_bits};
 
@@ -106,7 +110,9 @@ impl Buffer {
         error_context: &ErrorContext,
         predecessor_static_layout: ir::StaticBufferLayout,
     ) -> Result<(), Error> {
-        let Some(static_layout) = self.static_layout_opt.as_mut() else { panic!("{}", error_context) };
+        let Some(static_layout) = self.static_layout_opt.as_mut() else {
+            panic!("{}", error_context)
+        };
 
         //static_layout.byte_size += predecessor_static_layout.byte_size;
         //static_layout.alignment_bits = predecessor_static_layout.alignment_bits;
@@ -698,10 +704,29 @@ impl<'program> FuncletChecker<'program> {
             return Ok(());
         }
 
-        let Some(spec_funclet_id) = funclet_spec.funclet_id_opt else { return Err(Error::Generic{message: String::from("Expected spec funclet id")}); };
+        let Some(spec_funclet_id) = funclet_spec.funclet_id_opt else {
+            return Err(Error::Generic {
+                message: String::from("Expected spec funclet id"),
+            });
+        };
         let spec_funclet = &self.program.funclets[spec_funclet_id];
-        let ir::Quotient::Node{node_id: call_node_id} = operation else { return Err(Error::Generic{message: String::from("Expected operation to be a Node")}); };
-        let ir::Node::CallFunctionClass{function_id, arguments} = & spec_funclet.nodes[call_node_id] else { return Err(Error::Generic{message: String::from("Expected call node")}); };
+        let ir::Quotient::Node {
+            node_id: call_node_id,
+        } = operation
+        else {
+            return Err(Error::Generic {
+                message: String::from("Expected operation to be a Node"),
+            });
+        };
+        let ir::Node::CallFunctionClass {
+            function_id,
+            arguments,
+        } = &spec_funclet.nodes[call_node_id]
+        else {
+            return Err(Error::Generic {
+                message: String::from("Expected call node"),
+            });
+        };
         if !self.program.function_classes[*function_id]
             .external_function_ids
             .contains(&external_function_id)
@@ -716,7 +741,11 @@ impl<'program> FuncletChecker<'program> {
 
         let spec_checker = spec_checker_opt.unwrap();
 
-        let ir::ffi::ExternalFunction::CpuEffectfulOperation(effectful_operation) = & self.program.native_interface.external_functions[external_function_id.0] else { panic!("") };
+        let ir::ffi::ExternalFunction::CpuEffectfulOperation(effectful_operation) =
+            &self.program.native_interface.external_functions[external_function_id.0]
+        else {
+            panic!("")
+        };
         assert_eq!(effectful_operation.input_types.len() + 1, arguments.len());
         assert_eq!(yielded_impl_node_ids.len() + 1, arguments.len());
 
@@ -756,7 +785,15 @@ impl<'program> FuncletChecker<'program> {
         for index in 0..continuation_join_point.input_types.len() {
             // 0th output is the implicit
             let extract_node_id = call_node_id + 2 + index;
-            let ir::Node::ExtractResult{node_id, index: argument_index} = & spec_funclet.nodes[extract_node_id] else { return Err(Error::Generic{message: String::from("Expected extract result")}); };
+            let ir::Node::ExtractResult {
+                node_id,
+                index: argument_index,
+            } = &spec_funclet.nodes[extract_node_id]
+            else {
+                return Err(Error::Generic {
+                    message: String::from("Expected extract result"),
+                });
+            };
             assert_eq!(call_node_id, *node_id);
             assert_eq!(*argument_index, index);
             continuation_input_tags.push(ir::Tag {
@@ -855,7 +892,10 @@ impl<'program> FuncletChecker<'program> {
                     .nodes[*operation_node_id];
                 let (output_count, storage_type) = match encoded_node {
                     ir::Node::Constant { type_id, .. } => {
-                        let ir::Type::NativeValue{storage_type} = &self.program.types[*type_id] else { panic!("Must be native value") };
+                        let ir::Type::NativeValue { storage_type } = &self.program.types[*type_id]
+                        else {
+                            panic!("Must be native value")
+                        };
                         (1, *storage_type)
                     }
                     ir::Node::Select { true_case, .. } => {
@@ -958,6 +998,15 @@ impl<'program> FuncletChecker<'program> {
                         function_id,
                         arguments,
                     } => {
+                        eprintln!(
+                            "{:?} {:?}",
+                            external_function_id,
+                            self.program.function_classes[*function_id]
+                                .external_function_ids
+                                .clone()
+                                .into_iter()
+                                .collect::<Vec<_>>()
+                        );
                         assert!(self.program.function_classes[*function_id]
                             .external_function_ids
                             .contains(external_function_id));
@@ -1017,7 +1066,8 @@ impl<'program> FuncletChecker<'program> {
                 let encoder_timeline_tag = timeline_spec_checker.scalar_nodes[encoder];
                 let encoder_spatial_tag = spatial_spec_checker.scalar_nodes[encoder];
 
-                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder) else {
+                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder)
+                else {
                     panic!("Node #{} is not an encoder\n{}", encoder, error_context);
                 };
 
@@ -1046,7 +1096,8 @@ impl<'program> FuncletChecker<'program> {
                         for (input_index, input_impl_node_id) in
                             inputs[0..kernel.dimensionality].iter().enumerate()
                         {
-                            let Some(NodeType::LocalVar{ .. }) = self.node_types.get(input_impl_node_id)
+                            let Some(NodeType::LocalVar { .. }) =
+                                self.node_types.get(input_impl_node_id)
                             else {
                                 panic!("Dimension arguments to a GPU compute dispatch must be NativeValue and not Refs\n{}", error_context);
                             };
@@ -1074,7 +1125,12 @@ impl<'program> FuncletChecker<'program> {
                                 kernel.input_types[input_index]
                             );
 
-                            let NodeType::Slot(Slot{queue_place: ir::Place::Gpu, buffer_flags, ..}) = self.node_types.get(input_impl_node_id).as_ref().unwrap() else {
+                            let NodeType::Slot(Slot {
+                                queue_place: ir::Place::Gpu,
+                                buffer_flags,
+                                ..
+                            }) = self.node_types.get(input_impl_node_id).as_ref().unwrap()
+                            else {
                                 panic!("Non-dimensionality arguments to encode_do of a GPU kernel must be GPU refs (offending argument to encode_do: #{} which is node #{})\n{}", input_index, input_impl_node_id, error_context)
                             };
 
@@ -1143,7 +1199,14 @@ impl<'program> FuncletChecker<'program> {
                 source,
                 storage_type,
             } => {
-                let NodeType::Slot(Slot{queue_place, buffer_flags, ..}) = &self.node_types[source] else { panic!("Must be a slot") };
+                let NodeType::Slot(Slot {
+                    queue_place,
+                    buffer_flags,
+                    ..
+                }) = &self.node_types[source]
+                else {
+                    panic!("Must be a slot")
+                };
                 assert_eq!(*queue_place, ir::Place::Local);
 
                 // Input
@@ -1184,8 +1247,17 @@ impl<'program> FuncletChecker<'program> {
                 storage_type,
                 source,
             } => {
-                let NodeType::LocalVar(LocalVar{..}) = &self.node_types[source] else { panic!("Must be a local var") };
-                let NodeType::Slot(Slot{queue_place, buffer_flags, ..}) = &self.node_types[destination] else { panic!("Must be a slot") };
+                let NodeType::LocalVar(LocalVar { .. }) = &self.node_types[source] else {
+                    panic!("Must be a local var")
+                };
+                let NodeType::Slot(Slot {
+                    queue_place,
+                    buffer_flags,
+                    ..
+                }) = &self.node_types[destination]
+                else {
+                    panic!("Must be a slot")
+                };
                 assert_eq!(*queue_place, ir::Place::Local);
 
                 // Input
@@ -1215,11 +1287,25 @@ impl<'program> FuncletChecker<'program> {
                     .check_node_is_readable_at_implicit(error_context, *destination)?;
             }
             ir::Node::LocalCopy { input, output } => {
-                let Some(NodeType::Slot(Slot { buffer_flags: input_buffer_flags, .. })) = self.node_types.get(input) else {
-                    panic!("Source of local_copy (node #{}) is not a ref \n{}", input, error_context);
+                let Some(NodeType::Slot(Slot {
+                    buffer_flags: input_buffer_flags,
+                    ..
+                })) = self.node_types.get(input)
+                else {
+                    panic!(
+                        "Source of local_copy (node #{}) is not a ref \n{}",
+                        input, error_context
+                    );
                 };
-                let Some(NodeType::Slot(Slot { buffer_flags: output_buffer_flags, .. })) = self.node_types.get(output) else {
-                    panic!("Destination of local_copy (node #{}) is not a ref \n{}", output, error_context);
+                let Some(NodeType::Slot(Slot {
+                    buffer_flags: output_buffer_flags,
+                    ..
+                })) = self.node_types.get(output)
+                else {
+                    panic!(
+                        "Destination of local_copy (node #{}) is not a ref \n{}",
+                        output, error_context
+                    );
                 };
                 assert!(
                     input_buffer_flags.map_read,
@@ -1260,14 +1346,29 @@ impl<'program> FuncletChecker<'program> {
                 output,
                 encoder,
             } => {
-                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder) else {
+                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.get(encoder)
+                else {
                     panic!("Not an encoder\n{}", error_context);
                 };
-                let Some(NodeType::Slot(Slot { buffer_flags: input_buffer_flags, .. })) = self.node_types.get(input) else {
-                    panic!("Source of encode_copy (node #{}) is not a ref \n{}", input, error_context);
+                let Some(NodeType::Slot(Slot {
+                    buffer_flags: input_buffer_flags,
+                    ..
+                })) = self.node_types.get(input)
+                else {
+                    panic!(
+                        "Source of encode_copy (node #{}) is not a ref \n{}",
+                        input, error_context
+                    );
                 };
-                let Some(NodeType::Slot(Slot { buffer_flags: output_buffer_flags, .. })) = self.node_types.get(output) else {
-                    panic!("Destination of encode_copy (node #{}) is not a ref \n{}", output, error_context);
+                let Some(NodeType::Slot(Slot {
+                    buffer_flags: output_buffer_flags,
+                    ..
+                })) = self.node_types.get(output)
+                else {
+                    panic!(
+                        "Destination of encode_copy (node #{}) is not a ref \n{}",
+                        output, error_context
+                    );
                 };
                 assert!(
                     input_buffer_flags.copy_src,
@@ -1298,7 +1399,12 @@ impl<'program> FuncletChecker<'program> {
                 fences,
             } => {
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::EncodingEvent{remote_local_pasts, ..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be an encoding event\n{}", error_context) };
+                let ir::Node::EncodingEvent {
+                    remote_local_pasts, ..
+                } = &timeline_spec_checker.spec_funclet.nodes[*event_node_id]
+                else {
+                    panic!("Must be an encoding event\n{}", error_context)
+                };
                 assert_eq!(remote_local_pasts.len(), fences.len());
                 let mut input_impl_node_ids = Vec::<ir::NodeId>::new();
                 input_impl_node_ids.extend_from_slice(fences);
@@ -1334,12 +1440,18 @@ impl<'program> FuncletChecker<'program> {
                     },
                 encoder,
             } => {
-                let Some(NodeType::Encoder(Encoder { queue_place })) = self.node_types.remove(encoder) else {
+                let Some(NodeType::Encoder(Encoder { queue_place })) =
+                    self.node_types.remove(encoder)
+                else {
                     panic!("Not an encoder\n{}", error_context);
                 };
 
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::SubmissionEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else { panic!("Must be a submission event\n{}", error_context) };
+                let ir::Node::SubmissionEvent { .. } =
+                    &timeline_spec_checker.spec_funclet.nodes[*event_node_id]
+                else {
+                    panic!("Must be a submission event\n{}", error_context)
+                };
                 advance_forward_timeline(
                     timeline_spec_checker,
                     error_context,
@@ -1372,7 +1484,9 @@ impl<'program> FuncletChecker<'program> {
                     },
             } => {
                 let timeline_spec_checker = self.timeline_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::SynchronizationEvent{..} = & timeline_spec_checker.spec_funclet.nodes[*event_node_id] else {
+                let ir::Node::SynchronizationEvent { .. } =
+                    &timeline_spec_checker.spec_funclet.nodes[*event_node_id]
+                else {
                     panic!("Must be an synchronization event\n{}", error_context)
                 };
                 advance_forward_timeline(
@@ -1409,7 +1523,11 @@ impl<'program> FuncletChecker<'program> {
                 }
 
                 let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::SeparatedBufferSpaces{count: space_count, space: space_spec_node_id} = & spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id] else {
+                let ir::Node::SeparatedBufferSpaces {
+                    count: space_count,
+                    space: space_spec_node_id,
+                } = &spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id]
+                else {
                     panic!("Must be a separated space\n{}", error_context)
                 };
 
@@ -1427,7 +1545,10 @@ impl<'program> FuncletChecker<'program> {
                         },
                     );
 
-                let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id)
+                else {
+                    panic!("{}", error_context);
+                };
                 assert_eq!(buffer.storage_place, *place);
 
                 assert_eq!(sizes.len(), *space_count);
@@ -1438,7 +1559,11 @@ impl<'program> FuncletChecker<'program> {
                     let offset = 1 + i;
                     let output_impl_node_id = current_node_id + offset;
 
-                    let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_impl_node_id) else { panic!("{}", error_context); };
+                    let Some(NodeType::Buffer(buffer)) =
+                        self.node_types.get_mut(buffer_impl_node_id)
+                    else {
+                        panic!("{}", error_context);
+                    };
                     let buffer_flags = buffer.buffer_flags;
                     let new_static_layout = buffer
                         .split_static(&self.program.native_interface, error_context, *size)
@@ -1528,7 +1653,11 @@ impl<'program> FuncletChecker<'program> {
                 assert!(impl_node_ids.len() > 0);
 
                 let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
-                let ir::Node::SeparatedBufferSpaces{count: space_count, space: space_spec_node_id} = & spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id] else {
+                let ir::Node::SeparatedBufferSpaces {
+                    count: space_count,
+                    space: space_spec_node_id,
+                } = &spatial_spec_checker.spec_funclet.nodes[*spatial_spec_node_id]
+                else {
                     panic!("Must be a separated space\n{}", error_context)
                 };
 
@@ -1554,15 +1683,20 @@ impl<'program> FuncletChecker<'program> {
 
                     let Some(NodeType::Buffer(Buffer {
                         storage_place,
-                        static_layout_opt : Some(predecessor_static_layout),
-                        buffer_flags
-                    })) = self.node_types.remove(& impl_node_id) else {
+                        static_layout_opt: Some(predecessor_static_layout),
+                        buffer_flags,
+                    })) = self.node_types.remove(&impl_node_id)
+                    else {
                         panic!("{}", error_context)
                     };
 
                     assert_eq!(storage_place, *place);
 
-                    let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(& buffer_impl_node_id) else { panic!("{}", error_context); };
+                    let Some(NodeType::Buffer(buffer)) =
+                        self.node_types.get_mut(&buffer_impl_node_id)
+                    else {
+                        panic!("{}", error_context);
+                    };
                     assert_eq!(buffer_flags, buffer.buffer_flags);
                     buffer.merge_static_left(
                         &self.program.native_interface,
@@ -1910,7 +2044,11 @@ impl<'program> FuncletChecker<'program> {
         continuation_join_node_id: ir::NodeId,
         join_kind: JoinKind,
     ) -> Result<(), Error> {
-        let Some(join_funclet) = self.program.funclets.get(join_funclet_id) else { return Err(Error::Generic{message: format!("No funclet {}\n{}", join_funclet_id, error_context)}) };
+        let Some(join_funclet) = self.program.funclets.get(join_funclet_id) else {
+            return Err(Error::Generic {
+                message: format!("No funclet {}\n{}", join_funclet_id, error_context),
+            });
+        };
         //let join_funclet = &self.program.funclets[join_funclet_id];
         let join_funclet_value_spec = &self.get_funclet_value_spec(join_funclet);
         let join_funclet_timeline_spec = &self.get_funclet_timeline_spec(join_funclet);
@@ -1986,7 +2124,10 @@ impl<'program> FuncletChecker<'program> {
             ir::TailEdge::Return { return_values } => {
                 for (return_index, return_node_id) in return_values.iter().enumerate() {
                     let Some(node_type) = self.node_types.remove(return_node_id) else {
-                        return Err(error_context.generic_error(& format!("Returning nonexistent node #{}. Was it already used?", return_node_id)));
+                        return Err(error_context.generic_error(&format!(
+                            "Returning nonexistent node #{}. Was it already used?",
+                            return_node_id
+                        )));
                         //return Err(Error::Generic{message: format!("Returning nonexistent node #{}. Was it already used?", return_node_id)});
                     };
                     check_slot_type(
@@ -2327,7 +2468,11 @@ impl<'program> FuncletChecker<'program> {
                     *continuation_impl_node_id,
                 )?;
 
-                let ir::ffi::ExternalFunction::CpuEffectfulOperation(effectful_operation) = & self.program.native_interface.external_functions[external_function_id.0] else { panic!("Not effectful operation"); };
+                let ir::ffi::ExternalFunction::CpuEffectfulOperation(effectful_operation) =
+                    &self.program.native_interface.external_functions[external_function_id.0]
+                else {
+                    panic!("Not effectful operation");
+                };
 
                 // Step 1: Check current -> callee edge
                 assert_eq!(

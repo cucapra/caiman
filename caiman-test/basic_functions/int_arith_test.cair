@@ -5,8 +5,8 @@ event %event0;
 buffer_space %buffspace;
 native_value %ni64 : i64;
 
-function @sub(i64, i64) -> i64;
 function @mult(i64, i64) -> i64;
+function @sub(i64, i64) -> i64;
 function @main() -> i64;
 
 external-cpu-pure[impl @sub] %sub(i64, i64) -> i64;
@@ -20,7 +20,9 @@ value[impl default @main] %foo() -> i64 {
 
     %x_t = call @mult(%y, %z);
 
-    %y_t = call @sub(%x, %x_t);
+    %something = extract %x_t 0;
+
+    %y_t = call @sub(%x, %something);
 
     %r = extract %y_t 0;
     return %y;
@@ -50,14 +52,20 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     //alias z_ref into z
     %z = read-ref i64 %z_ref;
 
+    //allocate something
+    %something_ref = alloc-temporary local [storage, map_write] i64;
+
+    //allocate r
+    %r_ref = alloc-temporary local [storage, map_write] i64;
+
     //put into x_t the result of mult y, z and place it in y_ref
-    local-do-external %op mult($val.%x_t)(%y)(%z) -> %y_ref;
+    local-do-external %mult node($val.%x_t)(%y,%z) -> %something_ref;
 
     //put into y_t the result of sub x and x_t and place it in z_ref 
-    local-do-external %op sub($val.%y_t)(%x)(%y) -> %z_ref;
+    local-do-external %sub node($val.%y_t)(%x,%something_ref) -> %r_ref;
 
     //result should be in z ref 
-    %result = read-ref i64 %z_ref;
+    %result = read-ref i64 %r_ref;
     return %result;
 }
 
