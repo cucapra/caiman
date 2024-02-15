@@ -20,13 +20,9 @@ value[impl default @main] %foo() -> i64 {
 
     %x_t = call @mult(%y, %z);
 
-<<<<<<< HEAD
     %something = extract %x_t 0;
 
     %y_t = call @sub(%x, %something);
-=======
-    %y_t = call @sub(%x, %x_t);
->>>>>>> 664f7b3 (started writing the first test, have some errors, learning)
 
     %r = extract %y_t 0;
     return %y;
@@ -56,7 +52,6 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     //alias z_ref into z
     %z = read-ref i64 %z_ref;
 
-<<<<<<< HEAD
     //allocate something
     %something_ref = alloc-temporary local [storage, map_write] i64;
 
@@ -73,16 +68,6 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 
     //result should be in z ref 
     %result = read-ref i64 %r_ref;
-=======
-    //put into x_t the result of mult y, z and place it in y_ref
-    local-do-external %op mult($val.%x_t)(%y)(%z) -> %y_ref;
-
-    //put into y_t the result of sub x and x_t and place it in z_ref 
-    local-do-external %op sub($val.%y_t)(%x)(%y) -> %z_ref;
-
-    //result should be in z ref 
-    %result = read-ref i64 %z_ref;
->>>>>>> 664f7b3 (started writing the first test, have some errors, learning)
     return %result;
 }
 
