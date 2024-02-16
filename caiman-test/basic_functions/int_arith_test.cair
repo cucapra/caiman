@@ -61,8 +61,10 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     //put into x_t the result of mult y, z and place it in y_ref
     local-do-external %mult node($val.%x_t)(%y,%z) -> %something_ref;
 
+    %temp = read-ref i64 %something_ref;
+
     //put into y_t the result of sub x and x_t and place it in z_ref 
-    local-do-external %sub node($val.%y_t)(%x,%something_ref) -> %r_ref;
+    local-do-external %sub node($val.%y_t)(%x,%temp) -> %r_ref;
 
     //result should be in z ref 
     %result = read-ref i64 %r_ref;
