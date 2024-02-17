@@ -32,14 +32,14 @@ feq add_three {
     }
 }
 
-fn add1_impl(a, b, c) -> i64 impls add1, time, space
+fn add1_impl(a: i64, b: i64, c: i64) -> i64 impls add1, time, space
 {
     let t = a + b;
     let p = t + c;
     p
 }
 
-fn add2_impl(a, b, c) -> i64 impls add2, time, space
+fn add2_impl(a: i64, b: i64, c: i64) -> i64 impls add2, time, space
 {
     let t = b + c;
     let p = a + t;

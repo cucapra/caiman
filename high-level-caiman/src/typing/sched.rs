@@ -5,12 +5,14 @@ use crate::{
     error::{type_error, Info, LocalError},
     parse::ast::{
         Binop, DataType, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedLocalCall,
-        SchedStmt, SchedTerm,
+        SchedStmt, SchedTerm, Uop,
     },
 };
 use std::iter::once;
 
-use super::{binop_to_contraints, types::DTypeConstraint, Context, DTypeEnv, Mutability};
+use super::{
+    binop_to_contraints, types::DTypeConstraint, uop_to_contraints, Context, DTypeEnv, Mutability,
+};
 
 /// Collects all defined names in a spec and errors if any constants
 /// are redefined.
@@ -63,13 +65,13 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 collect_sched_names(false_block.iter(), names)?;
             }
             SchedStmt::Block(_, stmts) => collect_sched_names(stmts.iter(), names)?,
-            SchedStmt::Assign { lhs, info, .. } => {
-                if matches!(names.get(lhs), None | Some(Mutability::Const)) {
-                    return Err(type_error(
-                        *info,
-                        &format!("Cannot assign to immutable or undefined variable {lhs}"),
-                    ));
-                }
+            SchedStmt::Assign { lhs, .. } => {
+                let lhs = enum_cast!(
+                    SchedTerm::Var { name, .. },
+                    name,
+                    enum_cast!(SchedExpr::Term, lhs)
+                );
+                assert!(names.contains_key(lhs));
             }
             _ => (),
         }
@@ -116,6 +118,43 @@ fn collect_bop(
     env.add_raw_constraint(dest_name, &ret_c, info)?;
     env.add_raw_constraint(lhs_name, &left_c, info)?;
     env.add_raw_constraint(rhs_name, &right_c, info)
+}
+
+fn collect_assign_uop(
+    dest: &[(String, Option<FullType>)],
+    op: Uop,
+    expr: &SchedExpr,
+    env: &mut DTypeEnv,
+    info: Info,
+    mutables: &mut HashMap<String, Info>,
+) -> Result<(), LocalError> {
+    let expr_name = enum_cast!(
+        SchedTerm::Var { name, .. },
+        name,
+        enum_cast!(SchedExpr::Term, expr)
+    );
+    if op == Uop::Ref {
+        mutables.insert(expr_name.clone(), info);
+    }
+    let (expr_c, ret_c) = uop_to_contraints(op, &mut env.env);
+    if dest.len() != 1 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: Operator {op:?} has 1 destination, found {}",
+                dest.len()
+            ),
+        ));
+    }
+    let (dest_name, dest_annot) = &dest[0];
+    if let Some(FullType {
+        base: Some(anot), ..
+    }) = dest_annot
+    {
+        env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
+    }
+    env.add_raw_constraint(dest_name, &ret_c, info)?;
+    env.add_raw_constraint(expr_name, &expr_c, info)
 }
 
 /// Collects constraints for a literal assignment.
@@ -181,6 +220,7 @@ fn collect_seq_body(
     ctx: &Context,
     env: &mut DTypeEnv,
     stmt: &SchedStmt,
+    mutables: &mut HashMap<String, Info>,
 ) -> Result<(Vec<String>, Vec<String>), LocalError> {
     if let SchedStmt::If {
         true_block,
@@ -188,8 +228,10 @@ fn collect_seq_body(
         ..
     } = stmt
     {
-        let true_rets = collect_sched_helper(ctx, env, true_block.iter(), true_block.len())?;
-        let false_rets = collect_sched_helper(ctx, env, false_block.iter(), false_block.len())?;
+        let true_rets =
+            collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
+        let false_rets =
+            collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
         Ok((true_rets, false_rets))
     } else {
         unreachable!()
@@ -203,8 +245,9 @@ fn collect_seq(
     dests: &[(String, Option<FullType>)],
     block: &SchedStmt,
     info: Info,
+    mutables: &mut HashMap<String, Info>,
 ) -> Result<(), LocalError> {
-    let (rets_a, rets_b) = collect_seq_body(ctx, env, block)?;
+    let (rets_a, rets_b) = collect_seq_body(ctx, env, block, mutables)?;
     if dests.len() != rets_a.len() || dests.len() != rets_b.len() {
         return Err(type_error(
             info,
@@ -237,6 +280,7 @@ fn collect_if(
     true_block: &[SchedStmt],
     false_block: &[SchedStmt],
     info: Info,
+    mutables: &mut HashMap<String, Info>,
 ) -> Result<(), LocalError> {
     let guard_name = enum_cast!(
         SchedTerm::Var { name, .. },
@@ -244,8 +288,9 @@ fn collect_if(
         enum_cast!(SchedExpr::Term, guard)
     );
     env.add_constraint(guard_name, DTypeConstraint::Bool, info)?;
-    let true_rets = collect_sched_helper(ctx, env, true_block.iter(), true_block.len())?;
-    let false_rets = collect_sched_helper(ctx, env, false_block.iter(), false_block.len())?;
+    let true_rets = collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
+    let false_rets =
+        collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
     assert!(true_rets.is_empty() && false_rets.is_empty());
     Ok(())
 }
@@ -340,11 +385,13 @@ fn collect_null_decl(
 /// Unifies base types for a schedule.
 /// # Returns
 /// The type variables of the values being returned to the parent scope.
+#[allow(clippy::too_many_lines)]
 fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
     ctx: &Context,
     env: &mut DTypeEnv,
     stmts: T,
     mut num_stmts: usize,
+    mutables: &mut HashMap<String, Info>,
 ) -> Result<Vec<String>, LocalError> {
     for stmt in stmts {
         num_stmts -= 1;
@@ -360,6 +407,11 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 expr: Some(SchedExpr::Binop { info, op, lhs, rhs }),
                 ..
             } => collect_bop(dest, *op, lhs, rhs, env, *info)?,
+            SchedStmt::Decl {
+                lhs: dest,
+                expr: Some(SchedExpr::Uop { info, op, expr }),
+                ..
+            } => collect_assign_uop(dest, *op, expr, env, *info, mutables)?,
             SchedStmt::Decl {
                 lhs: dest,
                 expr: Some(SchedExpr::Term(SchedTerm::Lit { lit, .. })),
@@ -382,25 +434,34 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 collect_assign_call(ctx, env, dest, &call_info.unwrap_local_call(), *info)?;
             }
             SchedStmt::Assign {
-                lhs: dest,
+                lhs: SchedExpr::Term(SchedTerm::Var { name: dest, .. }),
                 rhs: SchedExpr::Term(SchedTerm::Var { name, .. }),
                 info,
+                lhs_is_ref,
                 ..
-            } => env.add_var_equiv(dest, name, *info)?,
+            } => {
+                mutables.insert(dest.clone(), *info);
+                if *lhs_is_ref {
+                    let x = env.env.get_type(name).unwrap();
+                    env.add_constraint(dest, DTypeConstraint::Ref(x), *info)?;
+                } else {
+                    env.add_var_equiv(dest, name, *info)?;
+                }
+            }
             SchedStmt::Block(_, b) => {
                 assert_eq!(num_stmts, 0);
-                return collect_sched_helper(ctx, env, b.iter(), b.len());
+                return collect_sched_helper(ctx, env, b.iter(), b.len(), mutables);
             }
             SchedStmt::Seq {
                 info, dests, block, ..
-            } => collect_seq(ctx, env, dests, block, *info)?,
+            } => collect_seq(ctx, env, dests, block, *info, mutables)?,
             SchedStmt::If {
                 guard,
                 true_block,
                 false_block,
                 info,
                 ..
-            } => collect_if(ctx, env, guard, true_block, false_block, *info)?,
+            } => collect_if(ctx, env, guard, true_block, false_block, *info, mutables)?,
             SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
@@ -439,6 +500,16 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
 
 /// Collects constraints for a schedule. Requires that the input constraints
 /// have already been added to the environment.
+/// # Arguments
+/// * `ctx` - The context of the schedule.
+/// * `env` - The environment to add constraints to.
+/// * `stmts` - The statements to collect constraints from.
+/// * `fn_out` - The return types of the function.
+/// * `sig_outs` - The return types of the function signature.
+/// * `info` - The info of the schedule.
+/// * `fn_name` - The name of the function.
+/// # Returns
+/// A mapping of mutable names to their info.
 pub fn collect_schedule(
     ctx: &Context,
     env: &mut DTypeEnv,
@@ -447,7 +518,7 @@ pub fn collect_schedule(
     sig_outs: &[DataType],
     info: Info,
     fn_name: &str,
-) -> Result<(), LocalError> {
+) -> Result<HashMap<String, Info>, LocalError> {
     if fn_out.len() != sig_outs.len() {
         return Err(type_error(
             info,
@@ -458,7 +529,8 @@ pub fn collect_schedule(
             ),
         ));
     }
-    let rets = collect_sched_helper(ctx, env, stmts.iter(), stmts.len())?;
+    let mut mutables = HashMap::new();
+    let rets = collect_sched_helper(ctx, env, stmts.iter(), stmts.len(), &mut mutables)?;
     if rets.len() != fn_out.len() {
         return Err(type_error(
             info,
@@ -474,7 +546,7 @@ pub fn collect_schedule(
             base: Some(anot), ..
         } = fn_t
         {
-            if &anot.base != sig_t {
+            if !anot.base.refines(sig_t) {
                 return Err(type_error(
                     info,
                     &format!(
@@ -482,8 +554,10 @@ pub fn collect_schedule(
                     ),
                 ));
             }
+            env.add_dtype_constraint(ret_name, anot.base.clone(), info)?;
+        } else {
+            panic!("Function return type has no base type");
         }
-        env.add_dtype_constraint(ret_name, sig_t.clone(), info)?;
     }
-    Ok(())
+    Ok(mutables)
 }

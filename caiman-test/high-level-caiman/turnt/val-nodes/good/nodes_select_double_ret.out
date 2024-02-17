@@ -54,8 +54,8 @@ Program {
                         ),
                         storage_place: Local,
                         buffer_flags: BufferFlags {
-                            map_read: false,
-                            map_write: false,
+                            map_read: true,
+                            map_write: true,
                             copy_src: false,
                             copy_dst: false,
                             storage: false,
@@ -87,8 +87,8 @@ Program {
                         ),
                         storage_place: Local,
                         buffer_flags: BufferFlags {
-                            map_read: false,
-                            map_write: false,
+                            map_read: true,
+                            map_write: true,
                             copy_src: false,
                             copy_dst: false,
                             storage: false,
@@ -120,8 +120,8 @@ Program {
                         ),
                         storage_place: Local,
                         buffer_flags: BufferFlags {
-                            map_read: false,
-                            map_write: false,
+                            map_read: true,
+                            map_write: true,
                             copy_src: false,
                             copy_dst: false,
                             storage: false,
@@ -731,8 +731,8 @@ Program {
                                     ),
                                     buffer_flags: Some(
                                         BufferFlags {
-                                            map_read: false,
-                                            map_write: false,
+                                            map_read: true,
+                                            map_write: true,
                                             copy_src: false,
                                             copy_dst: false,
                                             storage: false,
@@ -1516,8 +1516,8 @@ Program {
                                     ),
                                     buffer_flags: Some(
                                         BufferFlags {
-                                            map_read: false,
-                                            map_write: false,
+                                            map_read: true,
+                                            map_write: true,
                                             copy_src: false,
                                             copy_dst: false,
                                             storage: false,
@@ -1716,8 +1716,8 @@ Program {
                                     ),
                                     buffer_flags: Some(
                                         BufferFlags {
-                                            map_read: false,
-                                            map_write: false,
+                                            map_read: true,
+                                            map_write: true,
                                             copy_src: false,
                                             copy_dst: false,
                                             storage: false,
@@ -1916,8 +1916,8 @@ Program {
                                     ),
                                     buffer_flags: Some(
                                         BufferFlags {
-                                            map_read: false,
-                                            map_write: false,
+                                            map_read: true,
+                                            map_write: true,
                                             copy_src: false,
                                             copy_dst: false,
                                             storage: false,
@@ -2116,8 +2116,8 @@ Program {
                                     ),
                                     buffer_flags: Some(
                                         BufferFlags {
-                                            map_read: false,
-                                            map_write: false,
+                                            map_read: true,
+                                            map_write: true,
                                             copy_src: false,
                                             copy_dst: false,
                                             storage: false,

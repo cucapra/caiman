@@ -287,8 +287,22 @@
                                                 19,
                                             ),
                                         },
-                                        tag: None,
-                                        lhs: "x",
+                                        lhs: Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        10,
+                                                        13,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        10,
+                                                        14,
+                                                    ),
+                                                },
+                                                name: "x",
+                                                tag: None,
+                                            },
+                                        ),
                                         rhs: Term(
                                             Lit {
                                                 info: Info {
@@ -307,6 +321,7 @@
                                                 tag: None,
                                             },
                                         ),
+                                        lhs_is_ref: false,
                                     },
                                 ],
                                 false_block: [],

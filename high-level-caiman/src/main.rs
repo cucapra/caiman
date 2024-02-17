@@ -12,6 +12,7 @@ use lower::lower;
 
 #[derive(Parser)]
 #[clap(version)]
+#[allow(clippy::struct_excessive_bools)]
 struct Arguments {
     /// The file to compile.
     filename: String,

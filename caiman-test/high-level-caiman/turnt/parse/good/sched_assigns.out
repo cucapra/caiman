@@ -339,8 +339,22 @@
                         11,
                     ),
                 },
-                tag: None,
-                lhs: "x",
+                lhs: Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                6,
+                            ),
+                        },
+                        name: "x",
+                        tag: None,
+                    },
+                ),
                 rhs: Term(
                     Var {
                         info: Info {
@@ -357,6 +371,7 @@
                         tag: None,
                     },
                 ),
+                lhs_is_ref: false,
             },
         ],
     },

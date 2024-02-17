@@ -468,7 +468,18 @@ impl ASTFactory {
 
     struct_variant_factory!(sched_in_annotation(tags: Vec<Arg<Tags>>) -> SchedStmt:SchedStmt::InEdgeAnnotation);
     struct_variant_factory!(sched_out_annotation(tags: Vec<Arg<Tags>>) -> SchedStmt:SchedStmt::OutEdgeAnnotation);
-    struct_variant_factory!(sched_assign(lhs: Name, tag: Option<Tags>, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign);
+    struct_variant_factory!(sched_assign(lhs: SchedExpr, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign {
+        lhs: lhs,
+        rhs: rhs,
+        lhs_is_ref: false
+    
+    });
+    struct_variant_factory!(sched_ref_assign(lhs: SchedExpr, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign {
+        lhs: lhs,
+        rhs: rhs,
+        lhs_is_ref: true
+    
+    });
     tuple_variant_factory!(sched_return(e: SchedExpr) -> SchedStmt:SchedStmt::Return);
     tuple_variant_factory!(sched_hole_stmt() -> SchedStmt:SchedStmt::Hole);
     tuple_variant_factory!(sched_call_stmt(call: SchedFuncCall) -> SchedStmt:SchedStmt::Call);

@@ -1,0 +1,2 @@
+Error: At bad_assign3.cm:18:5, 
+  Type Error: Immutable variable c_0 cannot be assigned to or have its reference taken

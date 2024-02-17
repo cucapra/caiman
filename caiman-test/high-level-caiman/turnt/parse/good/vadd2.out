@@ -2391,8 +2391,22 @@
                                 25,
                             ),
                         },
-                        tag: None,
-                        lhs: "result",
+                        lhs: Term(
+                            Var {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        53,
+                                        9,
+                                    ),
+                                    end_ln_and_col: (
+                                        53,
+                                        15,
+                                    ),
+                                },
+                                name: "result",
+                                tag: None,
+                            },
+                        ),
                         rhs: Term(
                             Var {
                                 info: Info {
@@ -2409,6 +2423,7 @@
                                 tag: None,
                             },
                         ),
+                        lhs_is_ref: false,
                     },
                 ],
                 false_block: [
@@ -2605,8 +2620,22 @@
                                         41,
                                     ),
                                 },
-                                tag: None,
-                                lhs: "result",
+                                lhs: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                58,
+                                                9,
+                                            ),
+                                            end_ln_and_col: (
+                                                58,
+                                                15,
+                                            ),
+                                        },
+                                        name: "result",
+                                        tag: None,
+                                    },
+                                ),
                                 rhs: Term(
                                     Call(
                                         Info {
@@ -2687,6 +2716,7 @@
                                         },
                                     ),
                                 ),
+                                lhs_is_ref: false,
                             },
                         ],
                     ),

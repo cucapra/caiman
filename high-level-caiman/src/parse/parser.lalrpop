@@ -265,7 +265,8 @@ SpecStmt: SpecStmt = {
 SchedStmt: SchedStmt = {
     <@L> "let" <CommaList<MaybeArgFullType>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
     <@L> "var" <CommaList<MaybeArgFullType>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
-    <@L> <Id> <TagOp?> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
+    <@L> <Term> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
+    <@L> "*" <Term> "=" <SchedExpr> ";" <@R> => astf.sched_ref_assign(<>),
     <BlockSeq> => <>,
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
@@ -584,11 +585,13 @@ DotOp: Binop = {
     "." => Binop::Dot,
 }
 
+#[inline]
 UnOp: Uop = {
     "-" => Uop::Neg,
     "!" => Uop::LNot,
     "~" => Uop::Not,
     "&" => Uop::Ref,
+    "*" => Uop::Deref,
 }
 
 // LITERALS

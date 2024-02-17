@@ -1,0 +1,2 @@
+Error: At bad_assign.cm:19:5, 
+  Type Error: Failed to unify type constraints of variable _f1_0
