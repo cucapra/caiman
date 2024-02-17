@@ -269,7 +269,9 @@ impl Context {
         match self.variable_map.get(funclet) {
             Some(f) => match f.local.get(var) {
                 Some(v) => v,
-                None => panic!("Unknown local name {} in funclet {}", var, funclet),
+                None => {
+                    panic!("Unknown local name {} in funclet {}", var, funclet)
+                }
             },
             None => panic!("Unknown funclet name {}", funclet),
         }

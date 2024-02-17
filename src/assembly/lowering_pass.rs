@@ -120,13 +120,7 @@ pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient
     fn get_output_node(remote_id: &ast::RemoteNodeId, context: &Context) -> usize {
         let node_id = reject_hole(remote_id.node.as_ref());
         let funclet_id = reject_hole(remote_id.funclet.as_ref());
-        context.variable_map[funclet_id]
-            .returns
-            .get_index(node_id)
-            .expect(&format!(
-                "Output node '{:?}' not found for funclet {:?}",
-                node_id, funclet_id
-            ))
+        context.remote_return_id(funclet_id, node_id)
     }
     match quot {
         ast::Quotient::None(_) => ir::Quotient::None,
