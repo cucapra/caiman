@@ -1402,15 +1402,6 @@ impl<'program> CodeGenerator<'program> {
             }
         }
 
-        // write!(self.code_writer, " ) : ( ");
-
-        // for (i, var_type) in var_types.iter().enumerate() {
-        //     write!(self.code_writer, "{}", var_type);
-        //     if i < output_type_ids.len() - 1 {
-        //         write!(self.code_writer, ", ");
-        //     }
-        // }
-
         write!(
             self.code_writer,
             ") = if {} !=0 {{ ",
