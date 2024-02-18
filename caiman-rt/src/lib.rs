@@ -228,7 +228,8 @@ impl LocalVars {
         let type_id = std::any::TypeId::of::<T>();
         self.type_ids.insert(id, type_id);
         let mut r = unsafe {
-            (self.storage.alloc(id, size, align) as *mut c_void)
+            self.storage
+                .alloc(id, size, align)
                 .cast::<std::mem::MaybeUninit<T>>()
                 .as_mut()
                 .unwrap()
