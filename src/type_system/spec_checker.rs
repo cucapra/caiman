@@ -3,7 +3,7 @@ use crate::ir;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::default::Default;
 #[macro_use]
-use crate::type_system::error::{error_ifn_eq};
+use crate::type_system::error::error_ifn_eq;
 
 /*macro_rules! error_ifn_eq {
     ($ctx:expr, $left:expr, $right:expr $(,)?) => {

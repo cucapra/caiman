@@ -899,7 +899,7 @@ fn ir_spec_binding(
 ) -> ir::FuncletSpecBinding {
     match &funclet_header.binding {
         ast::FuncletBinding::None => ir::FuncletSpecBinding::None,
-        ast::FuncletBinding::ValueBinding(ast::FunctionClassBinding {
+        ast::FuncletBinding::SpecBinding(ast::FunctionClassBinding {
             default,
             function_class,
         }) => {
@@ -988,7 +988,7 @@ fn ir_function_class(
     for declaration in declarations {
         match declaration {
             ast::Declaration::Funclet(f) => match &f.header.binding {
-                ast::FuncletBinding::ValueBinding(binding) => {
+                ast::FuncletBinding::SpecBinding(binding) => {
                     if binding.function_class == function.name {
                         let current_id = context
                             .funclet_indices

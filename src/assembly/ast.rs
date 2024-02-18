@@ -273,7 +273,7 @@ pub struct ScheduleBinding {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum FuncletBinding {
-    ValueBinding(FunctionClassBinding),
+    SpecBinding(FunctionClassBinding),
     ScheduleBinding(ScheduleBinding),
     None,
 }

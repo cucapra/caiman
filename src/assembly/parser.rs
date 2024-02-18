@@ -199,6 +199,9 @@ impl CaimanAssemblyParser {
     fn spatial_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
+    fn schedule_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
     fn pipeline_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
@@ -1076,21 +1079,28 @@ impl CaimanAssemblyParser {
 
     fn funclet(input: Node) -> ParseResult<ast::Funclet> {
         match_nodes!(input.into_children();
-            [impl_box((default, function_class)), value_funclet(mut value)] => {
-                value.header.binding = ast::FuncletBinding::ValueBinding(
+            [impl_box((default, function_class)), value_funclet(mut funclet)] => {
+                funclet.header.binding = ast::FuncletBinding::SpecBinding(
                     ast::FunctionClassBinding {
                         default,
                         function_class
                 });
-                Ok(value)
+                Ok(funclet)
             },
+            [impl_box((default, function_class)), timeline_funclet(mut funclet)] => {
+                funclet.header.binding = ast::FuncletBinding::SpecBinding(
+                    ast::FunctionClassBinding {
+                        default,
+                        function_class
+                });
+                Ok(funclet)
+            },
+            [spatial_sep, spatial_funclet(mut funclet)] => Ok(funclet),
             [schedule_box(schedule), mut schedule_funclet] => {
                 *schedule_funclet.user_data().binding_info.borrow_mut() = Some(schedule);
                 let mut result = CaimanAssemblyParser::schedule_funclet(schedule_funclet);
                 result
             },
-            [timeline_sep, timeline_funclet(funclet)] => Ok(funclet),
-            [spatial_sep, spatial_funclet(funclet)] => Ok(funclet),
         )
     }
 
@@ -1771,9 +1781,9 @@ impl CaimanAssemblyParser {
 
     fn value_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [constant_node(n)] => n,
             [extract_node(n)] => n,
             [call_node(n)] => n,
+            [constant_node(n)] => n,
             [select_node(n)] => n
         ))
     }
@@ -1781,6 +1791,7 @@ impl CaimanAssemblyParser {
     fn timeline_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [extract_node(n)] => n,
+            [call_node(n)] => n,
             [encoding_event_node(n)] => n,
             [submission_event_node(n)] => n,
             [synchronization_event_node(n)] => n
@@ -1791,6 +1802,7 @@ impl CaimanAssemblyParser {
     fn spatial_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [extract_node(n)] => n,
+            [call_node(n)] => n,
             [separated_buffer_space_node(n)] => n
         ))
     }

@@ -29,6 +29,9 @@ function @addone(i64) -> i64;
 function @double(i64) -> i64;
 function @main(i64) -> i64;
 
+function @time(%event0) -> %event0;
+function @time_single(%event0) -> %event0;
+
 value[impl default @double] %double(%x : i64) -> [%out: i64] {
     %two = constant %i64n 2;
     %result_t = call @mult(%x, %two);
@@ -53,17 +56,19 @@ value[impl default @main] %main(%x : i64) -> [%out: i64] {
     return %result;
 }
 
-timeline %time(%e : %event0) -> %event0 {
+timeline[impl default @time] %time(%e : %event0) -> %event0 {
     return %e;
 }
 
-timeline %single(%e : %event0) -> [%out : %event0] {
+timeline[impl default @time_single] %single(%e : %event0) -> [%out : %event0] {
     %enc = encoding-event %e [];
     %enc_loc = extract %enc 0;
     %enc_remote = extract %enc 1;
     
     %sub = submission-event %enc_remote;
-    %snc = synchronization-event %sub %enc_loc;
+    %call_t = call @time(%sub);
+    %call = extract %call_t 0;
+    %snc = synchronization-event %call %enc_loc;
     return %snc;
 }
 
@@ -123,8 +128,8 @@ schedule[value $val = %main, timeline $time = %single, spatial $space = %space]
 
     schedule-call %addone_head [
             value node($val.%y_t),
-            timeline none($time.%sub),
-            spatial node($space.%bs)]
+            timeline node($time.%call_t),
+            spatial none($space)]
         (%x) %join;
 }
 
@@ -142,8 +147,8 @@ schedule[value $val = %main, timeline $time = %single, spatial $space = %space]
 
     schedule-call %double_head [
             value node($val.%result_t),
-            timeline node($time.%snc),
-            spatial node($space.%bs)]
+            timeline node($time.%call_t),
+            spatial none($space)]
         (%y) %join;
 }
 

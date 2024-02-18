@@ -155,14 +155,17 @@ function_class = { function_class_sep ~ function_class_name ~ "("
 value_sep = @{ "value" ~ sep }
 timeline_sep = @{ "timeline" ~ sep }
 spatial_sep = @{ "spatial" ~ sep }
+schedule_sep = @{ "schedule" ~ sep }
 
 schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
 schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
 schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
 schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
 
-funclet = { "value" ~ impl_box ~ value_funclet | "schedule" ~ schedule_box ~ schedule_funclet |
-    timeline_sep ~ timeline_funclet | spatial_sep ~ spatial_funclet }
+funclet = { "value" ~ impl_box ~ value_funclet 
+    | "timeline" ~ impl_box ~ timeline_funclet 
+    | spatial_sep ~ spatial_funclet
+    | "schedule" ~ schedule_box ~ schedule_funclet }
 
 //   header setup
 
@@ -216,14 +219,14 @@ tail_edge = { return_node | jump_node | debug_hole_node |
 
 extract_sep = @{ "extract" ~ sep }
 extract_node = { assign ~ extract_sep ~ name ~ n }
+call_sep = @{ "call" ~ sep }
+call_node = { assign ~ call_sep ~ function_class_name ~ name_call }
 
 //     value
 
 // we can syntactically disallow holes to a (limited) extent here, so might as well
 constant_value = @{ "-" ~ ASCII_DIGIT+ | ASCII_DIGIT+ }
 constant_node = ${ assign ~ sep? ~ "constant" ~ sep ~ name_sep ~ constant_value }
-call_sep = @{ "call" ~ sep }
-call_node = { assign ~ call_sep ~ function_class_name ~ name_call }
 select_sep = @{ "select" ~ sep }
 select_node = { assign ~ select_sep ~ name_sep ~ name_sep ~ name }
 
@@ -291,11 +294,11 @@ fulfill_captures_node = { assign ~ fulfill_captures_sep ~ name_hole_sep ~ name_b
 
 //   nodes
 
-value_node = { constant_node | extract_node | call_node | select_node }
+value_node = { extract_node | call_node | constant_node | select_node }
 
-timeline_node = { extract_node | encoding_event_node | submission_event_node | synchronization_event_node }
+timeline_node = { extract_node | call_node | encoding_event_node | submission_event_node | synchronization_event_node }
 
-spatial_node = { extract_node | separated_buffer_space_node }
+spatial_node = { extract_node | call_node | separated_buffer_space_node }
 
 schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_node
     | static_split_node | static_merge_node | read_node | borrow_node | write_node

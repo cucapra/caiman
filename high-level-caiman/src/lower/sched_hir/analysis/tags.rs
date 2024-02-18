@@ -91,7 +91,7 @@ impl TagInfo {
                 none_tag(
                     &self.specs.spatial,
                     match dtype {
-                        DataType::Ref(_) => ir::Flow::Save,
+                        DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
                     },
                 )
@@ -112,7 +112,7 @@ impl TagInfo {
                 Some(none_tag(
                     &self.specs.spatial,
                     match dtype {
-                        DataType::Ref(_) => ir::Flow::Save,
+                        DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
                     },
                 ))
@@ -174,8 +174,8 @@ impl TagAnalysis {
                 // the the future, also assume that it's save if the flow is not specified
                 // but the quotient is
                 if tg.spatial.is_none() {
-                    tg.spatial = Some(none_tag(&specs.spatial, ir::Flow::Save));
-                } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Save {
+                    tg.spatial = Some(none_tag(&specs.spatial, ir::Flow::Saved));
+                } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Saved {
                     panic!("Spatial tags for references must be save");
                 }
             }
