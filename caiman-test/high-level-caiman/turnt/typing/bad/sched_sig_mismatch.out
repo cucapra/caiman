@@ -1,0 +1,2 @@
+Error: At sched_sig_mismatch.cm:32:1, 
+  Type Error: Function input a_0 of one_func does not match the spec i64

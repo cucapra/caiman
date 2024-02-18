@@ -331,6 +331,12 @@ impl ASTFactory {
         flow: flow.flatten()
     });
 
+    struct_variant_factory!(flow_tag(quot_var: Option<QuotientReference>, flow: Option<Flow>) -> Tag:Tag {
+        quot: None,
+        quot_var: quot_var,
+        flow: flow
+    });
+
     struct_variant_factory!(import(path: String) -> TopLevel:TopLevel::Import);
 
     /// Converts a scheduling expression to a specification expression or
@@ -462,7 +468,18 @@ impl ASTFactory {
 
     struct_variant_factory!(sched_in_annotation(tags: Vec<Arg<Tags>>) -> SchedStmt:SchedStmt::InEdgeAnnotation);
     struct_variant_factory!(sched_out_annotation(tags: Vec<Arg<Tags>>) -> SchedStmt:SchedStmt::OutEdgeAnnotation);
-    struct_variant_factory!(sched_assign(lhs: Name, tag: Option<Tags>, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign);
+    struct_variant_factory!(sched_assign(lhs: SchedExpr, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign {
+        lhs: lhs,
+        rhs: rhs,
+        lhs_is_ref: false
+    
+    });
+    struct_variant_factory!(sched_ref_assign(lhs: SchedExpr, rhs: SchedExpr) -> SchedStmt:SchedStmt::Assign {
+        lhs: lhs,
+        rhs: rhs,
+        lhs_is_ref: true
+    
+    });
     tuple_variant_factory!(sched_return(e: SchedExpr) -> SchedStmt:SchedStmt::Return);
     tuple_variant_factory!(sched_hole_stmt() -> SchedStmt:SchedStmt::Hole);
     tuple_variant_factory!(sched_call_stmt(call: SchedFuncCall) -> SchedStmt:SchedStmt::Call);
@@ -581,7 +598,7 @@ impl ASTFactory {
     struct_variant_factory!(function_class(name: String, members: Vec<ClassMembers>) 
         -> TopLevel:TopLevel::FunctionClass);
 
-    struct_variant_factory!(sched_function(name: String, input: Vec<Arg<FullType>>, 
+    struct_variant_factory!(sched_function(name: String, input: Vec<MaybeArg<FullType>>, 
         output: Option<Vec<FullType>>, specs: Vec<String>, statements: Vec<SchedStmt>) 
         -> TopLevel:TopLevel::SchedulingFunc {
             name: name,

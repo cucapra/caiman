@@ -1,0 +1,2 @@
+[envs.typecheck]
+command = "../../../../../target/debug/hlc --typecheck {filename}"

@@ -1,20 +1,131 @@
 #![allow(clippy::module_name_repetitions)]
-use std::collections::BTreeSet;
+use std::{collections::{BTreeSet, HashMap}, rc::Rc};
 
 use crate::{
     enum_cast,
-    lower::data_type_to_local_type,
-    parse::ast::{ArgsOrEnc, Binop, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags, Uop},
+    parse::ast::{ArgsOrEnc, Binop, DataType, NestedExpr, SchedExpr, SchedFuncCall, Tags, Uop, Tag, QuotientReference, FullType}, lower::tuple_id,
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
 
 use crate::{
     error::Info,
-    parse::ast::{FullType, Name, SchedStmt, SchedTerm},
+    parse::ast::{Name, SchedStmt, SchedTerm},
 };
 
-use super::RET_VAR;
+use super::Specs;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TripleTag {
+    pub value: Option<Tag>,
+    pub spatial: Option<Tag>,
+    pub timeline: Option<Tag>,
+    pub specs: Rc<Specs>
+}
+
+impl TripleTag {
+    pub fn from_opt(tags: &Option<Tags>, specs: &Rc<Specs>) -> Self {
+        tags.as_ref().map_or_else(|| Self::from_owned_opt(None, specs), |tags| Self::from_tags(tags, specs))
+    }
+
+    pub fn from_owned_opt(tags: Option<Tags>, specs: &Rc<Specs>) -> Self {
+        tags.map_or_else(|| Self {
+                value: None,
+                spatial: None,
+                timeline: None,
+                specs: specs.clone()
+            }, |tags| Self::from_tag_vec(tags, specs))
+    }
+
+    pub fn from_tag_vec(tags: Vec<Tag>, specs: &Rc<Specs>) -> Self {
+        let mut value = None;
+        let mut spatial = None;
+        let mut timeline = None;
+        for tag in tags {
+            if let Tag { quot_var: Some(QuotientReference {
+                spec_name, ..
+            }), ..} = &tag {
+                if &specs.value.0 == spec_name {
+                    value = Some(tag.clone());
+                } else if &specs.spatial.0 == spec_name{
+                    spatial = Some(tag.clone());
+                } else if &specs.timeline.0 == spec_name {
+                    timeline = Some(tag.clone());
+                }
+            }
+        }
+        Self {
+            value,
+            spatial,
+            timeline,
+            specs: specs.clone()
+        }
+    }
+
+    pub fn from_tags(tags: &[Tag], specs: &Rc<Specs>) -> Self {
+        let mut value = None;
+        let mut spatial = None;
+        let mut timeline = None;
+        for tag in tags {
+            if let Tag { quot_var: Some(QuotientReference {
+                spec_name, ..
+            }), ..} = tag {
+                if &specs.value.0 == spec_name {
+                    value = Some(tag.clone());
+                } else if &specs.spatial.0 == spec_name{
+                    spatial = Some(tag.clone());
+                } else if &specs.timeline.0 == spec_name {
+                    timeline = Some(tag.clone());
+                }
+            }
+        }
+        Self {
+            value,
+            spatial,
+            timeline,
+            specs: specs.clone()
+        }
+    }
+
+    pub fn from_fulltype(ft: &FullType, specs: &Rc<Specs>) -> Self {
+        Self::from_tags(&ft.tags, specs)
+    }
+
+    pub fn from_fulltype_opt(ft: &Option<FullType>, specs: &Rc<Specs>) -> Self {
+        ft.as_ref().map_or_else(|| Self::from_owned_opt(None, specs), |ft| Self::from_fulltype(ft, specs))
+    }
+
+    pub const fn is_any_specified(&self) -> bool {
+        self.value.is_some() || self.spatial.is_some() || self.timeline.is_some()
+    }
+
+}
+
+impl From<TripleTag> for Tags {
+    fn from(val: TripleTag) -> Self {
+        let mut tags = Self::new();
+        if let Some(value) = val.value {
+            tags.push(value);
+        }
+        if let Some(spatial) = val.spatial {
+            tags.push(spatial);
+        }
+        if let Some(timeline) = val.timeline {
+            tags.push(timeline);
+        }
+        tags
+    }
+}
+
+impl From<TripleTag> for Option<Tags> {
+    fn from(val: TripleTag) -> Self {
+        if val.is_any_specified() {
+            Some(val.into())
+        } else {
+            None
+        }
+    }
+}
 
 /// High-level caiman IR, excluding tail edges.
 ///
@@ -30,7 +141,7 @@ pub enum HirBody {
     /// A data movement into a mutable variable
     RefStore {
         info: Info,
-        lhs_tags: Option<Tags>,
+        lhs_tags: TripleTag,
         lhs: Name,
         rhs: SchedTerm,
     },
@@ -44,14 +155,14 @@ pub enum HirBody {
     ConstDecl {
         info: Info,
         lhs: Name,
-        lhs_tag: Hole<FullType>,
+        lhs_tag: TripleTag,
         rhs: SchedTerm,
     },
     /// Declaration of a mutable variable (reference)
     VarDecl {
         info: Info,
         lhs: Name,
-        lhs_tag: Hole<FullType>,
+        lhs_tag: TripleTag,
         rhs: Option<SchedTerm>,
     },
     Hole(Info),
@@ -59,12 +170,20 @@ pub enum HirBody {
     Op {
         info: Info,
         dest: Name,
-        dest_tag: Hole<FullType>,
+        dest_tag: TripleTag,
         op: HirOp,
         args: Vec<SchedTerm>,
     },
-    InAnnotation(Info, Vec<(String, Tags)>),
-    OutAnnotation(Info, Vec<(String, Tags)>),
+    InAnnotation(Info, Vec<(String, TripleTag)>),
+    OutAnnotation(Info, Vec<(String, TripleTag)>),
+    Phi {
+        dest: Name,
+        /// Map from incoming block id to the incoming variable name 
+        /// from that block
+        inputs: HashMap<usize, Name>,
+        /// original name of the variable
+        original: Name,
+    },
 }
 
 /// A high level IR operation.
@@ -97,12 +216,11 @@ impl HirOp {
 pub struct HirFuncCall {
     pub target: String,
     pub args: Vec<String>,
-    pub tag: Option<Tags>,
+    pub tag: TripleTag,
 }
 
-impl TryFrom<SchedFuncCall> for HirFuncCall {
-    type Error = ();
-    fn try_from(value: SchedFuncCall) -> Result<Self, Self::Error> {
+impl HirFuncCall {
+    pub fn new(value: SchedFuncCall, specs: &Rc<Specs>) ->Self {
         if let NestedExpr::Term(SchedTerm::Var { name, .. }) = *value.target {
             if let ArgsOrEnc::Args(args) = *value.args {
                 let args = args
@@ -115,14 +233,23 @@ impl TryFrom<SchedFuncCall> for HirFuncCall {
                         )
                     })
                     .collect();
-                return Ok(Self {
+                return Self {
                     target: name,
                     args,
-                    tag: value.tag,
-                });
+                    tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag, specs)),
+                };
             }
         }
         panic!("Invalid internal function call")
+    }
+
+    fn to_tuple_tag(mut tag: TripleTag) -> TripleTag {
+        if let Some(val) = tag.value.as_mut() {
+            if let Some(qv) = val.quot_var.as_mut() {
+                qv.spec_var = qv.spec_var.as_ref().map(|sv| tuple_id(&[sv.clone()]));
+            }
+        }
+        tag
     }
 }
 
@@ -135,12 +262,12 @@ pub enum Terminator {
     /// return values in. The destinations are **NEW** variables, not writes to
     /// existing variables. This terminator is replaced by a `CaptureCall` terminator
     /// when analyses are complete.
-    Call(Vec<(String, Option<FullType>)>, HirFuncCall),
+    Call(Vec<(String, TripleTag)>, HirFuncCall),
     /// A call to an internal function with a list of destinations to store the
     /// return values in and a list of variables to capture. The destinations are
     /// **NEW** variables, not writes to existing variables.
     CaptureCall {
-        dests: Vec<(String, Option<FullType>)>,
+        dests: Vec<(String, TripleTag)>,
         call: HirFuncCall,
         captures: BTreeSet<String>,
     },
@@ -148,23 +275,25 @@ pub enum Terminator {
     /// we transition to the `true_branch` of the outgoing edge of this block
     /// in the CFG. Otherwise, we transition to the `false_branch`.
     Select {
-        dests: Vec<(String, Option<FullType>)>,
+        dests: Vec<(String, TripleTag)>,
         guard: String,
-        tag: Option<Tags>,
+        tag: TripleTag,
     },
     /// A return statement which returns values to the parent scope, **NOT** out
     /// of the function. This is modeled as an assignment to the destination variables.
     /// For returning from the function, the destination variables are
     /// `_out0`, `_out1`, etc.
     Return {
-        dests: Vec<(String, Option<FullType>)>,
+        /// The destination names and tags for the return values in the **parent** scope
+        dests: Vec<(String, TripleTag)>,
+        /// The returned variables in the child scope
         rets: Vec<String>,
     },
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
     /// for final block in the canonical CFG. Takes an argument which is
-    /// how many return values there are. Essentially returns `_out0` to `_out{n-1}`
-    FinalReturn(usize),
+    /// the names of the return values. Essentially returns `_out0` to `_out{n-1}`
+    FinalReturn(Vec<String>),
     /// No terminator, continue to the next block. A `None` terminator is just
     /// a temporary value until live vars and tag analysis can be done to know
     /// what the output variables are for the `Next` terminator
@@ -180,8 +309,6 @@ pub enum UseType {
     Read,
 }
 
-pub type Args = Vec<(String, Option<asm::TypeId>)>;
-
 /// A generalized HIR instruction which is either a body statement or a terminator.
 pub trait Hir {
     /// Get the variables used by this statement.
@@ -190,11 +317,15 @@ pub trait Hir {
 
     /// Get the name and type of the variables defined by this statement, if any.
     /// A def is a **NEW** variable, not a write to an existing variable.
-    fn get_defs(&self) -> Option<Args>;
+    fn get_defs(&self) -> Option<Vec<String>>;
 
     /// Renames all uses in this statement using the given function which is
     /// passed the name of the variable and the type of use.
     fn rename_uses(&mut self, f: &mut dyn FnMut(&str, UseType) -> String);
+
+    /// Renames all defs in this statement using the given function which is
+    /// passed the name of the variable.
+    fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String);
 
     /// Get the variables used by this statement.
     fn get_use_set(&self) -> BTreeSet<String> {
@@ -205,20 +336,13 @@ pub trait Hir {
 }
 
 impl Hir for Terminator {
-    fn get_defs(&self) -> Option<Args> {
+    fn get_defs(&self) -> Option<Vec<String>> {
         match self {
             Self::Call(defs, ..)
             | Self::CaptureCall { dests: defs, .. }
-            | Self::Return { dests: defs, .. } => Some(
-                defs.iter()
-                    .map(|(d, t)| {
-                        (
-                            d.clone(),
-                            t.as_ref().map(|dt| data_type_to_local_type(&dt.base.base)),
-                        )
-                    })
-                    .collect(),
-            ),
+            | Self::Return { dests: defs, .. } => {
+                Some(defs.iter().map(|(d, _)| d.clone()).collect())
+            }
             // we don't consider the defs of a select to be defs of this terminator,
             // but rather they are the defs of the left and right funclets
             Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => None,
@@ -235,17 +359,15 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 uses.insert(guard.clone());
             }
-            Self::Return { rets, .. } => {
+            Self::Return { rets, .. } | Self::Next(rets) => {
                 for node in rets {
                     uses.insert(node.clone());
                 }
             }
-            Self::FinalReturn(n) => {
-                for i in 0..*n {
-                    uses.insert(format!("{RET_VAR}{i}"));
-                }
+            Self::FinalReturn(names) => {
+                uses.extend(names.iter().cloned());
             }
-            Self::None | Self::Next(..) => (),
+            Self::None => (),
         }
     }
 
@@ -259,12 +381,25 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Return { rets, .. } => {
+            Self::Return { rets, .. } | Self::Next(rets) | Self::FinalReturn(rets) => {
                 for node in rets {
                     *node = f(node, UseType::Read);
                 }
             }
-            Self::FinalReturn(_) | Self::None | Self::Next(..) => (),
+            Self::None => (),
+        }
+    }
+
+    fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String) {
+        match self {
+            Self::Call(defs, ..)
+            | Self::CaptureCall { dests: defs, .. }
+            | Self::Return { dests: defs, .. } => {
+                for (dest, _) in defs {
+                    *dest = f(dest);
+                }
+            }
+            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => (),
         }
     }
 }
@@ -302,23 +437,27 @@ impl std::ops::DerefMut for HirInstr<'_> {
 }
 
 impl HirBody {
-    pub fn new(stmt: SchedStmt) -> Self {
+    pub fn new(stmt: SchedStmt, specs: &Rc<Specs>) -> Self {
         // TODO: operations
         match stmt {
             SchedStmt::Assign {
                 info,
-                tag,
                 lhs,
                 rhs,
-            } => {
-                let rhs = enum_cast!(SchedExpr::Term, rhs);
-                Self::RefStore {
-                    info,
-                    lhs_tags: tag,
-                    lhs,
-                    rhs,
-                }
-            }
+                ..
+            } => {   
+                if let SchedExpr::Term(SchedTerm::Var { name, tag, ..}) = lhs {
+                        let rhs = enum_cast!(SchedExpr::Term, rhs);
+                    Self::RefStore {
+                        info,
+                        lhs_tags: TripleTag::from_opt(&tag, specs),
+                        lhs: name,
+                        rhs,
+                    }
+                } else {
+                    panic!("Invalid assignment")
+                }       
+            },
             SchedStmt::Decl {
                 info,
                 lhs,
@@ -328,7 +467,7 @@ impl HirBody {
                 SchedExpr::Term(rhs) => Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
-                    lhs_tag: lhs[0].1.clone(),
+                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
                     rhs,
                 },
                 SchedExpr::Binop {
@@ -342,12 +481,24 @@ impl HirBody {
                     Self::Op {
                         info,
                         dest: lhs[0].0.clone(),
-                        dest_tag: lhs[0].1.clone(),
+                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
                         op: HirOp::Binary(op),
                         args: vec![lhs_term.clone(), rhs_term.clone()],
                     }
-                }
-                _ => todo!(),
+                },
+                SchedExpr::Uop { 
+                    info, op, expr
+                } => {
+                    let term = enum_cast!(SchedExpr::Term, *expr);
+                    Self::Op {
+                        info,
+                        dest: lhs[0].0.clone(),
+                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
+                        op: HirOp::Unary(op),
+                        args: vec![term],
+                    }
+                },
+                SchedExpr::Conditional { .. } => panic!("Inline conditonal expresssions not allowed in schedule"),
             },
             SchedStmt::Decl {
                 info,
@@ -359,7 +510,7 @@ impl HirBody {
                 Self::VarDecl {
                     info,
                     lhs: lhs[0].0.clone(),
-                    lhs_tag: lhs[0].1.clone(),
+                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
                     rhs,
                 }
             }
@@ -372,8 +523,8 @@ impl HirBody {
                 panic!("Unexpected stmt")
             }
             SchedStmt::Hole(info) => Self::Hole(info),
-            SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(info, tags),
-            SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(info, tags),
+            SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(info, tags.into_iter().map(|(name, tags)| (name, TripleTag::from_tag_vec(tags, specs))).collect()),
+            SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(info, tags.into_iter().map(|(name, tags)| (name, TripleTag::from_tag_vec(tags, specs))).collect()),
         }
     }
 }
@@ -403,29 +554,18 @@ impl Hir for HirBody {
                 }
             }
             Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::Hole(..) => (),
+            Self::Phi {inputs, ..} => {
+                res.extend(inputs.iter().map(|(_, name)| name.clone()));
+            }
         }
     }
 
-    fn get_defs(&self) -> Option<Args> {
+    fn get_defs(&self) -> Option<Vec<String>> {
         match self {
-            Self::ConstDecl { lhs, lhs_tag, .. } => {
-                Some(vec![(
-                    lhs.clone(),
-                    lhs_tag
-                        .as_ref()
-                        .map(|tag| data_type_to_local_type(&tag.base.base)),
-                )])
-            }
-            Self::VarDecl { lhs, lhs_tag, ..} => {
-                Some(vec![(
-                    lhs.clone(),
-                    lhs_tag
-                        .as_ref()
-                        .map(|tag| make_ref(data_type_to_local_type(&tag.base.base))),
-                )])
-            }
-            Self::RefLoad { dest: lhs, typ, .. } => {
-                Some(vec![(lhs.clone(), Some(data_type_to_local_type(typ)))])
+            Self::ConstDecl { lhs,  .. } | Self::VarDecl { lhs, .. } 
+            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} |
+            Self::Phi { dest: lhs, ..}=> {
+                Some(vec![lhs.clone()])
             }
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
@@ -434,10 +574,20 @@ impl Hir for HirBody {
             | Self::RefStore { .. }
             | Self::InAnnotation(..)
             | Self::OutAnnotation(..) => None,
-            Self::Op { dest, dest_tag, .. } => Some(vec![(
-                dest.clone(),
-                dest_tag.as_ref().map(|tag| data_type_to_local_type(&tag.base.base)),
-            )]),
+        }
+    }
+
+    fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String) {
+        match self {
+            Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } 
+            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} |
+            Self::Phi { dest: lhs, ..} => {
+                *lhs = f(lhs);
+            }
+            Self::Hole(..)
+            | Self::RefStore { .. }
+            | Self::InAnnotation(..)
+            | Self::OutAnnotation(..) => (),
         }
     }
 
@@ -458,9 +608,16 @@ impl Hir for HirBody {
             Self::RefLoad { src, .. } => {
                 *src = f(src, UseType::Read);
             }
+            Self::Phi { .. } => {
+                // don't rename uses of phi nodes
+
+            },
+            Self::InAnnotation(_, annots) | Self::OutAnnotation(_, annots) => {
+                for (name, _) in annots {
+                    *name = f(name, UseType::Read);
+                }
+            }
             Self::Hole(..)
-            | Self::InAnnotation(..)
-            | Self::OutAnnotation(..)
             | Self::VarDecl { rhs: None, .. } => (),
         }
     }
@@ -468,8 +625,8 @@ impl Hir for HirBody {
 
 /// Convert a list of `SchedStmts` to a list of Hirs
 #[allow(clippy::module_name_repetitions)]
-pub fn stmts_to_hir(stmts: Vec<SchedStmt>) -> Vec<HirBody> {
-    stmts.into_iter().map(HirBody::new).collect()
+pub fn stmts_to_hir(stmts: Vec<SchedStmt>, specs: &Rc<Specs>) -> Vec<HirBody> {
+    stmts.into_iter().map(|s| HirBody::new(s, specs)).collect()
 }
 
 /// Get the uses in a `SchedTerm`
@@ -494,7 +651,7 @@ fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
 
 /// Makes the base type of this type into a reference to the existing type
 /// Does not check against references to references
-fn make_ref(typ: asm::TypeId) -> asm::TypeId {
+pub(super) fn make_ref(typ: asm::TypeId) -> asm::TypeId {
     match typ {
         asm::TypeId::Local(type_name) => asm::TypeId::Local(format!("&{type_name}")),
         asm::TypeId::FFI(_) => todo!(),

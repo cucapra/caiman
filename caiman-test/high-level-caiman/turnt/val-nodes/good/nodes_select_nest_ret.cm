@@ -1,0 +1,32 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    returns (1 if true else 2) if false else (3 if false else 4)
+}
+
+fn foo() -> i64 impls main, time, space
+{
+    let v = if false {
+        let v = if true {
+            1
+        } else {
+            2
+        };
+        v
+    } else {
+        var v;
+        if false {
+            v = 3;
+        } else {
+            v = 4;
+        }
+        v
+    };
+    v
+}
+
+pipeline main { foo }

@@ -1,0 +1,28 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    returns (2 * 10 + 2 - 10) / 3
+}
+
+fn main_impl() -> i64
+    impls main, time, space
+{
+    let a = 2;
+    let c = 10;
+    let b = a * c;
+    // need to make new variables bc the spec
+    // creates different nodes for different uses of 2 and 10
+    let a = 2;
+    let c = 10;
+    let d = b + a;
+    let e = d - c;
+    let t = 3;
+    let k = e / t;
+    k
+    
+}
+
+pipeline main { main_impl }

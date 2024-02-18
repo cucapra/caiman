@@ -1,0 +1,10 @@
+#version 0.1.0
+fn foo() impls a {
+    if a {
+        10 + b
+    } else {
+        20 - c
+    }
+    let v = 20;
+    v * v
+}

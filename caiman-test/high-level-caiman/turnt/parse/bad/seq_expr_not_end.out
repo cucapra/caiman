@@ -1,0 +1,5 @@
+Error: At seq_expr_not_end.cm:8:5, 
+  Parsing Error: Unrecognized token: 'let', expected one of [
+    "\";\"",
+    "\"}\"",
+]

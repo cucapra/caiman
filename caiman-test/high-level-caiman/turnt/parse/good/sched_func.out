@@ -46,181 +46,195 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                4,
-                                11,
-                            ),
-                            end_ln_and_col: (
-                                4,
-                                27,
-                            ),
-                        },
-                        base: UserDefined(
-                            "gint",
-                        ),
-                        flags: [
-                            "map_write",
-                        ],
-                        settings: [],
-                    },
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    4,
-                                    30,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        27,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "gint",
                                 ),
-                                end_ln_and_col: (
-                                    4,
-                                    36,
-                                ),
+                                flags: [
+                                    "map_write",
+                                ],
+                                settings: [],
                             },
-                            quot: None,
-                            quot_var: None,
-                            flow: None,
-                        },
-                    ],
-                },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        30,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        36,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: None,
+                                flow: None,
+                            },
+                        ],
+                    },
+                ),
             ),
             (
                 "b",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                5,
-                                11,
-                            ),
-                            end_ln_and_col: (
-                                5,
-                                15,
-                            ),
-                        },
-                        base: Bool,
-                        flags: [],
-                        settings: [],
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        5,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        5,
+                                        15,
+                                    ),
+                                },
+                                base: Bool,
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
             (
                 "c",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                6,
-                                11,
-                            ),
-                            end_ln_and_col: (
-                                6,
-                                47,
-                            ),
-                        },
-                        base: Int(
-                            I64,
-                        ),
-                        flags: [
-                            "map_read",
-                        ],
-                        settings: [
-                            (
-                                "alignment_bits",
-                                "512",
-                            ),
-                        ],
-                    },
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    6,
-                                    51,
-                                ),
-                                end_ln_and_col: (
-                                    6,
-                                    62,
-                                ),
-                            },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "v",
-                                    spec_var: Some(
-                                        "y",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        47,
                                     ),
                                 },
-                            ),
-                            flow: Some(
-                                Dead,
-                            ),
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    6,
-                                    64,
+                                base: Int(
+                                    I64,
                                 ),
-                                end_ln_and_col: (
-                                    6,
-                                    74,
-                                ),
+                                flags: [
+                                    "map_read",
+                                ],
+                                settings: [
+                                    (
+                                        "alignment_bits",
+                                        "512",
+                                    ),
+                                ],
                             },
-                            quot: Some(
-                                None,
-                            ),
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "tm",
-                                    spec_var: None,
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        51,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        62,
+                                    ),
                                 },
-                            ),
-                            flow: None,
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    6,
-                                    76,
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "v",
+                                        spec_var: Some(
+                                            "y",
+                                        ),
+                                    },
                                 ),
-                                end_ln_and_col: (
-                                    6,
-                                    82,
+                                flow: Some(
+                                    Dead,
                                 ),
                             },
-                            quot: None,
-                            quot_var: None,
-                            flow: None,
-                        },
-                    ],
-                },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        64,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        74,
+                                    ),
+                                },
+                                quot: Some(
+                                    None,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "tm",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: None,
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        76,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        82,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: None,
+                                flow: None,
+                            },
+                        ],
+                    },
+                ),
             ),
         ],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            7,
-                            11,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                11,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                35,
+                            ),
+                        },
+                        base: Int(
+                            I32,
                         ),
-                        end_ln_and_col: (
-                            7,
-                            35,
-                        ),
+                        flags: [
+                            "storage",
+                            "map_write",
+                        ],
+                        settings: [],
                     },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [
-                        "storage",
-                        "map_write",
-                    ],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -246,25 +260,27 @@
                         "x",
                         Some(
                             FullType {
-                                base: FlaggedType {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            10,
-                                            12,
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                12,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                26,
+                                            ),
+                                        },
+                                        base: Int(
+                                            I32,
                                         ),
-                                        end_ln_and_col: (
-                                            10,
-                                            26,
-                                        ),
+                                        flags: [
+                                            "map_read",
+                                        ],
+                                        settings: [],
                                     },
-                                    base: Int(
-                                        I32,
-                                    ),
-                                    flags: [
-                                        "map_read",
-                                    ],
-                                    settings: [],
-                                },
+                                ),
                                 tags: [
                                     Tag {
                                         info: Info {

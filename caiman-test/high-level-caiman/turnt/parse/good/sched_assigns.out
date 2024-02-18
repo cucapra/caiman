@@ -14,115 +14,125 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: FlaggedType {
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        14,
+                                    ),
+                                },
+                                base: Int(
+                                    I32,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "b",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        19,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        33,
+                                    ),
+                                },
+                                base: Bool,
+                                flags: [
+                                    "storage",
+                                ],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        37,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        43,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "v",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: None,
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        2,
+                                        45,
+                                    ),
+                                    end_ln_and_col: (
+                                        2,
+                                        57,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "sp",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                        ],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
-                                2,
-                                11,
+                                3,
+                                9,
                             ),
                             end_ln_and_col: (
-                                2,
-                                14,
+                                3,
+                                22,
                             ),
                         },
                         base: Int(
                             I32,
                         ),
-                        flags: [],
-                        settings: [],
-                    },
-                    tags: [],
-                },
-            ),
-            (
-                "b",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                2,
-                                19,
-                            ),
-                            end_ln_and_col: (
-                                2,
-                                33,
-                            ),
-                        },
-                        base: Bool,
                         flags: [
                             "storage",
                         ],
                         settings: [],
                     },
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    2,
-                                    37,
-                                ),
-                                end_ln_and_col: (
-                                    2,
-                                    43,
-                                ),
-                            },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "v",
-                                    spec_var: None,
-                                },
-                            ),
-                            flow: None,
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    2,
-                                    45,
-                                ),
-                                end_ln_and_col: (
-                                    2,
-                                    57,
-                                ),
-                            },
-                            quot: None,
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "sp",
-                                    spec_var: None,
-                                },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                    ],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            3,
-                            9,
-                        ),
-                        end_ln_and_col: (
-                            3,
-                            22,
-                        ),
-                    },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [
-                        "storage",
-                    ],
-                    settings: [],
-                },
+                ),
                 tags: [
                     Tag {
                         info: Info {
@@ -195,23 +205,25 @@
                 ],
             },
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            3,
-                            68,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                68,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                71,
+                            ),
+                        },
+                        base: Int(
+                            I32,
                         ),
-                        end_ln_and_col: (
-                            3,
-                            71,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I32,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -327,8 +339,22 @@
                         11,
                     ),
                 },
-                tag: None,
-                lhs: "x",
+                lhs: Term(
+                    Var {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                6,
+                            ),
+                        },
+                        name: "x",
+                        tag: None,
+                    },
+                ),
                 rhs: Term(
                     Var {
                         info: Info {
@@ -345,6 +371,7 @@
                         tag: None,
                     },
                 ),
+                lhs_is_ref: false,
             },
         ],
     },

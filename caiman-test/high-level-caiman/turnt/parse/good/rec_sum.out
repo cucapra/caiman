@@ -218,23 +218,25 @@
         input: [],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            10,
-                            13,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                10,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                10,
+                                16,
+                            ),
+                        },
+                        base: Int(
+                            I64,
                         ),
-                        end_ln_and_col: (
-                            10,
-                            16,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I64,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -669,16 +671,119 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: FlaggedType {
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        24,
+                                        12,
+                                    ),
+                                    end_ln_and_col: (
+                                        24,
+                                        15,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        24,
+                                        19,
+                                    ),
+                                    end_ln_and_col: (
+                                        24,
+                                        42,
+                                    ),
+                                },
+                                quot: Some(
+                                    Input,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "rec_sum",
+                                        spec_var: Some(
+                                            "a",
+                                        ),
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        24,
+                                        44,
+                                    ),
+                                    end_ln_and_col: (
+                                        24,
+                                        59,
+                                    ),
+                                },
+                                quot: Some(
+                                    None,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "tm",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        24,
+                                        61,
+                                    ),
+                                    end_ln_and_col: (
+                                        24,
+                                        76,
+                                    ),
+                                },
+                                quot: Some(
+                                    None,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "sp",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                        ],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
                                 24,
-                                12,
+                                82,
                             ),
                             end_ln_and_col: (
                                 24,
-                                15,
+                                85,
                             ),
                         },
                         base: Int(
@@ -687,104 +792,7 @@
                         flags: [],
                         settings: [],
                     },
-                    tags: [
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    24,
-                                    19,
-                                ),
-                                end_ln_and_col: (
-                                    24,
-                                    42,
-                                ),
-                            },
-                            quot: Some(
-                                Input,
-                            ),
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "rec_sum",
-                                    spec_var: Some(
-                                        "a",
-                                    ),
-                                },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    24,
-                                    44,
-                                ),
-                                end_ln_and_col: (
-                                    24,
-                                    59,
-                                ),
-                            },
-                            quot: Some(
-                                None,
-                            ),
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "tm",
-                                    spec_var: None,
-                                },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                        Tag {
-                            info: Info {
-                                start_ln_and_col: (
-                                    24,
-                                    61,
-                                ),
-                                end_ln_and_col: (
-                                    24,
-                                    76,
-                                ),
-                            },
-                            quot: Some(
-                                None,
-                            ),
-                            quot_var: Some(
-                                QuotientReference {
-                                    spec_name: "sp",
-                                    spec_var: None,
-                                },
-                            ),
-                            flow: Some(
-                                Usable,
-                            ),
-                        },
-                    ],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            24,
-                            82,
-                        ),
-                        end_ln_and_col: (
-                            24,
-                            85,
-                        ),
-                    },
-                    base: Int(
-                        I64,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],

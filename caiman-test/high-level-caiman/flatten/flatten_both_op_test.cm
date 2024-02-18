@@ -1,0 +1,16 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    returns (2 * 10 + 2 - 10) / 3
+}
+
+fn main_impl() -> i64
+    impls main, time, space
+{
+    (2 * 10 + 2 - 10) / 3
+}
+
+pipeline main { main_impl }

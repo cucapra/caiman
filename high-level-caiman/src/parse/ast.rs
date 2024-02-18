@@ -5,16 +5,17 @@ use crate::error::Info;
 pub type Name = String;
 
 pub type Arg<T> = (String, T);
+pub type MaybeArg<T> = (String, Option<T>);
 pub type NamedOutput<T> = (Option<String>, T);
 
 /// A numeric data type
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub enum IntSize {
     I32,
     I64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Copy)]
 pub enum FloatSize {
     F64,
 }
@@ -51,6 +52,15 @@ impl PartialEq for DataType {
             (Self::UserDefined(l0), Self::UserDefined(r0)) => l0 == r0,
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
+    }
+}
+
+impl DataType {
+    /// Returns true if `self` refines `b`, that is is the same as `b` or is a
+    /// reference to `b`
+    #[must_use]
+    pub fn refines(&self, b: &Self) -> bool {
+        self == b || matches!(self, Self::Ref(ref a) if b == a.as_ref())
     }
 }
 
@@ -134,6 +144,7 @@ pub enum Uop {
     LNot,
     Not,
     Ref,
+    Deref,
 }
 
 /// A literal in the spec languages
@@ -216,7 +227,7 @@ pub enum SpecStmt {
     Returns(Info, SpecExpr),
 }
 /// AST-level quotient (once merged, we can use the ir enum)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Quotient {
     Node,
     None,
@@ -225,7 +236,7 @@ pub enum Quotient {
 }
 
 /// AST-level flow (once merged, we can use the ir enum)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Flow {
     Usable,
     Saved,
@@ -280,7 +291,7 @@ pub struct FlaggedType {
 #[derive(Clone, Debug)]
 #[allow(unused)]
 pub struct FullType {
-    pub base: FlaggedType,
+    pub base: Option<FlaggedType>,
     /// Tags, can be empty
     pub tags: Vec<Tag>,
 }
@@ -292,6 +303,13 @@ pub struct FullType {
 pub enum ArgsOrEnc {
     Args(Vec<SchedExpr>),
     Encode(EncodedStmt),
+}
+
+impl ArgsOrEnc {
+    #[must_use]
+    pub const fn is_args(&self) -> bool {
+        matches!(self, Self::Args(_))
+    }
 }
 
 /// A list of expressions or a type
@@ -308,12 +326,37 @@ pub type Tags = Vec<Tag>;
 /// Can be a procedure (no return value) or a function (has a return value).
 /// Can be an encoded statement or have a list of arguments.
 #[derive(Clone, Debug)]
-#[allow(unused)]
 pub struct SchedFuncCall {
     pub target: Box<SchedExpr>,
     pub templates: Option<TemplateArgs>,
     pub args: Box<ArgsOrEnc>,
     pub tag: Option<Tags>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SchedLocalCall<'a> {
+    pub target: &'a SchedExpr,
+    pub templates: &'a Option<TemplateArgs>,
+    pub args: &'a [SchedExpr],
+    pub tag: &'a Option<Tags>,
+}
+
+impl SchedFuncCall {
+    /// Unwraps the call into a local call
+    /// # Panics
+    /// If the call is an encoded statement
+    #[must_use]
+    pub fn unwrap_local_call(&self) -> SchedLocalCall {
+        match &*self.args {
+            ArgsOrEnc::Args(args) => SchedLocalCall {
+                target: &self.target,
+                templates: &self.templates,
+                args,
+                tag: &self.tag,
+            },
+            ArgsOrEnc::Encode(..) => panic!("Expected local call"),
+        }
+    }
 }
 
 /// A term (bottom level) of a scheduling expression
@@ -334,14 +377,11 @@ pub enum SchedTerm {
 }
 
 impl SchedTerm {
-    /// Gets the tags of this term if they are specified, otherwise returns `None`
     #[must_use]
-    #[allow(dead_code)]
     pub const fn get_tags(&self) -> Option<&Tags> {
         match self {
-            Self::Lit { tag, .. }
-            | Self::Var { tag, .. }
-            | Self::Call(_, SchedFuncCall { tag, .. }) => tag.as_ref(),
+            Self::Lit { tag, .. } | Self::Var { tag, .. } => tag.as_ref(),
+            Self::Call(_, call) => call.tag.as_ref(),
             Self::Hole(_) => None,
         }
     }
@@ -373,9 +413,10 @@ pub enum SchedStmt {
     },
     Assign {
         info: Info,
-        tag: Option<Tags>,
-        lhs: Name,
+        lhs: SchedExpr,
         rhs: SchedExpr,
+        /// whether the LHS is a reference (assignment of the form `*x = y`)
+        lhs_is_ref: bool,
     },
     If {
         info: Info,
@@ -428,7 +469,7 @@ impl SchedStmt {
 pub struct SchedulingFunc {
     pub info: Info,
     pub name: String,
-    pub input: Vec<Arg<FullType>>,
+    pub input: Vec<MaybeArg<FullType>>,
     pub output: Vec<FullType>,
     pub specs: Vec<String>,
     pub statements: Vec<SchedStmt>,
@@ -592,7 +633,7 @@ pub enum TopLevel {
     SchedulingFunc {
         info: Info,
         name: String,
-        input: Vec<Arg<FullType>>,
+        input: Vec<MaybeArg<FullType>>,
         output: Vec<FullType>,
         specs: Vec<String>,
         statements: Vec<SchedStmt>,

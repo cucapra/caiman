@@ -1,0 +1,19 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    a :- 2
+    returns a
+}
+
+fn main_impl() -> i64 @ node(main.a)-usable
+    impls main, time, space
+{
+    let a: i64 @ node(main.a) = true;
+    a
+    
+}
+
+pipeline main { main_impl }

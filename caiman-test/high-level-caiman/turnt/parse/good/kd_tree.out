@@ -270,70 +270,80 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                12,
-                                11,
-                            ),
-                            end_ln_and_col: (
-                                12,
-                                14,
-                            ),
-                        },
-                        base: Int(
-                            I64,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        12,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        12,
+                                        14,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
             (
                 "b",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                12,
-                                19,
-                            ),
-                            end_ln_and_col: (
-                                12,
-                                22,
-                            ),
-                        },
-                        base: Int(
-                            I64,
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        12,
+                                        19,
+                                    ),
+                                    end_ln_and_col: (
+                                        12,
+                                        22,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
         ],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            12,
-                            27,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                12,
+                                27,
+                            ),
+                            end_ln_and_col: (
+                                12,
+                                30,
+                            ),
+                        },
+                        base: Int(
+                            I64,
                         ),
-                        end_ln_and_col: (
-                            12,
-                            30,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: Int(
-                        I64,
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -860,70 +870,80 @@
         input: [
             (
                 "a",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                28,
-                                13,
-                            ),
-                            end_ln_and_col: (
-                                28,
-                                16,
-                            ),
-                        },
-                        base: UserDefined(
-                            "f32",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        28,
+                                        13,
+                                    ),
+                                    end_ln_and_col: (
+                                        28,
+                                        16,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "f32",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
             (
                 "b",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                28,
-                                21,
-                            ),
-                            end_ln_and_col: (
-                                28,
-                                24,
-                            ),
-                        },
-                        base: UserDefined(
-                            "f32",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        28,
+                                        21,
+                                    ),
+                                    end_ln_and_col: (
+                                        28,
+                                        24,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "f32",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
         ],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            28,
-                            29,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                28,
+                                29,
+                            ),
+                            end_ln_and_col: (
+                                28,
+                                32,
+                            ),
+                        },
+                        base: UserDefined(
+                            "f32",
                         ),
-                        end_ln_and_col: (
-                            28,
-                            32,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: UserDefined(
-                        "f32",
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -1995,95 +2015,109 @@
         input: [
             (
                 "p",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                74,
-                                30,
-                            ),
-                            end_ln_and_col: (
-                                74,
-                                33,
-                            ),
-                        },
-                        base: UserDefined(
-                            "f32",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        74,
+                                        30,
+                                    ),
+                                    end_ln_and_col: (
+                                        74,
+                                        33,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "f32",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
             (
                 "a",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                74,
-                                38,
-                            ),
-                            end_ln_and_col: (
-                                74,
-                                43,
-                            ),
-                        },
-                        base: Slice(
-                            UserDefined(
-                                "f32",
-                            ),
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        74,
+                                        38,
+                                    ),
+                                    end_ln_and_col: (
+                                        74,
+                                        43,
+                                    ),
+                                },
+                                base: Slice(
+                                    UserDefined(
+                                        "f32",
+                                    ),
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
             (
                 "min_dist",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                74,
-                                55,
-                            ),
-                            end_ln_and_col: (
-                                74,
-                                58,
-                            ),
-                        },
-                        base: UserDefined(
-                            "f32",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        74,
+                                        55,
+                                    ),
+                                    end_ln_and_col: (
+                                        74,
+                                        58,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "f32",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
                         ),
-                        flags: [],
-                        settings: [],
+                        tags: [],
                     },
-                    tags: [],
-                },
+                ),
             ),
         ],
         output: [
             FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            75,
-                            8,
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                75,
+                                8,
+                            ),
+                            end_ln_and_col: (
+                                75,
+                                11,
+                            ),
+                        },
+                        base: UserDefined(
+                            "f32",
                         ),
-                        end_ln_and_col: (
-                            75,
-                            11,
-                        ),
+                        flags: [],
+                        settings: [],
                     },
-                    base: UserDefined(
-                        "f32",
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -2708,16 +2742,73 @@
         input: [
             (
                 "p",
-                FullType {
-                    base: FlaggedType {
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        88,
+                                        26,
+                                    ),
+                                    end_ln_and_col: (
+                                        88,
+                                        29,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "f32",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "a",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        88,
+                                        34,
+                                    ),
+                                    end_ln_and_col: (
+                                        88,
+                                        39,
+                                    ),
+                                },
+                                base: Slice(
+                                    UserDefined(
+                                        "f32",
+                                    ),
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
                                 88,
-                                26,
+                                45,
                             ),
                             end_ln_and_col: (
                                 88,
-                                29,
+                                48,
                             ),
                         },
                         base: UserDefined(
@@ -2726,74 +2817,29 @@
                         flags: [],
                         settings: [],
                     },
-                    tags: [],
-                },
-            ),
-            (
-                "a",
-                FullType {
-                    base: FlaggedType {
+                ),
+                tags: [],
+            },
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
                                 88,
-                                34,
+                                50,
                             ),
                             end_ln_and_col: (
                                 88,
-                                39,
+                                53,
                             ),
                         },
-                        base: Slice(
-                            UserDefined(
-                                "f32",
-                            ),
+                        base: UserDefined(
+                            "f32",
                         ),
                         flags: [],
                         settings: [],
                     },
-                    tags: [],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            88,
-                            45,
-                        ),
-                        end_ln_and_col: (
-                            88,
-                            48,
-                        ),
-                    },
-                    base: UserDefined(
-                        "f32",
-                    ),
-                    flags: [],
-                    settings: [],
-                },
-                tags: [],
-            },
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            88,
-                            50,
-                        ),
-                        end_ln_and_col: (
-                            88,
-                            53,
-                        ),
-                    },
-                    base: UserDefined(
-                        "f32",
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -5263,16 +5309,169 @@
         input: [
             (
                 "p",
-                FullType {
-                    base: FlaggedType {
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        133,
+                                        20,
+                                    ),
+                                    end_ln_and_col: (
+                                        133,
+                                        23,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "f32",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "pts",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        133,
+                                        30,
+                                    ),
+                                    end_ln_and_col: (
+                                        133,
+                                        38,
+                                    ),
+                                },
+                                base: Array(
+                                    UserDefined(
+                                        "f32",
+                                    ),
+                                    Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    133,
+                                                    36,
+                                                ),
+                                                end_ln_and_col: (
+                                                    133,
+                                                    37,
+                                                ),
+                                            },
+                                            name: "N",
+                                        },
+                                    ),
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "start",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        133,
+                                        47,
+                                    ),
+                                    end_ln_and_col: (
+                                        133,
+                                        50,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "end",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        134,
+                                        10,
+                                    ),
+                                    end_ln_and_col: (
+                                        134,
+                                        13,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "idx",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        134,
+                                        20,
+                                    ),
+                                    end_ln_and_col: (
+                                        134,
+                                        23,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
-                                133,
-                                20,
+                                134,
+                                28,
                             ),
                             end_ln_and_col: (
-                                133,
-                                23,
+                                134,
+                                31,
                             ),
                         },
                         base: UserDefined(
@@ -5281,138 +5480,7 @@
                         flags: [],
                         settings: [],
                     },
-                    tags: [],
-                },
-            ),
-            (
-                "pts",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                133,
-                                30,
-                            ),
-                            end_ln_and_col: (
-                                133,
-                                38,
-                            ),
-                        },
-                        base: Array(
-                            UserDefined(
-                                "f32",
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            133,
-                                            36,
-                                        ),
-                                        end_ln_and_col: (
-                                            133,
-                                            37,
-                                        ),
-                                    },
-                                    name: "N",
-                                },
-                            ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
-                    tags: [],
-                },
-            ),
-            (
-                "start",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                133,
-                                47,
-                            ),
-                            end_ln_and_col: (
-                                133,
-                                50,
-                            ),
-                        },
-                        base: Int(
-                            I64,
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
-                    tags: [],
-                },
-            ),
-            (
-                "end",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                134,
-                                10,
-                            ),
-                            end_ln_and_col: (
-                                134,
-                                13,
-                            ),
-                        },
-                        base: Int(
-                            I64,
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
-                    tags: [],
-                },
-            ),
-            (
-                "idx",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                134,
-                                20,
-                            ),
-                            end_ln_and_col: (
-                                134,
-                                23,
-                            ),
-                        },
-                        base: Int(
-                            I64,
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
-                    tags: [],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            134,
-                            28,
-                        ),
-                        end_ln_and_col: (
-                            134,
-                            31,
-                        ),
-                    },
-                    base: UserDefined(
-                        "f32",
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],
@@ -6832,8 +6900,22 @@
                                                     34,
                                                 ),
                                             },
-                                            tag: None,
-                                            lhs: "nxt_start",
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            150,
+                                                            13,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            150,
+                                                            22,
+                                                        ),
+                                                    },
+                                                    name: "nxt_start",
+                                                    tag: None,
+                                                },
+                                            ),
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
@@ -6881,6 +6963,7 @@
                                                     },
                                                 ),
                                             },
+                                            lhs_is_ref: false,
                                         },
                                     ],
                                     false_block: [],
@@ -7343,8 +7426,22 @@
                                                     32,
                                                 ),
                                             },
-                                            tag: None,
-                                            lhs: "nxt_end",
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            155,
+                                                            13,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            155,
+                                                            20,
+                                                        ),
+                                                    },
+                                                    name: "nxt_end",
+                                                    tag: None,
+                                                },
+                                            ),
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
@@ -7392,6 +7489,7 @@
                                                     },
                                                 ),
                                             },
+                                            lhs_is_ref: false,
                                         },
                                     ],
                                     false_block: [],
@@ -7506,8 +7604,22 @@
                                                     25,
                                                 ),
                                             },
-                                            tag: None,
-                                            lhs: "nxt_idx",
+                                            lhs: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            160,
+                                                            13,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            160,
+                                                            20,
+                                                        ),
+                                                    },
+                                                    name: "nxt_idx",
+                                                    tag: None,
+                                                },
+                                            ),
                                             rhs: Term(
                                                 Lit {
                                                     info: Info {
@@ -7526,6 +7638,7 @@
                                                     tag: None,
                                                 },
                                             ),
+                                            lhs_is_ref: false,
                                         },
                                     ],
                                     false_block: [],
@@ -7903,16 +8016,88 @@
         input: [
             (
                 "p",
-                FullType {
-                    base: FlaggedType {
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        172,
+                                        26,
+                                    ),
+                                    end_ln_and_col: (
+                                        172,
+                                        29,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "f32",
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "a",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        172,
+                                        34,
+                                    ),
+                                    end_ln_and_col: (
+                                        172,
+                                        42,
+                                    ),
+                                },
+                                base: Array(
+                                    UserDefined(
+                                        "f32",
+                                    ),
+                                    Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    172,
+                                                    40,
+                                                ),
+                                                end_ln_and_col: (
+                                                    172,
+                                                    41,
+                                                ),
+                                            },
+                                            name: "N",
+                                        },
+                                    ),
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
                         info: Info {
                             start_ln_and_col: (
-                                172,
-                                26,
+                                173,
+                                8,
                             ),
                             end_ln_and_col: (
-                                172,
-                                29,
+                                173,
+                                11,
                             ),
                         },
                         base: UserDefined(
@@ -7921,69 +8106,7 @@
                         flags: [],
                         settings: [],
                     },
-                    tags: [],
-                },
-            ),
-            (
-                "a",
-                FullType {
-                    base: FlaggedType {
-                        info: Info {
-                            start_ln_and_col: (
-                                172,
-                                34,
-                            ),
-                            end_ln_and_col: (
-                                172,
-                                42,
-                            ),
-                        },
-                        base: Array(
-                            UserDefined(
-                                "f32",
-                            ),
-                            Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            172,
-                                            40,
-                                        ),
-                                        end_ln_and_col: (
-                                            172,
-                                            41,
-                                        ),
-                                    },
-                                    name: "N",
-                                },
-                            ),
-                        ),
-                        flags: [],
-                        settings: [],
-                    },
-                    tags: [],
-                },
-            ),
-        ],
-        output: [
-            FullType {
-                base: FlaggedType {
-                    info: Info {
-                        start_ln_and_col: (
-                            173,
-                            8,
-                        ),
-                        end_ln_and_col: (
-                            173,
-                            11,
-                        ),
-                    },
-                    base: UserDefined(
-                        "f32",
-                    ),
-                    flags: [],
-                    settings: [],
-                },
+                ),
                 tags: [],
             },
         ],

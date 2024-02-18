@@ -1,0 +1,4 @@
+[envs.typecheck]
+command = """
+    ../../../../../target/debug/hlc --typecheck {filename} 2>&1 > /dev/null \
+    | sed -n '/Error/,$p' | grep ."""

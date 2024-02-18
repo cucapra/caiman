@@ -1696,7 +1696,7 @@ impl<'program> CodeGen<'program> {
                     assert_eq!(src_place, ir::Place::Local);
                     assert_eq!(dst_place, ir::Place::Local);
 
-                    panic!("To do: Implement slices");
+                    //panic!("To do: Implement slices");
                     self.code_generator
                         .build_write_local_ref(dst_slot_id, src_slot_id);
                 }

@@ -1,0 +1,5 @@
+#version 0.1.0
+
+fn foo() impls a {
+    *ptr + 10 = 2;
+}

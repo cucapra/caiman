@@ -1,0 +1,494 @@
+[
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                10,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [
+            (
+                "a",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        14,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        17,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        28,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "main",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                        ],
+                    },
+                ),
+            ),
+            (
+                "b",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        33,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        36,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        39,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        52,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "main",
+                                        spec_var: Some(
+                                            "x",
+                                        ),
+                                    },
+                                ),
+                                flow: Some(
+                                    Usable,
+                                ),
+                            },
+                        ],
+                    },
+                ),
+            ),
+            (
+                "c",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        57,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        60,
+                                    ),
+                                },
+                                base: Int(
+                                    I32,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                66,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                69,
+                            ),
+                        },
+                        base: Int(
+                            I32,
+                        ),
+                        flags: [],
+                        settings: [],
+                    },
+                ),
+                tags: [
+                    Tag {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                72,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                93,
+                            ),
+                        },
+                        quot: Some(
+                            Output,
+                        ),
+                        quot_var: Some(
+                            QuotientReference {
+                                spec_name: "main",
+                                spec_var: Some(
+                                    "y",
+                                ),
+                            },
+                        ),
+                        flow: Some(
+                            Usable,
+                        ),
+                    },
+                ],
+            },
+        ],
+        specs: [
+            "main",
+        ],
+        statements: [
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        6,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        6,
+                        30,
+                    ),
+                },
+                lhs: [
+                    (
+                        "x",
+                        Some(
+                            FullType {
+                                base: None,
+                                tags: [
+                                    Tag {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                6,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                6,
+                                                24,
+                                            ),
+                                        },
+                                        quot: None,
+                                        quot_var: Some(
+                                            QuotientReference {
+                                                spec_name: "main",
+                                                spec_var: None,
+                                            },
+                                        ),
+                                        flow: Some(
+                                            Usable,
+                                        ),
+                                    },
+                                ],
+                            },
+                        ),
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    6,
+                                    27,
+                                ),
+                                end_ln_and_col: (
+                                    6,
+                                    29,
+                                ),
+                            },
+                            lit: Int(
+                                "10",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        7,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        7,
+                        36,
+                    ),
+                },
+                lhs: [
+                    (
+                        "y",
+                        Some(
+                            FullType {
+                                base: None,
+                                tags: [
+                                    Tag {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                7,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                7,
+                                                30,
+                                            ),
+                                        },
+                                        quot: Some(
+                                            Node,
+                                        ),
+                                        quot_var: Some(
+                                            QuotientReference {
+                                                spec_name: "main",
+                                                spec_var: None,
+                                            },
+                                        ),
+                                        flow: Some(
+                                            Usable,
+                                        ),
+                                    },
+                                ],
+                            },
+                        ),
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    7,
+                                    33,
+                                ),
+                                end_ln_and_col: (
+                                    7,
+                                    35,
+                                ),
+                            },
+                            lit: Int(
+                                "10",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        8,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        8,
+                        31,
+                    ),
+                },
+                lhs: [
+                    (
+                        "z",
+                        Some(
+                            FullType {
+                                base: None,
+                                tags: [
+                                    Tag {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                8,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                8,
+                                                25,
+                                            ),
+                                        },
+                                        quot: Some(
+                                            Node,
+                                        ),
+                                        quot_var: Some(
+                                            QuotientReference {
+                                                spec_name: "main",
+                                                spec_var: Some(
+                                                    "x",
+                                                ),
+                                            },
+                                        ),
+                                        flow: None,
+                                    },
+                                ],
+                            },
+                        ),
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    8,
+                                    28,
+                                ),
+                                end_ln_and_col: (
+                                    8,
+                                    30,
+                                ),
+                            },
+                            lit: Int(
+                                "20",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        9,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        9,
+                        37,
+                    ),
+                },
+                lhs: [
+                    (
+                        "w",
+                        Some(
+                            FullType {
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                9,
+                                                12,
+                                            ),
+                                            end_ln_and_col: (
+                                                9,
+                                                15,
+                                            ),
+                                        },
+                                        base: Int(
+                                            I64,
+                                        ),
+                                        flags: [],
+                                        settings: [],
+                                    },
+                                ),
+                                tags: [
+                                    Tag {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                9,
+                                                18,
+                                            ),
+                                            end_ln_and_col: (
+                                                9,
+                                                31,
+                                            ),
+                                        },
+                                        quot: None,
+                                        quot_var: Some(
+                                            QuotientReference {
+                                                spec_name: "main",
+                                                spec_var: Some(
+                                                    "y",
+                                                ),
+                                            },
+                                        ),
+                                        flow: Some(
+                                            Usable,
+                                        ),
+                                    },
+                                ],
+                            },
+                        ),
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    9,
+                                    34,
+                                ),
+                                end_ln_and_col: (
+                                    9,
+                                    36,
+                                ),
+                            },
+                            lit: Int(
+                                "30",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+        ],
+    },
+]

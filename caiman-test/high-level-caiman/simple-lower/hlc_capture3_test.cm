@@ -56,14 +56,10 @@ fn main_impl() -> i64 @ node(main.r)-usable
     let b: i64 @ node(main.b) = 5;
     let c: i64 @ node(main.c) = 7;
 
-    let a2: i64 @ node(main.a)-saved = 3;
-    let b2: i64 @ node(main.b)-saved = 5;
-    let c2: i64 @ node(main.c)-saved = 7;
+    let a2: i64 @ node(main.a) = 3;
+    let b2: i64 @ node(main.b) = 5;
+    let c2: i64 @ node(main.c) = 7;
     let j: i64 @ node(main.j)-usable = add1_impl(a, b, c) @ node(main.j);
-    @in { a2: node(main.a)-usable, 
-          b2: node(main.b)-usable, 
-          c2: node(main.c)-usable,
-    };
     // j is usable bc addition is pure
     let k: i64 @ node(main.k)-usable = add2_impl(a2, b2, c2) @ node(main.k);
     let r: i64 @ node(main.r) = j + k;

@@ -70,10 +70,10 @@ TopLevel: TopLevel = {
         <Id>
     "}" <@R> => astf.pipeline(<>),
 
-    <@L> "fn" <Id> "(" <CommaList<Arg<FullType>>> ")" <("->" <MultiType>)?>
+    <@L> "fn" <Id> "(" <CommaList<MaybeArgFullType>> ")" <("->" <MultiType>)?>
         "impls" <CommaList<Id>>
     "{"
-        <Sequence>
+        <MaybeUnitSequence>
     "}" <@R> => astf.sched_function(<>),
 
     <l: @L>
@@ -151,13 +151,30 @@ MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
 // Full type: base type with flags and settings and an optional tag
 FullType: FullType = {
     <FlaggedType> => FullType {
-        base: <>,
+        base: Some(<>),
         tags: vec![],
     },
     <b: FlaggedType> <t: TagOp> => FullType {
-        base: b,
+        base: Some(b),
         tags: t,
     },
+}
+
+// Name with optional full type, either the base type, tags, or both
+MaybeArgFullType: (String, Option<FullType>) = {
+    <i: Id> ":" <b: FlaggedType> => (String::from(i), Some(FullType {
+        base: Some(b),
+        tags: vec![],
+    })),
+    <i: Id> ":" <b: FlaggedType> <t: TagOp> => (String::from(i), Some(FullType {
+        base: Some(b),
+        tags: t,
+    })),
+    <i: Id> <t: TagOp> => (String::from(i), Some(FullType {
+        base: None,
+        tags: t,
+    })),
+    <i: Id> => (String::from(i), None),
 }
 
 MultiType: Vec<FullType> = {
@@ -177,6 +194,7 @@ Tags: Vec<Tag> = {
 
 Tag: Tag = {
     <@L> <Quotient> "(" <QuotRef> ")" <Flow?> <@R> => astf.tag(<>),
+    <@L> <QuotRef> <Flow> <@R> => astf.flow_tag(<>),
 }
 
 Quotient: Option<Quotient> = {
@@ -193,6 +211,14 @@ Flow: Option<Flow> = {
     "-need" => Some(Flow::Need),
     "-dead" => Some(Flow::Dead),
     "-?" => None,
+}
+
+SomeFlow: Option<Flow> = {
+    "usable" => Some(Flow::Usable),
+    "save" => Some(Flow::Save),
+    "need" => Some(Flow::Need),
+    "dead" => Some(Flow::Dead),
+    "?" => None
 }
 
 // Quotient reference: the part of the quotient which refers to a specific node
@@ -237,9 +263,10 @@ SpecStmt: SpecStmt = {
 
 // Scheduling statements
 SchedStmt: SchedStmt = {
-    <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
-    <@L> "var" <CommaList<MaybeArg<FullType>>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
-    <@L> <Id> <TagOp?> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
+    <@L> "let" <CommaList<MaybeArgFullType>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
+    <@L> "var" <CommaList<MaybeArgFullType>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
+    <@L> <Term> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
+    <@L> "*" <Term> "=" <SchedExpr> ";" <@R> => astf.sched_ref_assign(<>),
     <BlockSeq> => <>,
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
@@ -252,29 +279,45 @@ SchedStmt: SchedStmt = {
 //
 // This is the top level scheduling statement production for a list
 // of scheduling statements that may return a value to the parent
-Sequence: Vec<SchedStmt> = {
-    <mut s: SchedStmt*> <l: @L> <ret: SchedExpr?> <r: @R> => match ret {
+MaybeUnitSequence: Vec<SchedStmt> = {
+    <mut s: SchedStmt*> <ret: RetExpr?> => match ret {
         None => s,
         Some(ret) => {
-            s.push(astf.sched_return(l, ret, r));
+            s.push(ret);
             s
         },
     }
 }
 
+// A sequence of scheduling statements which must end with an expression
+// that is returned to the parent
+NonUnitSequence: Vec<SchedStmt> = {
+    <mut s: SchedStmt*> <ret: RetExpr> => {
+        s.push(ret);
+        s
+    }
+}
+
+// An expression that can terminate a sequence. Either an if statement or an
+// expression
+RetExpr: SchedStmt = {
+    <@L> <SchedExpr> <@R> => astf.sched_return(<>),
+    <SequenceIf> => <>,
+}
+
 // IF expressions
 
 BlockSeq: SchedStmt = {
-    <@L> "let" <CommaList<MaybeArg<FullType>>> "=" <SequenceIf> ";" <@R> => astf.sched_const_seq(<>),
-    <@L> "var" <CommaList<MaybeArg<FullType>>> "=" <SequenceIf> ";" <@R> => astf.sched_var_seq(<>),
+    <@L> "let" <CommaList<MaybeArgFullType>> "=" <SequenceIf> ";" <@R> => astf.sched_const_seq(<>),
+    <@L> "var" <CommaList<MaybeArgFullType>> "=" <SequenceIf> ";" <@R> => astf.sched_var_seq(<>),
     <Block> => <>,
 }
 
 // An matched if block where each block may end with an expression that is returned
 // to the parent
 SequenceIf: SchedStmt = {
-    <@L> "if" <TagOp?> <SchedExpr> "{" <Sequence> "}" "else" <SequenceIf> <@R> => astf.sched_matched_if(<>),
-    <@L> "{" <Sequence> "}" <@R> => astf.sched_block(<>),
+    <@L> "if" <TagOp?> <SchedExpr> "{" <NonUnitSequence> "}" "else" <SequenceIf> <@R> => astf.sched_matched_if(<>),
+    <@L> "{" <NonUnitSequence> "}" <@R> => astf.sched_block(<>),
 }
 
 // IFs and dangling else 
@@ -542,11 +585,13 @@ DotOp: Binop = {
     "." => Binop::Dot,
 }
 
+#[inline]
 UnOp: Uop = {
     "-" => Uop::Neg,
     "!" => Uop::LNot,
     "~" => Uop::Not,
     "&" => Uop::Ref,
+    "*" => Uop::Deref,
 }
 
 // LITERALS
