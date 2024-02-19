@@ -137,7 +137,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { FunctionClassId };
 	(Operation) => { NodeId };
-	(RemoteOperation) => { Quotient };
+	(RemoteOperation) => { RemoteNodeId };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -222,26 +222,20 @@ pub enum TailEdge {
     // Scheduling only
     // Split value - what will be computed
     ScheduleCall {
-        value_operation: Hole<Quotient>,
-        timeline_operation: Hole<Quotient>,
-        spatial_operation: Hole<Quotient>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         callee_funclet_id: Hole<FuncletId>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
-        value_operation: Hole<Quotient>,
-        timeline_operation: Hole<Quotient>,
-        spatial_operation: Hole<Quotient>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleCallYield {
-        value_operation: Hole<Quotient>,
-        timeline_operation: Hole<Quotient>,
-        spatial_operation: Hole<Quotient>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         external_function_id: Hole<ExternalFunctionId>,
         yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
@@ -258,9 +252,9 @@ pub struct FunctionClassBinding {
 pub struct ScheduleBinding {
     pub implicit_tags: Option<(Tag, Tag)>,
     // map from the name to the associated funclet id
-    pub value: Option<FuncletId>,
-    pub timeline: Option<FuncletId>,
-    pub spatial: Option<FuncletId>,
+    pub value: FuncletId,
+    pub timeline: FuncletId,
+    pub spatial: FuncletId,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -111,45 +111,16 @@ fn ir_version(version: &ast::Version, _: &mut Context) -> (u32, u32, u32) {
     result
 }
 
-pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> ir::Quotient {
-    let err = format!("Quotient {:?} missing a node", quot);
-    fn get_node(remote_id: &ast::RemoteNodeId, context: &Context, err: String) -> usize {
-        let node_id = remote_id.node.as_ref().unwrap_or_else(|| panic!(err));
-        let funclet_id = reject_hole(remote_id.funclet.as_ref());
-        context.remote_node_id(funclet_id, node_id)
-    }
-    fn get_output_node(remote_id: &ast::RemoteNodeId, context: &Context, err: String) -> usize {
-        let node_id = remote_id.node.as_ref().unwrap_or_else(|| panic!(err));
-        let funclet_id = reject_hole(remote_id.funclet.as_ref());
-        context.remote_return_id(funclet_id, node_id)
-    }
-    match quot {
-        ast::Quotient::None(_) => ir::Quotient::None,
-        ast::Quotient::Node(r) => ir::Quotient::Node {
-            node_id: get_node(reject_hole(r.as_ref()), context, err),
-        },
-        ast::Quotient::Input(r) => ir::Quotient::Input {
-            index: get_node(reject_hole(r.as_ref()), context, err),
-        },
-        ast::Quotient::Output(r) => ir::Quotient::Output {
-            index: get_output_node(reject_hole(r.as_ref()), context, err),
-        },
-    }
+pub fn ir_remote_node_id(remote_id: &ast::RemoteNodeId, context: &Context) -> ir::Quotient {
+    let node_id = reject_hole(remote_id.node.as_ref());
+    let funclet_id = reject_hole(remote_id.funclet.as_ref());
+    context.remote_node_id(funclet_id, node_id)
 }
 
 fn ir_tag(tag: &ast::Tag, context: &mut Context) -> ir::Tag {
     ir::Tag {
         quot: ir_quotient_node(&tag.quot, context),
         flow: tag.flow.clone(),
-    }
-}
-
-fn quotient_funclet(quot: &ast::Quotient, context: &mut Context) -> Option<ast::FuncletId> {
-    match quot {
-        ast::Quotient::None(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
-        ast::Quotient::Node(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
-        ast::Quotient::Input(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
-        ast::Quotient::Output(r) => reject_hole(r.as_ref()).funclet.clone().map(|f| f),
     }
 }
 
