@@ -317,83 +317,6 @@ impl CaimanAssemblyParser {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
 
-    fn meta_remote(input: Node) -> ParseResult<RemoteNodeId> {
-        let error = input.error("Unknown meta name");
-        let meta_map = input
-            .user_data()
-            .binding_info
-            .borrow()
-            .clone()
-            .unwrap()
-            .meta_map;
-        match_nodes!(input.into_children();
-            [meta_name(meta_name)] =>
-                match meta_map.get(&meta_name) {
-                        Some(funclet) => Ok(ast::RemoteNodeId {
-                            funclet: Some(funclet.clone()),
-                            node: None
-                        }),
-                        None => Err(error)
-                },
-            [meta_name(meta_name), name(node)] =>
-                match meta_map.get(&meta_name) {
-                        Some(funclet) => Ok(ast::RemoteNodeId {
-                            funclet: Some(funclet.clone()),
-                            node: Some(NodeId(node))
-                        }),
-                        None => Err(error)
-                }
-        )
-    }
-
-    fn meta_remote_hole(input: Node) -> ParseResult<RemoteNodeId> {
-        let error = input.error("Unknown meta name");
-        let meta_map = input
-            .user_data()
-            .binding_info
-            .borrow()
-            .clone()
-            .unwrap()
-            .meta_map;
-        match_nodes!(input.into_children();
-            // there's a way to make this pretty, but I'm stupid
-            [meta_name_hole(meta_name_hole)] =>
-                match meta_name_hole {
-                    None => Ok(ast::RemoteNodeId {
-                                funclet: None,
-                                node: None
-                            }),
-                    Some(meta_name) =>
-                        match meta_map.get(&meta_name) {
-                                Some(funclet) => Ok(ast::RemoteNodeId {
-                                    funclet: Some(funclet.clone()),
-                                    node: None
-                                }),
-                                None => Err(error)
-                        }
-                },
-            [meta_name_hole(meta_name_hole), name_hole(name_hole)] =>
-                match meta_name_hole {
-                    None => Ok(ast::RemoteNodeId {
-                                funclet: None,
-                                node: name_hole.map(|s| NodeId(s))
-                            }),
-                    Some(meta_name) =>
-                        match meta_map.get(&meta_name) {
-                                Some(funclet) => Ok(ast::RemoteNodeId {
-                                    funclet: Some(funclet.clone()),
-                                    node: name_hole.map(|s| NodeId(s))
-                                }),
-                                None => Err(error)
-                        }
-                },
-            [hole] => Ok(ast::RemoteNodeId {
-                funclet: None,
-                node: None
-            })
-        )
-    }
-
     fn ffi_type_base(input: Node) -> ParseResult<ast::FFIType> {
         input
             .as_str()
@@ -582,44 +505,40 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    // weirdly, this seems like the best way to do this with pest_consume for now?
-    fn quotient_name(
-        input: Node,
-    ) -> ParseResult<Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>> {
-        fn box_up<F>(f: &'static F) -> Box<dyn Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient>
-        where
-            F: Fn(Hole<ast::RemoteNodeId>) -> ast::Quotient,
-        {
-            Box::new(move |x| f(x))
-        }
-
-        input
-            .as_str()
-            .parse::<String>()
-            .map_err(|e| input.error(e))
-            .and_then(|s| match s.as_str() {
-                "node" => Ok(box_up(&ast::Quotient::Node)),
-                "input" => Ok(box_up(&ast::Quotient::Input)),
-                "output" => Ok(box_up(&ast::Quotient::Output)),
-                "none" => Ok(box_up(&ast::Quotient::None)),
-                _ => Err(input.error(unexpected(s))),
-            })
-    }
-
-    fn quotient(input: Node) -> ParseResult<ast::Quotient> {
+    fn quotient(input: Node) -> ParseResult<ast::RemoteNodeId> {
         Ok(match_nodes!(input.into_children();
-            [quotient_name(quot), meta_remote(remote)] => {
-                quot(Some(remote))
+            [meta_name(funclet_id)] => {
+                ast::RemoteNodeId {
+                    funclet: Some(ast::FuncletId(funclet_id)),
+                    node: None
+                }
+            },
+            [meta_name(funclet_id), name(node_id)] => {
+                ast::RemoteNodeId {
+                    funclet: Some(ast::FuncletId(funclet_id)),
+                    node: Some(ast::NodeId(node_id))
+                }
             },
         ))
     }
 
-    fn quotient_hole(input: Node) -> ParseResult<Hole<ast::Quotient>> {
+    fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
-            [hole(hole)] => None,
-            [quotient_name(quot), meta_remote_hole(remote)] => {
-                Some(quot(Some(remote)))
+            [meta_name_hole(funclet_id)] => {
+                Some(ast::RemoteNodeId {
+                    funclet: funclet_id.map(|f| ast::FuncletId(f)),
+                    node: None
+                })
             },
+            [meta_name_hole(funclet_id), name_hole(node_id)] => {
+                Some(ast::RemoteNodeId {
+                    funclet: funclet_id.map(|f| ast::FuncletId(f)),
+                    node: node_id.map(|n| ast::FuncletId(n))
+                })
+            },
+            [hole] => {
+                None
+            }
         ))
     }
 
@@ -639,7 +558,7 @@ impl CaimanAssemblyParser {
 
     fn tag(input: Node) -> ParseResult<ast::Tag> {
         Ok(match_nodes!(input.into_children();
-            [quotient(quot), flow(flow)] => ast::Tag { quot, flow }
+            [quotient(quot), flow(flow)] => ast::Tag { quot: Some(quot), flow }
         ))
     }
 
@@ -1282,11 +1201,7 @@ impl CaimanAssemblyParser {
 
     fn triple_box(
         input: Node,
-    ) -> ParseResult<(
-        Hole<ast::Quotient>,
-        Hole<ast::Quotient>,
-        Hole<ast::Quotient>,
-    )> {
+    ) -> ParseResult<(Vec<ast::RemoteNodeId>)> {
         Ok(match_nodes!(input.into_children();
             [value_sep, quotient_hole(vq),
                 timeline_sep, quotient_hole(tq),

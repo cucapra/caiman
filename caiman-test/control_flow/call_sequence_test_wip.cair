@@ -56,7 +56,7 @@ value[impl default @main] %main(%x : i64) -> [%out: i64] {
     return %result;
 }
 
-timeline[impl default @time] %time(%e : %event0) -> %event0 {
+timeline[impl default @time] %time(%e : %event0) -> [%out : %event0] {
     return %e;
 }
 
@@ -80,10 +80,10 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %addone, timeline $time = %time, spatial $space = %space] 
 %addone_head
-<node($time.%e)-usable, node($time.%e)-usable>
-    (%x     : input($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
-    -> 
-    output($val.%out)-usable node($time.%e)-usable none($space)-usable %i64n
+<input($time.%e)-usable, output($time.%out)-usable>
+    (%x     : input($val.%x)-usable none($time)-usable none($space)-usable %i64n)
+    ->
+    output($val.%out)-usable none($time)-usable none($space)-usable %i64n
 {
     %local_ref = alloc-temporary local [storage, map_write] i64;
 
@@ -99,8 +99,8 @@ schedule[value $val = %addone, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %double, timeline $time = %time, spatial $space = %space] 
 %double_head
-<node($time.%e)-usable, node($time.%e)-usable>
-    (%x     : input($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+<input($time.%e)-usable, output($time.%out)-usable>
+    (%x     : input($val.%x)-usable none($time)-usable none($space)-usable %i64n)
     -> 
     output($val.%out)-usable node($time.%e)-usable none($space)-usable %i64n
 {
@@ -118,7 +118,7 @@ schedule[value $val = %double, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %single, spatial $space = %space] 
 %main_head
-<node($time.%e)-usable, node($time.%e)-usable>
+<input($time.%e)-usable, output($time.%out)-usable>
     (%x     : input($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
     ->
     output($val.%out)-usable output($time.%out)-usable node($space.%bs)-usable %i64n
@@ -135,7 +135,7 @@ schedule[value $val = %main, timeline $time = %single, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %single, spatial $space = %space] 
 %main_second
-<node($time.%e)-usable, node($time.%e)-usable>
+<input($time.%e)-usable, output($time.%out)-usable>
     (%y     : node($val.%y)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
     -> 
     output($val.%out)-usable node($time.%snc)-usable node($space.%bs)-usable %i64n
@@ -154,7 +154,7 @@ schedule[value $val = %main, timeline $time = %single, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space] 
 %main_return
-<node($time.%e)-usable, node($time.%e)-usable>
+<input($time.%e)-usable, output($time.%out)-usable>
     (%result     : node($val.%result)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
     -> 
     node($val.%result)-usable node($time.%e)-usable node($space.%bs)-usable %i64n

@@ -393,6 +393,8 @@ impl<'program> FuncletSpecChecker<'program> {
         output_spec_node_ids: &[ir::NodeId],
         call_spec_node_id: ir::NodeId,
     ) -> Result<(), Error> {
+        dbg!(&input_impl_node_ids);
+        dbg!(&output_spec_node_ids);
         check_tag_compatibility_enter(
             error_context,
             output_spec_node_ids,

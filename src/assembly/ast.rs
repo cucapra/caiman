@@ -119,16 +119,8 @@ pub struct RemoteNodeId {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Quotient {
-    None(Hole<RemoteNodeId>),
-    Node(Hole<RemoteNodeId>),
-    Input(Hole<RemoteNodeId>),
-    Output(Hole<RemoteNodeId>),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tag {
-    pub quot: Quotient, // What a given value maps to in a specification
+    pub quot: Hole<RemoteNodeId>, // What a given value maps to in a specification
     pub flow: ir::Flow, // How this value transforms relative to the specification
 }
 

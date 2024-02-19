@@ -271,7 +271,7 @@ fn lower_spec_funclet(
                 })
                 .collect(),
             binding: class_name.map_or(asm::FuncletBinding::None, |name| {
-                asm::FuncletBinding::ValueBinding(asm::FunctionClassBinding {
+                asm::FuncletBinding::SpecBinding(asm::FunctionClassBinding {
                     default: false,
                     function_class: asm::FunctionClassId(name.to_string()),
                 })
