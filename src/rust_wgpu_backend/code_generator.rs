@@ -1033,7 +1033,7 @@ impl<'program> CodeGenerator<'program> {
         }
 
         for (argument_types, dispatcher) in self.active_dispatchers.iter() {
-            write!(self.code_writer, "fn pop_join_and_dispatch_at_{}<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(mut instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut caiman_rt::JoinStack<'callee>", dispatcher.dispatcher_id.0);
+            write!(self.code_writer, "fn pop_join_and_dispatch_at_{}<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(join_stack : &mut caiman_rt::JoinStack<'callee>", dispatcher.dispatcher_id.0);
 
             for (resuming_argument_index, resuming_type) in argument_types.iter().enumerate() {
                 write!(
@@ -1043,7 +1043,10 @@ impl<'program> CodeGenerator<'program> {
                     self.get_type_name_with_ref(*resuming_type, Some("callee"))
                 );
             }
-            // return value of pop_and_join is always the pipeline output
+            write!(
+                self.code_writer,
+                ", mut instance : Instance<'state, 'cpu_functions, Callbacks>"
+            );
             write!(
                 self.code_writer,
                 " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, {}>\n",
@@ -1124,24 +1127,14 @@ impl<'program> CodeGenerator<'program> {
         &'a mut self,
         argument_var_ids: &[VarId],
         mut argument_types: &'a [ffi::TypeId],
-        dispatcher_id: Option<DispatcherId>,
     ) {
-        let disp_id = dispatcher_id;
-        let dispatcher_id =
-            dispatcher_id.unwrap_or_else(|| self.lookup_dispatcher_id(argument_types));
-        if let Some(dispatcher) = disp_id {
-            for (args, disp) in &self.active_dispatchers {
-                if disp.dispatcher_id == dispatcher {
-                    argument_types = &args;
-                }
-            }
-        }
+        let dispatcher_id = self.lookup_dispatcher_id(argument_types);
         write!(
             self.code_writer,
             "return pop_join_and_dispatch_at_{}::<Callbacks, PipelineOutputTuple<'callee>>",
             dispatcher_id.0
         );
-        write!(self.code_writer, "(instance, join_stack");
+        write!(self.code_writer, "(join_stack");
         for ((argument_index, var_id), var_type) in argument_var_ids
             .iter()
             .enumerate()
@@ -1153,7 +1146,7 @@ impl<'program> CodeGenerator<'program> {
                 write!(self.code_writer, ", {}", self.access_val_str(*var_id));
             }
         }
-        write!(self.code_writer, ")\n");
+        write!(self.code_writer, ", instance)\n");
     }
 
     pub fn build_return(&mut self, output_var_ids: &[VarId], pipeline_rets: &[ffi::TypeId]) {
@@ -1166,7 +1159,7 @@ impl<'program> CodeGenerator<'program> {
                 "return pop_join_and_dispatch_at_{}::<Callbacks, PipelineOutputTuple<'callee>>",
                 dispatcher_id.0
             );
-            write!(self.code_writer, "(instance, join_stack");
+            write!(self.code_writer, "(join_stack");
             for ((return_index, var_id), var_type) in output_var_ids
                 .iter()
                 .enumerate()
@@ -1178,7 +1171,7 @@ impl<'program> CodeGenerator<'program> {
                     write!(self.code_writer, ", {}", self.access_val_str(*var_id));
                 }
             }
-            write!(self.code_writer, ") }}");
+            write!(self.code_writer, ", instance) }}");
             write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((");
             for ((return_index, var_id), var_type) in output_var_ids
                 .iter()
@@ -1752,7 +1745,7 @@ impl<'program> CodeGenerator<'program> {
         capture_types: &[ffi::TypeId],
         argument_types: &[ffi::TypeId],
         output_types: &[ffi::TypeId],
-    ) -> DispatcherId {
+    ) {
         let _closure_id = self.lookup_closure_id(funclet_id, capture_types, argument_types);
         let _argument_dispatcher_id = self.lookup_dispatcher_id(argument_types);
         println!(
@@ -1778,7 +1771,6 @@ impl<'program> CodeGenerator<'program> {
         write!(self.code_writer, "); let closure_header = ClosureHeader::Funclet{}Capturing{}; unsafe {{ join_stack.push_unsafe_unaligned(join_data).expect(\"Ran out of memory while serializing join\"); join_stack.push_unsafe_unaligned(closure_header).expect(\"Ran out of memory while serializing join\"); }}", funclet_id, capture_types.len());
 
         write!(self.code_writer, "}}");
-        _argument_dispatcher_id
     }
 
     pub fn encode_clone_local_data_from_buffer(
