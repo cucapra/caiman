@@ -154,22 +154,17 @@ timeline_sep = @{ "timeline" ~ sep }
 spatial_sep = @{ "spatial" ~ sep }
 schedule_sep = @{ "schedule" ~ sep }
 
-schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
-schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
-
-funclet = { "value" ~ impl_box ~ value_funclet 
-    | "timeline" ~ impl_box ~ timeline_funclet 
+funclet = { "value" ~ value_funclet 
+    | "timeline" ~ timeline_funclet 
     | spatial_sep ~ spatial_funclet
-    | "schedule" ~ schedule_box ~ schedule_funclet }
+    | "schedule" ~ schedule_funclet }
 
 //   header setup
 
 funclet_arg = { (name ~ ":")? ~ typ }
 funclet_args = { (funclet_arg ~ ("," ~ funclet_arg)*)? }
 funclet_return = { "[" ~ funclet_args ~ "]" | typ }
-funclet_header = { name ~ "(" ~ funclet_args ~ ")" ~ "->" ~ funclet_return }
+funclet_header = { impl_box? ~ name ~ "(" ~ funclet_args ~ ")" ~ "->" ~ funclet_return }
 
 value_command = { value_node | tail_edge }
 value_funclet = { funclet_header ~ "{" ~ (value_command ~ ";")* ~ "}" }
@@ -180,18 +175,24 @@ timeline_funclet = { funclet_header ~ "{" ~ (timeline_command ~ ";")* ~ "}" }
 spatial_command = { spatial_node | tail_edge }
 spatial_funclet = { funclet_header ~ "{" ~ (spatial_command ~ ";")* ~ "}" }
 
+schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
+schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
+
 schedule_typ = ${ (tag ~ sep)* ~ typ }
 schedule_arg = { (name ~ ":")? ~ schedule_typ }
 schedule_args = { (schedule_arg ~ ("," ~ schedule_arg)*)? }
 schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
-schedule_header = { name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
+
+schedule_header = { schedule_box ~ name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
 
 schedule_command = { schedule_node | tail_edge | node_hole }
 schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
 
-triple_box = { "[" ~ (quotient_hole)* ~ "]" }
+spec_mapping = { "[" ~ (quotient_hole)* ~ "]" | hole }
 
 debug_hole_node = @{ "debug-hole" ~ sep ~ name_list }
 return_sep = @{ "return" ~ sep }
@@ -200,11 +201,11 @@ jump_sep = @{ "jump" ~ sep }
 jump_node = { jump_sep ~ name_hole ~ name_box_single }
 
 schedule_call_sep = @{ "schedule-call" ~ sep }
-schedule_call_node = { schedule_call_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
+schedule_call_node = { schedule_call_sep ~ name_hole ~ spec_mapping ~ name_call ~ name_hole }
 schedule_select_sep = @{ "schedule-select" ~ sep }
-schedule_select_node = { schedule_select_sep ~ name_hole ~ name_box ~ triple_box ~ name_call ~ name_hole }
+schedule_select_node = { schedule_select_sep ~ name_hole ~ name_box ~ spec_mapping ~ name_call ~ name_hole }
 schedule_yield_sep = @{ "schedule-call-yield" ~ sep }
-schedule_yield_node = { schedule_yield_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
+schedule_yield_node = { schedule_yield_sep ~ name_hole ~ spec_mapping ~ name_call ~ name_hole }
 
 tail_edge = { return_node | jump_node | debug_hole_node |
     schedule_call_node | schedule_select_node | schedule_yield_node }

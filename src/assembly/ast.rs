@@ -42,6 +42,7 @@ macro_rules! def_assembly_id_type {
 }
 
 def_assembly_id_type!(FuncletId);
+def_assembly_id_type!(MetaId);
 def_assembly_id_type!(ExternalFunctionId);
 def_assembly_id_type!(FunctionClassId);
 def_assembly_id_type!(NodeId);
@@ -119,9 +120,17 @@ pub struct RemoteNodeId {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TagRemoteId {
+    pub funclet: Hole<MetaId>,
+    // we need an option of a hole
+    // since None is explicitly different than ?
+    pub node: Option<Hole<NodeId>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tag {
-    pub quot: Hole<RemoteNodeId>, // What a given value maps to in a specification
-    pub flow: ir::Flow, // How this value transforms relative to the specification
+    pub quot: Hole<TagRemoteId>, // What a given value maps to in a specification
+    pub flow: ir::Flow,          // How this value transforms relative to the specification
 }
 
 // Super Jank, but whatever
@@ -222,20 +231,20 @@ pub enum TailEdge {
     // Scheduling only
     // Split value - what will be computed
     ScheduleCall {
-        operations: Hole<Vec<Hole<RemoteNodeId>>>,
+        operations: Hole<Vec<Hole<TagRemoteId>>>,
         callee_funclet_id: Hole<FuncletId>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
-        operations: Hole<Vec<Hole<RemoteNodeId>>>,
+        operations: Hole<Vec<Hole<TagRemoteId>>>,
         condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleCallYield {
-        operations: Hole<Vec<Hole<RemoteNodeId>>>,
+        operations: Hole<Vec<Hole<TagRemoteId>>>,
         external_function_id: Hole<ExternalFunctionId>,
         yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
@@ -249,12 +258,17 @@ pub struct FunctionClassBinding {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ScheduleBinding {
-    pub implicit_tags: Option<(Tag, Tag)>,
+pub struct MetaMapping {
     // map from the name to the associated funclet id
-    pub value: FuncletId,
-    pub timeline: FuncletId,
-    pub spatial: FuncletId,
+    pub value: (MetaId, FuncletId),
+    pub timeline: (MetaId, FuncletId),
+    pub spatial: (MetaId, FuncletId),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ScheduleBinding {
+    pub implicit_tags: (Tag, Tag),
+    pub meta_map: MetaMapping
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

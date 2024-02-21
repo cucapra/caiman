@@ -17,6 +17,8 @@ pub struct Context {
     // cause we need to know the storage value of the native value
     pub native_type_map: HashMap<String, FFIType>,
     pub variable_map: HashMap<FuncletId, NodeTable>,
+    // for keeping track of the meanings of meta names for scheduling funclets
+    pub meta_map: HashMap<String, FuncletId>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
     pub location: LocationNames,
@@ -150,6 +152,7 @@ impl Context {
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             variable_map: HashMap::new(),
+            meta_map: HashMap::new(),
             location: LocationNames::new(),
         };
         context.setup_context(program);
