@@ -1,8 +1,8 @@
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
-    TypeId,
+    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, MetaId, NodeId, RemoteNodeId,
+    StorageTypeId, TypeId,
 };
 use crate::assembly::table::Table;
 use crate::ir;
@@ -16,9 +16,11 @@ pub struct Context {
     pub local_type_table: Table<String>,
     // cause we need to know the storage value of the native value
     pub native_type_map: HashMap<String, FFIType>,
-    pub variable_map: HashMap<FuncletId, NodeTable>,
-    // for keeping track of the meanings of meta names for scheduling funclets
-    pub meta_map: HashMap<String, FuncletId>,
+    pub variable_map: HashMap<FuncletId, HashMap<NodeId, ir::Quotient>>,
+    pub node_id_map: HashMap<FuncletId, Table<NodeId>>,
+    // for keeping track of the meanings of meta names for the current scheduling funclet
+    // is None when we aren't in a scheduling funclet
+    pub meta_map: Option<ast::MetaMapping>,
     // where we currently are in the AST, using names
     // optional cause we may not have started traversal
     pub location: LocationNames,
@@ -32,24 +34,10 @@ pub struct LocationNames {
     pub node_name: Option<NodeId>,
 }
 
-#[derive(Debug)]
-pub struct NodeTable {
-    // local names and return names such as [%out : i64] or whatever
-    pub local: Table<NodeId>,
-    pub returns: Table<NodeId>,
-}
-
 #[derive(Debug, Clone)]
 pub enum LocalFFI {
     FFI(usize),
     Local(usize),
-}
-
-#[derive(Debug, Clone)]
-pub enum NodeType {
-    // Keeps track of internal names vs return names
-    Local(usize),
-    Return(usize),
 }
 
 impl LocalFFI {
@@ -74,20 +62,18 @@ pub struct FuncletIndices {
     funclet_kind_map: HashMap<String, ir::Place>,
 }
 
+#[derive(Debug)]
+pub struct OperationSet {
+    pub value: Hole<ir::Quotient>,
+    pub timeline: Hole<ir::Quotient>,
+    pub spatial: Hole<ir::Quotient>,
+}
+
 impl LocationNames {
     pub fn new() -> LocationNames {
         LocationNames {
             funclet_name: FuncletId("".to_string()),
             node_name: None,
-        }
-    }
-}
-
-impl NodeTable {
-    pub fn new() -> NodeTable {
-        NodeTable {
-            local: Table::new(),
-            returns: Table::new(),
         }
     }
 }
@@ -152,7 +138,8 @@ impl Context {
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             variable_map: HashMap::new(),
-            meta_map: HashMap::new(),
+            node_id_map: HashMap::new(),
+            meta_map: None,
             location: LocationNames::new(),
         };
         context.setup_context(program);
@@ -187,49 +174,46 @@ impl Context {
                 ast::Declaration::Funclet(f) => {
                     self.funclet_indices
                         .insert(f.header.name.0.clone(), ir::Place::Local);
-                    let mut node_table = NodeTable::new();
+                    let mut var_map = HashMap::new();
+                    let mut id_table = Table::new();
                     // added because phi nodes themselves are unnamed
                     let mut rets = vec![];
-                    for command in &f.commands {
+                    for (index, ret_arg) in f.header.args.iter().enumerate() {
+                        match &ret_arg.name {
+                            None => {}
+                            Some(name) => {
+                                var_map.insert(name, ir::Quotient::Input { index });
+                            }
+                        };
+                    }
+                    for (node_id, command) in f.commands.iter().enumerate() {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
                                 match name {
-                                    None => node_table.local.dummy_push(),
-                                    Some(v) => node_table.local.push(v.clone()),
-                                }
-                            }
-                            Some(ast::Command::TailEdge(ast::TailEdge::Return {
-                                return_values: Some(return_values),
-                            })) => {
-                                for return_value in return_values {
-                                    match return_value {
-                                        Some(node) => {
-                                            rets.push(node.clone());
-                                        }
-                                        None => todo!(),
+                                    None => {
+                                        id_table.dummy_push();
+                                    }
+                                    Some(n) => {
+                                        id_table.push(n);
+                                        var_map.insert(n, ir::Quotient::Node { node_id });
                                     }
                                 }
                             }
                             _ => {}
                         }
                     }
-                    // TODO: this is a bit of a hack
-                    for (idx, ret_arg) in f.header.ret.iter().enumerate() {
+                    for (index, ret_arg) in f.header.ret.iter().enumerate() {
                         match &ret_arg.name {
-                            None => {
-                                if rets.len() > idx {
-                                    node_table.returns.push(rets[idx].clone());
-                                }
-                            }
+                            None => {}
                             Some(name) => {
-                                node_table.returns.push(name.clone());
+                                var_map.insert(name, ir::Quotient::Output { index });
                             }
-                        }
+                        };
                     }
-                    self.variable_map.insert(f.header.name.clone(), node_table);
+                    self.variable_map.insert(f.header.name.clone(), var_map);
                 }
                 ast::Declaration::ExternalFunction(f) => {
                     let location = match f.kind {
@@ -268,57 +252,94 @@ impl Context {
         }
     }
 
-    pub fn remote_node_id(&self, funclet: &FuncletId, var: &NodeId) -> usize {
+    pub fn remote_node_id(&self, funclet: &FuncletId, node: &Option<NodeId>) -> ir::Quotient {
         match self.variable_map.get(funclet) {
-            Some(f) => match f.local.get(var) {
-                Some(v) => v,
-                None => {
-                    panic!("Unknown local name {} in funclet {}", var, funclet)
-                }
+            Some(f) => match node {
+                None => ir::Quotient::None,
+                Some(var) => match f.get(var) {
+                    Some(v) => v.clone(),
+                    None => {
+                        panic!("Unknown node {} in funclet {}", var, funclet)
+                    }
+                },
             },
             None => panic!("Unknown funclet name {}", funclet),
         }
-    }
-
-    pub fn remote_return_id(&self, funclet: &FuncletId, var: &NodeId) -> usize {
-        match self.variable_map.get(funclet) {
-            Some(f) => match f.returns.get_index(var) {
-                Some(v) => v,
-                None => panic!("Unknown return name {} in funclet {}", var, funclet),
-            },
-            None => panic!("Unknown funclet name {}", funclet),
-        }
-    }
-
-    pub fn node_from_id(&self, index: usize) -> NodeId {
-        self.variable_map
-            .get(&self.location.funclet_name)
-            .unwrap()
-            .local
-            .get_at_index(index)
-            .unwrap()
-            .clone()
     }
 
     pub fn node_id(&self, var: &NodeId) -> usize {
         let funclet = &self.location.funclet_name;
-        match self.variable_map.get(funclet).unwrap().local.get_index(var) {
+        match self.node_id_map.get(funclet).unwrap().get_index(var) {
             Some(v) => v,
             None => panic!("Unknown variable name {:?} in funclet {:?}", var, &funclet),
         }
     }
 
-    pub fn return_id(&self, var: &NodeId) -> usize {
-        let funclet = &self.location.funclet_name;
-        match self
-            .variable_map
-            .get(funclet)
-            .unwrap()
-            .returns
-            .get_index(var)
-        {
-            Some(v) => v,
-            None => panic!("Unknown return name {:?} in funclet {:?}", var, &funclet),
+    // gets the associated value, timeline, and spatial results from the given list of operations
+    // note that this will return holes for any missing result
+    pub fn operational_lookup(&self, operations: Vec<Hole<&RemoteNodeId>>) -> OperationSet {
+        let mut result = OperationSet {
+            value: None,
+            timeline: None,
+            spatial: None,
+        };
+        let error = "Holes in operational lists unsupported";
+        for operation in operations {
+            let unwrapped = operation.unwrap_or_else(|| panic!(error));
+            let (fnid, kind) =
+                self.meta_lookup_loc(&unwrapped.funclet.unwrap_or_else(|| panic!(error)));
+            let quot = self.remote_node_id(
+                &fnid,
+                &unwrapped.node.as_ref().map(|n| n.unwrap_or_else(|| panic!(error))),
+            );
+            match kind {
+                ir::FuncletKind::Value => match result.value {
+                    None => { result.value = Some(quot) },
+                    Some(old) => { 
+                        panic!("Duplicate definitions using value: {:?} and {:?}", old, quot) 
+                    }
+                }
+                ir::FuncletKind::Timeline => match result.timeline {
+                    None => { result.timeline = Some(quot) },
+                    Some(old) => { 
+                        panic!("Duplicate definitions using timeline: {:?} and {:?}", old, quot) 
+                    }
+                } 
+                ir::FuncletKind::Spatial => match result.spatial {
+                    None => { result.spatial = Some(quot) },
+                    Some(old) => { 
+                        panic!("Duplicate definitions using spatial: {:?} and {:?}", old, quot) 
+                    }
+                }
+                _ => {unreachable!()}
+            }
         }
+        result
+    }
+
+    fn meta_lookup_loc(&self, meta: &MetaId) -> (FuncletId, ir::FuncletKind) {
+        let error = format!("{} doesn't have a meta map", &self.location.funclet_name);
+        let mapping = self.meta_map.unwrap_or_else(|| panic!(error));
+        if mapping.value.0 == *meta {
+            (mapping.value.1, ir::FuncletKind::Value)
+        } else if mapping.timeline.0 == *meta {
+            (mapping.timeline.1, ir::FuncletKind::Timeline)
+        } else if mapping.spatial.0 == *meta {
+            (mapping.spatial.1, ir::FuncletKind::Spatial)
+        } else {
+            panic!("Invalid meta name {}", meta)
+        }
+    }
+
+    pub fn meta_lookup(&self, meta: &MetaId) -> FuncletId {
+        self.meta_lookup_loc(meta).0
+    }
+
+    pub fn set_meta_map(&self, meta: ast::MetaMapping) {
+        self.meta_map = Some(meta)
+    }
+
+    pub fn reset_meta_map(&self) {
+        self.meta_map = None
     }
 }

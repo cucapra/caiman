@@ -146,9 +146,9 @@ schedule[value $val = %main, timeline $time = %single, spatial $space = %space]
     %join = inline-join %main_return [] %djoin;
 
     schedule-call %double_head [
-            value node($val.%result_t),
-            timeline node($time.%call_t),
-            spatial none($space)]
+            $val.%result_t,
+            $time.%call_t,
+            $space]
         (%y) %join;
 }
 

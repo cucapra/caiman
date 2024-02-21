@@ -493,16 +493,16 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn quotient(input: Node) -> ParseResult<ast::TagRemoteId> {
+    fn quotient(input: Node) -> ParseResult<ast::RemoteNodeId> {
         Ok(match_nodes!(input.into_children();
             [meta_name(funclet_id)] => {
-                ast::TagRemoteId {
+                ast::RemoteNodeId {
                     funclet: Some(ast::MetaId(funclet_id)),
                     node: None
                 }
             },
             [meta_name(funclet_id), name(node_id)] => {
-                ast::TagRemoteId {
+                ast::RemoteNodeId {
                     funclet: Some(ast::MetaId(funclet_id)),
                     node: Some(Some(ast::NodeId(node_id)))
                 }
@@ -510,16 +510,16 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn quotient_hole(input: Node) -> ParseResult<Hole<ast::TagRemoteId>> {
+    fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
             [meta_name_hole(funclet_id)] => {
-                Some(ast::TagRemoteId {
+                Some(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: None
                 })
             },
             [meta_name_hole(funclet_id), name_hole(node_id)] => {
-                Some(ast::TagRemoteId {
+                Some(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: Some(node_id.map(|n| ast::NodeId(n)))
                 })
@@ -1147,7 +1147,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn spec_mapping(input: Node) -> ParseResult<(Hole<Vec<Hole<ast::TagRemoteId>>>)> {
+    fn spec_mapping(input: Node) -> ParseResult<(Hole<Vec<Hole<ast::RemoteNodeId>>>)> {
         Ok(match_nodes!(input.into_children();
             [hole] => None,
             [quotient_hole(operations)..] => Some(operations.collect())
@@ -1183,7 +1183,7 @@ impl CaimanAssemblyParser {
     fn schedule_call_node(input: Node) -> ParseResult<ast::TailEdge> {
         Ok(match_nodes!(input.into_children();
             [schedule_call_sep, name_hole(callee_funclet_id),
-                triple_box(operations),
+                spec_mapping(operations),
                 name_call(callee_arguments), name_hole(continuation_join)] =>
                 ast::TailEdge::ScheduleCall {
                     operations,

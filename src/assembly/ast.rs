@@ -115,12 +115,6 @@ pub struct ExternalGpuFunctionResourceBinding {
 // keeping this idea around for the frontend, easier to reason about for tags
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
-    pub funclet: Hole<FuncletId>,
-    pub node: Hole<NodeId>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TagRemoteId {
     pub funclet: Hole<MetaId>,
     // we need an option of a hole
     // since None is explicitly different than ?
@@ -129,7 +123,7 @@ pub struct TagRemoteId {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tag {
-    pub quot: Hole<TagRemoteId>, // What a given value maps to in a specification
+    pub quot: Hole<RemoteNodeId>, // What a given value maps to in a specification
     pub flow: ir::Flow,          // How this value transforms relative to the specification
 }
 
@@ -231,20 +225,20 @@ pub enum TailEdge {
     // Scheduling only
     // Split value - what will be computed
     ScheduleCall {
-        operations: Hole<Vec<Hole<TagRemoteId>>>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         callee_funclet_id: Hole<FuncletId>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
-        operations: Hole<Vec<Hole<TagRemoteId>>>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleCallYield {
-        operations: Hole<Vec<Hole<TagRemoteId>>>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         external_function_id: Hole<ExternalFunctionId>,
         yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
