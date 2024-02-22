@@ -9,6 +9,14 @@ use crate::ir;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
 
+// Utility stuff
+pub fn reject_hole<T>(h: Hole<T>) -> T {
+    match h {
+        Some(v) => v,
+        None => unreachable!("Unimplemented Hole"),
+    }
+}
+
 #[derive(Debug)]
 pub struct Context {
     pub path: String,
@@ -62,11 +70,18 @@ pub struct FuncletIndices {
     funclet_kind_map: HashMap<String, ir::Place>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OperationSet {
     pub value: Hole<ir::Quotient>,
     pub timeline: Hole<ir::Quotient>,
     pub spatial: Hole<ir::Quotient>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TagSet {
+    pub value: Hole<ir::Tag>,
+    pub timeline: Hole<ir::Tag>,
+    pub spatial: Hole<ir::Tag>,
 }
 
 impl LocationNames {
@@ -176,13 +191,11 @@ impl Context {
                         .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut var_map = HashMap::new();
                     let mut id_table = Table::new();
-                    // added because phi nodes themselves are unnamed
-                    let mut rets = vec![];
                     for (index, ret_arg) in f.header.args.iter().enumerate() {
                         match &ret_arg.name {
                             None => {}
                             Some(name) => {
-                                var_map.insert(name, ir::Quotient::Input { index });
+                                var_map.insert(name.clone(), ir::Quotient::Input { index });
                             }
                         };
                     }
@@ -198,7 +211,7 @@ impl Context {
                                     }
                                     Some(n) => {
                                         id_table.push(n);
-                                        var_map.insert(n, ir::Quotient::Node { node_id });
+                                        var_map.insert(n.clone(), ir::Quotient::Node { node_id });
                                     }
                                 }
                             }
@@ -209,7 +222,7 @@ impl Context {
                         match &ret_arg.name {
                             None => {}
                             Some(name) => {
-                                var_map.insert(name, ir::Quotient::Output { index });
+                                var_map.insert(name.clone(), ir::Quotient::Output { index });
                             }
                         };
                     }
@@ -252,7 +265,7 @@ impl Context {
         }
     }
 
-    pub fn remote_node_id(&self, funclet: &FuncletId, node: &Option<NodeId>) -> ir::Quotient {
+    pub fn explicit_node_id(&self, funclet: &FuncletId, node: &Option<NodeId>) -> ir::Quotient {
         match self.variable_map.get(funclet) {
             Some(f) => match node {
                 None => ir::Quotient::None,
@@ -267,6 +280,13 @@ impl Context {
         }
     }
 
+    pub fn remote_node_id(&self, remote: &RemoteNodeId) -> ir::Quotient {
+        self.explicit_node_id(
+            &self.meta_lookup(reject_hole(remote.funclet.as_ref())),
+            reject_hole(remote.node.as_ref()),
+        )
+    }
+
     pub fn node_id(&self, var: &NodeId) -> usize {
         let funclet = &self.location.funclet_name;
         match self.node_id_map.get(funclet).unwrap().get_index(var) {
@@ -275,57 +295,100 @@ impl Context {
         }
     }
 
-    // gets the associated value, timeline, and spatial results from the given list of operations
+    // gets the associated value, timeline, and spatial results from the given list of tags
     // note that this will return holes for any missing result
-    pub fn operational_lookup(&self, operations: Vec<Hole<&RemoteNodeId>>) -> OperationSet {
-        let mut result = OperationSet {
+    pub fn tag_lookup(&self, operations: &Vec<Hole<ast::Tag>>) -> TagSet {
+        let mut result = TagSet {
             value: None,
             timeline: None,
             spatial: None,
         };
         let error = "Holes in operational lists unsupported";
         for operation in operations {
-            let unwrapped = operation.unwrap_or_else(|| panic!(error));
+            let unwrapped = operation.as_ref().unwrap_or_else(|| panic!(error));
+            let remote = unwrapped.quot.as_ref().unwrap_or_else(|| panic!(error));
             let (fnid, kind) =
-                self.meta_lookup_loc(&unwrapped.funclet.unwrap_or_else(|| panic!(error)));
-            let quot = self.remote_node_id(
+                self.meta_lookup_loc(remote.funclet.as_ref().unwrap_or_else(|| panic!(error)));
+            let quot = self.explicit_node_id(
                 &fnid,
-                &unwrapped.node.as_ref().map(|n| n.unwrap_or_else(|| panic!(error))),
+                &remote
+                    .node
+                    .as_ref()
+                    .cloned()
+                    .map(|n| n.unwrap_or_else(|| panic!(error))),
             );
+            let tag = Some(ir::Tag {
+                quot,
+                flow: unwrapped.flow.clone(),
+            });
             match kind {
                 ir::FuncletKind::Value => match result.value {
-                    None => { result.value = Some(quot) },
-                    Some(old) => { 
-                        panic!("Duplicate definitions using value: {:?} and {:?}", old, quot) 
+                    None => {
+                        result.value = tag;
                     }
-                }
+                    Some(old) => {
+                        panic!(
+                            "Duplicate definitions using value: {:?} and {:?}",
+                            old, quot
+                        )
+                    }
+                },
                 ir::FuncletKind::Timeline => match result.timeline {
-                    None => { result.timeline = Some(quot) },
-                    Some(old) => { 
-                        panic!("Duplicate definitions using timeline: {:?} and {:?}", old, quot) 
+                    None => {
+                        result.timeline = tag;
                     }
-                } 
+                    Some(old) => {
+                        panic!(
+                            "Duplicate definitions using timeline: {:?} and {:?}",
+                            old, quot
+                        )
+                    }
+                },
                 ir::FuncletKind::Spatial => match result.spatial {
-                    None => { result.spatial = Some(quot) },
-                    Some(old) => { 
-                        panic!("Duplicate definitions using spatial: {:?} and {:?}", old, quot) 
+                    None => {
+                        result.spatial = tag;
                     }
+                    Some(old) => {
+                        panic!(
+                            "Duplicate definitions using spatial: {:?} and {:?}",
+                            old, quot
+                        )
+                    }
+                },
+                _ => {
+                    unreachable!()
                 }
-                _ => {unreachable!()}
             }
         }
         result
     }
 
+    // extremely stupid, but it works
+    pub fn operational_lookup(&self, operations: &Vec<Hole<ast::RemoteNodeId>>) -> OperationSet {
+        let tags = operations.iter().map(|quot| {
+            Some(ast::Tag {
+                quot: quot.clone(),
+                // the dumb part, this doesn't matter
+                flow: ir::Flow::Dead,
+            })
+        });
+        let result = self.tag_lookup(&tags.collect());
+        OperationSet {
+            value: result.value.map(|t| t.quot),
+            timeline: result.timeline.map(|t| t.quot),
+            spatial: result.spatial.map(|t| t.quot),
+        }
+    }
+
     fn meta_lookup_loc(&self, meta: &MetaId) -> (FuncletId, ir::FuncletKind) {
         let error = format!("{} doesn't have a meta map", &self.location.funclet_name);
-        let mapping = self.meta_map.unwrap_or_else(|| panic!(error));
+        let mapping = self.meta_map.as_ref().unwrap_or_else(|| panic!(error));
         if mapping.value.0 == *meta {
-            (mapping.value.1, ir::FuncletKind::Value)
+            (mapping.value.1.clone(), ir::FuncletKind::Value)
         } else if mapping.timeline.0 == *meta {
-            (mapping.timeline.1, ir::FuncletKind::Timeline)
+            (mapping.timeline.1.clone(), ir::FuncletKind::Timeline)
         } else if mapping.spatial.0 == *meta {
-            (mapping.spatial.1, ir::FuncletKind::Spatial)
+            (mapping.spatial.1.clone(), ir::FuncletKind::Spatial)
         } else {
             panic!("Invalid meta name {}", meta)
         }
@@ -335,11 +398,11 @@ impl Context {
         self.meta_lookup_loc(meta).0
     }
 
-    pub fn set_meta_map(&self, meta: ast::MetaMapping) {
-        self.meta_map = Some(meta)
+    pub fn set_meta_map(&mut self, meta_map: ast::MetaMapping) {
+        self.meta_map = Some(meta_map)
     }
 
-    pub fn reset_meta_map(&self) {
+    pub fn reset_meta_map(&mut self) {
         self.meta_map = None
     }
 }
