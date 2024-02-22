@@ -966,7 +966,7 @@ impl<'program> CodeGenerator<'program> {
         {
             write!(
                 self.code_writer,
-                "pub fn start<'callee>(self, join_stack : &mut caiman_rt::JoinStack<'callee>"
+                "pub fn start<'callee>(mut self, join_stack : &mut caiman_rt::JoinStack<'callee>"
             );
             for (input_index, input_type) in input_types.iter().enumerate() {
                 write!(
@@ -976,11 +976,38 @@ impl<'program> CodeGenerator<'program> {
                     self.get_type_name(*input_type)
                 );
             }
-            write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ funclet{}_func(self, join_stack", funclet_id);
+            write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{\n");
             for (input_index, input_type) in input_types.iter().enumerate() {
-                write!(self.code_writer, ", arg_{}", input_index);
+                if self.is_ref(*input_type) {
+                    write!(
+                        self.code_writer,
+                        "self.locals.calloc({}, *arg_{});\n",
+                        input_index, input_index
+                    );
+                }
             }
-            write!(self.code_writer, ") }}",);
+            write!(
+                self.code_writer,
+                "let r = funclet{}_func(self, join_stack",
+                funclet_id
+            );
+            for (input_index, input_type) in input_types.iter().enumerate() {
+                if self.is_ref(*input_type) {
+                    write!(self.code_writer, ", StackRef::local({input_index})");
+                } else {
+                    write!(self.code_writer, ", arg_{input_index}");
+                }
+            }
+            write!(self.code_writer, ");\n",);
+            for (input_index, input_type) in input_types.iter().enumerate() {
+                if self.is_mut_ref(*input_type) {
+                    write!(
+                        self.code_writer,
+                        "*arg_{input_index} = *r.instance.locals.get({input_index});\n",
+                    );
+                }
+            }
+            write!(self.code_writer, "r }}");
         }
         if let Some(yield_points) = yield_points_opt {
             for (yield_point_id, yield_point) in yield_points.iter() {
@@ -1894,16 +1921,19 @@ impl<'program> CodeGenerator<'program> {
         type_id: ffi::TypeId,
     ) {
         let buffer_view_var_name = self.get_var_name(destination_var);
+        write!(self.code_writer, "{{ \n");
         let source_bytes = self.local_as_le_bytes(source_var, type_id);
+        write!(self.code_writer, "let _t = {};\n", source_bytes);
         self.code_writer.write(format!(
             "let {} = {};\n",
             buffer_view_var_name,
             self.build_get_gpu_ref(destination_var, Some(type_id))
         ));
         self.code_writer.write(format!(
-            "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, {});\n",
-            buffer_view_var_name, buffer_view_var_name, source_bytes
+            "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, _t);\n",
+            buffer_view_var_name, buffer_view_var_name
         ));
+        write!(self.code_writer, "}}\n");
     }
 
     pub fn encode_copy_buffer_from_buffer(

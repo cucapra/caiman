@@ -782,12 +782,14 @@ impl<'program> CodeGen<'program> {
         pipeline_context: &mut PipelineContext,
         traversal_state_stack: &mut Vec<InlineFuncletState>,
         default_join_point_id_opt: &mut Option<JoinPointId>,
+        inline: bool,
     ) -> Option<Box<[NodeResult]>> {
         let split_point = self.compile_scheduling_funclet(
             current_funclet_id,
             &current_output_node_results,
             pipeline_context,
             default_join_point_id_opt,
+            inline,
         );
 
         //println!("Split point: {:?}", split_point);
@@ -1080,9 +1082,10 @@ impl<'program> CodeGen<'program> {
             traversal_state: None,
         }];
 
+        let mut inline = false;
         while let Some(InlineFuncletState {
             funclet_id,
-            current_out_node_results: node_results,
+            mut current_out_node_results,
             join_point_id,
             traversal_state,
         }) = inline_funclet_stack.pop()
@@ -1094,17 +1097,20 @@ impl<'program> CodeGen<'program> {
                     pipeline_context,
                     traversal_state,
                     &mut inline_funclet_stack,
-                    &node_results,
+                    &current_out_node_results,
                 );
             }
             if process_func {
-                self.process_current_funclet(
+                if let Some(cur_out) = self.process_current_funclet(
                     funclet_id,
-                    &node_results,
+                    &current_out_node_results,
                     pipeline_context,
                     &mut inline_funclet_stack,
                     &mut default_join_point_id_opt,
-                );
+                    inline,
+                ) {
+                    current_out_node_results = cur_out;
+                }
             }
 
             if inline_funclet_stack.is_empty() {
@@ -1115,7 +1121,8 @@ impl<'program> CodeGen<'program> {
 
                     match &join_point {
                         JoinPoint::RootJoinPoint(_) => {
-                            let return_var_ids = NodeResult::collect_vars(&node_results);
+                            let return_var_ids =
+                                NodeResult::collect_vars(&current_out_node_results);
                             self.code_generator
                                 .build_return(&return_var_ids, pipeline_rets);
                         }
@@ -1124,7 +1131,8 @@ impl<'program> CodeGen<'program> {
                         }
                         JoinPoint::SerializedJoinPoint(serialized_join_point) => {
                             //panic!("Need to insert jump here");
-                            let argument_var_ids = NodeResult::collect_vars(&node_results);
+                            let argument_var_ids =
+                                NodeResult::collect_vars(&current_out_node_results);
                             self.code_generator
                                 .build_indirect_stack_jump_to_popped_serialized_join(
                                     &argument_var_ids,
@@ -1139,9 +1147,11 @@ impl<'program> CodeGen<'program> {
 
                     println!(
                         "{:?} {:?} {:?}",
-                        funclet_id, default_join_point_id_opt, node_results
+                        funclet_id, default_join_point_id_opt, current_out_node_results
                     );
                 }
+            } else {
+                inline = true;
             }
         }
 
@@ -1186,6 +1196,7 @@ impl<'program> CodeGen<'program> {
         argument_node_results: &[NodeResult],
         pipeline_context: &mut PipelineContext,
         default_join_point_id_opt: &mut Option<JoinPointId>,
+        inline: bool,
     ) -> SplitPoint {
         let funclet = &self.program.funclets[funclet_id];
         assert_eq!(funclet.kind, ir::FuncletKind::ScheduleExplicit);
@@ -1776,7 +1787,7 @@ impl<'program> CodeGen<'program> {
                     funclet: funclet_id,
                     captures,
                     continuation: continuation_join_node_id,
-                } |
+                } if inline => {}
                 // } => {
                 //     let mut captured_node_results = Vec::<NodeResult>::new();
                 //     let join_funclet = &self.program.funclets[*funclet_id];
@@ -1822,7 +1833,12 @@ impl<'program> CodeGen<'program> {
                 //         .node_results
                 //         .insert(current_node_id, NodeResult::Join { join_point_id });
                 // }
-                ir::Node::SerializedJoin {
+                ir::Node::InlineJoin {
+                    funclet: funclet_id,
+                    captures,
+                    continuation: continuation_join_node_id,
+                }
+                | ir::Node::SerializedJoin {
                     funclet: funclet_id,
                     captures,
                     continuation: continuation_join_node_id,
