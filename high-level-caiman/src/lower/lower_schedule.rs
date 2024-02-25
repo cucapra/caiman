@@ -163,24 +163,10 @@ fn lower_store(
 
 /// Changes the remote node id to the remote id of the result of the call, before
 /// extracing the result
-fn to_tuple_quotient(q: asm::Quotient) -> asm::Quotient {
-    match q {
-        asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        }))
-        | asm::Quotient::Input(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        }))
-        | asm::Quotient::Output(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        x => x,
+fn to_tuple_quotient(q: asm::RemoteNodeId) -> asm::RemoteNodeId {
+    asm::RemoteNodeId {
+        funclet: q.funclet,
+        node: q.node.map(|o| o.map(|n| asm::NodeId(tuple_id(&[n.0])))),
     }
 }
 

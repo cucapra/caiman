@@ -15,7 +15,7 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-use caiman::assembly::ast::{self as asm, Quotient};
+use caiman::assembly::ast::{self as asm, RemoteNodeId};
 
 use self::{
     analysis::{
@@ -35,9 +35,9 @@ pub use analysis::RET_VAR;
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Specs {
-    pub value: asm::FuncletId,
-    pub timeline: asm::FuncletId,
-    pub spatial: asm::FuncletId,
+    pub value: asm::MetaId,
+    pub timeline: asm::MetaId,
+    pub spatial: asm::MetaId,
 }
 
 /// Information about a high level caiman function
@@ -387,14 +387,10 @@ impl<'a> Funclet<'a> {
     }
 
     /// Returns true if the specified tag is a literal node in the value specification
-    pub fn is_literal_value(&self, t: &Quotient) -> bool {
-        match t {
-            Quotient::Input(Some(t)) | Quotient::Node(Some(t)) | Quotient::Output(Some(t)) => t
-                .node
-                .as_ref()
-                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0)),
-            _ => false,
-        }
+    pub fn is_literal_value(&self, remote: &RemoteNodeId) -> bool {
+        remote.node.as_ref().map_or(false, |n| {
+            n.map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
+        })
     }
 
     /// Returns true if the specified variable is a mutable reference or a mutable variable

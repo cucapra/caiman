@@ -42,12 +42,12 @@ impl From<TripleTag> for TagInfo {
 }
 
 /// Creates a tag with a none quotient for the given spec and flow
-fn none_tag(spec_name: &asm::FuncletId, flow: ir::Flow) -> asm::Tag {
+fn none_tag(spec_name: &asm::MetaId, flow: ir::Flow) -> asm::Tag {
     asm::Tag {
-        quot: asm::Quotient::None(Some(asm::RemoteNodeId {
+        quot: Some(asm::RemoteNodeId {
             funclet: Some(spec_name.clone()),
             node: None,
-        })),
+        }),
         flow,
     }
 }

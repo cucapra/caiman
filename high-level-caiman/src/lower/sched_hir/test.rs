@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use caiman::assembly::ast::FuncletId;
+use caiman::assembly::ast::MetaId;
 
 use crate::{
     error::Info,
@@ -90,9 +90,9 @@ fn cfg_gen() {
         stmts,
         &[],
         &Specs {
-            value: FuncletId(String::new()),
-            spatial: FuncletId(String::new()),
-            timeline: FuncletId(String::new()),
+            value: MetaId(String::new()),
+            spatial: MetaId(String::new()),
+            timeline: MetaId(String::new()),
         },
     );
     let mut ordered_graph = BTreeMap::new();
@@ -163,9 +163,9 @@ fn if_gen() {
         stmts,
         &[],
         &Specs {
-            value: FuncletId(String::new()),
-            spatial: FuncletId(String::new()),
-            timeline: FuncletId(String::new()),
+            value: MetaId(String::new()),
+            spatial: MetaId(String::new()),
+            timeline: MetaId(String::new()),
         },
     );
     let mut ordered_graph = BTreeMap::new();
@@ -241,9 +241,9 @@ fn if_ret() {
         stmts,
         &[],
         &Specs {
-            value: FuncletId(String::new()),
-            spatial: FuncletId(String::new()),
-            timeline: FuncletId(String::new()),
+            value: MetaId(String::new()),
+            spatial: MetaId(String::new()),
+            timeline: MetaId(String::new()),
         },
     );
     let mut ordered_graph = BTreeMap::new();

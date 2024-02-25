@@ -210,7 +210,7 @@ impl Context {
                                         id_table.dummy_push();
                                     }
                                     Some(n) => {
-                                        id_table.push(n);
+                                        id_table.push(n.clone());
                                         var_map.insert(n.clone(), ir::Quotient::Node { node_id });
                                     }
                                 }
@@ -226,6 +226,7 @@ impl Context {
                             }
                         };
                     }
+                    self.node_id_map.insert(f.header.name.clone(), id_table);
                     self.variable_map.insert(f.header.name.clone(), var_map);
                 }
                 ast::Declaration::ExternalFunction(f) => {
