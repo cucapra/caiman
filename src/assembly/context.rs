@@ -199,7 +199,8 @@ impl Context {
                             }
                         };
                     }
-                    for (node_id, command) in f.commands.iter().enumerate() {
+                    let mut node_id = 0; // used for skipping tail edges
+                    for command in f.commands.iter() {
                         match command {
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 // a bit sketchy, but if we only correct this here, we should be ok
@@ -214,6 +215,8 @@ impl Context {
                                         var_map.insert(n.clone(), ir::Quotient::Node { node_id });
                                     }
                                 }
+
+                                node_id += 1; // if it's a "real node" increment the id
                             }
                             _ => {}
                         }
@@ -284,7 +287,7 @@ impl Context {
     pub fn remote_node_id(&self, remote: &RemoteNodeId) -> ir::Quotient {
         self.explicit_node_id(
             &self.meta_lookup(reject_hole(remote.funclet.as_ref())),
-            reject_hole(remote.node.as_ref()),
+            &remote.node.as_ref().cloned().map(|n| reject_hole(n)),
         )
     }
 

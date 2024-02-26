@@ -18,13 +18,13 @@ value[impl default @main] %foo() -> i64 {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%bar<input($time.%e)-usable, output($time.%e)-usable>() ->
+%bar<$time.%e-usable, $time.%e-usable>() ->
 [%out : %ni64] {
     %x_ref = alloc-temporary local [storage, map_write] i64;
     %y_ref = alloc-temporary local [storage, map_write] i64;
-    local-do-builtin node($val.%x)() -> %x_ref;
+    local-do-builtin $val.%x() -> %x_ref;
     %x = read-ref i64 %x_ref;
-    local-do-external %op node($val.%y_t)(%x) -> %y_ref;
+    local-do-external %op $val.%y_t(%x) -> %y_ref;
     %result = read-ref i64 %y_ref;
     return %result;
 }

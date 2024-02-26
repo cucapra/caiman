@@ -46,20 +46,20 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %addtwo, timeline $time = %time, spatial $space = %space] 
 %addtwo_head
-<node($time.%e)-usable, node($time.%e)-usable>
-    (%x     : node($val.%x)-usable node($time.%e)-usable node($space.%bs)-usable %i64n)
+<$time.%e-usable, $time.%e-usable>
+    (%x     : $val.%x-usable $time.%e-usable $space.%bs-usable %i64n)
     -> 
-    node($val.%result)-usable node($time.%e)-usable none($space)-usable %i64n
+    $val.%result-usable $time.%e-usable $space-usable %i64n
 {
     %one_ref = alloc-temporary local [storage, map_write] i64;
     %result_ref = alloc-temporary local [storage, map_write] i64;
 
-    local-do-builtin node($val.%one)() -> %one_ref;
+    local-do-builtin $val.%one() -> %one_ref;
     %one = read-ref i64 %one_ref;
 
-    local-do-external %add node($val.%y_t)(%x, %one) -> %result_ref;
+    local-do-external %add $val.%y_t(%x, %one) -> %result_ref;
     %y = read-ref i64 %result_ref;
-    local-do-external %add node($val.%result_t)(%y, %one) -> %result_ref;
+    local-do-external %add $val.%result_t(%y, %one) -> %result_ref;
     %result = read-ref i64 %result_ref;
 
     return %result;

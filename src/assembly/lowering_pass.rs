@@ -718,6 +718,11 @@ fn ir_schedule_binding(
 ) -> ir::FuncletSpecBinding {
     context.set_meta_map(meta_map.clone());
 
+    let default_tag = ir::Tag {
+        quot: ir::Quotient::None,
+        flow: ir::Flow::Usable
+    };
+
     struct TagBindings {
         value_tags: Vec<ir::Tag>,
         spatial_tags: Vec<ir::Tag>,
@@ -737,16 +742,16 @@ fn ir_schedule_binding(
 
     for arg in &funclet_header.args {
         let tags = context.tag_lookup(&arg.tags.iter().map(|t| Some(t.clone())).collect());
-        input_tags.value_tags.push(reject_hole(tags.value).clone());
-        input_tags.spatial_tags.push(reject_hole(tags.spatial).clone());
-        input_tags.timeline_tags.push(reject_hole(tags.timeline).clone());
+        input_tags.value_tags.push(tags.value.unwrap_or(default_tag).clone());
+        input_tags.spatial_tags.push(tags.spatial.unwrap_or(default_tag).clone());
+        input_tags.timeline_tags.push(tags.timeline.unwrap_or(default_tag).clone());
     }
 
-    for arg in &funclet_header.ret {
-        let tags = context.tag_lookup(&arg.tags.iter().map(|t| Some(t.clone())).collect());
-        output_tags.value_tags.push(reject_hole(tags.value).clone());
-        output_tags.spatial_tags.push(reject_hole(tags.spatial).clone());
-        output_tags.timeline_tags.push(reject_hole(tags.timeline).clone());
+    for ret in &funclet_header.ret {
+        let tags = context.tag_lookup(&ret.tags.iter().map(|t| Some(t.clone())).collect());
+        output_tags.value_tags.push(tags.value.unwrap_or(default_tag).clone());
+        output_tags.spatial_tags.push(tags.spatial.unwrap_or(default_tag).clone());
+        output_tags.timeline_tags.push(tags.timeline.unwrap_or(default_tag).clone());
     }
 
     let implicit_in_tag = ir_tag(&implicit_tags.0, context);
