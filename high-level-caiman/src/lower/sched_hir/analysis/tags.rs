@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lower::lower_schedule::tag_to_tag;
-use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator, TripleTag};
+use crate::lower::sched_hir::{
+    meta_spatial, meta_timeline, meta_value, HirBody, HirInstr, Specs, Terminator, TripleTag,
+};
 use crate::parse::ast::{DataType, SchedTerm};
 use crate::typing::SpecType;
 
@@ -86,10 +88,10 @@ impl TagInfo {
     pub fn tags_vec_default(self, dtype: &DataType) -> Vec<asm::Tag> {
         vec![
             self.value
-                .unwrap_or_else(|| none_tag(&self.specs.value, ir::Flow::Usable)),
+                .unwrap_or_else(|| none_tag(&meta_value(), ir::Flow::Usable)),
             self.spatial.unwrap_or_else(|| {
                 none_tag(
-                    &self.specs.spatial,
+                    &meta_spatial(),
                     match dtype {
                         DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
@@ -97,7 +99,7 @@ impl TagInfo {
                 )
             }),
             self.timeline
-                .unwrap_or_else(|| none_tag(&self.specs.timeline, ir::Flow::Usable)),
+                .unwrap_or_else(|| none_tag(&meta_timeline(), ir::Flow::Usable)),
         ]
     }
 
@@ -107,10 +109,10 @@ impl TagInfo {
         Self {
             value: self
                 .value
-                .or_else(|| Some(none_tag(&self.specs.value, ir::Flow::Usable))),
+                .or_else(|| Some(none_tag(&meta_value(), ir::Flow::Usable))),
             spatial: self.spatial.or_else(|| {
                 Some(none_tag(
-                    &self.specs.spatial,
+                    &meta_spatial(),
                     match dtype {
                         DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
@@ -119,7 +121,7 @@ impl TagInfo {
             }),
             timeline: self
                 .timeline
-                .or_else(|| Some(none_tag(&self.specs.timeline, ir::Flow::Usable))),
+                .or_else(|| Some(none_tag(&meta_timeline(), ir::Flow::Usable))),
             specs: self.specs,
         }
     }
@@ -128,9 +130,9 @@ impl TagInfo {
     /// The default tag is `none()-usable`
     pub fn default_tag(&self, spec_type: SpecType) -> asm::Tag {
         match spec_type {
-            SpecType::Value => none_tag(&self.specs.value, ir::Flow::Usable),
-            SpecType::Spatial => none_tag(&self.specs.spatial, ir::Flow::Usable),
-            SpecType::Timeline => none_tag(&self.specs.timeline, ir::Flow::Usable),
+            SpecType::Value => none_tag(&meta_value(), ir::Flow::Usable),
+            SpecType::Spatial => none_tag(&meta_spatial(), ir::Flow::Usable),
+            SpecType::Timeline => none_tag(&meta_timeline(), ir::Flow::Usable),
         }
     }
 }
@@ -142,7 +144,6 @@ impl TagInfo {
 #[allow(clippy::module_name_repetitions)]
 pub struct TagAnalysis {
     tags: HashMap<String, TagInfo>,
-    specs: Rc<Specs>,
     /// For an output fact, thse are the input tags to be overridden
     input_overrides: HashMap<String, TagInfo>,
 }
@@ -158,7 +159,6 @@ impl Eq for TagAnalysis {}
 impl TagAnalysis {
     /// Constructs a new top element
     pub fn top(
-        specs: &Specs,
         input: &[(String, TripleTag)],
         out: &[TripleTag],
         data_types: &HashMap<String, DataType>,
@@ -174,7 +174,7 @@ impl TagAnalysis {
                 // the the future, also assume that it's save if the flow is not specified
                 // but the quotient is
                 if tg.spatial.is_none() {
-                    tg.spatial = Some(none_tag(&specs.spatial, ir::Flow::Saved));
+                    tg.spatial = Some(none_tag(&meta_spatial(), ir::Flow::Saved));
                 } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Saved {
                     panic!("Spatial tags for references must be save");
                 }
@@ -183,7 +183,6 @@ impl TagAnalysis {
         }
         Self {
             tags,
-            specs: Rc::new(specs.clone()),
             input_overrides: HashMap::new(),
         }
     }
@@ -217,7 +216,7 @@ impl TagAnalysis {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
                     } else {
-                        info.value = Some(none_tag(&self.specs.value, ir::Flow::Dead));
+                        info.value = Some(none_tag(&meta_value(), ir::Flow::Dead));
                     }
                 } else if let Some(SchedTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
@@ -226,7 +225,7 @@ impl TagAnalysis {
                     }
                 }
                 if info.spatial.is_none() {
-                    info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Saved));
+                    info.spatial = Some(none_tag(&meta_spatial(), ir::Flow::Saved));
                 }
                 self.tags.insert(lhs.clone(), info);
             }

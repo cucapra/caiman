@@ -32,12 +32,23 @@ mod test;
 
 pub use analysis::RET_VAR;
 
+// Constant names for the meta map stuff
+pub fn meta_value() -> asm::MetaId {
+    asm::MetaId("_VALUE".to_string())
+}
+pub fn meta_timeline() -> asm::MetaId {
+    asm::MetaId("_VALUE".to_string())
+}
+pub fn meta_spatial() -> asm::MetaId {
+    asm::MetaId("_VALUE".to_string())
+}
+
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Specs {
-    pub value: asm::MetaId,
-    pub timeline: asm::MetaId,
-    pub spatial: asm::MetaId,
+    pub value: asm::FuncletId,
+    pub timeline: asm::FuncletId,
+    pub spatial: asm::FuncletId,
 }
 
 /// Information about a high level caiman function
@@ -389,7 +400,8 @@ impl<'a> Funclet<'a> {
     /// Returns true if the specified tag is a literal node in the value specification
     pub fn is_literal_value(&self, remote: &RemoteNodeId) -> bool {
         remote.node.as_ref().map_or(false, |n| {
-            n.map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
+            n.as_ref()
+                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
         })
     }
 
@@ -495,7 +507,7 @@ impl Funclets {
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,
-            &TagAnalysis::top(specs, &hir_inputs, &hir_outputs, &data_types),
+            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types),
         );
         let finfo = FuncInfo {
             name: f.name,
