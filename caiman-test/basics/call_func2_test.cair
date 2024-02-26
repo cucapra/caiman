@@ -30,8 +30,8 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_head<$time.%e-usable, $time.%e-usable>() ->
-    [%out : $val.%y-usable $space.%e-usable $time.%e-usable %ni64]
+%main_head<$time-usable, $time-usable>() ->
+    [%out : $val.%y-usable $time-usable $space-usable %ni64]
 {
     %x_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_ref;
@@ -40,31 +40,27 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
     %default = default-join;
     %join = inline-join %main_ret [] %default;
 
-    schedule-call %foo_impl[value $val.%y_t,
-        timeline $time.%e,
-        spatial $space.%none](%arg) %join;
+    schedule-call %foo_impl[$val.%y_t, $time, $space](%arg) %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_ret<$time.%e-usable, $time.%e-usable>
-    (%y : $val.%y-usable $space.%e-usable $time.%e-usable %ni64) ->
-    [%out : $val.%y-usable $space.%e-usable $time.%e-usable %ni64]
+%main_ret<$time-usable, $time-usable>
+    (%y : $val.%y-usable $time-usable $space-usable %ni64) ->
+    [%out : $val.%y-usable $time-usable $space-usable %ni64]
 {
-
     return %y;
 }
 
 // foo
 
-
-value[impl default @foo] %foo(%i : %ni64) -> i64 {
+value[impl default @foo] %foo(%i : %ni64) -> [%out : i64] {
     return %i;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_impl<$time.%e-usable, $time.%e-usable>
-    (%arg : $val.%i-usable $space.%none-usable $time.%none-usable %ni64) ->
-    [%out : $val.%i-usable $space.%none-usable $time.%none-usable %ni64]
+%foo_impl<$time-usable, $time-usable>
+    (%arg : $val.%i-usable $time-usable $space-usable %ni64) ->
+    [%out : $val.%out-usable $time-usable $space-usable %ni64]
 {
     return %arg;
 }

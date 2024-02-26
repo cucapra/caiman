@@ -47,9 +47,9 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
     %default = default-join;
     %join = serialized-join %main_ret [] %default;
 
-    schedule-call %rec_sum_head[value $val.%y_t,
-        timeline $time.%e,
-        spatial $space.%none](%arg) %join;
+    schedule-call %rec_sum_head[$val.%y_t,
+        $time.%e,
+        $space.%none](%arg) %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
@@ -139,9 +139,9 @@ schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
     %default = default-join;
     %join = serialized-join %rec_sum_rec_tail [] %default;
 
-    schedule-call %rec_sum_head[value $val.%r_t,
-        timeline $time.%e,
-        spatial $space.%none](%arg) %join;
+    schedule-call %rec_sum_head[$val.%r_t,
+        $time.%e,
+        $space.%none](%arg) %join;
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]

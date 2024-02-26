@@ -25,7 +25,6 @@ pub struct Context {
     // cause we need to know the storage value of the native value
     pub native_type_map: HashMap<String, FFIType>,
     pub variable_map: HashMap<FuncletId, HashMap<NodeId, ir::Quotient>>,
-    pub node_id_map: HashMap<FuncletId, Table<NodeId>>,
     // for keeping track of the meanings of meta names for the current scheduling funclet
     // is None when we aren't in a scheduling funclet
     pub meta_map: Option<ast::MetaMapping>,
@@ -153,7 +152,6 @@ impl Context {
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             variable_map: HashMap::new(),
-            node_id_map: HashMap::new(),
             meta_map: None,
             location: LocationNames::new(),
         };
@@ -191,8 +189,8 @@ impl Context {
                         .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut var_map = HashMap::new();
                     let mut id_table = Table::new();
-                    for (index, ret_arg) in f.header.args.iter().enumerate() {
-                        match &ret_arg.name {
+                    for (index, arg) in f.header.args.iter().enumerate() {
+                        match &arg.name {
                             None => {}
                             Some(name) => {
                                 var_map.insert(name.clone(), ir::Quotient::Input { index });
@@ -202,6 +200,11 @@ impl Context {
                     let mut node_id = 0; // used for skipping tail edges
                     for command in f.commands.iter() {
                         match command {
+                            // ignore phi nodes cause they get handled by the header above
+                            // really they shouldn't be in here I suppose
+                            Some(ast::Command::Node(ast::NamedNode { node: ast::Node::Phi { index }, name })) => {
+                                node_id += 1;
+                            }
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
@@ -229,7 +232,6 @@ impl Context {
                             }
                         };
                     }
-                    self.node_id_map.insert(f.header.name.clone(), id_table);
                     self.variable_map.insert(f.header.name.clone(), var_map);
                 }
                 ast::Declaration::ExternalFunction(f) => {
@@ -293,9 +295,12 @@ impl Context {
 
     pub fn node_id(&self, var: &NodeId) -> usize {
         let funclet = &self.location.funclet_name;
-        match self.node_id_map.get(funclet).unwrap().get_index(var) {
-            Some(v) => v,
-            None => panic!("Unknown variable name {:?} in funclet {:?}", var, &funclet),
+        let var_error = format!("Unknown variable name {:?} in funclet {:?}", var, &funclet);
+        match self.variable_map.get(funclet).unwrap().get(var).expect(&var_error) {
+            ir::Quotient::None => panic!("Invalid None node {:?} in funclet {:?}", var, &funclet),
+            ir::Quotient::Input { index } |
+            ir::Quotient::Output { index } |
+            ir::Quotient::Node { node_id: index } => *index
         }
     }
 

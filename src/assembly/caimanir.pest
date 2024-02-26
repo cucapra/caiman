@@ -192,7 +192,7 @@ schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
 
-spec_mapping = { "[" ~ (quotient_hole)* ~ "]" | hole }
+spec_mapping = { "[" ~ (quotient_hole ~ ("," ~ quotient_hole)*)? ~ "]" | hole }
 
 debug_hole_node = @{ "debug-hole" ~ sep ~ name_list }
 return_sep = @{ "return" ~ sep }

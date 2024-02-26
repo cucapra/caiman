@@ -40,9 +40,9 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %default = default-join;
     %join = inline-join %foo_ret [] %default;
 
-    schedule-call %sel_main[value $val.%r_t,
-        timeline $time.%e,
-        spatial $space.%none](%y, %z) %join;
+    schedule-call %sel_main[$val.%r_t,
+        $time.%e,
+        $space.%none](%y, %z) %join;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
