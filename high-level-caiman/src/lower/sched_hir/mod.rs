@@ -32,16 +32,9 @@ mod test;
 
 pub use analysis::RET_VAR;
 
-// Constant names for the meta map stuff
-pub fn meta_value() -> asm::MetaId {
-    asm::MetaId("_VALUE".to_string())
-}
-pub fn meta_timeline() -> asm::MetaId {
-    asm::MetaId("_VALUE".to_string())
-}
-pub fn meta_spatial() -> asm::MetaId {
-    asm::MetaId("_VALUE".to_string())
-}
+pub const META_VALUE : &str = "_VALUE";
+pub const META_TIMELINE : &str = "_TIMELINE";
+pub const META_SPATIAL : &str = "_SPATIAL";
 
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]

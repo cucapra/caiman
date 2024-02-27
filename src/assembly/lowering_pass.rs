@@ -972,6 +972,7 @@ pub fn lower(mut program: ast::Program) -> frontend::Definition {
     // should probably handle errors with a result, future problem though
     explication::explicate(&mut program);
     let mut context = Context::new(&program);
+    // dbg!(&context);
     frontend::Definition {
         version: ir_version(&program.version, &mut context),
         program: ir_program(&program, &mut context),

@@ -61,8 +61,7 @@ use crate::{
     error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{Cfg, Edge},
-            HirBody, HirFuncCall, HirOp, Specs, Terminator, TripleTag,
+            cfg::{Cfg, Edge}, META_VALUE, HirBody, HirFuncCall, HirOp, Specs, Terminator, TripleTag
         },
         tuple_id,
     },
@@ -93,7 +92,7 @@ pub fn deduce_val_quots(
         env,
     )?;
     fill_type_info(&env, cfg, specs, &selects);
-    fill_io_type_info(inputs, outputs, &env, specs);
+    fill_io_type_info(inputs, outputs, &env);
     Ok(())
 }
 
@@ -551,7 +550,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
 /// # Panics
 /// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
-fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, specs: &Specs) {
+fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv) {
     if let Some(node) = env.get_node_name(name) {
         let info = tag.value.as_ref().map(|t| t.info);
         let quot = tag.value.as_ref().and_then(|t| t.quot);
@@ -572,7 +571,7 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, specs: &Spe
             })),
             quot_var: Some(QuotientReference {
                 spec_var: Some(node),
-                spec_name: specs.value.0.clone(),
+                spec_name: META_VALUE.to_string(),
             }),
             flow,
         });
@@ -599,7 +598,7 @@ fn construct_new_tag(name: &str, env: &NodeEnv, specs: &Rc<Specs>) -> TripleTag 
                 }),
                 quot_var: Some(QuotientReference {
                     spec_var: Some(node),
-                    spec_name: specs.value.0.clone(),
+                    spec_name: META_VALUE.to_string(),
                 }),
                 flow: None,
             }),
@@ -643,11 +642,11 @@ fn fill_type_info(
                     dest_tag: lhs_tag,
                     ..
                 } => {
-                    fill_val_quotient(lhs, lhs_tag, env, specs);
+                    fill_val_quotient(lhs, lhs_tag, env);
                 }
                 HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
                     for (name, tag) in tags {
-                        fill_val_quotient(name, tag, env, specs);
+                        fill_val_quotient(name, tag, env);
                     }
                 }
                 HirBody::Hole(_) | HirBody::RefLoad { .. } => {}
@@ -665,20 +664,19 @@ fn fill_type_info(
         match &mut block.terminator {
             Terminator::CaptureCall { dests, call, .. } => {
                 for (dest, tag) in dests.iter_mut() {
-                    fill_val_quotient(dest, tag, env, specs);
+                    fill_val_quotient(dest, tag, env);
                 }
                 fill_val_quotient(
                     &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
                     &mut call.tag,
                     env,
-                    specs,
                 );
             }
             Terminator::Select { dests, tag, .. } => {
                 for (dest, tag) in dests {
-                    fill_val_quotient(dest, tag, env, specs);
+                    fill_val_quotient(dest, tag, env);
                 }
-                fill_val_quotient(&selects[&block.id], tag, env, specs);
+                fill_val_quotient(&selects[&block.id], tag, env);
             }
             Terminator::Call(..) | Terminator::None => unreachable!(),
             // TODO: check the return, I think this is right bc returns should be handled
@@ -701,10 +699,9 @@ fn fill_io_type_info(
     inputs: &mut [(String, TripleTag)],
     outputs: &mut [TripleTag],
     env: &NodeEnv,
-    specs: &Rc<Specs>,
 ) {
     for (name, tag) in inputs.iter_mut() {
-        fill_val_quotient(name, tag, env, specs);
+        fill_val_quotient(name, tag, env);
     }
     let output_classes = env.get_output_classes().to_vec();
     assert_eq!(output_classes.len(), outputs.len());
@@ -725,7 +722,6 @@ fn fill_io_type_info(
             &MetaVar::new_class_name(&output_class).into_string(),
             tag,
             env,
-            specs,
         );
     }
 }

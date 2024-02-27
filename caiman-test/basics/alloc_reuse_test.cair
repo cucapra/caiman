@@ -46,10 +46,10 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %addtwo, timeline $time = %time, spatial $space = %space] 
 %addtwo_head
-<$time.%e-usable, $time.%e-usable>
-    (%x     : $val.%x-usable $time.%e-usable $space.%bs-usable %i64n)
+<$time-usable, $time-usable>
+    (%x     : $val.%x-usable $time-usable $space-usable %i64n)
     -> 
-    $val.%result-usable $time.%e-usable $space-usable %i64n
+    $val.%result-usable $time-usable $space-usable %i64n
 {
     %one_ref = alloc-temporary local [storage, map_write] i64;
     %result_ref = alloc-temporary local [storage, map_write] i64;

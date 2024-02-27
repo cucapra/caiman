@@ -6,7 +6,6 @@ from itertools import chain
 from sys import stderr
 from dataclasses import dataclass
 from shutil import rmtree
-import glob
 import os
 
 
@@ -283,7 +282,16 @@ def main():
         "files", nargs="*", help="If specified, only build/test these file(s)."
     )
     args = parser.parse_args()
-    inputs = [Path(file) for file in args.files]
+    inputs = []
+    for file in args.files:
+        if os.path.isdir(file):
+            for path, _, filenames in os.walk(file):
+                for filename in filenames:
+                    fpath = Path(filename)
+                    if fpath.suffix != ".rs" and fpath.stem.endswith("_test"):
+                        inputs.append(Path(path) / fpath)
+        else:
+            inputs.append(Path(file))
     if args.command == "run":
         ret = build(test_dir, inputs, args.quiet)
         ret |= run(test_dir, args.files)

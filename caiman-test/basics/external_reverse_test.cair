@@ -12,9 +12,9 @@ external-cpu-pure[impl @op] %op(i64) -> i64;
 
 value[impl default @main] %foo() -> i64 {
     return %y;
+    %x = constant %ni64 2;
     %y = extract %y_t 0;
     %y_t = call @op(%x);
-    %x = constant %ni64 2;
 }
 
 timeline %time(%e : %event0) -> %event0 {
@@ -27,7 +27,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %bar<$time-usable, $time-usable>() ->
-[%out : %ni64] {
+[%out : $val.%y_t-usable $time-usable $space-usable %ni64] {
     %x_ref = alloc-temporary local [] i64;
     %y_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_ref;

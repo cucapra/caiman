@@ -188,7 +188,6 @@ impl Context {
                     self.funclet_indices
                         .insert(f.header.name.0.clone(), ir::Place::Local);
                     let mut var_map = HashMap::new();
-                    let mut id_table = Table::new();
                     for (index, arg) in f.header.args.iter().enumerate() {
                         match &arg.name {
                             None => {}
@@ -210,11 +209,8 @@ impl Context {
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
                                 match name {
-                                    None => {
-                                        id_table.dummy_push();
-                                    }
+                                    None => {}
                                     Some(n) => {
-                                        id_table.push(n.clone());
                                         var_map.insert(n.clone(), ir::Quotient::Node { node_id });
                                     }
                                 }

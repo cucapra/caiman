@@ -12,7 +12,7 @@ use crate::{
         SchedFuncCall, Tag, Tags, Uop,
     },
 };
-use caiman::assembly::ast as asm;
+use caiman::assembly::ast::{self as asm};
 pub use caiman::assembly::ast::Hole;
 
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
     parse::ast::{Name, SchedStmt, SchedTerm},
 };
 
-use super::Specs;
+use super::{META_VALUE, META_TIMELINE, META_SPATIAL, Specs};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TripleTag {
@@ -61,11 +61,26 @@ impl TripleTag {
             } = &tag
             {
                 if &specs.value.0 == spec_name {
-                    value = Some(tag.clone());
+                    let mut new_tag = tag.clone();
+                    new_tag.quot_var = new_tag.quot_var.map(|qv| QuotientReference {
+                        spec_name: META_VALUE.to_string(),
+                        spec_var: qv.spec_var
+                    });
+                    value = Some(new_tag);
                 } else if &specs.spatial.0 == spec_name {
-                    spatial = Some(tag.clone());
+                    let mut new_tag = tag.clone();
+                    new_tag.quot_var = new_tag.quot_var.map(|qv| QuotientReference {
+                        spec_name: META_SPATIAL.to_string(),
+                        spec_var: qv.spec_var
+                    });
+                    spatial = Some(new_tag);
                 } else if &specs.timeline.0 == spec_name {
-                    timeline = Some(tag.clone());
+                    let mut new_tag = tag.clone();
+                    new_tag.quot_var = new_tag.quot_var.map(|qv| QuotientReference {
+                        spec_name: META_TIMELINE.to_string(),
+                        spec_var: qv.spec_var
+                    });
+                    timeline = Some(new_tag);
                 }
             }
         }

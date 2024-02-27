@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use caiman::assembly::ast::{self as asm, Hole};
+use caiman::assembly::ast::{self as asm, Hole, MetaId};
 
 use crate::{
     enum_cast,
@@ -18,7 +18,7 @@ use caiman::ir;
 use super::{
     data_type_to_storage_type,
     sched_hir::{
-        meta_spatial, meta_timeline, meta_value, Funclet, Funclets, HirBody, HirFuncCall, Specs,
+        META_SPATIAL, META_TIMELINE, META_VALUE, Funclet, Funclets, HirBody, HirFuncCall, Specs,
         Terminator, TripleTag,
     },
     tuple_id,
@@ -429,7 +429,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
                     || {
                         Some(asm::RemoteNodeId {
                             node: None,
-                            funclet: Some(meta_timeline()),
+                            funclet: Some(MetaId(META_TIMELINE.to_string())),
                         })
                     },
                     tag_to_quot,
@@ -438,7 +438,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
                     || {
                         Some(asm::RemoteNodeId {
                             node: None,
-                            funclet: Some(meta_spatial()),
+                            funclet: Some(MetaId(META_SPATIAL.to_string())),
                         })
                     },
                     tag_to_quot,
@@ -506,7 +506,7 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
     commands.extend(lower_terminator(funclet.terminator(), temp_id, funclet));
     let implicit_default = asm::Tag {
         quot: Some(asm::RemoteNodeId {
-            funclet: Some(meta_timeline()),
+            funclet: Some(MetaId(META_TIMELINE.to_string())),
             node: None,
         }),
         flow: ir::Flow::Usable,
@@ -520,9 +520,9 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
             binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
                 implicit_tags: (implicit_default.clone(), implicit_default),
                 meta_map: asm::MetaMapping {
-                    value: (meta_value(), funclet.specs().value.clone()),
-                    timeline: (meta_timeline(), funclet.specs().value.clone()),
-                    spatial: (meta_spatial(), funclet.specs().value.clone()),
+                    value: (MetaId(META_VALUE.to_string()), funclet.specs().value.clone()),
+                    timeline: (MetaId(META_TIMELINE.to_string()), funclet.specs().value.clone()),
+                    spatial: (MetaId(META_SPATIAL.to_string()), funclet.specs().value.clone()),
                 },
             }),
         },
