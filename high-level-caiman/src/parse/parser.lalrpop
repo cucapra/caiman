@@ -22,7 +22,7 @@ match {
   "i32", "i64", "bool", "Event", "BufferSpace",
   "true", "false", "import",
   "pure",
-  "node","none","input","output","usable","save","need","dead",
+  "node","none","input","output","usable","saved","need","dead",
 
 
   r"\s*" => { }, // Whitespace
@@ -207,7 +207,7 @@ Quotient: Option<Quotient> = {
 
 Flow: Option<Flow> = {
     "-usable" => Some(Flow::Usable),
-    "-saved" => Some(Flow::Saved),
+    "-saved" => Some(Flow::Save),
     "-need" => Some(Flow::Need),
     "-dead" => Some(Flow::Dead),
     "-?" => None,
@@ -215,7 +215,7 @@ Flow: Option<Flow> = {
 
 SomeFlow: Option<Flow> = {
     "usable" => Some(Flow::Usable),
-    "saved" => Some(Flow::Saved),
+    "saved" => Some(Flow::Save),
     "need" => Some(Flow::Need),
     "dead" => Some(Flow::Dead),
     "?" => None
