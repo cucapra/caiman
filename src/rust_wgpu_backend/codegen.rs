@@ -2047,14 +2047,25 @@ impl<'program> CodeGen<'program> {
                 }
 
                 assert!(default_join_point_id_opt.is_none());
-                let join_point_id = pipeline_context
-                    .join_graph
-                    .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
-                        value_funclet_id: callee_value_funclet_id,
-                        scheduling_funclet_id: callee_scheduling_funclet_id,
-                        captures: vec![].into_boxed_slice(),
-                        continuation_join_point_id,
-                    }));
+                let join_point_id =
+                    pipeline_context
+                        .join_graph
+                        .create(JoinPoint::SerializedJoinPoint(SerializedJoinPoint {
+                            value_funclet_id: callee_value_funclet_id,
+                            scheduling_funclet_id: callee_scheduling_funclet_id,
+                            continuation_join_point_id,
+                            argument_ffi_types: callee_funclet
+                                .input_types
+                                .iter()
+                                .map(|type_id| self.get_cpu_useable_type(*type_id))
+                                .collect(),
+                        }));
+                // .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
+                //     value_funclet_id: callee_value_funclet_id,
+                //     scheduling_funclet_id: callee_scheduling_funclet_id,
+                //     captures: vec![].into_boxed_slice(),
+                //     continuation_join_point_id,
+                // }));
                 SplitPoint::Next {
                     return_node_results: argument_node_results.into_boxed_slice(),
                     continuation_join_point_id_opt: Some(join_point_id),

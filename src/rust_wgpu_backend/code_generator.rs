@@ -1023,13 +1023,13 @@ impl<'program> CodeGenerator<'program> {
                         self.get_type_name(*resuming_type)
                     );
                 }
-                write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ pop_join_and_dispatch_at_{}::<F, PipelineOutputTuple<'callee>>(self, join_stack", dispatcher_id.0);
+                write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ pop_join_and_dispatch_at_{}::<F, PipelineOutputTuple<'callee>>(join_stack", dispatcher_id.0);
                 for (resuming_argument_index, resuming_type) in
                     yield_point.resuming_types.iter().enumerate()
                 {
                     write!(self.code_writer, ", arg_{}", resuming_argument_index);
                 }
-                write!(self.code_writer, ") }}\n");
+                write!(self.code_writer, ", self) }}\n");
             }
         }
         write!(self.code_writer, "}}\n");
