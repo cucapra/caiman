@@ -151,6 +151,11 @@ enum SplitPoint {
         return_node_results: Box<[NodeResult]>,
         continuation_join_point_id_opt: Option<JoinPointId>,
     },
+    Return {
+        return_node_results: Box<[NodeResult]>,
+        continuation_join_point_id_opt: Option<JoinPointId>,
+        argument_ffi_types: Box<[ir::ffi::TypeId]>,
+    },
     Yield {
         external_function_id: ir::ExternalFunctionId,
         yielded_node_results: Box<[NodeResult]>,
@@ -801,6 +806,24 @@ impl<'program> CodeGen<'program> {
                 *default_join_point_id_opt = continuation_join_point_id_opt;
                 return Some(return_node_results);
             }
+            SplitPoint::Return {
+                return_node_results,
+                continuation_join_point_id_opt,
+                argument_ffi_types,
+            } => {
+                if inline {
+                    *default_join_point_id_opt = continuation_join_point_id_opt;
+                    let argument_var_ids = NodeResult::collect_vars(&return_node_results);
+                    self.code_generator
+                        .build_indirect_stack_jump_to_popped_serialized_join(
+                            &argument_var_ids,
+                            &argument_ffi_types,
+                        );
+                    return None;
+                } else {
+                    return Some(return_node_results);
+                }
+            }
             SplitPoint::Yield {
                 external_function_id,
                 yielded_node_results,
@@ -1121,10 +1144,12 @@ impl<'program> CodeGen<'program> {
 
                     match &join_point {
                         JoinPoint::RootJoinPoint(_) => {
-                            let return_var_ids =
-                                NodeResult::collect_vars(&current_out_node_results);
-                            self.code_generator
-                                .build_return(&return_var_ids, pipeline_rets);
+                            if !inline {
+                                let return_var_ids =
+                                    NodeResult::collect_vars(&current_out_node_results);
+                                self.code_generator
+                                    .build_return(&return_var_ids, pipeline_rets);
+                            }
                         }
                         JoinPoint::SimpleJoinPoint(simple_join_point) => {
                             unreachable!();
@@ -1926,9 +1951,15 @@ impl<'program> CodeGen<'program> {
                     output_node_results.push(node_result);
                 }
 
-                SplitPoint::Next {
+                let join_funclet = &self.program.funclets[funclet_id];
+                let argument_ffi_types = join_funclet.input_types[/*captures.len() */..]
+                    .iter()
+                    .map(|type_id| self.get_cpu_useable_type(*type_id))
+                    .collect::<Box<[ir::ffi::TypeId]>>();
+                SplitPoint::Return {
                     return_node_results: output_node_results.into_boxed_slice(),
                     continuation_join_point_id_opt: *default_join_point_id_opt,
+                    argument_ffi_types,
                 }
             }
             ir::TailEdge::ScheduleCallYield {

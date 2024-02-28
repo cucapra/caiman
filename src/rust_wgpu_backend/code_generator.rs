@@ -1173,7 +1173,7 @@ impl<'program> CodeGenerator<'program> {
                 write!(self.code_writer, ", {}", self.access_val_str(*var_id));
             }
         }
-        write!(self.code_writer, ", instance)\n");
+        write!(self.code_writer, ", instance);\n");
     }
 
     pub fn build_return(&mut self, output_var_ids: &[VarId], pipeline_rets: &[ffi::TypeId]) {
