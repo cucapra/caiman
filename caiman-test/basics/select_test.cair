@@ -38,13 +38,13 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %join = inline-join %foo_ret [] %djoin;
 
     schedule-select %x_val [%foo_left, %foo_right]
-        [value $val.%r, timeline $time.%e, spatial $space.%bs]
+        [$val.%r, $time.%e, $space.%bs]
         (%r_loc) %join;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %foo_left<$time.%e-usable, $time.%e-usable>
-    (%r_loc : $val.%e-dead $time.%e-usable $space.%bs-saved %i64l) ->
+    (%r_loc : $val-dead $time.%e-usable $space.%bs-saved %i64l) ->
     [%out : $val.%y-usable $time.%e-usable $space.%bs-saved %i64l] 
 {
     local-do-builtin $val.%y() -> %r_loc;

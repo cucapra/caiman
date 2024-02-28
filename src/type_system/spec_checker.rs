@@ -318,9 +318,6 @@ impl<'program> FuncletSpecChecker<'program> {
             self.funclet_spec.output_tags.len()
         );
         for index in 0..return_value_node_ids.len() {
-            // dbg!(&self.scalar_nodes);
-            // dbg!(&index);
-            // dbg!(&self.funclet_spec);
             let scalar = &self.scalar_nodes[&return_value_node_ids[index]];
 
             check_tag_compatibility_interior(

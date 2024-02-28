@@ -13,8 +13,8 @@ external-cpu-pure[impl @op] %op(i64) -> i64;
 value[impl default @main] %main() -> i64 {
     return %y;
     %x = constant %ni64 2;
-    %y = extract %y_t 0;
     %y_t = call @op(%x);
+    %y = extract %y_t 0;
 }
 
 timeline %time(%e : %event0) -> %event0 {

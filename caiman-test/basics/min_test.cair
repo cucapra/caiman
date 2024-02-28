@@ -53,7 +53,7 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
     %join = inline-join %main_ret [] %default;
 
     schedule-select %r_val [%main_left, %main_right]
-        [value $val.%s, timeline $time.%none, spatial $space.%none]
+        [$val.%s, $time, $space]
         (%s_ref) %join;
 }
 
