@@ -44,7 +44,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %foo_left<$time-usable, $time-usable>
-(%loc : $val-usable $time-usable $space-saved %i64l) ->
+(%loc : $val-dead $time-usable $space-saved %i64l) ->
 [%out : $val.%y-usable $time-usable $space-saved %i64l] 
 {
     local-do-builtin $val.%y() -> %loc;
@@ -53,7 +53,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_right<$time-usable, $time-usable>
-(%loc : $val-usable $time-usable $space-saved %i64l) ->
+(%loc : $val-dead $time-usable $space-saved %i64l) ->
 [%out : $val.%z-usable $time-usable $space-saved %i64l] {
     local-do-builtin $val.%z() -> %loc;
     return %loc;
