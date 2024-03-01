@@ -264,7 +264,7 @@
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: None, flow: Save), (quot: None, flow: Usable)],
+						input_tags : [(quot: None, flow: Saved), (quot: None, flow: Usable)],
 						output_tags : [(quot: None, flow: Usable)]
 					),
 					timeline : (
