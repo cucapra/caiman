@@ -19,6 +19,8 @@
 //     max(min(x, y), min(x, z)) 
 // }
 
+// THIS TEST IS CURRENTLY NOT TYPECHECKING
+
 version 0.0.2
 
 type i64;
@@ -34,14 +36,14 @@ function @lt(i64, i64) -> i64;
 
 external-cpu-pure[impl @lt] %lt(i64, i64) -> i64;
 
-value[impl default @max] %max(%x : i64, %y : i64) -> i64 {
+value[impl default @max] %max(%x : i64, %y : i64) -> [%out: i64] {
     %b_t = call @lt(%x, %y);
     %b = extract %b_t 0;
     %r = select %b %y %x;
     return %r;
 }
 
-value[impl default @min] %min(%x : i64, %y : i64) -> i64 {
+value[impl default @min] %min(%x : i64, %y : i64) -> [%out: i64] {
     %b_t = call @lt(%x, %y);
     %b = extract %b_t 0;
     %r = select %b %x %y;
@@ -71,75 +73,68 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 // max setup
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
-    %max_main<none($time.%e)-usable, none($time.%e)-usable>
-    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n) 
-    ->
-    output($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n 
+%max_main<$time-usable, $time-usable>
+(%x     : $val.%x-usable $time-usable $space-usable %i64n,
+ %y     : $val.%y-usable $time-usable $space-usable %i64n) 
+->
+$val.%out-usable $time-usable $space-usable %i64n 
 {
     %b_loc = alloc-temporary local [] i64;
-    local-do-external %lt node($val.%b_t)(%x, %y) -> %b_loc;
+    local-do-external %lt $val.%b_t(%x, %y) -> %b_loc;
     %b = read-ref i64 %b_loc;
-
-    %r_loc = alloc-temporary local [] i64;
 
     %djoin = default-join;
     %join = inline-join %max_ret [] %djoin;
 
     schedule-select %b [%max_left, %max_right]
-        [value node($val.%r), timeline none($time.%e), spatial none($space.%bs)]
-        (%x, %y, %r_loc) %join;
+        [$val.%r, $time, $space]
+        (%x, %y) %join;
 }
 
 // max branches
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
-    %max_left<none($time.%e)-usable, none($time.%e)-usable>
-    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %r_loc : none($val.%r)-dead none($time.%e)-usable none($space.%bs)-saved %i64l)
-    ->
-    node($val.%x)-usable none($time.%e)-usable none($space.%bs)-saved %i64l
+%max_left<$time-usable, $time-usable>
+(%x     : $val.%x-usable $time-usable $space-usable %i64n,
+ %y     : $val.%y-usable $time-usable $space-usable %i64n)
+->
+$val.%y-usable $time-usable $space-saved %i64n
 {
-    write-ref i64 %x -> %r_loc;
-    return %r_loc;
+    return %y;
 }
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
-    %max_right<none($time.%e)-usable, none($time.%e)-usable>
-    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %r_loc : none($val.%r)-dead none($time.%e)-usable none($space.%bs)-saved %i64l) 
-    ->
-    node($val.%y)-usable none($time.%e)-usable none($space.%bs)-saved %i64l
+%max_right<$time-usable, $time-usable>
+(%x     : $val.%x-usable $time-usable $space-usable %i64n,
+ %y     : $val.%y-usable $time-usable $space-usable %i64n)
+->
+$val.%x-usable $time-usable $space-saved %i64n
 {
-    write-ref i64 %y -> %r_loc;
-    return %r_loc;
+    return %x;
 }
 
 // max return
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
-%max_ret<none($time.%e)-usable, none($time.%e)-usable>
-    (%r_loc : node($val.%r)-usable none($time.%e)-usable none($space.%bs)-saved %i64l)
-    ->
-    node($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n
+%max_ret<$time-usable, $time-usable>
+(%r : $val.%r-usable $time-usable $space-saved %i64n)
+->
+$val.%out-usable $time-usable $space-usable %i64n
 {
-    %r = read-ref i64 %r_loc;
     return %r;
 }
 
 // min setup
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
-    %min_main<none($time.%e)-usable, none($time.%e)-usable>
-    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n) 
-    ->
-    output($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n 
+%min_main<$time-usable, $time-usable>
+(%x     : $val.%x-usable $time-usable $space-usable %i64n,
+ %y     : $val.%y-usable $time-usable $space-usable %i64n) 
+->
+$val.%r-usable $time-usable $space-usable %i64n 
 {
     %b_loc = alloc-temporary local [] i64;
-    local-do-external %lt node($val.%b_t)(%x, %y) -> %b_loc;
+    local-do-external %lt $val.%b_t(%x, %y) -> %b_loc;
     %b = read-ref i64 %b_loc;
 
     %r_loc = alloc-temporary local [] i64;
@@ -148,45 +143,40 @@ schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
     %join = inline-join %max_ret [] %djoin;
 
     schedule-select %b [%max_left, %max_right]
-        [value node($val.%r), timeline none($time.%e), spatial none($space.%bs)]
-        (%x, %y, %r_loc) %join;
+        [$val.%r, $time, $space]
+        (%x, %y) %join;
 }
 
 // min branches
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
-    %min_left<none($time.%e)-usable, none($time.%e)-usable>
-    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %r_loc : none($val.%r)-dead none($time.%e)-usable none($space.%bs)-saved %i64l)
-    ->
-    node($val.%x)-usable none($time.%e)-usable none($space.%bs)-saved %i64l
+%min_left<$time-usable, $time-usable>
+(%x     : $val.%x-usable $time-usable $space-usable %i64n,
+ %y     : $val.%y-usable $time-usable $space-usable %i64n)
+->
+$val.%x-usable $time-usable $space-saved %i64n
 {
-    write-ref i64 %x -> %r_loc;
-    return %r_loc;
+    return %x;
 }
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
-    %min_right<none($time.%e)-usable, none($time.%e)-usable>
-    (%x     : node($val.%x)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %y     : node($val.%y)-usable none($time.%e)-usable none($space.%bs)-usable %i64n,
-     %r_loc : none($val.%r)-dead none($time.%e)-usable none($space.%bs)-saved %i64l) 
-    ->
-    node($val.%y)-usable none($time.%e)-usable none($space.%bs)-saved %i64l
+%min_right<$time-usable, $time-usable>
+(%x     : $val.%x-usable $time-usable $space-usable %i64n,
+ %y     : $val.%y-usable $time-usable $space-usable %i64n)
+->
+$val.%y-usable $time-usable $space-saved %i64n
 {
-    write-ref i64 %y -> %r_loc;
-    return %r_loc;
+    return %y;
 }
 
 // min return
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
-%min_ret<none($time.%e)-usable, none($time.%e)-usable>
-    (%r_loc : node($val.%r)-usable none($time.%e)-usable none($space.%bs)-saved %i64l)
-    ->
-    node($val.%r)-usable none($time.%e)-usable none($space.%bs)-usable %i64n
+%min_ret<$time-usable, $time-usable>
+(%r : $val.%r-usable $time-usable $space-saved %i64n)
+->
+$val.%r-usable $time-usable $space-usable %i64n
 {
-    %r = read-ref i64 %r_loc;
     return %r;
 }
 
