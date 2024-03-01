@@ -32,16 +32,16 @@ function @main(i64) -> i64;
 function @time(%event0) -> %event0;
 function @time_single(%event0) -> %event0;
 
-value[impl default @double] %double(%x : i64) -> [%out: i64] {
-    %two = constant %i64n 2;
-    %result_t = call @mult(%x, %two);
+value[impl default @addone] %addone(%x : i64) -> [%out: i64] {
+    %one = constant %i64n 1;
+    %result_t = call @add(%x, %one);
     %result = extract %result_t 0;
     return %result;
 }
 
-value[impl default @addone] %addone(%x : i64) -> [%out: i64] {
-    %one = constant %i64n 1;
-    %result_t = call @add(%x, %one);
+value[impl default @double] %double(%x : i64) -> [%out: i64] {
+    %two = constant %i64n 2;
+    %result_t = call @mult(%x, %two);
     %result = extract %result_t 0;
     return %result;
 }
@@ -60,18 +60,6 @@ timeline[impl default @time] %time(%e : %event0) -> [%out : %event0] {
     return %e;
 }
 
-timeline[impl default @time_single] %single(%e : %event0) -> [%out : %event0] {
-    %enc = encoding-event %e [];
-    %enc_loc = extract %enc 0;
-    %enc_remote = extract %enc 1;
-    
-    %sub = submission-event %enc_remote;
-    %call_t = call @time(%sub);
-    %call = extract %call_t 0;
-    %snc = synchronization-event %call %enc_loc;
-    return %snc;
-}
-
 spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
@@ -80,7 +68,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %addone, timeline $time = %time, spatial $space = %space] 
 %addone_head
-<$time.%e-usable, $time.%out-usable>
+<$time-usable, $time-usable>
     (%x     : $val.%x-usable $time-usable $space-usable %i64n)
     ->
     $val.%out-usable $time-usable $space-usable %i64n
@@ -89,7 +77,7 @@ schedule[value $val = %addone, timeline $time = %time, spatial $space = %space]
 
     local-do-builtin $val.%one() -> %local_ref;
     %one = read-ref i64 %local_ref;
-    local-do-external %addone $val.%result_t(%x, %one) -> %local_ref;
+    local-do-external %add $val.%result_t(%x, %one) -> %local_ref;
     %result = read-ref i64 %local_ref;
 
     return %result;
@@ -99,16 +87,16 @@ schedule[value $val = %addone, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %double, timeline $time = %time, spatial $space = %space] 
 %double_head
-<$time.%e-usable, $time.%out-usable>
+<$time-usable, $time-usable>
     (%x     : $val.%x-usable $time-usable $space-usable %i64n)
     -> 
-    $val.%out-usable $time.%e-usable $space-usable %i64n
+    $val.%out-usable $time-usable $space-usable %i64n
 {
     %local_ref = alloc-temporary local [storage, map_write] i64;
 
     local-do-builtin $val.%two() -> %local_ref;
     %two = read-ref i64 %local_ref;
-    local-do-external %double $val.%result_t(%x, %two) -> %local_ref;
+    local-do-external %mult $val.%result_t(%x, %two) -> %local_ref;
     %result = read-ref i64 %local_ref;
 
     return %result;
@@ -116,29 +104,29 @@ schedule[value $val = %double, timeline $time = %time, spatial $space = %space]
 
 // main definitions
 
-schedule[value $val = %main, timeline $time = %single, spatial $space = %space] 
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space] 
 %main_head
-<$time.%e-usable, $time.%out-usable>
-    (%x     : $val.%x-usable $time.%e-usable $space.%bs-usable %i64n)
+<$time-usable, $time-usable>
+    (%x     : $val.%x-usable $time-usable $space-usable %i64n)
     ->
-    $val.%out-usable $time.%out-usable $space.%bs-usable %i64n
+    $val.%out-usable $time-usable $space-usable %i64n
 {
     %djoin = default-join;
     %join = inline-join %main_second [] %djoin;
 
     schedule-call %addone_head [
             $val.%y_t,
-            $time.%call_t,
+            $time,
             $space]
         (%x) %join;
 }
 
-schedule[value $val = %main, timeline $time = %single, spatial $space = %space] 
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space] 
 %main_second
-<$time.%e-usable, $time.%out-usable>
-    (%y     : $val.%y-usable $time.%e-usable $space.%bs-usable %i64n)
+<$time-usable, $time-usable>
+    (%y     : $val.%y-usable $time-usable $space-usable %i64n)
     -> 
-    $val.%out-usable $time.%snc-usable $space.%bs-usable %i64n
+    $val.%out-usable $time-usable $space-usable %i64n
 {
     %local_ref = alloc-temporary local [storage, map_write] i64;
 
@@ -147,17 +135,17 @@ schedule[value $val = %main, timeline $time = %single, spatial $space = %space]
 
     schedule-call %double_head [
             $val.%result_t,
-            $time.%call_t,
+            $time,
             $space]
         (%y) %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space] 
 %main_return
-<$time.%e-usable, $time.%out-usable>
-    (%result     : $val.%result-usable $time.%e-usable $space.%bs-usable %i64n)
+<$time-usable, $time-usable>
+    (%result     : $val.%result-usable $time-usable $space-usable %i64n)
     -> 
-    $val.%result-usable $time.%e-usable $space.%bs-usable %i64n
+    $val.%result-usable $time-usable $space-usable %i64n
 {
     return %result;
 }
