@@ -1,0 +1,29 @@
+@startuml compiler_structure
+[*] --> Caiman
+[*] --> Caiman_Assembly
+[*] --> RON
+
+Caiman --> Caiman_AST : Parsing
+Caiman_Assembly --> Assembly_AST : Parsing
+RON --> Caiman_IR_AST : Parsing
+
+Caiman_AST --> Assembly_AST : Control Flow Lowering
+Assembly_AST --> Explication_AST : Name Lowering
+Explication_AST --> Caiman_IR_AST : Explication
+Caiman_IR_AST --> Checked_Caiman_AST : Type Checking
+Checked_Caiman_AST --> Rust : Codegen
+Rust --> [*]
+
+Caiman: Caiman code (also called High Level Caiman or HLC)
+Caiman_Assembly: Low-level representation of Caiman
+RON: Literal a Rust AST description of a program in the Caiman IR
+
+Caiman_AST: A higher-level AST for Caiman, includes non-basic-block control flow
+Assembly_AST: An AST for Caiman assembly (essentially just Caiman IR code with names)
+
+Explication_AST: AST used to represent unexplicated Caiman code, currently not in the main branch
+Caiman_IR_AST: The internal representation of Caiman code, used for typechecking
+Checked_Caiman_AST: The representation of Caiman after typechecking (is identical to the Caiman IR AST)
+Rust : The Rust code equivalent of the Caiman program
+
+@enduml
