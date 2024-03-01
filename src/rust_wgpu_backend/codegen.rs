@@ -1373,7 +1373,6 @@ impl<'program> CodeGen<'program> {
                 ir::Node::Phi { index } => {
                     // Phis must appear at the start of a scheduling funclet (so that node order reflects scheduling order)
                     assert_eq!(current_node_id, *index as usize);
-
                     funclet_scoped_state.node_results.insert(
                         current_node_id,
                         argument_node_results[*index as usize].clone(),

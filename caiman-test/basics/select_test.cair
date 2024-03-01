@@ -25,8 +25,8 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-    %foo_main<$time.%e-usable, $time.%e-usable>() ->
-    [%out : $val.%r-usable $time.%e-usable $space.%bs-usable %i64n] 
+    %foo_main<$time-usable, $time-usable>() ->
+    [%out : $val.%r-usable $time-usable $space-usable %i64n] 
 {
     %x_loc = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_loc;
@@ -38,30 +38,31 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %join = inline-join %foo_ret [] %djoin;
 
     schedule-select %x_val [%foo_left, %foo_right]
-        [$val.%r, $time.%e, $space.%bs]
+        [$val.%r, $time, $space]
         (%r_loc) %join;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-    %foo_left<$time.%e-usable, $time.%e-usable>
-    (%r_loc : $val-dead $time.%e-usable $space.%bs-saved %i64l) ->
-    [%out : $val.%y-usable $time.%e-usable $space.%bs-saved %i64l] 
+    %foo_left<$time-usable, $time-usable>
+(%loc : $val-usable $time-usable $space-saved %i64l) ->
+[%out : $val.%y-usable $time-usable $space-saved %i64l] 
 {
-    local-do-builtin $val.%y() -> %r_loc;
-    return %r_loc;
+    local-do-builtin $val.%y() -> %loc;
+    return %loc;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_right<$time.%e-usable, $time.%e-usable>(%r_loc : $val.%e-dead $space.%bs-saved $time.%e-usable %i64l) ->
-[%out : $val.%z-usable $time.%e-usable $space.%bs-saved %i64l] {
-    local-do-builtin $val.%z() -> %r_loc;
-    return %r_loc;
+%foo_right<$time-usable, $time-usable>
+(%loc : $val-usable $time-usable $space-saved %i64l) ->
+[%out : $val.%z-usable $time-usable $space-saved %i64l] {
+    local-do-builtin $val.%z() -> %loc;
+    return %loc;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_ret<$time.%e-usable, $time.%e-usable>
-(%r_loc : $val.%r-usable $time.%e-usable $space.%bs-saved %i64l) ->
-[%out : $val.%r-usable $time.%e-usable $space.%bs-usable %i64n] {
+%foo_ret<$time-usable, $time-usable>
+(%r_loc : $val.%r-usable $time-usable $space-saved %i64l) ->
+[%out : $val.%r-usable $time-usable $space-usable %i64n] {
     %r_val = read-ref i64 %r_loc;
     return %r_val;
 }

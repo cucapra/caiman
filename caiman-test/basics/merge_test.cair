@@ -10,7 +10,7 @@ function @main() -> i64;
 
 external-cpu-pure[impl @add] %add(i64, i64) -> i64;
 
-value[impl default @main] %foo() -> i64 {
+value[impl default @main] %foo() -> [%out: i64] {
     %res_t = call @add(%n1, %n2); // 8 + 5 = 13
     %res = extract %res_t 0;
     %n2_t = call @add(%x, %n1); // 3 + 5 = 8
@@ -31,8 +31,8 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_main<$time.%e-usable, $time.%e-usable>() ->
-[%out : %ni64] {
+%foo_main<$time-usable, $time-usable>() ->
+[%out : $val.%out-usable %ni64] {
     %x_loc = alloc-temporary local [] i64;
     %y_loc = alloc-temporary local [] i64;
     %n1_loc = alloc-temporary local [] i64;
