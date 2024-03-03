@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use caiman::assembly::ast::{self as asm, Hole};
+use caiman::assembly::ast::{self as asm, Hole, MetaId};
 
 use crate::{
     enum_cast,
@@ -17,7 +17,10 @@ use caiman::ir;
 
 use super::{
     data_type_to_storage_type,
-    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag},
+    sched_hir::{
+        META_SPATIAL, META_TIMELINE, META_VALUE, Funclet, Funclets, HirBody, HirFuncCall, Specs,
+        Terminator, TripleTag,
+    },
     tuple_id,
 };
 
@@ -45,17 +48,13 @@ fn build_copy_cmd(
             TripleTag::from_tags(t, f.specs())
                 .value
                 .as_ref()
-                .map(tag_to_quot)
+                .and_then(tag_to_quot)
         })
-        .or_else(|| {
-            backup_tag
-                .map(|t| &t.value)
-                .and_then(|t| t.as_ref().map(tag_to_quot))
-        })
+        .or_else(|| backup_tag.and_then(|t| (&t.value).as_ref().and_then(tag_to_quot)))
         .or_else(|| {
             if let SchedTerm::Var { name, .. } = src {
                 f.get_out_tag(name)
-                    .and_then(|t| t.value.as_ref().map(|t| t.quot.clone()))
+                    .and_then(|t| t.value.as_ref().and_then(|t| t.quot.clone()))
             } else {
                 None
             }
@@ -163,24 +162,10 @@ fn lower_store(
 
 /// Changes the remote node id to the remote id of the result of the call, before
 /// extracing the result
-fn to_tuple_quotient(q: asm::Quotient) -> asm::Quotient {
-    match q {
-        asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        }))
-        | asm::Quotient::Input(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        }))
-        | asm::Quotient::Output(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(node),
-        })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
-            funclet,
-            node: Some(asm::NodeId(tuple_id(&[node.0]))),
-        })),
-        x => x,
+fn to_tuple_quotient(q: asm::RemoteNodeId) -> asm::RemoteNodeId {
+    asm::RemoteNodeId {
+        funclet: q.funclet,
+        node: q.node.map(|o| o.map(|n| asm::NodeId(tuple_id(&[n.0])))),
     }
 }
 
@@ -214,7 +199,7 @@ fn lower_op(
                 dest_tag
                     .value
                     .as_ref()
-                    .map(|t| to_tuple_quotient(tag_to_quot(t)))
+                    .and_then(|t| tag_to_quot(t).map(to_tuple_quotient))
                     .expect("Tag must be set for now"),
             ),
             inputs: Some(inputs),
@@ -318,15 +303,17 @@ fn lower_func_call(
             },
         })),
         Some(asm::Command::TailEdge(asm::TailEdge::ScheduleCall {
-            timeline_operation: Some(tags.timeline.as_ref().map_or_else(
-                || tags.default_tag(SpecType::Timeline).quot,
-                |x| x.quot.clone(),
-            )),
-            spatial_operation: Some(tags.timeline.as_ref().map_or_else(
-                || tags.default_tag(SpecType::Spatial).quot,
-                |x| x.quot.clone(),
-            )),
-            value_operation: tags.value.map(|t| t.quot),
+            operations: Some(vec![
+                tags.timeline.as_ref().map_or_else(
+                    || tags.default_tag(SpecType::Timeline).quot,
+                    |x| x.quot.clone(),
+                ),
+                tags.spatial.as_ref().map_or_else(
+                    || tags.default_tag(SpecType::Spatial).quot,
+                    |x| x.quot.clone(),
+                ),
+                tags.value.and_then(|t| t.quot),
+            ]),
             callee_funclet_id: Some(asm::FuncletId(call.target.clone())),
             callee_arguments: Some(
                 call.args
@@ -433,30 +420,30 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
             },
         })),
         Some(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
-            value_operation: Some(
+            operations: Some(vec![
                 tags.value
                     .as_ref()
                     .map(tag_to_quot)
                     .expect("Selects need a value node for now"),
-            ),
-            timeline_operation: Some(tags.timeline.as_ref().map_or_else(
-                || {
-                    asm::Quotient::None(Some(asm::RemoteNodeId {
-                        node: None,
-                        funclet: Some(f.specs().timeline.clone()),
-                    }))
-                },
-                tag_to_quot,
-            )),
-            spatial_operation: Some(tags.spatial.as_ref().map_or_else(
-                || {
-                    asm::Quotient::None(Some(asm::RemoteNodeId {
-                        node: None,
-                        funclet: Some(f.specs().spatial.clone()),
-                    }))
-                },
-                tag_to_quot,
-            )),
+                tags.timeline.as_ref().map_or_else(
+                    || {
+                        Some(asm::RemoteNodeId {
+                            node: None,
+                            funclet: Some(MetaId(META_TIMELINE.to_string())),
+                        })
+                    },
+                    tag_to_quot,
+                ),
+                tags.spatial.as_ref().map_or_else(
+                    || {
+                        Some(asm::RemoteNodeId {
+                            node: None,
+                            funclet: Some(MetaId(META_SPATIAL.to_string())),
+                        })
+                    },
+                    tag_to_quot,
+                ),
+            ]),
             condition: Some(asm::NodeId(guard_name.to_string())),
             callee_funclet_ids: Some(f.next_blocks()),
             callee_arguments: Some(f.output_args()),
@@ -469,24 +456,20 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
 /// to a remote node id in the assembly
 fn quot_ref_to_remote_node(qr: &QuotientReference) -> asm::RemoteNodeId {
     asm::RemoteNodeId {
-        node: qr.spec_var.clone().map(asm::NodeId),
-        funclet: Some(asm::FuncletId(qr.spec_name.clone())),
+        node: qr.spec_var.clone().map(|n| Some(asm::NodeId(n))),
+        funclet: Some(asm::MetaId(qr.spec_name.clone())),
     }
 }
 
 /// Gets the assembly quotient from a high level caiman tag
-pub fn tag_to_quot(t: &Tag) -> asm::Quotient {
+pub fn tag_to_quot(t: &Tag) -> Option<asm::RemoteNodeId> {
     t.quot.as_ref().map_or_else(
-        || asm::Quotient::None(t.quot_var.as_ref().map(quot_ref_to_remote_node)),
+        || t.quot_var.as_ref().map(quot_ref_to_remote_node),
         |x| match x {
-            Quotient::Node => asm::Quotient::Node(t.quot_var.as_ref().map(quot_ref_to_remote_node)),
-            Quotient::Input => {
-                asm::Quotient::Input(t.quot_var.as_ref().map(quot_ref_to_remote_node))
-            }
-            Quotient::Output => {
-                asm::Quotient::Output(t.quot_var.as_ref().map(quot_ref_to_remote_node))
-            }
-            Quotient::None => asm::Quotient::None(t.quot_var.as_ref().map(quot_ref_to_remote_node)),
+            Quotient::Node => t.quot_var.as_ref().map(quot_ref_to_remote_node),
+            Quotient::Input => t.quot_var.as_ref().map(quot_ref_to_remote_node),
+            Quotient::Output => t.quot_var.as_ref().map(quot_ref_to_remote_node),
+            Quotient::None => t.quot_var.as_ref().map(quot_ref_to_remote_node),
         },
     )
 }
@@ -505,7 +488,7 @@ pub fn tag_to_tag_def(t: &Tag, default_flow: ir::Flow) -> asm::Tag {
             Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
             Flow::Usable => ir::Flow::Usable,
-            Flow::Save => ir::Flow::Save,
+            Flow::Saved => ir::Flow::Saved,
         }),
     }
 }
@@ -521,6 +504,13 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         commands.append(&mut new_cmds);
     }
     commands.extend(lower_terminator(funclet.terminator(), temp_id, funclet));
+    let implicit_default = asm::Tag {
+        quot: Some(asm::RemoteNodeId {
+            funclet: Some(MetaId(META_TIMELINE.to_string())),
+            node: None,
+        }),
+        flow: ir::Flow::Usable,
+    };
     asm::Funclet {
         kind: ir::FuncletKind::ScheduleExplicit,
         header: asm::FuncletHeader {
@@ -528,10 +518,12 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
             args: funclet.inputs(),
             ret: funclet.outputs(),
             binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
-                implicit_tags: None,
-                value: Some(funclet.specs().value.clone()),
-                timeline: Some(funclet.specs().timeline.clone()),
-                spatial: Some(funclet.specs().spatial.clone()),
+                implicit_tags: (implicit_default.clone(), implicit_default),
+                meta_map: asm::MetaMapping {
+                    value: (MetaId(META_VALUE.to_string()), funclet.specs().value.clone()),
+                    timeline: (MetaId(META_TIMELINE.to_string()), funclet.specs().timeline.clone()),
+                    spatial: (MetaId(META_SPATIAL.to_string()), funclet.specs().spatial.clone()),
+                },
             }),
         },
         commands,

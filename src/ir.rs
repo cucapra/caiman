@@ -188,7 +188,7 @@ pub enum Flow {
     Dead,   // Does not transform, can only be discarded and not read
     Usable, // Transforms forwards with state changes
     Need,   // Transforms backwards with state changes
-    Save,   // Usable has met Need and associated state will not change, but can still be read
+    Saved,   // Usable has met Need and associated state will not change, but can still be read
 }
 
 // Save is a zero value that cannot be discarded or duplicated
@@ -202,7 +202,7 @@ impl Flow {
             Self::Dead => true,
             Self::Usable => true,
             Self::Need => false,
-            Self::Save => false,
+            Self::Saved => false,
         }
     }
 
@@ -211,7 +211,7 @@ impl Flow {
             Self::Dead => false,
             Self::Usable => false,
             Self::Need => true,
-            Self::Save => false,
+            Self::Saved => false,
         }
     }
 
@@ -220,7 +220,7 @@ impl Flow {
             Self::Dead => false,
             Self::Usable => true,
             Self::Need => false,
-            Self::Save => true,
+            Self::Saved => true,
         }
     }
 
@@ -229,7 +229,7 @@ impl Flow {
             Self::Dead => true,
             Self::Usable => false,
             Self::Need => false,
-            Self::Save => true,
+            Self::Saved => true,
         }
     }
 }

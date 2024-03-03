@@ -37,25 +37,25 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_head<none($time.%e)-usable, none($time.%e)-usable>() ->
-    [%out : none($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
+%main_head<$time.%e-usable, $time.%e-usable>() ->
+    [%out : $val.%y-usable $space-usable $time.%e-usable %ni64]
 {
     %x_ref = alloc-temporary local [] i64;
-    local-do-builtin node($val.%x)() -> %x_ref;
+    local-do-builtin $val.%x() -> %x_ref;
     %arg = read-ref i64 %x_ref;
 
     %default = default-join;
     %join = serialized-join %main_ret [] %default;
 
-    schedule-call %rec_sum_head[value node($val.%y_t),
-        timeline none($time.%e),
-        spatial none($space.%none)](%arg) %join;
+    schedule-call %rec_sum_head[$val.%y_t,
+        $time.%e,
+        $space](%arg) %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_ret<none($time.%e)-usable, none($time.%e)-usable>
-    (%y : none($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64) ->
-    [%out : none($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64] 
+%main_ret<$time.%e-usable, $time.%e-usable>
+    (%y : $val.%y-usable $space-usable $time.%e-usable %ni64) ->
+    [%out : $val.%y-usable $space-usable $time.%e-usable %ni64] 
 {
 
     return %y;
@@ -87,24 +87,24 @@ value[impl default @rec_sum] %rec_sum(%i : %ni64) -> i64 {
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_head<none($time.%e)-usable, none($time.%e)-usable>
-    (%arg : input($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
-    [%out : none($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+%rec_sum_head<$time.%e-usable, $time.%e-usable>
+    (%arg : $val.%i-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%result-usable $space-usable $time-usable %ni64] 
 {
     %zero_ref = alloc-temporary local [] i64;
-    local-do-builtin node($val.%zero)() -> %zero_ref;
+    local-do-builtin $val.%zero() -> %zero_ref;
     %zero = read-ref i64 %zero_ref;
 
     %neg_1_ref = alloc-temporary local [] i64;
-    local-do-builtin node($val.%neg_1)() -> %neg_1_ref;
+    local-do-builtin $val.%neg_1() -> %neg_1_ref;
     %neg_1 = read-ref i64 %neg_1_ref;
 
     %cond_ref = alloc-temporary local [] i64;
-    local-do-external %gt node($val.%b_t)(%arg, %zero) -> %cond_ref;
+    local-do-external %gt $val.%b_t(%arg, %zero) -> %cond_ref;
     %cond = read-ref i64 %cond_ref;
 
     %arg_minus_1_ref = alloc-temporary local [] i64;
-    local-do-external %add node($val.%i_minus_1_t)(%arg, %neg_1) -> %arg_minus_1_ref;
+    local-do-external %add $val.%i_minus_1_t(%arg, %neg_1) -> %arg_minus_1_ref;
     %arg_minus_1 = read-ref i64 %arg_minus_1_ref;
 
     %default = default-join;
@@ -113,18 +113,18 @@ schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
     // i <= 0 ? %rec_sum_base : %rec_sum_rec
     // select cond [true, false]
     schedule-select %cond [%rec_sum_rec, %rec_sum_base] 
-        [value node($val.%result), timeline none($time.%e), spatial none($space.%none)]
+        [$val.%result, $time.%e, $space]
         (%arg_minus_1) %join;
 
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_base<none($time.%e)-usable, none($time.%e)-usable>
-    (%arg : none($val.%i_minus_1)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
-    [%out : none($val.%zero)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+%rec_sum_base<$time.%e-usable, $time.%e-usable>
+    (%arg : $val.%i_minus_1-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%zero-usable $space-usable $time-usable %ni64] 
 {
     %zero_ref = alloc-temporary local [] i64;
-    local-do-builtin node($val.%zero)() -> %zero_ref;
+    local-do-builtin $val.%zero() -> %zero_ref;
     %zero = read-ref i64 %zero_ref;
 
     return %zero;
@@ -132,30 +132,30 @@ schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_rec<none($time.%e)-usable, none($time.%e)-usable>
-    (%arg : node($val.%i_minus_1)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
-    [%out : none($val.%r)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+%rec_sum_rec<$time.%e-usable, $time.%e-usable>
+    (%arg : $val.%i_minus_1-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%r-usable $space-usable $time-usable %ni64] 
 {
     %default = default-join;
     %join = serialized-join %rec_sum_rec_tail [] %default;
 
-    schedule-call %rec_sum_head[value node($val.%r_t),
-        timeline none($time.%e),
-        spatial none($space.%none)](%arg) %join;
+    schedule-call %rec_sum_head[$val.%r_t,
+        $time.%e,
+        $space](%arg) %join;
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_rec_tail<none($time.%e)-usable, none($time.%e)-usable>
-    (%arg : none($val.%r)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
-    [%out : none($val.%r)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+%rec_sum_rec_tail<$time.%e-usable, $time.%e-usable>
+    (%arg : $val.%r-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%r-usable $space-usable $time-usable %ni64] 
 {
     return %arg;
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_ret<none($time.%e)-usable, none($time.%e)-usable>
-    (%arg : none($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
-    [%out : none($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+%rec_sum_ret<$time.%e-usable, $time.%e-usable>
+    (%arg : $val.%result-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%result-usable $space-usable $time-usable %ni64] 
 {
     return %arg;
 }

@@ -26,7 +26,7 @@ fn foo() -> i64 @ node(main.r)-usable
     } else {
         v = two;
     }
-    @in { v: [node(main.r)-usable, none(space)-save] };
+    @in { v: [node(main.r)-usable, none(space)-saved] };
     v
 }
 

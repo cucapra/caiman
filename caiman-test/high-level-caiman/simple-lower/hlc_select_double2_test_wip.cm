@@ -31,8 +31,8 @@ fn foo() -> i64 @ node(main.z)-usable
             let one: i64 @ node(main.one)-usable = 1;
             v = one;
         }
-        @in { v: [node(main.z)-usable, none(space)-save] };
-        @out { v: [node(main.z)-usable, none(space)-save] };
+        @in { v: [node(main.z)-usable, none(space)-saved] };
+        @out { v: [node(main.z)-usable, none(space)-saved] };
     } else {
         var r: bool @ none(main)-dead;
         let d: bool @ node(main.d)-usable = false;
@@ -44,8 +44,8 @@ fn foo() -> i64 @ node(main.z)-usable
             let one: i64 @ node(main.one)-usable = 1;
             v = one;
         }
-        @in { v: [node(main.z)-usable, none(space)-save] };
-        @out { v: [node(main.z)-usable, none(space)-save] };
+        @in { v: [node(main.z)-usable, none(space)-saved] };
+        @out { v: [node(main.z)-usable, none(space)-saved] };
     }
     v
 }

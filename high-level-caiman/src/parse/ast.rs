@@ -239,7 +239,7 @@ pub enum Quotient {
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Flow {
     Usable,
-    Save,
+    Saved,
     Dead,
     Need,
 }

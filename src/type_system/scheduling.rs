@@ -818,7 +818,7 @@ impl<'program> FuncletChecker<'program> {
                 spatial_spec_checker.update_scalar_node(
                     current_node_id,
                     spatial_spec_checker.current_implicit_tag.quot,
-                    ir::Flow::Save,
+                    ir::Flow::Saved,
                 );
                 self.node_types.insert(
                     current_node_id,
@@ -1808,7 +1808,7 @@ impl<'program> FuncletChecker<'program> {
 
                 let buffer_spatial_tag =
                     self.spatial_spec_checker_opt.as_mut().unwrap().scalar_nodes[buffer_node_id];
-                assert_ne!(buffer_spatial_tag.flow, ir::Flow::Save); // A continuation must own the space
+                assert_ne!(buffer_spatial_tag.flow, ir::Flow::Saved); // A continuation must own the space
 
                 if let Some(NodeType::Buffer(buffer)) = self.node_types.get_mut(buffer_node_id) {
                     assert_eq!(buffer.storage_place, *place);
@@ -1833,7 +1833,7 @@ impl<'program> FuncletChecker<'program> {
                         .update_scalar_node(
                             current_node_id,
                             buffer_spatial_tag.quot,
-                            ir::Flow::Save,
+                            ir::Flow::Saved,
                         );
                     self.node_types.insert(
                         current_node_id,

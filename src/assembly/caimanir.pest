@@ -64,12 +64,9 @@ buffer_flag = @{ "map_read" | "map_write" | "copy_src" | "copy_dst" | "storage" 
 buffer_flags_elements = !{ (buffer_flag ~ ("," ~ buffer_flag)*)? }
 buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
-meta_remote = { meta_name ~ ("." ~ name)? }
-meta_remote_hole = { meta_name_hole ~ ("." ~ name_hole)? | hole }
-quotient_name = { "node" | "input" | "output" | "none" }
-quotient = !{ quotient_name ~ "(" ~ meta_remote ~ ")" }
-quotient_hole = !{ quotient_name ~ "(" ~ meta_remote_hole ~ ")" | hole }
-flow = { "dead" | "usable" | "save" | "need" }
+quotient = !{ meta_name ~ ("." ~ name)? }
+quotient_hole = !{ meta_name_hole ~ ("." ~ name_hole)? | hole }
+flow = { "dead" | "usable" | "saved" | "need" }
 tag = ${ quotient ~ "-" ~ flow }
 
 // Program
@@ -155,21 +152,19 @@ function_class = { function_class_sep ~ function_class_name ~ "("
 value_sep = @{ "value" ~ sep }
 timeline_sep = @{ "timeline" ~ sep }
 spatial_sep = @{ "spatial" ~ sep }
+schedule_sep = @{ "schedule" ~ sep }
 
-schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
-schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
-schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
-
-funclet = { "value" ~ impl_box ~ value_funclet | "schedule" ~ schedule_box ~ schedule_funclet |
-    timeline_sep ~ timeline_funclet | spatial_sep ~ spatial_funclet }
+funclet = { "value" ~ value_funclet 
+    | "timeline" ~ timeline_funclet 
+    | spatial_sep ~ spatial_funclet
+    | "schedule" ~ schedule_funclet }
 
 //   header setup
 
 funclet_arg = { (name ~ ":")? ~ typ }
 funclet_args = { (funclet_arg ~ ("," ~ funclet_arg)*)? }
 funclet_return = { "[" ~ funclet_args ~ "]" | typ }
-funclet_header = { name ~ "(" ~ funclet_args ~ ")" ~ "->" ~ funclet_return }
+funclet_header = { impl_box? ~ name ~ "(" ~ funclet_args ~ ")" ~ "->" ~ funclet_return }
 
 value_command = { value_node | tail_edge }
 value_funclet = { funclet_header ~ "{" ~ (value_command ~ ";")* ~ "}" }
@@ -180,19 +175,24 @@ timeline_funclet = { funclet_header ~ "{" ~ (timeline_command ~ ";")* ~ "}" }
 spatial_command = { spatial_node | tail_edge }
 spatial_funclet = { funclet_header ~ "{" ~ (spatial_command ~ ";")* ~ "}" }
 
+schedule_box_value = { value_sep ~ meta_name ~ "=" ~ name }
+schedule_box_timeline = { ("," ~ timeline_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box_spatial = { ("," ~ spatial_sep ~ meta_name ~ "=" ~ name)? }
+schedule_box = { "[" ~ schedule_box_value ~ schedule_box_timeline ~ schedule_box_spatial ~ "]" }
+
 schedule_typ = ${ (tag ~ sep)* ~ typ }
 schedule_arg = { (name ~ ":")? ~ schedule_typ }
 schedule_args = { (schedule_arg ~ ("," ~ schedule_arg)*)? }
 schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
-schedule_header = { name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
+
+schedule_header = { schedule_box ~ name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
 
 schedule_command = { schedule_node | tail_edge | node_hole }
 schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
 //   tail edges
 
-triple_box = { "[" ~ value_sep ~ quotient_hole ~ "," ~
-timeline_sep ~ quotient_hole ~ "," ~ spatial_sep ~ quotient_hole ~ "]" }
+spec_mapping = { "[" ~ (quotient_hole ~ ("," ~ quotient_hole)*)? ~ "]" | hole }
 
 debug_hole_node = @{ "debug-hole" ~ sep ~ name_list }
 return_sep = @{ "return" ~ sep }
@@ -201,11 +201,11 @@ jump_sep = @{ "jump" ~ sep }
 jump_node = { jump_sep ~ name_hole ~ name_box_single }
 
 schedule_call_sep = @{ "schedule-call" ~ sep }
-schedule_call_node = { schedule_call_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
+schedule_call_node = { schedule_call_sep ~ name_hole ~ spec_mapping ~ name_call ~ name_hole }
 schedule_select_sep = @{ "schedule-select" ~ sep }
-schedule_select_node = { schedule_select_sep ~ name_hole ~ name_box ~ triple_box ~ name_call ~ name_hole }
+schedule_select_node = { schedule_select_sep ~ name_hole ~ name_box ~ spec_mapping ~ name_call ~ name_hole }
 schedule_yield_sep = @{ "schedule-call-yield" ~ sep }
-schedule_yield_node = { schedule_yield_sep ~ name_hole ~ triple_box ~ name_call ~ name_hole }
+schedule_yield_node = { schedule_yield_sep ~ name_hole ~ spec_mapping ~ name_call ~ name_hole }
 
 tail_edge = { return_node | jump_node | debug_hole_node |
     schedule_call_node | schedule_select_node | schedule_yield_node }
@@ -216,14 +216,14 @@ tail_edge = { return_node | jump_node | debug_hole_node |
 
 extract_sep = @{ "extract" ~ sep }
 extract_node = { assign ~ extract_sep ~ name ~ n }
+call_sep = @{ "call" ~ sep }
+call_node = { assign ~ call_sep ~ function_class_name ~ name_call }
 
 //     value
 
 // we can syntactically disallow holes to a (limited) extent here, so might as well
 constant_value = @{ "-" ~ ASCII_DIGIT+ | ASCII_DIGIT+ }
 constant_node = ${ assign ~ sep? ~ "constant" ~ sep ~ name_sep ~ constant_value }
-call_sep = @{ "call" ~ sep }
-call_node = { assign ~ call_sep ~ function_class_name ~ name_call }
 select_sep = @{ "select" ~ sep }
 select_node = { assign ~ select_sep ~ name_sep ~ name_sep ~ name }
 
@@ -291,11 +291,11 @@ fulfill_captures_node = { assign ~ fulfill_captures_sep ~ name_hole_sep ~ name_b
 
 //   nodes
 
-value_node = { constant_node | extract_node | call_node | select_node }
+value_node = { extract_node | call_node | constant_node | select_node }
 
-timeline_node = { extract_node | encoding_event_node | submission_event_node | synchronization_event_node }
+timeline_node = { extract_node | call_node | encoding_event_node | submission_event_node | synchronization_event_node }
 
-spatial_node = { extract_node | separated_buffer_space_node }
+spatial_node = { extract_node | call_node | separated_buffer_space_node }
 
 schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_node
     | static_split_node | static_merge_node | read_node | borrow_node | write_node

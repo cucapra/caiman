@@ -15,7 +15,7 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-use caiman::assembly::ast::{self as asm, Quotient};
+use caiman::assembly::ast::{self as asm, RemoteNodeId};
 
 use self::{
     analysis::{
@@ -31,6 +31,10 @@ mod analysis;
 mod test;
 
 pub use analysis::RET_VAR;
+
+pub const META_VALUE : &str = "_VALUE";
+pub const META_TIMELINE : &str = "_TIMELINE";
+pub const META_SPATIAL : &str = "_SPATIAL";
 
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -387,14 +391,11 @@ impl<'a> Funclet<'a> {
     }
 
     /// Returns true if the specified tag is a literal node in the value specification
-    pub fn is_literal_value(&self, t: &Quotient) -> bool {
-        match t {
-            Quotient::Input(Some(t)) | Quotient::Node(Some(t)) | Quotient::Output(Some(t)) => t
-                .node
-                .as_ref()
-                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0)),
-            _ => false,
-        }
+    pub fn is_literal_value(&self, remote: &RemoteNodeId) -> bool {
+        remote.node.as_ref().map_or(false, |n| {
+            n.as_ref()
+                .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
+        })
     }
 
     /// Returns true if the specified variable is a mutable reference or a mutable variable
@@ -499,7 +500,7 @@ impl Funclets {
         cfg = transform_out_ssa(cfg);
         let type_info = analyze(
             &mut cfg,
-            &TagAnalysis::top(specs, &hir_inputs, &hir_outputs, &data_types),
+            &TagAnalysis::top(&hir_inputs, &hir_outputs, &data_types),
         );
         let finfo = FuncInfo {
             name: f.name,

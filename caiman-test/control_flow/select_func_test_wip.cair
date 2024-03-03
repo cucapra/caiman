@@ -1,0 +1,109 @@
+version 0.0.2
+
+type i64;
+ref %i64l : i64-local<flags=[]>;
+event %event0;
+buffer_space %buffspace;
+native_value %i64n : i64;
+
+function @main() -> i64;
+function @select_fn(i64, i64) -> i64;
+
+value[impl default @main] %foo() -> i64 {
+    %y = constant %i64n 1;
+    %z = constant %i64n 2;
+    %r_t = call @select_fn(%y, %z);
+    %r = extract %r_t 0;
+    return %r;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_main<$time.%e-usable, $time.%e-usable>()
+    -> [%out: $val.%r-usable $space-usable $time.%e-usable %i64n]
+{
+    %y_ref = alloc-temporary local [] i64;
+    local-do-builtin $val.%y() -> %y_ref;
+    %y = read-ref i64 %y_ref;
+
+    %z_ref = alloc-temporary local [] i64;
+    local-do-builtin $val.%z() -> %z_ref;
+    %z = read-ref i64 %z_ref;
+
+    %default = default-join;
+    %join = inline-join %foo_ret [] %default;
+
+    schedule-call %sel_main[$val.%r_t,
+        $time.%e,
+        $space](%y, %z) %join;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_ret<$time.%e-usable, $time.%e-usable>
+    (%y : $val.%r-usable $space-usable $time.%e-usable %i64n) ->
+    [%out : $val.%r-usable $space-usable $time.%e-usable %i64n]
+{
+    return %y;
+}
+
+
+// select fn
+
+value[impl default @select_fn] %sel(%a : %i64n, %b: %i64n) -> i64 {
+    %x = constant %i64n 0;
+    %r = select %x %a %b;
+    return %r;
+}
+
+schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
+%sel_main<$time.%e-usable, $time.%e-usable>
+    (%a: $val.%a-usable $space-usable $time.%e-usable %i64n,
+    %b: $val.%b-usable $space-usable $time.%e-usable %i64n) ->
+    [%out : $val.%r-usable $space-usable $time.%e-usable %i64n] 
+{
+    %x_loc = alloc-temporary local [] i64;
+    local-do-builtin $val.%x() -> %x_loc;
+    %x_val = read-ref i64 %x_loc;
+
+    %djoin = default-join;
+    %join = inline-join %sel_ret [] %djoin;
+
+    schedule-select %x_val [%sel_left, %sel_right]
+        [$val.%r, $time, $space]
+        (%a, %b) %join;
+}
+
+schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
+%sel_left<$time.%e-usable, $time.%e-usable>
+    (%a: $val.%a-usable $space-usable $time.%e-usable %i64n,
+    %b: $val.%b-usable $space-usable $time.%e-usable %i64n) ->
+    [%out : $val.%a-usable $space-saved $time.%e-usable %i64n] 
+{
+    return %a;
+}
+
+schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
+%sel_right<$time.%e-usable, $time.%e-usable>
+    (%a: $val.%a-usable $space-usable $time.%e-usable %i64n,
+    %b: $val.%b-usable $space-usable $time.%e-usable %i64n) ->
+    [%out : $val.%b-usable $space-saved $time.%e-usable %i64n] 
+{
+    return %b;
+}
+
+schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
+%sel_ret<$time.%e-usable, $time.%e-usable>
+    (%r : $val.%r-usable $space-saved $time.%e-usable %i64n) ->
+    [%out : $val.%r-usable $space-usable $time.%e-usable %i64n] 
+{
+    return %r;
+}
+
+pipeline "main" = %foo_main;

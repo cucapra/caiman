@@ -42,6 +42,7 @@ macro_rules! def_assembly_id_type {
 }
 
 def_assembly_id_type!(FuncletId);
+def_assembly_id_type!(MetaId);
 def_assembly_id_type!(ExternalFunctionId);
 def_assembly_id_type!(FunctionClassId);
 def_assembly_id_type!(NodeId);
@@ -114,22 +115,16 @@ pub struct ExternalGpuFunctionResourceBinding {
 // keeping this idea around for the frontend, easier to reason about for tags
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
-    pub funclet: Hole<FuncletId>,
-    pub node: Hole<NodeId>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Quotient {
-    None(Hole<RemoteNodeId>),
-    Node(Hole<RemoteNodeId>),
-    Input(Hole<RemoteNodeId>),
-    Output(Hole<RemoteNodeId>),
+    pub funclet: Hole<MetaId>,
+    // we need an option of a hole
+    // since None is explicitly different than ?
+    pub node: Option<Hole<NodeId>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tag {
-    pub quot: Quotient, // What a given value maps to in a specification
-    pub flow: ir::Flow, // How this value transforms relative to the specification
+    pub quot: Hole<RemoteNodeId>, // What a given value maps to in a specification
+    pub flow: ir::Flow,          // How this value transforms relative to the specification
 }
 
 // Super Jank, but whatever
@@ -145,7 +140,7 @@ macro_rules! lookup_abstract_type_parser {
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { FunctionClassId };
 	(Operation) => { NodeId };
-	(RemoteOperation) => { Quotient };
+	(RemoteOperation) => { RemoteNodeId };
 	(Place) => { ir::Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
@@ -230,26 +225,20 @@ pub enum TailEdge {
     // Scheduling only
     // Split value - what will be computed
     ScheduleCall {
-        value_operation: Hole<Quotient>,
-        timeline_operation: Hole<Quotient>,
-        spatial_operation: Hole<Quotient>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         callee_funclet_id: Hole<FuncletId>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleSelect {
-        value_operation: Hole<Quotient>,
-        timeline_operation: Hole<Quotient>,
-        spatial_operation: Hole<Quotient>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         condition: Hole<NodeId>,
         callee_funclet_ids: Hole<Vec<Hole<FuncletId>>>,
         callee_arguments: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
     },
     ScheduleCallYield {
-        value_operation: Hole<Quotient>,
-        timeline_operation: Hole<Quotient>,
-        spatial_operation: Hole<Quotient>,
+        operations: Hole<Vec<Hole<RemoteNodeId>>>,
         external_function_id: Hole<ExternalFunctionId>,
         yielded_nodes: Hole<Vec<Hole<NodeId>>>,
         continuation_join: Hole<NodeId>,
@@ -263,17 +252,22 @@ pub struct FunctionClassBinding {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ScheduleBinding {
-    pub implicit_tags: Option<(Tag, Tag)>,
+pub struct MetaMapping {
     // map from the name to the associated funclet id
-    pub value: Option<FuncletId>,
-    pub timeline: Option<FuncletId>,
-    pub spatial: Option<FuncletId>,
+    pub value: (MetaId, FuncletId),
+    pub timeline: (MetaId, FuncletId),
+    pub spatial: (MetaId, FuncletId),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ScheduleBinding {
+    pub implicit_tags: (Tag, Tag),
+    pub meta_map: MetaMapping
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum FuncletBinding {
-    ValueBinding(FunctionClassBinding),
+    SpecBinding(FunctionClassBinding),
     ScheduleBinding(ScheduleBinding),
     None,
 }

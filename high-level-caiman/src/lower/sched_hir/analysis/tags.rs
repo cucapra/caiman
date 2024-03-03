@@ -1,9 +1,12 @@
+use caiman::assembly::ast::MetaId;
 use caiman::{assembly::ast as asm, ir};
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lower::lower_schedule::tag_to_tag;
-use crate::lower::sched_hir::{HirBody, HirInstr, Specs, Terminator, TripleTag};
+use crate::lower::sched_hir::{
+    META_SPATIAL, META_TIMELINE, META_VALUE, HirBody, HirInstr, Specs, Terminator, TripleTag,
+};
 use crate::parse::ast::{DataType, SchedTerm};
 use crate::typing::SpecType;
 
@@ -42,12 +45,12 @@ impl From<TripleTag> for TagInfo {
 }
 
 /// Creates a tag with a none quotient for the given spec and flow
-fn none_tag(spec_name: &asm::FuncletId, flow: ir::Flow) -> asm::Tag {
+fn none_tag(spec_name: &asm::MetaId, flow: ir::Flow) -> asm::Tag {
     asm::Tag {
-        quot: asm::Quotient::None(Some(asm::RemoteNodeId {
+        quot: Some(asm::RemoteNodeId {
             funclet: Some(spec_name.clone()),
             node: None,
-        })),
+        }),
         flow,
     }
 }
@@ -86,18 +89,18 @@ impl TagInfo {
     pub fn tags_vec_default(self, dtype: &DataType) -> Vec<asm::Tag> {
         vec![
             self.value
-                .unwrap_or_else(|| none_tag(&self.specs.value, ir::Flow::Usable)),
+                .unwrap_or_else(|| none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable)),
             self.spatial.unwrap_or_else(|| {
                 none_tag(
-                    &self.specs.spatial,
+                    &MetaId(META_SPATIAL.to_string()),
                     match dtype {
-                        DataType::Ref(_) => ir::Flow::Save,
+                        DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
                     },
                 )
             }),
             self.timeline
-                .unwrap_or_else(|| none_tag(&self.specs.timeline, ir::Flow::Usable)),
+                .unwrap_or_else(|| none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable)),
         ]
     }
 
@@ -107,19 +110,19 @@ impl TagInfo {
         Self {
             value: self
                 .value
-                .or_else(|| Some(none_tag(&self.specs.value, ir::Flow::Usable))),
+                .or_else(|| Some(none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable))),
             spatial: self.spatial.or_else(|| {
                 Some(none_tag(
-                    &self.specs.spatial,
+                    &MetaId(META_SPATIAL.to_string()),
                     match dtype {
-                        DataType::Ref(_) => ir::Flow::Save,
+                        DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
                     },
                 ))
             }),
             timeline: self
                 .timeline
-                .or_else(|| Some(none_tag(&self.specs.timeline, ir::Flow::Usable))),
+                .or_else(|| Some(none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable))),
             specs: self.specs,
         }
     }
@@ -128,9 +131,9 @@ impl TagInfo {
     /// The default tag is `none()-usable`
     pub fn default_tag(&self, spec_type: SpecType) -> asm::Tag {
         match spec_type {
-            SpecType::Value => none_tag(&self.specs.value, ir::Flow::Usable),
-            SpecType::Spatial => none_tag(&self.specs.spatial, ir::Flow::Usable),
-            SpecType::Timeline => none_tag(&self.specs.timeline, ir::Flow::Usable),
+            SpecType::Value => none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable),
+            SpecType::Spatial => none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Usable),
+            SpecType::Timeline => none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable),
         }
     }
 }
@@ -142,7 +145,6 @@ impl TagInfo {
 #[allow(clippy::module_name_repetitions)]
 pub struct TagAnalysis {
     tags: HashMap<String, TagInfo>,
-    specs: Rc<Specs>,
     /// For an output fact, thse are the input tags to be overridden
     input_overrides: HashMap<String, TagInfo>,
 }
@@ -158,7 +160,6 @@ impl Eq for TagAnalysis {}
 impl TagAnalysis {
     /// Constructs a new top element
     pub fn top(
-        specs: &Specs,
         input: &[(String, TripleTag)],
         out: &[TripleTag],
         data_types: &HashMap<String, DataType>,
@@ -174,8 +175,8 @@ impl TagAnalysis {
                 // the the future, also assume that it's save if the flow is not specified
                 // but the quotient is
                 if tg.spatial.is_none() {
-                    tg.spatial = Some(none_tag(&specs.spatial, ir::Flow::Save));
-                } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Save {
+                    tg.spatial = Some(none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Saved));
+                } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Saved {
                     panic!("Spatial tags for references must be save");
                 }
             }
@@ -183,7 +184,6 @@ impl TagAnalysis {
         }
         Self {
             tags,
-            specs: Rc::new(specs.clone()),
             input_overrides: HashMap::new(),
         }
     }
@@ -217,7 +217,7 @@ impl TagAnalysis {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
                     } else {
-                        info.value = Some(none_tag(&self.specs.value, ir::Flow::Dead));
+                        info.value = Some(none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Dead));
                     }
                 } else if let Some(SchedTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
@@ -226,7 +226,7 @@ impl TagAnalysis {
                     }
                 }
                 if info.spatial.is_none() {
-                    info.spatial = Some(none_tag(&self.specs.spatial, ir::Flow::Save));
+                    info.spatial = Some(none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Saved));
                 }
                 self.tags.insert(lhs.clone(), info);
             }

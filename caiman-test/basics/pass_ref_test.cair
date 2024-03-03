@@ -30,26 +30,26 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_head<none($time.%e)-usable, none($time.%e)-usable>() ->
-    [%out : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %i64]
+%main_head<$time-usable, $time-usable>() ->
+    [%out : $val.%y-usable $space-usable $time-usable %i64]
 {
 
     %x_r = alloc-temporary local [] i64;
-    local-do-builtin node($val.%x)() -> %x_r;
+    local-do-builtin $val.%x() -> %x_r;
 
 
     %default = default-join;
     %join = inline-join %main_ret [] %default;
 
-    schedule-call %foo_impl[value node($val.%y_t),
-        timeline none($time.%e),
-        spatial none($space.%none)](%x_r) %join;
+    schedule-call %foo_impl[$val.%y_t,
+        $time,
+        $space](%x_r) %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_ret<none($time.%e)-usable, none($time.%e)-usable>
-    (%y : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %i64) ->
-    [%out : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %i64]
+%main_ret<$time-usable, $time-usable>
+    (%y : $val.%y-usable $space-usable $time-usable %i64) ->
+    [%out : $val.%y-usable $space-usable $time-usable %i64]
 {
 
     return %y;
@@ -59,18 +59,18 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 // foo
 
 
-value[impl default @foo] %foo(%x : %i64) -> i64 {
+value[impl default @foo] %foo(%x : %i64) -> [%out: i64] {
     %i = constant %i64 20;
     return %i;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%foo_impl<none($time.%e)-usable, none($time.%e)-usable>
-    (%in : input($val.%x)-usable none($space.%none)-save none($time.%none)-usable %i64l) ->
-    [%out : output($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %i64]
+%foo_impl<$time-usable, $time-usable>
+    (%in : $val.%x-usable $space-saved $time-usable %i64l) ->
+    [%out : $val.%out-usable $space-usable $time-usable %i64]
 {
     %i_ref = alloc-temporary local [] i64;
-    local-do-builtin node($val.%i)() -> %i_ref;
+    local-do-builtin $val.%i() -> %i_ref;
     %result = read-ref i64 %i_ref;
     return %result;
 }
