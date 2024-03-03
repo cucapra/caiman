@@ -283,6 +283,10 @@ impl<'program> CodeGenerator<'program> {
             + self.code_writer.finish().as_str()
     }
 
+    pub fn get_native_interface(&self) -> &ffi::NativeInterface {
+        &self.native_interface
+    }
+
     fn get_var_name(&self, variable_id: VarId) -> String {
         format!("var_{}", variable_id.0)
     }
@@ -1176,10 +1180,15 @@ impl<'program> CodeGenerator<'program> {
         write!(self.code_writer, ", instance);\n");
     }
 
-    pub fn build_return(&mut self, output_var_ids: &[VarId], pipeline_rets: &[ffi::TypeId]) {
+    pub fn build_return(
+        &mut self,
+        output_var_ids: &[VarId],
+        output_var_types: &[ffi::TypeId],
+        pipeline_rets: &[ffi::TypeId],
+    ) {
         if let Some(result_type_ids) = &self.active_funclet_result_type_ids {
             let result_type_ids = result_type_ids.clone(); // Make a copy for now to satisfy the borrowchecking gods...
-            let dispatcher_id = self.lookup_dispatcher_id(&result_type_ids);
+            let dispatcher_id = self.lookup_dispatcher_id(&output_var_types);
             write!(self.code_writer, "if join_stack.used_bytes().len() > 0 {{ ");
             write!(
                 self.code_writer,
@@ -1190,7 +1199,7 @@ impl<'program> CodeGenerator<'program> {
             for ((return_index, var_id), var_type) in output_var_ids
                 .iter()
                 .enumerate()
-                .zip(result_type_ids.iter())
+                .zip(output_var_types.iter())
             {
                 if self.is_ref(*var_type) {
                     write!(self.code_writer, ", {}", self.make_stack_ref(*var_id));
