@@ -9,7 +9,11 @@ a.out
 caiman-test/src/bin/*
 caiman-test/src/*
 !caiman-test/src/util.rs
+**/parse/parser.rs
 
 # IDE
 *.sublime-project
 *.sublime-workspace
+
+# Generated parser files
+high-level-caiman/src/parse/parser.rs

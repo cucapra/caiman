@@ -1,0 +1,16 @@
+#version 0.1.0
+type gint = i32'<storage>;
+
+fn foo(a: gint'<map_write> @ input(v.x)-?, 
+       b: bool @ [],
+       c: i64'<map_read, alignment_bits = 512> @ [?(v.y)-dead, ?(tm)-?, output(sp)-?]) 
+       -> i32'<storage, map_write>
+        impls v, tm, sp
+{
+    let x: i32'<map_read> @ node(v.x)-? = ? * ?;
+    let y = foo(?, ?);
+}
+
+fn bar(a: i32, b: bool) -> gint impls v, tm, sp {
+    let y = ?;
+}

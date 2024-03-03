@@ -1,0 +1,20 @@
+#version 0.1.0
+
+val main() -> i32 {
+    a :- 10
+}
+
+tmln t(e: Event) -> Event {
+    returns e
+}
+
+sptl s(b: Buffersptl) -> Buffersptl {
+    returns s
+}
+
+tmln t2(e: Event) -> Event {
+    enc1, enc2 :- encoding_event(e, [])
+    sub :- submission_event(enc2)
+    snc :- synchronization_event(enc1, sub)
+    returns snc
+}

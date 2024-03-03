@@ -1,0 +1,5 @@
+Error: At bad_type_annotation.cm:3:11, 
+  Parsing Error: Unrecognized token: ''', expected one of [
+    "\",\"",
+    "\":-\"",
+]

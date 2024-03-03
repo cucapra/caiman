@@ -1,0 +1,31 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i32 {
+    a :- 2
+    c :- 10
+    b :- a * c
+    d :- b + a
+    e :- d - c
+    t :- 3
+    k :- e / t
+    returns k
+}
+
+fn main_impl() -> i32 @ node(main.k)-usable
+    impls main, time, space
+{
+    let a: i32 @ node(main.a) = 2;
+    let c: i32 @ node(main.c) = 10;
+    let b: i32 @ node(main.b) = a * c;
+    let d: i32 @ node(main.d) = b + a;
+    let e: i32 @ node(main.e) = d - c;
+    let t: i32 @ node(main.t) = 3;
+    let k: i32 @ node(main.k) = e / t;
+    k
+    
+}
+
+pipeline main { main_impl }

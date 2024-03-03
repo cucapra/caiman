@@ -10,7 +10,7 @@ function @main() -> i64;
 
 external-cpu-pure[impl @add] %add(i64, i64) -> i64;
 
-value[impl default @main] %foo() -> i64 {
+value[impl default @main] %foo() -> [%out: i64] {
     %res_t = call @add(%n1, %n2); // 8 + 5 = 13
     %res = extract %res_t 0;
     %n2_t = call @add(%x, %n1); // 3 + 5 = 8
@@ -30,22 +30,25 @@ spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule
-[value $val = %foo, timeline $time = %time, spatial $space = %space]
-<none-have, none-have>
-%foo_main() -> [%out : %ni64] {
-    %x_loc = alloc-temporary local i64;
-    %y_loc = alloc-temporary local i64;
-    %n1_loc = alloc-temporary local i64;
-    %n2_loc = alloc-temporary local i64;
-    %res_loc = alloc-temporary local i64;
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_main<$time-usable, $time-usable>() ->
+[%out : $val.%out-usable %ni64] {
+    %x_loc = alloc-temporary local [] i64;
+    %y_loc = alloc-temporary local [] i64;
+    %n1_loc = alloc-temporary local [] i64;
+    %n2_loc = alloc-temporary local [] i64;
+    %res_loc = alloc-temporary local [] i64;
 
-    local-do-builtin node($val.%x)() -> %x_loc;
-    local-do-builtin node($val.%y)() -> %y_loc;
+    local-do-builtin $val.%x() -> %x_loc;
+    local-do-builtin $val.%y() -> %y_loc;
 
-    local-do-external %add node($val.%n1_t)(%x_loc, %y_loc) -> %n1_loc;
-    local-do-external %add node($val.%n2_t)(%x_loc, %n1_loc) -> %n2_loc;
-    local-do-external %add node($val.%res_t)(%n1_loc, %n2_loc) -> %res_loc;
+    %x = read-ref i64 %x_loc;
+    %y = read-ref i64 %y_loc;
+    local-do-external %add $val.%n1_t(%x, %y) -> %n1_loc;
+    %n1 = read-ref i64 %n1_loc;
+    local-do-external %add $val.%n2_t(%x, %n1) -> %n2_loc;
+    %n2 = read-ref i64 %n2_loc;
+    local-do-external %add $val.%res_t(%n1, %n2) -> %res_loc;
     
     %res_val = read-ref i64 %res_loc;
     return %res_val;

@@ -1,0 +1,59 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    pass :- 10
+
+    b :- true
+    c :- false
+    d :- false
+    one :- 1
+    two :- 2
+    three :- 3
+    four :- 4
+
+    ll :- one + pass
+    lr :- two + pass
+    rl :- three + pass
+    rr:- four + pass
+
+    left :- ll if b else lr
+    right :- rl if c else rr
+    z :- left if d else right
+    returns z
+}
+
+fn foo() -> i64 @ node(main.z)-usable 
+    impls main, time, space
+{
+    let d = false;
+    let pass = 10;
+    if @ node(main.z) d {
+        let b = true;
+        if b {
+            let one = 1;
+            let ll = one + pass;
+            ll
+        } else {
+            let two = 2;
+            let lr = two + pass;
+            lr
+        }
+    } else {
+        let c = false;
+        if c {
+            let three = 3;
+            let rl = three + pass;
+            rl
+        } else {
+            let four = 4;
+            let rr = four + pass;
+            rr
+        }  
+    }
+}
+
+pipeline main { foo }

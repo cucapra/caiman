@@ -1,0 +1,6 @@
+#version 0.1.0
+
+fn foo() impls a, b, c {
+    baz(10)[2] = g;
+    foo_bar(2, 3)[4].x = h;
+}

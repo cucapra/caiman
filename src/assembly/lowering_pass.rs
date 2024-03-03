@@ -1,6 +1,11 @@
 use crate::assembly::ast;
+use crate::assembly::ast::FFIType;
+use crate::assembly::ast::Hole;
+use crate::assembly::ast::NodeId;
+use crate::assembly::context::reject_hole;
 use crate::assembly::context::Context;
-use crate::assembly::context::LocationNames;
+use crate::assembly::context;
+use crate::assembly::explication;
 use crate::assembly::parser;
 use crate::explication::expir;
 use crate::explication::Hole;
@@ -16,8 +21,15 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-pub fn ffi_to_ffi(value: ast::FFIType, context: &mut Context) -> ffi::Type {
-    fn box_map(b: Box<[ast::FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
+pub fn undefined<T>(h: Hole<T>) -> T {
+    match h {
+        Some(v) => v,
+        None => panic!(""),
+    }
+}
+
+pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
+    fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
         b.iter()
             .map(|x| ffi::TypeId(context.ffi_type_id(x)))
             .collect()
@@ -93,43 +105,11 @@ fn ir_version(version: &ast::Version, _: &mut Context) -> (u32, u32, u32) {
     result
 }
 
-pub fn ir_quotient_node(quot: &ast::Quotient, context: &Context) -> Hole<expir::Quotient> {
-    fn get_node(remote_id: &ast::RemoteNodeId, context: &Context) -> Hole<usize> {
-        match (remote_id.funclet.as_ref(), remote_id.node.as_ref()) {
-            (Some(funclet_id), Some(node_id)) => Some(context.remote_node_id(funclet_id, node_id)),
-            _ => None,
-        }
+fn ir_tag(tag: &ast::Tag, context: &mut Context) -> ir::Tag {
+    ir::Tag {
+        quot: context.remote_node_id(&reject_hole(tag.quot.clone())),
+        flow: tag.flow.clone(),
     }
-    match quot {
-        ast::Quotient::None => Some(expir::Quotient::None),
-        ast::Quotient::Node(r) => r
-            .as_ref()
-            .and_then(|v| get_node(v, context).map(|n| expir::Quotient::Node { node_id: n })),
-        ast::Quotient::Input(r) => r
-            .as_ref()
-            .and_then(|v| get_node(v, context).map(|n| expir::Quotient::Input { index: n })),
-        ast::Quotient::Output(r) => r
-            .as_ref()
-            .and_then(|v| get_node(v, context).map(|n| expir::Quotient::Output { index: n })),
-    }
-}
-
-fn ir_tag(tag: &Hole<ast::Tag>, context: &mut Context) -> Hole<expir::Tag> {
-    tag.as_ref().map(|t|
-        expir::Tag {
-            quot: ir_quotient_node(&t.quot, context),
-            flow: t.flow.clone(),
-        }
-    )
-}
-
-fn quotient_funclet(quot: &Hole<ast::Quotient>, context: &mut Context) -> Hole<ast::FuncletId> {
-    quot.and_then(|q| match q {
-        ast::Quotient::None => None,
-        ast::Quotient::Node(r) => r.as_ref().cloned().map(|v| v.funclet),
-        ast::Quotient::Input(r) => r.as_ref().cloned().map(|v| v.funclet),
-        ast::Quotient::Output(r) => r.as_ref().cloned().map(|v| v.funclet),
-    })
 }
 
 fn ir_external_gpu_resource(
@@ -295,9 +275,11 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<expi
                 ast::LocalTypeInfo::Ref {
                     storage_type,
                     storage_place,
-                } => expir::Type::Ref {
+                    buffer_flags,
+                } => ir::Type::Ref {
                     storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
                     storage_place: storage_place.clone(),
+                    buffer_flags: buffer_flags.clone(),
                 },
                 ast::LocalTypeInfo::Fence { queue_place } => expir::Type::Fence {
                     queue_place: queue_place.clone(),
@@ -305,9 +287,11 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<expi
                 ast::LocalTypeInfo::Buffer {
                     storage_place,
                     static_layout_opt,
-                } => expir::Type::Buffer {
+                    flags,
+                } => ir::Type::Buffer {
                     storage_place: storage_place.clone(),
                     static_layout_opt: static_layout_opt.clone(),
+                    flags: flags.clone(),
                 },
                 ast::LocalTypeInfo::Encoder { queue_place } => expir::Type::Encoder {
                     queue_place: queue_place.clone(),
@@ -370,162 +354,107 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                     .collect()
             }),
         },
-        ast::TailEdge::Jump { join, arguments } => expir::TailEdge::Jump {
-            join: context.funclet_indices.get_funclet(join.as_ref()),
-            arguments: arguments
-                .as_ref()
+        ast::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
+            join: context.node_id(reject_hole(join.as_ref())),
+            arguments: reject_hole(arguments.as_ref())
                 .iter()
                 .map(|n| context.node_id(n.as_ref()))
                 .collect(),
         },
         ast::TailEdge::ScheduleCall {
-            value_operation,
-            timeline_operation,
-            spatial_operation,
+            operations,
             callee_funclet_id,
             callee_arguments,
             continuation_join,
-        } => expir::TailEdge::ScheduleCall {
-            value_operation: ir_quotient_node(value_operation.as_ref(), context),
-            timeline_operation: ir_quotient_node(timeline_operation.as_ref(), context),
-            spatial_operation: ir_quotient_node(spatial_operation.as_ref(), context),
-            callee_funclet_id: context
-                .funclet_indices
-                .get_funclet(&callee_funclet_id.as_ref().0)
-                .clone(),
-            callee_arguments: callee_arguments
-                .as_ref()
-                .iter()
-                .map(|n| context.node_id(n.as_ref()))
-                .collect(),
-            continuation_join: context.node_id(continuation_join.as_ref()),
-        },
+        } => {
+            let operation_set = context.operational_lookup(reject_hole(operations.as_ref()));
+            ir::TailEdge::ScheduleCall {
+                value_operation: reject_hole(operation_set.value),
+                timeline_operation: reject_hole(operation_set.timeline),
+                spatial_operation: reject_hole(operation_set.spatial),
+                callee_funclet_id: context
+                    .funclet_indices
+                    .get_funclet(&reject_hole(callee_funclet_id.as_ref()).0)
+                    .unwrap()
+                    .clone(),
+                callee_arguments: reject_hole(callee_arguments.as_ref())
+                    .iter()
+                    .map(|n| context.node_id(reject_hole(n.as_ref())))
+                    .collect(),
+                continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
+            }
+        }
         ast::TailEdge::ScheduleSelect {
-            value_operation,
-            timeline_operation,
-            spatial_operation,
+            operations,
             condition,
             callee_funclet_ids,
             callee_arguments,
             continuation_join,
-        } => expir::TailEdge::ScheduleSelect {
-            value_operation: ir_quotient_node(reject_hole(value_operation.as_ref()), context),
-            timeline_operation: ir_quotient_node(reject_hole(timeline_operation.as_ref()), context),
-            spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
-            condition: context.node_id(reject_hole(condition.as_ref())),
-            callee_funclet_ids: reject_hole(callee_funclet_ids.as_ref())
-                .iter()
-                .map(|n| {
-                    context
-                        .funclet_indices
-                        .get_funclet(&reject_hole(n.as_ref()).0)
-                        .unwrap()
-                        .clone()
-                })
-                .collect(),
-            callee_arguments: reject_hole(callee_arguments.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
-        },
+        } => {
+            let operation_set = context.operational_lookup(reject_hole(operations.as_ref()));
+            ir::TailEdge::ScheduleSelect {
+                value_operation: reject_hole(operation_set.value),
+                timeline_operation: reject_hole(operation_set.timeline),
+                spatial_operation: reject_hole(operation_set.spatial),
+                condition: context.node_id(reject_hole(condition.as_ref())),
+                callee_funclet_ids: reject_hole(callee_funclet_ids.as_ref())
+                    .iter()
+                    .map(|n| {
+                        context
+                            .funclet_indices
+                            .get_funclet(&reject_hole(n.as_ref()).0)
+                            .unwrap()
+                            .clone()
+                    })
+                    .collect(),
+                callee_arguments: reject_hole(callee_arguments.as_ref())
+                    .iter()
+                    .map(|n| context.node_id(reject_hole(n.as_ref())))
+                    .collect(),
+                continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
+            }
+        }
         ast::TailEdge::ScheduleCallYield {
-            value_operation,
-            timeline_operation,
-            spatial_operation,
+            operations,
             external_function_id,
             yielded_nodes,
             continuation_join,
-        } => expir::TailEdge::ScheduleCallYield {
-            value_operation: ir_quotient_node(reject_hole(value_operation.as_ref()), context),
-            timeline_operation: ir_quotient_node(reject_hole(timeline_operation.as_ref()), context),
-            spatial_operation: ir_quotient_node(reject_hole(spatial_operation.as_ref()), context),
-            external_function_id: ffi::ExternalFunctionId(
-                context
-                    .funclet_indices
-                    .get_funclet(&reject_hole(external_function_id.as_ref()).0)
-                    .unwrap()
-                    .clone(),
-            ),
-            yielded_nodes: reject_hole(yielded_nodes.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
-        },
+        } => {
+            let operation_set = context.operational_lookup(reject_hole(operations.as_ref()));
+            ir::TailEdge::ScheduleCallYield {
+                value_operation: reject_hole(operation_set.value),
+                timeline_operation: reject_hole(operation_set.timeline),
+                spatial_operation: reject_hole(operation_set.spatial),
+                external_function_id: ffi::ExternalFunctionId(
+                    context
+                        .funclet_indices
+                        .get_funclet(&reject_hole(external_function_id.as_ref()).0)
+                        .unwrap()
+                        .clone(),
+                ),
+                yielded_nodes: reject_hole(yielded_nodes.as_ref())
+                    .iter()
+                    .map(|n| context.node_id(reject_hole(n.as_ref())))
+                    .collect(),
+                continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
+            }
+        }
     }
 }
 
 // updates the location in the context value funclet
 fn ir_schedule_binding(
     funclet_header: &ast::FuncletHeader,
-    implicit_tags: &Option<(ast::Tag, ast::Tag)>,
-    value: &Option<ast::FuncletId>,
-    timeline: &Option<ast::FuncletId>,
-    spatial: &Option<ast::FuncletId>,
+    implicit_tags: &(ast::Tag, ast::Tag),
+    meta_map: &ast::MetaMapping,
     context: &mut Context,
-) -> expir::FuncletSpecBinding {
-    #[derive(Debug)]
-    struct TagSet {
-        value: expir::Tag,
-        spatial: expir::Tag,
-        timeline: expir::Tag,
-    }
+) -> ir::FuncletSpecBinding {
+    context.set_meta_map(meta_map.clone());
 
-    fn gen_tags(
-        tags: &Vec<ast::Tag>,
-        value: &Option<ast::FuncletId>,
-        timeline: &Option<ast::FuncletId>,
-        spatial: &Option<ast::FuncletId>,
-        context: &mut Context,
-    ) -> TagSet {
-        let mut result = TagSet {
-            value: Default::default(),
-            spatial: Default::default(),
-            timeline: Default::default(),
-        };
-        for tag in tags {
-            let new_tag = ir_tag(tag, context);
-            let data = quotient_funclet(&tag.quot, context);
-            match data {
-                None => {}
-                Some(fnid) => {
-                    if fnid == value.clone().unwrap_or(ast::FuncletId("".to_string())) {
-                        result.value = new_tag;
-                    } else if fnid == spatial.clone().unwrap_or(ast::FuncletId("".to_string())) {
-                        result.spatial = new_tag;
-                    } else if fnid == timeline.clone().unwrap_or(ast::FuncletId("".to_string())) {
-                        result.timeline = new_tag;
-                    } else {
-                        panic!("Unknown tag funclet id {:?}", fnid);
-                    }
-                }
-            };
-        }
-        result
-    }
-
-    // probably a better way to do this, but whatever
-    let mut value_in = Default::default();
-    let mut value_out = Default::default();
-    let mut spatial_in = Default::default();
-    let mut spatial_out = Default::default();
-    let mut timeline_in = Default::default();
-    let mut timeline_out = Default::default();
-
-    match implicit_tags {
-        None => {}
-        Some((in_tag, out_tag)) => {
-            let in_tags = gen_tags(&vec![in_tag.clone()], value, timeline, spatial, context);
-            let out_tags = gen_tags(&vec![out_tag.clone()], value, timeline, spatial, context);
-            value_in = in_tags.value;
-            value_out = out_tags.value;
-            spatial_in = in_tags.spatial;
-            spatial_out = out_tags.spatial;
-            timeline_in = in_tags.timeline;
-            timeline_out = out_tags.timeline;
-        }
-    }
+    let default_tag = ir::Tag {
+        quot: ir::Quotient::None,
+        flow: ir::Flow::Usable
+    };
 
     struct TagBindings {
         value_tags: Vec<expir::Tag>,
@@ -545,35 +474,25 @@ fn ir_schedule_binding(
     };
 
     for arg in &funclet_header.args {
-        let tags = gen_tags(&arg.tags, value, timeline, spatial, context);
-        input_tags.value_tags.push(tags.value.clone());
-        input_tags.spatial_tags.push(tags.spatial.clone());
-        input_tags.timeline_tags.push(tags.timeline.clone());
+        let tags = context.tag_lookup(&arg.tags.iter().map(|t| Some(t.clone())).collect());
+        input_tags.value_tags.push(tags.value.unwrap_or(default_tag).clone());
+        input_tags.spatial_tags.push(tags.spatial.unwrap_or(default_tag).clone());
+        input_tags.timeline_tags.push(tags.timeline.unwrap_or(default_tag).clone());
     }
 
-    for arg in &funclet_header.ret {
-        let tags = gen_tags(&arg.tags, value, timeline, spatial, context);
-        output_tags.value_tags.push(tags.value.clone());
-        output_tags.spatial_tags.push(tags.spatial.clone());
-        output_tags.timeline_tags.push(tags.timeline.clone());
+    for ret in &funclet_header.ret {
+        let tags = context.tag_lookup(&ret.tags.iter().map(|t| Some(t.clone())).collect());
+        output_tags.value_tags.push(tags.value.unwrap_or(default_tag).clone());
+        output_tags.spatial_tags.push(tags.spatial.unwrap_or(default_tag).clone());
+        output_tags.timeline_tags.push(tags.timeline.unwrap_or(default_tag).clone());
     }
 
-    let mut implicit_in_tag = Default::default();
-    let mut implicit_out_tag = Default::default();
+    let implicit_in_tag = ir_tag(&implicit_tags.0, context);
+    let implicit_out_tag = ir_tag(&implicit_tags.1, context);
 
-    match implicit_tags {
-        None => {}
-        Some((in_tag, out_tag)) => {
-            implicit_in_tag = ir_tag(in_tag, context);
-            implicit_out_tag = ir_tag(out_tag, context);
-        }
-    }
-
-    expir::FuncletSpecBinding::ScheduleExplicit {
-        value: expir::FuncletSpec {
-            funclet_id_opt: value
-                .clone()
-                .map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
+    ir::FuncletSpecBinding::ScheduleExplicit {
+        value: ir::FuncletSpec {
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.value.1.0),
             input_tags: input_tags.value_tags.into_boxed_slice(),
             output_tags: output_tags.value_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),
@@ -586,17 +505,12 @@ fn ir_schedule_binding(
             input_tags: input_tags.spatial_tags.into_boxed_slice(),
             output_tags: output_tags.spatial_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),
-            implicit_out_tag: Default::default(),
         },
-        timeline: expir::FuncletSpec {
-            // assume implicit is timeline for now?
-            funclet_id_opt: timeline
-                .clone()
-                .map(|f| context.funclet_indices.get_funclet(&f.0).unwrap()),
-            input_tags: input_tags.timeline_tags.into_boxed_slice(),
-            output_tags: output_tags.timeline_tags.into_boxed_slice(),
-            implicit_in_tag,
-            implicit_out_tag,
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.spatial.1.0),
+            input_tags: input_tags.spatial_tags.into_boxed_slice(),
+            output_tags: output_tags.spatial_tags.into_boxed_slice(),
+            implicit_in_tag: Default::default(),
+            implicit_out_tag: Default::default(),
         },
     }
 }
@@ -606,8 +520,8 @@ fn ir_spec_binding(
     context: &mut Context,
 ) -> expir::FuncletSpecBinding {
     match &funclet_header.binding {
-        ast::FuncletBinding::None => expir::FuncletSpecBinding::None,
-        ast::FuncletBinding::ValueBinding(ast::FunctionClassBinding {
+        ast::FuncletBinding::None => ir::FuncletSpecBinding::None,
+        ast::FuncletBinding::SpecBinding(ast::FunctionClassBinding {
             default,
             function_class,
         }) => {
@@ -619,17 +533,8 @@ fn ir_spec_binding(
         }
         ast::FuncletBinding::ScheduleBinding(ast::ScheduleBinding {
             implicit_tags,
-            value,
-            timeline,
-            spatial,
-        }) => ir_schedule_binding(
-            funclet_header,
-            implicit_tags,
-            value,
-            timeline,
-            spatial,
-            context,
-        ),
+            meta_map,
+        }) => ir_schedule_binding(funclet_header, implicit_tags, meta_map, context),
     }
 }
 
@@ -668,7 +573,10 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> expir::Funclet {
         }
     }
 
-    expir::Funclet {
+    // help avoid reuse issues
+    context.reset_meta_map();
+
+    ir::Funclet {
         kind: funclet.kind.clone(),
         spec_binding,
         input_types: input_types.into_boxed_slice(),
@@ -699,7 +607,7 @@ fn ir_function_class(
     for declaration in declarations {
         match declaration {
             ast::Declaration::Funclet(f) => match &f.header.binding {
-                ast::FuncletBinding::ValueBinding(binding) => {
+                ast::FuncletBinding::SpecBinding(binding) => {
                     if binding.function_class == function.name {
                         let current_id = context
                             .funclet_indices

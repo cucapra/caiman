@@ -6,6 +6,59 @@ use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
 //use bitflags::bitflags;
 use crate::stable_vec::StableVec;
+use bitflags::bitflags;
+
+/*bitflags! {
+    //Copy, Clone, PartialEq, Eq, Hash
+    #[derive(Serialize, Deserialize)]
+    pub struct BufferFlags : u32 {
+        const MAP_READ = 0b1;
+        const MAP_WRITE = 0b10;
+        const COPY_SRC = 0b100;
+        const COPY_DST = 0b1000;
+        const STORAGE = 0b10000000;
+    }
+}*/
+
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BufferFlags {
+    #[serde(default)]
+    pub map_read: bool,
+    #[serde(default)]
+    pub map_write: bool,
+    #[serde(default)]
+    pub copy_src: bool,
+    #[serde(default)]
+    pub copy_dst: bool,
+    #[serde(default)]
+    pub storage: bool,
+    #[serde(default)]
+    pub uniform: bool,
+}
+
+impl BufferFlags {
+    pub fn new() -> Self {
+        Self {
+            map_read: false,
+            map_write: false,
+            copy_src: false,
+            copy_dst: false,
+            storage: false,
+            uniform: false,
+        }
+    }
+
+    pub fn or(&self, other: &Self) -> Self {
+        Self {
+            map_read: self.map_read | other.map_read,
+            map_write: self.map_write | other.map_write,
+            copy_src: self.copy_src | other.copy_src,
+            copy_dst: self.copy_dst | other.copy_dst,
+            storage: self.storage | other.storage,
+            uniform: self.uniform | other.uniform,
+        }
+    }
+}
 
 pub use crate::rust_wgpu_backend::ffi;
 
@@ -53,6 +106,7 @@ macro_rules! lookup_abstract_type {
 	(Place) => { Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
+    (BufferFlags) => { BufferFlags };
 }
 
 macro_rules! map_refs {
@@ -107,9 +161,18 @@ with_operations!(make_nodes);
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Quotient {
     None,
-    Node { node_id: usize },
-    Input { index: usize },
-    Output { index: usize },
+    Node {
+        /// Node id
+        node_id: usize,
+    },
+    Input {
+        index: usize,
+    },
+    /// Output quotient holding the index into the funclet's output array
+    Output {
+        /// The index into the funclet's output array
+        index: usize,
+    },
 }
 
 impl Default for Quotient {
@@ -122,51 +185,51 @@ impl Default for Quotient {
 // Encodes the "sign" of the data (this can be made more formal categorically as the interaction of adjunction pairs with a chirality structure)
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Flow {
-    None, // Does not transform, can only be discarded and not read
-    Have, // Transforms forwards with state changes
-    Need, // Transforms backwards with state changes
-    Met,  // Have has met Need and associated state will not change, but can still be read
+    Dead,   // Does not transform, can only be discarded and not read
+    Usable, // Transforms forwards with state changes
+    Need,   // Transforms backwards with state changes
+    Saved,   // Usable has met Need and associated state will not change, but can still be read
 }
 
-// Met is a zero value that cannot be discarded or duplicated
-// None is a zero value that can only be discarded or duplicated
-// Have is a nonzero (owning) value that can only be read and discarded
+// Save is a zero value that cannot be discarded or duplicated
+// Dead is a zero value that can only be discarded or duplicated
+// Usable is a nonzero (owning) value that can only be read and discarded
 // Need is a nonzero (owning) value that can only be written and duplicated
 
 impl Flow {
     pub fn is_droppable(&self) -> bool {
         match self {
-            Self::None => true,
-            Self::Have => true,
+            Self::Dead => true,
+            Self::Usable => true,
             Self::Need => false,
-            Self::Met => false,
+            Self::Saved => false,
         }
     }
 
     pub fn is_duplicable(&self) -> bool {
         match self {
-            Self::None => false,
-            Self::Have => false,
+            Self::Dead => false,
+            Self::Usable => false,
             Self::Need => true,
-            Self::Met => false,
+            Self::Saved => false,
         }
     }
 
     pub fn is_readable(&self) -> bool {
         match self {
-            Self::None => false,
-            Self::Have => true,
+            Self::Dead => false,
+            Self::Usable => true,
             Self::Need => false,
-            Self::Met => true,
+            Self::Saved => true,
         }
     }
 
     pub fn is_neutral(&self) -> bool {
         match self {
-            Self::None => true,
-            Self::Have => false,
+            Self::Dead => true,
+            Self::Usable => false,
             Self::Need => false,
-            Self::Met => true,
+            Self::Saved => true,
         }
     }
 }
@@ -181,7 +244,7 @@ impl Default for Tag {
     fn default() -> Self {
         Self {
             quot: Quotient::None,
-            flow: Flow::Have,
+            flow: Flow::Usable,
         }
     }
 }
@@ -190,6 +253,54 @@ impl Default for Tag {
 pub struct StaticBufferLayout {
     pub alignment_bits: usize,
     pub byte_size: usize,
+}
+
+impl StaticBufferLayout {
+    pub fn alloc_static(
+        &mut self,
+        native_interface: &ffi::NativeInterface,
+        storage_type: StorageTypeId,
+    ) {
+        // To do check alignment compatibility
+        let storage_size = native_interface.calculate_type_byte_size(storage_type);
+        let alignment_bits = native_interface.calculate_type_alignment_bits(storage_type);
+        let starting_alignment_offset = 1usize << self.alignment_bits;
+        let additional_alignment_offset = if alignment_bits > self.alignment_bits {
+            let alignment_offset = 1usize << alignment_bits;
+            alignment_offset - starting_alignment_offset
+        } else {
+            0usize
+        };
+        let total_byte_size = storage_size + additional_alignment_offset;
+
+        assert!(self.byte_size >= total_byte_size);
+        self.byte_size -= total_byte_size;
+        self.alignment_bits =
+            (total_byte_size + starting_alignment_offset).trailing_zeros() as usize;
+    }
+
+    pub fn split_static(&mut self, native_interface: &ffi::NativeInterface, size: usize) -> Self {
+        let predecessor_static_layout = Self {
+            byte_size: size,
+            alignment_bits: self.alignment_bits,
+        };
+
+        assert!(self.byte_size >= size);
+        self.byte_size -= size;
+        let starting_alignment_offset = 1usize << self.alignment_bits;
+        self.alignment_bits = (size + starting_alignment_offset).trailing_zeros() as usize;
+
+        return predecessor_static_layout;
+    }
+
+    pub fn merge_static_left(
+        &mut self,
+        native_interface: &ffi::NativeInterface,
+        predecessor_static_layout: Self,
+    ) {
+        self.byte_size += predecessor_static_layout.byte_size;
+        self.alignment_bits = predecessor_static_layout.alignment_bits;
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -206,6 +317,7 @@ pub enum Type {
     Ref {
         storage_type: ffi::TypeId,
         storage_place: Place,
+        buffer_flags: BufferFlags,
     },
     Fence {
         queue_place: Place,
@@ -213,6 +325,7 @@ pub enum Type {
     Buffer {
         storage_place: Place,
         static_layout_opt: Option<StaticBufferLayout>,
+        flags: BufferFlags,
     },
     Encoder {
         queue_place: Place,

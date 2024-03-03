@@ -1,0 +1,162 @@
+[
+    FunctionClass {
+        info: Info {
+            start_ln_and_col: (
+                3,
+                1,
+            ),
+            end_ln_and_col: (
+                6,
+                2,
+            ),
+        },
+        name: "baz",
+        members: [
+            ValueFunclet {
+                info: Info {
+                    start_ln_and_col: (
+                        3,
+                        1,
+                    ),
+                    end_ln_and_col: (
+                        6,
+                        2,
+                    ),
+                },
+                name: "baz",
+                input: [],
+                output: [
+                    (
+                        None,
+                        UserDefined(
+                            "custom_type",
+                        ),
+                    ),
+                ],
+                statements: [
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                5,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                5,
+                                37,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "foo",
+                                None,
+                            ),
+                        ],
+                        rhs: Conditional {
+                            info: Info {
+                                start_ln_and_col: (
+                                    5,
+                                    12,
+                                ),
+                                end_ln_and_col: (
+                                    5,
+                                    37,
+                                ),
+                            },
+                            if_true: Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            5,
+                                            12,
+                                        ),
+                                        end_ln_and_col: (
+                                            5,
+                                            13,
+                                        ),
+                                    },
+                                    lit: Int(
+                                        "2",
+                                    ),
+                                },
+                            ),
+                            guard: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            5,
+                                            17,
+                                        ),
+                                        end_ln_and_col: (
+                                            5,
+                                            18,
+                                        ),
+                                    },
+                                    name: "c",
+                                },
+                            ),
+                            if_false: Conditional {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        5,
+                                        24,
+                                    ),
+                                    end_ln_and_col: (
+                                        5,
+                                        37,
+                                    ),
+                                },
+                                if_true: Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                5,
+                                                24,
+                                            ),
+                                            end_ln_and_col: (
+                                                5,
+                                                25,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "1",
+                                        ),
+                                    },
+                                ),
+                                guard: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                5,
+                                                29,
+                                            ),
+                                            end_ln_and_col: (
+                                                5,
+                                                30,
+                                            ),
+                                        },
+                                        name: "a",
+                                    },
+                                ),
+                                if_false: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                5,
+                                                36,
+                                            ),
+                                            end_ln_and_col: (
+                                                5,
+                                                37,
+                                            ),
+                                        },
+                                        name: "b",
+                                    },
+                                ),
+                            },
+                        },
+                    },
+                ],
+            },
+        ],
+    },
+]

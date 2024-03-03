@@ -1,0 +1,274 @@
+[
+    Typedef {
+        info: Info {
+            start_ln_and_col: (
+                2,
+                1,
+            ),
+            end_ln_and_col: (
+                2,
+                27,
+            ),
+        },
+        name: "gint",
+        typ: FlaggedType {
+            info: Info {
+                start_ln_and_col: (
+                    2,
+                    13,
+                ),
+                end_ln_and_col: (
+                    2,
+                    26,
+                ),
+            },
+            base: Int(
+                I32,
+            ),
+            flags: [
+                "storage",
+            ],
+            settings: [],
+        },
+    },
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                4,
+                1,
+            ),
+            end_ln_and_col: (
+                11,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [
+            (
+                "a",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        27,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "gint",
+                                ),
+                                flags: [
+                                    "map_write",
+                                ],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        30,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        42,
+                                    ),
+                                },
+                                quot: Some(
+                                    Input,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "v",
+                                        spec_var: Some(
+                                            "x",
+                                        ),
+                                    },
+                                ),
+                                flow: None,
+                            },
+                        ],
+                    },
+                ),
+            ),
+            (
+                "b",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        5,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        5,
+                                        15,
+                                    ),
+                                },
+                                base: Bool,
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "c",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        47,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [
+                                    "map_read",
+                                ],
+                                settings: [
+                                    (
+                                        "alignment_bits",
+                                        "512",
+                                    ),
+                                ],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        51,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        65,
+                                    ),
+                                },
+                                quot: Some(
+                                    Node,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "v",
+                                        spec_var: Some(
+                                            "y",
+                                        ),
+                                    },
+                                ),
+                                flow: Some(
+                                    Dead,
+                                ),
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        67,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        83,
+                                    ),
+                                },
+                                quot: Some(
+                                    Input,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "tm",
+                                        spec_var: Some(
+                                            "z",
+                                        ),
+                                    },
+                                ),
+                                flow: Some(
+                                    Save,
+                                ),
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        85,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        102,
+                                    ),
+                                },
+                                quot: Some(
+                                    Output,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "sp",
+                                        spec_var: Some(
+                                            "k",
+                                        ),
+                                    },
+                                ),
+                                flow: Some(
+                                    Need,
+                                ),
+                            },
+                        ],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                11,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                35,
+                            ),
+                        },
+                        base: Int(
+                            I32,
+                        ),
+                        flags: [
+                            "storage",
+                            "map_write",
+                        ],
+                        settings: [],
+                    },
+                ),
+                tags: [],
+            },
+        ],
+        specs: [
+            "v",
+            "tm",
+            "sp",
+        ],
+        statements: [],
+    },
+]

@@ -45,6 +45,7 @@ fn input_type(input: &spec::OperationInput) -> String {
         OK::ValueFunction => "ValueFunction",
         OK::Funclet => "Funclet",
         OK::StorageType => "StorageType",
+        OK::BufferFlags => "BufferFlags",
     };
     if input.is_array {
         format!("[{base}]")

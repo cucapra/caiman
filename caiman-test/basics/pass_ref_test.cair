@@ -1,0 +1,80 @@
+version 0.0.2
+
+type i64;
+event %event0;
+buffer_space %buffspace;
+native_value %i64 : i64;
+ref %i64l : i64-local<flags=[]>;
+
+// A simple tests where a funclet invokes another
+
+function @main() -> i64;
+function @foo(i64) -> i64;
+
+
+// main
+
+value[impl default @main] %main() -> i64 {
+    %x = constant %i64 1;
+    %y_t = call @foo(%x);
+    %y = extract %y_t 0;
+    return %y;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_head<$time-usable, $time-usable>() ->
+    [%out : $val.%y-usable $space-usable $time-usable %i64]
+{
+
+    %x_r = alloc-temporary local [] i64;
+    local-do-builtin $val.%x() -> %x_r;
+
+
+    %default = default-join;
+    %join = inline-join %main_ret [] %default;
+
+    schedule-call %foo_impl[$val.%y_t,
+        $time,
+        $space](%x_r) %join;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_ret<$time-usable, $time-usable>
+    (%y : $val.%y-usable $space-usable $time-usable %i64) ->
+    [%out : $val.%y-usable $space-usable $time-usable %i64]
+{
+
+    return %y;
+
+}
+
+// foo
+
+
+value[impl default @foo] %foo(%x : %i64) -> [%out: i64] {
+    %i = constant %i64 20;
+    return %i;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_impl<$time-usable, $time-usable>
+    (%in : $val.%x-usable $space-saved $time-usable %i64l) ->
+    [%out : $val.%out-usable $space-usable $time-usable %i64]
+{
+    %i_ref = alloc-temporary local [] i64;
+    local-do-builtin $val.%i() -> %i_ref;
+    %result = read-ref i64 %i_ref;
+    return %result;
+}
+
+
+
+pipeline "main" = %main_head;

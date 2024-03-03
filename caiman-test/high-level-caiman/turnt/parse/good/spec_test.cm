@@ -1,0 +1,19 @@
+#version 0.1.0
+
+val main() -> i32 {
+    a :- 10
+}
+
+val foo(a: i32) -> i64 {
+    b :- 20
+}
+
+extern(gpu) bar(a: i32) -> i64
+
+feq baz {
+    val bb(g: i32, h: i32, z: i32) -> i64 {
+        
+    }
+
+    extern(cpu) bc(g: i32, h: i32, z: i32) -> i64
+}

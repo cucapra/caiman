@@ -1,0 +1,10 @@
+#version 0.1.0
+val f() {
+
+}
+
+extern(gpu) g()
+
+fn k() impls f {
+    
+}

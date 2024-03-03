@@ -1,0 +1,51 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    a :- 3
+    b :- 5
+    c :- calc(a, b)
+    returns c
+}
+
+val calc(a: i64, b: i64) -> i64 {
+    res :- a * b
+    res2 :- calc2(res)
+    returns res2
+}
+
+val calc2(t: i64) -> i64 {
+    nine :- 9
+    res :- t % nine
+    returns res
+}
+
+fn calc2_impl(t: i64 @ input(calc2.t)-usable)
+    -> i64 @ output(calc2.res)-usable impls calc2, time, space
+{
+    let n: i64 @ node(calc2.nine) = 9;
+    let r: i64 @ node(calc2.res) = t % n;
+    r
+}
+
+fn calc_impl(a: i64 @ input(calc.a)-usable, b: i64 @ input(calc.b)-usable) 
+    -> i64 @ output(calc.res2)-usable impls calc, time, space
+{
+    let res: i64 @ node(calc.res) = a * b;
+    let res2: i64 @ node(calc.res2) = calc2_impl(res) @ node(calc.res2);
+    res2
+}
+
+fn main_impl() -> i64 @ node(main.c)-usable
+    impls main, time, space
+{
+    let a: i64 @ node(main.a)-usable = 3;
+    let b: i64 @ node(main.b) = 5;
+    let c: i64 @ node(main.c)-usable = calc_impl(a, b) @ node(main.c);
+    c
+    
+}
+
+pipeline main { main_impl }

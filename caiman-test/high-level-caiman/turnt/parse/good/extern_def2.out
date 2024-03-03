@@ -1,0 +1,90 @@
+[
+    FunctionClass {
+        info: Info {
+            start_ln_and_col: (
+                2,
+                1,
+            ),
+            end_ln_and_col: (
+                21,
+                2,
+            ),
+        },
+        name: "foo",
+        members: [
+            Extern {
+                info: Info {
+                    start_ln_and_col: (
+                        2,
+                        1,
+                    ),
+                    end_ln_and_col: (
+                        21,
+                        2,
+                    ),
+                },
+                name: "foo",
+                device: "cpu",
+                pure: false,
+                input: [
+                    (
+                        Some(
+                            "a",
+                        ),
+                        Int(
+                            I64,
+                        ),
+                    ),
+                    (
+                        Some(
+                            "b",
+                        ),
+                        Int(
+                            I64,
+                        ),
+                    ),
+                ],
+                output: [
+                    (
+                        Some(
+                            "out",
+                        ),
+                        Int(
+                            I64,
+                        ),
+                    ),
+                ],
+                def: Some(
+                    ExternDef {
+                        path: "../../test.comp",
+                        entry: "main",
+                        dimensions: 1,
+                        resources: [
+                            ExternResource {
+                                binding: 0,
+                                group: 1,
+                                caiman_val: Input(
+                                    "a",
+                                ),
+                            },
+                            ExternResource {
+                                binding: 1,
+                                group: 1,
+                                caiman_val: Input(
+                                    "b",
+                                ),
+                            },
+                            ExternResource {
+                                binding: 3,
+                                group: 2,
+                                caiman_val: Output(
+                                    "out",
+                                ),
+                            },
+                        ],
+                    },
+                ),
+            },
+        ],
+    },
+]

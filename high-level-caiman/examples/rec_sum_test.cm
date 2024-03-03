@@ -1,0 +1,34 @@
+#version 0.1.0
+
+tmln tm(e: Event) -> Event { returns e }
+sptl sp(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    returns rec_sum(10)
+}
+
+fn foo() -> i64 
+    impls main, tm, sp
+{
+    let x = 10;
+    head(x)
+}
+
+val rec_sum(a: i64) -> i64 {
+    rec :- a + rec_sum(a - 1)
+    b :- rec if a > 0 else 0
+    returns b
+}
+
+
+fn head(a: i64 @ [input(rec_sum.a)-usable, none(tm)-usable, none(sp)-usable]) -> i64 
+    impls rec_sum, tm, sp
+{
+    if a > 0 {
+        r = a + head(a - 1);
+    } else {
+        r = 0;
+    }
+}
+
+pipeline main { foo }

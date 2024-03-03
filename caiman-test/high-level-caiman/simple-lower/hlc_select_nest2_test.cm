@@ -1,0 +1,62 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    pass :- 10
+
+    b :- true
+    c :- false
+    d :- false
+    one :- 1
+    two :- 2
+    three :- 3
+    four :- 4
+
+    ll :- one + pass
+    lr :- two + pass
+    rl :- three + pass
+    rr:- four + pass
+
+    left :- ll if b else lr
+    right :- rl if c else rr
+    z :- left if d else right
+    returns z
+}
+
+fn foo() -> i64 @ node(main.z)-usable 
+    impls main, time, space
+{
+    let d: bool @ node(main.d) = false;
+    let pass: i64 @ node(main.pass) = 10;
+    let v: i64 @ node(main.z) = if @ node(main.z) d {
+        let b: bool @ node(main.b) = true;
+        let r: i64 @ node(main.left) = if @ node(main.left) b {
+            let one: i64 @ node(main.one) = 1;
+            let ll: i64 @ node(main.ll) = one + pass;
+            ll
+        } else {
+            let two: i64 @ node(main.two) = 2;
+            let lr: i64 @ node(main.lr) = two + pass;
+            lr
+        };
+        r
+    } else {
+        let c: bool @ node(main.c) = false;
+        let r: i64 @ node(main.right) = if @ node(main.right) c {
+            let three: i64 @ node(main.three) = 3;
+            let rl: i64 @ node(main.rl) = three + pass;
+            rl
+        } else {
+            let four: i64 @ node(main.four) = 4;
+            let rr: i64 @ node(main.rr) = four + pass;
+            rr
+        };
+        r    
+    };
+    v
+}
+
+pipeline main { foo }

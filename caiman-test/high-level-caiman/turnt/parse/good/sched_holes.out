@@ -1,0 +1,112 @@
+[
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                2,
+                1,
+            ),
+            end_ln_and_col: (
+                7,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                2,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                2,
+                                16,
+                            ),
+                        },
+                        base: Int(
+                            I32,
+                        ),
+                        flags: [],
+                        settings: [],
+                    },
+                ),
+                tags: [],
+            },
+        ],
+        specs: [
+            "a",
+            "b",
+            "c",
+        ],
+        statements: [
+            Hole(
+                Info {
+                    start_ln_and_col: (
+                        5,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        5,
+                        9,
+                    ),
+                },
+            ),
+            Return(
+                Info {
+                    start_ln_and_col: (
+                        6,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        6,
+                        10,
+                    ),
+                },
+                Binop {
+                    info: Info {
+                        start_ln_and_col: (
+                            6,
+                            5,
+                        ),
+                        end_ln_and_col: (
+                            6,
+                            10,
+                        ),
+                    },
+                    op: Mul,
+                    lhs: Term(
+                        Hole(
+                            Info {
+                                start_ln_and_col: (
+                                    6,
+                                    5,
+                                ),
+                                end_ln_and_col: (
+                                    6,
+                                    6,
+                                ),
+                            },
+                        ),
+                    ),
+                    rhs: Term(
+                        Hole(
+                            Info {
+                                start_ln_and_col: (
+                                    6,
+                                    9,
+                                ),
+                                end_ln_and_col: (
+                                    6,
+                                    10,
+                                ),
+                            },
+                        ),
+                    ),
+                },
+            ),
+        ],
+    },
+]

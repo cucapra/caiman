@@ -1,0 +1,11 @@
+#version 0.1.0
+extern(gpu) foo(a: i64, b: i64) -> i64 {
+    path: "test.comp",
+    entry: "main",
+    resource {
+        binding: 0,
+        group: 1,
+        input: a,
+        output: b,
+    }
+}

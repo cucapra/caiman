@@ -1,0 +1,595 @@
+[
+    Typedef {
+        info: Info {
+            start_ln_and_col: (
+                2,
+                1,
+            ),
+            end_ln_and_col: (
+                2,
+                27,
+            ),
+        },
+        name: "gint",
+        typ: FlaggedType {
+            info: Info {
+                start_ln_and_col: (
+                    2,
+                    13,
+                ),
+                end_ln_and_col: (
+                    2,
+                    26,
+                ),
+            },
+            base: Int(
+                I32,
+            ),
+            flags: [
+                "storage",
+            ],
+            settings: [],
+        },
+    },
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                4,
+                1,
+            ),
+            end_ln_and_col: (
+                12,
+                2,
+            ),
+        },
+        name: "foo",
+        input: [
+            (
+                "a",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        27,
+                                    ),
+                                },
+                                base: UserDefined(
+                                    "gint",
+                                ),
+                                flags: [
+                                    "map_write",
+                                ],
+                                settings: [],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        30,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        42,
+                                    ),
+                                },
+                                quot: Some(
+                                    Input,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "v",
+                                        spec_var: Some(
+                                            "x",
+                                        ),
+                                    },
+                                ),
+                                flow: None,
+                            },
+                        ],
+                    },
+                ),
+            ),
+            (
+                "b",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        5,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        5,
+                                        15,
+                                    ),
+                                },
+                                base: Bool,
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "c",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        47,
+                                    ),
+                                },
+                                base: Int(
+                                    I64,
+                                ),
+                                flags: [
+                                    "map_read",
+                                ],
+                                settings: [
+                                    (
+                                        "alignment_bits",
+                                        "512",
+                                    ),
+                                ],
+                            },
+                        ),
+                        tags: [
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        51,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        62,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "v",
+                                        spec_var: Some(
+                                            "y",
+                                        ),
+                                    },
+                                ),
+                                flow: Some(
+                                    Dead,
+                                ),
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        64,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        71,
+                                    ),
+                                },
+                                quot: None,
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "tm",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: None,
+                            },
+                            Tag {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        73,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        85,
+                                    ),
+                                },
+                                quot: Some(
+                                    Output,
+                                ),
+                                quot_var: Some(
+                                    QuotientReference {
+                                        spec_name: "sp",
+                                        spec_var: None,
+                                    },
+                                ),
+                                flow: None,
+                            },
+                        ],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                7,
+                                11,
+                            ),
+                            end_ln_and_col: (
+                                7,
+                                35,
+                            ),
+                        },
+                        base: Int(
+                            I32,
+                        ),
+                        flags: [
+                            "storage",
+                            "map_write",
+                        ],
+                        settings: [],
+                    },
+                ),
+                tags: [],
+            },
+        ],
+        specs: [
+            "v",
+            "tm",
+            "sp",
+        ],
+        statements: [
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        10,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        10,
+                        49,
+                    ),
+                },
+                lhs: [
+                    (
+                        "x",
+                        Some(
+                            FullType {
+                                base: Some(
+                                    FlaggedType {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                12,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                26,
+                                            ),
+                                        },
+                                        base: Int(
+                                            I32,
+                                        ),
+                                        flags: [
+                                            "map_read",
+                                        ],
+                                        settings: [],
+                                    },
+                                ),
+                                tags: [
+                                    Tag {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                10,
+                                                29,
+                                            ),
+                                            end_ln_and_col: (
+                                                10,
+                                                40,
+                                            ),
+                                        },
+                                        quot: Some(
+                                            Node,
+                                        ),
+                                        quot_var: Some(
+                                            QuotientReference {
+                                                spec_name: "v",
+                                                spec_var: Some(
+                                                    "x",
+                                                ),
+                                            },
+                                        ),
+                                        flow: None,
+                                    },
+                                ],
+                            },
+                        ),
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Binop {
+                        info: Info {
+                            start_ln_and_col: (
+                                10,
+                                43,
+                            ),
+                            end_ln_and_col: (
+                                10,
+                                48,
+                            ),
+                        },
+                        op: Mul,
+                        lhs: Term(
+                            Hole(
+                                Info {
+                                    start_ln_and_col: (
+                                        10,
+                                        43,
+                                    ),
+                                    end_ln_and_col: (
+                                        10,
+                                        44,
+                                    ),
+                                },
+                            ),
+                        ),
+                        rhs: Term(
+                            Hole(
+                                Info {
+                                    start_ln_and_col: (
+                                        10,
+                                        47,
+                                    ),
+                                    end_ln_and_col: (
+                                        10,
+                                        48,
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        11,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        11,
+                        23,
+                    ),
+                },
+                lhs: [
+                    (
+                        "y",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    11,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    11,
+                                    22,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                11,
+                                                13,
+                                            ),
+                                            end_ln_and_col: (
+                                                11,
+                                                16,
+                                            ),
+                                        },
+                                        name: "foo",
+                                        tag: None,
+                                    },
+                                ),
+                                templates: None,
+                                args: Args(
+                                    [
+                                        Term(
+                                            Hole(
+                                                Info {
+                                                    start_ln_and_col: (
+                                                        11,
+                                                        17,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        11,
+                                                        18,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                        Term(
+                                            Hole(
+                                                Info {
+                                                    start_ln_and_col: (
+                                                        11,
+                                                        20,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        11,
+                                                        21,
+                                                    ),
+                                                },
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
+                    ),
+                ),
+            },
+        ],
+    },
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                14,
+                1,
+            ),
+            end_ln_and_col: (
+                16,
+                2,
+            ),
+        },
+        name: "bar",
+        input: [
+            (
+                "a",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        14,
+                                        11,
+                                    ),
+                                    end_ln_and_col: (
+                                        14,
+                                        14,
+                                    ),
+                                },
+                                base: Int(
+                                    I32,
+                                ),
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+            (
+                "b",
+                Some(
+                    FullType {
+                        base: Some(
+                            FlaggedType {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        14,
+                                        19,
+                                    ),
+                                    end_ln_and_col: (
+                                        14,
+                                        23,
+                                    ),
+                                },
+                                base: Bool,
+                                flags: [],
+                                settings: [],
+                            },
+                        ),
+                        tags: [],
+                    },
+                ),
+            ),
+        ],
+        output: [
+            FullType {
+                base: Some(
+                    FlaggedType {
+                        info: Info {
+                            start_ln_and_col: (
+                                14,
+                                28,
+                            ),
+                            end_ln_and_col: (
+                                14,
+                                32,
+                            ),
+                        },
+                        base: UserDefined(
+                            "gint",
+                        ),
+                        flags: [],
+                        settings: [],
+                    },
+                ),
+                tags: [],
+            },
+        ],
+        specs: [
+            "v",
+            "tm",
+            "sp",
+        ],
+        statements: [
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        15,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        15,
+                        15,
+                    ),
+                },
+                lhs: [
+                    (
+                        "y",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Hole(
+                            Info {
+                                start_ln_and_col: (
+                                    15,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    15,
+                                    14,
+                                ),
+                            },
+                        ),
+                    ),
+                ),
+            },
+        ],
+    },
+]

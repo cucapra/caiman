@@ -1,0 +1,2 @@
+Error: At mutate_spec.cm:9:5, 
+  Type Error: Duplicate node: a

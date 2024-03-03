@@ -1,0 +1,2 @@
+Error: At missing_extern.cm:2:39, 
+  Parsing Error: Extern definition at 2:39 - 4:2 missing field "path"

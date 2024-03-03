@@ -1,0 +1,107 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val min() -> i64 {
+    a :- 2
+    b :- 1
+    c :- a < b
+    ret :- a if c else b
+    returns ret
+}
+
+fn min_impl() -> i64
+    impls min, time, space
+{
+    let a: i64 @ node(min.a)-usable = 2;
+    let b: i64 @ node(min.b)-usable = 1;
+    let c: bool @ node(min.c)-usable = a < b;
+    var v: i64 @ [none(min)-dead, none(space)-saved];
+    if @ node(min.ret)-? c {
+        let a: i64 @ node(min.a)-usable = 2;
+        v = a;
+    } else {
+        let b: i64 @ node(min.b)-usable = 1;
+        v = b;
+    }
+    @in { v: [node(min.ret)-usable, none(space)-saved] };
+    v
+}
+
+pipeline main { min_impl }
+
+// ===================== CAIR ===================
+/*
+version 0.0.2
+
+type i64;
+event %event0;
+buffer_space %buffspace;
+native_value %i64n : i64;
+native_value %i8n : i8;
+
+function @main(i64, i64) -> i64;
+function @lt(i64, i64) -> i8;
+
+extern-cpu-pure[impl @lt] %lt(%x : i64, %y: i64) -> [%out : i8];
+
+value[impl default @main] %foo(%x: i64, %y: i64) -> i64 {
+    %b_t = call @lt(a, b);
+    %b = extract b 0;
+    %r = select %b %y %x;
+    return %r;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_main<none($time.%e)-usable, none($time.%e)-usable>
+    (%a: input($val.%x)-usable none($space.%e)-usable none($time.%bs)-usable,
+    %b: input($val.%y)-usable none($space.%e)-usable none($time.%bs)-usable) ->
+    [%out : none($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %i64n] 
+{
+    %is_min = alloc-temporary local i8;
+    local-do-external %lt node($val.%b_t)(%a, %b) -> %is_min;
+    %b_min = read-ref i8 %is_min;
+
+    %djoin = default-join;
+    %join = inline-join %foo_ret [] %djoin;
+
+    schedule-select %b_min [%foo_left, %foo_right]
+        [value node($val.%r), timeline none, spatial none]
+        () %join;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_left<none($time.%e)-usable, none($time.%e)-usable>() -> [%out : %i64n] 
+{
+    %y_loc = alloc-temporary local i64;
+    local-do-builtin node($val.%y)() -> %y_loc;
+    return %y_loc;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_right<none($time.%e)-usable, none($time.%e)-usable>() -> [%out : %i64n] 
+{
+    %x_loc = alloc-temporary local i64;
+    local-do-builtin node($val.%x)() -> %x_loc;
+    return %x_loc;
+}
+
+schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
+%foo_ret<none($time.%e)-usable, none($time.%e)-usable>
+    (%arg : none($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %i64n) ->
+    [%out : none($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %i64n] 
+{
+    return %arg;
+}
+
+*/

@@ -1,0 +1,47 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    a :- 2
+    c :- 10
+    b :- a & c
+    d :- b << a
+
+    e :- 8
+    cond1 :- d == e
+
+    f :- false
+    cond2 :- cond1 == f
+    g :- 1
+    k :- g if cond2 else e
+    returns k
+}
+
+fn main_impl() -> i64 @ node(main.k)-usable
+    impls main, time, space
+{
+    let a: i64 @ node(main.a) = 2;
+    let c: i64 @ node(main.c) = 10;
+    let b: i64 @ node(main.b) = a & c;
+    let d: i64 @ node(main.d) = b << a;
+    let e: i64 @ node(main.e) = 8;
+    let cond1: bool @ node(main.cond1) = d == e;
+    let f: bool @ node(main.f) = false;
+    let cond2: bool @ node(main.cond2) = cond1 == f;
+
+    var k: i64 @ none(main)-dead;
+    if @ node(main.k) cond2 {
+        let g: i64 @ node(main.g) = 1;
+        k = g;
+    } else {
+        let e2: i64 @ node(main.e) = 8;
+        k = e2;
+    }
+    @in { k: [node(main.k)-usable, none(space)-saved] };
+    k
+    
+}
+
+pipeline main { main_impl }

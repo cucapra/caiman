@@ -1,0 +1,11 @@
+#version 0.1.0
+extern(gpu) add(x: f32, y: f32) -> f32 {
+    path: "test.comp",
+    entry: "main",
+    dimensions: 1,
+    resource {
+        binding: ?,
+        group: 1,
+        input: a,
+    }
+}

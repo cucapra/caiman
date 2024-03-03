@@ -50,12 +50,12 @@
 		},
 		types : {
 			0 : NativeValue(storage_type : 0),
-			1 : Ref(storage_type : 0, storage_place : Local ),
+			1 : Ref(storage_type : 0, storage_place : Local, buffer_flags : BufferFlags(copy_dst : true, copy_src : true) ),
 			2 : Event,
-			3 : Ref(storage_type : 0, storage_place : Gpu ),
+			3 : Ref(storage_type : 0, storage_place : Gpu, buffer_flags : BufferFlags(storage: true, copy_dst : true, copy_src : true, map_read: true) ),
 			4 : Fence( queue_place : Gpu ),
-			5 : Ref(storage_type : 0, storage_place : Gpu ),
-			6 : Buffer(storage_place : Gpu, static_layout_opt : Some((alignment_bits : 0, byte_size : 4096)) ),
+			5 : Ref(storage_type : 0, storage_place : Gpu, buffer_flags : BufferFlags(copy_dst : true, copy_src : true) ),
+			6 : Buffer(storage_place : Gpu, static_layout_opt : Some((alignment_bits : 0, byte_size : 4096)), flags : BufferFlags(storage: true, copy_dst : true, copy_src : true) ),
 			7 : BufferSpace,
 		},
 		funclets : {
@@ -93,20 +93,20 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(9),
-						input_tags : [(quot: Input(index : 0), flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have)]
+						input_tags : [(quot: Input(index : 0), flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)]
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
-						implicit_in_tag : (quot: Node(node_id : 0), flow: Have),
-						implicit_out_tag : (quot: Node(node_id : 2), flow: Have)
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)],
+						implicit_in_tag : (quot: Node(node_id : 0), flow: Usable),
+						implicit_out_tag : (quot: Node(node_id : 2), flow: Usable)
 					)
 				),
 				nodes : [
@@ -140,38 +140,39 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(9),
-						input_tags : [(quot: Input(index : 0), flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have)]
+						input_tags : [(quot: Input(index : 0), flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)]
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
-						implicit_in_tag : (quot: Node(node_id : 0), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)],
+						implicit_in_tag : (quot: Node(node_id : 0), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [
 					Phi(index : 0),
 					DefaultJoin,
-					AllocTemporary(place : Local, storage_type : 0),
-					AllocTemporary(place : Gpu, storage_type : 0),
-					AllocTemporary(place : Gpu, storage_type : 0),
+					AllocTemporary(place : Local, storage_type : 0, buffer_flags : BufferFlags()),
+					AllocTemporary(place : Gpu, storage_type : 0, buffer_flags : BufferFlags(storage: true, copy_dst: true)),
+					AllocTemporary(place : Gpu, storage_type : 0, buffer_flags : BufferFlags(storage: true, copy_src : true, copy_dst : true, map_read : true )),
 
 					LocalDoBuiltin(operation : Node(node_id : 1), inputs : [], outputs : [2]),
 					BeginEncoding(place : Gpu, event: Node(node_id : 1), encoded: [3, 4], fences : []),
 					EncodeCopy(encoder : 6, input : 0, output : 3),
-					EncodeDoExternal(encoder : 6, operation : Node(node_id : 2), external_function_id : 0, inputs : [2, 2, 2, 3], outputs : [4]),
+					ReadRef(source : 2, storage_type : 0),
+					EncodeDoExternal(encoder : 6, operation : Node(node_id : 2), external_function_id : 0, inputs : [8, 8, 8, 3], outputs : [4]),
 					Submit(encoder : 6, event : Node(node_id : 4)),
 
 					InlineJoin(funclet : 16, captures : [], continuation : 1),
 				],
-				tail_edge : Jump(join : 10, arguments : [4, 9])
+				tail_edge : Jump(join : 11, arguments : [4, 10])
 				//tail_edge : DebugHole(inputs : [0])
 			),
 
@@ -182,20 +183,20 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(10),
-						input_tags : [(quot: Input(index : 0), flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have)]
+						input_tags : [(quot: Input(index : 0), flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)]
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
-						implicit_in_tag : (quot: Input(index : 0), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)],
+						implicit_in_tag : (quot: Input(index : 0), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [
@@ -213,20 +214,20 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(10),
-						input_tags : [(quot: Node(node_id : 2), flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have)]
+						input_tags : [(quot: Node(node_id : 2), flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)]
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
-						input_tags : [(quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
-						implicit_in_tag : (quot: Output(index : 0), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)],
+						implicit_in_tag : (quot: Output(index : 0), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [
@@ -258,27 +259,27 @@
 				spec_binding : ScheduleExplicit(
 					value : (
 						funclet_id_opt : Some(9),
-						input_tags : [(quot: Node(node_id : 3), flow: Have), (quot: None, flow: Have)],
-						output_tags : [(quot: Output(index : 0), flow: Have)]
+						input_tags : [(quot: Node(node_id : 3), flow: Usable), (quot: None, flow: Usable)],
+						output_tags : [(quot: Output(index : 0), flow: Usable)]
 					),
 					spatial : (
 						funclet_id_opt : Some(18),
-						input_tags : [(quot: None, flow: Met), (quot: None, flow: Have)],
-						output_tags : [(quot: None, flow: Have)]
+						input_tags : [(quot: None, flow: Saved), (quot: None, flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)]
 					),
 					timeline : (
 						funclet_id_opt : Some(15),
-						input_tags : [(quot: Node(node_id : 4), flow: Have), (quot: Node(node_id : 4), flow: Have)],
-						output_tags : [(quot: None, flow: Have)],
-						implicit_in_tag : (quot: Node(node_id : 2), flow: Have),
-						implicit_out_tag : (quot: Output(index : 0), flow: Have)
+						input_tags : [(quot: Node(node_id : 4), flow: Usable), (quot: Node(node_id : 4), flow: Usable)],
+						output_tags : [(quot: None, flow: Usable)],
+						implicit_in_tag : (quot: Node(node_id : 2), flow: Usable),
+						implicit_out_tag : (quot: Output(index : 0), flow: Usable)
 					)
 				),
 				nodes : [
 					Phi(index : 0),
 					Phi(index : 1),
 					None,
-					AllocTemporary(place : Local, storage_type : 0),
+					AllocTemporary(place : Local, storage_type : 0, buffer_flags : BufferFlags(map_write: true)),
 					SyncFence(place : Local, fence : 1, event : Node(node_id : 5)),
 					LocalCopy(input : 0, output : 3),
 					ReadRef(source : 3, storage_type : 0)

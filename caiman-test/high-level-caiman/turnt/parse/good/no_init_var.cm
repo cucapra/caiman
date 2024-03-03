@@ -1,0 +1,8 @@
+#version 0.1.0
+
+fn foo() impls a {
+    var c;
+    var b: i64 @ node(main.x)-usable;
+    var d: i64 @ [node(main.x)-usable, node(space.y)-usable, none(time)-?];
+    c = d;
+}

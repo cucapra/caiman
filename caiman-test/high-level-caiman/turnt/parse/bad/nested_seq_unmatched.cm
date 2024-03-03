@@ -1,0 +1,14 @@
+#version 0.1.0
+fn foo() impls a {
+    if a < b {
+        if c {
+            d
+        } else {
+            g
+        }
+    } else {
+        if c {
+            20
+        }
+    }
+}

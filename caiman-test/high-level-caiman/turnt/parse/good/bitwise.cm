@@ -1,0 +1,6 @@
+#version 0.1.0
+fn foo() impls a, b, c {
+    let x = 10 & 20 ^ 30 | 40 ^ 0 & 2;
+    let c = call'<x, x>(x, x);
+    let z = ~!-10;
+}

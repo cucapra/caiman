@@ -1,0 +1,4 @@
+#version 0.1.0
+val f(i32, [i32; 10]) -> f64 {
+    returns 10.0
+}

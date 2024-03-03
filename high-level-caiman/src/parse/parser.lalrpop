@@ -1,0 +1,610 @@
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+use super::ast::*;
+use super::ast_factory::ASTFactory;
+use crate::error::CustomParsingError;
+
+
+grammar(astf: &ASTFactory);
+
+extern {
+    type Error = CustomParsingError;
+}
+
+match {
+  r#"".*""#, // String Literal
+  r"[a-zA-Z][a-zA-Z0-9_]*", // Id
+  r"[0-9]+[.][0-9]+",   // Float Constant
+  r"[0-9]+",            // Integer Constant (we parse negatives as unary ops)
+
+  // Keywords (omitting things with symbols in here is ok for some reason)
+  "val", "feq", "fn", "tmln", "pipeline", "extern", "sptl", "type", "impls", "const",
+  "let", "returns", "return", "var", "if", "else",
+  "i32", "i64", "bool", "Event", "BufferSpace",
+  "true", "false", "import",
+  "pure",
+  "node","none","input","output","usable","saved","need","dead",
+
+
+  r"\s*" => { }, // Whitespace
+  r"//[^\n\r]*[\n\r]*" => { }, // Double-slash comments
+  // From: https://stackoverflow.com/questions/13014947/regex-to-match-a-c-style-multiline-comment
+  r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { }, // Multiline (non-nested) comments
+
+  _, // Everything else
+}
+
+// TOP LEVEL
+
+// Start symbol -> version identifier followed by one or more top level items
+pub Program: Program = { 
+    "#version" <maj_min: r"[0-9]+[.][0-9]+"> "." <patch: r"[0-9]+">
+    <tls: TopLevel*> =>? astf.program(maj_min, patch, tls), 
+}
+
+// Top level statements and declarations
+TopLevel: TopLevel = {
+    <ClassMembers> => astf.singleton_function_class(<>),
+    <@L> 
+    "feq" <Id> "{" <ClassMembers+> "}" 
+    <@R> => astf.function_class(<>),
+
+    <@L>
+    "tmln" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MaybeNamed<BaseType>>
+    "{"
+        <SpecStmt*>
+    "}"
+    <@R> => astf.time_funclet(<>),
+
+    <@L>
+    "sptl" <Id> "(" <CommaList<Arg<BaseType>>> ")" "->" <MaybeNamed<BaseType>>
+    "{"
+        <SpecStmt*>
+    "}"
+    <@R> => astf.space_funclet(<>),
+
+    <l: @L>
+    "const" <n: Id> "=" <e: SchedExpr> <u: (";")?>
+    <r: @L> =>? astf.const_def(l, n, e, r),
+
+    <@L> "pipeline" <Id> "{"
+        <Id>
+    "}" <@R> => astf.pipeline(<>),
+
+    <@L> "fn" <Id> "(" <CommaList<MaybeArgFullType>> ")" <("->" <MultiType>)?>
+        "impls" <CommaList<Id>>
+    "{"
+        <MaybeUnitSequence>
+    "}" <@R> => astf.sched_function(<>),
+
+    <l: @L>
+    "type" <n: Id> "=" <t: FlaggedType> <u: (";")?>
+    <r: @R> => astf.type_def(l, n, t, r),
+
+    <l: @L> "import" <i: Id> <u: (";")?> <r: @R> => astf.import(l, i, r),
+}
+
+// Function class members. Value functlets or extern funclets
+ClassMembers: ClassMembers = {
+    <@L>
+    "val" <Id> "(" <CommaList<Arg<BaseType>>> ")" <("->" <MultiNamedBaseType>)?>
+    "{"
+        <SpecStmt*>
+    "}"
+    <@R> => astf.value_funclet(<>),
+
+    <@L>
+    "extern" "(" <Id> ")" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 
+        <("->" <MultiNamedBaseType>)?> <ExternDef?>
+    <@R> => astf.extern_func(<>),
+
+    <@L>
+    "extern" "(" <Id> ")" "pure" <Id> "(" <CommaList<MaybeNamed<BaseType>>> ")" 
+        <("->" <MultiNamedBaseType>)?> <ExternDef?>
+    <@R> => astf.extern_pure_func(<>),
+}
+
+// Extern definitions: mapping of extern property names to values
+ExternDef: ExternDef = {
+    <@L>"{" 
+        <CommaList<ExternDefMembers>>
+    "}" <@R> =>? astf.extern_def(<>),
+}
+
+// Resource members: key value pairs of resource properties
+ResMembers: ResourceMembers = {
+    <k: Id> ":" <n: r"[0-9]+"> => ResourceMembers::Numeric(String::from(k), String::from(n)),
+    "input" ":" <v: Id> => ResourceMembers::Input(String::from(v)),
+    "output" ":" <v: Id> => ResourceMembers::Output(String::from(v)),
+}
+
+// a member of an extern definition. Key value pairs of extern properties
+ExternDefMembers: ExternDefMembers = {
+    <l: @L> <f: Id> "{" 
+        <d: CommaList<ResMembers>> 
+    "}" <r: @R> =>? astf.extern_resource(l, d, r).map(|r| ExternDefMembers::Resource(r)),
+    <k: Id> ":" <n: StringLiteral> => ExternDefMembers::StrVal(String::from(k), String::from(n)),
+    <k: Id> ":" <n: r"[0-9]+"> => ExternDefMembers::Dimensions(String::from(k), String::from(n)),
+}
+
+
+
+// TYPES
+
+BaseType: DataType = {
+    "i32"  => DataType::Int(IntSize::I32),
+    "i64"  => DataType::Int(IntSize::I64),
+    "bool" => DataType::Bool,
+    "Event" => DataType::Event,
+    "BufferSpace" => DataType::BufferSpace,
+    <n: Id> => DataType::UserDefined(String::from(n)),
+    "[" <t: BaseType> ";" <l: @R> <n: r"[0-9]+"> <r: @R>"]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_lit(l, SpecLiteral::Int(String::from(n)), r)))),
+    "[" <t: BaseType> ";" <l: @L> <n: Id> <r: @R> "]" => DataType::Array(Box::new(t), Box::new(SpecExpr::Term(astf.spec_var(l, String::from(n), r)))),
+    "[" <BaseType> "]" => DataType::Slice(Box::new(<>)),
+    "&" <BaseType> => DataType::Ref(Box::new(<>)),
+}
+
+MultiNamedBaseType: Vec<(Option<String>, DataType)> = {
+    "(" <TupleCommaList<MaybeNamed<BaseType>>> ")" => <>,
+    <MaybeNamed<BaseType>> => vec![<>],
+}
+
+// Full type: base type with flags and settings and an optional tag
+FullType: FullType = {
+    <FlaggedType> => FullType {
+        base: Some(<>),
+        tags: vec![],
+    },
+    <b: FlaggedType> <t: TagOp> => FullType {
+        base: Some(b),
+        tags: t,
+    },
+}
+
+// Name with optional full type, either the base type, tags, or both
+MaybeArgFullType: (String, Option<FullType>) = {
+    <i: Id> ":" <b: FlaggedType> => (String::from(i), Some(FullType {
+        base: Some(b),
+        tags: vec![],
+    })),
+    <i: Id> ":" <b: FlaggedType> <t: TagOp> => (String::from(i), Some(FullType {
+        base: Some(b),
+        tags: t,
+    })),
+    <i: Id> <t: TagOp> => (String::from(i), Some(FullType {
+        base: None,
+        tags: t,
+    })),
+    <i: Id> => (String::from(i), None),
+}
+
+MultiType: Vec<FullType> = {
+    "(" <TupleCommaList<FullType>> ")" => <>,
+    <FullType> => vec![<>],
+}
+
+TagOp: Vec<Tag> = {
+    "@" "[" <CommaList<Tag>> "]" => <>,
+    "@"  <Tag> => vec![<>],
+}
+
+Tags: Vec<Tag> = {
+    <Tag> => vec![<>],
+    "[" <CommaList<Tag>> "]" => <>,
+}
+
+Tag: Tag = {
+    <@L> <Quotient> "(" <QuotRef> ")" <Flow?> <@R> => astf.tag(<>),
+    <@L> <QuotRef> <Flow> <@R> => astf.flow_tag(<>),
+}
+
+Quotient: Option<Quotient> = {
+    "node" => Some(Quotient::Node),
+    "none" => Some(Quotient::None),
+    "input" => Some(Quotient::Input),
+    "output" => Some(Quotient::Output),
+    "?" => None,
+}
+
+Flow: Option<Flow> = {
+    "-usable" => Some(Flow::Usable),
+    "-saved" => Some(Flow::Saved),
+    "-need" => Some(Flow::Need),
+    "-dead" => Some(Flow::Dead),
+    "-?" => None,
+}
+
+SomeFlow: Option<Flow> = {
+    "usable" => Some(Flow::Usable),
+    "saved" => Some(Flow::Saved),
+    "need" => Some(Flow::Need),
+    "dead" => Some(Flow::Dead),
+    "?" => None
+}
+
+// Quotient reference: the part of the quotient which refers to a specific node
+// in a spec
+QuotRef: Option<QuotientReference> = {
+    <a: Id> "." <b: Id> => Some(QuotientReference {
+        spec_name: String::from(a),
+        spec_var: Some(String::from(b)),
+    }),
+    <a: Id> "." "(" <b: TupleCommaList<Id>> ")" => Some(QuotientReference {
+        spec_name: String::from(a),
+        spec_var: Some(format!("_{}", b.join("_"))),
+    }),
+    <a: Id> => Some(QuotientReference {
+        spec_name: String::from(a),
+        spec_var: None,
+    }),
+    "?" => None,
+}
+
+// Flagged type: base type with flags and settings
+FlaggedType: FlaggedType = {
+    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> => astf.flagged_type(<>)
+}
+
+// Flag or setting. A flag is a name with no value. A setting is a name with a value
+FlagOrSetting: (String, Option<String>) = {
+    <n: Id> => (String::from(n), None),
+    <n: Id> "=" <v: StringLiteral> => (String::from(n), Some(String::from(v))),
+    <n: Id> "=" <v: r"[0-9]+"> => (String::from(n), Some(String::from(v))),
+}
+
+// SPEC LANGUAGE SECTION
+
+// we use scheduling expressions and then sanitize with factory functions
+SpecStmt: SpecStmt = {
+    <@L> <CommaList<MaybeArg<BaseType>>> ":-" <SchedExpr> <@R> =>? astf.spec_decl(<>),
+    <@L> "returns" <SchedExpr> <@R> =>? astf.spec_returns(<>),
+}
+
+// SCHEDULE LANGUAGE SECTION
+
+// Scheduling statements
+SchedStmt: SchedStmt = {
+    <@L> "let" <CommaList<MaybeArgFullType>> "=" <SchedExpr> ";" <@R> => astf.sched_let_decl(<>),
+    <@L> "var" <CommaList<MaybeArgFullType>> <("=" <SchedExpr>)?> ";" <@R> => astf.sched_var_decl(<>),
+    <@L> <Term> "=" <SchedExpr> ";" <@R> => astf.sched_assign(<>),
+    <@L> "*" <Term> "=" <SchedExpr> ";" <@R> => astf.sched_ref_assign(<>),
+    <BlockSeq> => <>,
+    <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
+    <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
+    <@L> "@in" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
+    <@L> "@out" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
+}
+
+// A sequence of scheduling statements which may end with an expression that
+// is returned to the parent
+//
+// This is the top level scheduling statement production for a list
+// of scheduling statements that may return a value to the parent
+MaybeUnitSequence: Vec<SchedStmt> = {
+    <mut s: SchedStmt*> <ret: RetExpr?> => match ret {
+        None => s,
+        Some(ret) => {
+            s.push(ret);
+            s
+        },
+    }
+}
+
+// A sequence of scheduling statements which must end with an expression
+// that is returned to the parent
+NonUnitSequence: Vec<SchedStmt> = {
+    <mut s: SchedStmt*> <ret: RetExpr> => {
+        s.push(ret);
+        s
+    }
+}
+
+// An expression that can terminate a sequence. Either an if statement or an
+// expression
+RetExpr: SchedStmt = {
+    <@L> <SchedExpr> <@R> => astf.sched_return(<>),
+    <SequenceIf> => <>,
+}
+
+// IF expressions
+
+BlockSeq: SchedStmt = {
+    <@L> "let" <CommaList<MaybeArgFullType>> "=" <SequenceIf> ";" <@R> => astf.sched_const_seq(<>),
+    <@L> "var" <CommaList<MaybeArgFullType>> "=" <SequenceIf> ";" <@R> => astf.sched_var_seq(<>),
+    <Block> => <>,
+}
+
+// An matched if block where each block may end with an expression that is returned
+// to the parent
+SequenceIf: SchedStmt = {
+    <@L> "if" <TagOp?> <SchedExpr> "{" <NonUnitSequence> "}" "else" <SequenceIf> <@R> => astf.sched_matched_if(<>),
+    <@L> "{" <NonUnitSequence> "}" <@R> => astf.sched_block(<>),
+}
+
+// IFs and dangling else 
+
+Block: SchedStmt = {
+    <MatchedIf> => <>,
+    <UnmatchedIf> => <>,
+}
+
+// an if or if-else that's missing the final else
+UnmatchedIf: SchedStmt = {
+    <@L> "if" <TagOp?> <SchedExpr> "{" <SchedStmt*> "}" <("else" <UnmatchedIf>)?> <@R> => astf.sched_if(<>),
+}
+
+MatchedIf: SchedStmt = {
+    <@L> "if" <TagOp?> <SchedExpr> "{" <SchedStmt*> "}" "else" <MatchedIf> <@R> => astf.sched_matched_if(<>),
+    <@L> "{" <SchedStmt*> "}" <@R> => astf.sched_block(<>),
+}
+
+// Scheduling specific expressions
+
+#[inline]
+SchedTerm: SchedTerm = {
+    <@L> <SchedCall> <@R> => astf.sched_call_expr(<>),
+}
+
+#[inline]
+SchedCall: SchedFuncCall = {
+    <Term> <TemplateArgs?> 
+        "(" <CommaList<SchedExpr>> ")" <TagOp?> => astf.sched_fn_call(<>),
+}
+
+SchedCallStmt: SchedFuncCall = {
+    <SchedCall> => <>,
+    <Term> "[" <EncodedStmt> "]" 
+        <TagOp?> => astf.sched_encode(<>),
+}
+
+// parameterize on the literal type (number or no number)
+// to prevent confusion between 0.0 being a float or
+// Dot(0, 0). This method prevents numbers from being the
+// immediate right hand side of a dot op
+#[inline]
+SchedAtom<L>: SchedTerm = {
+    <@L> "?" <@R> => astf.sched_hole_expr(<>),
+    <@L> <Id> <TagOp?> <@R> => astf.sched_var(<>),
+    <@L> <L> <TagOp?> <@R> => astf.sched_lit(<>),
+}
+
+#[inline]
+SchedExpr: SchedExpr = {
+    <Conditional>
+}
+
+
+// Template arguments to scheduling calls
+TemplateArgs: TemplateArgs = {
+    "'" "<" <CommaList<Arith>> ">" =>? astf.template_args(<>),
+    "'" <FlaggedType>  => TemplateArgs::Type(<>),
+
+}
+
+// Encoded scheduling statements which are sent to a device
+EncodedStmt: EncodedStmt = {
+    <@L> <CommaList<MaybeArg<FlaggedType>>> "<-" <SchedExpr> <@R> => astf.encoded_stmt(<>),
+} 
+
+
+// MISC
+
+// An argument is an identifier followed by a production of `T`
+Arg<T>: Arg<T> = { <i: Id> ":" <t: T> => (i, t) }
+
+// argument with optional type
+MaybeArg<T> : (String, Option<T>) = {
+    <i: Id> ":" <t: T> => (String::from(i), Some(t)),
+    <i: Id> => (String::from(i), None),
+}
+
+// argument with optional name
+MaybeNamed<T> : (Option<String>, T) = {
+    <i: Id> ":" <t: T> => (Some(String::from(i)), t),
+    <t: T> => (None, t),
+}
+
+// cannot start with a number or underscore
+Id: String = { r"[a-zA-Z][a-zA-Z0-9_]*" => String::from(<>) }
+
+StringLiteral: String = { 
+    r#"".*""# => {
+        let mut s = String::from(<>);
+        // remove opening and closing quotes
+        s.pop();
+        s.remove(0);
+        s
+    }
+}
+
+CommaList<T>: Vec<T> = {
+    <mut v: (<T> ",")*> <e: T?> => match e { 
+        None => v, 
+        Some(e) => {
+            v.push(e);
+            v
+        },
+    }
+}
+
+// Comma list which needs at least one comma
+TupleCommaList<T>: Vec<T> = {
+    <mut v: (<T> ",")+> <e: T?> => match e {
+        None => v,
+        Some(e) => { 
+            v.push(e);
+            v
+        },
+    }
+}
+
+// GENERAL EXPRESSIONS
+
+//  Precedence (Ordered lowest to highest)
+//     Conditional
+//     Range | Cons
+//     BitOr
+//     BitXor
+//     BitAnd
+//     LShift | RShift | AShift
+//     Logical Or
+//     Logical And
+//     Comparisons (LT, LEQ, GT, GEQ, EQ, NEQ)
+//     Add | Sub
+//     Mul | Div | Mod
+//     Unary
+//     Dot | Index | Function Call
+
+
+Conditional: SchedExpr = {
+    <@L> <Range> "if" <Range> "else" <Conditional> <@R> => astf.conditional(<>),
+    Range,
+}
+
+Range: SchedExpr = {
+    <@L> <BitDisjunction> ".." <BitDisjunction> <@R> => astf.range(<>),
+    <@L> <BitDisjunction> <ConsOp> <Range> <@R> => astf.binop(<>),
+    BitDisjunction,
+}
+
+BitDisjunction: SchedExpr = {
+    <@L> <BitDisjunction> <BitOr> <BitXor> <@R> => astf.binop(<>),
+    BitXor,
+}
+
+BitXor: SchedExpr = {
+    <@L> <BitXor> <BitXorOp> <BitConjunction> <@R> => astf.binop(<>),
+    BitConjunction,
+}
+
+BitConjunction: SchedExpr = {
+    <@L> <BitConjunction> <BitAnd> <ShiftExpr> <@R> => astf.binop(<>),
+    ShiftExpr,
+}
+
+ShiftExpr: SchedExpr = {
+    <@L> <ShiftExpr> <ShiftOp> <Disjunction> <@R> => astf.binop(<>),
+    Disjunction,
+}
+
+Disjunction: SchedExpr = {
+    <@L> <Disjunction> <OrOp> <Conjunction> <@R> => astf.binop(<>),
+    Conjunction,
+}
+
+Conjunction: SchedExpr = {
+    <@L> <Conjunction> <AndOp> <Cmp> <@R> => astf.binop(<>),
+    Cmp,
+}
+
+Cmp: SchedExpr = {
+    <@L> <Cmp> <CmpOp> <Arith> <@R> => astf.binop(<>),
+    Arith,
+}
+
+Arith: SchedExpr = {
+    <@L> <Arith> <Class1Op> <Factor> <@R> => astf.binop(<>),
+    Factor,
+}
+
+Factor: SchedExpr = {
+    <@L> <Factor> <Class2Op> <Unary> <@R> => astf.binop(<>),
+    Unary,
+}
+
+Unary: SchedExpr = {
+    <@L> <UnOp> <Unary> <@R> => astf.uop(<>),
+    Term,
+}
+
+Term: SchedExpr = {
+    <SchedTerm> => NestedExpr::Term(<>),
+    <l: @L> <lhs: Term> "[" <rhs: Range> "]" <r: @R> => astf.binop(l, lhs, Binop::Index, rhs, r),
+    <@L> <Term> <DotOp> <Atom<LiteralNoNumber>> <@R> => astf.binop(<>),
+    Atom<Literal>,
+}
+
+#[inline]
+Atom<L>: SchedExpr = {
+    <SchedAtom<L>> => NestedExpr::Term(<>),
+    "(" <Conditional> ")",
+}
+
+// OPERATORS
+
+ConsOp: Binop = {
+    "::" => Binop::Cons,
+}
+
+BitOr: Binop = {
+    "|" => Binop::Or,
+}
+
+BitXorOp: Binop = {
+    "^" => Binop::Xor,
+}
+
+BitAnd: Binop = {
+    "&" => Binop::And,
+}
+
+ShiftOp: Binop = {
+    "<<" => Binop::Shl,
+    ">>" => Binop::Shr,
+    ">>>" => Binop::AShr,
+}
+
+AndOp: Binop = {
+    "&&" => Binop::Land,
+}
+
+OrOp: Binop = {
+    "||" => Binop::Lor,
+}
+
+CmpOp: Binop = {
+    "<" => Binop::Lt,
+    "<=" => Binop::Leq,
+    ">" => Binop::Gt,
+    ">=" => Binop::Geq,
+    "==" => Binop::Eq,
+    "!=" => Binop::Neq,
+}
+
+Class1Op: Binop = {
+    "+" => Binop::Add,
+    "-" => Binop::Sub,
+}
+
+Class2Op: Binop = {
+    "*" => Binop::Mul,
+    "/" => Binop::Div,
+    "%" => Binop::Mod,
+}
+
+DotOp: Binop = {
+    "." => Binop::Dot,
+}
+
+#[inline]
+UnOp: Uop = {
+    "-" => Uop::Neg,
+    "!" => Uop::LNot,
+    "~" => Uop::Not,
+    "&" => Uop::Ref,
+    "*" => Uop::Deref,
+}
+
+// LITERALS
+
+Literal: SchedLiteral = {
+    <l: @L> <n: r"[0-9]+"> <r: @R> => SchedLiteral::Int(String::from(n)),
+    <n: r"[0-9]+[.][0-9]+"> => SchedLiteral::Float(String::from(n)),
+    <LiteralNoNumber> => <>,
+}
+
+LiteralNoNumber: SchedLiteral = {
+    "true" => SchedLiteral::Bool(true),
+    "false" => SchedLiteral::Bool(false),
+    "(" <TupleCommaList<SchedExpr>> ")" => SchedLiteral::Tuple(<>),
+    "[" <CommaList<SchedExpr>> "]" => SchedLiteral::Array(<>),
+}

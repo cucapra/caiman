@@ -1,0 +1,73 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+
+val main() -> i64 {
+    c :- false
+    b :- false
+    a :- true
+    one :- 1
+    two :- 2
+    three :- 3
+    four :- 4
+    d :- a if b else c
+    left_left :- one if a else two
+    left :- left_left if b else two
+    right :- three if c else right_right
+
+    right_right :- three if b else four
+    z :- left if d else right
+    returns z
+}
+
+fn foo() -> i64 @ node(main.z)-usable 
+    impls main, time, space
+{
+    let b: bool @ node(main.b) = false;
+    var d: bool @ node(main.c) = false;
+    if @ node(main.d) b {
+        let a: bool @ node(main.a) = true;
+        d = a;
+    }
+    @in { d: [node(main.d)-usable, none(space)-saved] };
+
+    var v: i64 @ none(main)-dead;
+    if @ node(main.z) d {
+        let two: i64 @ node(main.two) = 2;
+        v = two;
+
+        let b: bool @ node(main.b) = false;
+        if @ node(main.left) b {
+            let aa: bool @ node(main.a) = true;
+            if @ node(main.left_left) aa {
+                let one: i64 @ node(main.one) = 1;
+                v = one;
+            }
+            @in { v: [node(main.left_left)-usable, none(space)-saved] };
+        }
+        @in { v: [node(main.left)-usable, none(space)-saved] };
+    } else {
+        let c: bool @ node(main.c) = false;
+        if @ node(main.right) c {
+            let three: i64 @ node(main.three) = 3;
+            v = three;
+        } else {
+            let four: i64 @ node(main.four) = 4;
+            v = four;
+            
+            let cond: bool @ node(main.b) = false;
+            if @ node(main.right_right) cond {
+                let three: i64 @ node(main.three) = 3;
+                v = three;
+            }
+            @in { v: [node(main.right_right)-usable, none(space)-saved] };
+        }
+        @in { v: [node(main.right)-usable, none(space)-saved] };
+    }
+    @in { v: [node(main.z)-usable, none(space)-saved] };
+    v
+}
+
+pipeline main { foo }

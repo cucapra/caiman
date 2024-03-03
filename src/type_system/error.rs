@@ -17,7 +17,7 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl Error {
+/*impl Error {
     pub fn append_message(mut self, new_message: String) -> Self {
         match self {
             Self::Unknown { message } => Self::Unknown {
@@ -28,7 +28,7 @@ impl Error {
             },
         }
     }
-}
+}*/
 
 pub struct ErrorContext<'scope> {
     parent_opt: Option<&'scope Self>,
@@ -70,7 +70,7 @@ impl<'scope> std::fmt::Display for ErrorContext<'scope> {
 }
 
 // Based on assert_eq!
-#[macro_export]
+//#[macro_export]
 macro_rules! error_ifn_eq {
     ($ctx:expr, $left:expr, $right:expr $(,)?) => {
         match (&$left, &$right) {
@@ -84,6 +84,8 @@ macro_rules! error_ifn_eq {
         }
     };
 }
+
+pub(crate) use error_ifn_eq;
 
 fn assert_failed<T: std::fmt::Debug>(error_context: &ErrorContext, a: T, b: T) -> Error {
     error_context.generic_error(&format!("{:?} != {:?}", a, b))

@@ -1,0 +1,2 @@
+Error: At double_spec.cm:11:1, 
+  Type Error: 11:1 - 17:2: Duplicate value specs main and main

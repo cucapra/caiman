@@ -1,0 +1,15 @@
+#version 0.1.0
+fn foo() -> i32 impls a, b, c {
+    {
+        let x = 10;
+    }
+    if x == 10 {
+
+    } else if x == 12 {
+        if y == 10 {
+            x = 5;
+        }
+    } else {
+        
+    }
+}

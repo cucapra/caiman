@@ -1,0 +1,11 @@
+#version 0.1.0
+val foo(a: [i32; 10], b: bool) -> [i32] {
+    c :- a.len()
+    d :- b.t0
+    g :- a.invoke(b.t0, 10)
+    g :- a[a.len() - 1]
+}
+
+val baz(a: i32) -> [i32; 10] {
+    returns a.t0
+}

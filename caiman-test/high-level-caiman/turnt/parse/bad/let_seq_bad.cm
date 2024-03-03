@@ -1,0 +1,7 @@
+#version 0.1.0
+fn foo() impls a {
+    let g = if a {
+        20
+    };
+    g
+}

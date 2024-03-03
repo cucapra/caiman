@@ -1,0 +1,83 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val main() -> i64 {
+    a :- 3
+    b :- 5
+    c :- 7
+
+    // j :- add_three(a, b, c)
+    k :- add_three(a, b, c)
+
+    // r :- j + k
+    r :- a + k
+    rr :- b + r
+    rrr :- c + rr
+    returns rrr
+}
+
+feq add_three {
+    val add1(a: i64, b: i64, c: i64) -> i64 {
+        t :- a + b
+        t2 :- t + c
+        returns t2
+    }
+
+    val add2(a: i64, b: i64, c: i64) -> i64 {
+        t :- b + c
+        t2 :- a + t
+        returns t2
+    }
+}
+
+fn add1_impl(a: i64 @ input(add1.a)-usable, 
+             b: i64 @ input(add1.b)-usable, 
+             c: i64 @ input(add1.c)-usable)
+    -> i64 @ output(add1.t2)-usable impls add1, time, space
+{
+    let t: i64 @ node(add1.t) = a + b;
+    let p: i64 @ node(add1.t2) = t + c;
+    p
+}
+
+fn add2_impl(a: i64 @ input(add2.a)-usable, 
+             b: i64 @ input(add2.b)-usable, 
+             c: i64 @ input(add2.c)-usable)
+    -> i64 @ output(add2.t2)-usable impls add2, time, space
+{
+    let t: i64 @ node(add2.t) = b + c;
+    let p: i64 @ node(add2.t2) = a + t;
+    p
+}
+
+
+fn main_impl() -> i64 @ node(main.rrr)-usable
+    impls main, time, space
+{
+    let a: i64 @ node(main.a) = 3;
+    let b: i64 @ node(main.b) = 5;
+    let c: i64 @ node(main.c) = 7;
+
+    // let j: i64 @ node(main.j)-usable = add1_impl(a, b, c) @ node(main.j);
+
+
+    let a2: i64 @ node(main.a)-saved = 3;
+    let b2: i64 @ node(main.b)-saved = 5;
+    let c2: i64 @ node(main.c)-saved = 7;
+    let k: i64 @ node(main.k)-usable = add2_impl(a, b, c) @ node(main.k);
+
+
+    @in { a2: node(main.a)-usable, 
+          b2: node(main.b)-usable, 
+          c2: node(main.c)-usable 
+    };
+    let r: i64 @ node(main.r) = a2 + k;
+    let rr: i64 @ node(main.rr) = b2 + r;
+    let rrr: i64 @ node(main.rrr) = c2 + rr;
+    rrr
+    
+}
+
+pipeline main { main_impl }

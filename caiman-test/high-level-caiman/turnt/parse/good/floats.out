@@ -1,0 +1,416 @@
+[
+    FunctionClass {
+        info: Info {
+            start_ln_and_col: (
+                2,
+                1,
+            ),
+            end_ln_and_col: (
+                5,
+                2,
+            ),
+        },
+        name: "f",
+        members: [
+            ValueFunclet {
+                info: Info {
+                    start_ln_and_col: (
+                        2,
+                        1,
+                    ),
+                    end_ln_and_col: (
+                        5,
+                        2,
+                    ),
+                },
+                name: "f",
+                input: [],
+                output: [],
+                statements: [
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                3,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                3,
+                                16,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "x",
+                                None,
+                            ),
+                        ],
+                        rhs: Term(
+                            Lit {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        3,
+                                        10,
+                                    ),
+                                    end_ln_and_col: (
+                                        3,
+                                        16,
+                                    ),
+                                },
+                                lit: Float(
+                                    "10.543",
+                                ),
+                            },
+                        ),
+                    },
+                    Assign {
+                        info: Info {
+                            start_ln_and_col: (
+                                4,
+                                5,
+                            ),
+                            end_ln_and_col: (
+                                4,
+                                28,
+                            ),
+                        },
+                        lhs: [
+                            (
+                                "y",
+                                None,
+                            ),
+                        ],
+                        rhs: Term(
+                            Call {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        4,
+                                        10,
+                                    ),
+                                    end_ln_and_col: (
+                                        4,
+                                        28,
+                                    ),
+                                },
+                                function: Binop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            4,
+                                            10,
+                                        ),
+                                        end_ln_and_col: (
+                                            4,
+                                            20,
+                                        ),
+                                    },
+                                    op: Dot,
+                                    lhs: Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    4,
+                                                    10,
+                                                ),
+                                                end_ln_and_col: (
+                                                    4,
+                                                    16,
+                                                ),
+                                            },
+                                            lit: Float(
+                                                "10.543",
+                                            ),
+                                        },
+                                    ),
+                                    rhs: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    4,
+                                                    17,
+                                                ),
+                                                end_ln_and_col: (
+                                                    4,
+                                                    20,
+                                                ),
+                                            },
+                                            name: "min",
+                                        },
+                                    ),
+                                },
+                                args: [
+                                    Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    4,
+                                                    21,
+                                                ),
+                                                end_ln_and_col: (
+                                                    4,
+                                                    27,
+                                                ),
+                                            },
+                                            lit: Float(
+                                                "10.302",
+                                            ),
+                                        },
+                                    ),
+                                ],
+                                template: None,
+                            },
+                        ),
+                    },
+                ],
+            },
+        ],
+    },
+    SchedulingFunc {
+        info: Info {
+            start_ln_and_col: (
+                7,
+                1,
+            ),
+            end_ln_and_col: (
+                11,
+                2,
+            ),
+        },
+        name: "g",
+        input: [],
+        output: [],
+        specs: [
+            "f",
+        ],
+        statements: [
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        8,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        8,
+                        20,
+                    ),
+                },
+                lhs: [
+                    (
+                        "x",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Lit {
+                            info: Info {
+                                start_ln_and_col: (
+                                    8,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    8,
+                                    19,
+                                ),
+                            },
+                            lit: Float(
+                                "10.543",
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        9,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        9,
+                        32,
+                    ),
+                },
+                lhs: [
+                    (
+                        "y",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    9,
+                                    13,
+                                ),
+                                end_ln_and_col: (
+                                    9,
+                                    31,
+                                ),
+                            },
+                            SchedFuncCall {
+                                target: Binop {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            9,
+                                            13,
+                                        ),
+                                        end_ln_and_col: (
+                                            9,
+                                            23,
+                                        ),
+                                    },
+                                    op: Dot,
+                                    lhs: Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    9,
+                                                    13,
+                                                ),
+                                                end_ln_and_col: (
+                                                    9,
+                                                    19,
+                                                ),
+                                            },
+                                            lit: Float(
+                                                "10.543",
+                                            ),
+                                            tag: None,
+                                        },
+                                    ),
+                                    rhs: Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    9,
+                                                    20,
+                                                ),
+                                                end_ln_and_col: (
+                                                    9,
+                                                    23,
+                                                ),
+                                            },
+                                            name: "min",
+                                            tag: None,
+                                        },
+                                    ),
+                                },
+                                templates: None,
+                                args: Args(
+                                    [
+                                        Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        9,
+                                                        24,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        9,
+                                                        30,
+                                                    ),
+                                                },
+                                                lit: Float(
+                                                    "10.302",
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
+                    ),
+                ),
+            },
+            Decl {
+                info: Info {
+                    start_ln_and_col: (
+                        10,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        10,
+                        30,
+                    ),
+                },
+                lhs: [
+                    (
+                        "z",
+                        None,
+                    ),
+                ],
+                is_const: true,
+                expr: Some(
+                    Binop {
+                        info: Info {
+                            start_ln_and_col: (
+                                10,
+                                13,
+                            ),
+                            end_ln_and_col: (
+                                10,
+                                29,
+                            ),
+                        },
+                        op: Mul,
+                        lhs: Term(
+                            Lit {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        10,
+                                        13,
+                                    ),
+                                    end_ln_and_col: (
+                                        10,
+                                        19,
+                                    ),
+                                },
+                                lit: Float(
+                                    "10.765",
+                                ),
+                                tag: None,
+                            },
+                        ),
+                        rhs: Uop {
+                            info: Info {
+                                start_ln_and_col: (
+                                    10,
+                                    22,
+                                ),
+                                end_ln_and_col: (
+                                    10,
+                                    29,
+                                ),
+                            },
+                            op: Neg,
+                            expr: Term(
+                                Lit {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            10,
+                                            23,
+                                        ),
+                                        end_ln_and_col: (
+                                            10,
+                                            29,
+                                        ),
+                                    },
+                                    lit: Float(
+                                        "9.7863",
+                                    ),
+                                    tag: None,
+                                },
+                            ),
+                        },
+                    },
+                ),
+            },
+        ],
+    },
+]
