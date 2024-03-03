@@ -521,8 +521,8 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
                 implicit_tags: (implicit_default.clone(), implicit_default),
                 meta_map: asm::MetaMapping {
                     value: (MetaId(META_VALUE.to_string()), funclet.specs().value.clone()),
-                    timeline: (MetaId(META_TIMELINE.to_string()), funclet.specs().value.clone()),
-                    spatial: (MetaId(META_SPATIAL.to_string()), funclet.specs().value.clone()),
+                    timeline: (MetaId(META_TIMELINE.to_string()), funclet.specs().timeline.clone()),
+                    spatial: (MetaId(META_SPATIAL.to_string()), funclet.specs().spatial.clone()),
                 },
             }),
         },
