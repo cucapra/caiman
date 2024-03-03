@@ -179,7 +179,7 @@ impl JoinGraph {
 
 #[derive(Debug)]
 enum SplitPoint {
-    Next {
+    Call {
         return_node_results: Box<[NodeResult]>,
         continuation_join_point_id_opt: Option<JoinPointId>,
     },
@@ -830,7 +830,7 @@ impl<'program> CodeGen<'program> {
         default_join_point_id_opt: &mut Option<JoinPointId>,
         func_inline: bool,
         branch_inline: bool,
-    ) -> Option<Box<[NodeResult]>> {
+    ) -> Option<(Box<[NodeResult]>, bool)> {
         let split_point = self.compile_scheduling_funclet(
             current_funclet_id,
             &current_output_node_results,
@@ -841,13 +841,13 @@ impl<'program> CodeGen<'program> {
 
         //println!("Split point: {:?}", split_point);
         match split_point {
-            SplitPoint::Next {
+            SplitPoint::Call {
                 return_node_results,
                 continuation_join_point_id_opt,
             } => {
                 // schedule call
                 *default_join_point_id_opt = continuation_join_point_id_opt;
-                return Some(return_node_results);
+                return Some((return_node_results, true));
             }
             SplitPoint::Jump {
                 return_node_results,
@@ -866,8 +866,8 @@ impl<'program> CodeGen<'program> {
                     return None;
                 } else {
                     unreachable!();
-                    *default_join_point_id_opt = continuation_join_point_id;
-                    return Some(return_node_results);
+                    // *default_join_point_id_opt = continuation_join_point_id;
+                    // return Some(return_node_results);
                 }
             }
             SplitPoint::Return {
@@ -885,7 +885,7 @@ impl<'program> CodeGen<'program> {
                         );
                     return None;
                 } else {
-                    return Some(return_node_results);
+                    return Some((return_node_results, false));
                 }
             }
             SplitPoint::Yield {
@@ -1178,8 +1178,9 @@ impl<'program> CodeGen<'program> {
                     branch_inline,
                 );
             }
+            let mut force_process_join = false;
             if process_func {
-                if let Some(cur_out) = self.process_current_funclet(
+                if let Some((cur_out, force_process)) = self.process_current_funclet(
                     funclet_id,
                     &current_out_node_results,
                     pipeline_context,
@@ -1189,10 +1190,11 @@ impl<'program> CodeGen<'program> {
                     branch_inline,
                 ) {
                     current_out_node_results = cur_out;
+                    force_process_join = force_process;
                 }
             }
 
-            if inline_funclet_stack.is_empty() {
+            if inline_funclet_stack.is_empty() || force_process_join {
                 if let Some(join_point_id) = default_join_point_id_opt {
                     default_join_point_id_opt = None;
                     let join_point = pipeline_context.join_graph.move_join(join_point_id);
@@ -2229,7 +2231,7 @@ impl<'program> CodeGen<'program> {
                         captures: vec![].into_boxed_slice(),
                         continuation_join_point_id,
                     }));
-                SplitPoint::Next {
+                SplitPoint::Call {
                     return_node_results: argument_node_results.into_boxed_slice(),
                     continuation_join_point_id_opt: Some(join_point_id),
                 }
