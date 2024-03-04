@@ -1,4 +1,4 @@
-use crate::ir;
+use crate::ir::{self, Program, Type};
 use crate::rust_wgpu_backend::code_generator;
 use crate::rust_wgpu_backend::code_generator::{CodeGenerator, SubmissionId, VarId};
 use crate::shadergen;
@@ -1194,7 +1194,7 @@ impl<'program> CodeGen<'program> {
                 }
             }
 
-            if inline_funclet_stack.is_empty() || force_process_join {
+            if (inline_funclet_stack.is_empty() || force_process_join) && process_func {
                 if let Some(join_point_id) = default_join_point_id_opt {
                     default_join_point_id_opt = None;
                     let join_point = pipeline_context.join_graph.move_join(join_point_id);
@@ -2085,15 +2085,16 @@ impl<'program> CodeGen<'program> {
                 let mut output_node_results = Vec::<NodeResult>::new();
 
                 let mut argument_ffi_types = Vec::new();
-                for (return_index, return_node_id) in return_values.iter().enumerate() {
+                for ((return_index, return_node_id), return_type) in return_values
+                    .iter()
+                    .enumerate()
+                    .zip(funclet.output_types.iter())
+                {
                     let node_result = funclet_scoped_state
                         .move_node_result(*return_node_id)
                         .unwrap();
-                    argument_ffi_types.push(
-                        node_result
-                            .get_type(self.code_generator.get_native_interface())
-                            .unwrap(),
-                    );
+                    let tid = node_result.get_type(self.code_generator.get_native_interface());
+                    argument_ffi_types.push(tid.unwrap());
                     output_node_results.push(node_result);
                 }
 
@@ -2116,6 +2117,9 @@ impl<'program> CodeGen<'program> {
                 yielded_nodes,
                 continuation_join: continuation_join_node_id,
             } => {
+                if pending_inline_join.is_some() {
+                    do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
+                }
                 let continuation_join_point_id = funclet_scoped_state
                     .move_node_join_point_id(*continuation_join_node_id)
                     .unwrap();
