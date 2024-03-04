@@ -1,11 +1,11 @@
 use crate::assembly::ast;
-use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, MetaId, NodeId, RemoteNodeId,
     StorageTypeId, TypeId,
 };
 use crate::assembly::table::Table;
-use crate::ir;
+use crate::explication::expir;
+use crate::explication::Hole;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
 
@@ -24,7 +24,7 @@ pub struct Context {
     pub local_type_table: Table<String>,
     // cause we need to know the storage value of the native value
     pub native_type_map: HashMap<String, FFIType>,
-    pub variable_map: HashMap<FuncletId, HashMap<NodeId, ir::Quotient>>,
+    pub variable_map: HashMap<FuncletId, HashMap<NodeId, expir::Quotient>>,
     // for keeping track of the meanings of meta names for the current scheduling funclet
     // is None when we aren't in a scheduling funclet
     pub meta_map: Option<ast::MetaMapping>,
@@ -58,7 +58,7 @@ impl LocalFFI {
 }
 
 pub struct FuncletInformation {
-    location: ir::Place,
+    location: expir::Place,
     index: usize,
 }
 
@@ -66,21 +66,21 @@ pub struct FuncletInformation {
 pub struct FuncletIndices {
     external_funclet_table: Table<ExternalFunctionId>,
     local_funclet_table: Table<FuncletId>,
-    funclet_kind_map: HashMap<String, ir::Place>,
+    funclet_kind_map: HashMap<String, expir::Place>,
 }
 
 #[derive(Debug, Clone)]
 pub struct OperationSet {
-    pub value: Hole<ir::Quotient>,
-    pub timeline: Hole<ir::Quotient>,
-    pub spatial: Hole<ir::Quotient>,
+    pub value: Hole<expir::Quotient>,
+    pub timeline: Hole<expir::Quotient>,
+    pub spatial: Hole<expir::Quotient>,
 }
 
 #[derive(Debug, Clone)]
 pub struct TagSet {
-    pub value: Hole<ir::Tag>,
-    pub timeline: Hole<ir::Tag>,
-    pub spatial: Hole<ir::Tag>,
+    pub value: Hole<expir::Tag>,
+    pub timeline: Hole<expir::Tag>,
+    pub spatial: Hole<expir::Tag>,
 }
 
 impl LocationNames {
@@ -101,13 +101,13 @@ impl FuncletIndices {
         }
     }
 
-    pub fn insert(&mut self, name: String, location: ir::Place) {
+    pub fn insert(&mut self, name: String, location: expir::Place) {
         match location {
-            ir::Place::Local => self.local_funclet_table.push(FuncletId(name.clone())),
-            ir::Place::Cpu => self
+            expir::Place::Local => self.local_funclet_table.push(FuncletId(name.clone())),
+            expir::Place::Cpu => self
                 .external_funclet_table
                 .push(ExternalFunctionId(name.clone())),
-            ir::Place::Gpu => self
+            expir::Place::Gpu => self
                 .external_funclet_table
                 .push(ExternalFunctionId(name.clone())),
         }
@@ -118,17 +118,17 @@ impl FuncletIndices {
         self.local_funclet_table.get(name)
     }
 
-    pub fn get_loc(&self, name: &String) -> Option<&ir::Place> {
+    pub fn get_loc(&self, name: &String) -> Option<&expir::Place> {
         self.funclet_kind_map.get(name)
     }
 
     pub fn get_funclet(&self, name: &String) -> Option<usize> {
         self.funclet_kind_map.get(name).and_then(|x| match x {
-            ir::Place::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
-            ir::Place::Cpu => self
+            expir::Place::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
+            expir::Place::Cpu => self
                 .external_funclet_table
                 .get(&ExternalFunctionId(name.clone())),
-            ir::Place::Gpu => self
+            expir::Place::Gpu => self
                 .external_funclet_table
                 .get(&ExternalFunctionId(name.clone())),
         })
@@ -186,7 +186,7 @@ impl Context {
                 },
                 ast::Declaration::Funclet(f) => {
                     self.funclet_indices
-                        .insert(f.header.name.0.clone(), ir::Place::Local);
+                        .insert(f.header.name.0.clone(), expir::Place::Local);
                     let mut var_map = HashMap::new();
                     for (index, arg) in f.header.args.iter().enumerate() {
                         match &arg.name {
@@ -201,7 +201,10 @@ impl Context {
                         match command {
                             // ignore phi nodes cause they get handled by the header above
                             // really they shouldn't be in here I suppose
-                            Some(ast::Command::Node(ast::NamedNode { node: ast::Node::Phi { index }, name })) => {
+                            Some(ast::Command::Node(ast::NamedNode {
+                                node: ast::Node::Phi { index },
+                                name,
+                            })) => {
                                 node_id += 1;
                             }
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
@@ -211,7 +214,8 @@ impl Context {
                                 match name {
                                     None => {}
                                     Some(n) => {
-                                        var_map.insert(n.clone(), ir::Quotient::Node { node_id });
+                                        var_map
+                                            .insert(n.clone(), expir::Quotient::Node { node_id });
                                     }
                                 }
 
@@ -224,7 +228,7 @@ impl Context {
                         match &ret_arg.name {
                             None => {}
                             Some(name) => {
-                                var_map.insert(name.clone(), ir::Quotient::Output { index });
+                                var_map.insert(name.clone(), expir::Quotient::Output { index });
                             }
                         };
                     }
@@ -232,9 +236,9 @@ impl Context {
                 }
                 ast::Declaration::ExternalFunction(f) => {
                     let location = match f.kind {
-                        ast::ExternalFunctionKind::CPUPure => ir::Place::Cpu,
-                        ast::ExternalFunctionKind::CPUEffect => ir::Place::Cpu,
-                        ast::ExternalFunctionKind::GPU(_) => ir::Place::Gpu,
+                        ast::ExternalFunctionKind::CPUPure => expir::Place::Cpu,
+                        ast::ExternalFunctionKind::CPUEffect => expir::Place::Cpu,
+                        ast::ExternalFunctionKind::GPU(_) => expir::Place::Gpu,
                     };
                     self.funclet_indices.insert(f.name.clone(), location);
                 }
@@ -267,36 +271,47 @@ impl Context {
         }
     }
 
-    pub fn explicit_node_id(&self, funclet: &FuncletId, node: &Option<NodeId>) -> ir::Quotient {
+    pub fn explicit_node_id(&self, funclet: &FuncletId, node: &Option<NodeId>) -> expir::Quotient {
         match self.variable_map.get(funclet) {
             Some(f) => match node {
-                None => ir::Quotient::None,
-                Some(var) => match f.get(var) {
-                    Some(v) => v.clone(),
-                    None => {
-                        panic!("Unknown node {} in funclet {}", var, funclet)
-                    }
-                },
+                None => expir::Quotient::None,
+                Some(var) => f
+                    .get(var)
+                    .expect(format!("Unknown node {} in funclet {}", var, funclet).as_str())
+                    .clone(),
             },
             None => panic!("Unknown funclet name {}", funclet),
         }
     }
 
-    pub fn remote_node_id(&self, remote: &RemoteNodeId) -> ir::Quotient {
-        self.explicit_node_id(
-            &self.meta_lookup(reject_hole(remote.funclet.as_ref())),
-            &remote.node.as_ref().cloned().map(|n| reject_hole(n)),
-        )
+    pub fn funclet_id(&self, f: &FuncletId) -> usize {
+        self.funclet_indices
+            .get_funclet(&f.0)
+            .expect(format!("Unknown funclet {:?}", f).as_str())
+    }
+
+    pub fn external_funclet_id(&self, f: &ExternalFunctionId) -> usize {
+        self.funclet_indices
+            .get_funclet(&f.0)
+            .expect(format!("Unknown funclet {:?}", f).as_str())
     }
 
     pub fn node_id(&self, var: &NodeId) -> usize {
         let funclet = &self.location.funclet_name;
         let var_error = format!("Unknown variable name {:?} in funclet {:?}", var, &funclet);
-        match self.variable_map.get(funclet).unwrap().get(var).expect(&var_error) {
-            ir::Quotient::None => panic!("Invalid None node {:?} in funclet {:?}", var, &funclet),
-            ir::Quotient::Input { index } |
-            ir::Quotient::Output { index } |
-            ir::Quotient::Node { node_id: index } => *index
+        match self
+            .variable_map
+            .get(funclet)
+            .unwrap()
+            .get(var)
+            .expect(&var_error)
+        {
+            expir::Quotient::None => {
+                panic!("Invalid None node {:?} in funclet {:?}", var, &funclet)
+            }
+            expir::Quotient::Input { index }
+            | expir::Quotient::Output { index }
+            | expir::Quotient::Node { node_id: index } => *index,
         }
     }
 
@@ -311,23 +326,16 @@ impl Context {
         let error = "Holes in operational lists unsupported";
         for operation in operations {
             let unwrapped = operation.as_ref().unwrap_or_else(|| panic!(error));
-            let remote = unwrapped.quot.as_ref().unwrap_or_else(|| panic!(error));
-            let (fnid, kind) =
-                self.meta_lookup_loc(remote.funclet.as_ref().unwrap_or_else(|| panic!(error)));
-            let quot = self.explicit_node_id(
-                &fnid,
-                &remote
-                    .node
-                    .as_ref()
-                    .cloned()
-                    .map(|n| n.unwrap_or_else(|| panic!(error))),
-            );
-            let tag = Some(ir::Tag {
+            let (fnid, kind) = self.meta_lookup_loc(&remote.funclet);
+            let quot = unwrapped
+                .quot
+                .map(|q| q.node.map(|o| self.explicit_node_id(&fnid, &o.node)));
+            let tag = Some(expir::Tag {
                 quot,
                 flow: unwrapped.flow.clone(),
             });
             match kind {
-                ir::FuncletKind::Value => match result.value {
+                expir::FuncletKind::Value => match result.value {
                     None => {
                         result.value = tag;
                     }
@@ -338,7 +346,7 @@ impl Context {
                         )
                     }
                 },
-                ir::FuncletKind::Timeline => match result.timeline {
+                expir::FuncletKind::Timeline => match result.timeline {
                     None => {
                         result.timeline = tag;
                     }
@@ -349,7 +357,7 @@ impl Context {
                         )
                     }
                 },
-                ir::FuncletKind::Spatial => match result.spatial {
+                expir::FuncletKind::Spatial => match result.spatial {
                     None => {
                         result.spatial = tag;
                     }
@@ -369,19 +377,31 @@ impl Context {
     }
 
     // extremely stupid, but it works
-    pub fn operational_lookup(&self, operations: &Vec<Hole<ast::RemoteNodeId>>) -> OperationSet {
-        let tags = operations.iter().map(|quot| {
-            Some(ast::Tag {
-                quot: quot.clone(),
-                // the dumb part, this doesn't matter
-                flow: ir::Flow::Dead,
-            })
-        });
-        let result = self.tag_lookup(&tags.collect());
-        OperationSet {
-            value: result.value.map(|t| t.quot),
-            timeline: result.timeline.map(|t| t.quot),
-            spatial: result.spatial.map(|t| t.quot),
+    pub fn operational_lookup(
+        &self,
+        operations: &Hole<Vec<Hole<ast::RemoteNodeId>>>,
+    ) -> OperationSet {
+        match operations.as_ref() {
+            None => OperationSet {
+                value: None,
+                timeline: None,
+                spatial: None,
+            },
+            Some(ops) => {
+                let tags = ops.iter().map(|quot| {
+                    Some(ast::Tag {
+                        quot: quot.clone(),
+                        // the dumb part, this doesn't matter
+                        flow: expir::Flow::Dead,
+                    })
+                });
+                let result = self.tag_lookup(&tags.collect());
+                OperationSet {
+                    value: result.value.map(|t| t.quot),
+                    timeline: result.timeline.map(|t| t.quot),
+                    spatial: result.spatial.map(|t| t.quot),
+                }
+            }
         }
     }
 
@@ -389,11 +409,11 @@ impl Context {
         let error = format!("{} doesn't have a meta map", &self.location.funclet_name);
         let mapping = self.meta_map.as_ref().unwrap_or_else(|| panic!(error));
         if mapping.value.0 == *meta {
-            (mapping.value.1.clone(), ir::FuncletKind::Value)
+            (mapping.value.1.clone(), expir::FuncletKind::Value)
         } else if mapping.timeline.0 == *meta {
-            (mapping.timeline.1.clone(), ir::FuncletKind::Timeline)
+            (mapping.timeline.1.clone(), expir::FuncletKind::Timeline)
         } else if mapping.spatial.0 == *meta {
-            (mapping.spatial.1.clone(), ir::FuncletKind::Spatial)
+            (mapping.spatial.1.clone(), expir::FuncletKind::Spatial)
         } else {
             panic!("Invalid meta name {}", meta)
         }

@@ -1,10 +1,11 @@
+use crate::ir;
 use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use crate::explication::Hole;
 
-// frontend AST
+// Explication and frontend AST
 
 #[macro_export]
 macro_rules! def_assembly_id_type {
@@ -46,7 +47,7 @@ def_assembly_id_type!(FunctionClassId);
 def_assembly_id_type!(NodeId);
 def_assembly_id_type!(LocalTypeId);
 
-pub type StorageTypeId = FFIType;
+pub type StorageTypeId = TypeId;
 
 // FFI stuff, rebuilt for a few reasons (mostly strings)
 
@@ -113,7 +114,9 @@ pub struct ExternalGpuFunctionResourceBinding {
 // keeping this idea around for the frontend, easier to reason about for tags
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
-    pub funclet: Hole<MetaId>,
+    // a funclet must always be present syntactically
+    // otherwise inference here makes no sense
+    pub funclet: MetaId,
     // we need an option of a hole
     // since None is explicitly different than ?
     pub node: Option<Hole<NodeId>>,
@@ -121,8 +124,8 @@ pub struct RemoteNodeId {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tag {
-    pub quot: Hole<RemoteNodeId>, // What a given value maps to in a specification
-    pub flow: ir::Flow,          // How this value transforms relative to the specification
+    pub quot: Hole<RemoteNodeId>,   // What a given value maps to in a specification
+    pub flow: Hole<ir::Flow>,       // How this value transforms relative to the specification
 }
 
 // Super Jank, but whatever
@@ -286,26 +289,22 @@ pub struct FuncletHeader {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Command {
-    Hole,
-    Node(Node),
-    TailEdge(TailEdge),
-    // for use by the explicator, undefined if found elsewhere
-    // essentially means "taken out for explication, will be replaced"
-    ExplicationHole,
+pub struct NamedNode {
+    pub name: Option<NodeId>,
+    pub node: Node,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct NamedCommand {
-    pub name: Option<NodeId>,
-    pub command: Command,
+pub enum Command {
+    Node(NamedNode),
+    TailEdge(TailEdge),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet {
     pub kind: ir::FuncletKind,
     pub header: FuncletHeader,
-    pub commands: Vec<NamedCommand>,
+    pub commands: Vec<Hole<Command>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

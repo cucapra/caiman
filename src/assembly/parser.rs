@@ -10,7 +10,7 @@ struct CaimanAssemblyParser;
 
 use crate::{assembly, frontend, ir};
 use assembly::ast;
-use ast::Hole;
+use crate::explication::Hole;
 use ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, MetaId, NodeId, RemoteNodeId,
     StorageTypeId, TypeId,
@@ -20,18 +20,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
-<<<<<<< HEAD
-struct ParseBindingInfo {
-    pub meta_map: HashMap<String, FuncletId>,
-}
-
-#[derive(Clone, Debug)]
-struct UserData {
-    pub binding_info: RefCell<Option<ParseBindingInfo>>,
-}
-=======
 struct UserData {}
->>>>>>> b81e2f6faa3ed7f6ef88e7f223168c74c0ae17e8
 
 type ParseResult<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, UserData>;
@@ -299,19 +288,6 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn meta_name_hole(input: Node) -> ParseResult<Hole<String>> {
-        Ok(match_nodes!(input.into_children();
-            [meta_name(name)] => Some(name),
-            [hole] => None
-        ))
-    }
-
-    fn meta_name_hole_sep(input: Node) -> ParseResult<Hole<String>> {
-        Ok(match_nodes!(input.into_children();
-            [meta_name_hole(name)] => name
-        ))
-    }
-
     fn throwaway(input: Node) -> ParseResult<String> {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
@@ -523,13 +499,13 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [meta_name(funclet_id)] => {
                 ast::RemoteNodeId {
-                    funclet: Some(ast::MetaId(funclet_id)),
+                    funclet: ast::MetaId(funclet_id),
                     node: None
                 }
             },
             [meta_name(funclet_id), name(node_id)] => {
                 ast::RemoteNodeId {
-                    funclet: Some(ast::MetaId(funclet_id)),
+                    funclet: ast::MetaId(funclet_id),
                     node: Some(Some(ast::NodeId(node_id)))
                 }
             },
@@ -538,13 +514,13 @@ impl CaimanAssemblyParser {
 
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
-            [meta_name_hole(funclet_id)] => {
+            [funclet_id] => {
                 Some(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: None
                 })
             },
-            [meta_name_hole(funclet_id), name_hole(node_id)] => {
+            [funclet_id, name_hole(node_id)] => {
                 Some(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: Some(node_id.map(|n| ast::NodeId(n)))
@@ -988,12 +964,6 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn schedule_implicit(input: Node) -> ParseResult<(ast::Tag, ast::Tag)> {
-        Ok(match_nodes!(input.into_children();
-            [tag(itag), tag(otag)] => (itag, otag)
-        ))
-    }
-
     fn funclet(input: Node) -> ParseResult<ast::Funclet> {
         Ok(match_nodes!(input.into_children();
             [value_funclet(funclet)] => funclet,
@@ -1052,16 +1022,10 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn value_command(input: Node) -> ParseResult<ast::NamedCommand> {
+    fn value_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [value_node((name, node))] => ast::NamedCommand {
-                name,
-                command: ast::Command::Node(node)
-            },
-            [tail_edge(tail_edge)] => ast::NamedCommand {
-                name: None,
-                command: ast::Command::TailEdge(tail_edge)
-            }
+            [value_node(node)] => Some(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge))
         ))
     }
 
@@ -1075,16 +1039,10 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn timeline_command(input: Node) -> ParseResult<ast::NamedCommand> {
+    fn timeline_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [timeline_node((name, node))] => ast::NamedCommand {
-                name,
-                command: ast::Command::Node(node)
-            },
-            [tail_edge(tail_edge)] => ast::NamedCommand {
-                name: None,
-                command: ast::Command::TailEdge(tail_edge)
-            }
+            [timeline_node(node)] => Some(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
         ))
     }
 
@@ -1098,16 +1056,10 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn spatial_command(input: Node) -> ParseResult<ast::NamedCommand> {
+    fn spatial_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [spatial_node((name, node))] => ast::NamedCommand {
-                name,
-                command: ast::Command::Node(node)
-            },
-            [tail_edge(tail_edge)] => ast::NamedCommand {
-                name: None,
-                command: ast::Command::TailEdge(tail_edge)
-            }
+            [spatial_node(node)] => Some(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
         ))
     }
 
@@ -1159,76 +1111,42 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn schedule_header_parameterized(
-        input: Node,
-    ) -> ParseResult<(
-        (ast::Tag, ast::Tag),
-        String,
-        Vec<ast::FuncletArgument>,
-        Vec<ast::FuncletArgument>,
-    )> {
-        Ok(match_nodes!(input.into_children();
-            [schedule_implicit(tags), name(name), schedule_args(args), schedule_return(ret)] =>
-                (tags, name, args, ret)
-        ))
-    }
-
-    fn schedule_header(input: Node) -> ParseResult<(ParseBindingInfo, ast::FuncletHeader)> {
+    fn schedule_header(input: Node) -> ParseResult<ast::FuncletHeader> {
         // requires that UserData be setup properly
         // unwrap with a panic cause this is an internal error if it happens
         Ok(match_nodes!(input.into_children();
             [schedule_box(meta_map), name(name), tag(itag),
             tag(otag), schedule_args(args), schedule_return(ret)] =>
-            ast::FuncletHeader {
-                name: FuncletId(name),
-                args,
-                ret,
-                binding: ast::FuncletBinding::ScheduleBinding(ast::ScheduleBinding {
-                    implicit_tags: (itag, otag),
-                    meta_map
-                })
-            })
-        )
-    }
-        
-
-    fn schedule_command(input: Node) -> ParseResult<ast::NamedCommand> {
-        Ok(match_nodes!(input.into_children();
-            [schedule_node((name, node))] => ast::NamedCommand {
-                name,
-                command: ast::Command::Node(node)
-            },
-            [tail_edge(tail_edge)] => ast::NamedCommand {
-                name: None,
-                command: ast::Command::TailEdge(tail_edge)
-            },
-            [node_hole] => ast::NamedCommand {
-                name: None,
-                command: ast::Command::Hole
-            }
+                {
+                    ast::FuncletHeader {
+                        name: FuncletId(name),
+                        args,
+                        ret,
+                        binding: ast::FuncletBinding::ScheduleBinding(ast::ScheduleBinding {
+                            implicit_tags: (itag, otag),
+                            meta_map
+                        })
+                    }
+                }
         ))
     }
 
-    fn schedule_commands(input: Node) -> ParseResult<Vec<ast::NamedCommand>> {
+    fn schedule_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [schedule_command(commands)..] => commands.collect()
+            [schedule_node(node)] => Some(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
+            [node_hole] => None
         ))
     }
 
     fn schedule_funclet(input: Node) -> ParseResult<ast::Funclet> {
-        match_nodes!(input.into_children();
-            [schedule_header((binding, header)), schedule_commands] => {
-                *schedule_commands.user_data().binding_info.borrow_mut() = Some(binding);
-                let commands_res = CaimanAssemblyParser::schedule_commands(schedule_commands);
-                commands_res.map(|commands|
-                    ast::Funclet {
-                        kind: ir::FuncletKind::ScheduleExplicit,
-                        header,
-                        commands,
-                    }
-                )
+        Ok(match_nodes!(input.into_children();
+            [schedule_header(header), schedule_command(commands)..] => ast::Funclet {
+                kind: ir::FuncletKind::ScheduleExplicit,
+                header,
+                commands: commands.collect(),
             }
-        )
+        ))
     }
 
     fn spec_mapping(input: Node) -> ParseResult<(Hole<Vec<Hole<ast::RemoteNodeId>>>)> {
@@ -1696,7 +1614,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn value_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn value_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [extract_node(n)] => n,
             [call_node(n)] => n,
@@ -1705,7 +1623,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn timeline_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn timeline_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [extract_node(n)] => n,
             [call_node(n)] => n,
@@ -1716,7 +1634,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn spatial_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn spatial_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [extract_node(n)] => n,
             [call_node(n)] => n,
@@ -1724,7 +1642,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn schedule_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn schedule_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [alloc_temporary_node(n)] => n,
             [drop_node(n)] => n,

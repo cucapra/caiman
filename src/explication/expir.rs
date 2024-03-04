@@ -8,8 +8,8 @@ use serde_derive::{Deserialize, Serialize};
 //use bitflags::bitflags;
 use crate::stable_vec::StableVec;
 
-pub use crate::rust_wgpu_backend::ffi;
 use crate::explication::Hole;
+pub use crate::rust_wgpu_backend::ffi;
 
 // Explication AST
 // identical to the "real" ir, but with holes everywhere
@@ -108,7 +108,9 @@ with_operations!(make_nodes);
 
 pub type Quotient = crate::ir::Quotient;
 pub type Flow = crate::ir::Flow;
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default,
+)]
 pub struct Tag {
     pub quot: Hole<Quotient>, // What a given value maps to in a specification
     pub flow: Hole<Flow>,     // How this value transforms relative to the specification
@@ -160,7 +162,7 @@ pub enum TailEdge {
     // Always passes type checking, but fails codegen
     DebugHole {
         // Scalar nodes
-        inputs: Hole<Box<[Hole<NodeId>]>>,
+        inputs: Box<[NodeId]>,
         // Continuations
         //outputs : Hole<Box<[Hole<NodeId>]>>
     },
@@ -172,17 +174,27 @@ pub type FuncletKind = ir::FuncletKind;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FuncletSpec {
     pub funclet_id_opt: Option<FuncletId>,
-    pub input_tags: Box<[Tag]>,
-    //pub input_flows : Box<[Flow]>,
-    pub output_tags: Box<[Tag]>,
-    //pub output_flows : Box<[Flow]>,
-    #[serde(default = "Tag::default")]
-    pub implicit_in_tag: Tag,
-    #[serde(default = "Tag::default")]
-    pub implicit_out_tag: Tag,
+    pub input_tags: Box<[Hole<Tag>]>,
+    pub output_tags: Box<[Hole<Tag>]>,
+    pub implicit_in_tag: Hole<Tag>,
+    pub implicit_out_tag: Hole<Tag>,
 }
 
-pub type FuncletSpecBinding = ir::FuncletSpecBinding;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum FuncletSpecBinding {
+    None,
+    Value {
+        value_function_id_opt: Option<ValueFunctionId>,
+    },
+    Timeline {
+        function_class_id_opt: Option<FunctionClassId>,
+    },
+    ScheduleExplicit {
+        value: FuncletSpec,
+        spatial: FuncletSpec,
+        timeline: FuncletSpec,
+    },
+}
 
 // TODO: macro
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -195,6 +207,12 @@ pub struct Funclet {
     pub output_types: Box<[TypeId]>,
     pub nodes: Box<[Node]>,
     pub tail_edge: Hole<TailEdge>,
+}
+
+impl FuncletSpecBinding {
+    pub fn default() -> Self {
+        FuncletSpecBinding::None
+    }
 }
 
 fn ordered_map<'a, T>(map: &HashMap<usize, T>) -> Vec<(&usize, &T)> {
