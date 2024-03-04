@@ -209,11 +209,11 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
 const fn binop_name(op: Binop) -> &'static str {
     match op {
         Binop::Lt => "lt",
-        Binop::Leq => "le",
+        Binop::Leq => "leq",
         Binop::Gt => "gt",
-        Binop::Geq => "ge",
+        Binop::Geq => "geq",
         Binop::Eq => "eq",
-        Binop::Neq => "ne",
+        Binop::Neq => "neq",
         Binop::Add => "add",
         Binop::Sub => "sub",
         Binop::Mul => "mul",

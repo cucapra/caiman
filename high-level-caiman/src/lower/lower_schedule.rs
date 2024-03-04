@@ -303,9 +303,8 @@ fn lower_func_call(
         })),
         Some(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            // TODO: for greater generality, should be `SerializedJoin`, but I
-            // think that's broken right now
-            // TODO: optimize and use inline join whenever possible
+            // TODO: codegen join semantics are broken, basically there's only
+            // inline join
             node: asm::Node::InlineJoin {
                 funclet: f.next_blocks().first().unwrap().clone(),
                 captures: Some(
@@ -317,25 +316,47 @@ fn lower_func_call(
                 continuation: Some(asm::NodeId(djoin_name)),
             },
         })),
-        Some(asm::Command::TailEdge(asm::TailEdge::ScheduleCall {
-            timeline_operation: Some(tags.timeline.as_ref().map_or_else(
-                || tags.default_tag(SpecType::Timeline).quot,
-                |x| x.quot.clone(),
-            )),
-            spatial_operation: Some(tags.timeline.as_ref().map_or_else(
-                || tags.default_tag(SpecType::Spatial).quot,
-                |x| x.quot.clone(),
-            )),
-            value_operation: tags.value.map(|t| t.quot),
-            callee_funclet_id: Some(asm::FuncletId(call.target.clone())),
-            callee_arguments: Some(
-                call.args
-                    .iter()
-                    .map(|x| Some(asm::NodeId(x.clone())))
-                    .collect(),
-            ),
-            continuation_join: Some(asm::NodeId(join_var)),
-        })),
+        if call.yield_call {
+            Some(asm::Command::TailEdge(asm::TailEdge::ScheduleCallYield {
+                timeline_operation: Some(tags.timeline.as_ref().map_or_else(
+                    || tags.default_tag(SpecType::Timeline).quot,
+                    |x| x.quot.clone(),
+                )),
+                spatial_operation: Some(tags.timeline.as_ref().map_or_else(
+                    || tags.default_tag(SpecType::Spatial).quot,
+                    |x| x.quot.clone(),
+                )),
+                value_operation: tags.value.map(|t| t.quot),
+                external_function_id: Some(asm::ExternalFunctionId(call.target.clone())),
+                yielded_nodes: Some(
+                    call.args
+                        .iter()
+                        .map(|x| Some(asm::NodeId(x.clone())))
+                        .collect(),
+                ),
+                continuation_join: Some(asm::NodeId(join_var)),
+            }))
+        } else {
+            Some(asm::Command::TailEdge(asm::TailEdge::ScheduleCall {
+                timeline_operation: Some(tags.timeline.as_ref().map_or_else(
+                    || tags.default_tag(SpecType::Timeline).quot,
+                    |x| x.quot.clone(),
+                )),
+                spatial_operation: Some(tags.timeline.as_ref().map_or_else(
+                    || tags.default_tag(SpecType::Spatial).quot,
+                    |x| x.quot.clone(),
+                )),
+                value_operation: tags.value.map(|t| t.quot),
+                callee_funclet_id: Some(asm::FuncletId(call.target.clone())),
+                callee_arguments: Some(
+                    call.args
+                        .iter()
+                        .map(|x| Some(asm::NodeId(x.clone())))
+                        .collect(),
+                ),
+                continuation_join: Some(asm::NodeId(join_var)),
+            }))
+        },
     ]
 }
 

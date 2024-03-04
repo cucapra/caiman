@@ -68,37 +68,6 @@ impl NodeResult {
         }
     }
 
-    fn get_type(&self, ni: &ffi::NativeInterface) -> Option<ffi::TypeId> {
-        match self {
-            NodeResult::LocalValue { storage_type, .. } => Some(*storage_type),
-            NodeResult::Ref { storage_type, .. } => {
-                for (id, typ) in ni.types.iter() {
-                    if matches!(typ, ffi::Type::MutRef { element_type } if element_type == storage_type)
-                    {
-                        return Some(ffi::TypeId(id));
-                    }
-                }
-                None
-            }
-            _ => None,
-        }
-    }
-    fn collect_types(node_results: &[NodeResult], ni: &ffi::NativeInterface) -> Box<[ffi::TypeId]> {
-        let mut type_ids = Vec::new();
-
-        for node_result in node_results.iter() {
-            if let Some(storage_type) = node_result.get_type(ni) {
-                type_ids.push(storage_type);
-            } else {
-                panic!(
-                    "Node Result {:?} does not have an associated storage type",
-                    node_result
-                );
-            }
-        }
-        type_ids.into_boxed_slice()
-    }
-
     fn collect_vars(node_results: &[NodeResult]) -> Box<[VarId]> {
         let mut var_ids = Vec::<VarId>::new();
 
@@ -1203,17 +1172,18 @@ impl<'program> CodeGen<'program> {
                     // so split point here is either for call or return
                     match &join_point {
                         JoinPoint::RootJoinPoint(_) | JoinPoint::SimpleJoinPoint(_) => {
-                            // return
+                            // tail edge must be a return
                             if !branch_inline {
                                 let return_var_ids =
                                     NodeResult::collect_vars(&current_out_node_results);
-                                let types = NodeResult::collect_types(
-                                    &current_out_node_results,
-                                    self.code_generator.get_native_interface(),
-                                );
+                                let types = &self.program.funclets[funclet_id].output_types;
+                                let types: Vec<_> = types
+                                    .iter()
+                                    .map(|x| self.get_cpu_useable_type(*x))
+                                    .collect();
                                 self.code_generator.build_return(
                                     &return_var_ids,
-                                    &types,
+                                    &types.into_boxed_slice(),
                                     pipeline_rets,
                                 );
                             }
@@ -2093,8 +2063,8 @@ impl<'program> CodeGen<'program> {
                     let node_result = funclet_scoped_state
                         .move_node_result(*return_node_id)
                         .unwrap();
-                    let tid = node_result.get_type(self.code_generator.get_native_interface());
-                    argument_ffi_types.push(tid.unwrap());
+                    let tid = self.get_cpu_useable_type(*return_type);
+                    argument_ffi_types.push(tid);
                     output_node_results.push(node_result);
                 }
 

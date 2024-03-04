@@ -217,6 +217,7 @@ pub struct HirFuncCall {
     pub target: String,
     pub args: Vec<String>,
     pub tag: TripleTag,
+    pub yield_call: bool,
 }
 
 impl HirFuncCall {
@@ -237,6 +238,7 @@ impl HirFuncCall {
                     target: name,
                     args,
                     tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag, specs)),
+                    yield_call: value.yield_call
                 };
             }
         }

@@ -331,6 +331,7 @@ pub struct SchedFuncCall {
     pub templates: Option<TemplateArgs>,
     pub args: Box<ArgsOrEnc>,
     pub tag: Option<Tags>,
+    pub yield_call: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -339,6 +340,7 @@ pub struct SchedLocalCall<'a> {
     pub templates: &'a Option<TemplateArgs>,
     pub args: &'a [SchedExpr],
     pub tag: &'a Option<Tags>,
+    pub yield_call: bool,
 }
 
 impl SchedFuncCall {
@@ -353,6 +355,7 @@ impl SchedFuncCall {
                 templates: &self.templates,
                 args,
                 tag: &self.tag,
+                yield_call: self.yield_call,
             },
             ArgsOrEnc::Encode(..) => panic!("Expected local call"),
         }
