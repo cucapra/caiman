@@ -1,0 +1,24 @@
+version 0.0.2
+
+pipeline "main" = %main_head;
+
+function @add(i64, i64) -> i64;
+function @double(i64) -> i64;
+
+external-cpu-pure[impl @add] %add(i64, i64) -> i64;
+external-cpu-pure[impl @double] %double_v1(i64) -> i64;
+external-cpu-pure[impl @double] %double_v2(i64) -> i64;
+
+function @main(i64) -> i64;
+
+value[impl default @main] %main(%x : i64) -> [%out: i64] {
+    %first_t = call @double(%x);
+    %first = extract %temp_t 0;
+
+    %second_t = call @double(%x);
+    %second = extract %second_t 0;
+
+    %result_t = call @add(%first, %second);
+    %result = extract %result_t 0;
+    return %result;
+}
