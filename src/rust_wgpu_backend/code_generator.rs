@@ -1180,12 +1180,7 @@ impl<'program> CodeGenerator<'program> {
         write!(self.code_writer, ", instance);\n");
     }
 
-    pub fn build_return(
-        &mut self,
-        output_var_ids: &[VarId],
-        output_var_types: &[ffi::TypeId],
-        pipeline_rets: &[ffi::TypeId],
-    ) {
+    pub fn build_return(&mut self, output_var_ids: &[VarId], output_var_types: &[ffi::TypeId]) {
         if let Some(result_type_ids) = &self.active_funclet_result_type_ids {
             let result_type_ids = result_type_ids.clone(); // Make a copy for now to satisfy the borrowchecking gods...
             let dispatcher_id = self.lookup_dispatcher_id(&output_var_types);
@@ -1235,6 +1230,10 @@ impl<'program> CodeGenerator<'program> {
         yield_point_id: ffi::ExternalFunctionId,
         yielded_var_ids: &[VarId],
     ) {
+        write!(
+            self.code_writer,
+            "instance.locals.reset();\ninstance.glocals.reset();\n"
+        );
         write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Yield{}{{ yielded : (", yield_point_id.0);
         for (return_index, var_id) in yielded_var_ids.iter().enumerate() {
             write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
@@ -1557,19 +1556,6 @@ impl<'program> CodeGenerator<'program> {
             var_ids.push(var_id);
         }
 
-        // write!(self.code_writer, "( ");
-
-        // for (i, (var_id, var_type)) in var_ids.iter().zip(var_types).enumerate() {
-        //     write!(
-        //         self.code_writer,
-        //         "*instance.locals.malloc::<{var_type}>({})",
-        //         var_id.0,
-        //     );
-        //     if i < output_type_ids.len() - 1 {
-        //         write!(self.code_writer, ", ");
-        //     }
-        // }
-
         write!(
             self.code_writer,
             "if {} !=0 {{ ",
@@ -1583,28 +1569,10 @@ impl<'program> CodeGenerator<'program> {
         // Temporary fix
         self.reset_pipeline();
 
-        // write!(self.code_writer, " ( ");
-        // for (i, var_id) in output_var_ids.iter().enumerate() {
-        //     let typ_name =
-        //         self.get_stripped_type_name(self.variable_tracker.variable_types[var_id]);
-        //     write!(self.code_writer, "{}", self.access_val_str(*var_id));
-        //     if i < output_var_ids.len() - 1 {
-        //         write!(self.code_writer, ", ");
-        //     }
-        // }
         write!(self.code_writer, " }} else {{ ");
     }
 
     pub fn end_else(&mut self, output_var_ids: &[VarId]) {
-        // write!(self.code_writer, " ( ");
-        // for (i, var_id) in output_var_ids.iter().enumerate() {
-        //     let typ_name =
-        //         self.get_stripped_type_name(self.variable_tracker.variable_types[var_id]);
-        //     write!(self.code_writer, "{}", self.access_val_str(*var_id));
-        //     if i < output_var_ids.len() - 1 {
-        //         write!(self.code_writer, ", ");
-        //     }
-        // }
         write!(self.code_writer, " }}\n");
 
         // Temporary fix

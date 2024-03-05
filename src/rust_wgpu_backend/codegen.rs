@@ -155,7 +155,7 @@ enum SplitPoint {
     Jump {
         return_node_results: Box<[NodeResult]>,
         continuation_join_point_id: Option<JoinPointId>,
-        funclet_id: Option<ir::FuncletId>,
+        funclet_id: ir::FuncletId,
     },
     Return {
         return_node_results: Box<[NodeResult]>,
@@ -224,11 +224,17 @@ enum TraversalState {
 
 /// The state of the current funclet being inlined into a single Rust function.
 struct InlineFuncletState {
+    /// The funclet id of the current funclet
     funclet_id: ir::FuncletId,
+    /// The output results of the current funclet which are the inputs to the next funclet
     current_out_node_results: Box<[NodeResult]>,
+    /// The join point id of the current funclet
     join_point_id: Option<JoinPointId>,
+    /// The traversal state of the current funclet if it is part of a branch
     traversal_state: Option<TraversalState>,
+    /// Whether the funclet is inlined in a function call
     func_inline: bool,
+    /// Whether the funclet is inlined in a branch
     branch_inline: bool,
 }
 
@@ -790,6 +796,23 @@ impl<'program> CodeGen<'program> {
         )
     }
 
+    /// Compiles the current funclet and returns a tuple for
+    /// any unhandled split points, which will be either returns or schedule calls.
+    /// # Arguments
+    /// * `current_funclet_id` - The funclet to compile
+    /// * `current_output_node_results` - The output node results of the funclet which are the
+    ///   inputs to the next funclet
+    /// * `pipeline_context` - The pipeline context
+    /// * `traversal_state_stack` - The traversal state stack, which will be pushed to if we need to
+    ///   process an inlined funclet after the current funclet
+    /// * `default_join_point_id_opt` - The default join point id to jump to after the current funclet
+    ///   is compiled
+    /// * `func_inline` - Whether the current funclet is being inlined as a call
+    /// * `branch_inline` - Whether the current funclet is being inlined as a branch
+    /// # Returns
+    /// * None for no unhandled split points, otherwise, a tuple of the
+    ///     unhandled split point node results and a boolean indicating whether
+    ///     the split point is a call
     fn process_current_funclet(
         &mut self,
         current_funclet_id: ir::FuncletId,
@@ -823,27 +846,23 @@ impl<'program> CodeGen<'program> {
                 continuation_join_point_id,
                 funclet_id,
             } => {
-                if let Some(funclet_id) = funclet_id {
-                    traversal_state_stack.push(InlineFuncletState {
-                        funclet_id,
-                        current_out_node_results: return_node_results,
-                        join_point_id: continuation_join_point_id,
-                        traversal_state: None,
-                        func_inline,
-                        branch_inline,
-                    });
-                    return None;
-                } else {
-                    unreachable!();
-                    // *default_join_point_id_opt = continuation_join_point_id;
-                    // return Some(return_node_results);
-                }
+                traversal_state_stack.push(InlineFuncletState {
+                    funclet_id,
+                    current_out_node_results: return_node_results,
+                    join_point_id: continuation_join_point_id,
+                    traversal_state: None,
+                    func_inline,
+                    branch_inline,
+                });
+                return None;
             }
             SplitPoint::Return {
                 return_node_results,
                 continuation_join_point_id_opt,
                 argument_ffi_types,
             } => {
+                // if in a branch, return now, otherwise continue to the
+                // next funclet (if there is one)
                 if branch_inline {
                     *default_join_point_id_opt = continuation_join_point_id_opt;
                     let argument_var_ids = NodeResult::collect_vars(&return_node_results);
@@ -906,14 +925,7 @@ impl<'program> CodeGen<'program> {
                 });
                 return None;
             }
-            SplitPoint::DynAlloc {
-                buffer_node_result,
-                success_funclet_id,
-                failure_funclet_id,
-                argument_node_results,
-                dynamic_allocation_size_slot_ids,
-                continuation_join_point_id_opt,
-            } => {
+            SplitPoint::DynAlloc { .. } => {
                 unreachable!();
                 // assert!(default_join_point_id_opt.is_none());
                 // traversal_state_stack.push(TraversalState::DynAllocIf {
@@ -930,6 +942,17 @@ impl<'program> CodeGen<'program> {
     }
 
     /// Returns true if we should compile the current funclet, otherwise returns false
+    /// # Arguments
+    /// * `pipeline_context` - The pipeline context
+    /// * `traversal_state` - The traversal state of the current funclet
+    /// * `funclet_stack` - The funclet stack, which may be pushed to with a
+    ///    funclet to process after the current funclet
+    /// * `current_out_node_results` - The output node results of the current funclet
+    ///     which are the inputs to the next funclet
+    /// * `func_inline` - Whether the current funclet is being inlined as a call
+    /// * `branch_inline` - Whether the current funclet is being inlined as a branch
+    /// # Returns
+    /// * True if we should compile the current funclet, otherwise returns false
     fn process_traversal_state(
         &mut self,
         pipeline_context: &mut PipelineContext,
@@ -1135,35 +1158,34 @@ impl<'program> CodeGen<'program> {
             branch_inline,
         }) = inline_funclet_stack.pop()
         {
-            let mut process_func = true;
             let mut default_join_point_id_opt = join_point_id;
             if let Some(traversal_state) = traversal_state {
-                process_func = self.process_traversal_state(
+                if !self.process_traversal_state(
                     pipeline_context,
                     traversal_state,
                     &mut inline_funclet_stack,
                     &current_out_node_results,
                     func_inline,
                     branch_inline,
-                );
-            }
-            let mut force_process_join = false;
-            if process_func {
-                if let Some((cur_out, force_process)) = self.process_current_funclet(
-                    funclet_id,
-                    &current_out_node_results,
-                    pipeline_context,
-                    &mut inline_funclet_stack,
-                    &mut default_join_point_id_opt,
-                    func_inline,
-                    branch_inline,
                 ) {
-                    current_out_node_results = cur_out;
-                    force_process_join = force_process;
+                    continue;
                 }
             }
+            let mut force_process_join = false;
+            if let Some((cur_out, force_process)) = self.process_current_funclet(
+                funclet_id,
+                &current_out_node_results,
+                pipeline_context,
+                &mut inline_funclet_stack,
+                &mut default_join_point_id_opt,
+                func_inline,
+                branch_inline,
+            ) {
+                current_out_node_results = cur_out;
+                force_process_join = force_process;
+            }
 
-            if (inline_funclet_stack.is_empty() || force_process_join) && process_func {
+            if inline_funclet_stack.is_empty() || force_process_join {
                 if let Some(join_point_id) = default_join_point_id_opt {
                     default_join_point_id_opt = None;
                     let join_point = pipeline_context.join_graph.move_join(join_point_id);
@@ -1173,6 +1195,7 @@ impl<'program> CodeGen<'program> {
                     match &join_point {
                         JoinPoint::RootJoinPoint(_) | JoinPoint::SimpleJoinPoint(_) => {
                             // tail edge must be a return
+                            // inlined branches are already handled
                             if !branch_inline {
                                 let return_var_ids =
                                     NodeResult::collect_vars(&current_out_node_results);
@@ -1181,11 +1204,8 @@ impl<'program> CodeGen<'program> {
                                     .iter()
                                     .map(|x| self.get_cpu_useable_type(*x))
                                     .collect();
-                                self.code_generator.build_return(
-                                    &return_var_ids,
-                                    &types.into_boxed_slice(),
-                                    pipeline_rets,
-                                );
+                                self.code_generator
+                                    .build_return(&return_var_ids, &types.into_boxed_slice());
                             }
                         }
                         JoinPoint::CallJoinPoint(simple_join_point) => {
@@ -1261,6 +1281,14 @@ impl<'program> CodeGen<'program> {
         return input_var_ids.into_boxed_slice();
     }
 
+    /// Compiles the current funclet and returns the split point for the tail edge
+    /// # Arguments
+    /// * `funclet_id` - The funclet to compile
+    /// * `argument_node_results` - The output node results of the previous funclet
+    /// * `pipeline_context` - The pipeline context
+    /// * `default_join_point_id_opt` - The default join point id to jump to after the current funclet
+    ///   is compiled
+    /// * `inline` - Whether the current funclet is being inlined as a call or branch
     fn compile_scheduling_funclet(
         &mut self,
         funclet_id: ir::FuncletId,
@@ -1290,6 +1318,8 @@ impl<'program> CodeGen<'program> {
             );
         }
 
+        // Keep track of any inline joins and decide what to do with them
+        // based on the split point
         let mut pending_inline_join = None;
         for (current_node_id, node) in funclet.nodes.iter().enumerate() {
             self.code_generator
@@ -2068,11 +2098,6 @@ impl<'program> CodeGen<'program> {
                     output_node_results.push(node_result);
                 }
 
-                // let join_funclet = &self.program.funclets[funclet_id];
-                // let argument_ffi_types = join_funclet.input_types[/*captures.len() */..]
-                //     .iter()
-                //     .map(|type_id| self.get_cpu_useable_type(*type_id))
-                //     .collect::<Box<[ir::ffi::TypeId]>>();
                 SplitPoint::Return {
                     return_node_results: output_node_results.into_boxed_slice(),
                     continuation_join_point_id_opt: *default_join_point_id_opt,
@@ -2129,15 +2154,13 @@ impl<'program> CodeGen<'program> {
 
                 assert!(join_point_id.is_some());
                 assert!(default_join_point_id_opt.is_none());
-                let funclet_id = join_point_id.map(|join_pt_id| {
-                    let continuation_join_point =
-                        pipeline_context.join_graph.get_join(join_point_id.unwrap());
-                    match continuation_join_point {
-                        JoinPoint::SimpleJoinPoint(s) => s.scheduling_funclet_id,
-                        JoinPoint::SerializedJoinPoint(s) => s.scheduling_funclet_id,
-                        _ => unreachable!("Invalid join point for jump"),
-                    }
-                });
+                let continuation_join_point =
+                    pipeline_context.join_graph.get_join(join_point_id.unwrap());
+                let funclet_id = match continuation_join_point {
+                    JoinPoint::SimpleJoinPoint(s) => s.scheduling_funclet_id,
+                    JoinPoint::SerializedJoinPoint(s) => s.scheduling_funclet_id,
+                    _ => unreachable!("Invalid join point for jump"),
+                };
                 SplitPoint::Jump {
                     return_node_results: argument_node_results.into_boxed_slice(),
                     continuation_join_point_id: join_point_id,
@@ -2187,24 +2210,15 @@ impl<'program> CodeGen<'program> {
                 }
 
                 assert!(default_join_point_id_opt.is_none());
-                let join_point_id = pipeline_context
-                    .join_graph
-                    // .create(JoinPoint::SerializedJoinPoint(SerializedJoinPoint {
-                    //     value_funclet_id: callee_value_funclet_id,
-                    //     scheduling_funclet_id: callee_scheduling_funclet_id,
-                    //     continuation_join_point_id,
-                    //     argument_ffi_types: callee_funclet
-                    //         .input_types
-                    //         .iter()
-                    //         .map(|type_id| self.get_cpu_useable_type(*type_id))
-                    //         .collect(),
-                    // }));
-                    .create(JoinPoint::CallJoinPoint(SimpleJoinPoint {
-                        value_funclet_id: callee_value_funclet_id,
-                        scheduling_funclet_id: callee_scheduling_funclet_id,
-                        captures: vec![].into_boxed_slice(),
-                        continuation_join_point_id,
-                    }));
+                let join_point_id =
+                    pipeline_context
+                        .join_graph
+                        .create(JoinPoint::CallJoinPoint(SimpleJoinPoint {
+                            value_funclet_id: callee_value_funclet_id,
+                            scheduling_funclet_id: callee_scheduling_funclet_id,
+                            captures: vec![].into_boxed_slice(),
+                            continuation_join_point_id,
+                        }));
                 SplitPoint::Call {
                     return_node_results: argument_node_results.into_boxed_slice(),
                     continuation_join_point_id_opt: Some(join_point_id),
