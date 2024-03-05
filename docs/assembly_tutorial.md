@@ -3,20 +3,9 @@ Author: Meredith Hu
 
 ## What is Caiman?
 *This guide is for CAIMAN ASSEMBLY and not Original Caiman or Caiman Frontend. <br> <br>
+Caiman is a research language that is a project of CU Capra. It is a “specification language” and it aims to reveal the optimality differences between different implementations of the same program. There are many levels of Caiman that one can write in. There is low-level Caiman in which if a user wants to implement anything, they must implement every aspect of the program to a level of detail unsuited for user programming. The developers of Caiman have attempted to mitigate this lack of user-friendliness by making Caiman Assembly, a more high level version of Caiman that is easier to write in but still requires lots of the formal specification of program features that is characteristic to the mission of Caiman as a project. Another project currently being developed is Caiman front end, a version of Caiman that is easier to use still.
 
-Caiman is a research language that is a project of CU Capra. Caiman programs consist of several "specification languages" and an "implementation" of those specification languages. The intention of this divide in responsibility is to make it easier to explore performance tradeoffs while maintaining program semantics.
-This repository contains implementations of three levels of abstraction for working with the Caiman compiler:
-
-- The raw IR, which you can write directly as a Rust .ron file
-- Caiman Assembly, which gives you exacting control over the generation of the Caiman IR (and is essentially just a .ron file with node names and some small quality of life changes)
-- High Level Caiman (HLC), which lets you write Caiman with slightly higher-level semantics. Note that we are in the process of updating names so that HLC is just called Caiman, since this is the intended representation of the Caiman language.
-
-The structure of the Caiman compiler, at the moment, is roughly as follows:
-
-HLC -> Caiman Assembly -> Explication (currently empty) -> Caiman IR -> Rust
-but you may also view a detailed visual diagram here: https://github.com/cucapra/caiman/blob/main/docs/compiler_structure.svg
-
-Where each of these arrows can be "bypassed" by writing a lower level of abstraction. Note that typechecking is done on the Caiman IR, though HLC and Caiman Assembly also do some lowering work and may error as a result.
+Caiman Assembly reveals the differences in different implementations to the user by requiring the user to write a value codeblock and scheduling codeblock for any given program. The schedule codeblock must typecheck to the value code in order for the whole file to compile. The value code serves as a formal description of expressions a program must include to perform what it needs to, but the scheduling language actually implements this with allocations for local variables, function calls, and specification for where everything is placed. 
 
 ## How do I set up Caiman?
 You can obtain caiman by cloning the git repository that Caiman lives at. 
@@ -29,7 +18,7 @@ You can obtain caiman by cloning the git repository that Caiman lives at.
 run: https://github.com/cucapra/caiman/blob/main/caiman-test/test.py  
 
 __Optional:__
-Download the VSCode extension to add commenting capabilities. It can be found [here](https://github.com/Checkmate50/caiman-vsc).
+Download the VSCode extension to add commenting capabilities 
 
 ## How do I test Caiman?
 __How to create a program:__
@@ -40,7 +29,7 @@ __How to create a program:__
 5. [ ] To test your code, run `python test.py run basics/<YOUR-TEST-NAME>_test.cair`.
 
 __How to debug your file:__ <br>
-For now, debugging with Rust skills is a very practical option. You may also run the compiler with the this flag to see the translation to the intermediate representation, including any explication that was done:
+For now, debugging with Rust skills is a very practical option. You may also run the compiler with this flag after “run” to get a lot of information about the entered file:
 `--explicate_only`
 
 ## Helpful Resources:
@@ -50,6 +39,5 @@ For now, debugging with Rust skills is a very practical option. You may also run
 
 ### Caiman References 
 - [ ] Working Caiman Assembly Examples ()
-- [ ] [Diagram of Caiman Compiler](https://github.com/cucapra/caiman/blob/main/docs/compiler_structure.svg)
 - [ ] [Caiman Reference Guide](https://github.com/cucapra/caiman/blob/main/caiman-spec/src/content.ron)
 - [ ] [More Caiman Reference](https://github.com/cucapra/caiman/blob/main/caiman-test/reference_untested/example.cair)

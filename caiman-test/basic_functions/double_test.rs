@@ -1,14 +1,21 @@
 struct Callbacks;
 
 impl main::CpuFunctions for Callbacks {
-    fn add(&self, _: &mut dyn caiman_rt::State, value1: i64, value2: i64) -> main::outputs::add {
-        return (value1 + value2,);
+    fn doublev1(
+        &self,
+        _: &mut dyn caiman_rt::State,
+        value1: i64,
+        value2: i64,
+    ) -> main::outputs::sub {
+        return (value1 - value2,);
     }
-    fn double_v1(&self, _: &mut dyn caiman_rt::State, value1: i64) -> main::outputs::double_v1 {
-        return (value1 + value1,);
-    }
-    fn double_v2(&self, _: &mut dyn caiman_rt::State, value1: i64) -> main::outputs::double_v2 {
-        return (value1 * 2,);
+    fn doublev2(
+        &self,
+        _: &mut dyn caiman_rt::State,
+        value1: i64,
+        value2: i64,
+    ) -> main::outputs::mult {
+        return (value1 * value2,);
     }
 }
 

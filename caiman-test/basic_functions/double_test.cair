@@ -13,7 +13,7 @@ function @main(i64) -> i64;
 
 value[impl default @main] %main(%x : i64) -> [%out: i64] {
     %first_t = call @double(%x);
-    %first = extract %first_t 0;
+    %first = extract %temp_t 0;
 
     %second_t = call @double(%x);
     %second = extract %second_t 0;
@@ -22,44 +22,3 @@ value[impl default @main] %main(%x : i64) -> [%out: i64] {
     %result = extract %result_t 0;
     return %result;
 }
-
-schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%bar<input($time.%e)-usable, output($time.%e)-usable>() ->
-[%out : %ni64] {
-    //initialize first
-    %first_ref = alloc-temporary local [storage, map_write] i64;
-    //put the value of first_t into first_ref
-
-    //put into first_t the result of double of x and place it in first_ref
-    local-do-external %double_v1 node($val.%first_t)(%x) -> %first_ref;
-    //dereference x
-    %double1 = read-ref i64 %first_ref;
-
-    //initialize second
-    %second_ref = alloc-temporary local [storage, map_write] i64;
-    //put into first_t the result of double of x and place it in first_ref
-    local-do-external %double_v2 node($val.%second_t)(%x) -> %second_ref;
-    //dereference x
-    %double2 = read-ref i64 %second_ref;
-
-
-    //allocate something (a place to put the result of add )
-    %r_ref = alloc-temporary local [storage, map_write] i64;
-
-    //put into result_t the result of sub x and x_t and place it in r_ref 
-    local-do-external %add node($val.%result_t)(%double1,%double2) -> %r_ref;
-
-    //result should be in z ref 
-    %result = read-ref i64 %r_ref;
-    return %result;
-}
-
-timeline %time(%e : %event0) -> %event0 {
-    return %e;
-}
-
-spatial %space(%bs : %buffspace) -> %buffspace {
-    return %bs;
-}
-
-pipeline "main" = %bar;
