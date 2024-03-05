@@ -40,6 +40,7 @@ macro_rules! def_assembly_id_type {
     };
 }
 
+def_assembly_id_type!(EffectId);
 def_assembly_id_type!(FuncletId);
 def_assembly_id_type!(MetaId);
 def_assembly_id_type!(ExternalFunctionId);
@@ -394,6 +395,20 @@ pub struct Version {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Effect {
+    Unrestricted,
+    FullyConnected {
+        effectful_function_ids: Vec<ExternalFunctionId>,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EffectDeclaration {
+    pub name : EffectId,
+    pub effect : Effect
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FunctionClass {
     pub name: FunctionClassId,
     pub input_types: Vec<TypeId>,
@@ -404,6 +419,7 @@ pub struct FunctionClass {
 pub struct Pipeline {
     pub name: String,
     pub funclet: FuncletId,
+    pub effect: Option<EffectId>
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -412,6 +428,7 @@ pub enum Declaration {
     ExternalFunction(ExternalFunction),
     FunctionClass(FunctionClass),
     Funclet(Funclet),
+    Effect(EffectDeclaration),
     Pipeline(Pipeline),
 }
 

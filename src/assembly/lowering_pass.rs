@@ -234,6 +234,7 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
 fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::NativeInterface {
     let mut types = StableVec::new();
     let mut external_functions = StableVec::new();
+    let mut effects = StableVec::new();
 
     for declaration in &program.declarations {
         match declaration {
@@ -243,6 +244,9 @@ fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::Na
             ast::Declaration::ExternalFunction(external) => {
                 external_functions.add(ir_external(external, context));
             }
+            ast::Declaration::Effect(effect) => {
+                effects.add(ir_effect(effect, context));
+            }
             _ => {}
         }
     }
@@ -250,7 +254,7 @@ fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::Na
     ffi::NativeInterface {
         types,
         external_functions,
-        effects: StableVec::new(), // todo: add
+        effects
     }
 }
 
@@ -497,6 +501,7 @@ fn ir_schedule_binding(
         timeline: expir::FuncletSpec {
             // assume implicit is timeline for now?
             funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
             implicit_in_tag: implicit_in_lookup.timeline,
@@ -690,6 +695,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> expir::Program {
             ast::Declaration::Pipeline(p) => {
                 pipelines.push(ir_pipeline(p, context));
             }
+            ast::Declaration::Effect(effect) => {}
         }
     }
 
