@@ -4,16 +4,22 @@ pub mod outstate;
 pub mod staticcontext;
 
 use crate::assembly::ast;
-use crate::assembly::ast::Hole;
-use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, NodeId, RemoteNodeId, StorageTypeId,
-    TypeId,
-};
-use crate::assembly::explication::util::*;
-use crate::assembly::table::Table;
+use crate::explication::util::*;
+use crate::explication::Hole;
 use crate::ir;
+use crate::stable_vec;
+use crate::explication::expir;
+use crate::explication::expir::{NodeId, FuncletId, TypeId, PlaceId, StorageTypeId};
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet, VecDeque};
+use crate::rust_wgpu_backend::ffi;
+
+#[derive(Debug, Clone)]
+pub struct Location {
+    // a pointer to a funclet that needs filling
+    funclet_id : usize,
+    node_id : usize
+}
 
 #[derive(Debug, Clone)]
 pub struct InState {
@@ -41,7 +47,7 @@ pub struct FuncletOutState {
     to_fill: HashSet<Location>,
 
     // commands we've built on this particular funclet of the stack
-    commands: VecDeque<ast::NamedCommand>,
+    commands: VecDeque<ast::NamedNode>,
 }
 
 #[derive(Debug)]
@@ -67,7 +73,7 @@ struct LocalTypeDeclaration {
     pub place: Option<ir::Place>,
 
     // if this type has an associated FFI Type
-    pub ffi: Option<FFIType>,
+    pub ffi: Option<ffi::Type>,
 }
 
 // this information is static, and doesn't change as explication progresses

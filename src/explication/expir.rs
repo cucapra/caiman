@@ -112,7 +112,7 @@ pub type Flow = crate::ir::Flow;
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default,
 )]
 pub struct Tag {
-    pub quot: Hole<Quotient>, // What a given value maps to in a specification
+    pub quot: Quotient, // What a given value maps to in a specification
     pub flow: Hole<Flow>,     // How this value transforms relative to the specification
 }
 
