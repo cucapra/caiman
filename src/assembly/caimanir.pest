@@ -78,8 +78,8 @@ declaration = { type_decl | external_function | funclet | effect | function_clas
 
 // Effects
 
-effect_args = $ { "<" ~ (name ~ ("," ~ name)*)? ~ ">" }
-effect = ${ "effect" ~ effect_args? ~ name }
+effect_args = !{ "<" ~ (name ~ ("," ~ name)*)? ~ ">" }
+effect = ${ "effect" ~ effect_args? ~ sep ~ name ~ ";" }
 
 // Types
 ffi_type_decl = ${ "type" ~ sep ~ ffi_type }

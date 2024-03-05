@@ -38,6 +38,10 @@ buffer_space %buffer_space0;
 
 function @simple(i64) -> i64;
 
+effect %effect_empty;
+effect<%do_thing_on_cpu, %do_pure_thing_on_cpu> %effect;
+effect<> %effect_semi_empty;
+
 external-cpu-pure[impl @simple] %do_pure_thing_on_cpu(i64) -> i64;
 external-cpu[impl @simple] %do_thing_on_cpu(i64) -> i64;
 // the path is required, and is relative to where you run this thing at the moment (unfortunately)
@@ -86,7 +90,7 @@ spatial %space(%b : %buffer_space0) -> [%iout : i64] {
 }
 
 // can syntactically be empty, even though this is meaningless
-schedule[value $val = %foo] %bar<$val-usable, $val-dead>(%0 : %slot0) -> [%out : %slot0] {
+schedule[value $val = %foo,  timeline $time = %time, spatial $space = %space] %bar<$val-usable, $val-dead>(%0 : %slot0) -> [%out : %slot0] {
     %x = alloc-temporary local [copy_dst, copy_src] i64;
     drop %0;
     %y = static-sub-alloc local i64 %x;
@@ -117,7 +121,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 (%abc : $val.%x-usable %slot0)
 -> [%out : $val.%y-saved %slot0] {
     // Note that these are not parser-bound by funclet type, but (should be) managed by the typechecker
-    schedule-call %bar[value ?,
+    schedule-call %bar[?,
         ?,
         $space](%abc, %abc) %abc;
 }
@@ -127,7 +131,7 @@ schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 %sselect<$time.%e-saved, $time.%e-usable>
 (%abc : $time.%e-saved $val.%x-usable %slot0)
 -> $time.%e-saved $val.%x-dead %slot0 {
-    schedule-select %abc [%bar, %scall][value ?,
+    schedule-select %abc [%bar, %scall][?,
         ?,
         $space](%abc, %abc) %abc;
 }
@@ -136,7 +140,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %syield<$time.%e-usable, $time.%e-need>
 (%abc : $time.%bs-dead %event0)
 -> [%out : $time.%bs-need %buffer0] {
-    schedule-call-yield %bar[value $val.%x,
+    schedule-call-yield %bar[$val.%x,
         $time.%e,
         $space](%abc, %abc) %abc;
 }
@@ -149,3 +153,4 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 }
 
 pipeline "pipeline_trivial" = %bar;
+pipeline "pipeline_effect" = %foo, effect %effect;

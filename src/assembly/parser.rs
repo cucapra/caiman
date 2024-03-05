@@ -567,6 +567,7 @@ impl CaimanAssemblyParser {
             [external_function(x)] => ast::Declaration::ExternalFunction(x),
             [funclet(x)] => ast::Declaration::Funclet(x),
             [function_class(x)] => ast::Declaration::FunctionClass(x),
+            [effect(x)] => ast::Declaration::Effect(x),
             [pipeline(x)] => ast::Declaration::Pipeline(x),
         ))
     }
