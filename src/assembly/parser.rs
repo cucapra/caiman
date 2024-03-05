@@ -10,7 +10,7 @@ struct CaimanAssemblyParser;
 
 use crate::{assembly, frontend, ir};
 use assembly::ast;
-use ast::Hole;
+use crate::explication::Hole;
 use ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, MetaId, NodeId, RemoteNodeId,
     StorageTypeId, TypeId,
@@ -291,19 +291,6 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn meta_name_hole(input: Node) -> ParseResult<Hole<String>> {
-        Ok(match_nodes!(input.into_children();
-            [meta_name(name)] => Some(name),
-            [hole] => None
-        ))
-    }
-
-    fn meta_name_hole_sep(input: Node) -> ParseResult<Hole<String>> {
-        Ok(match_nodes!(input.into_children();
-            [meta_name_hole(name)] => name
-        ))
-    }
-
     fn throwaway(input: Node) -> ParseResult<String> {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
@@ -500,13 +487,13 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [meta_name(funclet_id)] => {
                 ast::RemoteNodeId {
-                    funclet: Some(ast::MetaId(funclet_id)),
+                    funclet: ast::MetaId(funclet_id),
                     node: None
                 }
             },
             [meta_name(funclet_id), name(node_id)] => {
                 ast::RemoteNodeId {
-                    funclet: Some(ast::MetaId(funclet_id)),
+                    funclet: ast::MetaId(funclet_id),
                     node: Some(Some(ast::NodeId(node_id)))
                 }
             },
@@ -515,15 +502,15 @@ impl CaimanAssemblyParser {
 
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
-            [meta_name_hole(funclet_id)] => {
+            [meta_name(funclet_id)] => {
                 Some(ast::RemoteNodeId {
-                    funclet: funclet_id.map(|f| ast::MetaId(f)),
+                    funclet: ast::MetaId(funclet_id),
                     node: None
                 })
             },
-            [meta_name_hole(funclet_id), name_hole(node_id)] => {
+            [meta_name(funclet_id), name_hole(node_id)] => {
                 Some(ast::RemoteNodeId {
-                    funclet: funclet_id.map(|f| ast::MetaId(f)),
+                    funclet: ast::MetaId(funclet_id),
                     node: Some(node_id.map(|n| ast::NodeId(n)))
                 })
             },
@@ -533,16 +520,17 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn flow(input: Node) -> ParseResult<ir::Flow> {
+    fn flow(input: Node) -> ParseResult<Hole<ir::Flow>> {
         input
             .as_str()
             .parse::<String>()
             .map_err(|e| input.error(e))
             .and_then(|s| match s.as_str() {
-                "dead" => Ok(ir::Flow::Dead),
-                "usable" => Ok(ir::Flow::Usable),
-                "saved" => Ok(ir::Flow::Saved),
-                "need" => Ok(ir::Flow::Need),
+                "dead" => Ok(Some(ir::Flow::Dead)),
+                "usable" => Ok(Some(ir::Flow::Usable)),
+                "saved" => Ok(Some(ir::Flow::Saved)),
+                "need" => Ok(Some(ir::Flow::Need)),
+                "?" => Ok(None),
                 _ => unreachable!(),
             })
     }

@@ -66,7 +66,7 @@ buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
 quotient = !{ meta_name ~ ("." ~ name)? }
 quotient_hole = !{ meta_name ~ ("." ~ name_hole)? | hole }
-flow = { "dead" | "usable" | "saved" | "need" }
+flow = { "dead" | "usable" | "saved" | "need" | "?" }
 tag = ${ quotient ~ "-" ~ flow }
 
 // Program

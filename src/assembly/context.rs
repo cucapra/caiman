@@ -6,6 +6,7 @@ use crate::assembly::ast::{
 use crate::assembly::table::Table;
 use crate::explication::expir;
 use crate::explication::Hole;
+use crate::rust_wgpu_backend::ffi;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
 
@@ -207,10 +208,6 @@ impl Context {
                                 node: ast::Node::Phi { index },
                                 name,
                             })) => {
-                            Some(ast::Command::Node(ast::NamedNode {
-                                node: ast::Node::Phi { index },
-                                name,
-                            })) => {
                                 node_id += 1;
                             }
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
@@ -258,8 +255,8 @@ impl Context {
             }
         }
     }
-    
-    pub fn external_lookup(&self, id: &ExternalFunctionId) -> ir::ExternalFunctionId {
+
+    pub fn external_lookup(&self, id: &ExternalFunctionId) -> expir::ExternalFunctionId {
         ffi::ExternalFunctionId(
             self.funclet_indices
                 .external_funclet_table
@@ -353,8 +350,7 @@ impl Context {
         for operation in operations {
             let unwrapped = operation.as_ref().unwrap_or_else(|| panic!(error));
             let remote = unwrapped.quot.as_ref().unwrap_or_else(|| panic!(error));
-            let (fnid, kind) =
-                self.meta_lookup_loc(&remote.funclet);
+            let (fnid, kind) = self.meta_lookup_loc(&remote.funclet);
             let quot = self.explicit_node_id(
                 &fnid,
                 &remote

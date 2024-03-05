@@ -501,7 +501,6 @@ fn ir_schedule_binding(
         timeline: expir::FuncletSpec {
             // assume implicit is timeline for now?
             funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
             implicit_in_tag: implicit_in_lookup.timeline,
@@ -653,6 +652,20 @@ fn ir_function_class(
     }
 }
 
+fn ir_effect(declaration: &ast::EffectDeclaration, context: &mut Context) -> ffi::Effect {
+    match &declaration.effect {
+        ast::Effect::Unrestricted => ffi::Effect::Unrestricted,
+        ast::Effect::FullyConnected {
+            effectful_function_ids,
+        } => ffi::Effect::FullyConnected {
+            effectful_function_ids: effectful_function_ids
+                .iter()
+                .map(|fid| context.external_lookup(fid))
+                .collect(),
+        },
+    }
+}
+
 fn ir_pipeline(pipeline: &ast::Pipeline, context: &mut Context) -> expir::Pipeline {
     match context.funclet_indices.get_funclet(&pipeline.funclet.0) {
         Some(entry_funclet) => expir::Pipeline {
@@ -710,7 +723,6 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> expir::Program {
 
 pub fn lower(mut program: ast::Program) -> frontend::ExplicationDefinition {
     // should probably handle errors with a result, future problem though
-    give_names(&mut program);
     let mut context = Context::new(&program);
     frontend::ExplicationDefinition {
         version: ir_version(&program.version, &mut context),
