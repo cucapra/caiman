@@ -74,7 +74,12 @@ tag = ${ quotient ~ "-" ~ flow }
 version_keyword = @{ "version" ~ sep }
 version = ${ version_keyword ~ n ~ "." ~ n ~ "." ~ n }
 
-declaration = { type_decl | external_function | funclet | function_class | pipeline }
+declaration = { type_decl | external_function | funclet | effect | function_class | pipeline }
+
+// Effects
+
+effect_args = $ { "<" ~ (name ~ ("," ~ name)*)? ~ ">" }
+effect = ${ "effect" ~ effect_args? ~ name }
 
 // Types
 ffi_type_decl = ${ "type" ~ sep ~ ffi_type }
@@ -307,6 +312,8 @@ schedule_node = { alloc_temporary_node | drop_node | static_sub_alloc_node
 // Pipelines
 
 pipeline_sep = @{ "pipeline" ~ sep }
-pipeline = { pipeline_sep ~ str ~ "=" ~ name ~ ";" }
+pipeline_effect_sep = @{ "effect" ~ sep }
+pipeline_effect = { "," ~ pipeline_effect_sep ~ name }
+pipeline = { pipeline_sep ~ str ~ "=" ~ name ~ pipeline_effect? ~ ";" }
 
 program = { SOI ~ version ~ declaration* ~ EOI }

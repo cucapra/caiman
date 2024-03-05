@@ -2,9 +2,9 @@ use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::NodeId;
+use crate::assembly::context;
 use crate::assembly::context::reject_hole;
 use crate::assembly::context::Context;
-use crate::assembly::context;
 use crate::assembly::explication;
 use crate::assembly::parser;
 use crate::ir::ffi;
@@ -720,7 +720,7 @@ fn ir_schedule_binding(
 
     let default_tag = ir::Tag {
         quot: ir::Quotient::None,
-        flow: ir::Flow::Usable
+        flow: ir::Flow::Usable,
     };
 
     struct TagBindings {
@@ -742,16 +742,28 @@ fn ir_schedule_binding(
 
     for arg in &funclet_header.args {
         let tags = context.tag_lookup(&arg.tags.iter().map(|t| Some(t.clone())).collect());
-        input_tags.value_tags.push(tags.value.unwrap_or(default_tag).clone());
-        input_tags.spatial_tags.push(tags.spatial.unwrap_or(default_tag).clone());
-        input_tags.timeline_tags.push(tags.timeline.unwrap_or(default_tag).clone());
+        input_tags
+            .value_tags
+            .push(tags.value.unwrap_or(default_tag).clone());
+        input_tags
+            .spatial_tags
+            .push(tags.spatial.unwrap_or(default_tag).clone());
+        input_tags
+            .timeline_tags
+            .push(tags.timeline.unwrap_or(default_tag).clone());
     }
 
     for ret in &funclet_header.ret {
         let tags = context.tag_lookup(&ret.tags.iter().map(|t| Some(t.clone())).collect());
-        output_tags.value_tags.push(tags.value.unwrap_or(default_tag).clone());
-        output_tags.spatial_tags.push(tags.spatial.unwrap_or(default_tag).clone());
-        output_tags.timeline_tags.push(tags.timeline.unwrap_or(default_tag).clone());
+        output_tags
+            .value_tags
+            .push(tags.value.unwrap_or(default_tag).clone());
+        output_tags
+            .spatial_tags
+            .push(tags.spatial.unwrap_or(default_tag).clone());
+        output_tags
+            .timeline_tags
+            .push(tags.timeline.unwrap_or(default_tag).clone());
     }
 
     let implicit_in_tag = ir_tag(&implicit_tags.0, context);
@@ -759,7 +771,7 @@ fn ir_schedule_binding(
 
     ir::FuncletSpecBinding::ScheduleExplicit {
         value: ir::FuncletSpec {
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.value.1.0),
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.value.1 .0),
             input_tags: input_tags.value_tags.into_boxed_slice(),
             output_tags: output_tags.value_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),
@@ -767,14 +779,14 @@ fn ir_schedule_binding(
         },
         timeline: ir::FuncletSpec {
             // assume implicit is timeline for now?
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1.0),
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
             implicit_in_tag,
             implicit_out_tag,
         },
         spatial: ir::FuncletSpec {
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.spatial.1.0),
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.spatial.1 .0),
             input_tags: input_tags.spatial_tags.into_boxed_slice(),
             output_tags: output_tags.spatial_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),
@@ -851,6 +863,20 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     }
 }
 
+fn ir_effect(declaration: &ast::EffectDeclaration, context: &mut Context) -> ffi::Effect {
+    match &declaration.effect {
+        ast::Effect::Unrestricted => ffi::Effect::Unrestricted,
+        ast::Effect::FullyConnected {
+            effectful_function_ids,
+        } => ffi::Effect::FullyConnected {
+            effectful_function_ids: effectful_function_ids
+                .iter()
+                .map(|fid| context.external_lookup(fid))
+                .collect(),
+        },
+    }
+}
+
 fn ir_function_class(
     declarations: &Vec<ast::Declaration>,
     function: &ast::FunctionClass,
@@ -924,7 +950,7 @@ fn ir_pipeline(pipeline: &ast::Pipeline, context: &mut Context) -> ir::Pipeline 
             .get_funclet(&pipeline.funclet.0)
             .unwrap()
             .clone(),
-        effect_id_opt: None,
+        effect_id_opt: pipeline.effect.as_ref().map(|e| context.effect_lookup(e)),
     }
 }
 
@@ -933,6 +959,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
     let mut types = StableVec::new();
     let mut funclets = StableVec::new();
     let mut function_classes = StableVec::new();
+    let mut effects = StableVec::new();
     let mut pipelines = Vec::new();
 
     for declaration in &program.declarations {
@@ -952,6 +979,9 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
             }
             ast::Declaration::Funclet(f) => {
                 funclets.add(ir_funclet(f, context));
+            }
+            ast::Declaration::Effect(effect) => {
+                effects.add(ir_effect(effect, context));
             }
             ast::Declaration::Pipeline(p) => {
                 pipelines.push(ir_pipeline(p, context));

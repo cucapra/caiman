@@ -190,6 +190,9 @@ impl CaimanAssemblyParser {
     fn schedule_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
+    fn pipeline_effect_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
     fn pipeline_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
@@ -926,6 +929,27 @@ impl CaimanAssemblyParser {
                     output_types
                 })
         )
+    }
+
+    fn effect_args(input: Node) -> ParseResult<Vec<ast::ExternalFunctionId>> {
+        Ok(match_nodes!(input.into_children();
+            [name(args)..] => args.map(ast::ExternalFunctionId).collect()
+        ))
+    }
+
+    fn effect(input: Node) -> ParseResult<ast::EffectDeclaration> {
+        Ok(match_nodes!(input.into_children();
+            [name(name)] => ast::EffectDeclaration {
+                name: ast::EffectId(name),
+                effect: ast::Effect::Unrestricted
+            },
+            [effect_args(effectful_function_ids), name(name)] => ast::EffectDeclaration {
+                name: ast::EffectId(name),
+                effect: ast::Effect::FullyConnected {
+                    effectful_function_ids
+                }
+            }
+        ))
     }
 
     // some duplication, but it's annoying to fix...
@@ -1687,10 +1711,20 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn pipeline_effect(input: Node) -> ParseResult<ast::EffectId> {
+        Ok(match_nodes!(input.into_children();
+            [pipeline_effect_sep, name(name)] => ast::EffectId(name)
+        ))
+    }
+
     fn pipeline(input: Node) -> ParseResult<ast::Pipeline> {
         Ok(match_nodes!(input.into_children();
             [pipeline_sep, str(name), name(funclet)] => ast::Pipeline{
-                name, funclet: FuncletId(funclet)
+                name, funclet: FuncletId(funclet), effect: None
+            },
+            [pipeline_sep, str(name), name(funclet), pipeline_effect(effect)] => 
+            ast::Pipeline{
+                name, funclet: FuncletId(funclet), effect: Some(effect)
             }
         ))
     }

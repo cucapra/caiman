@@ -1,11 +1,12 @@
 use crate::assembly::ast;
 use crate::assembly::ast::Hole;
 use crate::assembly::ast::{
-    ExternalFunctionId, FFIType, FuncletId, FunctionClassId, MetaId, NodeId, RemoteNodeId,
-    StorageTypeId, TypeId,
+    EffectId, ExternalFunctionId, FFIType, FuncletId, FunctionClassId, MetaId, NodeId,
+    RemoteNodeId, StorageTypeId, TypeId,
 };
 use crate::assembly::table::Table;
 use crate::ir;
+use crate::rust_wgpu_backend::ffi;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet};
 
@@ -33,6 +34,7 @@ pub struct Context {
     pub location: LocationNames,
     pub funclet_indices: FuncletIndices,
     pub function_classes: Table<FunctionClassId>,
+    pub effects: Table<EffectId>,
 }
 
 #[derive(Debug)]
@@ -151,6 +153,7 @@ impl Context {
             native_type_map: HashMap::new(),
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
+            effects: Table::new(),
             variable_map: HashMap::new(),
             meta_map: None,
             location: LocationNames::new(),
@@ -201,7 +204,10 @@ impl Context {
                         match command {
                             // ignore phi nodes cause they get handled by the header above
                             // really they shouldn't be in here I suppose
-                            Some(ast::Command::Node(ast::NamedNode { node: ast::Node::Phi { index }, name })) => {
+                            Some(ast::Command::Node(ast::NamedNode {
+                                node: ast::Node::Phi { index },
+                                name,
+                            })) => {
                                 node_id += 1;
                             }
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
@@ -241,9 +247,29 @@ impl Context {
                 ast::Declaration::FunctionClass(f) => {
                     self.function_classes.push(f.name.clone());
                 }
+                ast::Declaration::Effect(f) => {
+                    self.effects.push(f.name.clone());
+                }
                 _ => {}
             }
         }
+    }
+    
+    pub fn external_lookup(&self, id: &ExternalFunctionId) -> ir::ExternalFunctionId {
+        ffi::ExternalFunctionId(
+            self.funclet_indices
+                .external_funclet_table
+                .get(id)
+                .expect(format!("Unknown external funclet {:?}", id).as_str()),
+        )
+    }
+
+    pub fn effect_lookup(&self, effect: &EffectId) -> ffi::EffectId {
+        ffi::EffectId(
+            self.effects
+                .get(effect)
+                .expect(format!("Unknown effect {:?}", effect).as_str()),
+        )
     }
 
     pub fn ffi_type_id(&self, name: &ast::FFIType) -> usize {
@@ -292,11 +318,17 @@ impl Context {
     pub fn node_id(&self, var: &NodeId) -> usize {
         let funclet = &self.location.funclet_name;
         let var_error = format!("Unknown variable name {:?} in funclet {:?}", var, &funclet);
-        match self.variable_map.get(funclet).unwrap().get(var).expect(&var_error) {
+        match self
+            .variable_map
+            .get(funclet)
+            .unwrap()
+            .get(var)
+            .expect(&var_error)
+        {
             ir::Quotient::None => panic!("Invalid None node {:?} in funclet {:?}", var, &funclet),
-            ir::Quotient::Input { index } |
-            ir::Quotient::Output { index } |
-            ir::Quotient::Node { node_id: index } => *index
+            ir::Quotient::Input { index }
+            | ir::Quotient::Output { index }
+            | ir::Quotient::Node { node_id: index } => *index,
         }
     }
 
