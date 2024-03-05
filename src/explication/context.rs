@@ -15,13 +15,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::rust_wgpu_backend::ffi;
 
 #[derive(Debug, Clone)]
-pub struct Location {
-    // a pointer to a funclet that needs filling
-    funclet_id : usize,
-    node_id : usize
-}
-
-#[derive(Debug, Clone)]
 pub struct InState {
     // state information needs to be duplicated as we recurse
 

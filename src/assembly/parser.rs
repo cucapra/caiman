@@ -10,7 +10,7 @@ struct CaimanAssemblyParser;
 
 use crate::{assembly, frontend, ir};
 use assembly::ast;
-use crate::explication::Hole;
+use ast::Hole;
 use ast::{
     ExternalFunctionId, FFIType, FuncletId, FunctionClassId, MetaId, NodeId, RemoteNodeId,
     StorageTypeId, TypeId,
@@ -190,6 +190,9 @@ impl CaimanAssemblyParser {
     fn schedule_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
+    fn pipeline_effect_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
     fn pipeline_sep(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
@@ -288,6 +291,19 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn meta_name_hole(input: Node) -> ParseResult<Hole<String>> {
+        Ok(match_nodes!(input.into_children();
+            [meta_name(name)] => Some(name),
+            [hole] => None
+        ))
+    }
+
+    fn meta_name_hole_sep(input: Node) -> ParseResult<Hole<String>> {
+        Ok(match_nodes!(input.into_children();
+            [meta_name_hole(name)] => name
+        ))
+    }
+
     fn throwaway(input: Node) -> ParseResult<String> {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
@@ -321,17 +337,8 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn ffi_type_hole_sep(input: Node) -> ParseResult<Hole<ast::FFIType>> {
-        Ok(match_nodes!(input.into_children();
-            [ffi_type_hole(f)] => f
-        ))
-    }
-
     fn ffi_array_parameters(input: Node) -> ParseResult<ast::FFIType> {
         Ok(match_nodes!(input.into_children();
-            [ffi_type(element_type)] => ast::FFIType::ErasedLengthArray(
-                Box::new(element_type)
-            ),
             [ffi_type(element_type), n(length)] => ast::FFIType::Array {
                 element_type: Box::new(element_type),
                 length,
@@ -354,6 +361,7 @@ impl CaimanAssemblyParser {
             .parse::<String>()
             .map_err(|e| input.error(e))
             .and_then(|s| match s.as_str() {
+                "erased_length_array" => Ok(box_up(&ast::FFIType::ErasedLengthArray)),
                 "const_ref" => Ok(box_up(&ast::FFIType::ConstRef)),
                 "mut_ref" => Ok(box_up(&ast::FFIType::MutRef)),
                 "const_slice" => Ok(box_up(&ast::FFIType::ConstSlice)),
@@ -389,13 +397,6 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [ffi_type_base(t)] => t,
             [ffi_parameterized_type(t)] => t
-        ))
-    }
-
-    fn ffi_type_hole(input: Node) -> ParseResult<Hole<ast::FFIType>> {
-        Ok(match_nodes!(input.into_children();
-            [ffi_type(f)] => Some(f),
-            [hole] => None
         ))
     }
 
@@ -499,13 +500,13 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [meta_name(funclet_id)] => {
                 ast::RemoteNodeId {
-                    funclet: ast::MetaId(funclet_id),
+                    funclet: Some(ast::MetaId(funclet_id)),
                     node: None
                 }
             },
             [meta_name(funclet_id), name(node_id)] => {
                 ast::RemoteNodeId {
-                    funclet: ast::MetaId(funclet_id),
+                    funclet: Some(ast::MetaId(funclet_id)),
                     node: Some(Some(ast::NodeId(node_id)))
                 }
             },
@@ -514,13 +515,13 @@ impl CaimanAssemblyParser {
 
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
-            [funclet_id] => {
+            [meta_name_hole(funclet_id)] => {
                 Some(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: None
                 })
             },
-            [funclet_id, name_hole(node_id)] => {
+            [meta_name_hole(funclet_id), name_hole(node_id)] => {
                 Some(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: Some(node_id.map(|n| ast::NodeId(n)))
@@ -566,6 +567,7 @@ impl CaimanAssemblyParser {
             [external_function(x)] => ast::Declaration::ExternalFunction(x),
             [funclet(x)] => ast::Declaration::Funclet(x),
             [function_class(x)] => ast::Declaration::FunctionClass(x),
+            [effect(x)] => ast::Declaration::Effect(x),
             [pipeline(x)] => ast::Declaration::Pipeline(x),
         ))
     }
@@ -930,6 +932,27 @@ impl CaimanAssemblyParser {
         )
     }
 
+    fn effect_args(input: Node) -> ParseResult<Vec<ast::ExternalFunctionId>> {
+        Ok(match_nodes!(input.into_children();
+            [name(args)..] => args.map(ast::ExternalFunctionId).collect()
+        ))
+    }
+
+    fn effect(input: Node) -> ParseResult<ast::EffectDeclaration> {
+        Ok(match_nodes!(input.into_children();
+            [name(name)] => ast::EffectDeclaration {
+                name: ast::EffectId(name),
+                effect: ast::Effect::Unrestricted
+            },
+            [effect_args(effectful_function_ids), name(name)] => ast::EffectDeclaration {
+                name: ast::EffectId(name),
+                effect: ast::Effect::FullyConnected {
+                    effectful_function_ids
+                }
+            }
+        ))
+    }
+
     // some duplication, but it's annoying to fix...
     fn schedule_box_value(input: Node) -> ParseResult<(MetaId, FuncletId)> {
         // the type is a bit of a lie here, but it reflects the AST better
@@ -1246,103 +1269,109 @@ impl CaimanAssemblyParser {
         input.as_str().parse::<String>().map_err(|e| input.error(e))
     }
 
-    fn constant_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn constant_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), name_sep(type_id), constant_value(value)] => (Some(name),
-                ast::Node::Constant {
+            [assign(name), name_sep(type_id), constant_value(value)] => ast::NamedNode {
+                name: Some(name),
+                node: ast::Node::Constant {
                     value: Some(value),
                     type_id: Some(ast::TypeId::Local(type_id))
                 }
-            )
+            }
         ))
     }
 
-    fn extract_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn extract_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), extract_sep, name(node_id), n(index)] => (Some(name),
-                ast::Node::ExtractResult {
+            [assign(name), extract_sep, name(node_id), n(index)] => ast::NamedNode {
+                name: Some(name),
+                node: ast::Node::ExtractResult {
                     node_id: Some(NodeId(node_id)),
                     index: Some(index)
                 }
-            )
+            }
         ))
     }
 
-    fn call_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn call_node(input: Node) -> ParseResult<ast::NamedNode> {
         // will split apart later
         Ok(match_nodes!(input.into_children();
             [assign(name), call_sep, function_class_name(external_function_id),
-                name_call(arguments)] => (Some(name),
-                    ast::Node::CallFunctionClass {
+                name_call(arguments)] => ast::NamedNode {
+                name: Some(name),
+                    node: ast::Node::CallFunctionClass {
                         function_id: Some(FunctionClassId(external_function_id)),
                         arguments
                     }
-                )
+                }
         ))
     }
 
-    fn select_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn select_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), select_sep, name_sep(condition),
-                name_sep(true_case), name(false_case)] => (Some(name),
-                    ast::Node::Select {
+                name_sep(true_case), name(false_case)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::Select {
                         condition: Some(NodeId(condition)),
                         true_case: Some(NodeId(true_case)),
                         false_case: Some(NodeId(false_case))
-
                     }
-                )
+                }
         ))
     }
 
-    fn encoding_event_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn encoding_event_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), encoding_event_sep, name_sep(local_past),
-                name_box(remote_local_pasts)] => (Some(name),
-                    ast::Node::EncodingEvent {
+                name_box(remote_local_pasts)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::EncodingEvent {
                         local_past: Some(NodeId(local_past)),
                         remote_local_pasts
-
                     }
-                )
+                }
         ))
     }
 
-    fn submission_event_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn submission_event_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), submission_event_sep, name(local_past)] => (Some(name),
-                    ast::Node::SubmissionEvent {
-                            local_past: Some(NodeId(local_past))
+            [assign(name), submission_event_sep, name(local_past)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::SubmissionEvent {
+                        local_past: Some(NodeId(local_past))
                     }
-                )
+                }
         ))
     }
 
-    fn synchronization_event_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn synchronization_event_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submission_event_sep, name_sep(local_past),
-                name(remote_local_past)] => (Some(name),
-                    ast::Node::SynchronizationEvent {
-                            local_past: Some(NodeId(local_past)),
-                            remote_local_past: Some(NodeId(remote_local_past))
+                name(remote_local_past)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::SynchronizationEvent {
+                        local_past: Some(NodeId(local_past)),
+                        remote_local_past: Some(NodeId(remote_local_past))
                     }
-                )
+                }
         ))
     }
 
-    fn separated_buffer_space_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn separated_buffer_space_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), separated_buffer_space_sep,
-                n_sep(count), name(space)] => (Some(name),
-                    ast::Node::SeparatedBufferSpaces {
-                            count: Some(count),
-                            space: Some(NodeId(space))
+                n_sep(count), name(space)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::SeparatedBufferSpaces {
+                        count: Some(count),
+                        space: Some(NodeId(space))
                     }
-                )
+                }
         ))
     }
 
-    fn alloc_temporary_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn alloc_temporary_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), alloc_temporary_sep, place_hole_sep(place),
                 buffer_flags(buffer_flags),
@@ -1354,30 +1383,31 @@ impl CaimanAssemblyParser {
                         storage_type,
                     }
                 }
-            )
-        )
-    }
-
-    fn drop_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
-        Ok(match_nodes!(input.into_children();
-            [name_hole(node)] => (None,
-                ast::Node::Drop {
-                    node: node.map(|s| NodeId(s))
-                }
-            )
         ))
     }
 
-    fn static_sub_alloc_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn drop_node(input: Node) -> ParseResult<ast::NamedNode> {
+        Ok(match_nodes!(input.into_children();
+            [name_hole(node)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::Drop {
+                        node: node.map(|s| NodeId(s))
+                    }
+                }
+        ))
+    }
+
+    fn static_sub_alloc_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), static_sub_alloc_sep, place_hole_sep(place),
-                ffi_type_hole_sep(storage_type), name_hole(node)] => (Some(name),
-                    ast::Node::StaticSubAlloc {
+                type_hole_sep(storage_type), name_hole(node)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::StaticSubAlloc {
                         node: node.map(|s| NodeId(s)),
                         place,
                         storage_type
                     }
-                )
+                }
         ))
     }
 
@@ -1393,8 +1423,7 @@ impl CaimanAssemblyParser {
                         spatial_operation
                     }
                 }
-            )
-        )
+        ))
     }
 
     fn static_merge_node(input: Node) -> ParseResult<ast::NamedNode> {
@@ -1408,167 +1437,178 @@ impl CaimanAssemblyParser {
                         spatial_operation
                     }
                 }
-            )
-        )
-    }
-
-    fn read_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
-        Ok(match_nodes!(input.into_children();
-            [assign(name), read_sep, ffi_type_hole_sep(storage_type),
-                name_hole(source)] => (Some(name),
-                    ast::Node::ReadRef {
-                        source: source.map(|s| NodeId(s)),
-                        storage_type
-                    }
-                )
         ))
     }
 
-    fn borrow_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn read_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [assign(name), borrow_sep, ffi_type_hole_sep(storage_type),
-                name_hole(source)] => (Some(name),
-                    ast::Node::BorrowRef {
+            [assign(name), read_sep, ffi_type_sep(storage_type),
+                name_hole(source)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::ReadRef {
                         source: source.map(|s| NodeId(s)),
-                        storage_type
+                        storage_type: Some(ast::TypeId::FFI(storage_type))
                     }
-                )
+                }
         ))
     }
 
-    fn write_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn borrow_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [write_sep, ffi_type_hole_sep(storage_type),
-                name_hole(source), name_hole(destination)] => (None,
-                    ast::Node::WriteRef {
+            [assign(name), borrow_sep, type_hole_sep(storage_type),
+                name_hole(source)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::BorrowRef {
+                        source: source.map(|s| NodeId(s)),
+                        storage_type
+                    }
+                }
+        ))
+    }
+
+    fn write_node(input: Node) -> ParseResult<ast::NamedNode> {
+        Ok(match_nodes!(input.into_children();
+            [write_sep, type_hole_sep(storage_type),
+                name_hole(source), name_hole(destination)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::WriteRef {
                         storage_type,
                         source: source.map(|s| NodeId(s)),
                         destination: destination.map(|s| NodeId(s))
                     }
-                )
+                }
         ))
     }
 
-    fn local_do_builtin_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn local_do_builtin_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [local_do_builtin_sep, quotient_hole(operation),
-                name_call(inputs), name_box_single(outputs)] => (None,
-                    ast::Node::LocalDoBuiltin {
+                name_call(inputs), name_box_single(outputs)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::LocalDoBuiltin {
                         operation,
                         inputs,
                         outputs
                     }
-                )
+                }
         ))
     }
 
-    fn local_do_external_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn local_do_external_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [local_do_external_sep, name_hole_sep(external_function_id),
                 quotient_hole(operation), name_call(inputs),
-                name_box_single(outputs)] => (None,
-                    ast::Node::LocalDoExternal {
+                name_box_single(outputs)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::LocalDoExternal {
                         external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
                         operation,
                         inputs,
                         outputs
                     }
-                )
+                }
         ))
     }
 
-    fn local_copy_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn local_copy_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [local_copy_sep, name_hole(input), name_hole(output)] => (None,
-                    ast::Node::LocalCopy {
+            [local_copy_sep, name_hole(input), name_hole(output)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::LocalCopy {
                         input: input.map(|s| NodeId(s)),
                         output: output.map(|s| NodeId(s))
                     }
-                )
+                }
         ))
     }
 
-    fn begin_encoding_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn begin_encoding_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), begin_encoding_sep, place_hole_sep(place),
                 quotient_hole(event), name_box(encoded),
-                name_box_single(fences)] => (Some(name),
-                    ast::Node::BeginEncoding {
+                name_box_single(fences)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::BeginEncoding {
                         place,
                         event,
                         encoded,
                         fences
                     }
-                )
+                }
         ))
     }
 
-    fn encode_do_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn encode_do_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [encode_do_sep, name_hole_sep(encoder), name_hole_sep(external_function_id),
                 quotient_hole(operation), name_call(inputs),
-                name_box_single(outputs)] => (None,
-                    ast::Node::EncodeDoExternal {
+                name_box_single(outputs)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::EncodeDoExternal {
                         encoder: encoder.map(|s| NodeId(s)),
                         external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
                         operation,
                         inputs,
                         outputs
                     }
-                )
+                }
         ))
     }
 
-    fn encode_copy_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn encode_copy_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [encode_copy_sep, name_hole_sep(encoder), name_hole(input),
-                name_hole(output)] => (None,
-                    ast::Node::EncodeCopy {
+                name_hole(output)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::EncodeCopy {
                         encoder: encoder.map(|s| NodeId(s)),
                         input: input.map(|s| NodeId(s)),
                         output: output.map(|s| NodeId(s))
                     }
-                )
+                }
         ))
     }
 
-    fn submit_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn submit_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), submit_sep, name_hole_sep(encoder),
-                quotient_hole(event)] => (Some(name),
-                    ast::Node::Submit {
+                quotient_hole(event)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::Submit {
                         encoder: encoder.map(|s| NodeId(s)),
                         event
                     }
-                )
+                }
         ))
     }
 
-    fn sync_fence_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn sync_fence_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
-            [sync_fence_sep, name_hole_sep(fence), quotient_hole(event)] => (None,
-                    ast::Node::SyncFence {
+            [sync_fence_sep, name_hole_sep(fence), quotient_hole(event)] => ast::NamedNode {
+                    name: None,
+                    node: ast::Node::SyncFence {
                         fence: fence.map(|s| NodeId(s)),
                         event
                     }
-                )
+                }
         ))
     }
 
-    fn inline_join_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn inline_join_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), inline_join_sep, name_hole_sep(funclet), name_box(captures),
-                name_hole(continuation)] => (Some(name),
-                    ast::Node::InlineJoin {
+                name_hole(continuation)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::InlineJoin {
                         funclet: funclet.map(|s| FuncletId(s)),
                         captures,
                         continuation: continuation.map(|s| NodeId(s)),
                     }
-                )
+                }
         ))
     }
 
-    fn serialized_join_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn serialized_join_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), serialized_join_sep, name_hole_sep(funclet),
                 name_box(captures), name_hole(continuation)] => ast::NamedNode {
@@ -1579,38 +1619,42 @@ impl CaimanAssemblyParser {
                         continuation: continuation.map(|s| NodeId(s)),
                     }
                 }
-            )
-        )
-    }
-
-    fn default_join_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
-        Ok(match_nodes!(input.into_children();
-            [assign(name)] => (Some(name), ast::Node::DefaultJoin{})
         ))
     }
 
-    fn promise_captures_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn default_join_node(input: Node) -> ParseResult<ast::NamedNode> {
+        Ok(match_nodes!(input.into_children();
+            [assign(name)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::DefaultJoin{}
+                }
+        ))
+    }
+
+    fn promise_captures_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), promise_captures_sep, n(count),
-                name_hole(continuation)] => (Some(name),
-                    ast::Node::PromiseCaptures {
+                name_hole(continuation)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::PromiseCaptures {
                         count: Some(count),
                         continuation: continuation.map(|s| NodeId(s))
                     }
-                )
+                }
         ))
     }
 
-    fn fulfill_captures_node(input: Node) -> ParseResult<(Option<NodeId>, ast::Node)> {
+    fn fulfill_captures_node(input: Node) -> ParseResult<ast::NamedNode> {
         Ok(match_nodes!(input.into_children();
             [assign(name), fulfill_captures_sep, name_hole_sep(continuation),
-                name_box(haves), name_box(needs)] => (Some(name),
-                    ast::Node::FulfillCaptures {
+                name_box(haves), name_box(needs)] => ast::NamedNode {
+                    name: Some(name),
+                    node: ast::Node::FulfillCaptures {
                         continuation: continuation.map(|s| NodeId(s)),
                         haves,
                         needs
                     }
-                )
+                }
         ))
     }
 
@@ -1668,10 +1712,20 @@ impl CaimanAssemblyParser {
         ))
     }
 
+    fn pipeline_effect(input: Node) -> ParseResult<ast::EffectId> {
+        Ok(match_nodes!(input.into_children();
+            [pipeline_effect_sep, name(name)] => ast::EffectId(name)
+        ))
+    }
+
     fn pipeline(input: Node) -> ParseResult<ast::Pipeline> {
         Ok(match_nodes!(input.into_children();
             [pipeline_sep, str(name), name(funclet)] => ast::Pipeline{
-                name, funclet: FuncletId(funclet)
+                name, funclet: FuncletId(funclet), effect: None
+            },
+            [pipeline_sep, str(name), name(funclet), pipeline_effect(effect)] => 
+            ast::Pipeline{
+                name, funclet: FuncletId(funclet), effect: Some(effect)
             }
         ))
     }

@@ -205,7 +205,7 @@ pub struct Funclet {
     pub spec_binding: FuncletSpecBinding,
     pub input_types: Box<[TypeId]>,
     pub output_types: Box<[TypeId]>,
-    pub nodes: Box<[Node]>,
+    pub nodes: Box<[Hole<Node>]>,
     pub tail_edge: Hole<TailEdge>,
 }
 

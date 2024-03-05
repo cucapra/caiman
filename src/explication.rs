@@ -1,29 +1,29 @@
-mod context;
-mod explicator;
-mod util;
+// mod context;
+// mod explicator;
+// mod util;
 pub mod expir;
 
 pub type Hole<T> = Option<T>;
 
-use context::{InState, StaticContext};
+// use context::{InState, StaticContext};
 
-fn explicate_funclets(context: StaticContext) -> StableVec<Funclet> {
-    context.program().declarations.iter().map(|decleration| match decleration {
-        expir::Funclet(funclet) => {
-            let state = InState::new(funclet.header.name.clone());
+// fn explicate_funclets(context: StaticContext) -> StableVec<Funclet> {
+//     context.program().declarations.iter().map(|decleration| match decleration {
+//         expir::Funclet(funclet) => {
+//             let state = InState::new(funclet.header.name.clone());
     
-            expir::Declaration::Funclet(
-                explicator::explicate_funclet(
-                    funclet.kind.clone(),
-                    funclet.header.clone(),
-                    state,
-                    &context,
-                )
-            )
-        },
-        d => d
-    }).collect()
-}
+//             expir::Declaration::Funclet(
+//                 explicator::explicate_funclet(
+//                     funclet.kind.clone(),
+//                     funclet.header.clone(),
+//                     state,
+//                     &context,
+//                 )
+//             )
+//         },
+//         d => d
+//     }).collect()
+// }
 
 // it's probably best to do the lowering pass like this,
 //   and simply guarantee there won't be any holes left over

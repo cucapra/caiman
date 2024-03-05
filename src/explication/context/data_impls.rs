@@ -1,5 +1,5 @@
 use super::*;
-use crate::assembly::explication::util::*;
+use crate::explication::util::*;
 
 impl InstantiatedNodes {
     pub fn new(specs: &SpecLanguages, remotes: Vec<RemoteNodeId>) -> InstantiatedNodes {

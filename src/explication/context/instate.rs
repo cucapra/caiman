@@ -1,5 +1,5 @@
 use super::*;
-use crate::assembly::explication::util::*;
+use crate::explication::util::*;
 
 impl InState {
     pub fn new(funclet: FuncletId) -> InState {

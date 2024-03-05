@@ -366,7 +366,6 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 callee_funclet_id: callee_funclet_id.map(|f| {
                     context
                         .funclet_id(&f)
-                        .expect(format!("Unknown funclet {:?}", f).as_str())
                 }),
                 callee_arguments: callee_arguments.map(|args| {
                     args.iter()
@@ -415,7 +414,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 spatial_operation: operation_set.spatial,
                 external_function_id: external_function_id
                     .as_ref()
-                    .map(|id| ffi::ExternalFunctionId(context.funclet_id(id))),
+                    .map(|id| ffi::ExternalFunctionId(context.external_funclet_id(id))),
                 yielded_nodes: yielded_nodes.map(|args| {
                     args.iter()
                         .map(|o| o.as_ref().map(|n| context.node_id(n)))
@@ -554,19 +553,19 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> expir::Funclet {
     }
 
     for command in &funclet.commands {
-        context.location.node_name = command.name.clone();
-        match &command.command {
-            ast::Command::Node(node) => {
-                nodes.push(ir_node(&node, context));
+        match command {
+            None => {
+                nodes.push(None)
             }
-            ast::Command::TailEdge(tail) => {
+            Some(ast::Command::Node(node)) => {
+                context.location.node_name = node.name.clone();
+                nodes.push(Some(ir_node(&node.node, context)));
+            }
+            Some(ast::Command::TailEdge(tail)) => {
                 if tail_edge.is_some() {
                     panic!("More than one tail edge in {:?}", funclet.header.name);
                 }
                 tail_edge = Some(ir_tail_edge(tail, context));
-            }
-            _ => {
-                unreachable!("Unresolved Hole {:?}", command);
             }
         }
     }
@@ -580,7 +579,7 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> expir::Funclet {
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         nodes: nodes.into_boxed_slice(),
-        tail_edge: tail_edge.unwrap(), // actually safe, oddly enough
+        tail_edge: tail_edge,
     }
 }
 

@@ -1,22 +1,24 @@
 use crate::explication::context::{InState, FuncletOutState, StaticContext};
 use crate::explication::util::*;
 use crate::ir::Place;
-use crate::{explication, assembly, frontend, ir};
+use crate::{explication, frontend, ir};
+use crate::explication::expir;
+use crate::explication::expir::{RemoteNodeId, NodeId, FuncletId};
 
-fn quotient_id(quot: &ast::Quotient) -> &Hole<RemoteNodeId> {
+fn quotient_id(quot: &expir::Quotient) -> &Hole<RemoteNodeId> {
     match quot {
-        ast::Quotient::None => &None,
-        ast::Quotient::Node(n) => n,
-        ast::Quotient::Input(n) => n,
-        ast::Quotient::Output(n) => n,
+        expir::Quotient::None => &None,
+        expir::Quotient::Node(n) => n,
+        expir::Quotient::Input(n) => n,
+        expir::Quotient::Output(n) => n,
     }
 }
 
-fn tag_quotient(tag: &ast::Tag) -> &Hole<RemoteNodeId> {
+fn tag_quotient(tag: &expir::Tag) -> &Hole<RemoteNodeId> {
     quotient_id(&tag.quot)
 }
 
-fn read_phi_node(location: &Location, index: usize, context: &mut Context) -> ast::Node {
+fn read_phi_node(location: &Location, index: usize, context: &mut Context) -> expir::Node {
     let current_funclet = context.get_funclet(&location.funclet);
     let argument = current_funclet.header.args.get(index).unwrap_or_else(|| {
         panic!(
@@ -34,7 +36,7 @@ fn read_phi_node(location: &Location, index: usize, context: &mut Context) -> as
     }
     let place = context.get_type_place(&argument.typ);
     context.add_instantiation(location.node.clone(), remotes, place.cloned());
-    ast::Node::Phi { index: Some(index) }
+    expir::Node::Phi { index: Some(index) }
 }
 
 // the function that handles "ok, I have an output, now figure out how to get there"
@@ -71,11 +73,11 @@ fn deduce_operation(
 
 fn explicate_local_do_builtin(
     location: &Location,
-    og_operation: Hole<ast::Quotient>,
+    og_operation: Hole<expir::Quotient>,
     og_inputs: Hole<Vec<Hole<NodeId>>>,
     og_outputs: Hole<Vec<Hole<NodeId>>>,
     context: &mut Context,
-) -> ast::Node {
+) -> expir::Node {
     let mut available = false;
 
     let deduced_op = match og_operation {
@@ -122,7 +124,7 @@ fn explicate_local_do_builtin(
     if available {
         context.add_available_operation(location.node.clone(), OpCode::LocalDoBuiltin);
     }
-    let operation = Some(ast::Quotient::Node(Some(deduced_op)));
+    let operation = Some(expir::Quotient::Node(Some(deduced_op)));
 }
 
 fn explicate_hold(state: InState, context: &Context) {}
@@ -133,72 +135,72 @@ fn explicate_hold(state: InState, context: &Context) {}
 fn explicate_node(location: Location, context: &mut Context) {
     let current = context.extract_node(&location.funclet, &location.node);
     let result = match current {
-        ast::Node::Phi { index } => read_phi_node(&location, index.unwrap(), context),
-        ast::Node::AllocTemporary { .. } => {
+        expir::Node::Phi { index } => read_phi_node(&location, index.unwrap(), context),
+        expir::Node::AllocTemporary { .. } => {
             context.add_available_operation(location.node.clone(), OpCode::AllocTemporary);
             current
         }
-        ast::Node::Drop { .. } => {
+        expir::Node::Drop { .. } => {
             todo!()
         }
-        ast::Node::StaticSubAlloc { .. } => {
+        expir::Node::StaticSubAlloc { .. } => {
             todo!()
         }
-        ast::Node::StaticAlloc { .. } => {
+        expir::Node::StaticAlloc { .. } => {
             todo!()
         }
-        ast::Node::StaticDealloc { .. } => {
+        expir::Node::StaticDealloc { .. } => {
             todo!()
         }
-        ast::Node::ReadRef { .. } => {
+        expir::Node::ReadRef { .. } => {
             // dbg!(&context.program());
             todo!()
         }
-        ast::Node::BorrowRef { .. } => {
+        expir::Node::BorrowRef { .. } => {
             todo!()
         }
-        ast::Node::WriteRef { .. } => {
+        expir::Node::WriteRef { .. } => {
             todo!()
         }
-        ast::Node::LocalDoBuiltin {
+        expir::Node::LocalDoBuiltin {
             operation,
             inputs,
             outputs,
         } => explicate_local_do_builtin(&location, operation, inputs, outputs, context),
-        ast::Node::LocalDoExternal { .. } => {
+        expir::Node::LocalDoExternal { .. } => {
             todo!()
         }
-        ast::Node::LocalCopy { .. } => {
+        expir::Node::LocalCopy { .. } => {
             todo!()
         }
-        ast::Node::BeginEncoding { .. } => {
+        expir::Node::BeginEncoding { .. } => {
             todo!()
         }
-        ast::Node::EncodeDoExternal { .. } => {
+        expir::Node::EncodeDoExternal { .. } => {
             todo!()
         }
-        ast::Node::EncodeCopy { .. } => {
+        expir::Node::EncodeCopy { .. } => {
             todo!()
         }
-        ast::Node::Submit { .. } => {
+        expir::Node::Submit { .. } => {
             todo!()
         }
-        ast::Node::SyncFence { .. } => {
+        expir::Node::SyncFence { .. } => {
             todo!()
         }
-        ast::Node::InlineJoin { .. } => {
+        expir::Node::InlineJoin { .. } => {
             todo!()
         }
-        ast::Node::SerializedJoin { .. } => {
+        expir::Node::SerializedJoin { .. } => {
             todo!()
         }
-        ast::Node::DefaultJoin => {
+        expir::Node::DefaultJoin => {
             todo!()
         }
-        ast::Node::PromiseCaptures { .. } => {
+        expir::Node::PromiseCaptures { .. } => {
             todo!()
         }
-        ast::Node::FulfillCaptures { .. } => {
+        expir::Node::FulfillCaptures { .. } => {
             todo!()
         }
         _ => unreachable!("Unsupported node for explication {:?}", location),
@@ -212,12 +214,12 @@ fn explicate_tail_edge(state: InState, context: &Context) -> FuncletOutState {
             todo!()
         }
         Some(tail_edge) => match tail_edge {
-            ast::TailEdge::DebugHole { .. } => {}
-            ast::TailEdge::Return { .. } => {}
-            ast::TailEdge::Jump { .. } => {}
-            ast::TailEdge::ScheduleCall { .. } => {}
-            ast::TailEdge::ScheduleSelect { .. } => {}
-            ast::TailEdge::ScheduleCallYield { .. } => {}
+            expir::TailEdge::DebugHole { .. } => {}
+            expir::TailEdge::Return { .. } => {}
+            expir::TailEdge::Jump { .. } => {}
+            expir::TailEdge::ScheduleCall { .. } => {}
+            expir::TailEdge::ScheduleSelect { .. } => {}
+            expir::TailEdge::ScheduleCallYield { .. } => {}
         },
     }
     todo!()
@@ -225,14 +227,14 @@ fn explicate_tail_edge(state: InState, context: &Context) -> FuncletOutState {
 
 fn explicate_command(mut state: InState, context: &StaticContext) -> Option<FuncletOutState> {
     match context.get_command(&state.funclet, &location.node) {
-        ast::Command::Hole => {
+        expir::Command::Hole => {
             state.add_explication_hole();
             state.get_latest_scope_mut().advance_node();
             explicate_command(state, context)
         }
-        ast::Command::Node(n) => explicate_node(state, context),
-        ast::Command::TailEdge(_) => explicate_tail_edge(state, context),
-        ast::Command::ExplicationHole => {
+        expir::Command::Node(n) => explicate_node(state, context),
+        expir::Command::TailEdge(_) => explicate_tail_edge(state, context),
+        expir::Command::ExplicationHole => {
             unreachable!("Should not be attempting to explicate an explication hole as a command")
         }
     }
@@ -240,10 +242,10 @@ fn explicate_command(mut state: InState, context: &StaticContext) -> Option<Func
 
 pub fn explicate_funclet(
     kind: ir::FuncletKind,
-    header: ast::FuncletHeader,
+    header: expir::FuncletHeader,
     state: InState,
     context: &StaticContext,
-) -> ast::Funclet {
+) -> expir::Funclet {
     match explicate_command(state, context) {
         None => panic!(
             "No explication solution found for {:?}",
@@ -251,7 +253,7 @@ pub fn explicate_funclet(
         ),
         Some(result) =>  {
             assert!(!result.has_fills_remaining());
-            ast::Funclet {
+            expir::Funclet {
             kind,
             header,
             commands: result.drain_commands(),

@@ -192,7 +192,7 @@ impl Context {
                         match &arg.name {
                             None => {}
                             Some(name) => {
-                                var_map.insert(name.clone(), ir::Quotient::Input { index });
+                                var_map.insert(name.clone(), expir::Quotient::Input { index });
                             }
                         };
                     }
@@ -326,10 +326,17 @@ impl Context {
         let error = "Holes in operational lists unsupported";
         for operation in operations {
             let unwrapped = operation.as_ref().unwrap_or_else(|| panic!(error));
-            let (fnid, kind) = self.meta_lookup_loc(&remote.funclet);
-            let quot = unwrapped
-                .quot
-                .map(|q| q.node.map(|o| self.explicit_node_id(&fnid, &o.node)));
+            let remote = unwrapped.quot.as_ref().unwrap_or_else(|| panic!(error));
+            let (fnid, kind) =
+                self.meta_lookup_loc(&remote.funclet);
+            let quot = self.explicit_node_id(
+                &fnid,
+                &remote
+                    .node
+                    .as_ref()
+                    .cloned()
+                    .map(|n| n.unwrap_or_else(|| panic!(error))),
+            );
             let tag = Some(expir::Tag {
                 quot,
                 flow: unwrapped.flow.clone(),
@@ -392,7 +399,7 @@ impl Context {
                     Some(ast::Tag {
                         quot: quot.clone(),
                         // the dumb part, this doesn't matter
-                        flow: expir::Flow::Dead,
+                        flow: None,
                     })
                 });
                 let result = self.tag_lookup(&tags.collect());
@@ -405,7 +412,7 @@ impl Context {
         }
     }
 
-    fn meta_lookup_loc(&self, meta: &MetaId) -> (FuncletId, ir::FuncletKind) {
+    fn meta_lookup_loc(&self, meta: &MetaId) -> (FuncletId, expir::FuncletKind) {
         let error = format!("{} doesn't have a meta map", &self.location.funclet_name);
         let mapping = self.meta_map.as_ref().unwrap_or_else(|| panic!(error));
         if mapping.value.0 == *meta {
