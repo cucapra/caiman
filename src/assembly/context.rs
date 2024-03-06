@@ -202,14 +202,6 @@ impl Context {
                     let mut node_id = 0; // used for skipping tail edges
                     for command in f.commands.iter() {
                         match command {
-                            // ignore phi nodes cause they get handled by the header above
-                            // really they shouldn't be in here I suppose
-                            Some(ast::Command::Node(ast::NamedNode {
-                                node: ast::Node::Phi { index },
-                                name,
-                            })) => {
-                                node_id += 1;
-                            }
                             Some(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
@@ -217,7 +209,9 @@ impl Context {
                                 match name {
                                     None => {}
                                     Some(n) => {
-                                        var_map.insert(n.clone(), ir::Quotient::Node { node_id });
+                                        if (n.0 != "_") {
+                                            var_map.insert(n.clone(), ir::Quotient::Node { node_id });
+                                        }
                                     }
                                 }
 

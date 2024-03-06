@@ -988,11 +988,25 @@ impl CaimanAssemblyParser {
     }
 
     fn funclet(input: Node) -> ParseResult<ast::Funclet> {
+        fn add_phi_nodes(mut funclet: ast::Funclet) -> ast::Funclet {
+            let mut index = 0;
+            for input in funclet.header.args.iter() {
+                funclet.commands.insert(
+                    index,
+                    Some(ast::Command::Node(ast::NamedNode {
+                        name: None,
+                        node: ast::Node::Phi { index: Some(index) },
+                    })),
+                );
+                index += 1;
+            }
+            funclet
+        }
         Ok(match_nodes!(input.into_children();
-            [value_funclet(funclet)] => funclet,
-            [timeline_funclet(funclet)] => funclet,
-            [spatial_sep, spatial_funclet(funclet)] => funclet,
-            [schedule_funclet(funclet)] => funclet,
+            [value_funclet(funclet)] => add_phi_nodes(funclet),
+            [timeline_funclet(funclet)] => add_phi_nodes(funclet),
+            [spatial_sep, spatial_funclet(funclet)] => add_phi_nodes(funclet),
+            [schedule_funclet(funclet)] => add_phi_nodes(funclet),
         ))
     }
 

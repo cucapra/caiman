@@ -262,7 +262,7 @@ fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::Na
     ffi::NativeInterface {
         types,
         external_functions,
-        effects
+        effects,
     }
 }
 
