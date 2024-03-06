@@ -558,7 +558,7 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv) {
         assert!(old_spec_var.is_none() || old_spec_var.unwrap() == &node);
         tag.value = Some(Tag {
             info: info.unwrap_or_default(),
-            quot: quot.unwrap(),
+            quot: quot.unwrap_or(Quotient::Some),
             quot_var: Some(QuotientReference {
                 spec_var: Some(node),
                 spec_type: SpecType::Value,

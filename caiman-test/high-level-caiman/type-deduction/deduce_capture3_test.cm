@@ -28,14 +28,14 @@ feq add_three {
     }
 }
 
-fn add1_impl(a: i64, b: i64, c: i64) -> i64 @ output(add1.t2) impls add1, time, space
+fn add1_impl(a: i64, b: i64, c: i64) -> i64 @ output(val.t2) impls add1, time, space
 {
     let t = a + b;
     let p = t + c;
     p
 }
 
-fn add2_impl(a: i64, b: i64, c: i64) -> i64 @ output(add2.t2) impls add2, time, space
+fn add2_impl(a: i64, b: i64, c: i64) -> i64 @ output(val.t2) impls add2, time, space
 {
     let t = b + c;
     let p = a + t;
@@ -43,7 +43,7 @@ fn add2_impl(a: i64, b: i64, c: i64) -> i64 @ output(add2.t2) impls add2, time, 
 }
 
 
-fn main_impl() -> i64 @ node(main.r)
+fn main_impl() -> i64 @ node(val.r)
     impls main, time, space
 {
     let a = 3;

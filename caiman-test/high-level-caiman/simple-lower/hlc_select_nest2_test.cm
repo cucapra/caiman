@@ -26,32 +26,32 @@ val main() -> i64 {
     returns z
 }
 
-fn foo() -> i64 @ node(main.z)-usable 
+fn foo() -> i64 @ node(val.z)-usable 
     impls main, time, space
 {
-    let d: bool @ node(main.d) = false;
-    let pass: i64 @ node(main.pass) = 10;
-    let v: i64 @ node(main.z) = if @ node(main.z) d {
-        let b: bool @ node(main.b) = true;
-        let r: i64 @ node(main.left) = if @ node(main.left) b {
-            let one: i64 @ node(main.one) = 1;
-            let ll: i64 @ node(main.ll) = one + pass;
+    let d: bool @ node(val.d) = false;
+    let pass: i64 @ node(val.pass) = 10;
+    let v: i64 @ node(val.z) = if @ node(val.z) d {
+        let b: bool @ node(val.b) = true;
+        let r: i64 @ node(val.left) = if @ node(val.left) b {
+            let one: i64 @ node(val.one) = 1;
+            let ll: i64 @ node(val.ll) = one + pass;
             ll
         } else {
-            let two: i64 @ node(main.two) = 2;
-            let lr: i64 @ node(main.lr) = two + pass;
+            let two: i64 @ node(val.two) = 2;
+            let lr: i64 @ node(val.lr) = two + pass;
             lr
         };
         r
     } else {
-        let c: bool @ node(main.c) = false;
-        let r: i64 @ node(main.right) = if @ node(main.right) c {
-            let three: i64 @ node(main.three) = 3;
-            let rl: i64 @ node(main.rl) = three + pass;
+        let c: bool @ node(val.c) = false;
+        let r: i64 @ node(val.right) = if @ node(val.right) c {
+            let three: i64 @ node(val.three) = 3;
+            let rl: i64 @ node(val.rl) = three + pass;
             rl
         } else {
-            let four: i64 @ node(main.four) = 4;
-            let rr: i64 @ node(main.rr) = four + pass;
+            let four: i64 @ node(val.four) = 4;
+            let rr: i64 @ node(val.rr) = four + pass;
             rr
         };
         r    

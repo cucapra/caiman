@@ -13,14 +13,14 @@ val main() -> i64 {
     returns n3
 }
 
-fn main_impl() -> i64 @ node(main.n3)-usable
+fn main_impl() -> i64 @ node(val.n3)-usable
     impls main, time, space
 {
-    let a: i64 @ node(main.x) = 3;
-    let b: i64 @ node(main.y) = 2;
-    let c: i64 @ node(main.n1) = a + b;
-    let d: i64 @ node(main.n2) = a + c;
-    let e: i64 @ node(main.n3) = c + d;
+    let a: i64 @ node(val.x) = 3;
+    let b: i64 @ node(val.y) = 2;
+    let c: i64 @ node(val.n1) = a + b;
+    let d: i64 @ node(val.n2) = a + c;
+    let e: i64 @ node(val.n3) = c + d;
     e
 }
 

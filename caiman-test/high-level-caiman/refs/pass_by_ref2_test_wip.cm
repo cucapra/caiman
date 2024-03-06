@@ -28,7 +28,7 @@ fn id_func(a: i64) -> i64
     a
 }
 
-fn one_func(a: &i64 @ [input(one.a)-usable, none(space)-save, none(time)-usable]) -> i64 
+fn one_func(a: &i64 @ [input(val.a)-usable, none(sptl)-saved, none(tmln)-usable]) -> i64 
     impls one, time, space
 {
     1

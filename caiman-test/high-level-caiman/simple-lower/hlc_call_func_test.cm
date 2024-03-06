@@ -13,13 +13,13 @@ val id(a: i64) -> i64 {
     returns a
 }
 
-fn main_func() -> i64 @ node(main.r)-usable impls main, time, space  {
-    let c: i64 @ node(main.c)-usable = 1;
-    let r: i64 @ node(main.r)-usable = id_func(c) @ node(main.r);
+fn main_func() -> i64 @ node(val.r)-usable impls main, time, space  {
+    let c: i64 @ node(val.c)-usable = 1;
+    let r: i64 @ node(val.r)-usable = id_func(c) @ node(val.r);
     r
 }
 
-fn id_func(a: i64 @ input(id.a)-usable) -> i64 @ output(id.a)-usable  
+fn id_func(a: i64 @ input(val.a)-usable) -> i64 @ output(val.a)-usable  
     impls id, time, space
 {
     a

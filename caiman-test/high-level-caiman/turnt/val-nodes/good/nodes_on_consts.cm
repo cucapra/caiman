@@ -12,19 +12,19 @@ val main() -> i64 {
     returns r
 }
 
-fn foo() -> i64 @ node(main.r)-usable 
+fn foo() -> i64 @ node(val.r)-usable 
     impls main, time, space
 {
-    let b @ main-? = false @ node(main.b);
-    var v @ none(main);
-    if @ node(main.r) b {
-        let one @ main-? = 1 @ node(main.one);
+    let b @ main-? = false @ node(val.b);
+    var v @ none(val);
+    if @ node(val.r) b {
+        let one @ main-? = 1 @ node(val.one);
         v = one;
     } else {
-        let two @ main-? = 2 @ node(main.two);
+        let two @ main-? = 2 @ node(val.two);
         v = two;
     }
-    @in { v: [node(main.r)-usable, none(space)-save] };
+    @in { v: [node(val.r)-usable, none(sptl)-saved] };
     v
 }
 

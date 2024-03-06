@@ -15,37 +15,37 @@ val main() -> i64 {
     returns z
 }
 
-fn foo() -> i64 @ node(main.z)-usable 
+fn foo() -> i64 @ node(val.z)-usable 
     impls main, time, space
 {
-    let b: bool @ node(main.b)-usable = false;
-    var v: i64 @ none(main)-dead;
-    if @ node(main.r)-? b {
-        var r: bool @ none(main)-dead;
-        let c: bool @ node(main.c)-usable = true;
-        r @ node(main.r)-usable = c;
-        if @ node(main.z)-? r {
-            let two: i64 @ node(main.two)-usable = 2;
+    let b: bool @ node(val.b)-usable = false;
+    var v: i64 @ none(val)-dead;
+    if @ node(val.r)-? b {
+        var r: bool @ none(val)-dead;
+        let c: bool @ node(val.c)-usable = true;
+        r @ node(val.r)-usable = c;
+        if @ node(val.z)-? r {
+            let two: i64 @ node(val.two)-usable = 2;
             v = two;
         } else {
-            let one: i64 @ node(main.one)-usable = 1;
+            let one: i64 @ node(val.one)-usable = 1;
             v = one;
         }
-        @in { v: [node(main.z)-usable, none(space)-saved] };
-        @out { v: [node(main.z)-usable, none(space)-saved] };
+        @in { v: [node(val.z)-usable, none(sptl)-saved] };
+        @out { v: [node(val.z)-usable, none(sptl)-saved] };
     } else {
-        var r: bool @ none(main)-dead;
-        let d: bool @ node(main.d)-usable = false;
-        r @ node(main.r)-usable = d;
-        if @ node(main.z)-? r {
-            let two: i64 @ node(main.two)-usable = 2;
+        var r: bool @ none(val)-dead;
+        let d: bool @ node(val.d)-usable = false;
+        r @ node(val.r)-usable = d;
+        if @ node(val.z)-? r {
+            let two: i64 @ node(val.two)-usable = 2;
             v = two;
         } else {
-            let one: i64 @ node(main.one)-usable = 1;
+            let one: i64 @ node(val.one)-usable = 1;
             v = one;
         }
-        @in { v: [node(main.z)-usable, none(space)-saved] };
-        @out { v: [node(main.z)-usable, none(space)-saved] };
+        @in { v: [node(val.z)-usable, none(sptl)-saved] };
+        @out { v: [node(val.z)-usable, none(sptl)-saved] };
     }
     v
 }

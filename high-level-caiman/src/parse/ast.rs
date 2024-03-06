@@ -252,7 +252,7 @@ pub enum SpecType {
 
 impl SpecType {
     #[must_use]
-    pub fn get_meta_id(&self) -> caiman::assembly::ast::MetaId {
+    pub fn get_meta_id(self) -> caiman::assembly::ast::MetaId {
         use caiman::assembly::ast::MetaId;
         match self {
             Self::Value => MetaId("val".to_string()),

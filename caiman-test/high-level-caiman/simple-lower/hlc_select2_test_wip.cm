@@ -12,21 +12,21 @@ val main() -> i64 {
     returns r
 }
 
-fn foo() -> i64 @ node(main.r)-usable 
+fn foo() -> i64 @ node(val.r)-usable 
     impls main, time, space
 {
-    let b: bool @ node(main.b)-usable = true;
-    let one: i64 @ node(main.one)-usable = 1;
-    let two: i64 @ node(main.two)-usable = 2;
-    var v: i64 @ none(main);
+    let b: bool @ node(val.b)-usable = true;
+    let one: i64 @ node(val.one)-usable = 1;
+    let two: i64 @ node(val.two)-usable = 2;
+    var v: i64 @ none(val);
     
     // Need to use serialized-join, but that doesn't work with temporaries
-    if @ node(main.r) b {
+    if @ node(val.r) b {
         v = one;
     } else {
         v = two;
     }
-    @in { v: [node(main.r)-usable, none(space)-saved] };
+    @in { v: [node(val.r)-usable, none(sptl)-saved] };
     v
 }
 

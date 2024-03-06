@@ -18,31 +18,31 @@ val main() -> i64 {
     returns z
 }
 
-fn foo() -> i64 @ node(main.z)-usable 
+fn foo() -> i64 @ node(val.z)-usable 
     impls main, time, space
 {
-    let d: bool @ node(main.d) = false;
-    var v: i64 @ none(main)-dead;
-    if @ node(main.z) d {
-        let b: bool @ node(main.b) = true;
-        let two: i64 @ node(main.two) = 2;
+    let d: bool @ node(val.d) = false;
+    var v: i64 @ none(val)-dead;
+    if @ node(val.z) d {
+        let b: bool @ node(val.b) = true;
+        let two: i64 @ node(val.two) = 2;
         v = two;
-        if @ node(main.left) b {
-            let one: i64 @ node(main.one) = 1;
+        if @ node(val.left) b {
+            let one: i64 @ node(val.one) = 1;
             v = one;
         }
-        @in { v: [node(main.left)-usable, none(space)-saved] };
+        @in { v: [node(val.left)-usable, none(sptl)-saved] };
     } else {
-        let c: bool @ node(main.c) = false;
-        let four: i64 @ node(main.four) = 4;
+        let c: bool @ node(val.c) = false;
+        let four: i64 @ node(val.four) = 4;
         v = four;
-        if @ node(main.right) c {
-            let three: i64 @ node(main.three) = 3;
+        if @ node(val.right) c {
+            let three: i64 @ node(val.three) = 3;
             v = three;
         }
-        @in { v: [node(main.right)-usable, none(space)-saved] };
+        @in { v: [node(val.right)-usable, none(sptl)-saved] };
     }
-    @in { v: [node(main.z)-usable, none(space)-saved] };
+    @in { v: [node(val.z)-usable, none(sptl)-saved] };
     v
 }
 

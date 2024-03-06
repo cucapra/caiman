@@ -19,27 +19,27 @@ val main() -> i64 {
     returns k
 }
 
-fn main_impl() -> i64 @ node(main.k)-usable
+fn main_impl() -> i64 @ node(val.k)-usable
     impls main, time, space
 {
-    let a: i64 @ node(main.a) = 2;
-    let c: i64 @ node(main.c) = 10;
-    let b: i64 @ node(main.b) = a & c;
-    let d: i64 @ node(main.d) = b << a;
-    let e: i64 @ node(main.e) = 8;
-    let cond1: bool @ node(main.cond1) = d == e;
-    let f: bool @ node(main.f) = false;
-    let cond2: bool @ node(main.cond2) = cond1 == f;
+    let a: i64 @ node(val.a) = 2;
+    let c: i64 @ node(val.c) = 10;
+    let b: i64 @ node(val.b) = a & c;
+    let d: i64 @ node(val.d) = b << a;
+    let e: i64 @ node(val.e) = 8;
+    let cond1: bool @ node(val.cond1) = d == e;
+    let f: bool @ node(val.f) = false;
+    let cond2: bool @ node(val.cond2) = cond1 == f;
 
-    var k: i64 @ none(main)-dead;
-    if @ node(main.k) cond2 {
-        let g: i64 @ node(main.g) = 1;
+    var k: i64 @ none(val)-dead;
+    if @ node(val.k) cond2 {
+        let g: i64 @ node(val.g) = 1;
         k = g;
     } else {
-        let e2: i64 @ node(main.e) = 8;
+        let e2: i64 @ node(val.e) = 8;
         k = e2;
     }
-    @in { k: [node(main.k)-usable, none(space)-saved] };
+    @in { k: [node(val.k)-usable, none(sptl)-saved] };
     k
     
 }

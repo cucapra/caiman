@@ -12,7 +12,7 @@ val main() -> i64 {
     returns r
 }
 
-fn foo() -> i64 @ node(main.r)
+fn foo() -> i64 @ node(val.r)
     impls main, time, space
 {
     let b = false;

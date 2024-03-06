@@ -7,7 +7,7 @@ fn foo(a: gint'<map_write> @ ?(?)-?,
        -> i32'<storage, map_write>
         impls v, tm, sp
 {
-    let x: i32'<map_read> @ node(v.x)-? = 10 + 20 @ node(v.z)-? * call'<10, 30>(c) @ node(v.y)-?;
+    let x: i32'<map_read> @ node(val.x)-? = 10 + 20 @ node(val.z)-? * call'<10, 30>(c) @ node(val.y)-?;
     let y = call'<c * c, c + c>(b, b, c);
     let f = [call(10 + 10), foo'<c>(20 * 20)];
 }

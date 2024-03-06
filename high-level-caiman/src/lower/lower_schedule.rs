@@ -475,12 +475,28 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
             },
         })),
         Hole::Filled(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
-            operations: Hole::Filled(vec![Hole::Filled(
-                tags.value
-                    .as_ref()
-                    .map(tag_to_remote_id)
-                    .expect("Selects need a value node"),
-            )]),
+            operations: Hole::Filled(vec![
+                Hole::Filled(
+                    tags.value
+                        .as_ref()
+                        .map(tag_to_remote_id)
+                        .expect("Selects need a value node"),
+                ),
+                Hole::Filled(tags.spatial.as_ref().map_or_else(
+                    || asm::RemoteNodeId {
+                        node: None,
+                        funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                    },
+                    tag_to_remote_id,
+                )),
+                Hole::Filled(tags.timeline.as_ref().map_or_else(
+                    || asm::RemoteNodeId {
+                        node: None,
+                        funclet: Hole::Filled(SpecType::Timeline.get_meta_id()),
+                    },
+                    tag_to_remote_id,
+                )),
+            ]),
             condition: Hole::Filled(asm::NodeId(guard_name.to_string())),
             callee_funclet_ids: Hole::Filled(f.next_blocks()),
             callee_arguments: Hole::Filled(f.output_args()),

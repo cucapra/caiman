@@ -30,7 +30,7 @@ tmln foo_time(e: Event) -> Event {
 fn foo_main(x: i32) -> i32 
     impls foo, foo_time, foo_space
 {
-    let c : i32'<storage> = 1 @ [node(foo.c)-?];
+    let c : i32'<storage> = 1 @ [node(val.c)-?];
     let e = new_gpu_encoder();
     e.encode_cpy[x_gpu <- x];
     e.encode[y_gpu <- simple'<c, c, c>(x_gpu)];

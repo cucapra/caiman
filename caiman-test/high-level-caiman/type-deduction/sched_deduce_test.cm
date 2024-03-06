@@ -14,16 +14,16 @@ val main() -> i32 {
     returns k
 }
 
-fn main_impl() -> i32 @ node(main.k)-usable
+fn main_impl() -> i32 @ node(val.k)-usable
     impls main, time, space
 {
-    let a @ node(main.a) = 2;
-    let c @ node(main.c) = 10;
-    let b @ node(main.b) = a * c;
-    let d @ node(main.d) = b + a;
-    let e @ node(main.e) = d - c;
-    let t @ node(main.t) = 3;
-    let k @ node(main.k) = e / t;
+    let a @ node(val.a) = 2;
+    let c @ node(val.c) = 10;
+    let b @ node(val.b) = a * c;
+    let d @ node(val.d) = b + a;
+    let e @ node(val.e) = d - c;
+    let t @ node(val.t) = 3;
+    let k @ node(val.k) = e / t;
     k
     
 }

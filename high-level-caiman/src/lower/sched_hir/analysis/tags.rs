@@ -116,7 +116,7 @@ impl TagInfo {
             }),
             timeline: self
                 .timeline
-                .or_else(|| Some(none_tag(SpecType::Value, ir::Flow::Usable))),
+                .or_else(|| Some(none_tag(SpecType::Timeline, ir::Flow::Usable))),
         }
     }
 

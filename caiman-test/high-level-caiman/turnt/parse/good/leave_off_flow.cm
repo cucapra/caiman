@@ -1,9 +1,9 @@
 #version 0.1.0
 
-fn main(a: i64 @ node(main.f)) -> i64 @ output(main.g) 
+fn main(a: i64 @ node(val.f)) -> i64 @ output(val.g) 
     impls main, time, space
 {
-    if @ node(main.r) true {
-        let g = foo() @ node(main.c);
+    if @ node(val.r) true {
+        let g = foo() @ node(val.c);
     }
 }

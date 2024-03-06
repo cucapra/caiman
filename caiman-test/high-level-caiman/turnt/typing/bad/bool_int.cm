@@ -11,16 +11,16 @@ val main() -> i64 {
     returns r
 }
 
-fn main_impl() -> i64 @ node(main.r)-usable
+fn main_impl() -> i64 @ node(val.r)-usable
     impls main, time, space
 {
-    let a @ node(main.a) = 2;
-    var v @ none(main);
-    if @ node(main.r) a {
-        let b @ node(main.b) = 1;
+    let a @ node(val.a) = 2;
+    var v @ none(val);
+    if @ node(val.r) a {
+        let b @ node(val.b) = 1;
         v = b;
     } else {
-        let c @ node(main.c) = 3;
+        let c @ node(val.c) = 3;
         v = c;
     }
     v
