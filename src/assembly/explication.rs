@@ -13,5 +13,5 @@ use context::Context;
 //   but debugging explication is gonna be even harder without names...
 pub fn explicate(mut program: &mut ast::Program) {
     let mut context = Context::new(&mut program);
-    context.corrections();
+    // context.corrections();
 }
