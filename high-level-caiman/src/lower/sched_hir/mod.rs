@@ -15,7 +15,7 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-use caiman::assembly::ast::{self as asm, RemoteNodeId};
+use caiman::assembly::ast::{self as asm};
 
 use self::{
     analysis::{
@@ -31,10 +31,6 @@ mod analysis;
 mod test;
 
 pub use analysis::RET_VAR;
-
-pub const META_VALUE : &str = "_VALUE";
-pub const META_TIMELINE : &str = "_TIMELINE";
-pub const META_SPATIAL : &str = "_SPATIAL";
 
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,10 +90,10 @@ impl<'a> Funclet<'a> {
                     .map(|id| asm::FuncletId(self.parent.funclet_name(id)));
                 let mut res = vec![];
                 if let Some(true_block) = e.next() {
-                    res.push(Some(true_block));
+                    res.push(Hole::Filled(true_block));
                 }
                 if let Some(false_block) = e.next() {
-                    res.push(Some(false_block));
+                    res.push(Hole::Filled(false_block));
                 }
                 assert_eq!(res.len(), 2);
                 res
@@ -112,7 +108,7 @@ impl<'a> Funclet<'a> {
                     .cfg
                     .successors(self.block.id)
                     .into_iter()
-                    .map(|id| Some(asm::FuncletId(self.parent.funclet_name(id))));
+                    .map(|id| Hole::Filled(asm::FuncletId(self.parent.funclet_name(id))));
                 let res: Vec<_> = e.collect();
                 assert!(res.len() <= 1);
                 res
@@ -324,7 +320,7 @@ impl<'a> Funclet<'a> {
             .iter()
             .cloned()
             .map(asm::NodeId)
-            .map(Some)
+            .map(Hole::Filled)
             .collect()
     }
 
@@ -391,8 +387,8 @@ impl<'a> Funclet<'a> {
     }
 
     /// Returns true if the specified tag is a literal node in the value specification
-    pub fn is_literal_value(&self, remote: &RemoteNodeId) -> bool {
-        remote.node.as_ref().map_or(false, |n| {
+    pub fn is_literal_value(&self, t: &asm::RemoteNodeId) -> bool {
+        t.node.as_ref().map_or(false, |n| {
             n.as_ref()
                 .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
         })
@@ -467,7 +463,7 @@ impl Funclets {
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
-        let mut cfg = Cfg::new(f.statements, &f.output, specs);
+        let mut cfg = Cfg::new(f.statements, &f.output);
         let (mut types, mut data_types, variables) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
@@ -480,13 +476,9 @@ impl Funclets {
         let mut hir_inputs: Vec<_> = f
             .input
             .iter()
-            .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ, &specs_rc)))
+            .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ)))
             .collect();
-        let mut hir_outputs: Vec<_> = f
-            .output
-            .iter()
-            .map(|typ| TripleTag::from_fulltype(typ, &specs_rc))
-            .collect();
+        let mut hir_outputs: Vec<_> = f.output.iter().map(TripleTag::from_fulltype).collect();
 
         deduce_val_quots(
             &mut hir_inputs,
@@ -494,7 +486,6 @@ impl Funclets {
             &mut cfg,
             &ctx.specs[&specs.value.0],
             ctx,
-            &specs_rc,
         )
         .unwrap();
         cfg = transform_out_ssa(cfg);

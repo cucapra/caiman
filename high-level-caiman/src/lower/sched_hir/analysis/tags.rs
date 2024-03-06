@@ -1,14 +1,10 @@
-use caiman::assembly::ast::MetaId;
+use caiman::assembly::ast::Hole;
 use caiman::{assembly::ast as asm, ir};
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use crate::lower::lower_schedule::tag_to_tag;
-use crate::lower::sched_hir::{
-    META_SPATIAL, META_TIMELINE, META_VALUE, HirBody, HirInstr, Specs, Terminator, TripleTag,
-};
-use crate::parse::ast::{DataType, SchedTerm};
-use crate::typing::SpecType;
+use crate::lower::sched_hir::{HirBody, HirInstr, Terminator, TripleTag};
+use crate::parse::ast::{DataType, SchedTerm, SpecType};
 
 use super::{Fact, Forwards, RET_VAR};
 
@@ -18,7 +14,6 @@ pub struct TagInfo {
     pub value: Option<asm::Tag>,
     pub spatial: Option<asm::Tag>,
     pub timeline: Option<asm::Tag>,
-    specs: Rc<Specs>,
 }
 
 impl From<&TripleTag> for TagInfo {
@@ -27,7 +22,6 @@ impl From<&TripleTag> for TagInfo {
             value: t.value.as_ref().map(tag_to_tag),
             spatial: t.spatial.as_ref().map(tag_to_tag),
             timeline: t.timeline.as_ref().map(tag_to_tag),
-            specs: t.specs.clone(),
         }
     }
 }
@@ -45,10 +39,10 @@ impl From<TripleTag> for TagInfo {
 }
 
 /// Creates a tag with a none quotient for the given spec and flow
-fn none_tag(spec_name: &asm::MetaId, flow: ir::Flow) -> asm::Tag {
+fn none_tag(spec_type: SpecType, flow: ir::Flow) -> asm::Tag {
     asm::Tag {
-        quot: Some(asm::RemoteNodeId {
-            funclet: Some(spec_name.clone()),
+        quot: Hole::Filled(asm::RemoteNodeId {
+            funclet: Hole::Filled(spec_type.get_meta_id()),
             node: None,
         }),
         flow,
@@ -89,10 +83,10 @@ impl TagInfo {
     pub fn tags_vec_default(self, dtype: &DataType) -> Vec<asm::Tag> {
         vec![
             self.value
-                .unwrap_or_else(|| none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable)),
+                .unwrap_or_else(|| none_tag(SpecType::Value, ir::Flow::Usable)),
             self.spatial.unwrap_or_else(|| {
                 none_tag(
-                    &MetaId(META_SPATIAL.to_string()),
+                    SpecType::Spatial,
                     match dtype {
                         DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
@@ -100,7 +94,7 @@ impl TagInfo {
                 )
             }),
             self.timeline
-                .unwrap_or_else(|| none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable)),
+                .unwrap_or_else(|| none_tag(SpecType::Timeline, ir::Flow::Usable)),
         ]
     }
 
@@ -110,10 +104,10 @@ impl TagInfo {
         Self {
             value: self
                 .value
-                .or_else(|| Some(none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable))),
+                .or_else(|| Some(none_tag(SpecType::Value, ir::Flow::Usable))),
             spatial: self.spatial.or_else(|| {
                 Some(none_tag(
-                    &MetaId(META_SPATIAL.to_string()),
+                    SpecType::Spatial,
                     match dtype {
                         DataType::Ref(_) => ir::Flow::Saved,
                         _ => ir::Flow::Usable,
@@ -122,19 +116,14 @@ impl TagInfo {
             }),
             timeline: self
                 .timeline
-                .or_else(|| Some(none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable))),
-            specs: self.specs,
+                .or_else(|| Some(none_tag(SpecType::Value, ir::Flow::Usable))),
         }
     }
 
     /// Returns the default tag for the specified specifcation type.
     /// The default tag is `none()-usable`
-    pub fn default_tag(&self, spec_type: SpecType) -> asm::Tag {
-        match spec_type {
-            SpecType::Value => none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable),
-            SpecType::Spatial => none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Usable),
-            SpecType::Timeline => none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable),
-        }
+    pub fn default_tag(spec_type: SpecType) -> asm::Tag {
+        none_tag(spec_type, ir::Flow::Usable)
     }
 }
 
@@ -175,7 +164,7 @@ impl TagAnalysis {
                 // the the future, also assume that it's save if the flow is not specified
                 // but the quotient is
                 if tg.spatial.is_none() {
-                    tg.spatial = Some(none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Saved));
+                    tg.spatial = Some(none_tag(SpecType::Spatial, ir::Flow::Saved));
                 } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Saved {
                     panic!("Spatial tags for references must be save");
                 }
@@ -217,7 +206,7 @@ impl TagAnalysis {
                     if let Some(val) = info.value.as_mut() {
                         val.flow = ir::Flow::Dead;
                     } else {
-                        info.value = Some(none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Dead));
+                        info.value = Some(none_tag(SpecType::Value, ir::Flow::Dead));
                     }
                 } else if let Some(SchedTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
@@ -226,7 +215,7 @@ impl TagAnalysis {
                     }
                 }
                 if info.spatial.is_none() {
-                    info.spatial = Some(none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Saved));
+                    info.spatial = Some(none_tag(SpecType::Spatial, ir::Flow::Saved));
                 }
                 self.tags.insert(lhs.clone(), info);
             }

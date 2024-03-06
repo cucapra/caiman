@@ -143,6 +143,7 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                 let pipeline = asm::Pipeline {
                     name,
                     funclet: asm::FuncletId(entry),
+                    effect: None,
                 };
                 asm.declarations.push(asm::Declaration::Pipeline(pipeline));
             }

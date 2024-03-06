@@ -55,17 +55,18 @@
 //! value spec nodes that the schedule nodes are equivalent to. This allows us
 //! to get the canonical representative (spec node id) of any equivalence class.
 
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{
     error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{Cfg, Edge}, META_VALUE, HirBody, HirFuncCall, HirOp, Specs, Terminator, TripleTag
+            cfg::{Cfg, Edge},
+            HirBody, HirFuncCall, HirOp, Terminator, TripleTag,
         },
         tuple_id,
     },
-    parse::ast::{Binop, Quotient, QuotientReference, SchedLiteral, SchedTerm, Tag},
+    parse::ast::{Binop, Quotient, QuotientReference, SchedLiteral, SchedTerm, SpecType, Tag},
     typing::{Context, MetaVar, NodeEnv, SchedOrExtern, SpecInfo, ValQuot},
 };
 
@@ -80,18 +81,16 @@ pub fn deduce_val_quots(
     cfg: &mut Cfg,
     spec_info: &SpecInfo,
     ctx: &Context,
-    specs: &Rc<Specs>,
 ) -> Result<(), LocalError> {
     let env = spec_info.nodes.clone();
     let (env, selects) = unify_nodes(
         inputs.iter().map(|(name, _)| name),
         cfg,
-        specs,
         ctx,
         Info::default(),
         env,
     )?;
-    fill_type_info(&env, cfg, specs, &selects);
+    fill_type_info(&env, cfg, &selects);
     fill_io_type_info(inputs, outputs, &env);
     Ok(())
 }
@@ -208,7 +207,6 @@ fn unify_decl(
     lhs: &str,
     lhs_tag: &TripleTag,
     rhs: &SchedTerm,
-    specs: &Rc<Specs>,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     match rhs {
@@ -217,7 +215,7 @@ fn unify_decl(
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag, specs), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
             env = add_constraint(lhs, &ValQuot::Int(i.clone()), *info, env)?;
         }
         SchedTerm::Lit {
@@ -225,7 +223,7 @@ fn unify_decl(
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag, specs), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
             env = add_constraint(lhs, &ValQuot::Bool(*b), *info, env)?;
         }
         SchedTerm::Lit {
@@ -233,11 +231,11 @@ fn unify_decl(
             info,
             tag,
         } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag, specs), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
             env = add_constraint(lhs, &ValQuot::Float(f.clone()), *info, env)?;
         }
         SchedTerm::Var { name, info, tag } => {
-            env = add_type_annot(lhs, &TripleTag::from_opt(tag, specs), env)?;
+            env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
             env = add_var_constraint(lhs, name, *info, env)?;
         }
         _ => todo!(),
@@ -297,14 +295,13 @@ fn unify_op(
     op: &HirOp,
     args: &[SchedTerm],
     info: Info,
-    specs: &Rc<Specs>,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     let mut arg_names = vec![];
     for arg in args {
         match arg {
             SchedTerm::Var { name, tag, .. } => {
-                env = add_type_annot(name, &TripleTag::from_opt(tag, specs), env)?;
+                env = add_type_annot(name, &TripleTag::from_opt(tag), env)?;
                 arg_names.push(name.clone());
             }
             _ => unreachable!(),
@@ -457,7 +454,6 @@ fn unify_call(
 fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
     inputs: T,
     cfg: &Cfg,
-    specs: &Rc<Specs>,
     ctx: &Context,
     info: Info,
     mut env: NodeEnv,
@@ -472,19 +468,19 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
             env = match stmt {
                 HirBody::ConstDecl {
                     lhs, lhs_tag, rhs, ..
-                } => unify_decl(lhs, lhs_tag, rhs, specs, env)?,
+                } => unify_decl(lhs, lhs_tag, rhs, env)?,
                 HirBody::VarDecl {
                     lhs, lhs_tag, rhs, ..
                 } => {
                     if let Some(rhs) = rhs {
-                        unify_decl(lhs, lhs_tag, rhs, specs, env)?
+                        unify_decl(lhs, lhs_tag, rhs, env)?
                     } else {
                         env
                     }
                 }
                 HirBody::RefStore {
                     lhs, lhs_tags, rhs, ..
-                } => unify_decl(lhs, lhs_tags, rhs, specs, env)?,
+                } => unify_decl(lhs, lhs_tags, rhs, env)?,
                 HirBody::RefLoad { dest, src, .. } => {
                     add_var_constraint(dest, src, Info::default(), env)?
                 }
@@ -501,7 +497,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     dest_tag,
                     op,
                     args,
-                } => unify_op(dest, dest_tag, op, args, *info, specs, env)?,
+                } => unify_op(dest, dest_tag, op, args, *info, env)?,
                 HirBody::Phi { dest, inputs, .. } => unify_phi(
                     dest,
                     inputs,
@@ -553,7 +549,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
 fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv) {
     if let Some(node) = env.get_node_name(name) {
         let info = tag.value.as_ref().map(|t| t.info);
-        let quot = tag.value.as_ref().and_then(|t| t.quot);
+        let quot = tag.value.as_ref().map(|t| t.quot);
         let flow = tag.value.as_ref().and_then(|t| t.flow);
         let old_spec_var = tag
             .value
@@ -562,16 +558,10 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv) {
         assert!(old_spec_var.is_none() || old_spec_var.unwrap() == &node);
         tag.value = Some(Tag {
             info: info.unwrap_or_default(),
-            quot: Some(quot.unwrap_or_else(|| {
-                if env.get_input_classes().contains(&node) {
-                    Quotient::Input
-                } else {
-                    Quotient::Node
-                }
-            })),
+            quot: quot.unwrap(),
             quot_var: Some(QuotientReference {
                 spec_var: Some(node),
-                spec_name: META_VALUE.to_string(),
+                spec_type: SpecType::Value,
             }),
             flow,
         });
@@ -580,31 +570,25 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv) {
 
 /// Constructs a new triple tag based on information from the environment.
 /// Any information the environment does not have is left as `None`.
-fn construct_new_tag(name: &str, env: &NodeEnv, specs: &Rc<Specs>) -> TripleTag {
+fn construct_new_tag(name: &str, env: &NodeEnv) -> TripleTag {
     env.get_node_name(name).map_or_else(
         || TripleTag {
             value: None,
             spatial: None,
             timeline: None,
-            specs: specs.clone(),
         },
         |node| TripleTag {
             value: Some(Tag {
                 info: Info::default(),
-                quot: Some(if env.get_input_classes().contains(&node) {
-                    Quotient::Input
-                } else {
-                    Quotient::Node
-                }),
+                quot: Quotient::Some,
                 quot_var: Some(QuotientReference {
                     spec_var: Some(node),
-                    spec_name: META_VALUE.to_string(),
+                    spec_type: SpecType::Value,
                 }),
                 flow: None,
             }),
             spatial: None,
             timeline: None,
-            specs: specs.clone(),
         },
     )
 }
@@ -620,12 +604,7 @@ fn construct_new_tag(name: &str, env: &NodeEnv, specs: &Rc<Specs>) -> TripleTag 
 /// * `specs` - The specs
 /// * `selects` - A map from each block with a select node to the name of the spec variable
 /// which maps to the select node.
-fn fill_type_info(
-    env: &NodeEnv,
-    cfg: &mut Cfg,
-    specs: &Rc<Specs>,
-    selects: &HashMap<usize, String>,
-) {
+fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>) {
     for block in cfg.blocks.values_mut() {
         let mut insertions = vec![];
         for (idx, stmt) in block.stmts.iter_mut().enumerate() {
@@ -655,7 +634,7 @@ fn fill_type_info(
                         idx,
                         HirBody::InAnnotation(
                             Info::default(),
-                            vec![(dest.clone(), construct_new_tag(dest, env, specs))],
+                            vec![(dest.clone(), construct_new_tag(dest, env))],
                         ),
                     ));
                 }
@@ -695,11 +674,7 @@ fn fill_type_info(
 /// * `inputs` - The names of the input variables
 /// * `outputs` - The type information for the outputs
 /// * `env` - The current environment
-fn fill_io_type_info(
-    inputs: &mut [(String, TripleTag)],
-    outputs: &mut [TripleTag],
-    env: &NodeEnv,
-) {
+fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTag], env: &NodeEnv) {
     for (name, tag) in inputs.iter_mut() {
         fill_val_quotient(name, tag, env);
     }
@@ -707,13 +682,11 @@ fn fill_io_type_info(
     assert_eq!(output_classes.len(), outputs.len());
     for (tag, output_class) in outputs.iter_mut().zip(output_classes) {
         if let Some(Tag { quot, .. }) = tag.value.as_mut() {
-            if quot.is_none() {
-                *quot = Some(Quotient::Output);
-            }
+            *quot = Quotient::Some;
         } else {
             tag.value = Some(Tag {
                 info: Info::default(),
-                quot: Some(Quotient::Output),
+                quot: Quotient::Some,
                 quot_var: None,
                 flow: None,
             });

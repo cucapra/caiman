@@ -21,8 +21,8 @@ use std::path::Path;
 
 pub fn undefined<T>(h: Hole<T>) -> T {
     match h {
-        Some(v) => v,
-        None => panic!(""),
+        Hole::Filled(v) => v,
+        Hole::Empty => panic!(""),
     }
 }
 
@@ -262,7 +262,7 @@ fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::Na
     ffi::NativeInterface {
         types,
         external_functions,
-        effects
+        effects,
     }
 }
 
@@ -374,7 +374,7 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         } => ir::Node::AllocTemporary {
             place: reject_hole(place.clone()),
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-            buffer_flags: reject_hole(*buffer_flags),
+            buffer_flags: reject_hole(buffer_flags.clone()),
         },
         ast::Node::Drop { node } => ir::Node::Drop {
             node: context.node_id(reject_hole(node.as_ref())),
@@ -745,7 +745,7 @@ fn ir_schedule_binding(
     };
 
     for arg in &funclet_header.args {
-        let tags = context.tag_lookup(&arg.tags.iter().map(|t| Some(t.clone())).collect());
+        let tags = context.tag_lookup(&arg.tags.iter().map(|t| Hole::Filled(t.clone())).collect());
         input_tags
             .value_tags
             .push(tags.value.unwrap_or(default_tag).clone());
@@ -758,7 +758,7 @@ fn ir_schedule_binding(
     }
 
     for ret in &funclet_header.ret {
-        let tags = context.tag_lookup(&ret.tags.iter().map(|t| Some(t.clone())).collect());
+        let tags = context.tag_lookup(&ret.tags.iter().map(|t| Hole::Filled(t.clone())).collect());
         output_tags
             .value_tags
             .push(tags.value.unwrap_or(default_tag).clone());
@@ -775,7 +775,10 @@ fn ir_schedule_binding(
 
     ir::FuncletSpecBinding::ScheduleExplicit {
         value: ir::FuncletSpec {
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.value.1 .0),
+            funclet_id_opt: context
+                .funclet_indices
+                .get_funclet(&meta_map.value.1 .0)
+                .into(),
             input_tags: input_tags.value_tags.into_boxed_slice(),
             output_tags: output_tags.value_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),
@@ -783,14 +786,20 @@ fn ir_schedule_binding(
         },
         timeline: ir::FuncletSpec {
             // assume implicit is timeline for now?
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
+            funclet_id_opt: context
+                .funclet_indices
+                .get_funclet(&meta_map.timeline.1 .0)
+                .into(),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
             implicit_in_tag,
             implicit_out_tag,
         },
         spatial: ir::FuncletSpec {
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.spatial.1 .0),
+            funclet_id_opt: context
+                .funclet_indices
+                .get_funclet(&meta_map.spatial.1 .0)
+                .into(),
             input_tags: input_tags.spatial_tags.into_boxed_slice(),
             output_tags: output_tags.spatial_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),

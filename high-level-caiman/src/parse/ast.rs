@@ -229,19 +229,37 @@ pub enum SpecStmt {
 /// AST-level quotient (once merged, we can use the ir enum)
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Quotient {
-    Node,
+    Some,
     None,
-    Input,
-    Output,
 }
 
 /// AST-level flow (once merged, we can use the ir enum)
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Flow {
     Usable,
-    Saved,
+    Save,
     Dead,
     Need,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The type of a spec.
+pub enum SpecType {
+    Value,
+    Timeline,
+    Spatial,
+}
+
+impl SpecType {
+    #[must_use]
+    pub fn get_meta_id(&self) -> caiman::assembly::ast::MetaId {
+        use caiman::assembly::ast::MetaId;
+        match self {
+            Self::Value => MetaId("val".to_string()),
+            Self::Timeline => MetaId("tmln".to_string()),
+            Self::Spatial => MetaId("sptl".to_string()),
+        }
+    }
 }
 
 /// The part of a type annotation referring to a specific variable in a spec
@@ -250,7 +268,7 @@ pub enum Flow {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuotientReference {
     /// Name of the spec
-    pub spec_name: String,
+    pub spec_type: SpecType,
     /// Name of the variable within the spec to refer to
     pub spec_var: Option<String>,
 }
@@ -259,7 +277,7 @@ pub struct QuotientReference {
 #[derive(Clone, Debug)]
 pub struct Tag {
     pub info: Info,
-    pub quot: Option<Quotient>,
+    pub quot: Quotient,
     pub quot_var: Option<QuotientReference>,
     pub flow: Option<Flow>,
 }

@@ -4,7 +4,7 @@ mod specs;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType, Uop},
+    parse::ast::{Binop, DataType, SpecType, Uop},
 };
 use caiman::{assembly::ast as asm, ir};
 
@@ -30,13 +30,6 @@ pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
     copy_src: false,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// The type of a spec.
-pub enum SpecType {
-    Value,
-    Timeline,
-    Spatial,
-}
 /// A typing environement for deducing quotients.
 #[derive(Debug, Clone)]
 pub struct NodeEnv {

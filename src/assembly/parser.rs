@@ -37,8 +37,8 @@ fn error_hole(input: &Node) -> Error<Rule> {
 
 fn reject_hole<T>(h: Hole<T>, error: Error<Rule>) -> ParseResult<T> {
     match h {
-        Some(v) => Ok(v),
-        None => Err(error),
+        Hole::Filled(v) => Ok(v),
+        Hole::Empty => Err(error),
     }
 }
 
@@ -234,8 +234,8 @@ impl CaimanAssemblyParser {
 
     fn n_hole(input: Node) -> ParseResult<Hole<usize>> {
         Ok(match_nodes!(input.into_children();
-            [n(n)] => Some(n),
-            [hole] => None
+            [n(n)] => Hole::Filled(n),
+            [hole] => Hole::Empty
         ))
     }
 
@@ -267,8 +267,8 @@ impl CaimanAssemblyParser {
 
     fn name_hole(input: Node) -> ParseResult<Hole<String>> {
         Ok(match_nodes!(input.into_children();
-            [name(name)] => Some(name),
-            [hole] => None
+            [name(name)] => Hole::Filled(name),
+            [hole] => Hole::Empty
         ))
     }
 
@@ -293,8 +293,8 @@ impl CaimanAssemblyParser {
 
     fn meta_name_hole(input: Node) -> ParseResult<Hole<String>> {
         Ok(match_nodes!(input.into_children();
-            [meta_name(name)] => Some(name),
-            [hole] => None
+            [meta_name(name)] => Hole::Filled(name),
+            [hole] => Hole::Empty
         ))
     }
 
@@ -413,8 +413,8 @@ impl CaimanAssemblyParser {
 
     fn type_hole(input: Node) -> ParseResult<Hole<ast::TypeId>> {
         Ok(match_nodes!(input.into_children();
-            [typ(t)] => Some(t),
-            [hole] => None
+            [typ(t)] => Hole::Filled(t),
+            [hole] => Hole::Empty
         ))
     }
 
@@ -441,8 +441,8 @@ impl CaimanAssemblyParser {
 
     fn place_hole(input: Node) -> ParseResult<Hole<ir::Place>> {
         Ok(match_nodes!(input.into_children();
-            [place(place)] => Some(place),
-            [hole] => None
+            [place(place)] => Hole::Filled(place),
+            [hole] => Hole::Empty
         ))
     }
 
@@ -500,14 +500,14 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [meta_name(funclet_id)] => {
                 ast::RemoteNodeId {
-                    funclet: Some(ast::MetaId(funclet_id)),
+                    funclet: Hole::Filled(ast::MetaId(funclet_id)),
                     node: None
                 }
             },
             [meta_name(funclet_id), name(node_id)] => {
                 ast::RemoteNodeId {
-                    funclet: Some(ast::MetaId(funclet_id)),
-                    node: Some(Some(ast::NodeId(node_id)))
+                    funclet: Hole::Filled(ast::MetaId(funclet_id)),
+                    node: Some(Hole::Filled(ast::NodeId(node_id)))
                 }
             },
         ))
@@ -516,19 +516,19 @@ impl CaimanAssemblyParser {
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
             [meta_name_hole(funclet_id)] => {
-                Some(ast::RemoteNodeId {
+                Hole::Filled(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: None
                 })
             },
             [meta_name_hole(funclet_id), name_hole(node_id)] => {
-                Some(ast::RemoteNodeId {
+                Hole::Filled(ast::RemoteNodeId {
                     funclet: funclet_id.map(|f| ast::MetaId(f)),
                     node: Some(node_id.map(|n| ast::NodeId(n)))
                 })
             },
             [hole] => {
-                None
+                Hole::Empty
             }
         ))
     }
@@ -549,7 +549,7 @@ impl CaimanAssemblyParser {
 
     fn tag(input: Node) -> ParseResult<ast::Tag> {
         Ok(match_nodes!(input.into_children();
-            [quotient(quot), flow(flow)] => ast::Tag { quot: Some(quot), flow }
+            [quotient(quot), flow(flow)] => ast::Tag { quot: Hole::Filled(quot), flow }
         ))
     }
 
@@ -714,22 +714,22 @@ impl CaimanAssemblyParser {
 
     fn name_box(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
-            [name_hole_elements(lst)] => Some(lst),
-            [hole] => None
+            [name_hole_elements(lst)] => Hole::Filled(lst),
+            [hole] => Hole::Empty
         ))
     }
 
     fn name_box_single(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
             [name_box(b)] => b,
-            [name_hole(name)] => Some(vec![name.map(|s| NodeId(s))])
+            [name_hole(name)] => Hole::Filled(vec![name.map(|s| NodeId(s))])
         ))
     }
 
     fn name_call(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
-            [name_hole_elements(lst)] => Some(lst),
-            [hole] => None
+            [name_hole_elements(lst)] => Hole::Filled(lst),
+            [hole] => Hole::Empty
         ))
     }
 
@@ -741,14 +741,14 @@ impl CaimanAssemblyParser {
 
     fn n_elements(input: Node) -> ParseResult<Vec<Hole<usize>>> {
         Ok(match_nodes!(input.into_children();
-            [n(values)..] => values.map(|v| Some(v)).collect(),
+            [n(values)..] => values.map(|v| Hole::Filled(v)).collect(),
         ))
     }
 
     fn n_list(input: Node) -> ParseResult<Hole<Vec<Hole<usize>>>> {
         Ok(match_nodes!(input.into_children();
-            [n(n)] => Some(vec![Some(n)]),
-            [n_elements(values)] => Some(values)
+            [n(n)] => Hole::Filled(vec![Hole::Filled(n)]),
+            [n_elements(values)] => Hole::Filled(values)
         ))
     }
 
@@ -891,7 +891,7 @@ impl CaimanAssemblyParser {
                         (ir::Place::Cpu, true) => Ok(ast::ExternalFunctionKind::CPUPure),
                         (ir::Place::Cpu, false) => Ok(ast::ExternalFunctionKind::CPUEffect),
                         (ir::Place::Gpu, false) => {
-                            reject_hole(body, error.clone())
+                            reject_hole(body.into(), error.clone())
                             .map(|v| ast::ExternalFunctionKind::GPU(v))
                         }
                         _ => Err(error.clone()),
@@ -953,7 +953,7 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    // some duplication, but it's annoying to fix...
+    // Hole::Filled duplication, but it's annoying to fix...
     fn schedule_box_value(input: Node) -> ParseResult<(MetaId, FuncletId)> {
         // the type is a bit of a lie here, but it reflects the AST better
         Ok(match_nodes!(input.into_children();
@@ -1047,8 +1047,8 @@ impl CaimanAssemblyParser {
 
     fn value_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [value_node(node)] => Some(ast::Command::Node(node)),
-            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge))
+            [value_node(node)] => Hole::Filled(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Hole::Filled(ast::Command::TailEdge(tail_edge))
         ))
     }
 
@@ -1064,8 +1064,8 @@ impl CaimanAssemblyParser {
 
     fn timeline_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [timeline_node(node)] => Some(ast::Command::Node(node)),
-            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
+            [timeline_node(node)] => Hole::Filled(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Hole::Filled(ast::Command::TailEdge(tail_edge)),
         ))
     }
 
@@ -1081,8 +1081,8 @@ impl CaimanAssemblyParser {
 
     fn spatial_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [spatial_node(node)] => Some(ast::Command::Node(node)),
-            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
+            [spatial_node(node)] => Hole::Filled(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Hole::Filled(ast::Command::TailEdge(tail_edge)),
         ))
     }
 
@@ -1156,9 +1156,9 @@ impl CaimanAssemblyParser {
 
     fn schedule_command(input: Node) -> ParseResult<Hole<ast::Command>> {
         Ok(match_nodes!(input.into_children();
-            [schedule_node(node)] => Some(ast::Command::Node(node)),
-            [tail_edge(tail_edge)] => Some(ast::Command::TailEdge(tail_edge)),
-            [node_hole] => None
+            [schedule_node(node)] => Hole::Filled(ast::Command::Node(node)),
+            [tail_edge(tail_edge)] => Hole::Filled(ast::Command::TailEdge(tail_edge)),
+            [node_hole] => Hole::Empty
         ))
     }
 
@@ -1174,8 +1174,8 @@ impl CaimanAssemblyParser {
 
     fn spec_mapping(input: Node) -> ParseResult<(Hole<Vec<Hole<ast::RemoteNodeId>>>)> {
         Ok(match_nodes!(input.into_children();
-            [hole] => None,
-            [quotient_hole(operations)..] => Some(operations.collect())
+            [hole] => Hole::Empty,
+            [quotient_hole(operations)..] => Hole::Filled(operations.collect())
         ))
     }
 
@@ -1274,8 +1274,8 @@ impl CaimanAssemblyParser {
             [assign(name), name_sep(type_id), constant_value(value)] => ast::NamedNode {
                 name: Some(name),
                 node: ast::Node::Constant {
-                    value: Some(value),
-                    type_id: Some(ast::TypeId::Local(type_id))
+                    value: Hole::Filled(value),
+                    type_id: Hole::Filled(ast::TypeId::Local(type_id))
                 }
             }
         ))
@@ -1286,8 +1286,8 @@ impl CaimanAssemblyParser {
             [assign(name), extract_sep, name(node_id), n(index)] => ast::NamedNode {
                 name: Some(name),
                 node: ast::Node::ExtractResult {
-                    node_id: Some(NodeId(node_id)),
-                    index: Some(index)
+                    node_id: Hole::Filled(NodeId(node_id)),
+                    index: Hole::Filled(index)
                 }
             }
         ))
@@ -1300,7 +1300,7 @@ impl CaimanAssemblyParser {
                 name_call(arguments)] => ast::NamedNode {
                 name: Some(name),
                     node: ast::Node::CallFunctionClass {
-                        function_id: Some(FunctionClassId(external_function_id)),
+                        function_id: Hole::Filled(FunctionClassId(external_function_id)),
                         arguments
                     }
                 }
@@ -1313,9 +1313,9 @@ impl CaimanAssemblyParser {
                 name_sep(true_case), name(false_case)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::Select {
-                        condition: Some(NodeId(condition)),
-                        true_case: Some(NodeId(true_case)),
-                        false_case: Some(NodeId(false_case))
+                        condition: Hole::Filled(NodeId(condition)),
+                        true_case: Hole::Filled(NodeId(true_case)),
+                        false_case: Hole::Filled(NodeId(false_case))
                     }
                 }
         ))
@@ -1327,7 +1327,7 @@ impl CaimanAssemblyParser {
                 name_box(remote_local_pasts)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::EncodingEvent {
-                        local_past: Some(NodeId(local_past)),
+                        local_past: Hole::Filled(NodeId(local_past)),
                         remote_local_pasts
                     }
                 }
@@ -1339,7 +1339,7 @@ impl CaimanAssemblyParser {
             [assign(name), submission_event_sep, name(local_past)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::SubmissionEvent {
-                        local_past: Some(NodeId(local_past))
+                        local_past: Hole::Filled(NodeId(local_past))
                     }
                 }
         ))
@@ -1351,8 +1351,8 @@ impl CaimanAssemblyParser {
                 name(remote_local_past)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::SynchronizationEvent {
-                        local_past: Some(NodeId(local_past)),
-                        remote_local_past: Some(NodeId(remote_local_past))
+                        local_past: Hole::Filled(NodeId(local_past)),
+                        remote_local_past: Hole::Filled(NodeId(remote_local_past))
                     }
                 }
         ))
@@ -1364,8 +1364,8 @@ impl CaimanAssemblyParser {
                 n_sep(count), name(space)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::SeparatedBufferSpaces {
-                        count: Some(count),
-                        space: Some(NodeId(space))
+                        count: Hole::Filled(count),
+                        space: Hole::Filled(NodeId(space))
                     }
                 }
         ))
@@ -1379,7 +1379,7 @@ impl CaimanAssemblyParser {
                     name: Some(name),
                     node: ast::Node::AllocTemporary {
                         place,
-                        buffer_flags: Some(buffer_flags),
+                        buffer_flags: Hole::Filled(buffer_flags),
                         storage_type,
                     }
                 }
@@ -1447,7 +1447,7 @@ impl CaimanAssemblyParser {
                     name: Some(name),
                     node: ast::Node::ReadRef {
                         source: source.map(|s| NodeId(s)),
-                        storage_type: Some(ast::TypeId::FFI(storage_type))
+                        storage_type: Hole::Filled(ast::TypeId::FFI(storage_type))
                     }
                 }
         ))
@@ -1637,7 +1637,7 @@ impl CaimanAssemblyParser {
                 name_hole(continuation)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::PromiseCaptures {
-                        count: Some(count),
+                        count: Hole::Filled(count),
                         continuation: continuation.map(|s| NodeId(s))
                     }
                 }
@@ -1723,7 +1723,7 @@ impl CaimanAssemblyParser {
             [pipeline_sep, str(name), name(funclet)] => ast::Pipeline{
                 name, funclet: FuncletId(funclet), effect: None
             },
-            [pipeline_sep, str(name), name(funclet), pipeline_effect(effect)] => 
+            [pipeline_sep, str(name), name(funclet), pipeline_effect(effect)] =>
             ast::Pipeline{
                 name, funclet: FuncletId(funclet), effect: Some(effect)
             }
