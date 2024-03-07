@@ -257,7 +257,7 @@ pub enum ValQuot {
     Float(String),
     Bool(bool),
     Input(String),
-    Output(String),
+    Output(MetaVar),
     Call(String, Vec<MetaVar>),
     Extract(MetaVar, usize),
     Bop(Binop, MetaVar, MetaVar),
@@ -279,8 +279,8 @@ impl ValQuot {
         match (self, other) {
             (Self::Float(x), Self::Float(y))
             | (Self::Int(x), Self::Int(y))
-            | (Self::Input(x), Self::Input(y))
-            | (Self::Output(x), Self::Output(y)) => x == y,
+            | (Self::Input(x), Self::Input(y)) => x == y,
+            (Self::Output(x), Self::Output(y)) => x == y,
             (Self::Bool(x), Self::Bool(y)) => x == y,
             (Self::Call(f1, args1), Self::Call(f2, args2)) => {
                 f1 == f2
@@ -333,7 +333,7 @@ pub enum VQType {
     Float(String),
     Bool(bool),
     Input(String),
-    Output(String),
+    Output,
     Call(String),
     Extract(usize),
     Bop(Binop),
@@ -347,7 +347,7 @@ impl std::fmt::Debug for VQType {
             Self::Float(i) => write!(f, "Float({i})"),
             Self::Bool(b) => write!(f, "Bool({b})"),
             Self::Input(i) => write!(f, "Input({i})"),
-            Self::Output(i) => write!(f, "Output({i})"),
+            Self::Output => write!(f, "Output"),
             Self::Call(i) => write!(f, "Call({i})"),
             Self::Extract(i) => write!(f, "Extract({i})"),
             Self::Bop(op) => write!(f, "Bop({op:?})"),
@@ -363,7 +363,7 @@ impl From<&ValQuot> for VQType {
             ValQuot::Float(f) => Self::Float(f.clone()),
             ValQuot::Bool(b) => Self::Bool(*b),
             ValQuot::Input(i) => Self::Input(i.clone()),
-            ValQuot::Output(o) => Self::Output(o.clone()),
+            ValQuot::Output(_) => Self::Output,
             ValQuot::Call(f, _) => Self::Call(f.clone()),
             ValQuot::Extract(_, j) => Self::Extract(*j),
             ValQuot::Bop(op, _, _) => Self::Bop(*op),
@@ -382,7 +382,7 @@ impl From<&ValQuot> for Constraint<VQType, ()> {
             ValQuot::Float(f) => Self::Term(VQType::Float(f.clone()), vec![]),
             ValQuot::Bool(b) => Self::Term(VQType::Bool(*b), vec![]),
             ValQuot::Input(i) => Self::Term(VQType::Input(i.clone()), vec![]),
-            ValQuot::Output(o) => Self::Term(VQType::Output(o.clone()), vec![]),
+            ValQuot::Output(o) => Self::Term(VQType::Output, vec![Self::Var(o.0.clone())]),
             ValQuot::Call(f, args) => Self::Term(
                 VQType::Call(f.clone()),
                 args.iter().map(|x| Self::Var(x.0.clone())).collect(),

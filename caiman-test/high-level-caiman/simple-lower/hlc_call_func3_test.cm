@@ -23,7 +23,7 @@ val calc2(t: i64) -> i64 {
 }
 
 fn calc2_impl(t: i64 @ input(val.t)-usable)
-    -> i64 @ output(val.res)-usable impls calc2, time, space
+    -> i64 impls calc2, time, space
 {
     let n: i64 @ node(val.nine) = 9;
     let r: i64 @ node(val.res) = t % n;
@@ -31,14 +31,14 @@ fn calc2_impl(t: i64 @ input(val.t)-usable)
 }
 
 fn calc_impl(a: i64 @ input(val.a)-usable, b: i64 @ input(val.b)-usable) 
-    -> i64 @ output(val.res2)-usable impls calc, time, space
+    -> i64 impls calc, time, space
 {
     let res: i64 @ node(val.res) = a * b;
     let res2: i64 @ node(val.res2) = calc2_impl(res) @ node(val.res2);
     res2
 }
 
-fn main_impl() -> i64 @ node(val.c)-usable
+fn main_impl() -> i64
     impls main, time, space
 {
     let a: i64 @ node(val.a)-usable = 3;

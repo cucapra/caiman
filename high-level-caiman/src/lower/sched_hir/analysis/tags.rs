@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::lower::lower_schedule::tag_to_tag;
 use crate::lower::sched_hir::{HirBody, HirInstr, Terminator, TripleTag};
-use crate::parse::ast::{DataType, SchedTerm, SpecType};
+use crate::parse::ast::{DataType, Quotient, SchedTerm, SpecType};
 
 use super::{Fact, Forwards, RET_VAR};
 
@@ -14,6 +14,7 @@ pub struct TagInfo {
     pub value: Option<asm::Tag>,
     pub spatial: Option<asm::Tag>,
     pub timeline: Option<asm::Tag>,
+    pub node_type: Option<Quotient>,
 }
 
 impl From<&TripleTag> for TagInfo {
@@ -22,6 +23,7 @@ impl From<&TripleTag> for TagInfo {
             value: t.value.as_ref().map(tag_to_tag),
             spatial: t.spatial.as_ref().map(tag_to_tag),
             timeline: t.timeline.as_ref().map(tag_to_tag),
+            node_type: t.value.as_ref().and_then(|x| x.quot),
         }
     }
 }
@@ -56,6 +58,7 @@ impl TagInfo {
         // TODO: re-evaluate this approach
         if let Some(value) = &other.value {
             self.value = Some(tag_to_tag(value));
+            self.node_type = value.quot;
         }
         if let Some(spatial) = &other.spatial {
             self.spatial = Some(tag_to_tag(spatial));
@@ -65,15 +68,27 @@ impl TagInfo {
         }
     }
 
-    pub fn update_info(&mut self, other: Self) {
-        if let Some(value) = other.value {
-            self.value = Some(value);
+    fn manual_override_tag(t: &mut Option<asm::Tag>, other: Option<asm::Tag>) {
+        match (t, other) {
+            (Some(ref mut a), Some(b)) => {
+                a.flow = b.flow;
+                if let Hole::Filled(q) = b.quot {
+                    a.quot = Hole::Filled(q);
+                }
+            }
+            (none, Some(b)) => {
+                *none = Some(b);
+            }
+            _ => (),
         }
-        if let Some(spatial) = other.spatial {
-            self.spatial = Some(spatial);
-        }
-        if let Some(timeline) = other.timeline {
-            self.timeline = Some(timeline);
+    }
+
+    pub fn apply_manual_override(&mut self, other: Self) {
+        Self::manual_override_tag(&mut self.value, other.value);
+        Self::manual_override_tag(&mut self.spatial, other.spatial);
+        Self::manual_override_tag(&mut self.timeline, other.timeline);
+        if let Some(node_type) = other.node_type {
+            self.node_type = Some(node_type);
         }
     }
 
@@ -81,9 +96,19 @@ impl TagInfo {
     /// assumed to be `none()-usable` except for references, which will be
     /// `none()-save` in the spatial dimension
     pub fn tags_vec_default(self, dtype: &DataType) -> Vec<asm::Tag> {
+        assert!(
+            matches!(
+                self.value,
+                Some(asm::Tag {
+                    quot: Hole::Filled(_),
+                    ..
+                })
+            ),
+            "Value tag must have a quotient"
+        );
         vec![
             self.value
-                .unwrap_or_else(|| none_tag(SpecType::Value, ir::Flow::Usable)),
+                .unwrap_or_else(|| panic!("Value tag not specified")),
             self.spatial.unwrap_or_else(|| {
                 none_tag(
                     SpecType::Spatial,
@@ -117,6 +142,7 @@ impl TagInfo {
             timeline: self
                 .timeline
                 .or_else(|| Some(none_tag(SpecType::Timeline, ir::Flow::Usable))),
+            node_type: Some(self.node_type.unwrap_or(Quotient::Node)),
         }
     }
 
@@ -203,15 +229,13 @@ impl TagAnalysis {
             } => {
                 let mut info = TagInfo::from(lhs_tag);
                 if rhs.is_none() {
-                    if let Some(val) = info.value.as_mut() {
-                        val.flow = ir::Flow::Dead;
-                    } else {
-                        info.value = Some(none_tag(SpecType::Value, ir::Flow::Dead));
-                    }
+                    info.value = Some(none_tag(SpecType::Value, ir::Flow::Dead));
+                    info.node_type = Some(Quotient::Node);
                 } else if let Some(SchedTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         info.value = rhs_typ.value;
+                        info.node_type = rhs_typ.node_type;
                     }
                 }
                 if info.spatial.is_none() {
@@ -231,6 +255,7 @@ impl TagAnalysis {
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         let t = self.tags.get_mut(lhs).unwrap();
                         t.value = rhs_typ.value;
+                        t.node_type = rhs_typ.node_type;
                     }
                 }
                 // set_remote_node_id(&mut quot, remote_node_id(&t.value.quot).clone());
@@ -290,6 +315,10 @@ fn meet_tag_info(a: &mut TagInfo, b: &TagInfo) {
 
     if a.timeline != b.timeline {
         a.timeline = None;
+    }
+
+    if a.node_type != b.node_type {
+        a.node_type = None;
     }
 }
 

@@ -3,18 +3,18 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(s: BufferSpace) -> BufferSpace { returns s }
 
-val main() -> i64 {
+val main() -> res: i64 {
     c :- 1
     r :- id(c)
     x :- c + r
     returns x
 }
 
-val id(a: i64) -> i64 {
+val id(a: i64) -> r: i64 {
     returns a
 }
 
-fn main_func() -> i64 @ node(val.x)-usable impls main, time, space  {
+fn main_func() -> i64 @ node(val.res)-usable impls main, time, space  {
     let c: i64 @ node(val.c)-usable = 1;
     let c2: i64 @ node(val.c)-saved = 1;
     let r: i64 @ node(val.r)-usable = id_func(c) @ node(val.r);
@@ -23,7 +23,7 @@ fn main_func() -> i64 @ node(val.x)-usable impls main, time, space  {
     x
 }
 
-fn id_func(a: i64 @ input(val.a)-usable) -> i64 @ output(val.a)-usable  
+fn id_func(a: i64 @ input(val.a)-usable) -> i64 @ val.r-usable  
     impls id, time, space
 {
     a

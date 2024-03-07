@@ -4,7 +4,7 @@ tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
 
-val main() -> i64 {
+val main() -> out: i64 {
     b :- false
     one :- 1
     two :- 2
@@ -12,7 +12,7 @@ val main() -> i64 {
     returns r
 }
 
-fn foo() -> i64 @ node(val.r)
+fn foo() -> i64 @ node(val.out)
     impls main, time, space
 {
     let b = false;

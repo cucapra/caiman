@@ -31,7 +31,7 @@ feq add_three {
 fn add1_impl(a: i64 @ input(val.a)-usable, 
              b: i64 @ input(val.b)-usable, 
              c: i64 @ input(val.c)-usable)
-    -> i64 @ output(val.t2)-usable impls add1, time, space
+    -> i64 @ val-usable impls add1, time, space
 {
     let t: i64 @ node(val.t) = a + b;
     let p: i64 @ node(val.t2) = t + c;
@@ -41,7 +41,7 @@ fn add1_impl(a: i64 @ input(val.a)-usable,
 fn add2_impl(a: i64 @ input(val.a)-usable, 
              b: i64 @ input(val.b)-usable, 
              c: i64 @ input(val.c)-usable)
-    -> i64 @ output(val.t2)-usable impls add2, time, space
+    -> i64 @ val-usable impls add2, time, space
 {
     let t: i64 @ node(val.t) = b + c;
     let p: i64 @ node(val.t2) = a + t;
@@ -49,7 +49,7 @@ fn add2_impl(a: i64 @ input(val.a)-usable,
 }
 
 
-fn main_impl() -> i64 @ node(val.r)-usable
+fn main_impl() -> i64 
     impls main, time, space
 {
     let a: i64 @ node(val.a) = 3;

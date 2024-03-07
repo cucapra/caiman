@@ -326,13 +326,13 @@ impl ASTFactory {
     }
 
     struct_variant_factory!(tag(quot: Quotient, quot_var: Option<QuotientReference>, flow: Option<Option<Flow>>) -> Tag:Tag {
-        quot: quot,
+        quot: Some(quot),
         quot_var: quot_var,
         flow: flow.flatten()
     });
 
     struct_variant_factory!(flow_tag(quot_var: Option<QuotientReference>, flow: Option<Flow>) -> Tag:Tag {
-        quot: Quotient::Some,
+        quot: None,
         quot_var: quot_var,
         flow: flow
     });

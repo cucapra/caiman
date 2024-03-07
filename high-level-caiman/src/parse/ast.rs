@@ -229,8 +229,16 @@ pub enum SpecStmt {
 /// AST-level quotient (once merged, we can use the ir enum)
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Quotient {
-    Some,
+    Node,
+    Input,
     None,
+}
+
+impl Quotient {
+    #[must_use]
+    pub const fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
 }
 
 /// AST-level flow (once merged, we can use the ir enum)
@@ -277,7 +285,7 @@ pub struct QuotientReference {
 #[derive(Clone, Debug)]
 pub struct Tag {
     pub info: Info,
-    pub quot: Quotient,
+    pub quot: Option<Quotient>,
     pub quot_var: Option<QuotientReference>,
     pub flow: Option<Flow>,
 }

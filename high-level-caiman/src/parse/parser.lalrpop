@@ -198,10 +198,10 @@ Tag: Tag = {
 }
 
 Quotient: Quotient = {
-    "node" => Quotient::Some,
+    "node" => Quotient::Node,
     "none" => Quotient::None,
-    "input" => Quotient::Some,
-    "output" => Quotient::Some,
+    "input" => Quotient::Input,
+    // "output" => Quotient::Output,
 }
 
 Flow: Option<Flow> = {

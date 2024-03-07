@@ -86,9 +86,9 @@ impl NodeEnv {
     /// Sets the qotient classes of the outputs.
     /// # Panics
     /// If any of the class names contain a `$`.
-    pub fn set_output_classes(&mut self, classes: &[String]) {
-        assert!(classes.iter().all(|x| !x.contains('$')));
-        self.outputs = classes.to_vec();
+    pub fn set_output_classes(&mut self, sig: &NamedSignature) {
+        assert!(sig.output.iter().all(|(x, _)| !x.contains('$')));
+        self.outputs = sig.output.iter().map(|(x, _)| x.clone()).collect();
     }
 
     /// Gets the output classes, without the leading `$` symbol.
@@ -453,14 +453,14 @@ pub struct Signature {
 #[derive(Debug, Clone)]
 pub struct NamedSignature {
     pub input: Vec<(String, DataType)>,
-    pub output: Vec<DataType>,
+    pub output: Vec<(String, DataType)>,
 }
 
 impl From<&NamedSignature> for Signature {
     fn from(sig: &NamedSignature) -> Self {
         Self {
             input: sig.input.iter().cloned().map(|(_, t)| t).collect(),
-            output: sig.output.clone(),
+            output: sig.output.iter().cloned().map(|(_, t)| t).collect(),
         }
     }
 }
@@ -481,12 +481,8 @@ impl Eq for NamedSignature {}
 /// Returns true if the two signatures match, ignoring the names of the inputs.
 fn sig_match(sig1: &Signature, sig2: &NamedSignature) -> bool {
     sig1.input.len() == sig2.input.len()
-        && sig1
-            .input
-            .iter()
-            .zip(sig2.input.iter())
-            .all(|(t1, (_, t2))| t1 == t2)
-        && sig1.output == sig2.output
+        && sig1.input.iter().eq(sig2.input.iter().map(|(_, t)| t))
+        && sig1.output.iter().eq(sig2.output.iter().map(|(_, t)| t))
 }
 
 /// A global context for a caiman program. This contains information about constants,

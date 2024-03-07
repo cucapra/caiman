@@ -3,7 +3,7 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
-val main() -> i64 {
+val main() -> out: i64 {
     a :- 3
     b :- 5
     c :- 7
@@ -19,13 +19,13 @@ val main() -> i64 {
 }
 
 feq add_three {
-    val add1(a: i64, b: i64, c: i64) -> i64 {
+    val add1(a: i64, b: i64, c: i64) -> r: i64 {
         t :- a + b
         t2 :- t + c
         returns t2
     }
 
-    val add2(a: i64, b: i64, c: i64) -> i64 {
+    val add2(a: i64, b: i64, c: i64) -> r: i64 {
         t :- b + c
         t2 :- a + t
         returns t2
@@ -35,7 +35,7 @@ feq add_three {
 fn add1_impl(a: i64 @ input(val.a)-usable, 
              b: i64 @ input(val.b)-usable, 
              c: i64 @ input(val.c)-usable)
-    -> i64 @ output(val.t2)-usable impls add1, time, space
+    -> i64 @ val.r-usable impls add1, time, space
 {
     let t: i64 @ node(val.t) = a + b;
     let p: i64 @ node(val.t2) = t + c;
@@ -45,7 +45,7 @@ fn add1_impl(a: i64 @ input(val.a)-usable,
 fn add2_impl(a: i64 @ input(val.a)-usable, 
              b: i64 @ input(val.b)-usable, 
              c: i64 @ input(val.c)-usable)
-    -> i64 @ output(val.t2)-usable impls add2, time, space
+    -> i64 @ val.r-usable impls add2, time, space
 {
     let t: i64 @ node(val.t) = b + c;
     let p: i64 @ node(val.t2) = a + t;
@@ -53,7 +53,7 @@ fn add2_impl(a: i64 @ input(val.a)-usable,
 }
 
 
-fn main_impl() -> i64 @ node(val.r)-usable
+fn main_impl() -> i64 @ val.out-usable
     impls main, time, space
 {
     let cond: bool @ node(val.cond) = false;

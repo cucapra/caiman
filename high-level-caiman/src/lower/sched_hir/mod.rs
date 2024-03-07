@@ -12,7 +12,7 @@ pub use hir::*;
 use crate::{
     lower::data_type_to_local_type,
     normalize::original_name,
-    parse::ast::{DataType, SchedulingFunc},
+    parse::ast::{DataType, Quotient, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
 use caiman::assembly::ast::{self as asm};
@@ -264,7 +264,7 @@ impl<'a> Funclet<'a> {
             (orig, None) => orig,
             (None, Some(ovr)) => Some(ovr),
             (Some(mut orig), Some(ovr)) => {
-                orig.update_info(ovr);
+                orig.apply_manual_override(ovr);
                 Some(orig.clone())
             }
         }
@@ -319,6 +319,7 @@ impl<'a> Funclet<'a> {
             .live_set()
             .iter()
             .cloned()
+            .map(|s| self.get_use_name(&s))
             .map(asm::NodeId)
             .map(Hole::Filled)
             .collect()
@@ -392,6 +393,21 @@ impl<'a> Funclet<'a> {
             n.as_ref()
                 .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
         })
+    }
+
+    /// Returns true if the specified use should be a phi node instead of a regular use
+    pub fn use_phi(&self, var: &str) -> bool {
+        self.get_input_tag(var)
+            .map_or(false, |x| x.node_type == Some(Quotient::Node))
+            && self.input_vars().iter().any(|v| v == var)
+    }
+
+    pub fn get_use_name(&self, var: &str) -> String {
+        if self.use_phi(var) {
+            format!("__phi_{var}")
+        } else {
+            var.to_string()
+        }
     }
 
     /// Returns true if the specified variable is a mutable reference or a mutable variable

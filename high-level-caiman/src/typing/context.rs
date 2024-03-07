@@ -311,7 +311,16 @@ fn collect_class_signatures(
             } => {
                 let sig = NamedSignature {
                     input: input.clone(),
-                    output: output.iter().map(|x| x.1.clone()).collect::<Vec<_>>(),
+                    output: output
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, (name, typ))| {
+                            (
+                                name.clone().unwrap_or_else(|| format!("_out{idx}")),
+                                typ.clone(),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
                 };
                 if let Some(member_sig) = &member_sig {
                     if !sig_match(member_sig, &sig) {
@@ -375,7 +384,7 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
                         SpecType::Spatial,
                         NamedSignature {
                             input: vec![(String::from("bs"), DataType::BufferSpace)],
-                            output: vec![DataType::BufferSpace],
+                            output: vec![(String::from("_out0"), DataType::BufferSpace)],
                         },
                         *info,
                         None,
@@ -389,7 +398,7 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
                         SpecType::Timeline,
                         NamedSignature {
                             input: vec![(String::from("e"), DataType::Event)],
-                            output: vec![DataType::Event],
+                            output: vec![(String::from("_out0"), DataType::Event)],
                         },
                         *info,
                         None,

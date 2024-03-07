@@ -271,13 +271,11 @@ fn lower_spec_funclet(
                 .collect(),
             ret: output
                 .into_iter()
-                .map(|x| {
-                    let (name, dt) = x;
-                    asm::FuncletArgument {
-                        name: name.map(asm::NodeId),
-                        typ: data_type_to_local_type(&dt),
-                        tags: Vec::new(),
-                    }
+                .enumerate()
+                .map(|(id, (name, dt))| asm::FuncletArgument {
+                    name: Some(asm::NodeId(name.unwrap_or_else(|| format!("_out{id}")))),
+                    typ: data_type_to_local_type(&dt),
+                    tags: Vec::new(),
                 })
                 .collect(),
             binding: class_name.map_or(asm::FuncletBinding::None, |name| {

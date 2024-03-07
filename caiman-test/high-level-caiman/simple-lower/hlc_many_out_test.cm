@@ -3,13 +3,13 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(s: BufferSpace) -> BufferSpace { returns s }
 
-val main() -> i64 {
+val main() -> r: i64 {
     a :- 0
     one, two, three, four, five, six, seven, eight, nine, ten :- nums(a)
     returns four
 }
 
-val nums(a: i64) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) {
+val nums(in: i64) -> (a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64) {
     one :- 1
     two :- 2
     three :- 3
@@ -23,7 +23,7 @@ val nums(a: i64) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) {
     returns (one, two, three, four, five, six, seven, eight, nine, ten)
 }
 
-fn main_func() -> i64 @ node(val.four)-usable impls main, time, space  {
+fn main_func() -> i64 @ node(val.r)-usable impls main, time, space  {
     let a: i64 @ node(val.a) = 0;
     let one: i64 @ node(val.one), two: i64 @ node(val.two),
         three: i64 @ node(val.three), four: i64 @ node(val.four),
@@ -35,11 +35,11 @@ fn main_func() -> i64 @ node(val.four)-usable impls main, time, space  {
     four
 }
 
-fn nums_func(a: i64 @ input(val.a)-usable) 
-    -> (i64 @ output(val.one), i64 @ output(val.two), i64 @ output(val.three),
-        i64 @ output(val.four), i64 @ output(val.five), i64 @ output(val.six),
-        i64 @ output(val.seven), i64 @ output(val.eight), i64 @ output(val.nine),
-        i64 @ output(val.ten)) 
+fn nums_func(a: i64 @ input(val.in)-usable) 
+    -> (i64 @ node(val.a), i64 @ node(val.b), i64 @ node(val.c),
+        i64 @ node(val.d), i64 @ node(val.e), i64 @ node(val.f),
+        i64 @ node(val.g), i64 @ node(val.h), i64 @ node(val.i),
+        i64 @ node(val.j)) 
     impls nums, time, space
 {
     let one: i64 @ node(val.one) = 1;

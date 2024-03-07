@@ -3,7 +3,7 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
-val main() -> i64 {
+val main() -> z: i64 {
     a :- 2
     c :- 10
     b :- a * c
@@ -14,7 +14,7 @@ val main() -> i64 {
     returns k
 }
 
-fn main_impl() -> i64 @ node(val.k)-usable
+fn main_impl() -> i64 @ node(val.z)-usable
     impls main, time, space
 {
     let a: i64 @ node(val.a) = 2;

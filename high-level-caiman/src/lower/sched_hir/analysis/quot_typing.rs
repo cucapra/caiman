@@ -61,7 +61,7 @@ use crate::{
     error::{type_error, Info, LocalError},
     lower::{
         sched_hir::{
-            cfg::{Cfg, Edge},
+            cfg::{Cfg, Edge, START_BLOCK_ID},
             HirBody, HirFuncCall, HirOp, Terminator, TripleTag,
         },
         tuple_id,
@@ -523,7 +523,13 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                 let output_classes: Vec<_> = env.get_output_classes().to_vec();
                 assert_eq!(ret_names.len(), output_classes.len());
                 for (ret_name, class) in ret_names.iter().zip(output_classes.into_iter()) {
-                    env = add_node_eq(ret_name, &class, Info::default(), env)?;
+                    env = add_constraint(
+                        &format!("{ret_name}!"),
+                        &ValQuot::Output(MetaVar::new_var_name(ret_name)),
+                        info,
+                        env,
+                    )?;
+                    env = add_node_eq(&format!("{ret_name}!"), &class, Info::default(), env)?;
                 }
                 env
             }
@@ -546,19 +552,32 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
 /// # Panics
 /// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
-fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv) {
+fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
+    if name == "c_1" {
+        dbg!();
+    }
     if let Some(node) = env.get_node_name(name) {
         let info = tag.value.as_ref().map(|t| t.info);
-        let quot = tag.value.as_ref().map(|t| t.quot);
+        let quot = tag.value.as_ref().and_then(|t| t.quot);
         let flow = tag.value.as_ref().and_then(|t| t.flow);
         let old_spec_var = tag
             .value
             .as_ref()
             .and_then(|t| t.quot_var.as_ref().and_then(|q| q.spec_var.as_ref()));
-        assert!(old_spec_var.is_none() || old_spec_var.unwrap() == &node);
+        assert!(
+            old_spec_var.is_none() || old_spec_var.unwrap() == &node,
+            "Cannot unify output class {name} with unequal nodes {node} and {}",
+            old_spec_var.unwrap()
+        );
         tag.value = Some(Tag {
             info: info.unwrap_or_default(),
-            quot: quot.unwrap_or(Quotient::Some),
+            quot: Some(quot.unwrap_or_else(|| {
+                if env.get_input_classes().contains(&node) && block_id == START_BLOCK_ID {
+                    Quotient::Input
+                } else {
+                    Quotient::Node
+                }
+            })),
             quot_var: Some(QuotientReference {
                 spec_var: Some(node),
                 spec_type: SpecType::Value,
@@ -570,7 +589,7 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv) {
 
 /// Constructs a new triple tag based on information from the environment.
 /// Any information the environment does not have is left as `None`.
-fn construct_new_tag(name: &str, env: &NodeEnv) -> TripleTag {
+fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
     env.get_node_name(name).map_or_else(
         || TripleTag {
             value: None,
@@ -580,7 +599,13 @@ fn construct_new_tag(name: &str, env: &NodeEnv) -> TripleTag {
         |node| TripleTag {
             value: Some(Tag {
                 info: Info::default(),
-                quot: Quotient::Some,
+                quot: Some(
+                    if env.get_input_classes().contains(&node) && block_id == START_BLOCK_ID {
+                        Quotient::Input
+                    } else {
+                        Quotient::Node
+                    },
+                ),
                 quot_var: Some(QuotientReference {
                     spec_var: Some(node),
                     spec_type: SpecType::Value,
@@ -621,11 +646,11 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                     dest_tag: lhs_tag,
                     ..
                 } => {
-                    fill_val_quotient(lhs, lhs_tag, env);
+                    fill_val_quotient(lhs, lhs_tag, env, block.id);
                 }
                 HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
                     for (name, tag) in tags {
-                        fill_val_quotient(name, tag, env);
+                        fill_val_quotient(name, tag, env, block.id);
                     }
                 }
                 HirBody::Hole(_) | HirBody::RefLoad { .. } => {}
@@ -634,7 +659,7 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                         idx,
                         HirBody::InAnnotation(
                             Info::default(),
-                            vec![(dest.clone(), construct_new_tag(dest, env))],
+                            vec![(dest.clone(), construct_new_tag(dest, env, block.id))],
                         ),
                     ));
                 }
@@ -643,19 +668,20 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
         match &mut block.terminator {
             Terminator::CaptureCall { dests, call, .. } => {
                 for (dest, tag) in dests.iter_mut() {
-                    fill_val_quotient(dest, tag, env);
+                    fill_val_quotient(dest, tag, env, block.id);
                 }
                 fill_val_quotient(
                     &tuple_id(&dests.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()),
                     &mut call.tag,
                     env,
+                    block.id,
                 );
             }
             Terminator::Select { dests, tag, .. } => {
                 for (dest, tag) in dests {
-                    fill_val_quotient(dest, tag, env);
+                    fill_val_quotient(dest, tag, env, block.id);
                 }
-                fill_val_quotient(&selects[&block.id], tag, env);
+                fill_val_quotient(&selects[&block.id], tag, env, block.id);
             }
             Terminator::Call(..) | Terminator::None => unreachable!(),
             // TODO: check the return, I think this is right bc returns should be handled
@@ -676,17 +702,19 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
 /// * `env` - The current environment
 fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTag], env: &NodeEnv) {
     for (name, tag) in inputs.iter_mut() {
-        fill_val_quotient(name, tag, env);
+        fill_val_quotient(name, tag, env, START_BLOCK_ID);
     }
     let output_classes = env.get_output_classes().to_vec();
     assert_eq!(output_classes.len(), outputs.len());
     for (tag, output_class) in outputs.iter_mut().zip(output_classes) {
         if let Some(Tag { quot, .. }) = tag.value.as_mut() {
-            *quot = Quotient::Some;
+            if quot.is_none() {
+                *quot = Some(Quotient::Node);
+            }
         } else {
             tag.value = Some(Tag {
                 info: Info::default(),
-                quot: Quotient::Some,
+                quot: Some(Quotient::Node),
                 quot_var: None,
                 flow: None,
             });
@@ -695,6 +723,7 @@ fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTa
             &MetaVar::new_class_name(&output_class).into_string(),
             tag,
             env,
+            START_BLOCK_ID,
         );
     }
 }

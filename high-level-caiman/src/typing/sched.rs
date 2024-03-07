@@ -515,7 +515,7 @@ pub fn collect_schedule(
     env: &mut DTypeEnv,
     stmts: &[SchedStmt],
     fn_out: &[FullType],
-    sig_outs: &[DataType],
+    sig_outs: &[(String, DataType)],
     info: Info,
     fn_name: &str,
 ) -> Result<HashMap<String, Info>, LocalError> {
@@ -546,7 +546,7 @@ pub fn collect_schedule(
             base: Some(anot), ..
         } = fn_t
         {
-            if !anot.base.refines(sig_t) {
+            if !anot.base.refines(&sig_t.1) {
                 return Err(type_error(
                     info,
                     &format!(

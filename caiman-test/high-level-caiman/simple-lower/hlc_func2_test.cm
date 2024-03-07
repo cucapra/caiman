@@ -3,19 +3,19 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
-val main() -> i64 {
+val main() -> r: i64 {
     a :- 2
     c :- calc(a)
     returns c
 }
 
-val calc(a: i64) -> i64 {
+val calc(a: i64) -> r: i64 {
     b :- a * a
     c :- b ^ a
     returns c
 }
 
-fn calc_impl(a: i64 @ input(val.a)-usable) -> i64 @ output(val.c)-usable
+fn calc_impl(a: i64 @ input(val.a)-usable) -> i64 @ val.r-usable
     impls calc, time, space
 {
     let b: i64 @ node(val.b) = a * a;
@@ -23,7 +23,7 @@ fn calc_impl(a: i64 @ input(val.a)-usable) -> i64 @ output(val.c)-usable
     c
 }
 
-fn main_impl() -> i64 @ node(val.c)-usable
+fn main_impl() -> i64 @ val.r-usable
     impls main, time, space
 {
     let a: i64 @ node(val.a)-usable = 2;
