@@ -20,59 +20,19 @@ impl<T> Hole<T> {
         }
     }
 
-    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Hole<U> {
-        match self {
-            Hole::Empty => Hole::Empty,
-            Hole::Filled(x) => Hole::Filled(f(x)),
-        }
-    }
-
-    pub fn map_or<R>(self, default: R, f: impl FnOnce(T) -> R) -> R {
-        match self {
-            Hole::Empty => default,
-            Hole::Filled(x) => f(x),
-        }
-    }
-
-    pub fn unwrap(self) -> T {
-        match self {
-            Hole::Filled(x) => x,
-            Hole::Empty => panic!("called `Hole::unwrap()` on an `Empty` value"),
-        }
-    }
-
-    pub fn unwrap_or_else(self, f: impl FnOnce() -> T) -> T {
-        match self {
-            Hole::Filled(x) => x,
-            Hole::Empty => f(),
-        }
-    }
-
-    pub fn unwrap_or(self, default: T) -> T {
-        match self {
-            Hole::Filled(x) => x,
-            Hole::Empty => default,
-        }
-    }
-
-    pub fn and_then(self, f: impl FnOnce(T) -> Hole<T>) -> Hole<T> {
-        match self {
-            Hole::Empty => Hole::Empty,
-            Hole::Filled(x) => f(x),
-        }
-    }
-
     pub fn opt(self) -> Option<T> {
         self.into()
     }
-}
 
-impl<T> Hole<Hole<T>> {
-    pub fn flatten(self) -> Hole<T> {
+    pub fn is_empty(&self) -> bool {
         match self {
-            Hole::Empty => Hole::Empty,
-            Hole::Filled(x) => x,
+            Hole::Empty => true,
+            Hole::Filled(_) => false,
         }
+    }
+
+    pub fn is_filled(&self) -> bool {
+        !self.is_empty()
     }
 }
 
@@ -238,14 +198,17 @@ macro_rules! map_parser_refs {
     // When mapping referenced nodes, we only care about mapping the Operation types,
     // since those are the actual references.
     ($map:ident, $arg:ident : Operation) => {
-        $arg.as_ref().map(|x| $map(x.clone()))
+        $arg.as_ref().opt().map(|x| $map(x.clone())).into()
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.as_ref().map(|lst| {
-            lst.iter()
-                .map(|arg_hole| arg_hole.as_ref().map(|arg| $map(arg.clone())))
-                .collect()
-        })
+        $arg.as_ref()
+            .opt()
+            .map(|lst| {
+                lst.iter()
+                    .map(|arg_hole| arg_hole.as_ref().opt().map(|arg| $map(arg.clone())).into())
+                    .collect()
+            })
+            .into()
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()

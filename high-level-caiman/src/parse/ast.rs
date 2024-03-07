@@ -286,7 +286,7 @@ pub struct QuotientReference {
 pub struct Tag {
     pub info: Info,
     pub quot: Option<Quotient>,
-    pub quot_var: Option<QuotientReference>,
+    pub quot_var: QuotientReference,
     pub flow: Option<Flow>,
 }
 

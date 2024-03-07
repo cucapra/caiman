@@ -18,6 +18,13 @@ pub fn reject_hole<T>(h: Hole<T>) -> T {
     }
 }
 
+pub fn reject_opt<T>(h: Option<T>) -> T {
+    match h {
+        Some(v) => v,
+        None => unreachable!("Unimplemented Hole"),
+    }
+}
+
 #[derive(Debug)]
 pub struct Context {
     pub path: String,
@@ -340,17 +347,26 @@ impl Context {
         };
         let error = "Holes in operational lists unsupported";
         for operation in operations {
-            let unwrapped = operation.as_ref().unwrap_or_else(|| panic!(error));
-            let remote = unwrapped.quot.as_ref().unwrap_or_else(|| panic!(error));
-            let (fnid, kind) =
-                self.meta_lookup_loc(remote.funclet.as_ref().unwrap_or_else(|| panic!(error)));
+            let unwrapped = operation.as_ref().opt().unwrap_or_else(|| panic!(error));
+            let remote = unwrapped
+                .quot
+                .as_ref()
+                .opt()
+                .unwrap_or_else(|| panic!(error));
+            let (fnid, kind) = self.meta_lookup_loc(
+                remote
+                    .funclet
+                    .as_ref()
+                    .opt()
+                    .unwrap_or_else(|| panic!(error)),
+            );
             let quot = self.explicit_node_id(
                 &fnid,
                 &remote
                     .node
                     .as_ref()
                     .cloned()
-                    .map(|n| n.unwrap_or_else(|| panic!(error))),
+                    .map(|n| n.opt().unwrap_or_else(|| panic!(error))),
             );
             let tag = Hole::Filled(ir::Tag {
                 quot,
@@ -409,9 +425,9 @@ impl Context {
         });
         let result = self.tag_lookup(&tags.collect());
         OperationSet {
-            value: result.value.map(|t| t.quot),
-            timeline: result.timeline.map(|t| t.quot),
-            spatial: result.spatial.map(|t| t.quot),
+            value: result.value.opt().map(|t| t.quot).into(),
+            timeline: result.timeline.opt().map(|t| t.quot).into(),
+            spatial: result.spatial.opt().map(|t| t.quot).into(),
         }
     }
 

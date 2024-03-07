@@ -229,20 +229,19 @@ SpecType: SpecType = {
 
 // Quotient reference: the part of the quotient which refers to a specific node
 // in a spec
-QuotRef: Option<QuotientReference> = {
-    <a: SpecType> "." <b: Id> => Some(QuotientReference {
+QuotRef: QuotientReference = {
+    <a: SpecType> "." <b: Id> => QuotientReference {
         spec_type: a,
         spec_var: Some(String::from(b)),
-    }),
-    <a: SpecType> "." "(" <b: TupleCommaList<Id>> ")" => Some(QuotientReference {
+    },
+    <a: SpecType> "." "(" <b: TupleCommaList<Id>> ")" => QuotientReference {
         spec_type: a,
         spec_var: Some(format!("_{}", b.join("_"))),
-    }),
-    <a: SpecType> => Some(QuotientReference {
+    },
+    <a: SpecType> => QuotientReference {
         spec_type: a,
         spec_var: None,
-    }),
-    "?" => None,
+    },
 }
 
 // Flagged type: base type with flags and settings

@@ -517,18 +517,9 @@ pub fn tag_to_remote_id(t: &Tag) -> asm::RemoteNodeId {
         node: if t.quot.map_or(false, |q| q.is_none()) {
             None
         } else {
-            Some(
-                t.quot_var
-                    .as_ref()
-                    .and_then(|x| x.spec_var.clone().map(asm::NodeId))
-                    .into(),
-            )
+            Some(t.quot_var.spec_var.clone().map(asm::NodeId).into())
         },
-        funclet: t
-            .quot_var
-            .as_ref()
-            .map(|qr| qr.spec_type.get_meta_id())
-            .into(),
+        funclet: Hole::Filled(t.quot_var.spec_type.get_meta_id()),
     }
 }
 

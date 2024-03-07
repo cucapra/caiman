@@ -2,7 +2,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    enum_cast, lower::tuple_id, parse::ast::{ArgsOrEnc, Binop, DataType, FullType, NestedExpr, QuotientReference, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
+    enum_cast, lower::tuple_id, parse::ast::{ArgsOrEnc, Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -37,15 +37,11 @@ impl TripleTag {
         let mut spatial = None;
         let mut timeline = None;
         for tag in tags {
-            if let Tag { quot_var: Some(QuotientReference {
-                spec_type, ..
-            }), ..} = &tag {
-                match spec_type {
+                match tag.quot_var.spec_type {
                     SpecType::Value => value = Some(tag.clone()),
                     SpecType::Spatial => spatial = Some(tag.clone()),
                     SpecType::Timeline => timeline = Some(tag.clone()),
-                }
-            }
+                }     
         }
         Self {
             value,
@@ -59,15 +55,11 @@ impl TripleTag {
         let mut spatial = None;
         let mut timeline = None;
         for tag in tags {
-            if let Tag { quot_var: Some(QuotientReference {
-                spec_type, ..
-            }), ..} = tag {
-                match spec_type {
+                match tag.quot_var.spec_type {
                     SpecType::Value => value = Some(tag.clone()),
                     SpecType::Spatial => spatial = Some(tag.clone()),
                     SpecType::Timeline => timeline = Some(tag.clone()),
                 }
-            }
         }
         Self {
             value,
@@ -234,9 +226,8 @@ impl HirFuncCall {
 
     fn to_tuple_tag(mut tag: TripleTag) -> TripleTag {
         if let Some(val) = tag.value.as_mut() {
-            if let Some(qv) = val.quot_var.as_mut() {
-                qv.spec_var = qv.spec_var.as_ref().map(|sv| tuple_id(&[sv.clone()]));
-            }
+                val.quot_var.spec_var = val.quot_var.spec_var.as_ref().map(|sv| tuple_id(&[sv.clone()]));
+            
         }
         tag
     }

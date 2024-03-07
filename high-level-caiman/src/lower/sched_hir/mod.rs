@@ -391,6 +391,7 @@ impl<'a> Funclet<'a> {
     pub fn is_literal_value(&self, t: &asm::RemoteNodeId) -> bool {
         t.node.as_ref().map_or(false, |n| {
             n.as_ref()
+                .opt()
                 .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
         })
     }

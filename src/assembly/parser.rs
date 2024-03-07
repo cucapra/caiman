@@ -517,14 +517,14 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [meta_name_hole(funclet_id)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.map(|f| ast::MetaId(f)),
+                    funclet: funclet_id.opt().map(|f| ast::MetaId(f)).into(),
                     node: None
                 })
             },
             [meta_name_hole(funclet_id), name_hole(node_id)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.map(|f| ast::MetaId(f)),
-                    node: Some(node_id.map(|n| ast::NodeId(n)))
+                    funclet: funclet_id.opt().map(|f| ast::MetaId(f)).into(),
+                    node: Some(node_id.opt().map(|n| ast::NodeId(n)).into())
                 })
             },
             [hole] => {
@@ -708,7 +708,7 @@ impl CaimanAssemblyParser {
 
     fn name_hole_elements(input: Node) -> ParseResult<Vec<Hole<NodeId>>> {
         Ok(match_nodes!(input.into_children();
-               [name_hole(names)..] => names.map(|name| name.map(|s| NodeId(s))).collect()
+               [name_hole(names)..] => names.map(|name| name.opt().map(|s| NodeId(s)).into()).collect()
         ))
     }
 
@@ -722,7 +722,7 @@ impl CaimanAssemblyParser {
     fn name_box_single(input: Node) -> ParseResult<Hole<Vec<Hole<NodeId>>>> {
         Ok(match_nodes!(input.into_children();
             [name_box(b)] => b,
-            [name_hole(name)] => Hole::Filled(vec![name.map(|s| NodeId(s))])
+            [name_hole(name)] => Hole::Filled(vec![name.opt().map(|s| NodeId(s)).into()])
         ))
     }
 
@@ -1215,7 +1215,7 @@ impl CaimanAssemblyParser {
         Ok(match_nodes!(input.into_children();
             [join_sep, name_hole(join), name_box_single(arguments)] =>
                 ast::TailEdge::Jump {
-                    join: join.map(|s| NodeId(s)),
+                    join: join.opt().map(|s| NodeId(s)).into(),
                     arguments
                 }
         ))
@@ -1228,9 +1228,9 @@ impl CaimanAssemblyParser {
                 name_call(callee_arguments), name_hole(continuation_join)] =>
                 ast::TailEdge::ScheduleCall {
                     operations,
-                    callee_funclet_id: callee_funclet_id.map(|s| FuncletId(s)),
+                    callee_funclet_id: callee_funclet_id.opt().map(|s| FuncletId(s)).into(),
                     callee_arguments,
-                    continuation_join: continuation_join.map(|s| NodeId(s))
+                    continuation_join: continuation_join.opt().map(|s| NodeId(s)).into()
                 }
         ))
     }
@@ -1242,16 +1242,16 @@ impl CaimanAssemblyParser {
                 name_call(callee_arguments), name_hole(continuation_join)] =>
                 ast::TailEdge::ScheduleSelect {
                     operations,
-                    condition: condition.map(|s| NodeId(s)),
-                    callee_funclet_ids: callee_funclet_ids.map(
+                    condition: condition.opt().map(|s| NodeId(s)).into(),
+                    callee_funclet_ids: callee_funclet_ids.opt().map(
                         |v| v.into_iter().map(
-                            |name| name.map(
+                            |name| name.opt().map(
                                 |s| FuncletId(s.0)
-                            )
+                            ).into()
                         ).collect()
-                    ),
+                    ).into(),
                     callee_arguments,
-                    continuation_join: continuation_join.map(|s| NodeId(s))
+                    continuation_join: continuation_join.opt().map(|s| NodeId(s)).into()
                 }
         ))
     }
@@ -1263,9 +1263,9 @@ impl CaimanAssemblyParser {
                 name_call(yielded_nodes), name_hole(continuation_join)] =>
                 ast::TailEdge::ScheduleCallYield {
                     operations,
-                    external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
+                    external_function_id: external_function_id.opt().map(|s| ExternalFunctionId(s)).into(),
                     yielded_nodes,
-                    continuation_join: continuation_join.map(|s| NodeId(s))
+                    continuation_join: continuation_join.opt().map(|s| NodeId(s)).into()
                 }
         ))
     }
@@ -1407,7 +1407,7 @@ impl CaimanAssemblyParser {
             [name_hole(node)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::Drop {
-                        node: node.map(|s| NodeId(s))
+                        node: node.opt().map(|s| NodeId(s)).into()
                     }
                 }
         ))
@@ -1419,7 +1419,7 @@ impl CaimanAssemblyParser {
                 type_hole_sep(storage_type), name_hole(node)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::StaticSubAlloc {
-                        node: node.map(|s| NodeId(s)),
+                        node: node.opt().map(|s| NodeId(s)).into(),
                         place,
                         storage_type
                     }
@@ -1433,7 +1433,7 @@ impl CaimanAssemblyParser {
                 name_hole(node), n_list(sizes), quotient_hole(spatial_operation)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::StaticSplit {
-                        node: node.map(|s| NodeId(s)),
+                        node: node.opt().map(|s| NodeId(s)).into(),
                         place,
                         sizes,
                         spatial_operation
@@ -1462,7 +1462,7 @@ impl CaimanAssemblyParser {
                 name_hole(source)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::ReadRef {
-                        source: source.map(|s| NodeId(s)),
+                        source: source.opt().map(|s| NodeId(s)).into(),
                         storage_type: Hole::Filled(ast::TypeId::FFI(storage_type))
                     }
                 }
@@ -1475,7 +1475,7 @@ impl CaimanAssemblyParser {
                 name_hole(source)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::BorrowRef {
-                        source: source.map(|s| NodeId(s)),
+                        source: source.opt().map(|s| NodeId(s)).into(),
                         storage_type
                     }
                 }
@@ -1489,8 +1489,8 @@ impl CaimanAssemblyParser {
                     name: None,
                     node: ast::Node::WriteRef {
                         storage_type,
-                        source: source.map(|s| NodeId(s)),
-                        destination: destination.map(|s| NodeId(s))
+                        source: source.opt().map(|s| NodeId(s)).into(),
+                        destination: destination.opt().map(|s| NodeId(s)).into()
                     }
                 }
         ))
@@ -1517,7 +1517,7 @@ impl CaimanAssemblyParser {
                 name_box_single(outputs)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::LocalDoExternal {
-                        external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
+                        external_function_id: external_function_id.opt().map(|s| ExternalFunctionId(s)).into(),
                         operation,
                         inputs,
                         outputs
@@ -1531,8 +1531,8 @@ impl CaimanAssemblyParser {
             [local_copy_sep, name_hole(input), name_hole(output)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::LocalCopy {
-                        input: input.map(|s| NodeId(s)),
-                        output: output.map(|s| NodeId(s))
+                        input: input.opt().map(|s| NodeId(s)).into(),
+                        output: output.opt().map(|s| NodeId(s)).into()
                     }
                 }
         ))
@@ -1561,8 +1561,8 @@ impl CaimanAssemblyParser {
                 name_box_single(outputs)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::EncodeDoExternal {
-                        encoder: encoder.map(|s| NodeId(s)),
-                        external_function_id: external_function_id.map(|s| ExternalFunctionId(s)),
+                        encoder: encoder.opt().map(|s| NodeId(s)).into(),
+                        external_function_id: external_function_id.opt().map(|s| ExternalFunctionId(s)).into(),
                         operation,
                         inputs,
                         outputs
@@ -1577,9 +1577,9 @@ impl CaimanAssemblyParser {
                 name_hole(output)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::EncodeCopy {
-                        encoder: encoder.map(|s| NodeId(s)),
-                        input: input.map(|s| NodeId(s)),
-                        output: output.map(|s| NodeId(s))
+                        encoder: encoder.opt().map(|s| NodeId(s)).into(),
+                        input: input.opt().map(|s| NodeId(s)).into(),
+                        output: output.opt().map(|s| NodeId(s)).into()
                     }
                 }
         ))
@@ -1591,7 +1591,7 @@ impl CaimanAssemblyParser {
                 quotient_hole(event)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::Submit {
-                        encoder: encoder.map(|s| NodeId(s)),
+                        encoder: encoder.opt().map(|s| NodeId(s)).into(),
                         event
                     }
                 }
@@ -1603,7 +1603,7 @@ impl CaimanAssemblyParser {
             [sync_fence_sep, name_hole_sep(fence), quotient_hole(event)] => ast::NamedNode {
                     name: None,
                     node: ast::Node::SyncFence {
-                        fence: fence.map(|s| NodeId(s)),
+                        fence: fence.opt().map(|s| NodeId(s)).into(),
                         event
                     }
                 }
@@ -1616,9 +1616,9 @@ impl CaimanAssemblyParser {
                 name_hole(continuation)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::InlineJoin {
-                        funclet: funclet.map(|s| FuncletId(s)),
+                        funclet: funclet.opt().map(|s| FuncletId(s)).into(),
                         captures,
-                        continuation: continuation.map(|s| NodeId(s)),
+                        continuation: continuation.opt().map(|s| NodeId(s)).into(),
                     }
                 }
         ))
@@ -1630,9 +1630,9 @@ impl CaimanAssemblyParser {
                 name_box(captures), name_hole(continuation)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::SerializedJoin {
-                        funclet: funclet.map(|s| FuncletId(s)),
+                        funclet: funclet.opt().map(|s| FuncletId(s)).into(),
                         captures,
-                        continuation: continuation.map(|s| NodeId(s)),
+                        continuation: continuation.opt().map(|s| NodeId(s)).into(),
                     }
                 }
         ))
@@ -1654,7 +1654,7 @@ impl CaimanAssemblyParser {
                     name: Some(name),
                     node: ast::Node::PromiseCaptures {
                         count: Hole::Filled(count),
-                        continuation: continuation.map(|s| NodeId(s))
+                        continuation: continuation.opt().map(|s| NodeId(s)).into()
                     }
                 }
         ))
@@ -1666,7 +1666,7 @@ impl CaimanAssemblyParser {
                 name_box(haves), name_box(needs)] => ast::NamedNode {
                     name: Some(name),
                     node: ast::Node::FulfillCaptures {
-                        continuation: continuation.map(|s| NodeId(s)),
+                        continuation: continuation.opt().map(|s| NodeId(s)).into(),
                         haves,
                         needs
                     }

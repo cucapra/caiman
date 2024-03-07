@@ -180,10 +180,10 @@ fn add_type_annot(name: &str, annot: &TripleTag, env: NodeEnv) -> Result<NodeEnv
     if let Some(Tag {
         info,
         quot_var:
-            Some(QuotientReference {
+            QuotientReference {
                 spec_var: Some(class_name),
                 ..
-            }),
+            },
         ..
     }) = &annot.value
     {
@@ -563,7 +563,7 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: u
         let old_spec_var = tag
             .value
             .as_ref()
-            .and_then(|t| t.quot_var.as_ref().and_then(|q| q.spec_var.as_ref()));
+            .and_then(|t| t.quot_var.spec_var.as_ref());
         assert!(
             old_spec_var.is_none() || old_spec_var.unwrap() == &node,
             "Cannot unify output class {name} with unequal nodes {node} and {}",
@@ -578,10 +578,10 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: u
                     Quotient::Node
                 }
             })),
-            quot_var: Some(QuotientReference {
+            quot_var: QuotientReference {
                 spec_var: Some(node),
                 spec_type: SpecType::Value,
-            }),
+            },
             flow,
         });
     }
@@ -606,10 +606,10 @@ fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
                         Quotient::Node
                     },
                 ),
-                quot_var: Some(QuotientReference {
+                quot_var: QuotientReference {
                     spec_var: Some(node),
                     spec_type: SpecType::Value,
-                }),
+                },
                 flow: None,
             }),
             spatial: None,
@@ -715,7 +715,10 @@ fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTa
             tag.value = Some(Tag {
                 info: Info::default(),
                 quot: Some(Quotient::Node),
-                quot_var: None,
+                quot_var: QuotientReference {
+                    spec_type: SpecType::Value,
+                    spec_var: None,
+                },
                 flow: None,
             });
         }
