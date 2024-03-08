@@ -22,7 +22,7 @@ use self::{
         analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_out_ssa,
         transform_to_ssa, InOutFacts, LiveVars, TagAnalysis,
     },
-    cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
+    cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
 
 pub use analysis::TagInfo;
@@ -124,8 +124,17 @@ impl<'a> Funclet<'a> {
     /// The returned vector of strings do not contain duplicates and each part of the
     /// result (the captures and non-captures) is sorted alphabetically.
     fn input_vars(&self) -> Vec<String> {
-        let preds = self.parent.cfg.predecessors(self.id());
-        self.parent.exiting_vars(&preds)
+        if self.id() == START_BLOCK_ID {
+            self.parent
+                .finfo
+                .input
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect()
+        } else {
+            let preds = self.parent.cfg.predecessors(self.id());
+            self.parent.exiting_vars(&preds)
+        }
     }
 
     /// Gets the output arguments of this funclet based on the live out variables
@@ -319,7 +328,7 @@ impl<'a> Funclet<'a> {
             .live_set()
             .iter()
             .cloned()
-            .map(|s| self.get_use_name(&s))
+            .map(|s| self.get_use_name2(&s))
             .map(asm::NodeId)
             .map(Hole::Filled)
             .collect()
@@ -398,9 +407,10 @@ impl<'a> Funclet<'a> {
 
     /// Returns true if the specified use should be a phi node instead of a regular use
     pub fn use_phi(&self, var: &str) -> bool {
-        self.get_input_tag(var)
-            .map_or(false, |x| x.node_type == Some(Quotient::Node))
-            && self.input_vars().iter().any(|v| v == var)
+        /*self.get_input_tag(var)
+        .map_or(false, |x| x.node_type == Some(Quotient::Node))
+        && */
+        self.input_vars().iter().any(|v| v == var)
     }
 
     pub fn get_use_name(&self, var: &str) -> String {
@@ -409,6 +419,14 @@ impl<'a> Funclet<'a> {
         } else {
             var.to_string()
         }
+    }
+
+    pub fn get_use_name2(&self, var: &str) -> String {
+        // if self.use_phi(var) {
+        //     format!("__phi_{var}")
+        // } else {
+        var.to_string()
+        // }
     }
 
     /// Returns true if the specified variable is a mutable reference or a mutable variable

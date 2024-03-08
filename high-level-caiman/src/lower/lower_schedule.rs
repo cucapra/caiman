@@ -332,7 +332,7 @@ fn lower_func_call(
                 captures: Hole::Filled(
                     captures
                         .iter()
-                        .map(|x| Hole::Filled(asm::NodeId(f.get_use_name(x))))
+                        .map(|x| Hole::Filled(asm::NodeId(f.get_use_name2(x))))
                         .collect(),
                 ),
                 continuation: Hole::Filled(asm::NodeId(djoin_name)),
@@ -357,7 +357,7 @@ fn lower_func_call(
             callee_arguments: Hole::Filled(
                 call.args
                     .iter()
-                    .map(|x| Hole::Filled(asm::NodeId(f.get_use_name(x))))
+                    .map(|x| Hole::Filled(asm::NodeId(f.get_use_name2(x))))
                     .collect(),
             ),
             continuation_join: Hole::Filled(asm::NodeId(join_var)),
