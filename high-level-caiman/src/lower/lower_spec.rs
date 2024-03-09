@@ -190,13 +190,14 @@ fn lower_spec_assign(
         NestedExpr::Uop { .. } => todo!(),
     }
 }
-/// Lower a list of spec statements into a list of assembly commands.
+/// Lower a list of spec statements into a list of assembly commands by appending
+/// the commands to the given vector `res`.
 fn lower_spec_stmts(
     stmts: Vec<SpecStmt>,
     ctx: &Context,
     spec_name: &str,
+    mut res: Vec<Hole<asm::Command>>,
 ) -> Vec<Hole<asm::Command>> {
-    let mut res = vec![];
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, rhs, .. } => {
@@ -255,6 +256,18 @@ fn lower_spec_funclet(
     class_name: Option<&str>,
     ctx: &Context,
 ) -> (asm::FuncletHeader, Vec<Hole<asm::Command>>) {
+    let phi_nodes: Vec<_> = input
+        .iter()
+        .enumerate()
+        .map(|(idx, (name, _))| {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(name.to_string())),
+                node: asm::Node::Phi {
+                    index: Hole::Filled(idx),
+                },
+            }))
+        })
+        .collect();
     (
         asm::FuncletHeader {
             name: asm::FuncletId(name.to_string()),
@@ -263,7 +276,7 @@ fn lower_spec_funclet(
                 .map(|x| {
                     let (name, dt) = x;
                     asm::FuncletArgument {
-                        name: Some(asm::NodeId(name)),
+                        name: Some(asm::NodeId(format!("_in_{name}"))),
                         typ: data_type_to_local_type(&dt),
                         tags: Vec::new(),
                     }
@@ -285,7 +298,7 @@ fn lower_spec_funclet(
                 })
             }),
         },
-        lower_spec_stmts(statements, ctx, name),
+        lower_spec_stmts(statements, ctx, name, phi_nodes),
     )
 }
 

@@ -12,7 +12,7 @@ pub use hir::*;
 use crate::{
     lower::data_type_to_local_type,
     normalize::original_name,
-    parse::ast::{DataType, Quotient, SchedulingFunc},
+    parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
 use caiman::assembly::ast::{self as asm};
@@ -209,7 +209,9 @@ impl<'a> Funclet<'a> {
                 .map(|(name, annot)| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
                     typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
-                    tags: TagInfo::from(annot).tags_vec_default(&self.parent.data_types[name]),
+                    tags: TagInfo::from(annot)
+                        .set_val_input()
+                        .tags_vec_default(&self.parent.data_types[name]),
                 })
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
@@ -328,7 +330,6 @@ impl<'a> Funclet<'a> {
             .live_set()
             .iter()
             .cloned()
-            .map(|s| self.get_use_name2(&s))
             .map(asm::NodeId)
             .map(Hole::Filled)
             .collect()
@@ -403,30 +404,6 @@ impl<'a> Funclet<'a> {
                 .opt()
                 .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
         })
-    }
-
-    /// Returns true if the specified use should be a phi node instead of a regular use
-    pub fn use_phi(&self, var: &str) -> bool {
-        /*self.get_input_tag(var)
-        .map_or(false, |x| x.node_type == Some(Quotient::Node))
-        && */
-        self.input_vars().iter().any(|v| v == var)
-    }
-
-    pub fn get_use_name(&self, var: &str) -> String {
-        if self.use_phi(var) {
-            format!("__phi_{var}")
-        } else {
-            var.to_string()
-        }
-    }
-
-    pub fn get_use_name2(&self, var: &str) -> String {
-        // if self.use_phi(var) {
-        //     format!("__phi_{var}")
-        // } else {
-        var.to_string()
-        // }
     }
 
     /// Returns true if the specified variable is a mutable reference or a mutable variable

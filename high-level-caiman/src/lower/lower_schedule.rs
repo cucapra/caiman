@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use caiman::assembly::ast::{self as asm, FuncletArgument, Hole, MetaMapping, RemoteNodeId};
+use caiman::assembly::ast::{self as asm, Hole, MetaMapping, RemoteNodeId};
 
 use crate::{
     enum_cast,
@@ -73,7 +73,7 @@ fn build_copy_cmd(
         asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalCopy {
-                input: Hole::Filled(asm::NodeId(f.get_use_name(src))),
+                input: Hole::Filled(asm::NodeId(src.clone())),
                 output: Hole::Filled(asm::NodeId(dest.to_string())),
             },
         })
@@ -81,7 +81,7 @@ fn build_copy_cmd(
         asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::WriteRef {
-                source: Hole::Filled(asm::NodeId(f.get_use_name(src))),
+                source: Hole::Filled(asm::NodeId(src.clone())),
                 destination: Hole::Filled(asm::NodeId(dest.to_string())),
                 storage_type: Hole::Filled(data_type_to_storage_type(f.get_dtype(dest).unwrap())),
             },
@@ -216,7 +216,7 @@ fn lower_op(
     let mut inputs = vec![];
     for arg in args {
         let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
-        inputs.push(Hole::Filled(asm::NodeId(f.get_use_name(arg))));
+        inputs.push(Hole::Filled(asm::NodeId(arg.clone())));
     }
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
@@ -250,18 +250,12 @@ fn lower_op(
     )
 }
 
-fn lower_load(
-    dest: &str,
-    typ: &DataType,
-    src: &str,
-    temp_id: usize,
-    f: &Funclet,
-) -> (CommandVec, usize) {
+fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (CommandVec, usize) {
     (
         vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
-                source: Hole::Filled(asm::NodeId(f.get_use_name(src))),
+                source: Hole::Filled(asm::NodeId(src.to_string())),
                 storage_type: Hole::Filled(data_type_to_ffi_type(typ)),
             },
         }))],
@@ -284,7 +278,7 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         HirBody::RefStore {
             lhs, rhs, lhs_tags, ..
         } => lower_store(lhs, lhs_tags, rhs, temp_id, f),
-        HirBody::RefLoad { dest, src, typ, .. } => lower_load(dest, typ, src, temp_id, f),
+        HirBody::RefLoad { dest, src, typ, .. } => lower_load(dest, typ, src, temp_id),
         // annotations don't lower to anything
         HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) => (vec![], temp_id),
         HirBody::Op {
@@ -332,7 +326,7 @@ fn lower_func_call(
                 captures: Hole::Filled(
                     captures
                         .iter()
-                        .map(|x| Hole::Filled(asm::NodeId(f.get_use_name2(x))))
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
                         .collect(),
                 ),
                 continuation: Hole::Filled(asm::NodeId(djoin_name)),
@@ -357,7 +351,7 @@ fn lower_func_call(
             callee_arguments: Hole::Filled(
                 call.args
                     .iter()
-                    .map(|x| Hole::Filled(asm::NodeId(f.get_use_name2(x))))
+                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
                     .collect(),
             ),
             continuation_join: Hole::Filled(asm::NodeId(join_var)),
@@ -398,7 +392,7 @@ fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
             Hole::Filled(asm::Command::TailEdge(asm::TailEdge::Jump {
                 arguments: Hole::Filled(
                     rets.iter()
-                        .map(|x| Hole::Filled(asm::NodeId(f.get_use_name(x))))
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
                         .collect(),
                 ),
                 join: Hole::Filled(asm::NodeId(join_var)),
@@ -409,7 +403,7 @@ fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
             asm::TailEdge::Return {
                 return_values: Hole::Filled(
                     rets.iter()
-                        .map(|x| Hole::Filled(asm::NodeId(f.get_use_name(x))))
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
                         .collect(),
                 ),
             },
@@ -431,7 +425,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
                 asm::TailEdge::Return {
                     return_values: Hole::Filled(
                         vars.iter()
-                            .map(|v| Hole::Filled(asm::NodeId(f.get_use_name(v))))
+                            .map(|v| Hole::Filled(asm::NodeId(v.clone())))
                             .collect(),
                     ),
                 },
@@ -441,7 +435,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
             asm::TailEdge::Return {
                 return_values: Hole::Filled(
                     n.iter()
-                        .map(|v| Hole::Filled(asm::NodeId(f.get_use_name(v))))
+                        .map(|v| Hole::Filled(asm::NodeId(v.clone())))
                         .collect(),
                 ),
             },
@@ -503,7 +497,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
                     tag_to_remote_id,
                 )),
             ]),
-            condition: Hole::Filled(asm::NodeId(f.get_use_name(guard_name))),
+            condition: Hole::Filled(asm::NodeId(guard_name.to_string())),
             callee_funclet_ids: Hole::Filled(f.next_blocks()),
             callee_arguments: Hole::Filled(f.output_args()),
             continuation_join: Hole::Filled(asm::NodeId(join_var)),
@@ -547,20 +541,13 @@ pub fn tag_to_tag_def(t: &Tag, default_flow: ir::Flow) -> asm::Tag {
 fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
     let mut commands = vec![];
     let inputs = funclet.inputs();
-    for (idx, input) in inputs.iter().enumerate() {
-        if let FuncletArgument {
-            name: Some(name), ..
-        } = input
-        {
-            commands.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
-                name: Some(asm::NodeId(format!("__phi_{name}"))),
-                node: asm::Node::Phi {
-                    index: Hole::Filled(idx),
-                },
-            })));
-        } else {
-            panic!("Hmm");
-        }
+    for idx in 0..inputs.len() {
+        commands.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: None,
+            node: asm::Node::Phi {
+                index: Hole::Filled(idx),
+            },
+        })));
     }
     let mut temp_id = 0;
     for cmd in funclet.stmts() {

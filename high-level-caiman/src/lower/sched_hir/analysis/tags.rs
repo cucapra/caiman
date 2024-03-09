@@ -68,6 +68,24 @@ impl TagInfo {
         }
     }
 
+    /// Hack to set the value tag to be an input tag
+    pub fn set_val_input(mut self) -> Self {
+        if let Some(asm::Tag {
+            quot:
+                Hole::Filled(asm::RemoteNodeId {
+                    node: Some(Hole::Filled(node_id)),
+                    ..
+                }),
+            ..
+        }) = self.value.as_mut()
+        {
+            node_id.0 = format!("_in_{}", node_id.0);
+        } else {
+            panic!("Input value tag is none or hole");
+        }
+        self
+    }
+
     fn manual_override_tag(t: &mut Option<asm::Tag>, other: Option<asm::Tag>) {
         match (t, other) {
             (Some(ref mut a), Some(b)) => {
