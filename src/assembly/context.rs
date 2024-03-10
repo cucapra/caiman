@@ -13,6 +13,13 @@ use std::collections::{HashMap, HashSet};
 // Utility stuff
 pub fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
+        Hole::Filled(v) => v,
+        Hole::Empty => unreachable!("Unimplemented Hole"),
+    }
+}
+
+pub fn reject_opt<T>(h: Option<T>) -> T {
+    match h {
         Some(v) => v,
         None => unreachable!("Unimplemented Hole"),
     }
@@ -124,22 +131,25 @@ impl FuncletIndices {
         self.funclet_kind_map.get(name)
     }
 
-    pub fn get_funclet(&self, name: &String) -> Option<usize> {
-        self.funclet_kind_map.get(name).and_then(|x| match x {
-            ir::Place::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
-            ir::Place::Cpu => self
-                .external_funclet_table
-                .get(&ExternalFunctionId(name.clone())),
-            ir::Place::Gpu => self
-                .external_funclet_table
-                .get(&ExternalFunctionId(name.clone())),
-        })
+    pub fn get_funclet(&self, name: &String) -> Hole<usize> {
+        self.funclet_kind_map
+            .get(name)
+            .and_then(|x| match x {
+                ir::Place::Local => self.local_funclet_table.get(&FuncletId(name.clone())),
+                ir::Place::Cpu => self
+                    .external_funclet_table
+                    .get(&ExternalFunctionId(name.clone())),
+                ir::Place::Gpu => self
+                    .external_funclet_table
+                    .get(&ExternalFunctionId(name.clone())),
+            })
+            .into()
     }
 
     pub fn require_funclet(&self, name: &String) -> usize {
         match self.get_funclet(name) {
-            Some(f) => f,
-            None => panic!("Unknown funclet name {}", name),
+            Hole::Filled(f) => f,
+            Hole::Empty => panic!("Unknown funclet name {}", name),
         }
     }
 }
@@ -202,7 +212,7 @@ impl Context {
                     let mut node_id = 0; // used for skipping tail edges
                     for command in f.commands.iter() {
                         match command {
-                            Some(ast::Command::Node(ast::NamedNode { node, name })) => {
+                            Hole::Filled(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
@@ -210,7 +220,8 @@ impl Context {
                                     None => {}
                                     Some(n) => {
                                         if (n.0 != "_") {
-                                            var_map.insert(n.clone(), ir::Quotient::Node { node_id });
+                                            var_map
+                                                .insert(n.clone(), ir::Quotient::Node { node_id });
                                         }
                                     }
                                 }
@@ -248,7 +259,7 @@ impl Context {
             }
         }
     }
-    
+
     pub fn external_lookup(&self, id: &ExternalFunctionId) -> ir::ExternalFunctionId {
         ffi::ExternalFunctionId(
             self.funclet_indices
@@ -330,34 +341,43 @@ impl Context {
     // note that this will return holes for any missing result
     pub fn tag_lookup(&self, operations: &Vec<Hole<ast::Tag>>) -> TagSet {
         let mut result = TagSet {
-            value: None,
-            timeline: None,
-            spatial: None,
+            value: Hole::Empty,
+            timeline: Hole::Empty,
+            spatial: Hole::Empty,
         };
         let error = "Holes in operational lists unsupported";
         for operation in operations {
-            let unwrapped = operation.as_ref().unwrap_or_else(|| panic!(error));
-            let remote = unwrapped.quot.as_ref().unwrap_or_else(|| panic!(error));
-            let (fnid, kind) =
-                self.meta_lookup_loc(remote.funclet.as_ref().unwrap_or_else(|| panic!(error)));
+            let unwrapped = operation.as_ref().opt().unwrap_or_else(|| panic!(error));
+            let remote = unwrapped
+                .quot
+                .as_ref()
+                .opt()
+                .unwrap_or_else(|| panic!(error));
+            let (fnid, kind) = self.meta_lookup_loc(
+                remote
+                    .funclet
+                    .as_ref()
+                    .opt()
+                    .unwrap_or_else(|| panic!(error)),
+            );
             let quot = self.explicit_node_id(
                 &fnid,
                 &remote
                     .node
                     .as_ref()
                     .cloned()
-                    .map(|n| n.unwrap_or_else(|| panic!(error))),
+                    .map(|n| n.opt().unwrap_or_else(|| panic!(error))),
             );
-            let tag = Some(ir::Tag {
+            let tag = Hole::Filled(ir::Tag {
                 quot,
                 flow: unwrapped.flow.clone(),
             });
             match kind {
                 ir::FuncletKind::Value => match result.value {
-                    None => {
+                    Hole::Empty => {
                         result.value = tag;
                     }
-                    Some(old) => {
+                    Hole::Filled(old) => {
                         panic!(
                             "Duplicate definitions using value: {:?} and {:?}",
                             old, quot
@@ -365,10 +385,10 @@ impl Context {
                     }
                 },
                 ir::FuncletKind::Timeline => match result.timeline {
-                    None => {
+                    Hole::Empty => {
                         result.timeline = tag;
                     }
-                    Some(old) => {
+                    Hole::Filled(old) => {
                         panic!(
                             "Duplicate definitions using timeline: {:?} and {:?}",
                             old, quot
@@ -376,10 +396,10 @@ impl Context {
                     }
                 },
                 ir::FuncletKind::Spatial => match result.spatial {
-                    None => {
+                    Hole::Empty => {
                         result.spatial = tag;
                     }
-                    Some(old) => {
+                    Hole::Filled(old) => {
                         panic!(
                             "Duplicate definitions using spatial: {:?} and {:?}",
                             old, quot
@@ -397,7 +417,7 @@ impl Context {
     // extremely stupid, but it works
     pub fn operational_lookup(&self, operations: &Vec<Hole<ast::RemoteNodeId>>) -> OperationSet {
         let tags = operations.iter().map(|quot| {
-            Some(ast::Tag {
+            Hole::Filled(ast::Tag {
                 quot: quot.clone(),
                 // the dumb part, this doesn't matter
                 flow: ir::Flow::Dead,
@@ -405,9 +425,9 @@ impl Context {
         });
         let result = self.tag_lookup(&tags.collect());
         OperationSet {
-            value: result.value.map(|t| t.quot),
-            timeline: result.timeline.map(|t| t.quot),
-            spatial: result.spatial.map(|t| t.quot),
+            value: result.value.opt().map(|t| t.quot).into(),
+            timeline: result.timeline.opt().map(|t| t.quot).into(),
+            spatial: result.spatial.opt().map(|t| t.quot).into(),
         }
     }
 

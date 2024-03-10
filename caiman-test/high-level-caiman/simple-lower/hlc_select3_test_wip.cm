@@ -12,15 +12,15 @@ val main() -> i64 {
     returns r
 }
 
-fn foo() -> i64 @ node(main.r)-usable 
+fn foo() -> i64 @ node(val.r)-usable 
     impls main, time, space
 {
-    let b: bool @ node(main.b)-usable = false;
-    if @ node(main.r)-? b {
-        let one: i64 @ node(main.one)-usable = 1;
+    let b: bool @ node(val.b)-usable = false;
+    if @ node(val.r)-? b {
+        let one: i64 @ node(val.one)-usable = 1;
         one
     } else {
-        let two: i64 @ node(main.two)-usable = 2;
+        let two: i64 @ node(val.two)-usable = 2;
         two
     }
 }

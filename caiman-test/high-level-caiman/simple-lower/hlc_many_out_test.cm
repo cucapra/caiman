@@ -3,13 +3,13 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(s: BufferSpace) -> BufferSpace { returns s }
 
-val main() -> i64 {
+val main() -> r: i64 {
     a :- 0
     one, two, three, four, five, six, seven, eight, nine, ten :- nums(a)
     returns four
 }
 
-val nums(a: i64) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) {
+val nums(in: i64) -> (a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64, i: i64, j: i64) {
     one :- 1
     two :- 2
     three :- 3
@@ -23,35 +23,35 @@ val nums(a: i64) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) {
     returns (one, two, three, four, five, six, seven, eight, nine, ten)
 }
 
-fn main_func() -> i64 @ node(main.four)-usable impls main, time, space  {
-    let a: i64 @ node(main.a) = 0;
-    let one: i64 @ node(main.one), two: i64 @ node(main.two),
-        three: i64 @ node(main.three), four: i64 @ node(main.four),
-        five: i64 @ node(main.five), six: i64 @ node(main.six),
-        seven: i64 @ node(main.seven), eight: i64 @ node(main.eight),
-        nine: i64 @ node(main.nine), ten: i64 @ node(main.ten) 
+fn main_func() -> i64 @ node(val.r)-usable impls main, time, space  {
+    let a: i64 @ node(val.a) = 0;
+    let one: i64 @ node(val.one), two: i64 @ node(val.two),
+        three: i64 @ node(val.three), four: i64 @ node(val.four),
+        five: i64 @ node(val.five), six: i64 @ node(val.six),
+        seven: i64 @ node(val.seven), eight: i64 @ node(val.eight),
+        nine: i64 @ node(val.nine), ten: i64 @ node(val.ten) 
         = nums_func(a) 
-        @ node(main.(one, two, three, four, five, six, seven, eight, nine, ten));
+        @ node(val.(one, two, three, four, five, six, seven, eight, nine, ten));
     four
 }
 
-fn nums_func(a: i64 @ input(nums.a)-usable) 
-    -> (i64 @ output(nums.one), i64 @ output(nums.two), i64 @ output(nums.three),
-        i64 @ output(nums.four), i64 @ output(nums.five), i64 @ output(nums.six),
-        i64 @ output(nums.seven), i64 @ output(nums.eight), i64 @ output(nums.nine),
-        i64 @ output(nums.ten)) 
+fn nums_func(a: i64 @ input(val.in)-usable) 
+    -> (i64 @ node(val.a), i64 @ node(val.b), i64 @ node(val.c),
+        i64 @ node(val.d), i64 @ node(val.e), i64 @ node(val.f),
+        i64 @ node(val.g), i64 @ node(val.h), i64 @ node(val.i),
+        i64 @ node(val.j)) 
     impls nums, time, space
 {
-    let one: i64 @ node(nums.one) = 1;
-    let two: i64 @ node(nums.two) = 2;
-    let three: i64 @ node(nums.three) = 3;
-    let four: i64 @ node(nums.four) = 4;
-    let five: i64 @ node(nums.five) = 5;
-    let six: i64 @ node(nums.six) = 6;
-    let seven: i64 @ node(nums.seven) = 7;
-    let eight: i64 @ node(nums.eight) = 8;
-    let nine: i64 @ node(nums.nine) = 9;
-    let ten: i64 @ node(nums.ten) = 10;
+    let one: i64 @ node(val.one) = 1;
+    let two: i64 @ node(val.two) = 2;
+    let three: i64 @ node(val.three) = 3;
+    let four: i64 @ node(val.four) = 4;
+    let five: i64 @ node(val.five) = 5;
+    let six: i64 @ node(val.six) = 6;
+    let seven: i64 @ node(val.seven) = 7;
+    let eight: i64 @ node(val.eight) = 8;
+    let nine: i64 @ node(val.nine) = 9;
+    let ten: i64 @ node(val.ten) = 10;
     (one, two, three, four, five, six, seven, eight, nine, ten)
 }
 

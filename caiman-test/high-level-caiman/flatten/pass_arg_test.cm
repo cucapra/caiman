@@ -1,0 +1,25 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val foo(a: i64) -> i64 {
+    returns a * a
+}
+
+fn foo_impl(a: i64) -> i64
+    impls foo, time, space
+{
+    a * a
+}
+
+val main(a: i64) -> i64 {
+    returns foo(foo(a))
+}
+
+fn main_impl(a: i64) -> i64 impls main, time, space {
+    let r = foo_impl(a);
+    foo_impl(r)
+}
+
+pipeline main { main_impl }

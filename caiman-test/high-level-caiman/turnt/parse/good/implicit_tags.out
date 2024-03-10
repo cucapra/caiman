@@ -37,23 +37,11 @@
                         ),
                         tags: [
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        3,
-                                        17,
-                                    ),
-                                    end_ln_and_col: (
-                                        3,
-                                        28,
-                                    ),
-                                },
                                 quot: None,
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "main",
-                                        spec_var: None,
-                                    },
-                                ),
+                                quot_var: QuotientReference {
+                                    spec_type: Value,
+                                    spec_var: None,
+                                },
                                 flow: Some(
                                     Usable,
                                 ),
@@ -71,11 +59,11 @@
                                 info: Info {
                                     start_ln_and_col: (
                                         3,
-                                        33,
+                                        32,
                                     ),
                                     end_ln_and_col: (
                                         3,
-                                        36,
+                                        35,
                                     ),
                                 },
                                 base: Int(
@@ -87,25 +75,13 @@
                         ),
                         tags: [
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        3,
-                                        39,
-                                    ),
-                                    end_ln_and_col: (
-                                        3,
-                                        52,
+                                quot: None,
+                                quot_var: QuotientReference {
+                                    spec_type: Value,
+                                    spec_var: Some(
+                                        "x",
                                     ),
                                 },
-                                quot: None,
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "main",
-                                        spec_var: Some(
-                                            "x",
-                                        ),
-                                    },
-                                ),
                                 flow: Some(
                                     Usable,
                                 ),
@@ -123,11 +99,11 @@
                                 info: Info {
                                     start_ln_and_col: (
                                         3,
-                                        57,
+                                        55,
                                     ),
                                     end_ln_and_col: (
                                         3,
-                                        60,
+                                        58,
                                     ),
                                 },
                                 base: Int(
@@ -149,11 +125,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 3,
-                                66,
+                                64,
                             ),
                             end_ln_and_col: (
                                 3,
-                                69,
+                                67,
                             ),
                         },
                         base: Int(
@@ -165,27 +141,15 @@
                 ),
                 tags: [
                     Tag {
-                        info: Info {
-                            start_ln_and_col: (
-                                3,
-                                72,
-                            ),
-                            end_ln_and_col: (
-                                3,
-                                93,
+                        quot: Some(
+                            Node,
+                        ),
+                        quot_var: QuotientReference {
+                            spec_type: Value,
+                            spec_var: Some(
+                                "y",
                             ),
                         },
-                        quot: Some(
-                            Output,
-                        ),
-                        quot_var: Some(
-                            QuotientReference {
-                                spec_name: "main",
-                                spec_var: Some(
-                                    "y",
-                                ),
-                            },
-                        ),
                         flow: Some(
                             Usable,
                         ),
@@ -205,7 +169,7 @@
                     ),
                     end_ln_and_col: (
                         6,
-                        30,
+                        29,
                     ),
                 },
                 lhs: [
@@ -216,23 +180,11 @@
                                 base: None,
                                 tags: [
                                     Tag {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                6,
-                                                13,
-                                            ),
-                                            end_ln_and_col: (
-                                                6,
-                                                24,
-                                            ),
-                                        },
                                         quot: None,
-                                        quot_var: Some(
-                                            QuotientReference {
-                                                spec_name: "main",
-                                                spec_var: None,
-                                            },
-                                        ),
+                                        quot_var: QuotientReference {
+                                            spec_type: Value,
+                                            spec_var: None,
+                                        },
                                         flow: Some(
                                             Usable,
                                         ),
@@ -249,11 +201,11 @@
                             info: Info {
                                 start_ln_and_col: (
                                     6,
-                                    27,
+                                    26,
                                 ),
                                 end_ln_and_col: (
                                     6,
-                                    29,
+                                    28,
                                 ),
                             },
                             lit: Int(
@@ -272,7 +224,7 @@
                     ),
                     end_ln_and_col: (
                         7,
-                        36,
+                        35,
                     ),
                 },
                 lhs: [
@@ -283,25 +235,13 @@
                                 base: None,
                                 tags: [
                                     Tag {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                7,
-                                                13,
-                                            ),
-                                            end_ln_and_col: (
-                                                7,
-                                                30,
-                                            ),
-                                        },
                                         quot: Some(
                                             Node,
                                         ),
-                                        quot_var: Some(
-                                            QuotientReference {
-                                                spec_name: "main",
-                                                spec_var: None,
-                                            },
-                                        ),
+                                        quot_var: QuotientReference {
+                                            spec_type: Value,
+                                            spec_var: None,
+                                        },
                                         flow: Some(
                                             Usable,
                                         ),
@@ -318,11 +258,11 @@
                             info: Info {
                                 start_ln_and_col: (
                                     7,
-                                    33,
+                                    32,
                                 ),
                                 end_ln_and_col: (
                                     7,
-                                    35,
+                                    34,
                                 ),
                             },
                             lit: Int(
@@ -341,7 +281,7 @@
                     ),
                     end_ln_and_col: (
                         8,
-                        31,
+                        30,
                     ),
                 },
                 lhs: [
@@ -352,27 +292,15 @@
                                 base: None,
                                 tags: [
                                     Tag {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                8,
-                                                13,
-                                            ),
-                                            end_ln_and_col: (
-                                                8,
-                                                25,
-                                            ),
-                                        },
                                         quot: Some(
                                             Node,
                                         ),
-                                        quot_var: Some(
-                                            QuotientReference {
-                                                spec_name: "main",
-                                                spec_var: Some(
-                                                    "x",
-                                                ),
-                                            },
-                                        ),
+                                        quot_var: QuotientReference {
+                                            spec_type: Value,
+                                            spec_var: Some(
+                                                "x",
+                                            ),
+                                        },
                                         flow: None,
                                     },
                                 ],
@@ -387,11 +315,11 @@
                             info: Info {
                                 start_ln_and_col: (
                                     8,
-                                    28,
+                                    27,
                                 ),
                                 end_ln_and_col: (
                                     8,
-                                    30,
+                                    29,
                                 ),
                             },
                             lit: Int(
@@ -410,7 +338,7 @@
                     ),
                     end_ln_and_col: (
                         9,
-                        37,
+                        36,
                     ),
                 },
                 lhs: [
@@ -439,25 +367,13 @@
                                 ),
                                 tags: [
                                     Tag {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                9,
-                                                18,
-                                            ),
-                                            end_ln_and_col: (
-                                                9,
-                                                31,
+                                        quot: None,
+                                        quot_var: QuotientReference {
+                                            spec_type: Value,
+                                            spec_var: Some(
+                                                "y",
                                             ),
                                         },
-                                        quot: None,
-                                        quot_var: Some(
-                                            QuotientReference {
-                                                spec_name: "main",
-                                                spec_var: Some(
-                                                    "y",
-                                                ),
-                                            },
-                                        ),
                                         flow: Some(
                                             Usable,
                                         ),
@@ -474,11 +390,11 @@
                             info: Info {
                                 start_ln_and_col: (
                                     9,
-                                    34,
+                                    33,
                                 ),
                                 end_ln_and_col: (
                                     9,
-                                    36,
+                                    35,
                                 ),
                             },
                             lit: Int(

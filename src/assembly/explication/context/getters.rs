@@ -77,7 +77,7 @@ impl<'context> Context<'context> {
         self.get_funclet(funclet_name).and_then(|f| {
             for command in &f.commands {
                 match command {
-                    Some(ast::Command::Node(ast::NamedNode { name, node })) => match name {
+                    Hole::Filled(ast::Command::Node(ast::NamedNode { name, node })) => match name {
                         None => {}
                         Some(n) => {
                             if n == node_name {
@@ -96,7 +96,7 @@ impl<'context> Context<'context> {
         self.get_funclet(funclet_name).and_then(|f| {
             for command in &f.commands {
                 match command {
-                    Some(ast::Command::TailEdge(t)) => return Some(t),
+                    Hole::Filled(ast::Command::TailEdge(t)) => return Some(t),
                     _ => {}
                 }
             }

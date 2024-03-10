@@ -10,9 +10,11 @@ impl<'context> Context<'context> {
                     for arg in &f.header.args {
                         f.commands.insert(
                             index,
-                            Some(ast::Command::Node(ast::NamedNode {
+                            Hole::Filled(ast::Command::Node(ast::NamedNode {
                                 name: arg.name.clone(),
-                                node: ast::Node::Phi { index: Some(index) },
+                                node: ast::Node::Phi {
+                                    index: Hole::Filled(index),
+                                },
                             })),
                         );
                         index += 1;
@@ -22,7 +24,7 @@ impl<'context> Context<'context> {
 
                         // rename "_" nodes
                         match command {
-                            Some(ast::Command::Node(ast::NamedNode { node, name })) => {
+                            Hole::Filled(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 match name {
                                     None => {}
                                     Some(n) => {
@@ -149,7 +151,7 @@ impl<'context> Context<'context> {
         self.get_funclet_mut(funclet_name).and_then(|f| {
             for command in &mut f.commands {
                 match command {
-                    Some(ast::Command::Node(ast::NamedNode { name, node })) => match name {
+                    Hole::Filled(ast::Command::Node(ast::NamedNode { name, node })) => match name {
                         None => {}
                         Some(n) => {
                             if n == node_name {
@@ -168,7 +170,7 @@ impl<'context> Context<'context> {
         self.get_funclet_mut(funclet_name).and_then(|f| {
             for command in &mut f.commands {
                 match command {
-                    Some(ast::Command::TailEdge(t)) => return Some(t),
+                    Hole::Filled(ast::Command::TailEdge(t)) => return Some(t),
                     _ => {}
                 }
             }

@@ -3,7 +3,7 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
-val main() -> i64 {
+val main() -> out: i64 {
     a :- 3
     b :- 5
     c :- 7
@@ -19,54 +19,54 @@ val main() -> i64 {
 }
 
 feq add_three {
-    val add1(a: i64, b: i64, c: i64) -> i64 {
+    val add1(a: i64, b: i64, c: i64) -> r: i64 {
         t :- a + b
         t2 :- t + c
         returns t2
     }
 
-    val add2(a: i64, b: i64, c: i64) -> i64 {
+    val add2(a: i64, b: i64, c: i64) -> r: i64 {
         t :- b + c
         t2 :- a + t
         returns t2
     }
 }
 
-fn add1_impl(a: i64 @ input(add1.a)-usable, 
-             b: i64 @ input(add1.b)-usable, 
-             c: i64 @ input(add1.c)-usable)
-    -> i64 @ output(add1.t2)-usable impls add1, time, space
+fn add1_impl(a: i64 @ input(val.a)-usable, 
+             b: i64 @ input(val.b)-usable, 
+             c: i64 @ input(val.c)-usable)
+    -> i64 @ val.r-usable impls add1, time, space
 {
-    let t: i64 @ node(add1.t) = a + b;
-    let p: i64 @ node(add1.t2) = t + c;
+    let t: i64 @ node(val.t) = a + b;
+    let p: i64 @ node(val.t2) = t + c;
     p
 }
 
-fn add2_impl(a: i64 @ input(add2.a)-usable, 
-             b: i64 @ input(add2.b)-usable, 
-             c: i64 @ input(add2.c)-usable)
-    -> i64 @ output(add2.t2)-usable impls add2, time, space
+fn add2_impl(a: i64 @ input(val.a)-usable, 
+             b: i64 @ input(val.b)-usable, 
+             c: i64 @ input(val.c)-usable)
+    -> i64 @ val.r-usable impls add2, time, space
 {
-    let t: i64 @ node(add2.t) = b + c;
-    let p: i64 @ node(add2.t2) = a + t;
+    let t: i64 @ node(val.t) = b + c;
+    let p: i64 @ node(val.t2) = a + t;
     p
 }
 
 
-fn main_impl() -> i64 @ node(main.r)-usable
+fn main_impl() -> i64 @ val.out-usable
     impls main, time, space
 {
-    let cond: bool @ node(main.cond) = false;
-    let a: i64 @ node(main.a) = 3;
-    let r: i64 @ node(main.r) = if @ node(main.r) cond {
-        let b: i64 @ node(main.b) = 5;
-        let c: i64 @ node(main.c) = 7;
-        let j: i64 @ node(main.j) = add1_impl(a, b, c) @ node(main.j);
+    let cond: bool @ node(val.cond) = false;
+    let a: i64 @ node(val.a) = 3;
+    let r: i64 @ node(val.r) = if @ node(val.r) cond {
+        let b: i64 @ node(val.b) = 5;
+        let c: i64 @ node(val.c) = 7;
+        let j: i64 @ node(val.j) = add1_impl(a, b, c) @ node(val.j);
         j
     } else {
-        let b: i64 @ node(main.b) = 5;
-        let d: i64 @ node(main.d) = 9;
-        let k: i64 @ node(main.k) = add2_impl(a, b, d) @ node(main.k);
+        let b: i64 @ node(val.b) = 5;
+        let d: i64 @ node(val.d) = 9;
+        let k: i64 @ node(val.k) = add2_impl(a, b, d) @ node(val.k);
         k
     };
     r

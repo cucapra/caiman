@@ -6,7 +6,53 @@ use std::hash::{Hash, Hasher};
 
 // Explication and frontend AST
 
-pub type Hole<T> = Option<T>;
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Hole<T> {
+    Empty,
+    Filled(T),
+}
+
+impl<T> Hole<T> {
+    pub fn as_ref(&self) -> Hole<&T> {
+        match self {
+            Hole::Empty => Hole::Empty,
+            Hole::Filled(x) => Hole::Filled(x),
+        }
+    }
+
+    pub fn opt(self) -> Option<T> {
+        self.into()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Hole::Empty => true,
+            Hole::Filled(_) => false,
+        }
+    }
+
+    pub fn is_filled(&self) -> bool {
+        !self.is_empty()
+    }
+}
+
+impl<T> From<Option<T>> for Hole<T> {
+    fn from(x: Option<T>) -> Self {
+        match x {
+            Some(x) => Hole::Filled(x),
+            None => Hole::Empty,
+        }
+    }
+}
+
+impl<T> From<Hole<T>> for Option<T> {
+    fn from(x: Hole<T>) -> Self {
+        match x {
+            Hole::Filled(x) => Some(x),
+            Hole::Empty => None,
+        }
+    }
+}
 
 #[macro_export]
 macro_rules! def_assembly_id_type {
@@ -125,7 +171,7 @@ pub struct RemoteNodeId {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tag {
     pub quot: Hole<RemoteNodeId>, // What a given value maps to in a specification
-    pub flow: ir::Flow,          // How this value transforms relative to the specification
+    pub flow: ir::Flow,           // How this value transforms relative to the specification
 }
 
 // Super Jank, but whatever
@@ -152,14 +198,17 @@ macro_rules! map_parser_refs {
     // When mapping referenced nodes, we only care about mapping the Operation types,
     // since those are the actual references.
     ($map:ident, $arg:ident : Operation) => {
-        $arg.as_ref().map(|x| $map(x.clone()))
+        $arg.as_ref().opt().map(|x| $map(x.clone())).into()
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.as_ref().map(|lst| {
-            lst.iter()
-                .map(|arg_hole| arg_hole.as_ref().map(|arg| $map(arg.clone())))
-                .collect()
-        })
+        $arg.as_ref()
+            .opt()
+            .map(|lst| {
+                lst.iter()
+                    .map(|arg_hole| arg_hole.as_ref().opt().map(|arg| $map(arg.clone())).into())
+                    .collect()
+            })
+            .into()
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()
@@ -263,7 +312,7 @@ pub struct MetaMapping {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ScheduleBinding {
     pub implicit_tags: (Tag, Tag),
-    pub meta_map: MetaMapping
+    pub meta_map: MetaMapping,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -403,8 +452,8 @@ pub enum Effect {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EffectDeclaration {
-    pub name : EffectId,
-    pub effect : Effect
+    pub name: EffectId,
+    pub effect: Effect,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -418,7 +467,7 @@ pub struct FunctionClass {
 pub struct Pipeline {
     pub name: String,
     pub funclet: FuncletId,
-    pub effect: Option<EffectId>
+    pub effect: Option<EffectId>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

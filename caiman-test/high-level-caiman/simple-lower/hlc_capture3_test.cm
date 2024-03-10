@@ -28,41 +28,41 @@ feq add_three {
     }
 }
 
-fn add1_impl(a: i64 @ input(add1.a)-usable, 
-             b: i64 @ input(add1.b)-usable, 
-             c: i64 @ input(add1.c)-usable)
-    -> i64 @ output(add1.t2)-usable impls add1, time, space
+fn add1_impl(a: i64 @ input(val.a)-usable, 
+             b: i64 @ input(val.b)-usable, 
+             c: i64 @ input(val.c)-usable)
+    -> i64 @ val-usable impls add1, time, space
 {
-    let t: i64 @ node(add1.t) = a + b;
-    let p: i64 @ node(add1.t2) = t + c;
+    let t: i64 @ node(val.t) = a + b;
+    let p: i64 @ node(val.t2) = t + c;
     p
 }
 
-fn add2_impl(a: i64 @ input(add2.a)-usable, 
-             b: i64 @ input(add2.b)-usable, 
-             c: i64 @ input(add2.c)-usable)
-    -> i64 @ output(add2.t2)-usable impls add2, time, space
+fn add2_impl(a: i64 @ input(val.a)-usable, 
+             b: i64 @ input(val.b)-usable, 
+             c: i64 @ input(val.c)-usable)
+    -> i64 @ val-usable impls add2, time, space
 {
-    let t: i64 @ node(add2.t) = b + c;
-    let p: i64 @ node(add2.t2) = a + t;
+    let t: i64 @ node(val.t) = b + c;
+    let p: i64 @ node(val.t2) = a + t;
     p
 }
 
 
-fn main_impl() -> i64 @ node(main.r)-usable
+fn main_impl() -> i64 
     impls main, time, space
 {
-    let a: i64 @ node(main.a) = 3;
-    let b: i64 @ node(main.b) = 5;
-    let c: i64 @ node(main.c) = 7;
+    let a: i64 @ node(val.a) = 3;
+    let b: i64 @ node(val.b) = 5;
+    let c: i64 @ node(val.c) = 7;
 
-    let a2: i64 @ node(main.a) = 3;
-    let b2: i64 @ node(main.b) = 5;
-    let c2: i64 @ node(main.c) = 7;
-    let j: i64 @ node(main.j)-usable = add1_impl(a, b, c) @ node(main.j);
+    let a2: i64 @ node(val.a) = 3;
+    let b2: i64 @ node(val.b) = 5;
+    let c2: i64 @ node(val.c) = 7;
+    let j: i64 @ node(val.j)-usable = add1_impl(a, b, c) @ node(val.j);
     // j is usable bc addition is pure
-    let k: i64 @ node(main.k)-usable = add2_impl(a2, b2, c2) @ node(main.k);
-    let r: i64 @ node(main.r) = j + k;
+    let k: i64 @ node(val.k)-usable = add2_impl(a2, b2, c2) @ node(val.k);
+    let r: i64 @ node(val.r) = j + k;
     r
     
 }

@@ -14,15 +14,15 @@ use std::collections::HashMap;
 
 pub fn todo_hole<T>(h: Hole<T>) -> T {
     match h {
-        Some(v) => v,
-        None => todo!(),
+        Hole::Filled(v) => v,
+        Hole::Empty => todo!(),
     }
 }
 
 pub fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
-        Some(v) => v,
-        None => panic!("Invalid hole location"),
+        Hole::Filled(v) => v,
+        Hole::Empty => panic!("Invalid hole location"),
     }
 }
 
@@ -30,10 +30,10 @@ pub fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
     let mut result = Vec::new();
     for (index, hole) in v.into_iter().enumerate() {
         match hole {
-            Some(value) => {
+            Hole::Filled(value) => {
                 result.push((index, value));
             }
-            None => {}
+            Hole::Empty => {}
         }
     }
     result
@@ -44,8 +44,8 @@ where
     T: Clone,
 {
     match h {
-        Some(v) => find_filled(v.into_vec()),
-        None => Vec::new(),
+        Hole::Filled(v) => find_filled(v.into_vec()),
+        Hole::Empty => Vec::new(),
     }
 }
 
