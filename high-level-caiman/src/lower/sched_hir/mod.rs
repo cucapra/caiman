@@ -10,7 +10,7 @@ use std::{
 pub use hir::*;
 
 use crate::{
-    lower::data_type_to_local_type,
+    lower::{data_type_to_local_type, IN_STEM},
     normalize::original_name,
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
@@ -24,8 +24,6 @@ use self::{
     },
     cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
-
-pub use analysis::TagInfo;
 mod analysis;
 #[cfg(test)]
 mod test;
@@ -141,7 +139,7 @@ impl<'a> Funclet<'a> {
     /// of this block. The returned vector of strings do not contain duplicates and
     /// contains captures **and** non-captures. The entire result is sorted
     #[allow(clippy::option_if_let_else)]
-    fn output_vars(&self) -> Vec<(String, TagInfo)> {
+    fn output_vars(&self) -> Vec<(String, TripleTag)> {
         // Schedule call and select occurs "before" funclet ends.
         // Their returns (return of continuation)
         // must match the returns of the funclet.
@@ -153,10 +151,10 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| {
+                .map(|(idx, _)| {
                     let s = format!("{RET_VAR}{idx}");
-                    let dt = self.parent.data_types.get(&s).unwrap();
-                    (s, TagInfo::from(out).tag_info_default(dt))
+                    let t = self.get_out_tag(&s).unwrap().clone();
+                    (s, t)
                 })
                 .collect();
         }
@@ -206,12 +204,13 @@ impl<'a> Funclet<'a> {
                 .finfo
                 .input
                 .iter()
-                .map(|(name, annot)| asm::FuncletArgument {
+                .map(|(name, _)| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
                     typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
-                    tags: TagInfo::from(annot)
-                        .set_val_input()
-                        .tags_vec_default(&self.parent.data_types[name]),
+                    tags: self
+                        .get_input_tag(&format!("{IN_STEM}{name}"))
+                        .unwrap()
+                        .tags_vec(),
                 })
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
@@ -222,12 +221,12 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| {
+                .map(|(idx, _)| {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
-                        name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
+                        tags: self.get_input_tag(&name).unwrap().tags_vec(),
+                        name: Some(asm::NodeId(name)),
                     }
                 })
                 .collect()
@@ -250,14 +249,14 @@ impl<'a> Funclet<'a> {
                                 self.block.src_loc
                             )
                         })
-                        .tags_vec_default(&self.parent.data_types[var]),
+                        .tags_vec(),
                 })
                 .collect()
         }
     }
 
     /// Gets the input tag of the specified variable, handling input overrides
-    fn get_input_tag(&self, var: &str) -> Option<TagInfo> {
+    fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
         let ovr = self
             .parent
             .type_info
@@ -273,9 +272,13 @@ impl<'a> Funclet<'a> {
             ovr,
         ) {
             (orig, None) => orig,
-            (None, Some(ovr)) => Some(ovr),
+            (None, Some(ovr)) => {
+                // for auto generated sequence-ifs, we handle this by creating
+                // an in annotation for the variable
+                Some(ovr)
+            }
             (Some(mut orig), Some(ovr)) => {
-                orig.apply_manual_override(ovr);
+                orig.set_specified_info(ovr);
                 Some(orig.clone())
             }
         }
@@ -289,12 +292,12 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| {
+                .map(|(idx, _)| {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
-                        name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
+                        tags: self.get_out_tag(&name).unwrap().tags_vec(),
+                        name: Some(asm::NodeId(name)),
                     }
                 })
                 .collect()
@@ -316,7 +319,7 @@ impl<'a> Funclet<'a> {
                             )
                         })
                         .clone(),
-                    tags: tag.tags_vec_default(&self.parent.data_types[&var]),
+                    tags: tag.tags_vec(),
                 })
                 .collect()
         }
@@ -385,7 +388,7 @@ impl<'a> Funclet<'a> {
 
     /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
-    pub fn get_out_tag(&self, var: &str) -> Option<&TagInfo> {
+    pub fn get_out_tag(&self, var: &str) -> Option<&TripleTag> {
         self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
 

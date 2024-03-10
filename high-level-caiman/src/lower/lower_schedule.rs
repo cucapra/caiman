@@ -9,8 +9,8 @@ use caiman::assembly::ast::{self as asm, Hole, MetaMapping, RemoteNodeId};
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
-    lower::{data_type_to_ffi_type, sched_hir::TagInfo},
-    parse::ast::{DataType, Flow, SchedTerm, SchedulingFunc, SpecType, Tag},
+    lower::{data_type_to_ffi_type, IN_STEM},
+    parse::ast::{self, DataType, Flow, SchedTerm, SchedulingFunc, SpecType, Tag},
     typing::{Context, LOCAL_TEMP_FLAGS},
 };
 use caiman::ir;
@@ -41,17 +41,11 @@ fn build_copy_cmd(
 ) -> asm::Command {
     let val_quot = src
         .get_tags()
-        .and_then(|t| TripleTag::from_tags(t).value.as_ref().map(tag_to_remote_id))
-        .or_else(|| {
-            backup_tag
-                .map(|t| &t.value)
-                .and_then(|t| t.as_ref().map(tag_to_remote_id))
-        })
+        .map(|t| tag_to_remote_id(&TripleTag::from_tags(t).value))
+        .or_else(|| backup_tag.map(|t| tag_to_remote_id(&t.value)))
         .or_else(|| {
             if let SchedTerm::Var { name, .. } = src {
-                f.get_out_tag(name)
-                    .and_then(|t| t.value.as_ref().map(|t| t.quot.clone().opt()))
-                    .flatten()
+                f.get_out_tag(name).map(|t| tag_to_remote_id(&t.value))
             } else {
                 None
             }
@@ -100,7 +94,6 @@ fn lower_flat_decl(
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
-    assert!(dest_tag.is_any_specified());
     let temp_node_name = temp_var_name(temp_id);
     let temp = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(temp_node_name.clone())),
@@ -175,24 +168,6 @@ fn to_tuple_quotient(q: asm::RemoteNodeId) -> asm::RemoteNodeId {
     } else {
         q
     }
-    // match q {
-    //     asm::Quotient::Node(Some(asm::RemoteNodeId {
-    //         funclet,
-    //         node: Some(node),
-    //     }))
-    //     | asm::Quotient::Input(Some(asm::RemoteNodeId {
-    //         funclet,
-    //         node: Some(node),
-    //     }))
-    //     | asm::Quotient::Output(Some(asm::RemoteNodeId {
-    //         funclet,
-    //         node: Some(node),
-    //     })) => asm::Quotient::Node(Some(asm::RemoteNodeId {
-    //         funclet,
-    //         node: Some(asm::NodeId(tuple_id(&[node.0]))),
-    //     })),
-    //     x => x,
-    // }
 }
 
 /// Lowers an operation into a local-do-external and read-ref
@@ -221,13 +196,7 @@ fn lower_op(
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
         node: asm::Node::LocalDoExternal {
-            operation: Hole::Filled(
-                dest_tag
-                    .value
-                    .as_ref()
-                    .map(|t| to_tuple_quotient(tag_to_remote_id(t)))
-                    .expect("Tag must be set for now"),
-            ),
+            operation: Hole::Filled(to_tuple_quotient(tag_to_remote_id(&dest_tag.value))),
             inputs: Hole::Filled(inputs),
             outputs: Hole::Filled(vec![Hole::Filled(asm::NodeId(temp_node_name.clone()))]),
             external_function_id: Hole::Filled(asm::ExternalFunctionId(op.to_string())),
@@ -310,7 +279,6 @@ fn lower_func_call(
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
     let join_var = temp_var_name(join);
-    let tags = TagInfo::from(&call.tag);
     vec![
         Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(djoin_name.clone())),
@@ -333,20 +301,14 @@ fn lower_func_call(
             },
         })),
         Hole::Filled(asm::Command::TailEdge(asm::TailEdge::ScheduleCall {
-            operations: Hole::Filled(vec![
-                tags.timeline.as_ref().map_or_else(
-                    || TagInfo::default_tag(SpecType::Timeline).quot,
-                    |x| x.quot.clone(),
-                ),
-                tags.spatial.as_ref().map_or_else(
-                    || TagInfo::default_tag(SpecType::Spatial).quot,
-                    |x| x.quot.clone(),
-                ),
-                tags.value.as_ref().map_or_else(
-                    || TagInfo::default_tag(SpecType::Value).quot,
-                    |x| x.quot.clone(),
-                ),
-            ]),
+            operations: Hole::Filled(
+                call.tag
+                    .clone()
+                    .tags_vec()
+                    .into_iter()
+                    .map(|x| x.quot)
+                    .collect(),
+            ),
             callee_funclet_id: Hole::Filled(asm::FuncletId(call.target.clone())),
             callee_arguments: Hole::Filled(
                 call.args
@@ -475,28 +437,13 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
             },
         })),
         Hole::Filled(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
-            operations: Hole::Filled(vec![
-                Hole::Filled(
-                    tags.value
-                        .as_ref()
-                        .map(tag_to_remote_id)
-                        .expect("Selects need a value node"),
-                ),
-                Hole::Filled(tags.spatial.as_ref().map_or_else(
-                    || asm::RemoteNodeId {
-                        node: None,
-                        funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
-                    },
-                    tag_to_remote_id,
-                )),
-                Hole::Filled(tags.timeline.as_ref().map_or_else(
-                    || asm::RemoteNodeId {
-                        node: None,
-                        funclet: Hole::Filled(SpecType::Timeline.get_meta_id()),
-                    },
-                    tag_to_remote_id,
-                )),
-            ]),
+            operations: Hole::Filled(
+                tags.clone()
+                    .tags_vec()
+                    .into_iter()
+                    .map(|x| x.quot)
+                    .collect(),
+            ),
             condition: Hole::Filled(asm::NodeId(guard_name.to_string())),
             callee_funclet_ids: Hole::Filled(f.next_blocks()),
             callee_arguments: Hole::Filled(f.output_args()),
@@ -508,10 +455,22 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
 /// Gets the assembly quotient from a high level caiman tag
 pub fn tag_to_remote_id(t: &Tag) -> asm::RemoteNodeId {
     asm::RemoteNodeId {
-        node: if t.quot.map_or(false, |q| q.is_none()) {
+        node: if matches!(t.quot, Some(ast::Quotient::None)) {
             None
         } else {
-            Some(t.quot_var.spec_var.clone().map(asm::NodeId).into())
+            Some(
+                t.quot_var
+                    .spec_var
+                    .clone()
+                    .map(|x| {
+                        if matches!(t.quot, Some(ast::Quotient::Input)) {
+                            asm::NodeId(format!("{IN_STEM}{x}"))
+                        } else {
+                            asm::NodeId(x)
+                        }
+                    })
+                    .into(),
+            )
         },
         funclet: Hole::Filled(t.quot_var.spec_type.get_meta_id()),
     }
@@ -519,20 +478,14 @@ pub fn tag_to_remote_id(t: &Tag) -> asm::RemoteNodeId {
 
 /// Converts a hlc tag to a tag in the assembly
 pub fn tag_to_tag(t: &Tag) -> asm::Tag {
-    tag_to_tag_def(t, ir::Flow::Usable)
-}
-
-/// Converts a hlc tag to a tag in the assembly, using a default flow
-/// if the tag does not specify a flow
-pub fn tag_to_tag_def(t: &Tag, default_flow: ir::Flow) -> asm::Tag {
     asm::Tag {
         quot: Hole::Filled(tag_to_remote_id(t)),
-        flow: t.flow.as_ref().map_or(default_flow, |f| match f {
+        flow: match t.flow.expect("TODO: Holes in flow") {
             Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
             Flow::Usable => ir::Flow::Usable,
             Flow::Save => ir::Flow::Saved,
-        }),
+        },
     }
 }
 

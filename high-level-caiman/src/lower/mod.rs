@@ -40,6 +40,9 @@ macro_rules! enum_cast {
 // TODO: only i32, i64, and u64 are currently supported in the IR
 // change this to u8 or i8 once we support those types
 pub const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
+/// The prefix for the name of the actual input arguments in spec funclets
+/// (as opposed to the phi node which is the same name without the prefix).
+const IN_STEM: &str = "_in_";
 
 /// Converts a high-level caiman data type to a caiman assembly type id.
 fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {

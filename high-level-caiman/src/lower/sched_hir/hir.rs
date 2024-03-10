@@ -2,7 +2,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    enum_cast, lower::tuple_id, parse::ast::{ArgsOrEnc, Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
+    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{ArgsOrEnc, Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -12,23 +12,31 @@ use crate::{
     parse::ast::{Name, SchedStmt, SchedTerm},
 };
 
+/// A tag in the HIR with the value, spatial, and timeline information separated.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TripleTag {
-    pub value: Option<Tag>,
-    pub spatial: Option<Tag>,
-    pub timeline: Option<Tag>,
+    pub value: Tag,
+    pub spatial: Tag,
+    pub timeline: Tag,
 }
 
 impl TripleTag {
+    pub const fn new_unspecified() -> Self {
+        Self {
+            value: Tag::new_unspecified(SpecType::Value),
+            spatial: Tag::new_unspecified(SpecType::Spatial),
+            timeline: Tag::new_unspecified(SpecType::Timeline),
+        }
+    }
     pub fn from_opt(tags: &Option<Tags>) -> Self {
         tags.as_ref().map_or_else(|| Self::from_owned_opt(None), |tags| Self::from_tags(tags))
     }
 
     pub fn from_owned_opt(tags: Option<Tags>) -> Self {
         tags.map_or_else(|| Self {
-                value: None,
-                spatial: None,
-                timeline: None,
+                value: Tag::new_unspecified(SpecType::Value),
+                spatial: Tag::new_unspecified(SpecType::Spatial),
+                timeline: Tag::new_unspecified(SpecType::Timeline),
             }, Self::from_tag_vec)
     }
 
@@ -44,9 +52,9 @@ impl TripleTag {
                 }     
         }
         Self {
-            value,
-            spatial,
-            timeline,
+            value: value.unwrap_or_else(|| Tag::new_unspecified(SpecType::Value)),
+            spatial: spatial.unwrap_or_else(|| Tag::new_unspecified(SpecType::Spatial)),
+            timeline: timeline.unwrap_or_else(|| Tag::new_unspecified(SpecType::Timeline),)
         }
     }
 
@@ -62,9 +70,9 @@ impl TripleTag {
                 }
         }
         Self {
-            value,
-            spatial,
-            timeline,
+            value: value.unwrap_or_else(|| Tag::new_unspecified(SpecType::Value)),
+            spatial: spatial.unwrap_or_else(|| Tag::new_unspecified(SpecType::Spatial)),
+            timeline: timeline.unwrap_or_else(|| Tag::new_unspecified(SpecType::Timeline)),
         }
     }
 
@@ -76,35 +84,56 @@ impl TripleTag {
         ft.as_ref().map_or_else(|| Self::from_owned_opt(None), Self::from_fulltype)
     }
 
-    pub const fn is_any_specified(&self) -> bool {
-        self.value.is_some() || self.spatial.is_some() || self.timeline.is_some()
+    /// Updates the tag so that all non-null parts of `other` are added to `self`
+    pub fn set_specified_info(&mut self, other: Self) {
+        self.value.set_specified_info(other.value);
+        self.spatial.set_specified_info(other.spatial);
+        self.timeline.set_specified_info(other.timeline);
+    }
+
+    /// Updates the tag so that all unknown parts of `self` are overridden by `other`
+    pub fn override_unknown_info(&mut self, other: Self) {
+        self.value.override_unknown_info(other.value);
+        self.spatial.override_unknown_info(other.spatial);
+        self.timeline.override_unknown_info(other.timeline);
+    }
+
+    /// Asserts that the given tag has no holes in its quotient or flow
+    fn assert_tag_no_hole(tag: &Tag) {
+        assert!(tag.quot.is_some(), "Tag must have a quotient");
+        assert!(tag.flow.is_some(), "Tag must have a flow");
+    }
+
+    /// Asserts that the triple tag has no holes
+    fn assert_no_holes(&self) {
+        Self::assert_tag_no_hole(&self.value);
+        Self::assert_tag_no_hole(&self.spatial);
+        Self::assert_tag_no_hole(&self.timeline);
+    }
+
+    /// Converts a triple tag into an assembly tag vector, using
+    /// the given data type to determine the default flow for the spatial tag.
+    pub fn tags_vec(&self) -> Vec<asm::Tag> {
+        self.assert_no_holes();
+        vec![
+            tag_to_tag(&self.value),
+            tag_to_tag(&self.spatial),
+            tag_to_tag(&self.timeline),
+        ]
     }
 
 }
 
+
 impl From<TripleTag> for Tags {
     fn from(val: TripleTag) -> Self {
-        let mut tags = Self::new();
-        if let Some(value) = val.value {
-            tags.push(value);
-        }
-        if let Some(spatial) = val.spatial {
-            tags.push(spatial);
-        }
-        if let Some(timeline) = val.timeline {
-            tags.push(timeline);
-        }
-        tags
+        vec![val.value, val.spatial, val.timeline]
     }
 }
 
 impl From<TripleTag> for Option<Tags> {
     fn from(val: TripleTag) -> Self {
-        if val.is_any_specified() {
-            Some(val.into())
-        } else {
-            None
-        }
+        Some(Tags::from(val))
     }
 }
 
@@ -225,9 +254,8 @@ impl HirFuncCall {
     }
 
     fn to_tuple_tag(mut tag: TripleTag) -> TripleTag {
-        if let Some(val) = tag.value.as_mut() {
-                val.quot_var.spec_var = val.quot_var.spec_var.as_ref().map(|sv| tuple_id(&[sv.clone()]));
-            
+        if let Some(val) = tag.value.quot_var.spec_var.as_mut() {
+            *val = tuple_id(&[val.clone()]);
         }
         tag
     }

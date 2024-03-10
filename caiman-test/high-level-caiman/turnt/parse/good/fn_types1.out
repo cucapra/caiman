@@ -107,71 +107,35 @@
                         ),
                         tags: [
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        4,
-                                        33,
-                                    ),
-                                    end_ln_and_col: (
-                                        4,
-                                        43,
+                                quot: None,
+                                quot_var: QuotientReference {
+                                    spec_type: Value,
+                                    spec_var: Some(
+                                        "x",
                                     ),
                                 },
-                                quot: None,
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "foo",
-                                        spec_var: Some(
-                                            "x",
-                                        ),
-                                    },
-                                ),
                                 flow: None,
                             },
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        4,
-                                        45,
-                                    ),
-                                    end_ln_and_col: (
-                                        4,
-                                        60,
-                                    ),
-                                },
                                 quot: Some(
                                     None,
                                 ),
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "tm",
-                                        spec_var: None,
-                                    },
-                                ),
+                                quot_var: QuotientReference {
+                                    spec_type: Timeline,
+                                    spec_var: None,
+                                },
                                 flow: Some(
                                     Usable,
                                 ),
                             },
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        4,
-                                        62,
-                                    ),
-                                    end_ln_and_col: (
-                                        4,
-                                        72,
-                                    ),
-                                },
                                 quot: Some(
                                     None,
                                 ),
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "sp",
-                                        spec_var: None,
-                                    },
-                                ),
+                                quot_var: QuotientReference {
+                                    spec_type: Spatial,
+                                    spec_var: None,
+                                },
                                 flow: None,
                             },
                         ],
@@ -186,11 +150,11 @@
                         info: Info {
                             start_ln_and_col: (
                                 4,
-                                78,
+                                79,
                             ),
                             end_ln_and_col: (
                                 4,
-                                81,
+                                82,
                             ),
                         },
                         base: Int(

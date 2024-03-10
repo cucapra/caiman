@@ -1,9 +1,9 @@
 #version 0.1.0
 type gint = i32'<storage>;
 
-fn foo(a: gint'<map_write> @ ?(?)-?, 
+fn foo(a: gint'<map_write>, 
        b: bool @ [],
-       c: i64'<map_read, alignment_bits = 512> @ [?(v.y)-dead, none(tm)-?, ?(?)-?]) 
+       c: i64'<map_read, alignment_bits = 512> @ [val.y-dead, none(tmln)-?]) 
        -> i32'<storage, map_write>
         impls v, tm, sp
 {

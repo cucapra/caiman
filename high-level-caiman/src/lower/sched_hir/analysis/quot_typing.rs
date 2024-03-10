@@ -177,17 +177,8 @@ fn add_node_eq(
 /// # Returns
 /// The updated environment
 fn add_type_annot(name: &str, annot: &TripleTag, env: NodeEnv) -> Result<NodeEnv, LocalError> {
-    if let Some(Tag {
-        info,
-        quot_var:
-            QuotientReference {
-                spec_var: Some(class_name),
-                ..
-            },
-        ..
-    }) = &annot.value
-    {
-        add_node_eq(name, class_name, *info, env)
+    if let Some(class_name) = &annot.value.quot_var.spec_var {
+        add_node_eq(name, class_name, Info::default(), env)
     } else {
         Ok(env)
     }
@@ -553,24 +544,16 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
 /// If the value quotient spec id is already filled with a value that
 /// conflicts with the information in `env`.
 fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: usize) {
-    if name == "c_1" {
-        dbg!();
-    }
     if let Some(node) = env.get_node_name(name) {
-        let info = tag.value.as_ref().map(|t| t.info);
-        let quot = tag.value.as_ref().and_then(|t| t.quot);
-        let flow = tag.value.as_ref().and_then(|t| t.flow);
-        let old_spec_var = tag
-            .value
-            .as_ref()
-            .and_then(|t| t.quot_var.spec_var.as_ref());
+        let quot = tag.value.quot;
+        let flow = tag.value.flow;
+        let old_spec_var = tag.value.quot_var.spec_var.as_ref();
         assert!(
             old_spec_var.is_none() || old_spec_var.unwrap() == &node,
             "Cannot unify output class {name} with unequal nodes {node} and {}",
             old_spec_var.unwrap()
         );
-        tag.value = Some(Tag {
-            info: info.unwrap_or_default(),
+        tag.value = Tag {
             quot: Some(quot.unwrap_or_else(|| {
                 if env.get_input_classes().contains(&node) && block_id == START_BLOCK_ID {
                     Quotient::Input
@@ -583,22 +566,16 @@ fn fill_val_quotient(name: &str, tag: &mut TripleTag, env: &NodeEnv, block_id: u
                 spec_type: SpecType::Value,
             },
             flow,
-        });
+        };
     }
 }
 
 /// Constructs a new triple tag based on information from the environment.
 /// Any information the environment does not have is left as `None`.
 fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
-    env.get_node_name(name).map_or_else(
-        || TripleTag {
-            value: None,
-            spatial: None,
-            timeline: None,
-        },
-        |node| TripleTag {
-            value: Some(Tag {
-                info: Info::default(),
+    env.get_node_name(name)
+        .map_or_else(TripleTag::new_unspecified, |node| TripleTag {
+            value: Tag {
                 quot: Some(
                     if env.get_input_classes().contains(&node) && block_id == START_BLOCK_ID {
                         Quotient::Input
@@ -611,11 +588,10 @@ fn construct_new_tag(name: &str, env: &NodeEnv, block_id: usize) -> TripleTag {
                     spec_type: SpecType::Value,
                 },
                 flow: None,
-            }),
-            spatial: None,
-            timeline: None,
-        },
-    )
+            },
+            spatial: Tag::new_unspecified(SpecType::Spatial),
+            timeline: Tag::new_unspecified(SpecType::Timeline),
+        })
 }
 
 /// Fills the value quotient spec ids in the tags for the all variables in
@@ -707,21 +683,7 @@ fn fill_io_type_info(inputs: &mut [(String, TripleTag)], outputs: &mut [TripleTa
     let output_classes = env.get_output_classes().to_vec();
     assert_eq!(output_classes.len(), outputs.len());
     for (tag, output_class) in outputs.iter_mut().zip(output_classes) {
-        if let Some(Tag { quot, .. }) = tag.value.as_mut() {
-            if quot.is_none() {
-                *quot = Some(Quotient::Node);
-            }
-        } else {
-            tag.value = Some(Tag {
-                info: Info::default(),
-                quot: Some(Quotient::Node),
-                quot_var: QuotientReference {
-                    spec_type: SpecType::Value,
-                    spec_var: None,
-                },
-                flow: None,
-            });
-        }
+        tag.value.quot = Some(Quotient::Node);
         fill_val_quotient(
             &MetaVar::new_class_name(&output_class).into_string(),
             tag,

@@ -226,7 +226,7 @@ pub enum SpecStmt {
     },
     Returns(Info, SpecExpr),
 }
-/// AST-level quotient (once merged, we can use the ir enum)
+/// AST-level quotient
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Quotient {
     Node,
@@ -236,7 +236,7 @@ pub enum Quotient {
 
 impl Quotient {
     #[must_use]
-    pub const fn is_none(&self) -> bool {
+    pub const fn is_none(self) -> bool {
         matches!(self, Self::None)
     }
 }
@@ -284,10 +284,50 @@ pub struct QuotientReference {
 /// Frontend level tag
 #[derive(Clone, Debug)]
 pub struct Tag {
-    pub info: Info,
     pub quot: Option<Quotient>,
     pub quot_var: QuotientReference,
     pub flow: Option<Flow>,
+}
+
+impl Tag {
+    /// Creates a new tag with unspecified quotient and flow
+    #[must_use]
+    pub const fn new_unspecified(spec_type: SpecType) -> Self {
+        Self {
+            quot: None,
+            quot_var: QuotientReference {
+                spec_type,
+                spec_var: None,
+            },
+            flow: None,
+        }
+    }
+
+    /// Updates the tag so that all non-null parts of `other` are copied to `self`
+    pub fn set_specified_info(&mut self, other: Self) {
+        if other.quot.is_some() {
+            self.quot = other.quot;
+        }
+        if other.quot_var.spec_var.is_some() {
+            self.quot_var.spec_var = other.quot_var.spec_var;
+        }
+        if other.flow.is_some() {
+            self.flow = other.flow;
+        }
+    }
+
+    /// Updates the tag so that all unknown parts of `self` are copied from `other`
+    pub fn override_unknown_info(&mut self, other: Self) {
+        if self.quot.is_none() {
+            self.quot = other.quot;
+        }
+        if self.quot_var.spec_var.is_none() {
+            self.quot_var.spec_var = other.quot_var.spec_var;
+        }
+        if self.flow.is_none() {
+            self.flow = other.flow;
+        }
+    }
 }
 
 impl PartialEq for Tag {

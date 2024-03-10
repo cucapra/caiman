@@ -1,5 +1,6 @@
 use crate::{
     enum_cast,
+    lower::IN_STEM,
     parse::ast::{
         Binop, ClassMembers, DataType, NestedExpr, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
         TopLevel,
@@ -276,7 +277,7 @@ fn lower_spec_funclet(
                 .map(|x| {
                     let (name, dt) = x;
                     asm::FuncletArgument {
-                        name: Some(asm::NodeId(format!("_in_{name}"))),
+                        name: Some(asm::NodeId(format!("{IN_STEM}{name}"))),
                         typ: data_type_to_local_type(&dt),
                         tags: Vec::new(),
                     }

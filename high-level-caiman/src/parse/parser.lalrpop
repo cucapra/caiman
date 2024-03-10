@@ -193,8 +193,8 @@ Tags: Vec<Tag> = {
 }
 
 Tag: Tag = {
-    <@L> <Quotient> "(" <QuotRef> ")" <Flow?> <@R> => astf.tag(<>),
-    <@L> <QuotRef> <Flow> <@R> => astf.flow_tag(<>),
+    <Quotient> "(" <QuotRef> ")" <Flow?> => ASTFactory::tag(<>),
+    <QuotRef> <Flow> => ASTFactory::flow_tag(<>),
 }
 
 Quotient: Quotient = {

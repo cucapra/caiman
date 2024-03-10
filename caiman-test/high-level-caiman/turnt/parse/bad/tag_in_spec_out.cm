@@ -1,4 +1,4 @@
 #version 0.1.0
-val g(f: (i32,)) -> (i32,) @ output(val.x)-? {
+val g(f: (i32,)) -> (i32,) @ node(val.x)-? {
     x :- 10
 }

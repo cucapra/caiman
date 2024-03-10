@@ -3,7 +3,7 @@ type gint = i32'<storage>;
 
 fn foo(a: gint'<map_write> @ input(val.x)-?, 
        b: bool @ [],
-       c: i64'<map_read, alignment_bits = 512> @ [node(val.y)-dead, input(val.z)-saved, output(val.k)-need]) 
+       c: i64'<map_read, alignment_bits = 512> @ [node(val.y)-dead, input(val.z)-saved, node(val.k)-need]) 
        -> i32'<storage, map_write>
         impls v, tm, sp
 {

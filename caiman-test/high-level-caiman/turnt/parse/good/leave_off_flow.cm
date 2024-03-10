@@ -1,6 +1,6 @@
 #version 0.1.0
 
-fn main(a: i64 @ node(val.f)) -> i64 @ output(val.g) 
+fn main(a: i64 @ node(val.f)) -> i64 @ node(val.g) 
     impls main, time, space
 {
     if @ node(val.r) true {
