@@ -2409,7 +2409,7 @@ Program {
                                             node: None,
                                         },
                                     ),
-                                    flow: Saved,
+                                    flow: Usable,
                                 },
                                 Tag {
                                     quot: Filled(
@@ -2832,7 +2832,7 @@ Program {
                                             node: None,
                                         },
                                     ),
-                                    flow: Saved,
+                                    flow: Usable,
                                 },
                                 Tag {
                                     quot: Filled(

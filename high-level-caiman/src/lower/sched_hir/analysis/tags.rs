@@ -161,7 +161,7 @@ impl TagAnalysis {
                 let t = self.tags.get_mut(lhs).unwrap();
                 t.set_specified_info(lhs_tags.clone());
                 if let SchedTerm::Var { name, .. } = rhs {
-                    // TODO: this is probably not what we want to do
+                    // TODO: check this
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {
                         let t = self.tags.get_mut(lhs).unwrap();
                         t.value = rhs_typ.value;
@@ -169,11 +169,15 @@ impl TagAnalysis {
                 }
             }
             HirBody::RefLoad { dest, src, .. } => {
-                let tag = self
+                let mut tag = self
                     .tags
                     .get(src)
                     .cloned()
                     .unwrap_or_else(|| self.input_overrides.get(src).cloned().unwrap());
+                // loading makes things usable
+                if tag.spatial.flow == Some(Flow::Save) {
+                    tag.spatial.flow = Some(Flow::Usable);
+                }
                 self.tags.insert(
                     dest.clone(),
                     override_none_usable(tag, &self.data_types[dest]),
@@ -216,6 +220,12 @@ impl TagAnalysis {
     }
 }
 
+/// Determines if there is a conflict between the quotient or flow of the
+/// value, spatial, or timeline parts of two tags. This does not check the
+/// quotient node names.
+///
+/// # Returns
+/// `true` if there is a conflict, `false` otherwise
 fn tag_conflict(t: &TripleTag, other: &TripleTag) -> bool {
     matches!((t.value.quot, other.value.quot), (Some(x), Some(y)) if  x != y)
         || matches!((t.spatial.quot, other.spatial.quot), (Some(x), Some(y)) if  x != y)
@@ -233,17 +243,16 @@ impl Fact for TagAnalysis {
                 Entry::Occupied(mut old_v) => {
                     if old_v.get() != v {
                         old_v.get_mut().override_unknown_info(v.clone());
-                        // TODO: the problem is that _out is used to identify the
-                        // return value, which might change types in the last
-                        // funclet. To avoid overriding the final output type,
-                        // we don't do anything when it meets with a different value
-                        //assert!(k.starts_with("_out"), "Unexpected tag conflict with {k}");
                         if tag_conflict(old_v.get(), v) && !k.starts_with("_out") {
-                            // TODO
-                            old_v.remove_entry();
+                            // TODO: the problem is that _out is used to identify the
+                            // return value, which might change types in the last
+                            // funclet. To avoid overriding the final output type,
+                            // we don't do anything when it meets with a different value
+                            assert!(k.starts_with("_out"), "Unexpected tag conflict with {k}");
                         }
+                        // TODO: we assume quotient node names are solved and don't worry
+                        // about those conflicts
                     }
-                    // assert_eq!(old_v.get(), v, "Duplicate key {k} with unequal values");
                 }
                 Entry::Vacant(entry) => {
                     entry.insert(v.clone());

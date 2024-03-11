@@ -229,7 +229,7 @@ fn unify_decl(
             env = add_type_annot(lhs, &TripleTag::from_opt(tag), env)?;
             env = add_var_constraint(lhs, name, *info, env)?;
         }
-        _ => todo!(),
+        x => todo!("{x:#?}"),
     }
     add_type_annot(lhs, lhs_tag, env)
 }
