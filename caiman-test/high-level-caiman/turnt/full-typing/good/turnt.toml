@@ -1,0 +1,3 @@
+[envs.full-typing]
+command = "../../../../../target/debug/hlc {filename} > /dev/null"
+# don't care what it generates, just that it succeeds
