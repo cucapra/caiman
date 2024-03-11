@@ -1,0 +1,30 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val min(a: i64, b: i64) -> i64 {
+    returns a if a < b else b
+}
+
+fn min_impl(a: i64, b: i64) -> i64
+    impls min, time, space
+{
+    if a < b {
+        @in {a: node(min.a)-usable, b: node(min.b)-usable};
+        a
+    } else {
+        @in {b: node(min.b)-usable, a: node(min.a)-usable};
+        b
+    }
+}
+
+val main() -> i64 {
+    returns min(min(10, 0), 5)
+}
+
+fn main_impl() -> i64 impls main, time, space {
+    min_impl(min_impl(10, 0), 5)
+}
+
+pipeline main { main_impl }

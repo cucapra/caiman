@@ -382,6 +382,7 @@ impl ASTFactory {
                 templates,
                 args,
                 tag,
+                yield_call: _,
             }) if (templates.is_none() || matches!(templates, Some(TemplateArgs::Type(_)))) && tag.is_none() => {
                 let target = Self::sched_to_spec_expr(*target)?;
                 match *args {
@@ -523,6 +524,7 @@ impl ASTFactory {
             target: Box::new(target),
             templates: templates,
             args: Box::new(ArgsOrEnc::Args(args)),
+            yield_call: false,
             tag,
         }
     }
@@ -550,6 +552,7 @@ impl ASTFactory {
                 templates: None,
                 args: Box::new(ArgsOrEnc::Encode(encoding)),
                 tag,
+                yield_call: false,
             }
         }
     
