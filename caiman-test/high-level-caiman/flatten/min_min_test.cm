@@ -11,10 +11,8 @@ fn min_impl(a: i64, b: i64) -> i64
     impls min, time, space
 {
     if a < b {
-        @in {a: node(min.a)-usable, b: node(min.b)-usable};
         a
     } else {
-        @in {b: node(min.b)-usable, a: node(min.a)-usable};
         b
     }
 }

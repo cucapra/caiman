@@ -11,10 +11,8 @@ fn min_impl(a: i64, b: i64) -> i64
     impls min, time, space
 {
     if a < b {
-        @in {a: node(min.a)-usable, b: node(min.b)-usable};
         a
     } else {
-        @in {b: node(min.b)-usable, a: node(min.a)-usable};
         b
     }
 }
@@ -24,11 +22,7 @@ val main(a: i64, b: i64, c: i64, d: i64) -> i64 {
 }
 
 fn main_impl(a: i64, b: i64, c: i64, d: i64) -> i64 impls main, time, space {
-    // TODO: Quotient node/input isn't quite right but that's being removed anyway
-    @out { a: node(main.a)-usable, b: node(main.b)-usable, 
-           c: node(main.c)-usable, d: node(main.d)-usable };
     let r = min_impl(a, b);
-    @in { c: node(main.c)-usable, d: node(main.d)-usable };
     let s = min_impl(c, d);
     min_impl(r, s)
 }
