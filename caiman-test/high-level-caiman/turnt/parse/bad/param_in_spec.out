@@ -1,11 +1,2 @@
-Error: At param_in_spec.cm:2:19, 
-  Parsing Error: Unrecognized token: '(', expected one of [
-    "\"&\"",
-    "\"BufferSpace\"",
-    "\"Event\"",
-    "\"[\"",
-    "\"bool\"",
-    "\"i32\"",
-    "\"i64\"",
-    "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",
-]
+Error: At param_in_spec.cm:3:10, 
+  Parsing Error: Cannot parameterize a function call with non-type template arguments nor specify a tag in this context
