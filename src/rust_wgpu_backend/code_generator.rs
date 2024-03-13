@@ -768,8 +768,7 @@ impl<'program> CodeGenerator<'program> {
 
         write!(
             self.code_writer,
-            " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, {}>",
-            self.get_tuple_definition_string(&funclet_result_type_ids)
+            " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, PipelineOutputTuple<'callee>>",
         );
         self.code_writer
             .write("\n{\n\tuse std::convert::TryInto;\n".to_string());
@@ -1180,7 +1179,19 @@ impl<'program> CodeGenerator<'program> {
         write!(self.code_writer, ", instance);\n");
     }
 
-    pub fn build_return(&mut self, output_var_ids: &[VarId], output_var_types: &[ffi::TypeId]) {
+    /// Builds a return statement for the current funclet
+    /// # Arguments
+    /// * `output_var_ids` - The variable ids of the variables being returned
+    /// * `output_var_types` - The types of the variables being returned
+    /// * `may_return` - Whether or not the funclet may return.
+    ///    If false, the generated code will panic if there is nothing to pop from
+    ///    the join stack.
+    pub fn build_return(
+        &mut self,
+        output_var_ids: &[VarId],
+        output_var_types: &[ffi::TypeId],
+        may_return: bool,
+    ) {
         if let Some(result_type_ids) = &self.active_funclet_result_type_ids {
             let result_type_ids = result_type_ids.clone(); // Make a copy for now to satisfy the borrowchecking gods...
             let dispatcher_id = self.lookup_dispatcher_id(&output_var_types);
@@ -1203,23 +1214,30 @@ impl<'program> CodeGenerator<'program> {
                 }
             }
             write!(self.code_writer, ", instance) }}");
-            write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((");
-            for ((return_index, var_id), var_type) in output_var_ids
-                .iter()
-                .enumerate()
-                .zip(result_type_ids.iter())
-            {
-                if self.is_ref(*var_type) {
-                    if self.variable_tracker.is_arg(*var_id) {
-                        write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
+            if may_return {
+                write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((");
+                for ((return_index, var_id), var_type) in output_var_ids
+                    .iter()
+                    .enumerate()
+                    .zip(result_type_ids.iter())
+                {
+                    if self.is_ref(*var_type) {
+                        if self.variable_tracker.is_arg(*var_id) {
+                            write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
+                        } else {
+                            write!(self.code_writer, "StackRef::local({}) ", var_id.0);
+                        }
                     } else {
-                        write!(self.code_writer, "StackRef::local({}) ", var_id.0);
+                        write!(self.code_writer, "{}, ", self.access_val_str(*var_id));
                     }
-                } else {
-                    write!(self.code_writer, "{}, ", self.access_val_str(*var_id));
                 }
+                write!(self.code_writer, ")), instance}};");
+            } else {
+                write!(
+                    self.code_writer,
+                    "else {{ panic!(\"Corrupted join stack\"); }}"
+                );
             }
-            write!(self.code_writer, ")), instance}};");
         } else {
             panic!("Can this happen?");
         }

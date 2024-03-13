@@ -5,7 +5,7 @@ sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
 
 val main() -> i64 {
-    returns (1 if true else 2) if false else (3 if false else 4)
+    returns (1 if true else 2) if false else (3 if true else 4)
 }
 
 fn foo() -> i64 impls main, time, space
@@ -18,7 +18,7 @@ fn foo() -> i64 impls main, time, space
         }
     } else {
         var v;
-        if false {
+        if true {
             v = 3;
         } else {
             v = 4;

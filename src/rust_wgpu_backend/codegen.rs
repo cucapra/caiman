@@ -1204,8 +1204,15 @@ impl<'program> CodeGen<'program> {
                                     .iter()
                                     .map(|x| self.get_cpu_useable_type(*x))
                                     .collect();
-                                self.code_generator
-                                    .build_return(&return_var_ids, &types.into_boxed_slice());
+                                // if the output types don't match the pipeline return types,
+                                // then there's no way for us to return adn we must
+                                // call something off the join stack
+                                let may_return = pipeline_rets.iter().eq(types.iter());
+                                self.code_generator.build_return(
+                                    &return_var_ids,
+                                    &types.into_boxed_slice(),
+                                    may_return,
+                                );
                             }
                         }
                         JoinPoint::CallJoinPoint(simple_join_point) => {
@@ -2175,11 +2182,7 @@ impl<'program> CodeGen<'program> {
                 continuation_join: continuation_join_node_id,
             } => {
                 if pending_inline_join.is_some() {
-                    if inline {
-                        do_inline_join(self, &mut funclet_scoped_state, pipeline_context);
-                    } else {
-                        do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
-                    }
+                    do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
                 }
                 let callee_scheduling_funclet_id = *callee_scheduling_funclet_id_ref;
 
