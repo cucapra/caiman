@@ -2236,11 +2236,7 @@ impl<'program> CodeGen<'program> {
                 continuation_join: continuation_join_node_id,
             } => {
                 if pending_inline_join.is_some() {
-                    if !inline {
-                        do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
-                    } else {
-                        do_inline_join(self, &mut funclet_scoped_state, pipeline_context);
-                    }
+                    do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
                 }
                 let condition_slot_id = funclet_scoped_state
                     .get_node_var_id(*condition_slot_node_id)
