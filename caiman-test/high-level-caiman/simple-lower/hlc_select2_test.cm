@@ -12,7 +12,7 @@ val main() -> i64 {
     returns r
 }
 
-fn foo() -> i64 @ node(val.r)-usable 
+fn foo() -> i64
     impls main, time, space
 {
     let b: bool @ node(val.b)-usable = true;
@@ -26,7 +26,6 @@ fn foo() -> i64 @ node(val.r)-usable
     } else {
         v = two;
     }
-    @in { v: [node(val.r)-usable, none(sptl)-saved] };
     v
 }
 

@@ -12,10 +12,10 @@ val main() -> i64 {
     returns r
 }
 
-fn foo() -> i64 @ node(val.r)-usable 
+fn foo() -> i64
     impls main, time, space
 {
-    let b: bool @ node(val.b)-usable = false;
+    let b: bool @ node(val.b)-usable = true;
     if @ node(val.r)-? b {
         let one: i64 @ node(val.one)-usable = 1;
         one
