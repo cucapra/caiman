@@ -13,7 +13,6 @@ use crate::{
     },
 };
 use caiman::assembly::ast::{self as asm};
-pub use caiman::assembly::ast::Hole;
 
 use crate::{
     error::Info,

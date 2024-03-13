@@ -6,8 +6,8 @@ extern crate core;
 
 #[macro_use]
 mod operations;
-mod assembly;
-mod explication;
+pub mod assembly;
+pub mod explication;
 mod id_generator;
 pub mod ir;
 pub mod stable_vec;
@@ -27,7 +27,8 @@ pub fn explicate_and_execute(
     let version = &program.version;
     assert_eq!((version.major, version.minor, version.detailed), (0, 0, 2));
 
-    let definition = assembly::lowering_pass::lower(program);
+    let exp_defininition = assembly::lowering_pass::lower(program);
+    let definition = explication::explicate(exp_defininition);
     if explicate_only {
         println!("{:#?}", definition);
         return;

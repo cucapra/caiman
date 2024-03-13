@@ -48,10 +48,10 @@ impl From<TripleTag> for TagInfo {
 fn none_tag(spec_name: &asm::MetaId, flow: ir::Flow) -> asm::Tag {
     asm::Tag {
         quot: Some(asm::RemoteNodeId {
-            funclet: Some(spec_name.clone()),
+            funclet: spec_name.clone(),
             node: None,
         }),
-        flow,
+        flow: Some(flow),
     }
 }
 
@@ -176,7 +176,7 @@ impl TagAnalysis {
                 // but the quotient is
                 if tg.spatial.is_none() {
                     tg.spatial = Some(none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Saved));
-                } else if tg.spatial.as_ref().unwrap().flow != ir::Flow::Saved {
+                } else if tg.spatial.as_ref().unwrap().flow != Some(ir::Flow::Saved) {
                     panic!("Spatial tags for references must be save");
                 }
             }
@@ -215,7 +215,7 @@ impl TagAnalysis {
                 let mut info = TagInfo::from(lhs_tag);
                 if rhs.is_none() {
                     if let Some(val) = info.value.as_mut() {
-                        val.flow = ir::Flow::Dead;
+                        val.flow = Some(ir::Flow::Dead);
                     } else {
                         info.value = Some(none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Dead));
                     }

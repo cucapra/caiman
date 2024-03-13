@@ -55,6 +55,7 @@ macro_rules! lookup_abstract_type {
 	(Place) => { Place };
 	(Funclet) => { FuncletId };
 	(StorageType) => { StorageTypeId };
+    (BufferFlags) => { ir::BufferFlags };
 }
 
 macro_rules! map_refs {

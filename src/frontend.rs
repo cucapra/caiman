@@ -1,5 +1,5 @@
-use crate::ir;
 use crate::explication;
+use crate::ir;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::default::Default;
@@ -47,7 +47,7 @@ impl std::fmt::Display for CompileError {
 }
 
 // #[cfg(feature = "assembly")]
-fn read_assembly(compile_data: CompileData) -> Result<Definition, CompileError> {
+fn read_assembly(compile_data: CompileData) -> Result<ExplicationDefinition, CompileError> {
     let program = crate::assembly::parser::parse(&compile_data.path, &compile_data.input_string);
     // dbg!(&program);
     match program {
@@ -71,7 +71,7 @@ fn read_definition(
     compile_mode: CompileMode,
 ) -> Result<Definition, CompileError> {
     match compile_mode {
-        CompileMode::Assembly => read_assembly(compile_data),
+        CompileMode::Assembly => read_assembly(compile_data).map(explication::explicate),
         CompileMode::RON => match ron::from_str(&compile_data.input_string) {
             Err(why) => Err(CompileError {
                 message: format!("Parse error at {}: {}", why.position, why),
@@ -105,7 +105,6 @@ pub fn explicate_caiman(
 ) -> Result<String, CompileError> {
     let pretty = ron::ser::PrettyConfig::new().enumerate_arrays(true);
     let mut definition = read_definition(compile_data, options.compile_mode)?;
-    definition = explication::explicate(definition);
     assert_eq!(definition.version, (0, 0, 2));
     let output_string_result = ron::ser::to_string_pretty(&definition, pretty);
     Ok(output_string_result.unwrap())

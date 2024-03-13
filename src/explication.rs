@@ -31,7 +31,8 @@ pub type Hole<T> = Option<T>;
 //   seems cool, but probably too much work
 // arguably this pass should be on the lowered AST rather than on the frontend
 //   but debugging explication is gonna be even harder without names...
-pub fn explicate(mut program: expir::Program) -> crate::frontend::Definition {
+pub fn explicate(program: crate::frontend::ExplicationDefinition) -> crate::frontend::Definition {
+    dbg!(&program);
     // explicate_funclets(StaticContext::new(program));
 
     // dbg!(&context);

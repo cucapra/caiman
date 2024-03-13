@@ -4,7 +4,8 @@
 
 use std::collections::BTreeSet;
 
-use caiman::assembly::ast::{self as asm, Hole, MetaId};
+use caiman::assembly::ast::{self as asm, MetaId};
+use caiman::explication::Hole;
 
 use crate::{
     enum_cast,
@@ -429,7 +430,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
                     || {
                         Some(asm::RemoteNodeId {
                             node: None,
-                            funclet: Some(MetaId(META_TIMELINE.to_string())),
+                            funclet: MetaId(META_TIMELINE.to_string()),
                         })
                     },
                     tag_to_quot,
@@ -438,7 +439,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
                     || {
                         Some(asm::RemoteNodeId {
                             node: None,
-                            funclet: Some(MetaId(META_SPATIAL.to_string())),
+                            funclet: MetaId(META_SPATIAL.to_string()),
                         })
                     },
                     tag_to_quot,
@@ -457,7 +458,7 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
 fn quot_ref_to_remote_node(qr: &QuotientReference) -> asm::RemoteNodeId {
     asm::RemoteNodeId {
         node: qr.spec_var.clone().map(|n| Some(asm::NodeId(n))),
-        funclet: Some(asm::MetaId(qr.spec_name.clone())),
+        funclet: asm::MetaId(qr.spec_name.clone()),
     }
 }
 
@@ -476,15 +477,15 @@ pub fn tag_to_quot(t: &Tag) -> Option<asm::RemoteNodeId> {
 
 /// Converts a hlc tag to a tag in the assembly
 pub fn tag_to_tag(t: &Tag) -> asm::Tag {
-    tag_to_tag_def(t, ir::Flow::Usable)
+    tag_to_tag_def(t)
 }
 
 /// Converts a hlc tag to a tag in the assembly, using a default flow
 /// if the tag does not specify a flow
-pub fn tag_to_tag_def(t: &Tag, default_flow: ir::Flow) -> asm::Tag {
+pub fn tag_to_tag_def(t: &Tag) -> asm::Tag {
     asm::Tag {
         quot: tag_to_quot(t),
-        flow: t.flow.as_ref().map_or(default_flow, |f| match f {
+        flow: t.flow.as_ref().map(|f| match f {
             Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
             Flow::Usable => ir::Flow::Usable,
@@ -506,10 +507,10 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
     commands.extend(lower_terminator(funclet.terminator(), temp_id, funclet));
     let implicit_default = asm::Tag {
         quot: Some(asm::RemoteNodeId {
-            funclet: Some(MetaId(META_TIMELINE.to_string())),
+            funclet: MetaId(META_TIMELINE.to_string()),
             node: None,
         }),
-        flow: ir::Flow::Usable,
+        flow: Some(ir::Flow::Usable),
     };
     asm::Funclet {
         kind: ir::FuncletKind::ScheduleExplicit,

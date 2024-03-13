@@ -307,8 +307,8 @@ fn ir_node(node: &ast::Node, context: &Context) -> expir::Node {
     match &node {
         ast::Node::Constant { value, type_id } => {
             // we don't allow holes for constants
-            let unwrapped_value = value.unwrap().clone();
-            let unwrapped_type = type_id.unwrap().clone();
+            let unwrapped_value = value.as_ref().unwrap().clone();
+            let unwrapped_type = type_id.as_ref().unwrap().clone();
             let parsed_value = match &unwrapped_type {
                 ast::TypeId::Local(name) => match context.native_type_map.get(name) {
                     None => panic!("{:?} must have a direct FFI storage type", type_id),
@@ -350,7 +350,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
         },
         ast::TailEdge::Jump { join, arguments } => expir::TailEdge::Jump {
             join: join.as_ref().map(|n| context.node_id(n)),
-            arguments: arguments.map(|args| {
+            arguments: arguments.as_ref().map(|args| {
                 args.iter()
                     .map(|o| o.as_ref().map(|n| context.node_id(n)))
                     .collect()
@@ -367,11 +367,11 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 value_operation: operation_set.value,
                 timeline_operation: operation_set.timeline,
                 spatial_operation: operation_set.spatial,
-                callee_funclet_id: callee_funclet_id.map(|f| {
+                callee_funclet_id: callee_funclet_id.as_ref().map(|f| {
                     context
-                        .funclet_id(&f)
+                        .funclet_id(f)
                 }),
-                callee_arguments: callee_arguments.map(|args| {
+                callee_arguments: callee_arguments.as_ref().map(|args| {
                     args.iter()
                         .map(|o| o.as_ref().map(|n| context.node_id(n)))
                         .collect()
@@ -392,12 +392,12 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 timeline_operation: operation_set.timeline,
                 spatial_operation: operation_set.spatial,
                 condition: condition.as_ref().map(|n| context.node_id(n)),
-                callee_funclet_ids: callee_funclet_ids.map(|args| {
+                callee_funclet_ids: callee_funclet_ids.as_ref().map(|args| {
                     args.iter()
                         .map(|o| o.as_ref().map(|f| context.funclet_id(f)))
                         .collect()
                 }),
-                callee_arguments: callee_arguments.map(|args| {
+                callee_arguments: callee_arguments.as_ref().map(|args| {
                     args.iter()
                         .map(|o| o.as_ref().map(|n| context.node_id(n)))
                         .collect()
@@ -419,7 +419,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 external_function_id: external_function_id
                     .as_ref()
                     .map(|id| ffi::ExternalFunctionId(context.external_funclet_id(id))),
-                yielded_nodes: yielded_nodes.map(|args| {
+                yielded_nodes: yielded_nodes.as_ref().map(|args| {
                     args.iter()
                         .map(|o| o.as_ref().map(|n| context.node_id(n)))
                         .collect()
@@ -475,16 +475,15 @@ fn ir_schedule_binding(
     let implicit_out_lookup = context.tag_lookup(&vec![Some(implicit_tags.1.clone())]);
 
     // we want an error to make sure user input isn't being thrown out quietly
+    let error_tags = implicit_tags.clone();
     let error_in = format!(
         "Implicit tag {:?} invalid -- implicit tags must be for the timeline",
-        implicit_tags.0.clone()
-    )
-    .as_str();
+        error_tags.0
+    );
     let error_out = format!(
         "Implicit tag {:?} invalid -- implicit tags must be for the timeline",
-        implicit_tags.0.clone()
-    )
-    .as_str();
+        error_tags.1
+    );
     assert!(!implicit_in_lookup.value.is_none(), error_in);
     assert!(!implicit_in_lookup.spatial.is_none(), error_in);
     assert!(!implicit_out_lookup.value.is_none(), error_out);
