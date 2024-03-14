@@ -8,7 +8,7 @@ use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
 };
-use caiman::assembly::ast as asm;
+use caiman::assembly::ast::{self as asm};
 use caiman::ir;
 
 use super::sched::{collect_sched_names, collect_schedule};

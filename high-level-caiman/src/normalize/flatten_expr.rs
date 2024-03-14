@@ -576,6 +576,7 @@ fn flatten_sched_call(
         target,
         templates,
         tag,
+        yield_call,
     } = call;
     if let ArgsOrEnc::Args(args) = *args {
         let (mut instrs, mut temp_num, func_expr, new_args) = flatten_call(
@@ -596,6 +597,7 @@ fn flatten_sched_call(
                     target: Box::new(func_expr),
                     templates,
                     tag,
+                    yield_call,
                 },
             ))),
             info,
@@ -629,6 +631,7 @@ fn flatten_sched_term_children(
                 templates,
                 args,
                 tag,
+                yield_call,
             },
         )) => {
             if let ArgsOrEnc::Args(args) = *args {
@@ -649,6 +652,7 @@ fn flatten_sched_term_children(
                             target,
                             templates,
                             tag,
+                            yield_call,
                         },
                     )),
                 )

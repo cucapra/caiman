@@ -286,9 +286,8 @@ fn lower_func_call(
         })),
         Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            // TODO: for greater generality, should be `SerializedJoin`, but I
-            // think that's broken right now
-            // TODO: optimize and use inline join whenever possible
+            // TODO: codegen join semantics are broken, basically there's only
+            // inline join
             node: asm::Node::InlineJoin {
                 funclet: f.next_blocks().first().unwrap().clone(),
                 captures: Hole::Filled(

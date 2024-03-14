@@ -1,12 +1,8 @@
 struct Callbacks;
 
 impl main::CpuFunctions for Callbacks {
-    fn _mod_i64_i64(&self, _: &mut dyn caiman_rt::State, a: i64, b: i64) -> (i64,) {
-        (a % b,)
-    }
-
-    fn _eq_i64_i64(&self, _: &mut dyn caiman_rt::State, a: i64, b: i64) -> (i32,) {
-        if a == b {
+    fn _lt_i64_i64(&self, _: &mut dyn caiman_rt::State, a: i64, b: i64) -> (i32,) {
+        if a < b {
             (1,)
         } else {
             (0,)
@@ -22,6 +18,6 @@ fn main() -> Result<(), String> {
     let mut join_stack_bytes = [0u8; 4096usize];
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
     let instance = main::Instance::new(&mut root_state, &callbacks);
-    let result = instance.start(&mut join_stack, 11);
+    let result = instance.start(&mut join_stack);
     crate::expect_returned!(0, result.returned().map(|x| x.0))
 }

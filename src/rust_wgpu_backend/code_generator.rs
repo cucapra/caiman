@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use super::ffi;
 use crate::id_generator::IdGenerator;
 use crate::ir;
@@ -9,6 +11,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::default::Default;
+use std::env::var;
 use std::fmt::Write;
 
 // The dependency on crate::ir is not good
@@ -65,6 +68,7 @@ struct VariableTracker {
     variable_types: HashMap<VarId, ffi::TypeId>,
     /// variables allocated via alloc_temporary
     allocated_temps: HashSet<VarId>,
+    arguments: HashSet<VarId>,
 }
 
 impl VariableTracker {
@@ -74,6 +78,7 @@ impl VariableTracker {
             variable_kinds: HashMap::<VarId, VariableKind>::new(),
             variable_types: HashMap::<VarId, ffi::TypeId>::new(),
             allocated_temps: HashSet::<VarId>::new(),
+            arguments: HashSet::<VarId>::new(),
         }
     }
 
@@ -134,6 +139,15 @@ impl VariableTracker {
     // Returns if the variable was created by alloc temporary
     fn is_temp(&self, variable_id: VarId) -> bool {
         self.allocated_temps.contains(&variable_id)
+    }
+
+    fn is_arg(&self, variable_id: VarId) -> bool {
+        self.arguments.contains(&variable_id)
+    }
+
+    fn new_arg(&mut self, variable_id: VarId, variable_type: ffi::TypeId) {
+        self.arguments.insert(variable_id);
+        self.variable_types.insert(variable_id, variable_type);
     }
 }
 
@@ -269,6 +283,10 @@ impl<'program> CodeGenerator<'program> {
             + self.code_writer.finish().as_str()
     }
 
+    pub fn get_native_interface(&self) -> &ffi::NativeInterface {
+        &self.native_interface
+    }
+
     fn get_var_name(&self, variable_id: VarId) -> String {
         format!("var_{}", variable_id.0)
     }
@@ -277,7 +295,7 @@ impl<'program> CodeGenerator<'program> {
         let mut output_string = String::new();
         write!(output_string, "(");
         for (index, type_id) in type_ids.iter().enumerate() {
-            let type_name = self.get_type_name(*type_id);
+            let type_name = self.get_type_name_with_ref(*type_id, Some("callee"));
             write!(output_string, "{}, ", type_name);
         }
         write!(output_string, ")");
@@ -650,6 +668,7 @@ impl<'program> CodeGenerator<'program> {
             self.code_writer,
             "use caiman_rt::{{LocalVars, GpuLocals, wgpu, bytemuck}};\n"
         );
+        write!(self.code_writer, "use std::marker::PhantomData;\n");
 
         self.code_writer.begin_module("outputs");
         {
@@ -723,8 +742,10 @@ impl<'program> CodeGenerator<'program> {
             write!(self.code_writer, ", ");
 
             let variable_id = self.variable_tracker.create_local_data(Some(*input_type));
+            self.variable_tracker
+                .new_arg(variable_id, input_type.clone());
             argument_variable_ids.push(variable_id);
-            let type_name = self.get_type_name(*input_type);
+            let type_name = self.get_type_name_with_ref(*input_type, Some("callee"));
             let is_mutable = match &self.native_interface.types[input_type.0] {
                 ffi::Type::GpuBufferAllocator => true,
                 _ => false,
@@ -747,8 +768,7 @@ impl<'program> CodeGenerator<'program> {
 
         write!(
             self.code_writer,
-            " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, {}>",
-            self.get_tuple_definition_string(&funclet_result_type_ids)
+            " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, PipelineOutputTuple<'callee>>",
         );
         self.code_writer
             .write("\n{\n\tuse std::convert::TryInto;\n".to_string());
@@ -949,7 +969,7 @@ impl<'program> CodeGenerator<'program> {
         {
             write!(
                 self.code_writer,
-                "pub fn start<'callee>(self, join_stack : &mut caiman_rt::JoinStack<'callee>"
+                "pub fn start<'callee>(mut self, join_stack : &mut caiman_rt::JoinStack<'callee>"
             );
             for (input_index, input_type) in input_types.iter().enumerate() {
                 write!(
@@ -959,11 +979,38 @@ impl<'program> CodeGenerator<'program> {
                     self.get_type_name(*input_type)
                 );
             }
-            write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ funclet{}_func(self, join_stack", funclet_id);
+            write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{\n");
             for (input_index, input_type) in input_types.iter().enumerate() {
-                write!(self.code_writer, ", arg_{}", input_index);
+                if self.is_ref(*input_type) {
+                    write!(
+                        self.code_writer,
+                        "self.locals.calloc({}, *arg_{});\n",
+                        input_index, input_index
+                    );
+                }
             }
-            write!(self.code_writer, ") }}",);
+            write!(
+                self.code_writer,
+                "let r = funclet{}_func(self, join_stack",
+                funclet_id
+            );
+            for (input_index, input_type) in input_types.iter().enumerate() {
+                if self.is_ref(*input_type) {
+                    write!(self.code_writer, ", StackRef::local({input_index})");
+                } else {
+                    write!(self.code_writer, ", arg_{input_index}");
+                }
+            }
+            write!(self.code_writer, ");\n",);
+            for (input_index, input_type) in input_types.iter().enumerate() {
+                if self.is_mut_ref(*input_type) {
+                    write!(
+                        self.code_writer,
+                        "*arg_{input_index} = *r.instance.locals.get({input_index});\n",
+                    );
+                }
+            }
+            write!(self.code_writer, "r }}");
         }
         if let Some(yield_points) = yield_points_opt {
             for (yield_point_id, yield_point) in yield_points.iter() {
@@ -979,13 +1026,13 @@ impl<'program> CodeGenerator<'program> {
                         self.get_type_name(*resuming_type)
                     );
                 }
-                write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ pop_join_and_dispatch_at_{}::<F, PipelineOutputTuple<'callee>>(self, join_stack", dispatcher_id.0);
+                write!(self.code_writer, ") -> FuncletResult<'state, 'cpu_functions, 'callee, F, PipelineOutputTuple<'callee>> {{ pop_join_and_dispatch_at_{}::<F, PipelineOutputTuple<'callee>>(join_stack", dispatcher_id.0);
                 for (resuming_argument_index, resuming_type) in
                     yield_point.resuming_types.iter().enumerate()
                 {
                     write!(self.code_writer, ", arg_{}", resuming_argument_index);
                 }
-                write!(self.code_writer, ") }}\n");
+                write!(self.code_writer, ", self) }}\n");
             }
         }
         write!(self.code_writer, "}}\n");
@@ -1016,16 +1063,20 @@ impl<'program> CodeGenerator<'program> {
         }
 
         for (argument_types, dispatcher) in self.active_dispatchers.iter() {
-            write!(self.code_writer, "fn pop_join_and_dispatch_at_{}<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(instance : Instance<'state, 'cpu_functions, Callbacks>, join_stack : &mut caiman_rt::JoinStack<'callee>", dispatcher.dispatcher_id.0);
+            write!(self.code_writer, "fn pop_join_and_dispatch_at_{}<'state, 'cpu_functions, 'callee, Callbacks : CpuFunctions, Intermediates>(join_stack : &mut caiman_rt::JoinStack<'callee>", dispatcher.dispatcher_id.0);
 
             for (resuming_argument_index, resuming_type) in argument_types.iter().enumerate() {
                 write!(
                     self.code_writer,
                     ", arg_{} : {}",
                     resuming_argument_index,
-                    self.get_type_name(*resuming_type)
+                    self.get_type_name_with_ref(*resuming_type, Some("callee"))
                 );
             }
+            write!(
+                self.code_writer,
+                ", mut instance : Instance<'state, 'cpu_functions, Callbacks>"
+            );
             write!(
                 self.code_writer,
                 " ) -> FuncletResult<'state, 'cpu_functions, 'callee, Callbacks, {}>\n",
@@ -1052,6 +1103,35 @@ impl<'program> CodeGenerator<'program> {
 
             write!(self.code_writer, "_ => panic!(\"Dispatcher cannot dispatch given closure {{:?}}\", closure_header), }} }}", );
         }
+        let s = r#"
+        #[derive(Debug, Copy, Clone)]
+        enum StackRef<T> {
+            Local(usize, PhantomData<T>),
+        }
+        impl<T: 'static> StackRef<T> {
+            fn get<'state, 'cpu_functions, 'a, F: CpuFunctions>(
+                &self,
+                instance: &'a Instance<'state, 'cpu_functions, F>,
+            ) -> &'a T {
+                match self {
+                    StackRef::Local(index, ..) => instance.locals.get::<T>(*index),
+                }
+            }
+    
+            fn get_mut<'state, 'cpu_functions, 'a, F: CpuFunctions>(
+                &self,
+                instance: &'a mut Instance<'state, 'cpu_functions, F>,
+            ) -> &'a mut T {
+                match self {
+                    StackRef::Local(index, ..) => instance.locals.get_mut::<T>(*index),
+                }
+            }
+    
+            fn local(index: usize) -> Self {
+                StackRef::Local(index, PhantomData)
+            }
+        }"#;
+        write!(self.code_writer, "{s}");
     }
 
     pub fn emit_oneshot_pipeline_entry_point(
@@ -1073,10 +1153,10 @@ impl<'program> CodeGenerator<'program> {
         self.emit_pipeline_entry_point(funclet_id, input_types, output_types, Some(yield_points))
     }
 
-    pub fn build_indirect_stack_jump_to_popped_serialized_join(
-        &mut self,
+    pub fn build_indirect_stack_jump_to_popped_serialized_join<'a>(
+        &'a mut self,
         argument_var_ids: &[VarId],
-        argument_types: &[ffi::TypeId],
+        mut argument_types: &'a [ffi::TypeId],
     ) {
         let dispatcher_id = self.lookup_dispatcher_id(argument_types);
         write!(
@@ -1084,34 +1164,83 @@ impl<'program> CodeGenerator<'program> {
             "return pop_join_and_dispatch_at_{}::<Callbacks, PipelineOutputTuple<'callee>>",
             dispatcher_id.0
         );
-        write!(self.code_writer, "(instance, join_stack");
-        for (argument_index, var_id) in argument_var_ids.iter().enumerate() {
-            write!(self.code_writer, ", {}", self.get_var_name(*var_id));
+        write!(self.code_writer, "(join_stack");
+        for ((argument_index, var_id), var_type) in argument_var_ids
+            .iter()
+            .enumerate()
+            .zip(argument_types.iter())
+        {
+            if self.is_ref(*var_type) {
+                write!(self.code_writer, ", {}", self.make_stack_ref(*var_id));
+            } else {
+                write!(self.code_writer, ", {}", self.access_val_str(*var_id));
+            }
         }
-        write!(self.code_writer, ")\n");
+        write!(self.code_writer, ", instance);\n");
     }
 
-    pub fn build_return(&mut self, output_var_ids: &[VarId]) {
+    /// Builds a return statement for the current funclet
+    /// # Arguments
+    /// * `output_var_ids` - The variable ids of the variables being returned
+    /// * `output_var_types` - The types of the variables being returned
+    /// * `may_return` - Whether or not the funclet may return.
+    ///    If false, the generated code will panic if there is nothing to pop from
+    ///    the join stack.
+    pub fn build_return(
+        &mut self,
+        output_var_ids: &[VarId],
+        output_var_types: &[ffi::TypeId],
+        may_return: bool,
+    ) {
         if let Some(result_type_ids) = &self.active_funclet_result_type_ids {
             let result_type_ids = result_type_ids.clone(); // Make a copy for now to satisfy the borrowchecking gods...
-            let dispatcher_id = self.lookup_dispatcher_id(&result_type_ids);
+            let dispatcher_id = self.lookup_dispatcher_id(&output_var_types);
             write!(self.code_writer, "if join_stack.used_bytes().len() > 0 {{ ");
             write!(
                 self.code_writer,
                 "return pop_join_and_dispatch_at_{}::<Callbacks, PipelineOutputTuple<'callee>>",
                 dispatcher_id.0
             );
-            write!(self.code_writer, "(instance, join_stack");
-            for (return_index, var_id) in output_var_ids.iter().enumerate() {
-                write!(self.code_writer, ", {}", self.get_var_name(*var_id));
+            write!(self.code_writer, "(join_stack");
+            for ((return_index, var_id), var_type) in output_var_ids
+                .iter()
+                .enumerate()
+                .zip(output_var_types.iter())
+            {
+                if self.is_ref(*var_type) {
+                    write!(self.code_writer, ", {}", self.make_stack_ref(*var_id));
+                } else {
+                    write!(self.code_writer, ", {}", self.access_val_str(*var_id));
+                }
             }
-            write!(self.code_writer, ") }}");
+            write!(self.code_writer, ", instance) }}");
+            if may_return {
+                write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((");
+                for ((return_index, var_id), var_type) in output_var_ids
+                    .iter()
+                    .enumerate()
+                    .zip(result_type_ids.iter())
+                {
+                    if self.is_ref(*var_type) {
+                        if self.variable_tracker.is_arg(*var_id) {
+                            write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
+                        } else {
+                            write!(self.code_writer, "StackRef::local({}) ", var_id.0);
+                        }
+                    } else {
+                        write!(self.code_writer, "{}, ", self.access_val_str(*var_id));
+                    }
+                }
+                write!(self.code_writer, ")), instance}};");
+            } else {
+                write!(
+                    self.code_writer,
+                    "else {{ panic!(\"Corrupted join stack\"); }}"
+                );
+            }
+        } else {
+            panic!("Can this happen?");
         }
-        write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{instance, phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Return((");
-        for (return_index, var_id) in output_var_ids.iter().enumerate() {
-            write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
-        }
-        write!(self.code_writer, "))}};");
     }
 
     pub fn build_yield(
@@ -1119,11 +1248,15 @@ impl<'program> CodeGenerator<'program> {
         yield_point_id: ffi::ExternalFunctionId,
         yielded_var_ids: &[VarId],
     ) {
-        write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{instance, phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Yield{}{{ yielded : (", yield_point_id.0);
+        write!(
+            self.code_writer,
+            "instance.locals.reset();\ninstance.glocals.reset();\n"
+        );
+        write!(self.code_writer, "return FuncletResult::<'state, 'cpu_functions, 'callee, Callbacks, _> {{phantom : std::marker::PhantomData::<& 'callee ()>, intermediates : FuncletResultIntermediates::<_>::Yield{}{{ yielded : (", yield_point_id.0);
         for (return_index, var_id) in yielded_var_ids.iter().enumerate() {
             write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
         }
-        write!(self.code_writer, ") }} }};");
+        write!(self.code_writer, ") }}, instance }};");
     }
 
     pub fn end_funclet(&mut self) {
@@ -1218,7 +1351,18 @@ impl<'program> CodeGenerator<'program> {
         }
     }
 
+    fn is_mut_ref(&self, type_id: ffi::TypeId) -> bool {
+        match &self.native_interface.types[type_id.0] {
+            ffi::Type::MutRef { .. } | ffi::Type::MutSlice { .. } => true,
+            _ => false,
+        }
+    }
+
     fn get_type_name(&self, type_id: ffi::TypeId) -> String {
+        self.get_type_name_with_ref(type_id, None)
+    }
+
+    fn get_type_name_with_ref(&self, type_id: ffi::TypeId, lifetime: Option<&str>) -> String {
         match &self.native_interface.types[type_id.0] {
             ffi::Type::F32 => "f32".to_string(),
             ffi::Type::F64 => "f64".to_string(),
@@ -1232,28 +1376,69 @@ impl<'program> CodeGenerator<'program> {
             ffi::Type::I32 => "i32".to_string(),
             ffi::Type::I64 => "i64".to_string(),
             ffi::Type::ConstRef { element_type } => {
-                ("& ").to_string() + self.get_type_name(*element_type).as_str()
+                if let Some(_lifetime) = lifetime {
+                    format!(
+                        "StackRef<{}>",
+                        self.get_type_name_with_ref(*element_type, lifetime)
+                    )
+                } else {
+                    format!("&{}", self.get_type_name_with_ref(*element_type, lifetime))
+                }
             }
             ffi::Type::MutRef { element_type } => {
-                ("&mut ").to_string() + self.get_type_name(*element_type).as_str()
+                if let Some(_lifetime) = lifetime {
+                    format!(
+                        "StackRef<{}>",
+                        self.get_type_name_with_ref(*element_type, lifetime)
+                    )
+                } else {
+                    format!(
+                        "&mut {}",
+                        self.get_type_name_with_ref(*element_type, lifetime)
+                    )
+                }
             }
             ffi::Type::ConstSlice { element_type } => {
-                ("& [").to_string() + self.get_type_name(*element_type).as_str() + "]"
+                if let Some(_lifetime) = lifetime {
+                    format!(
+                        "StackRef<[{}]>",
+                        self.get_type_name_with_ref(*element_type, lifetime)
+                    )
+                } else {
+                    format!(
+                        "&[{}]",
+                        self.get_type_name_with_ref(*element_type, lifetime)
+                    )
+                }
             }
             ffi::Type::MutSlice { element_type } => {
-                ("&mut [").to_string() + self.get_type_name(*element_type).as_str() + "]"
+                if let Some(_lifetime) = lifetime {
+                    format!(
+                        "StackRef<[{}]>",
+                        self.get_type_name_with_ref(*element_type, lifetime)
+                    )
+                } else {
+                    format!(
+                        "&mut [{}]",
+                        self.get_type_name_with_ref(*element_type, lifetime)
+                    )
+                }
             }
             ffi::Type::Array {
                 element_type,
                 length,
-            } => format!("[{}; {}]", self.get_type_name(*element_type), length),
+            } => format!(
+                "[{}; {}]",
+                self.get_type_name_with_ref(*element_type, lifetime),
+                length
+            ),
             ffi::Type::GpuBufferRef { element_type } => format!(
                 "caiman_rt::GpuBufferRef<'callee, {}>",
-                self.get_type_name(*element_type)
+                self.get_type_name_with_ref(*element_type, lifetime)
             ),
             ffi::Type::GpuBufferSlice { element_type } => format!(
                 "caiman_rt::GpuBufferSlice<'callee, {}>",
-                self.get_type_name(*element_type)
+                self.get_type_name_with_ref(*element_type, lifetime)
             ),
             ffi::Type::GpuBufferAllocator => format!("caiman_rt::GpuBufferAllocator<'callee>"),
             ffi::Type::GpuFence => format!("caiman_rt::GpuFence"),
@@ -1389,22 +1574,9 @@ impl<'program> CodeGenerator<'program> {
             var_ids.push(var_id);
         }
 
-        write!(self.code_writer, "( ");
-
-        for (i, (var_id, var_type)) in var_ids.iter().zip(var_types).enumerate() {
-            write!(
-                self.code_writer,
-                "*instance.locals.malloc::<{var_type}>({})",
-                var_id.0,
-            );
-            if i < output_type_ids.len() - 1 {
-                write!(self.code_writer, ", ");
-            }
-        }
-
         write!(
             self.code_writer,
-            ") = if {} !=0 {{ ",
+            "if {} !=0 {{ ",
             self.get_var_name(condition_var_id)
         );
 
@@ -1415,29 +1587,11 @@ impl<'program> CodeGenerator<'program> {
         // Temporary fix
         self.reset_pipeline();
 
-        write!(self.code_writer, " ( ");
-        for (i, var_id) in output_var_ids.iter().enumerate() {
-            let typ_name =
-                self.get_stripped_type_name(self.variable_tracker.variable_types[var_id]);
-            write!(self.code_writer, "{}", self.access_val_str(*var_id));
-            if i < output_var_ids.len() - 1 {
-                write!(self.code_writer, ", ");
-            }
-        }
-        write!(self.code_writer, " ) }} else {{ ");
+        write!(self.code_writer, " }} else {{ ");
     }
 
     pub fn end_else(&mut self, output_var_ids: &[VarId]) {
-        write!(self.code_writer, " ( ");
-        for (i, var_id) in output_var_ids.iter().enumerate() {
-            let typ_name =
-                self.get_stripped_type_name(self.variable_tracker.variable_types[var_id]);
-            write!(self.code_writer, "{}", self.access_val_str(*var_id));
-            if i < output_var_ids.len() - 1 {
-                write!(self.code_writer, ", ");
-            }
-        }
-        write!(self.code_writer, " ) }};\n");
+        write!(self.code_writer, " }}\n");
 
         // Temporary fix
         self.reset_pipeline();
@@ -1629,8 +1783,12 @@ impl<'program> CodeGenerator<'program> {
             funclet_id,
             capture_types.len()
         );
-        for var_id in capture_var_ids.iter() {
-            write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
+        for (var_id, var_type) in capture_var_ids.iter().zip(capture_types.iter()) {
+            if self.is_ref(*var_type) {
+                write!(self.code_writer, "{}, ", self.make_stack_ref(*var_id));
+            } else {
+                write!(self.code_writer, "{}, ", self.access_val_str(*var_id));
+            }
         }
         write!(self.code_writer, "); let closure_header = ClosureHeader::Funclet{}Capturing{}; unsafe {{ join_stack.push_unsafe_unaligned(join_data).expect(\"Ran out of memory while serializing join\"); join_stack.push_unsafe_unaligned(closure_header).expect(\"Ran out of memory while serializing join\"); }}", funclet_id, capture_types.len());
 
@@ -1758,16 +1916,19 @@ impl<'program> CodeGenerator<'program> {
         type_id: ffi::TypeId,
     ) {
         let buffer_view_var_name = self.get_var_name(destination_var);
+        write!(self.code_writer, "{{ \n");
         let source_bytes = self.local_as_le_bytes(source_var, type_id);
+        write!(self.code_writer, "let _t = {};\n", source_bytes);
         self.code_writer.write(format!(
             "let {} = {};\n",
             buffer_view_var_name,
             self.build_get_gpu_ref(destination_var, Some(type_id))
         ));
         self.code_writer.write(format!(
-            "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, {});\n",
-            buffer_view_var_name, buffer_view_var_name, source_bytes
+            "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, _t);\n",
+            buffer_view_var_name, buffer_view_var_name
         ));
+        write!(self.code_writer, "}}\n");
     }
 
     pub fn encode_copy_buffer_from_buffer(
@@ -1865,50 +2026,52 @@ impl<'program> CodeGenerator<'program> {
     }
 
     pub fn build_write_local_ref(&mut self, dst_ref_var_id: VarId, src_var_id: VarId) {
-        let src = if self.variable_tracker.is_temp(src_var_id) {
-            // safe bc of the caiman type system
-            format!(
-                "*instance.locals.get::<{}>({})",
-                self.get_stripped_var_type_name(src_var_id),
-                src_var_id.0,
-            )
+        let src = self.access_val_str(src_var_id);
+        write!(
+            self.code_writer,
+            "*{} = {};\n",
+            self.access_ref_str(dst_ref_var_id, true),
+            src,
+        );
+    }
+
+    fn make_stack_ref(&self, var_id: VarId) -> String {
+        if self.variable_tracker.is_arg(var_id) {
+            self.get_var_name(var_id)
         } else {
-            self.get_var_name(src_var_id)
-        };
-        if self.variable_tracker.is_temp(dst_ref_var_id) {
-            // this should be safe bc of the caiman type system
-            write!(
-                self.code_writer,
-                "*instance.locals.get_mut::<{}>({}) = {};\n",
-                self.get_stripped_var_type_name(dst_ref_var_id),
-                dst_ref_var_id.0,
-                src,
-            );
-        } else {
-            write!(
-                self.code_writer,
-                "*{} = {};\n",
-                self.get_var_name(dst_ref_var_id),
-                src,
-            );
+            format!("StackRef::local({})", var_id.0)
         }
     }
 
     /// Returns a string that is the code that can access the reference to a variable
-    fn access_ref_str(&self, var_id: VarId) -> String {
+    fn access_ref_str(&self, var_id: VarId, is_mut: bool) -> String {
         if self.variable_tracker.is_temp(var_id) {
             // safe bc of the caiman type system
             format!(
-                "instance.locals.get::<{}>({})",
+                "instance.locals.get{}::<{}>({})",
+                if is_mut { "_mut" } else { "" },
                 self.get_stripped_var_type_name(var_id),
                 var_id.0,
+            )
+        } else if self.variable_tracker.is_arg(var_id)
+            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+        {
+            format!(
+                "{}.get{}(&{} instance)",
+                self.get_var_name(var_id),
+                if is_mut { "_mut" } else { "" },
+                if is_mut { "mut" } else { "" }
             )
         } else if self.variable_tracker.variable_types.contains_key(&var_id)
             && self.is_ref(self.variable_tracker.variable_types[&var_id])
         {
             self.get_var_name(var_id)
         } else {
-            format!("(&{})", self.get_var_name(var_id))
+            format!(
+                "(&{}{})",
+                if is_mut { "mut " } else { "" },
+                self.get_var_name(var_id)
+            )
         }
     }
 
@@ -1921,6 +2084,10 @@ impl<'program> CodeGenerator<'program> {
                 self.get_stripped_var_type_name(var_id),
                 var_id.0,
             )
+        } else if self.variable_tracker.is_arg(var_id)
+            && self.is_ref(self.variable_tracker.variable_types[&var_id])
+        {
+            format!("(*{}.get(&instance))", self.get_var_name(var_id))
         } else if self.variable_tracker.variable_types.contains_key(&var_id)
             && self.is_ref(self.variable_tracker.variable_types[&var_id])
         {

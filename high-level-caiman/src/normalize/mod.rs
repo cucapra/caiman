@@ -1,6 +1,7 @@
 mod flatten_expr;
 mod if_to_seq;
 mod sched_rename;
+mod yields;
 
 use crate::{
     error::LocalError,
@@ -11,11 +12,13 @@ use self::{
     flatten_expr::{flatten_schedule, flatten_spec},
     if_to_seq::final_if_to_seq,
     sched_rename::rename_vars,
+    yields::CallGraph,
 };
 pub use sched_rename::original_name;
 
-/// Normalizes the AST by renaming schedule variables and flattening nested
-/// expressions.
+/// Normalizes the AST by renaming schedule variables, flattening nested
+/// expressions, converting conditional returns to sequences, and inserting
+/// yields.
 /// # Errors
 /// If there is a type error in the AST caught during normalization.
 #[allow(clippy::module_name_repetitions)]
@@ -40,5 +43,7 @@ pub fn normalize_ast(mut p: Program) -> Result<Program, LocalError> {
             _ => (),
         }
     }
+    let mut cg = CallGraph::new(&mut p);
+    cg.insert_yields();
     Ok(p)
 }

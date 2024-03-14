@@ -7,23 +7,22 @@ val min(a: i64, b: i64) -> i64 {
     returns a if a < b else b
 }
 
-fn min_impl(a, b) -> i64
+fn min_impl(a: i64, b: i64) -> i64
     impls min, time, space
 {
-    let r = if a < b {
+    if a < b {
         a
     } else {
         b
-    };
-    r
+    }
 }
 
 val main() -> i64 {
-    returns min(3, 4)
+    returns min(min(10, 0), 5)
 }
 
 fn main_impl() -> i64 impls main, time, space {
-    min_impl(3, 4)
+    min_impl(min_impl(10, 0), 5)
 }
 
-pipeline main { min_impl }
+pipeline main { main_impl }
