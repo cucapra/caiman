@@ -75,6 +75,7 @@
                         [],
                     ),
                     tag: None,
+                    yield_call: false,
                 },
             ),
             Call(
@@ -231,6 +232,7 @@
                                                             [],
                                                         ),
                                                         tag: None,
+                                                        yield_call: false,
                                                     },
                                                 ),
                                             ),
@@ -260,6 +262,7 @@
                         ],
                     ),
                     tag: None,
+                    yield_call: false,
                 },
             ),
             Return(
@@ -307,6 +310,7 @@
                                 [],
                             ),
                             tag: None,
+                            yield_call: false,
                         },
                     ),
                 ),
