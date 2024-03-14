@@ -23,7 +23,7 @@ impl FuncletOutState {
         }
     }
 
-    pub fn drain_allocation_requests(&mut self) -> Vec<(ast::TypeId, usize)> {
+    pub fn drain_allocation_requests(&mut self) -> Vec<(ast::FFIType, usize)> {
         self.allocation_requests.drain().collect()
     }
 
@@ -36,7 +36,7 @@ impl FuncletOutState {
         self.to_fill.contains(spec_type)
     }
 
-    pub fn fill(&mut self, spec_type: Location) {
+    pub fn fill(&mut self, spec_type: &Location) {
         let check = self.to_fill.remove(spec_type);
         assert!(check);
     }
@@ -45,11 +45,11 @@ impl FuncletOutState {
         self.to_fill.is_empty()
     }
 
-    pub fn push_comand(&mut self, command: ast::NamedCommand) {
+    pub fn push_comand(&mut self, command: ast::NamedNode) {
         self.commands.push_front(command);
     }
 
-    pub fn drain_commands(&mut self) -> Vec<ast::NamedCommand> {
+    pub fn drain_commands(&mut self) -> Vec<ast::NamedNode> {
         self.commands.drain(..).collect()
     }
 }

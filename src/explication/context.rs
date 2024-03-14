@@ -4,8 +4,8 @@ pub mod outstate;
 pub mod staticcontext;
 
 use crate::assembly::ast;
-use crate::explication::util::*;
-use crate::explication::Hole;
+use super::util::*;
+use super::Hole;
 use crate::ir;
 use crate::stable_vec;
 use crate::explication::expir;
@@ -51,7 +51,7 @@ pub struct StaticContext {
     // the entire original program, useful for looking things up
     // note that we are constructing a completely fresh program recursively
     // so the original program is not mutated
-    program: ast::Program,
+    program: expir::Program,
 
     // information about each type
     type_declarations: HashMap<String, LocalTypeDeclaration>,

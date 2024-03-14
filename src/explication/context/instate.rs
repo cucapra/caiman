@@ -30,7 +30,7 @@ impl InState {
     pub fn add_instantiation(
         &mut self,
         schedule_node: NodeId,
-        spec_remotes: Vec<RemoteNodeId>,
+        spec_remotes: Vec<Location>,
         place: ir::Place,
     ) {
         let scope = self.get_latest_scope();
@@ -74,6 +74,7 @@ impl InState {
     //   panics in this case if there is none that can fulfill the requirements
     pub fn get_instantiation(
         &mut self,
+        buffer_flags: Option<ir::BufferFlags>,
         target_location: &Location,
         target_place: &ir::Place,
     ) -> Location {
@@ -94,6 +95,7 @@ impl InState {
         };
         let nodes = vec![
             &ast::Node::AllocTemporary {
+                buffer_flags,
                 place: Some(target_place.clone()),
                 storage_type: None,
             }

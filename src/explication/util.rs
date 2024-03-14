@@ -4,8 +4,6 @@ use crate::explication::Hole;
 use crate::assembly::ast::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
-use crate::explication::context;
-use crate::explication::context::StaticContext;
 use crate::assembly::parser;
 use crate::ir::ffi;
 use crate::{frontend, ir};

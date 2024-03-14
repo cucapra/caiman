@@ -1,3 +1,5 @@
+use self::expir::FuncletKind;
+
 use super::*;
 use crate::ir;
 
@@ -5,9 +7,9 @@ use crate::ir;
 // Specifically we want things like lists of funclet names up-front or node names up-front
 
 impl StaticContext {
-    pub fn new(program: ast::Program) -> StaticContext {
-        let mut context = StaticContext { 
-            program: DebugIgnore(program),
+    pub fn new(program: expir::Program) -> StaticContext {
+        let mut context = StaticContext {
+            program,
             type_declarations: HashMap::new(),
             spec_explication_data: HashMap::new(),
         };
@@ -17,63 +19,34 @@ impl StaticContext {
 
     fn initialize_declarations(&mut self) {
         let mut type_decls = HashMap::new();
-        let mut spec_funclets = Vec::new();
-        let mut schedule_funclets = Vec::new();
-        for declaration in &self.program.declarations {
-            match declaration {
-                ast::Declaration::TypeDecl(ast::TypeDecl::Local(local)) => {
-                    type_decls.insert(local.name.clone(), LocalTypeDeclaration::new(&local.data));
-                }
-                ast::Declaration::Funclet(funclet) => {
-                    let name = funclet.header.name.clone();
-                    match &funclet.kind {
-                        ir::FuncletKind::Value => {
-                            spec_funclets.push(name);
-                        }
-                        ir::FuncletKind::Timeline => {
-                            spec_funclets.push(name);
-                        }
-                        ir::FuncletKind::Spatial => {
-                            spec_funclets.push(name);
-                        }
-                        ir::FuncletKind::ScheduleExplicit => {
-                            schedule_funclets.push(name);
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
-        }
+
         self.type_declarations = type_decls;
-        for spec_funclet in spec_funclets {
-            self.initialize_spec_funclet_info(spec_funclet);
-        }
-        for schedule_funclet in schedule_funclets {
-            self.initialize_schedule_funclet_info(schedule_funclet);
+        for (index, funclet) in self.program.funclets.iter() {
+            match &funclet.kind {
+                FuncletKind::Value | FuncletKind:: Unknown => {},
+                _ => {
+                    self.initialize_spec_funclet_info(index, funclet);
+                }
+            }
         }
     }
 
-    fn initialize_spec_funclet_info(&mut self, funclet_name: ast::FuncletId) {
-        let funclet = self.get_funclet_mut(&funclet_name);
+    fn initialize_spec_funclet_info(&mut self, index: usize, funclet: &expir::Funclet) {
         let mut node_dependencies = HashMap::new();
         let mut tail_dependencies = Vec::new();
-        for command in &funclet.commands {
-            match &command.command {
-                ast::Command::Hole => {}
-                ast::Command::Node(node) => {
+        for (index, node) in funclet.nodes.as_ref().iter().enumerate() {
+            match &node {
+                None => {}
+                Some(node) => {
                     node_dependencies
-                        .insert(reject_hole_clone(&command.name), identify_node_deps(node));
+                        .insert(index, identify_node_deps(node));
                 }
-                ast::Command::TailEdge(edge) => {
-                    tail_dependencies = identify_tailedge_deps(edge);
-                }
-                ast::Command::ExplicationHole => {
-                    panic!(
-                        "Encountered an explication hole when initializing the context in {:?}",
-                        funclet_name
-                    );
-                }
+            }
+        }
+        match &funclet.tail_edge {
+            None => {}
+            Some(t) => {
+                identify_tailedge_deps(t);
             }
         }
 
@@ -81,10 +54,11 @@ impl StaticContext {
         let mut deduced_types = HashMap::new();
         match &funclet.kind {
             ir::FuncletKind::Value => {
-                for command in &funclet.commands {
-                    match &command.command {
-                        ast::Command::Node(nodeid) => {}
-                        _ => {}
+                for node in funclet.nodes.as_ref() {
+                    match node {
+                        None => {}
+                        // TODO: ???
+                        Some(n) => {}
                     }
                 }
             }
@@ -92,7 +66,7 @@ impl StaticContext {
         }
 
         self.spec_explication_data.insert(
-            funclet_name,
+            index,
             SpecFuncletData {
                 node_dependencies,
                 tail_dependencies,
@@ -102,42 +76,8 @@ impl StaticContext {
         );
     }
 
-    fn initialize_schedule_funclet_info(&mut self, funclet_name: ast::FuncletId) {
-        let funclet = self.get_funclet_mut(&funclet_name);
-        match &funclet.kind {
-            ir::FuncletKind::ScheduleExplicit => match &funclet.header.binding {
-                ast::FuncletBinding::ScheduleBinding(binding) => {
-                    let specs = SpecLanguages {
-                        value: reject_hole_clone(&binding.value),
-                        timeline: reject_hole_clone(&binding.timeline),
-                        spatial: reject_hole_clone(&binding.spatial),
-                    };
-                    self.get_spec_info_mut(&specs.value)
-                        .connections
-                        .push(funclet_name.clone());
-                    self.get_spec_info_mut(&specs.timeline)
-                        .connections
-                        .push(funclet_name.clone());
-                    self.get_spec_info_mut(&specs.spatial)
-                        .connections
-                        .push(funclet_name.clone());
-                    self.schedule_explication_data.insert(
-                        funclet_name,
-                        ScheduleFuncletData {
-                            type_instantiations: Default::default(),
-                        },
-                    );
-                }
-                _ => {
-                    unreachable!("Expected schedule binding for {:?}", funclet);
-                }
-            },
-            _ => {}
-        }
-    }
-
     // for quick and dirty things
-    pub fn program(&self) -> &ast::Program {
+    pub fn program(&self) -> &expir::Program {
         &self.program
     }
 
@@ -145,7 +85,7 @@ impl StaticContext {
         let mut result = Vec::new();
         for declaration in &self.program.declarations {
             match declaration {
-                ast::Declaration::Funclet(f) => match f.kind {
+                expir::Declaration::Funclet(f) => match f.kind {
                     ir::FuncletKind::ScheduleExplicit => {
                         result.push(f.header.name.clone());
                     }
@@ -157,18 +97,18 @@ impl StaticContext {
         result
     }
 
-    pub fn command_ids(&self, funclet: &ast::FuncletId) -> Vec<NodeId> {
+    pub fn command_ids(&self, funclet: &expir::FuncletId) -> Vec<NodeId> {
         let mut result = Vec::new();
         for command in &self.get_funclet(funclet).commands {
             match &command.command {
-                ast::Command::Node(_) => {
+                expir::Command::Node(_) => {
                     result.push(command.name.as_ref().unwrap().clone());
                 }
-                ast::Command::Hole => {
+                expir::Command::Hole => {
                     result.push(command.name.as_ref().unwrap().clone());
                 }
-                ast::Command::TailEdge(_) => {}
-                ast::Command::ExplicationHole => unreachable!(),
+                expir::Command::TailEdge(_) => {}
+                expir::Command::ExplicationHole => unreachable!(),
             }
         }
         result
@@ -214,7 +154,7 @@ impl StaticContext {
         None
     }
 
-    fn get_type_decl(&self, typ: &ast::TypeId) -> Option<&LocalTypeDeclaration> {
+    fn get_type_decl(&self, typ: &expir::TypeId) -> Option<&LocalTypeDeclaration> {
         match typ {
             TypeId::FFI(_) => None,
             TypeId::Local(type_name) => Some(
@@ -245,7 +185,7 @@ impl StaticContext {
             let name = command.name.as_ref().unwrap();
             if index_map.contains_key(name) {
                 match &command.command {
-                    ast::Command::Node(ast::Node::ExtractResult { node_id, index }) => {
+                    expir::Command::Node(expir::Node::ExtractResult { node_id, index }) => {
                         // make sure that the index matches the given argument
                         assert_eq!(index.as_ref().unwrap(), index_map.get(name).unwrap());
                         // lots of potentially panicking unwraps here
@@ -266,18 +206,18 @@ impl StaticContext {
         result
     }
 
-    pub fn get_type_place(&self, typ: &ast::TypeId) -> Option<&ir::Place> {
+    pub fn get_type_place(&self, typ: &expir::TypeId) -> Option<&ir::Place> {
         self.get_type_decl(typ).and_then(|t| (&t.place).as_ref())
     }
 
-    pub fn get_type_ffi(&self, typ: &ast::TypeId) -> Option<&ast::FFIType> {
+    pub fn get_type_ffi(&self, typ: &expir::TypeId) -> Option<&expir::FFIType> {
         self.get_type_decl(typ).and_then(|t| (&t.ffi).as_ref())
     }
 
     pub fn get_latest_explication_hole(&self) -> Option<&FuncletId> {
         for scope in self.scopes.iter().rev() {
             if scope.explication_hole {
-                return Some(scope.funclet_name)
+                return Some(scope.funclet_name);
             }
         }
         None
@@ -297,10 +237,10 @@ impl StaticContext {
         }
     }
 
-    pub fn get_funclet(&self, funclet: &FuncletId) -> &ast::Funclet {
+    pub fn get_funclet(&self, funclet: &FuncletId) -> &expir::Funclet {
         for declaration in &self.program.declarations {
             match declaration {
-                ast::Declaration::Funclet(f) => {
+                expir::Declaration::Funclet(f) => {
                     if &f.header.name == funclet {
                         return f;
                     }
@@ -311,7 +251,7 @@ impl StaticContext {
         panic!("Unknown funclet {:?}", funclet);
     }
 
-    pub fn get_command(&self, funclet: &FuncletId, name: &NodeId) -> &ast::Command {
+    pub fn get_command(&self, funclet: &FuncletId, name: &NodeId) -> &expir::Command {
         for command in &self.get_funclet(funclet).commands {
             match &command.name {
                 None => {}
@@ -327,9 +267,9 @@ impl StaticContext {
         panic!("Unknown command {:?} in funclet {:?}", name, funclet);
     }
 
-    pub fn get_node(&self, funclet: &FuncletId, name: &NodeId) -> &ast::Node {
+    pub fn get_node(&self, funclet: &FuncletId, name: &NodeId) -> &expir::Node {
         match self.get_command(funclet, name) {
-            ast::Command::Node(n) => n,
+            expir::Command::Node(n) => n,
             _ => panic!(
                 "Attempted to treat command {:?} in funclet {:?} as a node",
                 name, funclet
@@ -337,12 +277,12 @@ impl StaticContext {
         }
     }
 
-    pub fn get_tail_edge(&self, funclet_name: &FuncletId) -> Option<&ast::TailEdge> {
+    pub fn get_tail_edge(&self, funclet_name: &FuncletId) -> Option<&expir::TailEdge> {
         for command in &self.get_funclet(funclet_name).commands {
             match &command.name {
                 None => {}
                 Some(n) => match &command.command {
-                    ast::Command::TailEdge(edge) => {
+                    expir::Command::TailEdge(edge) => {
                         return Some(edge);
                     }
                     _ => {}
@@ -353,34 +293,34 @@ impl StaticContext {
     }
 }
 
-fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
+fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
     let dependencies = match node {
-        ast::Node::Phi { index } => {
+        expir::Node::Phi { index } => {
             vec![]
         }
-        ast::Node::ExtractResult { node_id, index } => {
-            vec![reject_hole_clone(node_id)]
+        expir::Node::ExtractResult { node_id, index } => {
+            vec![node_id]
         }
-        ast::Node::Constant { value, type_id } => vec![],
-        ast::Node::CallFunctionClass {
+        expir::Node::Constant { value, type_id } => vec![],
+        expir::Node::CallFunctionClass {
             function_id,
             arguments,
         } => reject_hole(arguments.as_ref())
             .iter()
             .map(|n| reject_hole_clone(n))
             .collect(),
-        ast::Node::Select {
+        expir::Node::Select {
             condition,
             true_case,
             false_case,
         } => {
             vec![
-                reject_hole_clone(condition),
-                reject_hole_clone(true_case),
-                reject_hole_clone(false_case),
+                reject_hole(condition),
+                reject_hole(true_case),
+                reject_hole(false_case),
             ]
         }
-        ast::Node::EncodingEvent {
+        expir::Node::EncodingEvent {
             local_past,
             remote_local_pasts,
         } => vec![reject_hole_clone(local_past)]
@@ -391,10 +331,10 @@ fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
                     .map(|n| reject_hole_clone(n)),
             )
             .collect(),
-        ast::Node::SubmissionEvent { local_past } => {
+        expir::Node::SubmissionEvent { local_past } => {
             vec![reject_hole_clone(local_past)]
         }
-        ast::Node::SynchronizationEvent {
+        expir::Node::SynchronizationEvent {
             local_past,
             remote_local_past,
         } => {
@@ -403,7 +343,7 @@ fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
                 reject_hole_clone(remote_local_past),
             ]
         }
-        ast::Node::SeparatedBufferSpaces { count, space } => {
+        expir::Node::SeparatedBufferSpaces { count, space } => {
             vec![reject_hole_clone(space)]
         }
         _ => {
@@ -414,14 +354,14 @@ fn identify_node_deps(node: &ast::Node) -> Vec<NodeId> {
 }
 
 // helper methods for reading information
-fn identify_tailedge_deps(edge: &ast::TailEdge) -> Vec<NodeId> {
+fn identify_tailedge_deps(edge: &expir::TailEdge) -> Vec<NodeId> {
     let dependencies = match edge {
-        ast::TailEdge::DebugHole { inputs } => inputs.iter().map(|n| n.clone()).collect(),
-        ast::TailEdge::Return { return_values } => reject_hole(return_values.as_ref())
+        expir::TailEdge::DebugHole { inputs } => inputs.iter().map(|n| n.clone()).collect(),
+        expir::TailEdge::Return { return_values } => reject_hole(return_values.as_ref())
             .iter()
             .map(|n| reject_hole_clone(n))
             .collect(),
-        ast::TailEdge::Jump { join, arguments } => vec![reject_hole_clone(join)]
+        expir::TailEdge::Jump { join, arguments } => vec![reject_hole_clone(join)]
             .into_iter()
             .chain(
                 reject_hole(arguments.as_ref())
@@ -436,11 +376,11 @@ fn identify_tailedge_deps(edge: &ast::TailEdge) -> Vec<NodeId> {
     dependencies
 }
 
-fn get_spec_node<'a>(funclet: &'a ast::Funclet, node: &NodeId) -> &'a ast::Node {
+fn get_spec_node<'a>(funclet: &'a expir::Funclet, node: &NodeId) -> &'a expir::Node {
     for command in &funclet.commands {
         if command.name.as_ref().unwrap() == node {
             match &command.command {
-                ast::Command::Node(node) => {
+                expir::Command::Node(node) => {
                     return node;
                 }
                 _ => unreachable!("Attempting to treat spec element {:?} as a node", command),
@@ -451,11 +391,11 @@ fn get_spec_node<'a>(funclet: &'a ast::Funclet, node: &NodeId) -> &'a ast::Node 
 }
 
 fn get_type_info<'a>(
-    funclet: &'a ast::Funclet,
+    funclet: &'a expir::Funclet,
     nodeid: &NodeId,
     node_dependencies: &HashMap<NodeId, Vec<NodeId>>,
     type_map: &mut HashMap<NodeId, Vec<TypeId>>,
-) -> Vec<&'a ast::TypeId> {
+) -> Vec<&'a expir::TypeId> {
     if let Some(result) = type_map.get(nodeid) {
         result
     } else {
@@ -466,7 +406,7 @@ fn get_type_info<'a>(
 }
 
 fn deduce_type<'a>(
-    funclet: &'a ast::Funclet,
+    funclet: &'a expir::Funclet,
     check_id: &NodeId,
     node_dependencies: &HashMap<NodeId, Vec<NodeId>>,
     type_map: &mut HashMap<NodeId, Vec<TypeId>>,
@@ -476,7 +416,7 @@ fn deduce_type<'a>(
     });
     let node = get_spec_node(funclet, &check_id);
     let typ = match node {
-        ast::Node::Phi { index } => vec![
+        expir::Node::Phi { index } => vec![
             &funclet
                 .header
                 .args
@@ -485,7 +425,7 @@ fn deduce_type<'a>(
                 .unwrap()
                 .typ,
         ],
-        ast::Node::ExtractResult { node_id, index } => {
+        expir::Node::ExtractResult { node_id, index } => {
             let index = index.unwrap();
             vec![get_type_info(
                 funclet,
@@ -499,12 +439,12 @@ fn deduce_type<'a>(
                 index, node_id
             ))]
         }
-        ast::Node::Constant { value, type_id } => {}
-        ast::Node::CallFunctionClass {
+        expir::Node::Constant { value, type_id } => {}
+        expir::Node::CallFunctionClass {
             function_id,
             arguments,
         } => {}
-        ast::Node::Select {
+        expir::Node::Select {
             condition,
             true_case,
             false_case,

@@ -1,9 +1,13 @@
-// mod context;
+mod context;
 // mod explicator;
-// mod util;
+mod util;
 pub mod expir;
 
 pub type Hole<T> = Option<T>;
+
+fn reject_hole<T>(hole: Hole<T>) -> T {
+    hole.expect("Unimplemented hole")
+}
 
 // use context::{InState, StaticContext};
 

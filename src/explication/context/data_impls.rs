@@ -2,7 +2,7 @@ use super::*;
 use crate::explication::util::*;
 
 impl InstantiatedNodes {
-    pub fn new(specs: &SpecLanguages, remotes: Vec<RemoteNodeId>) -> InstantiatedNodes {
+    pub fn new(specs: &SpecLanguages, remotes: Vec<Location>) -> InstantiatedNodes {
         let mut result = InstantiatedNodes {
             value: None,
             timeline: None,
@@ -48,6 +48,7 @@ impl LocalTypeDeclaration {
                 (None, Some(unwrap_ffi_type(storage_type.clone())))
             }
             ast::LocalTypeInfo::Ref {
+                buffer_flags,
                 storage_type,
                 storage_place,
             } => (
@@ -56,6 +57,7 @@ impl LocalTypeDeclaration {
             ),
             ast::LocalTypeInfo::Fence { queue_place } => (Some(queue_place.clone()), None),
             ast::LocalTypeInfo::Buffer {
+                flags,
                 storage_place,
                 static_layout_opt,
             } => (Some(storage_place.clone()), None),
@@ -76,13 +78,16 @@ impl ScheduleScopeData {
         instantiations: HashMap<Location, Vec<(ir::Place, NodeId)>>,
         allocations: HashMap<OpCode, Vec<NodeId>>) 
         -> ScheduleScopeData {
-            ScheduleScopeData {
-                funclet,
-                node: None,
-                instantiations,
-                allocations,
-                explication_hole: false
-            }
+            todo!()
+            // ScheduleScopeData {
+            //     funclet,
+            //     node_index,
+            //     node: None,
+            //     instantiations,
+            //     allocations,
+            //     explication_hole: false,
+            //     spec_functions
+            // }
         }
 
     pub fn next_node(&mut self) {
