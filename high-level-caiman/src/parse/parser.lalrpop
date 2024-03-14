@@ -193,21 +193,20 @@ Tags: Vec<Tag> = {
 }
 
 Tag: Tag = {
-    <@L> <Quotient> "(" <QuotRef> ")" <Flow?> <@R> => astf.tag(<>),
-    <@L> <QuotRef> <Flow> <@R> => astf.flow_tag(<>),
+    <Quotient> "(" <QuotRef> ")" <Flow?> => ASTFactory::tag(<>),
+    <QuotRef> <Flow> => ASTFactory::flow_tag(<>),
 }
 
-Quotient: Option<Quotient> = {
-    "node" => Some(Quotient::Node),
-    "none" => Some(Quotient::None),
-    "input" => Some(Quotient::Input),
-    "output" => Some(Quotient::Output),
-    "?" => None,
+Quotient: Quotient = {
+    "node" => Quotient::Node,
+    "none" => Quotient::None,
+    "input" => Quotient::Input,
+    // "output" => Quotient::Output,
 }
 
 Flow: Option<Flow> = {
     "-usable" => Some(Flow::Usable),
-    "-saved" => Some(Flow::Saved),
+    "-saved" => Some(Flow::Save),
     "-need" => Some(Flow::Need),
     "-dead" => Some(Flow::Dead),
     "-?" => None,
@@ -215,28 +214,34 @@ Flow: Option<Flow> = {
 
 SomeFlow: Option<Flow> = {
     "usable" => Some(Flow::Usable),
-    "saved" => Some(Flow::Saved),
+    "saved" => Some(Flow::Save),
     "need" => Some(Flow::Need),
     "dead" => Some(Flow::Dead),
     "?" => None
 }
 
+SpecType: SpecType = {
+    "val" => SpecType::Value,
+    "sptl" => SpecType::Spatial,
+    "tmln" => SpecType::Timeline,
+
+}
+
 // Quotient reference: the part of the quotient which refers to a specific node
 // in a spec
-QuotRef: Option<QuotientReference> = {
-    <a: Id> "." <b: Id> => Some(QuotientReference {
-        spec_name: String::from(a),
+QuotRef: QuotientReference = {
+    <a: SpecType> "." <b: Id> => QuotientReference {
+        spec_type: a,
         spec_var: Some(String::from(b)),
-    }),
-    <a: Id> "." "(" <b: TupleCommaList<Id>> ")" => Some(QuotientReference {
-        spec_name: String::from(a),
+    },
+    <a: SpecType> "." "(" <b: TupleCommaList<Id>> ")" => QuotientReference {
+        spec_type: a,
         spec_var: Some(format!("_{}", b.join("_"))),
-    }),
-    <a: Id> => Some(QuotientReference {
-        spec_name: String::from(a),
+    },
+    <a: SpecType> => QuotientReference {
+        spec_type: a,
         spec_var: None,
-    }),
-    "?" => None,
+    },
 }
 
 // Flagged type: base type with flags and settings

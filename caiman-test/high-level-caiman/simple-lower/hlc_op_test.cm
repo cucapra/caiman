@@ -3,7 +3,7 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
-val main() -> i64 {
+val main() -> z: i64 {
     a :- 2
     c :- 10
     b :- a * c
@@ -14,16 +14,16 @@ val main() -> i64 {
     returns k
 }
 
-fn main_impl() -> i64 @ node(main.k)-usable
+fn main_impl() -> i64 @ node(val.z)-usable
     impls main, time, space
 {
-    let a: i64 @ node(main.a) = 2;
-    let c: i64 @ node(main.c) = 10;
-    let b: i64 @ node(main.b) = a * c;
-    let d: i64 @ node(main.d) = b + a;
-    let e: i64 @ node(main.e) = d - c;
-    let t: i64 @ node(main.t) = 3;
-    let k: i64 @ node(main.k) = e / t;
+    let a: i64 @ node(val.a) = 2;
+    let c: i64 @ node(val.c) = 10;
+    let b: i64 @ node(val.b) = a * c;
+    let d: i64 @ node(val.d) = b + a;
+    let e: i64 @ node(val.e) = d - c;
+    let t: i64 @ node(val.t) = 3;
+    let k: i64 @ node(val.k) = e / t;
     k
     
 }

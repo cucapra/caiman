@@ -1,0 +1,190 @@
+version 0.0.2
+
+type i64;
+event %event0;
+buffer_space %buffspace;
+native_value %ni64 : i64;
+
+// A simple recursive sum test
+
+function @main() -> i64;
+function @rec_sum(i64) -> i64;
+
+function @add(i64, i64) -> i64;
+// function @lte(i64, i64) -> i64;
+function @gt(i64, i64) -> i64;
+
+function @loop() -> [];
+
+external-cpu-pure[impl @add] %add(i64, i64) -> i64;
+// external-cpu-pure[impl @lte] %lte(i64, i64) -> i64;
+external-cpu-pure[impl @gt] %gt(i64, i64) -> i64;
+external-cpu[impl @loop] %loop() -> [];
+
+
+// main
+
+value[impl default @main] %main() -> i64 {
+    %x = constant %ni64 20;
+    %y_t = call @rec_sum(%x);
+    %y = extract %y_t 0;
+    return %y;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_head<none($time.%e)-usable, none($time.%e)-usable>() ->
+    [%out : output($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64]
+{
+    %x_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%x)() -> %x_ref;
+    %arg = read-ref i64 %x_ref;
+
+    %default = default-join;
+    %join = inline-join %main_ret [] %default;
+
+    schedule-call %rec_sum_head[value node($val.%y_t),
+        timeline none($time.%e),
+        spatial none($space.%none)](%arg) %join;
+}
+
+schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
+%main_ret<none($time.%e)-usable, none($time.%e)-usable>
+    (%y : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64) ->
+    [%out : node($val.%y)-usable none($space.%e)-usable none($time.%e)-usable %ni64] 
+{
+
+    return %y;
+}
+
+// rec_sum
+
+
+value[impl default @rec_sum] %rec_sum(%i : %ni64) -> i64 {
+    %zero = constant %ni64 0;
+    %neg_1 = constant %ni64 -1;
+
+    %b_t = call @gt(%i, %zero);
+    %b = extract %b_t 0;
+
+    %i_minus_1_t = call @add(%i, %neg_1);
+    %i_minus_1 = extract %i_minus_1_t 0;
+
+    %r_t = call @rec_sum(%i_minus_1);
+    %r = extract %r_t 0;
+
+    %sum_t = call @add(%i, %r);
+    %sum = extract %sum_t 0;
+
+    // i <= 0 ? zero : sum
+    // select cond true false
+    %result = select %b %sum %zero;
+    return %result;
+}
+
+schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+%rec_sum_head<none($time.%e)-usable, none($time.%e)-usable>
+    (%arg : input($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
+    [%out : output($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+{
+    %zero_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%zero)() -> %zero_ref;
+    %zero = read-ref i64 %zero_ref;
+
+    %neg_1_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%neg_1)() -> %neg_1_ref;
+    %neg_1 = read-ref i64 %neg_1_ref;
+
+    %cond_ref = alloc-temporary local [] i64;
+    local-do-external %gt node($val.%b_t)(%arg, %zero) -> %cond_ref;
+    %cond = read-ref i64 %cond_ref;
+
+    %arg_minus_1_ref = alloc-temporary local [] i64;
+    local-do-external %add node($val.%i_minus_1_t)(%arg, %neg_1) -> %arg_minus_1_ref;
+    %arg_minus_1 = read-ref i64 %arg_minus_1_ref;
+
+    %default = default-join;
+    %join = serialized-join %rec_sum_ret [] %default;
+
+    // i <= 0 ? %rec_sum_base : %rec_sum_rec
+    // select cond [true, false]
+    schedule-select %cond [%rec_sum_rec, %rec_sum_base] 
+        [value node($val.%result), timeline none($time.%e), spatial none($space.%none)]
+        (%arg_minus_1, %arg) %join;
+
+}
+
+schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+%rec_sum_base<none($time.%e)-usable, none($time.%e)-usable>
+    (%arg_minus_1 : node($val.%i_minus_1)-usable none($space.%none)-usable none($time.%none)-usable %ni64,
+     %arg : node($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
+    [%out : node($val.%zero)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+{
+    %zero_ref = alloc-temporary local [] i64;
+    local-do-builtin node($val.%zero)() -> %zero_ref;
+    %zero = read-ref i64 %zero_ref;
+
+    return %zero;
+
+}
+
+schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+%rec_sum_rec<none($time.%e)-usable, none($time.%e)-usable>
+    (%arg_minus_1 : node($val.%i_minus_1)-usable none($space.%none)-usable none($time.%none)-usable %ni64,
+    %arg : node($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
+    [%out : node($val.%sum)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+{
+    %default = default-join;
+    %join = serialized-join %rec_sum_rec_head [%arg_minus_1, %arg] %default;
+
+    schedule-call-yield %loop[value none($val.%r_t),
+        timeline none($time.%e),
+        spatial none($space.%none)]() %join;
+}
+
+schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+%rec_sum_rec_head<none($time.%e)-usable, none($time.%e)-usable>
+    (%arg_minus_1 : node($val.%i_minus_1)-usable none($space.%none)-usable none($time.%none)-usable %ni64,
+     %i : node($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
+    [%out : node($val.%sum)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+{
+
+    %default = default-join;
+    %join = serialized-join %rec_sum_rec_tail [%i] %default;
+
+    schedule-call %rec_sum_head[value node($val.%r_t),
+        timeline none($time.%e),
+        spatial none($space.%none)](%arg_minus_1) %join;
+}
+
+schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+%rec_sum_rec_tail<none($time.%e)-usable, none($time.%e)-usable>
+    (%i : node($val.%i)-usable none($space.%none)-usable none($time.%none)-usable %ni64,
+     %r : node($val.%r)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
+    [%out : node($val.%sum)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+{
+
+    %res_ref = alloc-temporary local [] i64;
+    local-do-external %add node($val.%sum_t)(%i, %r) -> %res_ref;
+    %res = read-ref i64 %res_ref;
+    return %res;
+}
+
+schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+%rec_sum_ret<none($time.%e)-usable, none($time.%e)-usable>
+    (%arg : node($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %ni64) ->
+    [%out : node($val.%result)-usable none($space.%none)-usable none($time.%none)-usable %ni64] 
+{
+    return %arg;
+}
+
+
+
+pipeline "main" = %main_head;

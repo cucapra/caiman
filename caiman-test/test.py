@@ -156,7 +156,7 @@ def process_inputs(
             test_dir.rglob("*test.cair"),
             test_dir.rglob("*test.ron"),
             test_dir.rglob("*test.caiman"),
-            # test_dir.rglob("*test.cm"),
+            test_dir.rglob("*test.cm"),
         )
     for input in inputs:
         if f"{input}".find("turnt") != -1:

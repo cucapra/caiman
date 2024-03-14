@@ -19,10 +19,12 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use super::context::reject_opt;
+
 pub fn undefined<T>(h: Hole<T>) -> T {
     match h {
-        Some(v) => v,
-        None => panic!(""),
+        Hole::Filled(v) => v,
+        Hole::Empty => panic!(""),
     }
 }
 
@@ -374,7 +376,7 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         } => ir::Node::AllocTemporary {
             place: reject_hole(place.clone()),
             storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-            buffer_flags: reject_hole(*buffer_flags),
+            buffer_flags: reject_hole(buffer_flags.clone()),
         },
         ast::Node::Drop { node } => ir::Node::Drop {
             node: context.node_id(reject_hole(node.as_ref())),
@@ -459,10 +461,13 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
             outputs,
         } => ir::Node::LocalDoExternal {
             operation: context.remote_node_id(reject_hole(operation.as_ref())),
-            external_function_id: reject_hole(
+            external_function_id: reject_opt(
                 context
                     .funclet_indices
-                    .get_funclet(reject_hole(external_function_id.as_ref().map(|x| &x.0)))
+                    .get_funclet(reject_opt(
+                        external_function_id.as_ref().opt().map(|x| &x.0),
+                    ))
+                    .opt()
                     .map(ffi::ExternalFunctionId),
             ),
             inputs: reject_hole(inputs.as_ref())
@@ -504,10 +509,13 @@ fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
         } => ir::Node::EncodeDoExternal {
             encoder: context.node_id(reject_hole(encoder.as_ref())),
             operation: context.remote_node_id(reject_hole(operation.as_ref())),
-            external_function_id: reject_hole(
+            external_function_id: reject_opt(
                 context
                     .funclet_indices
-                    .get_funclet(reject_hole(external_function_id.as_ref().map(|x| &x.0)))
+                    .get_funclet(reject_opt(
+                        external_function_id.as_ref().opt().map(|x| &x.0),
+                    ))
+                    .opt()
                     .map(ffi::ExternalFunctionId),
             ),
             inputs: reject_hole(inputs.as_ref())
@@ -646,6 +654,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
                 callee_funclet_id: context
                     .funclet_indices
                     .get_funclet(&reject_hole(callee_funclet_id.as_ref()).0)
+                    .opt()
                     .unwrap()
                     .clone(),
                 callee_arguments: reject_hole(callee_arguments.as_ref())
@@ -674,6 +683,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
                         context
                             .funclet_indices
                             .get_funclet(&reject_hole(n.as_ref()).0)
+                            .opt()
                             .unwrap()
                             .clone()
                     })
@@ -700,6 +710,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
                     context
                         .funclet_indices
                         .get_funclet(&reject_hole(external_function_id.as_ref()).0)
+                        .opt()
                         .unwrap()
                         .clone(),
                 ),
@@ -745,29 +756,29 @@ fn ir_schedule_binding(
     };
 
     for arg in &funclet_header.args {
-        let tags = context.tag_lookup(&arg.tags.iter().map(|t| Some(t.clone())).collect());
+        let tags = context.tag_lookup(&arg.tags.iter().map(|t| Hole::Filled(t.clone())).collect());
         input_tags
             .value_tags
-            .push(tags.value.unwrap_or(default_tag).clone());
+            .push(tags.value.opt().unwrap_or(default_tag).clone());
         input_tags
             .spatial_tags
-            .push(tags.spatial.unwrap_or(default_tag).clone());
+            .push(tags.spatial.opt().unwrap_or(default_tag).clone());
         input_tags
             .timeline_tags
-            .push(tags.timeline.unwrap_or(default_tag).clone());
+            .push(tags.timeline.opt().unwrap_or(default_tag).clone());
     }
 
     for ret in &funclet_header.ret {
-        let tags = context.tag_lookup(&ret.tags.iter().map(|t| Some(t.clone())).collect());
+        let tags = context.tag_lookup(&ret.tags.iter().map(|t| Hole::Filled(t.clone())).collect());
         output_tags
             .value_tags
-            .push(tags.value.unwrap_or(default_tag).clone());
+            .push(tags.value.opt().unwrap_or(default_tag).clone());
         output_tags
             .spatial_tags
-            .push(tags.spatial.unwrap_or(default_tag).clone());
+            .push(tags.spatial.opt().unwrap_or(default_tag).clone());
         output_tags
             .timeline_tags
-            .push(tags.timeline.unwrap_or(default_tag).clone());
+            .push(tags.timeline.opt().unwrap_or(default_tag).clone());
     }
 
     let implicit_in_tag = ir_tag(&implicit_tags.0, context);
@@ -775,7 +786,10 @@ fn ir_schedule_binding(
 
     ir::FuncletSpecBinding::ScheduleExplicit {
         value: ir::FuncletSpec {
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.value.1 .0),
+            funclet_id_opt: context
+                .funclet_indices
+                .get_funclet(&meta_map.value.1 .0)
+                .into(),
             input_tags: input_tags.value_tags.into_boxed_slice(),
             output_tags: output_tags.value_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),
@@ -783,14 +797,20 @@ fn ir_schedule_binding(
         },
         timeline: ir::FuncletSpec {
             // assume implicit is timeline for now?
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
+            funclet_id_opt: context
+                .funclet_indices
+                .get_funclet(&meta_map.timeline.1 .0)
+                .into(),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
             implicit_in_tag,
             implicit_out_tag,
         },
         spatial: ir::FuncletSpec {
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.spatial.1 .0),
+            funclet_id_opt: context
+                .funclet_indices
+                .get_funclet(&meta_map.spatial.1 .0)
+                .into(),
             input_tags: input_tags.spatial_tags.into_boxed_slice(),
             output_tags: output_tags.spatial_tags.into_boxed_slice(),
             implicit_in_tag: Default::default(),
@@ -907,6 +927,7 @@ fn ir_function_class(
                         let current_id = context
                             .funclet_indices
                             .get_funclet(&f.header.name.0)
+                            .opt()
                             .unwrap();
                         if binding.default {
                             default_funclet_id = match default_funclet_id {
@@ -929,7 +950,7 @@ fn ir_function_class(
                         )
                     }
                     external_function_ids.insert(ffi::ExternalFunctionId(
-                        context.funclet_indices.get_funclet(&f.name).unwrap(),
+                        context.funclet_indices.get_funclet(&f.name).opt().unwrap(),
                     ));
                 }
             }
@@ -952,6 +973,7 @@ fn ir_pipeline(pipeline: &ast::Pipeline, context: &mut Context) -> ir::Pipeline 
         entry_funclet: context
             .funclet_indices
             .get_funclet(&pipeline.funclet.0)
+            .opt()
             .unwrap()
             .clone(),
         effect_id_opt: pipeline.effect.as_ref().map(|e| context.effect_lookup(e)),

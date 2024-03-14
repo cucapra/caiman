@@ -14,18 +14,18 @@ val min() -> i64 {
 fn min_impl() -> i64
     impls min, time, space
 {
-    let a: i64 @ node(min.a)-usable = 2;
-    let b: i64 @ node(min.b)-usable = 1;
-    let c: bool @ node(min.c)-usable = a < b;
-    var v: i64 @ [none(min)-dead, none(space)-saved];
-    if @ node(min.ret)-? c {
-        let a: i64 @ node(min.a)-usable = 2;
+    let a: i64 @ node(val.a)-usable = 2;
+    let b: i64 @ node(val.b)-usable = 1;
+    let c: bool @ node(val.c)-usable = a < b;
+    var v: i64 @ [none(val)-dead, none(sptl)-saved];
+    if @ node(val.ret)-? c {
+        let a: i64 @ node(val.a)-usable = 2;
         v = a;
     } else {
-        let b: i64 @ node(min.b)-usable = 1;
+        let b: i64 @ node(val.b)-usable = 1;
         v = b;
     }
-    @in { v: [node(min.ret)-usable, none(space)-saved] };
+    @in { v: [node(val.ret)-usable, none(sptl)-saved] };
     v
 }
 

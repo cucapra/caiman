@@ -1,7 +1,7 @@
 #version 0.1.0
 type gbuf = [i32]'<storage, map_write, map_read, alignment_bits = 512>
 
-fn foo(a: gbuf, b: i32'<gpu> @ [?(foo.x)-?, none(tm)-usable, none(sp)-?]) -> i32 
+fn foo(a: gbuf, b: i32'<gpu> @ [val.x-?, none(tmln)-usable, none(sptl)-?]) -> i32 
     impls v, tm, sp
 {
 

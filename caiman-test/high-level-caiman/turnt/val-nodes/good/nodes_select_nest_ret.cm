@@ -11,12 +11,12 @@ val main() -> i64 {
 fn foo() -> i64 impls main, time, space
 {
     let v = if false {
-        let v = if true {
+        let r = if true {
             1
         } else {
             2
         };
-        v
+        r
     } else {
         var v;
         if false {

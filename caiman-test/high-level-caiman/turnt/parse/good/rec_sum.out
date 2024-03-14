@@ -694,75 +694,39 @@
                         ),
                         tags: [
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        24,
-                                        19,
-                                    ),
-                                    end_ln_and_col: (
-                                        24,
-                                        42,
-                                    ),
-                                },
                                 quot: Some(
                                     Input,
                                 ),
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "rec_sum",
-                                        spec_var: Some(
-                                            "a",
-                                        ),
-                                    },
-                                ),
+                                quot_var: QuotientReference {
+                                    spec_type: Value,
+                                    spec_var: Some(
+                                        "a",
+                                    ),
+                                },
                                 flow: Some(
                                     Usable,
                                 ),
                             },
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        24,
-                                        44,
-                                    ),
-                                    end_ln_and_col: (
-                                        24,
-                                        59,
-                                    ),
-                                },
                                 quot: Some(
                                     None,
                                 ),
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "tm",
-                                        spec_var: None,
-                                    },
-                                ),
+                                quot_var: QuotientReference {
+                                    spec_type: Timeline,
+                                    spec_var: None,
+                                },
                                 flow: Some(
                                     Usable,
                                 ),
                             },
                             Tag {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        24,
-                                        61,
-                                    ),
-                                    end_ln_and_col: (
-                                        24,
-                                        76,
-                                    ),
-                                },
                                 quot: Some(
                                     None,
                                 ),
-                                quot_var: Some(
-                                    QuotientReference {
-                                        spec_name: "sp",
-                                        spec_var: None,
-                                    },
-                                ),
+                                quot_var: QuotientReference {
+                                    spec_type: Spatial,
+                                    spec_var: None,
+                                },
                                 flow: Some(
                                     Usable,
                                 ),

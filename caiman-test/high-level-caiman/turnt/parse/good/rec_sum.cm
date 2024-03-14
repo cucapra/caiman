@@ -21,7 +21,7 @@ val rec_sum(a: i64) -> i64 {
 }
 
 
-fn head(a: i64 @ [input(rec_sum.a)-usable, none(tm)-usable, none(sp)-usable]) -> i64 
+fn head(a: i64 @ [input(val.a)-usable, none(tmln)-usable, none(sptl)-usable]) -> i64 
     impls rec_sum, tm, sp
 {
     let c = if a > 0 {

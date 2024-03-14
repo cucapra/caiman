@@ -632,27 +632,15 @@
                             tag: Some(
                                 [
                                     Tag {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                33,
-                                                34,
-                                            ),
-                                            end_ln_and_col: (
-                                                33,
-                                                47,
-                                            ),
-                                        },
                                         quot: Some(
                                             Node,
                                         ),
-                                        quot_var: Some(
-                                            QuotientReference {
-                                                spec_name: "foo",
-                                                spec_var: Some(
-                                                    "c",
-                                                ),
-                                            },
-                                        ),
+                                        quot_var: QuotientReference {
+                                            spec_type: Value,
+                                            spec_var: Some(
+                                                "c",
+                                            ),
+                                        },
                                         flow: None,
                                     },
                                 ],

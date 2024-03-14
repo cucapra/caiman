@@ -321,6 +321,7 @@ fn collect_spec_returns(
     e: &SpecExpr,
     info: Info,
 ) -> Result<(), LocalError> {
+    env.nodes.set_output_classes(&ctx.sig);
     match e {
         SpecExpr::Term(SpecTerm::Var { name, .. }) => {
             if ctx.sig.output.len() != 1 {
@@ -334,8 +335,11 @@ fn collect_spec_returns(
                 ));
             }
             env.types
-                .add_dtype_constraint(name, ctx.sig.output[0].clone(), info)?;
-            env.nodes.set_output_classes(&[name.clone()]);
+                .add_dtype_constraint(name, ctx.sig.output[0].1.clone(), info)?;
+            env.nodes.add_quotient(
+                &ctx.sig.output[0].0,
+                ValQuot::Output(MetaVar::new_class_name(name)),
+            );
             Ok(())
         }
         SpecExpr::Term(
@@ -363,14 +367,10 @@ fn collect_spec_returns(
                     panic!("Not lowered")
                 }
             }
-            env.nodes.set_output_classes(
-                &constraints
-                    .iter()
-                    .map(|(name, _)| (*name).clone())
-                    .collect::<Vec<_>>(),
-            );
-            for (name, typ) in constraints {
+            for (name, (class, typ)) in constraints {
                 env.types.add_dtype_constraint(name, typ, info)?;
+                env.nodes
+                    .add_quotient(&class, ValQuot::Output(MetaVar::new_class_name(name)));
             }
             Ok(())
         }

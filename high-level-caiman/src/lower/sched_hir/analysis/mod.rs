@@ -20,7 +20,7 @@ pub use refs::deref_transform_pass;
 pub use ssa::transform_out_ssa;
 pub use ssa::transform_to_ssa;
 #[allow(clippy::module_name_repetitions)]
-pub use tags::{TagAnalysis, TagInfo};
+pub use tags::TagAnalysis;
 
 /// A dataflow analysis fact
 pub trait Fact: PartialEq + Clone {
