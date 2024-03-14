@@ -25,6 +25,8 @@ struct UserData {}
 type ParseResult<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, UserData>;
 
+const PHI_QUALIFIER: &str = "_PHI_";
+
 // helper stuff
 
 fn unexpected(s: String) -> String {
@@ -80,6 +82,9 @@ impl CaimanAssemblyParser {
         unreachable!()
     }
     fn function_class_sep(_input: Node) -> ParseResult<()> {
+        unreachable!()
+    }
+    fn phi_qualifier(_input: Node) -> ParseResult<()> {
         unreachable!()
     }
     fn encoder_sep(_input: Node) -> ParseResult<()> {
@@ -498,10 +503,22 @@ impl CaimanAssemblyParser {
 
     fn quotient(input: Node) -> ParseResult<ast::RemoteNodeId> {
         Ok(match_nodes!(input.into_children();
+            [phi_qualifier, meta_name(funclet_id)] => {
+                ast::RemoteNodeId {
+                    funclet: Hole::Filled(ast::MetaId(funclet_id)),
+                    node: None
+                }
+            },
             [meta_name(funclet_id)] => {
                 ast::RemoteNodeId {
                     funclet: Hole::Filled(ast::MetaId(funclet_id)),
                     node: None
+                }
+            },
+            [phi_qualifier, meta_name(funclet_id), name(node_id)] => {
+                ast::RemoteNodeId {
+                    funclet: Hole::Filled(ast::MetaId(funclet_id)),
+                    node: Some(Hole::Filled(ast::NodeId(PHI_QUALIFIER.to_owned() + &node_id)))
                 }
             },
             [meta_name(funclet_id), name(node_id)] => {
@@ -515,16 +532,30 @@ impl CaimanAssemblyParser {
 
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
+            [phi_qualifier, meta_name_hole(funclet_id)] => {
+                Hole::Filled(ast::RemoteNodeId {
+                    funclet: funclet_id.opt().map(ast::MetaId).into(),
+                    node: None
+                })
+            },
             [meta_name_hole(funclet_id)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.opt().map(|f| ast::MetaId(f)).into(),
+                    funclet: funclet_id.opt().map(ast::MetaId).into(),
                     node: None
+                })
+            },
+            [phi_qualifier, meta_name_hole(funclet_id), name_hole(node_id)] => {
+                Hole::Filled(ast::RemoteNodeId {
+                    funclet: funclet_id.opt().map(ast::MetaId).into(),
+                    node: Some(node_id.opt().map(|n| 
+                        ast::NodeId(PHI_QUALIFIER.to_owned() + &n))
+                    .into())
                 })
             },
             [meta_name_hole(funclet_id), name_hole(node_id)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.opt().map(|f| ast::MetaId(f)).into(),
-                    node: Some(node_id.opt().map(|n| ast::NodeId(n)).into())
+                    funclet: funclet_id.opt().map(ast::MetaId).into(),
+                    node: Some(node_id.opt().map(ast::NodeId).into())
                 })
             },
             [hole] => {
@@ -994,7 +1025,9 @@ impl CaimanAssemblyParser {
                 funclet.commands.insert(
                     index,
                     Hole::Filled(ast::Command::Node(ast::NamedNode {
-                        name: None,
+                        name: input.name.as_ref().map(|n| 
+                            ast::NodeId(PHI_QUALIFIER.to_owned() + &n.0)
+                        ),
                         node: ast::Node::Phi {
                             index: Hole::Filled(index),
                         },
