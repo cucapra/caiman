@@ -19,7 +19,12 @@ fn sort_impl(a: i64, b: i64) -> (i64, i64) impls sort, time, space {
 val s4(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64) {
     x, y :- sort(a, b)
     z, w :- sort(c, d)
-    one :- x if x <= z else z
+    returns (x, y, z, w) if x <= z && y <= z else
+            (x, z, y, w) if x <= z && z <= y && y <= w else 
+            (x, z, w, y) if x <= z && w <= y else
+            (z, w, x, y) if z <= x && w <= x else
+            (z, x, w, y) if z <= x && x <= w && w <= y else
+            (z, x, y, w)
 }
 
 fn s4_impl(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64) 
