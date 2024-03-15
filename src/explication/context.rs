@@ -3,7 +3,6 @@ pub mod instate;
 pub mod outstate;
 pub mod staticcontext;
 
-use crate::assembly::ast;
 use super::util::*;
 use super::Hole;
 use crate::ir;
@@ -39,8 +38,8 @@ pub struct FuncletOutState {
     // they (by default) will be filled in the most "recent" open slot
     to_fill: HashSet<Location>,
 
-    // commands we've built on this particular funclet of the stack
-    commands: VecDeque<ast::NamedNode>,
+    // nodes we've built on this particular funclet of the stack
+    nodes: VecDeque<expir::Node>,
 }
 
 #[derive(Debug)]
@@ -53,20 +52,8 @@ pub struct StaticContext {
     // so the original program is not mutated
     program: expir::Program,
 
-    // information about each type
-    type_declarations: HashMap<String, LocalTypeDeclaration>,
-
     // information found about a given spec funclet
     spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
-}
-
-#[derive(Debug)]
-struct LocalTypeDeclaration {
-    // if this (local) type has an associated place
-    pub place: Option<ir::Place>,
-
-    // if this type has an associated FFI Type
-    pub ffi: Option<ffi::Type>,
 }
 
 // this information is static, and doesn't change as explication progresses
@@ -78,7 +65,7 @@ struct SpecFuncletData {
     // type information derived from dependencies
     // technically this can be derived from the nodes lazily
     // but it's slow enough recursing repeatedly when explicating to wanna do it up-front I guess
-    deduced_types: HashMap<NodeId, Vec<ast::TypeId>>,
+    deduced_types: HashMap<NodeId, Vec<expir::TypeId>>,
 
     // tailedge dependencies for scheduling
     tail_dependencies: Vec<NodeId>,
@@ -121,9 +108,8 @@ struct ScheduleScopeData {
     // structure to manage the explication information for the current scope
     // the rule is more-to-less specific, then go up to the next scope out
 
-    // the funclet name being worked on in this scope
-    // a funclet is always named, even a generated one
-    pub funclet: ast::FuncletId,
+    // the funclet id being worked on in this scope
+    pub funclet: expir::FuncletId,
 
     // the node of the original funclet we are working on
     // is none precisely when we are starting a new funclet

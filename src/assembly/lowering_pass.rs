@@ -307,8 +307,9 @@ fn ir_node(node: &ast::Node, context: &Context) -> expir::Node {
     match &node {
         ast::Node::Constant { value, type_id } => {
             // we don't allow holes for constants
-            let unwrapped_value = value.as_ref().unwrap().clone();
-            let unwrapped_type = type_id.as_ref().unwrap().clone();
+            let error = format!("Constant {:?} cannot have explication holes", &node);
+            let unwrapped_value = value.as_ref().expect(&error).clone();
+            let unwrapped_type = type_id.as_ref().expect(&error).clone();
             let parsed_value = match &unwrapped_type {
                 ast::TypeId::Local(name) => match context.native_type_map.get(name) {
                     None => panic!("{:?} must have a direct FFI storage type", type_id),
@@ -328,8 +329,8 @@ fn ir_node(node: &ast::Node, context: &Context) -> expir::Node {
                 ast::TypeId::FFI(_) => panic!("Cannot directly type a constant with an ffi type"),
             };
             expir::Node::Constant {
-                value: parsed_value,
-                type_id: context.loc_type_id(&unwrapped_type),
+                value: Some(parsed_value),
+                type_id: Some(context.loc_type_id(&unwrapped_type)),
             }
         }
         _ => ir_non_constant_node(node, context),

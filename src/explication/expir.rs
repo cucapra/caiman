@@ -41,7 +41,7 @@ pub type FunctionClassId = ValueFunctionId;
 pub type StorageTypeId = ffi::TypeId;
 
 macro_rules! lookup_abstract_type {
-	([$elem_type:ident]) => { Box<[lookup_abstract_type!($elem_type)]> };
+	([$elem_type:ident]) => { Box<[Hole<lookup_abstract_type!($elem_type)>]> };
 	(Type) => { TypeId };
 	(Immediate) => { Constant };
 	(ImmediateI64) => { i64 };
@@ -62,10 +62,14 @@ macro_rules! map_refs {
     // When mapping referenced nodes, we only care about mapping the Operation types,
     // since those are the actual references.
     ($map:ident, $arg:ident : Operation) => {
-        $map(*$arg)
+        $arg.map(|x| $map(x.clone()))
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.iter().map(|op| $map(*op)).collect()
+        $arg.as_ref().map(|lst| {
+            lst.iter()
+                .map(|arg_hole| arg_hole.clone())
+                .collect()
+        })
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()
@@ -94,7 +98,7 @@ macro_rules! make_nodes {
 	(@ $map:ident {$name:ident ($($arg:ident : $arg_type:tt,)*), $($rest:tt)*} -> ($($fields:tt)*), ($($mapper:tt)*)) => {
 		make_nodes! {
 			@ $map { $($rest)* } ->
-			($($fields)* $name { $($arg: lookup_abstract_type!($arg_type)),* },),
+			($($fields)* $name { $($arg: Hole<lookup_abstract_type!($arg_type)>),* },),
 			($($mapper)* Self::$name { $($arg),* } => Self::$name {
 				$($arg: map_refs!($map, $arg : $arg_type)),*
 			},)

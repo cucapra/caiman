@@ -1,5 +1,6 @@
 use super::*;
 use crate::explication::util::*;
+use paste::paste;
 
 impl InState {
     pub fn new(funclet: FuncletId) -> InState {
@@ -15,12 +16,12 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet: FuncletId) {
-        let instantiations = self.scopes.last().cloned().map(|le| le.instantiations).unwrap_or(HashMap::default());
-        let allocations = self.scopes.last().cloned().map(|le| le.allocations).unwrap_or(HashMap::default());
+        let instantiations = self.scopes.lexpir().cloned().map(|le| le.instantiations).unwrap_or(HashMap::default());
+        let allocations = self.scopes.lexpir().cloned().map(|le| le.allocations).unwrap_or(HashMap::default());
         self.scopes.push(ScheduleScopeData::new(funclet));
     }
     pub fn exit_funclet(&mut self) -> bool {
-        // returns if we have popped the last element of the scope
+        // returns if we have popped the lexpir element of the scope
         match self.scopes.pop() {
             None => panic!("Cannot leave a scope when there is no scope to leave"),
             Some(_) => {}
@@ -53,11 +54,11 @@ impl InState {
     }
 
     pub fn get_latest_scope(&self) -> &ScheduleScopeData {
-        self.scopes.last().unwrap()
+        self.scopes.lexpir().unwrap()
     }
 
     pub fn get_latest_scope_mut(&mut self) -> &mut ScheduleScopeData {
-        &mut self.scopes.last().unwrap()
+        &mut self.scopes.lexpir().unwrap()
     }
 
     pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
@@ -68,7 +69,7 @@ impl InState {
         self.get_latest_scope_mut().add_explication_hole(node)
     }
 
-    // Returns an instantiation if one is available in any scope (most to least recent)
+    // Returns an instantiation if one is available in any scope (most to leexpir recent)
     // if there is no instantiation already made for the given funclet/node
     //   pops the best available instantiation
     //   panics in this case if there is none that can fulfill the requirements
@@ -94,7 +95,7 @@ impl InState {
             }
         };
         let nodes = vec![
-            &ast::Node::AllocTemporary {
+            &expir::Node::AllocTemporary {
                 buffer_flags,
                 place: Some(target_place.clone()),
                 storage_type: None,
@@ -112,7 +113,7 @@ impl InState {
     //   4. most recently added node
     // if no such operation exists, returns the most recent explication hole
     // if there is also no explication hole, panics
-    pub fn pop_best_operation(&mut self, nodes: &Vec<&ast::Node>) -> usize {
+    pub fn pop_best_operation(&mut self, nodes: &Vec<&expir::Node>) -> usize {
         struct HeuristicResults {
             pub opcode: OpCode,
             pub scope_index: usize,
@@ -238,10 +239,10 @@ macro_rules! match_op_args {
 macro_rules! operation_iniatializations {
     ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
         paste! {
-            fn compare_ops(req_node: &ast::Node, target_node: &ast::Node) -> Option<usize> {
+            fn compare_ops(req_node: &expir::Node, target_node: &expir::Node) -> Option<usize> {
                 match (req_node, target_node) {
-                    $((ast::Node::$name { $($arg : [<$arg _one>],)* },
-                    ast::Node::$name { $($arg : [<$arg _two>],)* }) => {
+                    $((expir::Node::$name { $($arg : [<$arg _one>],)* },
+                    expir::Node::$name { $($arg : [<$arg _two>],)* }) => {
                         let mut matches = Some(0);
                         $(
                             matches = match matches {

@@ -1,11 +1,10 @@
-use crate::assembly::ast;
-use crate::assembly::ast::FFIType;
-use crate::explication::Hole;
-use crate::assembly::ast::{
+use crate::explication::expir;
+use crate::explication::expir::{
     ExternalFunctionId, FuncletId, FunctionClassId, NodeId, StorageTypeId, TypeId,
 };
-use crate::assembly::parser;
+use crate::explication::Hole;
 use crate::ir::ffi;
+use crate::stable_vec::StableVec;
 use crate::{frontend, ir};
 use serde_derive::{Deserialize, Serialize};
 use std::any::Any;
@@ -13,38 +12,8 @@ use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Location {
-    pub funclet: ast::FuncletId,
-    pub node: ast::NodeId,
-}
-
-pub fn unwrap_ffi_type(local: ast::TypeId) -> ast::FFIType {
-    match local {
-        TypeId::FFI(f) => f,
-        TypeId::Local(_) => {
-            unreachable!("Attempted to treat local type {:?} as an FFI type", &local)
-        }
-    }
-}
-
-pub fn todo_hole<T>(h: Hole<T>) -> T {
-    match h {
-        Some(v) => v,
-        None => todo!(),
-    }
-}
-
-pub fn reject_hole<T>(h: Hole<T>) -> T {
-    match h {
-        Some(v) => v,
-        None => panic!("Invalid hole location"),
-    }
-}
-
-pub fn reject_hole_clone<T>(node: &Hole<T>) -> T
-where
-    T: Clone,
-{
-    reject_hole(node.as_ref()).clone()
+    pub funclet: FuncletId,
+    pub node: NodeId,
 }
 
 pub fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
@@ -81,6 +50,28 @@ where
             Some(value)
         }
     }
+}
+
+impl<T> StableVec<T>
+where
+    T: std::fmt::Debug,
+{
+    pub fn get_expect(&self, index: usize) -> &T {
+        &self.get(index).expect(&format!(
+            "Index {} out of bounds for stable vec {:?}",
+            index, self
+        ))
+    }
+}
+
+pub fn get_expect_box<T>(data: &Box<[T]>, index: usize) -> &T
+where
+    T: std::fmt::Debug,
+{
+    &data.get(index).expect(&format!(
+        "Index {} out of bounds for slice {:?}",
+        index, data
+    ))
 }
 
 // used for identifying which spec language to reason about in a given search

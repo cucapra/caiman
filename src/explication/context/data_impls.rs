@@ -41,34 +41,6 @@ impl InstantiatedNodes {
     }
 }
 
-impl LocalTypeDeclaration {
-    pub fn new(info: &ast::LocalTypeInfo) -> LocalTypeDeclaration {
-        let (place, ffi) = match info {
-            ast::LocalTypeInfo::NativeValue { storage_type } => {
-                (None, Some(unwrap_ffi_type(storage_type.clone())))
-            }
-            ast::LocalTypeInfo::Ref {
-                buffer_flags,
-                storage_type,
-                storage_place,
-            } => (
-                Some(storage_place.clone()),
-                Some(unwrap_ffi_type(storage_type.clone())),
-            ),
-            ast::LocalTypeInfo::Fence { queue_place } => (Some(queue_place.clone()), None),
-            ast::LocalTypeInfo::Buffer {
-                flags,
-                storage_place,
-                static_layout_opt,
-            } => (Some(storage_place.clone()), None),
-            ast::LocalTypeInfo::Encoder { queue_place } => (Some(queue_place.clone()), None),
-            ast::LocalTypeInfo::Event => (None, None),
-            ast::LocalTypeInfo::BufferSpace => (None, None),
-        };
-        LocalTypeDeclaration { place, ffi }
-    }
-}
-
 impl ScheduleScopeData {
     pub fn new(funclet: FuncletId) -> ScheduleScopeData {
         ScheduleScopeData::new_inner(funclet, HashMap::Default(), HashMap::Default())
@@ -119,9 +91,9 @@ impl ScheduleScopeData {
 macro_rules! op_code_initialization {
     ($($_lang:ident $name:ident ($($_arg:ident : $_arg_type:tt,)*) -> $_output:ident;)*) => {
         impl OpCode {
-            pub fn new(node: &ast::Node) -> OpCode {
+            pub fn new(node: &expir::Node) -> OpCode {
                 match node {
-                    $(ast::Node::$name { .. } => OpCode::$name,)*
+                    $(expir::Node::$name { .. } => OpCode::$name,)*
                 }
             }
         }

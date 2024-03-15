@@ -1,6 +1,5 @@
 use super::*;
 use crate::explication::util::*;
-use paste::paste;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
@@ -23,7 +22,7 @@ impl FuncletOutState {
         }
     }
 
-    pub fn drain_allocation_requests(&mut self) -> Vec<(ast::FFIType, usize)> {
+    pub fn drain_allocation_requests(&mut self) -> Vec<(expir::StorageTypeId, usize)> {
         self.allocation_requests.drain().collect()
     }
 
@@ -45,11 +44,11 @@ impl FuncletOutState {
         self.to_fill.is_empty()
     }
 
-    pub fn push_comand(&mut self, command: ast::NamedNode) {
-        self.commands.push_front(command);
+    pub fn push_node(&mut self, command: expir::Node) {
+        self.nodes.push_front(command);
     }
 
-    pub fn drain_commands(&mut self) -> Vec<ast::NamedNode> {
-        self.commands.drain(..).collect()
+    pub fn drain_nodes(&mut self) -> Vec<expir::Node> {
+        self.nodes.drain(..).collect()
     }
 }
