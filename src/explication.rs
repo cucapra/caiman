@@ -1,33 +1,16 @@
 mod context;
-// mod explicator;
+mod explicator;
 mod util;
 pub mod expir;
 
 pub type Hole<T> = Option<T>;
 
-fn reject_hole<T>(hole: Hole<T>) -> T {
-    hole.expect("Unimplemented hole")
-}
+use context::{InState, StaticContext};
+use crate::stable_vec::StableVec;
 
-// use context::{InState, StaticContext};
-
-// fn explicate_funclets(context: StaticContext) -> StableVec<Funclet> {
-//     context.program().declarations.iter().map(|decleration| match decleration {
-//         expir::Funclet(funclet) => {
-//             let state = InState::new(funclet.header.name.clone());
+fn explicate_funclets(context: &StaticContext) -> StableVec<Funclet> {
     
-//             expir::Declaration::Funclet(
-//                 explicator::explicate_funclet(
-//                     funclet.kind.clone(),
-//                     funclet.header.clone(),
-//                     state,
-//                     &context,
-//                 )
-//             )
-//         },
-//         d => d
-//     }).collect()
-// }
+}
 
 // it's probably best to do the lowering pass like this,
 //   and simply guarantee there won't be any holes left over

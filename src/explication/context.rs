@@ -39,7 +39,10 @@ pub struct FuncletOutState {
     to_fill: HashSet<Location>,
 
     // nodes we've built on this particular funclet of the stack
-    nodes: VecDeque<expir::Node>,
+    nodes: VecDeque<ir::Node>,
+
+    // found tail edge for this funclet (if we managed to explicate one)
+    tail_edge: Option<ir::TailEdge>,
 }
 
 #[derive(Debug)]

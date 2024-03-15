@@ -16,8 +16,18 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet: FuncletId) {
-        let instantiations = self.scopes.last().cloned().map(|le| le.instantiations).unwrap_or(HashMap::default());
-        let allocations = self.scopes.last().cloned().map(|le| le.allocations).unwrap_or(HashMap::default());
+        let instantiations = self
+            .scopes
+            .last()
+            .cloned()
+            .map(|le| le.instantiations)
+            .unwrap_or(HashMap::default());
+        let allocations = self
+            .scopes
+            .last()
+            .cloned()
+            .map(|le| le.allocations)
+            .unwrap_or(HashMap::default());
         self.scopes.push(ScheduleScopeData::new(funclet));
     }
     pub fn exit_funclet(&mut self) -> bool {
@@ -36,11 +46,7 @@ impl InState {
     ) {
         let scope = self.get_latest_scope_mut();
         for spec_remote in &spec_remotes {
-            scope.add_instantiation(
-                schedule_node.clone(),
-                spec_remote.clone(),
-                place
-            );
+            scope.add_instantiation(schedule_node.clone(), spec_remote.clone(), place);
         }
         let name = scope.funclet.clone();
         let explication_data = self.schedule_explication_data.get_mut(&name).unwrap();
@@ -48,6 +54,13 @@ impl InState {
         // explication_data
         //     .type_instantiations
         //     .insert(schedule_node, instantiated);
+    }
+
+    pub fn expect_location(&self) -> Location {
+        Location {
+            funclet: self.get_latest_scope().funclet,
+            node: self.get_latest_scope().node.unwrap(),
+        }
     }
 
     pub fn get_latest_scope(&self) -> &ScheduleScopeData {
@@ -61,6 +74,14 @@ impl InState {
 
     pub fn add_explication_hole(&mut self, node: NodeId) {
         self.get_latest_scope_mut().add_explication_hole()
+    }
+
+    pub fn get_current_node(&self, context: &StaticContext) -> &Option<expir::Node> {
+        let scope = self.get_latest_scope();
+        get_expect_box(
+            &context.get_funclet(scope.funclet).nodes,
+            scope.node.unwrap(),
+        )
     }
 
     // Returns an instantiation if one is available in any scope (most to leexpir recent)
@@ -82,12 +103,12 @@ impl InState {
                             return Location {
                                 funclet: scope.funclet.clone(),
                                 node: node.clone(),
-                            }
+                            };
                         }
                     }
                 }
             }
-        };
+        }
         todo!()
         // let nodes = vec![
         //     expir::Node::AllocTemporary {

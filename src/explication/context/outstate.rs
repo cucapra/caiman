@@ -44,11 +44,24 @@ impl FuncletOutState {
         self.to_fill.is_empty()
     }
 
-    pub fn push_node(&mut self, command: expir::Node) {
-        self.nodes.push_front(command);
+    pub fn push_node(&mut self, node: ir::Node) {
+        self.nodes.push_front(node);
     }
 
-    pub fn drain_nodes(&mut self) -> Vec<expir::Node> {
+    pub fn drain_nodes(&mut self) -> Vec<ir::Node> {
         self.nodes.drain(..).collect()
+    }
+
+    pub fn set_tail_edge(&mut self, tail_edge: ir::TailEdge) {
+        assert!(self.tail_edge.is_none());
+        self.tail_edge = Some(tail_edge)
+    }
+
+    pub fn has_tail_edge(&self) -> bool {
+        self.tail_edge.is_some()
+    }
+
+    pub fn expect_tail_edge(&mut self) -> ir::TailEdge {
+        self.tail_edge.expect("No tail edge found")
     }
 }

@@ -22,7 +22,7 @@ impl StaticContext {
 
     pub fn get_matching_operation(
         &self,
-        funclet: &FuncletId,
+        funclet: FuncletId,
         returns: Vec<Hole<&NodeId>>,
     ) -> Option<&NodeId> {
         let mut result = None;
@@ -56,14 +56,14 @@ impl StaticContext {
         result
     }
 
-    fn get_spec_data(&self, funclet: &FuncletId) -> &SpecFuncletData {
+    fn get_spec_data(&self, funclet: FuncletId) -> &SpecFuncletData {
         self.spec_explication_data
-            .get(funclet)
+            .get(&funclet)
             .expect(&format!("Unknown specification function {:?}", funclet))
     }
 
-    fn get_funclet(&self, funclet: &FuncletId) -> &expir::Funclet {
-        self.program.funclets.get(*funclet).expect(&format!(
+    pub fn get_funclet(&self, funclet: FuncletId) -> &expir::Funclet {
+        self.program.funclets.get(funclet).expect(&format!(
             "Invalid funclet index {} for funclets {:?}",
             funclet, &self.program.funclets
         ))
