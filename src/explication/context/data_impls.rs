@@ -10,8 +10,8 @@ impl InstantiatedNodes {
         };
         let error = format!("Duplicate value node definitions in {:?}", &remotes);
         for remote in remotes {
-            let funclet = remote.funclet.unwrap();
-            let node = remote.node.unwrap();
+            let funclet = remote.funclet;
+            let node = remote.node;
             if &funclet == &specs.value {
                 if result.value.is_some() {
                     panic!(error);
@@ -43,7 +43,7 @@ impl InstantiatedNodes {
 
 impl ScheduleScopeData {
     pub fn new(funclet: FuncletId) -> ScheduleScopeData {
-        ScheduleScopeData::new_inner(funclet, HashMap::Default(), HashMap::Default())
+        ScheduleScopeData::new_inner(funclet, HashMap::new(), HashMap::new())
     }
 
     pub fn new_inner(funclet: FuncletId, 
@@ -63,10 +63,13 @@ impl ScheduleScopeData {
         }
 
     pub fn next_node(&mut self) {
-        self.node += 1
+        self.node = match self.node {
+            None => Some(0),
+            Some(x) => Some(x + 1)
+        }
     }
 
-    pub fn add_instantiation(&mut self, schedule_node: NodeId, location: Location, place: ir::Place) {
+    pub fn add_instantiation(&mut self, schedule_node: NodeId, location: Location, place: expir::Place) {
         self.instantiations
             .entry(location)
             .or_insert(Vec::new())
@@ -83,8 +86,8 @@ impl ScheduleScopeData {
         vec.push(node);
     }
 
-    pub fn add_explication_hole(&mut self, node: NodeId) {
-        self.explication_hole = Some(node);
+    pub fn add_explication_hole(&mut self) {
+        self.explication_hole = true;
     }
 }
 

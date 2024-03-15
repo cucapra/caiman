@@ -8,67 +8,11 @@ use crate::ir;
 
 impl StaticContext {
     pub fn new(program: expir::Program) -> StaticContext {
-        let mut context = StaticContext {
+        let spec_explication_data = initialize_declarations(&program);
+        StaticContext {
             program,
-            spec_explication_data: HashMap::new(),
-        };
-        context.initialize_declarations();
-        context
-    }
-
-    fn initialize_declarations(&mut self) {
-        for (index, funclet) in self.program.funclets.iter() {
-            match &funclet.kind {
-                FuncletKind::Value | FuncletKind::Unknown => {}
-                _ => {
-                    self.initialize_spec_funclet_info(index, funclet);
-                }
-            }
+            spec_explication_data,
         }
-    }
-
-    fn initialize_spec_funclet_info(&mut self, index: usize, funclet: &expir::Funclet) {
-        let mut node_dependencies = HashMap::new();
-        let mut tail_dependencies = Vec::new();
-        for (index, node) in funclet.nodes.as_ref().iter().enumerate() {
-            match &node {
-                None => {}
-                Some(node) => {
-                    node_dependencies.insert(index, identify_node_deps(node));
-                }
-            }
-        }
-        match &funclet.tail_edge {
-            None => {}
-            Some(t) => {
-                identify_tailedge_deps(t);
-            }
-        }
-
-        // second loop for type information
-        let mut deduced_types = HashMap::new();
-        match &funclet.kind {
-            ir::FuncletKind::Value => {
-                for node in funclet.nodes.as_ref() {
-                    match node {
-                        None => {}
-                        // TODO: ???
-                        Some(n) => {}
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        self.spec_explication_data.insert(
-            index,
-            SpecFuncletData {
-                node_dependencies,
-                tail_dependencies,
-                deduced_types,
-                connections: vec![],
-            },
-        );
     }
 
     // for quick and dirty things
@@ -124,6 +68,68 @@ impl StaticContext {
             funclet, &self.program.funclets
         ))
     }
+}
+
+fn initialize_declarations(program: &expir::Program) -> HashMap<FuncletId, SpecFuncletData> {
+    let mut result = HashMap::new();
+    for (index, funclet) in program.funclets.iter() {
+        match &funclet.kind {
+            FuncletKind::Value | FuncletKind::Unknown => {}
+            _ => {
+                result = initialize_spec_funclet_info(result, index, funclet);
+            }
+        }
+    }
+    result
+}
+
+fn initialize_spec_funclet_info(
+    mut result: HashMap<FuncletId, SpecFuncletData>,
+    index: usize,
+    funclet: &expir::Funclet,
+) -> HashMap<FuncletId, SpecFuncletData> {
+    let mut node_dependencies = HashMap::new();
+    let mut tail_dependencies = Vec::new();
+    for (index, node) in funclet.nodes.as_ref().iter().enumerate() {
+        match &node {
+            None => {}
+            Some(node) => {
+                node_dependencies.insert(index, identify_node_deps(node));
+            }
+        }
+    }
+    match &funclet.tail_edge {
+        None => {}
+        Some(t) => {
+            identify_tailedge_deps(t);
+        }
+    }
+
+    // second loop for type information
+    let mut deduced_types = HashMap::new();
+    match &funclet.kind {
+        ir::FuncletKind::Value => {
+            for node in funclet.nodes.as_ref() {
+                match node {
+                    None => {}
+                    // TODO: ???
+                    Some(n) => {}
+                }
+            }
+        }
+        _ => {}
+    }
+
+    result.insert(
+        index,
+        SpecFuncletData {
+            node_dependencies,
+            tail_dependencies,
+            deduced_types,
+            connections: vec![],
+        },
+    );
+    result
 }
 
 fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
@@ -224,11 +230,11 @@ fn identify_tailedge_deps(edge: &expir::TailEdge) -> Vec<NodeId> {
 
 fn get_type_info(
     funclet: &expir::Funclet,
-    nodeid: &NodeId,
+    nodeid: NodeId,
     node_dependencies: &HashMap<NodeId, Vec<NodeId>>,
     type_map: &mut HashMap<NodeId, Vec<TypeId>>,
 ) -> Vec<expir::TypeId> {
-    if let Some(result) = type_map.get(nodeid) {
+    if let Some(result) = type_map.get(&nodeid) {
         result.clone()
     } else {
         let result = deduce_type(funclet, nodeid, node_dependencies, type_map);
@@ -239,22 +245,19 @@ fn get_type_info(
 
 fn deduce_type(
     funclet: &expir::Funclet,
-    check_id: &NodeId,
+    check_id: NodeId,
     node_dependencies: &HashMap<NodeId, Vec<NodeId>>,
     type_map: &mut HashMap<NodeId, Vec<TypeId>>,
 ) -> Vec<TypeId> {
     let names = node_dependencies
-        .get(check_id)
+        .get(&check_id)
         .expect(&format!("Unknown spec node dependency {:?}", check_id));
-    let node = funclet.nodes.get(*check_id).expect(&format!(
-        "Invalid index {:?} looking up node in funclet {:?}",
-        check_id, &funclet
-    ));
+    let node = get_expect_box(&funclet.nodes, check_id);
     let error = format!(
         "Invalid hole in {:?}, cannot have an explication hole in a spec funclet",
         &node
     );
-    let typ = match node.expect(&error) {
+    let typ = match node.clone().expect(&error) {
         expir::Node::Phi { index } => {
             vec![get_expect_box(&funclet.input_types, index.expect(&error)).clone()]
         }
@@ -262,7 +265,7 @@ fn deduce_type(
             let index = index.expect(&error);
             vec![get_type_info(
                 funclet,
-                node_id.as_ref().expect(&error),
+                *node_id.as_ref().expect(&error),
                 node_dependencies,
                 type_map,
             )
@@ -270,18 +273,19 @@ fn deduce_type(
             .expect(&format!(
                 "Not enough arguments to extract index {} from {:?}",
                 index, node_id
-            )).clone()]
+            ))
+            .clone()]
         }
-        expir::Node::Constant { value, type_id } => { Vec::new() }
+        expir::Node::Constant { value, type_id } => Vec::new(),
         expir::Node::CallFunctionClass {
             function_id,
             arguments,
-        } => { Vec::new() }
+        } => Vec::new(),
         expir::Node::Select {
             condition,
             true_case,
             false_case,
-        } => { Vec::new() }
+        } => Vec::new(),
         _ => unreachable!("Not a value node {:?}", node),
     };
     typ

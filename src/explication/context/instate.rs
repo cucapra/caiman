@@ -16,8 +16,8 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet: FuncletId) {
-        let instantiations = self.scopes.lexpir().cloned().map(|le| le.instantiations).unwrap_or(HashMap::default());
-        let allocations = self.scopes.lexpir().cloned().map(|le| le.allocations).unwrap_or(HashMap::default());
+        let instantiations = self.scopes.last().cloned().map(|le| le.instantiations).unwrap_or(HashMap::default());
+        let allocations = self.scopes.last().cloned().map(|le| le.allocations).unwrap_or(HashMap::default());
         self.scopes.push(ScheduleScopeData::new(funclet));
     }
     pub fn exit_funclet(&mut self) -> bool {
@@ -32,16 +32,13 @@ impl InState {
         &mut self,
         schedule_node: NodeId,
         spec_remotes: Vec<Location>,
-        place: ir::Place,
+        place: expir::Place,
     ) {
-        let scope = self.get_latest_scope();
+        let scope = self.get_latest_scope_mut();
         for spec_remote in &spec_remotes {
             scope.add_instantiation(
                 schedule_node.clone(),
-                Location {
-                    funclet: spec_remote.funclet.as_ref().unwrap().clone(),
-                    node: spec_remote.node.as_ref().unwrap().clone(),
-                },
+                spec_remote.clone(),
                 place
             );
         }
@@ -54,19 +51,16 @@ impl InState {
     }
 
     pub fn get_latest_scope(&self) -> &ScheduleScopeData {
-        self.scopes.lexpir().unwrap()
+        self.scopes.last().unwrap()
     }
 
     pub fn get_latest_scope_mut(&mut self) -> &mut ScheduleScopeData {
-        &mut self.scopes.lexpir().unwrap()
-    }
-
-    pub fn add_available_operation(&mut self, schedule_node: NodeId, operation: OpCode) {
-        self.get_latest_scope_mut().add_operation(schedule_node, operation)
+        todo!()
+        // &mut self.scopes.last_mut().unwrap()
     }
 
     pub fn add_explication_hole(&mut self, node: NodeId) {
-        self.get_latest_scope_mut().add_explication_hole(node)
+        self.get_latest_scope_mut().add_explication_hole()
     }
 
     // Returns an instantiation if one is available in any scope (most to leexpir recent)
@@ -77,7 +71,7 @@ impl InState {
         &mut self,
         buffer_flags: Option<ir::BufferFlags>,
         target_location: &Location,
-        target_place: &ir::Place,
+        target_place: &expir::Place,
     ) -> Location {
         for scope in self.scopes.iter().rev() {
             match scope.instantiations.get(&target_location) {
@@ -86,7 +80,7 @@ impl InState {
                     for (inst_place, node) in instantiations {
                         if inst_place == target_place {
                             return Location {
-                                funclet: scope.name.clone(),
+                                funclet: scope.funclet.clone(),
                                 node: node.clone(),
                             }
                         }
@@ -94,14 +88,15 @@ impl InState {
                 }
             }
         };
-        let nodes = vec![
-            &expir::Node::AllocTemporary {
-                buffer_flags,
-                place: Some(target_place.clone()),
-                storage_type: None,
-            }
-        ];
-        self.pop_best_operation(&nodes)
+        todo!()
+        // let nodes = vec![
+        //     expir::Node::AllocTemporary {
+        //         buffer_flags,
+        //         place: Some(target_place.clone()),
+        //         storage_type: None,
+        //     }
+        // ];
+        // self.pop_best_operation(&nodes)
     }
 
     // Pops and returns the best match for the given list of operations (if one exists)
@@ -113,77 +108,78 @@ impl InState {
     //   4. most recently added node
     // if no such operation exists, returns the most recent explication hole
     // if there is also no explication hole, panics
-    pub fn pop_best_operation(&mut self, nodes: &Vec<&expir::Node>) -> usize {
-        struct HeuristicResults {
-            pub opcode: OpCode,
-            pub scope_index: usize,
-            pub operation_index: usize,
-            pub heuristic_value: usize,
-        }
-        let mut best_found: Option<HeuristicResults> = None;
-        // enumerate before reversing for later access
-        for (scope_index, scope) in self.scopes.iter().enumerate().rev() {
-            for node in nodes {
-                let opcode = OpCode::new(node);
-                match scope.available_operations.get(&opcode) {
-                    None => {}
-                    Some(operations) => {
-                        // 0 --> index, 1 --> value
-                        for (operation_index, comp_node) in operations.iter().enumerate() {
-                            best_found =
-                                match compare_ops(node, self.get_node(&scope.name, comp_node)) {
-                                    None => best_found,
-                                    // this is the "magic heuristic"
-                                    Some(heuristic_value) => {
-                                        let new_found = Some(HeuristicResults {
-                                            opcode: opcode.clone(),
-                                            scope_index,
-                                            operation_index,
-                                            heuristic_value,
-                                        });
-                                        match best_found {
-                                            None => new_found,
-                                            Some(old_result) => {
-                                                if heuristic_value > old_result.heuristic_value {
-                                                    new_found
-                                                } else {
-                                                    Some(old_result)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                        }
-                    }
-                }
-            }
-        }
-        match best_found {
-            None => {}
-            Some(result) => {
-                let scope = &mut self.scopes[result.scope_index];
-                return Location {
-                    funclet: scope.name.clone(),
-                    node: scope
-                        .available_operations
-                        .get_mut(&result.opcode)
-                        .unwrap()
-                        .remove(result.operation_index),
-                };
-            }
-        }
-        for scope in self.scopes.iter().rev() {
-            match &scope.explication_hole {
-                None => {}
-                Some(hole) => {
-                    return Location {
-                        funclet: scope.name.clone(),
-                        node: hole.clone(),
-                    };
-                }
-            }
-        }
-        panic!("No resource found for any of {:?}", nodes);
+    pub fn pop_best_operation(&mut self, nodes: &Vec<&expir::Node>) -> Location {
+        todo!("I have no idea what to do here right now");
+        // struct HeuristicResults {
+        //     pub opcode: OpCode,
+        //     pub scope_index: usize,
+        //     pub operation_index: usize,
+        //     pub heuristic_value: usize,
+        // }
+        // let mut best_found: Option<HeuristicResults> = None;
+        // // enumerate before reversing for later access
+        // for (scope_index, scope) in self.scopes.iter().enumerate().rev() {
+        //     for node in nodes {
+        //         let opcode = OpCode::new(node);
+        //         match scope.allocations.get(&opcode) {
+        //             None => {}
+        //             Some(operations) => {
+        //                 // 0 --> index, 1 --> value
+        //                 for (operation_index, comp_node) in operations.iter().enumerate() {
+        //                     best_found =
+        //                         match compare_ops(node, self.get_node(&scope.name, comp_node)) {
+        //                             None => best_found,
+        //                             // this is the "magic heuristic"
+        //                             Some(heuristic_value) => {
+        //                                 let new_found = Some(HeuristicResults {
+        //                                     opcode: opcode.clone(),
+        //                                     scope_index,
+        //                                     operation_index,
+        //                                     heuristic_value,
+        //                                 });
+        //                                 match best_found {
+        //                                     None => new_found,
+        //                                     Some(old_result) => {
+        //                                         if heuristic_value > old_result.heuristic_value {
+        //                                             new_found
+        //                                         } else {
+        //                                             Some(old_result)
+        //                                         }
+        //                                     }
+        //                                 }
+        //                             }
+        //                         }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+        // match best_found {
+        //     None => {}
+        //     Some(result) => {
+        //         let scope = &mut self.scopes[result.scope_index];
+        //         return Location {
+        //             funclet: scope.name.clone(),
+        //             node: scope
+        //                 .available_operations
+        //                 .get_mut(&result.opcode)
+        //                 .unwrap()
+        //                 .remove(result.operation_index),
+        //         };
+        //     }
+        // }
+        // for scope in self.scopes.iter().rev() {
+        //     match &scope.explication_hole {
+        //         None => {}
+        //         Some(hole) => {
+        //             return Location {
+        //                 funclet: scope.name.clone(),
+        //                 node: hole.clone(),
+        //             };
+        //         }
+        //     }
+        // }
+        // panic!("No resource found for any of {:?}", nodes);
     }
 }
 

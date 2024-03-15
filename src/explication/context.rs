@@ -129,7 +129,7 @@ struct ScheduleScopeData {
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
     // we only care about local information
-    instantiations: HashMap<Location, Vec<(ir::Place, usize)>>,
+    instantiations: HashMap<Location, Vec<(expir::Place, usize)>>,
 
     // map from operation code to a vector of "available" allocations
     // for now, these consist of exactly allocations where we don't yet know the type
