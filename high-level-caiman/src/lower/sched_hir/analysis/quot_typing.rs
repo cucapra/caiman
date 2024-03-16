@@ -503,7 +503,8 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
         env = match &block.terminator {
             Terminator::CaptureCall { dests, call, .. } => unify_call(dests, call, ctx, env)?,
             Terminator::Call(..) => unreachable!(),
-            Terminator::Return { dests, rets } => {
+            Terminator::Return { dests, rets, .. } => {
+                // pass through is ignored (like next)
                 // the destination tag is the tag for the merged node, we handle this
                 for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
                     env = add_var_constraint(dest, ret, Info::default(), env)?;

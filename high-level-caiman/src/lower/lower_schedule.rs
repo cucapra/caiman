@@ -330,7 +330,8 @@ fn lower_func_call(
 /// * `f` - the funclet that contains the return
 /// # Returns
 /// A tuple containing the commands that implement the return
-fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+    assert!(passthrough.len() <= 1 || passthrough.iter().le(passthrough.iter().skip(1)));
     if f.is_final_return() {
         let djoin_id = temp_id;
         let djoin_name = temp_var_name(djoin_id);
@@ -353,6 +354,7 @@ fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
             Hole::Filled(asm::Command::TailEdge(asm::TailEdge::Jump {
                 arguments: Hole::Filled(
                     rets.iter()
+                        .chain(passthrough.iter())
                         .map(|x| Hole::Filled(asm::NodeId(x.clone())))
                         .collect(),
                 ),
@@ -364,6 +366,7 @@ fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
             asm::TailEdge::Return {
                 return_values: Hole::Filled(
                     rets.iter()
+                        .chain(passthrough.iter())
                         .map(|x| Hole::Filled(asm::NodeId(x.clone())))
                         .collect(),
                 ),
@@ -380,7 +383,9 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
     // we do not return the new `temp_id` because this is the last instruction
     // in the block
     match t {
-        Terminator::Return { rets, .. } => lower_ret(rets, temp_id, f),
+        Terminator::Return {
+            rets, passthrough, ..
+        } => lower_ret(rets, passthrough, temp_id, f),
         Terminator::Next(vars) => {
             vec![Hole::Filled(asm::Command::TailEdge(
                 asm::TailEdge::Return {

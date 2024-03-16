@@ -252,6 +252,7 @@ fn handle_return(
             Terminator::Return {
                 dests: ast_to_hir_named_tags(ret_names),
                 rets: expr_to_multi_node_id(sched_expr),
+                passthrough: vec![],
             },
             None,
             info,

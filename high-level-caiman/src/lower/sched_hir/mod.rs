@@ -470,6 +470,16 @@ impl Funclets {
                     call,
                     captures,
                 };
+            } else if let Terminator::Return {
+                dests, passthrough, ..
+            } = &mut bb.terminator
+            {
+                let live_out = live_vars.get_out_fact(*id).live_set();
+                for v in live_out {
+                    if !dests.iter().any(|(d, _)| d == v) {
+                        passthrough.push(v.clone());
+                    }
+                }
             }
         }
         captured_out
@@ -630,12 +640,6 @@ impl Funclets {
             .filter(|v| !captures.contains(*v) && !term_dests.contains(*v))
             .cloned()
             .collect();
-        let _debug: Vec<_> = returns.iter().collect();
-        assert!(
-            term_dests.is_empty() && !returns.is_empty()
-                || returns.is_empty() && !term_dests.is_empty()
-                || returns.is_empty() && term_dests.is_empty()
-        );
         captures
             .into_iter()
             .chain(term_dests.into_iter())

@@ -296,6 +296,9 @@ pub enum Terminator {
         dests: Vec<(String, TripleTag)>,
         /// The returned variables in the child scope
         rets: Vec<String>,
+        /// The variables that aren't directly returned by the user but are
+        /// captured by the select
+        passthrough: Vec<String>,
     },
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
@@ -367,12 +370,12 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 uses.insert(guard.clone());
             }
-            Self::Return { rets, .. } | Self::Next(rets) => {
-                for node in rets {
+            Self::Return { rets, passthrough, ..}  => {
+                for node in rets.iter().chain(passthrough.iter()) {
                     uses.insert(node.clone());
                 }
             }
-            Self::FinalReturn(names) => {
+            Self::FinalReturn(names) | Self::Next(names)=> {
                 uses.extend(names.iter().cloned());
             }
             Self::None => (),
@@ -389,8 +392,13 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Return { rets, .. } | Self::Next(rets) | Self::FinalReturn(rets) => {
+            Self::Next(rets) | Self::FinalReturn(rets) => {
                 for node in rets {
+                    *node = f(node, UseType::Read);
+                }
+            }
+            Self::Return { rets, passthrough, .. } => {
+                for node in rets.iter_mut().chain(passthrough.iter_mut()) {
                     *node = f(node, UseType::Read);
                 }
             }
