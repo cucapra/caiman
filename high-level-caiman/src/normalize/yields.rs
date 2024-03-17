@@ -10,7 +10,7 @@ pub struct CallGraph<'a> {
     // place every time
     /// Map from source function name to a list of (edge_id, destination function name)
     /// Edge ids are indices into the `edges` vector
-    adj: BTreeMap<String, BTreeMap<String, usize>>,
+    adj: BTreeMap<String, Vec<(String, usize)>>,
     edges: Vec<&'a mut SchedFuncCall>,
 }
 
@@ -18,7 +18,7 @@ impl<'a> CallGraph<'a> {
     /// Constructs a new call graph from a program. Requires that the program is
     /// flattened.
     pub fn new(program: &'a mut Program) -> Self {
-        let mut adj: BTreeMap<_, BTreeMap<String, usize>> = BTreeMap::new();
+        let mut adj: BTreeMap<_, Vec<(String, usize)>> = BTreeMap::new();
         let mut edges = Vec::new();
         for decl in program {
             if let TopLevel::SchedulingFunc {
@@ -37,7 +37,7 @@ impl<'a> CallGraph<'a> {
     fn search_for_calls<T: Iterator<Item = &'a mut SchedStmt>>(
         func_name: &str,
         stmts: T,
-        adj: &mut BTreeMap<String, BTreeMap<String, usize>>,
+        adj: &mut BTreeMap<String, Vec<(String, usize)>>,
         edges: &mut Vec<&'a mut SchedFuncCall>,
     ) {
         for stmt in stmts {
@@ -53,14 +53,11 @@ impl<'a> CallGraph<'a> {
                 }
                 | SchedStmt::Return(_, SchedExpr::Term(SchedTerm::Call(_, call))) => {
                     if let NestedExpr::Term(SchedTerm::Var { name: dest, .. }) = &*call.target {
-                        let map = adj.entry(func_name.to_string()).or_default();
-                        if !map.contains_key(dest) {
-                            let edge_id = edges.len();
-                            adj.entry(func_name.to_string())
-                                .or_default()
-                                .insert(dest.clone(), edge_id);
-                            edges.push(call);
-                        }
+                        let edge_id = edges.len();
+                        adj.entry(func_name.to_string())
+                            .or_default()
+                            .push((dest.clone(), edge_id));
+                        edges.push(call);
                     } else {
                         panic!("Call target is not a variable");
                     }
@@ -131,17 +128,10 @@ impl<'a> CallGraph<'a> {
     /// and performing a depth first search from each node
     fn find_all_backedges(&self) -> HashSet<usize> {
         let mut backedges = HashSet::new();
-        let mut visited = HashSet::new();
+        let mut completed = HashSet::new();
         for node in self.adj.keys() {
-            if !visited.contains(node) {
-                let mut local_visited = HashSet::new();
-                self.dfs(
-                    node,
-                    &mut local_visited,
-                    &mut HashSet::new(),
-                    &mut backedges,
-                );
-                visited.extend(local_visited);
+            if !completed.contains(node) {
+                self.dfs(node, &mut HashSet::new(), &mut completed, &mut backedges);
             }
         }
         backedges

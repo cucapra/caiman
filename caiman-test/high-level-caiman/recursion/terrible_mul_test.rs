@@ -23,10 +23,10 @@ fn main() -> Result<(), String> {
     let mut join_stack_bytes = [0u8; 4096usize];
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
     let instance = main::Instance::new(&mut root_state, &callbacks);
-    let mut result = instance.start(&mut join_stack, 6, 4);
+    let mut result = instance.start(&mut join_stack, 17, 23);
     while result.returned().is_none() {
         let instance = result.prepare_next();
         result = instance.resume_at__loop_impl(&mut join_stack);
     }
-    crate::expect_returned!(24, result.returned().map(|x| x.0))
+    crate::expect_returned!(391, result.returned().map(|x| x.0))
 }
