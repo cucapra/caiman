@@ -100,7 +100,8 @@ impl<'a> Funclet<'a> {
             | Terminator::Return { .. }
             | Terminator::Next(_)
             | Terminator::Call(..)
-            | Terminator::CaptureCall { .. } => {
+            | Terminator::CaptureCall { .. }
+            | Terminator::Yield(_) => {
                 let e = self
                     .parent
                     .cfg
@@ -160,7 +161,10 @@ impl<'a> Funclet<'a> {
         }
 
         match self.block.terminator {
-            Terminator::Call(..) | Terminator::CaptureCall { .. } | Terminator::Select { .. } => {
+            Terminator::Call(..)
+            | Terminator::CaptureCall { .. }
+            | Terminator::Select { .. }
+            | Terminator::Yield(_) => {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
@@ -480,6 +484,10 @@ impl Funclets {
                         passthrough.push(v.clone());
                     }
                 }
+            } else if let Terminator::Yield(captures) = &mut bb.terminator {
+                let lives = live_vars.get_out_fact(*id).live_set();
+                *captures = lives.iter().cloned().collect();
+                captured_out.insert(*id, lives.clone());
             }
         }
         captured_out

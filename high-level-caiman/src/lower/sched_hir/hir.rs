@@ -311,6 +311,9 @@ pub enum Terminator {
     None,
     /// No terminator, continue to next block with the specified returns
     Next(Vec<String>),
+    /// A yield which will capture its arguments to pass them to the
+    /// continuation
+    Yield(Vec<String>),
 }
 
 /// How a variable is used in a statement.
@@ -356,7 +359,7 @@ impl Hir for Terminator {
             }
             // we don't consider the defs of a select to be defs of this terminator,
             // but rather they are the defs of the left and right funclets
-            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => None,
+            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) | Self::Yield(_) => None,
         }
     }
 
@@ -375,7 +378,7 @@ impl Hir for Terminator {
                     uses.insert(node.clone());
                 }
             }
-            Self::FinalReturn(names) | Self::Next(names)=> {
+            Self::FinalReturn(names) | Self::Next(names) | Self::Yield(names)=> {
                 uses.extend(names.iter().cloned());
             }
             Self::None => (),
@@ -397,6 +400,11 @@ impl Hir for Terminator {
                     *node = f(node, UseType::Read);
                 }
             }
+            Self::Yield(names) => {
+                for name in names.iter_mut() {
+                    *name = f(name, UseType::Read);
+                }
+            }
             Self::Return { rets, passthrough, .. } => {
                 for node in rets.iter_mut().chain(passthrough.iter_mut()) {
                     *node = f(node, UseType::Read);
@@ -415,7 +423,7 @@ impl Hir for Terminator {
                     *dest = f(dest);
                 }
             }
-            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => (),
+            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) | Self::Yield(_) => (),
         }
     }
 }

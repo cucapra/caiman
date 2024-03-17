@@ -78,6 +78,32 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
     ]
 }
 
+fn get_other_decls() -> Vec<asm::Declaration> {
+    vec![
+        asm::Declaration::FunctionClass(asm::FunctionClass {
+            name: asm::FunctionClassId(String::from("_loop")),
+            input_types: vec![],
+            output_types: vec![],
+        }),
+        asm::Declaration::ExternalFunction(asm::ExternalFunction {
+            kind: asm::ExternalFunctionKind::CPUEffect,
+            value_function_binding: asm::FunctionClassBinding {
+                default: false,
+                function_class: asm::FunctionClassId(String::from("_loop")),
+            },
+            name: String::from("_loop_impl"),
+            input_args: vec![],
+            output_types: vec![],
+        }),
+        asm::Declaration::Effect(asm::EffectDeclaration {
+            name: asm::EffectId(String::from("_loop_eff")),
+            effect: asm::Effect::FullyConnected {
+                effectful_function_ids: vec![asm::ExternalFunctionId(String::from("_loop_impl"))],
+            },
+        }),
+    ]
+}
+
 /// Collects a context for top level declarations.
 /// Generates a list of extern declarations needed for a given program and type
 /// checks the specs.
@@ -494,7 +520,10 @@ impl Context {
     pub fn new(tl: &[TopLevel]) -> Result<Self, LocalError> {
         let ctx = Self {
             specs: HashMap::new(),
-            type_decls: gen_type_decls(tl).into_iter().collect(),
+            type_decls: gen_type_decls(tl)
+                .into_iter()
+                .chain(get_other_decls())
+                .collect(),
             signatures: HashMap::new(),
             scheds: HashMap::new(),
         };

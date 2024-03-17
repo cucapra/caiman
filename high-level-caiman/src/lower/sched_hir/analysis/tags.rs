@@ -313,7 +313,10 @@ impl Fact for TagAnalysis {
                 }
             }
             HirInstr::Tail(
-                Terminator::None | Terminator::Next(..) | Terminator::FinalReturn(_),
+                Terminator::None
+                | Terminator::Next(..)
+                | Terminator::FinalReturn(_)
+                | Terminator::Yield(_),
             ) => (),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }

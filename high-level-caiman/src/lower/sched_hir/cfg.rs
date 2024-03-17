@@ -350,16 +350,40 @@ fn handle_call(
         &info,
     );
     edges.insert(*cur_id, Edge::Next(*cur_id + 1));
-    blocks.insert(
-        *cur_id,
-        make_block(
-            cur_id,
-            cur_stmts,
-            Terminator::Call(ast_to_hir_fulltype(lhs), HirFuncCall::new(call)),
-            Some(*cur_id + 1),
-            info,
-        ),
-    );
+    if call.yield_call {
+        blocks.insert(
+            *cur_id,
+            make_block(
+                cur_id,
+                cur_stmts,
+                Terminator::Yield(vec![]),
+                Some(*cur_id + 1),
+                info,
+            ),
+        );
+        edges.insert(*cur_id, Edge::Next(*cur_id + 1));
+        blocks.insert(
+            *cur_id,
+            make_block(
+                cur_id,
+                &mut vec![],
+                Terminator::Call(ast_to_hir_fulltype(lhs), HirFuncCall::new(call)),
+                Some(*cur_id + 1),
+                info,
+            ),
+        );
+    } else {
+        blocks.insert(
+            *cur_id,
+            make_block(
+                cur_id,
+                cur_stmts,
+                Terminator::Call(ast_to_hir_fulltype(lhs), HirFuncCall::new(call)),
+                Some(*cur_id + 1),
+                info,
+            ),
+        );
+    }
 }
 
 /// Handles a sequence statement by constructing a new block with the sequence as the terminator

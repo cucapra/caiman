@@ -105,17 +105,26 @@ impl<'a> CallGraph<'a> {
     /// * `node` - The node to start the search from
     /// * `visited` - The set of nodes that have been visited (updated by the function)
     /// * `backedges` - The set of backedges in the graph (updated by the function)
-    fn dfs(&self, node: &str, visited: &mut HashSet<String>, backedges: &mut HashSet<usize>) {
+    fn dfs(
+        &self,
+        node: &str,
+        visited: &mut HashSet<String>,
+        finished: &mut HashSet<String>,
+        backedges: &mut HashSet<usize>,
+    ) {
         visited.insert(node.to_string());
         if self.adj.contains_key(node) {
             for (dest, edge_id) in &self.adj[node] {
-                if visited.contains(dest) {
-                    backedges.insert(*edge_id);
-                } else {
-                    self.dfs(dest, visited, backedges);
+                if !finished.contains(dest) {
+                    if visited.contains(dest) {
+                        backedges.insert(*edge_id);
+                    } else {
+                        self.dfs(dest, visited, finished, backedges);
+                    }
                 }
             }
         }
+        finished.insert(node.to_string());
     }
 
     /// Finds all backedges in the call graph by iterating over the adjacency list
@@ -126,7 +135,12 @@ impl<'a> CallGraph<'a> {
         for node in self.adj.keys() {
             if !visited.contains(node) {
                 let mut local_visited = HashSet::new();
-                self.dfs(node, &mut local_visited, &mut backedges);
+                self.dfs(
+                    node,
+                    &mut local_visited,
+                    &mut HashSet::new(),
+                    &mut backedges,
+                );
                 visited.extend(local_visited);
             }
         }
@@ -140,6 +154,11 @@ impl<'a> CallGraph<'a> {
         // This is a simple method which puts a yield at every backedge in the call graph.
         // It puts in more yields than necessary since finding the minimal set of yields
         // is the minimum feedback arc set problem which is NP-hard.
+        let _debug: Vec<(_, Vec<_>)> = self
+            .adj
+            .iter()
+            .map(|(k, v)| (k, v.iter().collect()))
+            .collect();
         let backedges = self.find_all_backedges();
         for edge in backedges {
             let call = self.edges.get_mut(edge).unwrap();

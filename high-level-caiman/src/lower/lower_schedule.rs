@@ -320,6 +320,58 @@ fn lower_func_call(
     ]
 }
 
+/// Lowers a yield terminator into a caiman assembly command
+/// # Arguments
+/// * `captures` - the names of the variables to capture to the continuation
+/// * `temp_id` - the next available temporary id
+/// * `f` - the funclet that contains the yield
+/// # Returns
+/// A vec containing the commands that implement the yield
+fn lower_yield(captures: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+    let djoin_id = temp_id;
+    let djoin_name = temp_var_name(djoin_id);
+    let join = temp_id + 1;
+    let join_var = temp_var_name(join);
+    vec![
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(djoin_name.clone())),
+            node: asm::Node::DefaultJoin,
+        })),
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(join_var.clone())),
+            node: asm::Node::SerializedJoin {
+                funclet: f.next_blocks().first().unwrap().clone(),
+                captures: Hole::Filled(
+                    captures
+                        .iter()
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .collect(),
+                ),
+                continuation: Hole::Filled(asm::NodeId(djoin_name)),
+            },
+        })),
+        Hole::Filled(asm::Command::TailEdge(asm::TailEdge::ScheduleCallYield {
+            operations: Hole::Filled(vec![
+                Hole::Filled(asm::RemoteNodeId {
+                    node: None,
+                    funclet: Hole::Filled(SpecType::Value.get_meta_id()),
+                }),
+                Hole::Filled(asm::RemoteNodeId {
+                    node: None,
+                    funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                }),
+                Hole::Filled(asm::RemoteNodeId {
+                    node: None,
+                    funclet: Hole::Filled(SpecType::Timeline.get_meta_id()),
+                }),
+            ]),
+            external_function_id: Hole::Filled(asm::ExternalFunctionId(String::from("_loop_impl"))),
+            yielded_nodes: Hole::Filled(vec![]),
+            continuation_join: Hole::Filled(asm::NodeId(join_var)),
+        })),
+    ]
+}
+
 /// Lowers a return terminator into a caiman assembly command.
 /// If the return is a final return, it is lowered into a default join and a
 /// jump to the final block. Otherwise it is lowered into a return command.
@@ -413,6 +465,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         Terminator::CaptureCall { call, captures, .. } => {
             lower_func_call(call, captures, temp_id, f)
         }
+        Terminator::Yield(captures) => lower_yield(captures, temp_id, f),
     }
 }
 
@@ -431,9 +484,6 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
         })),
         Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            // TODO: for greater generality, should be `SerializedJoin`, but I
-            // think that's broken right now
-            // TODO: optimize and use inline join whenever possible
             node: asm::Node::InlineJoin {
                 funclet: Hole::Filled(f.join_funclet()),
                 captures: Hole::Filled(vec![]),
