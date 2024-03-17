@@ -1,4 +1,5 @@
 mod context;
+mod explicator_macros;
 mod explicator;
 mod util;
 pub mod expir;
@@ -7,9 +8,10 @@ pub type Hole<T> = Option<T>;
 
 use context::{InState, StaticContext};
 use crate::stable_vec::StableVec;
+use crate::ir;
 
-fn explicate_funclets(context: &StaticContext) -> StableVec<Funclet> {
-    
+fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
+    todo!()
 }
 
 // it's probably best to do the lowering pass like this,

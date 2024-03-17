@@ -16,19 +16,8 @@ pub use crate::rust_wgpu_backend::ffi;
 // should be macro'd out in principle
 // but also I need something working
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Place {
-    Local,
-    Cpu,
-    Gpu,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Constant {
-    I32(i32),
-    I64(i64),
-    U64(u64),
-}
+pub type Place = ir::Place;
+pub type Constant = ir::Constant;
 
 pub type ExternalFunctionId = ffi::ExternalFunctionId;
 pub type FuncletId = usize;

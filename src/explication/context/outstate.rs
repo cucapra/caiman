@@ -62,6 +62,6 @@ impl FuncletOutState {
     }
 
     pub fn expect_tail_edge(&mut self) -> ir::TailEdge {
-        self.tail_edge.expect("No tail edge found")
+        self.tail_edge.as_ref().expect("No tail edge found").clone()
     }
 }

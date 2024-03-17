@@ -76,7 +76,7 @@ impl InState {
         self.get_latest_scope_mut().add_explication_hole()
     }
 
-    pub fn get_current_node(&self, context: &StaticContext) -> &Option<expir::Node> {
+    pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::Node> {
         let scope = self.get_latest_scope();
         get_expect_box(
             &context.get_funclet(scope.funclet).nodes,

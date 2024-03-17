@@ -1,4 +1,6 @@
-use crate::explication::ir;
+use crate::ir;
+use crate::explication::expir;
+use crate::explication::expir::Node;
 use paste::paste;
 
 macro_rules! satisfy_argument {
@@ -14,14 +16,14 @@ macro_rules! satisfy_argument {
             // we want to add stuff if it's currently none
             // if both are vectors, then we also wanna handle that
             (None, None) => None,
-            (Some(v), None) => Some(v),
+            (Some(v), None) => Some(v.clone()),
             (None, Some(v)) => Some(v.clone()),
             (Some(left), Some(right)) => { satisfy_argument!{@ $nested (left right)} }
         }
     };
     (@ false ($left:ident $right:ident)) => {
-        assert_eq!(&$left, $right); // safety check
-        Some($left)
+        assert_eq!($left, $right); // safety check
+        Some($left.clone())
     };
     (@ true ($left:ident $right:ident)) => {
         assert_eq!($left.len(), $right.len());  // safety check
@@ -30,21 +32,21 @@ macro_rules! satisfy_argument {
             let right_value = &$right[index];
             result.push(satisfy_argument!(@ left_value right_value false))
         };
-        Some(result)
+        Some(result.into_boxed_slice())
     }
 }
 
 macro_rules! generate_satisfiers {
     ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
         paste! {
-            fn satisfy_explication_request(current: ast::Node, requested: &ast::Node) -> ast::Node {
+            fn satisfy_explication_request(current: &expir::Node, requested: &expir::Node) -> expir::Node {
                 match (current, requested) {
-                    $((ast::Node::$name { $($arg : [<$arg _one>],)* },
-                    ast::Node::$name { $($arg : [<$arg _two>],)* }) => {
+                    $((expir::Node::$name { $($arg : [<$arg _one>],)* },
+                    expir::Node::$name { $($arg : [<$arg _two>],)* }) => {
                         $(
                             let $arg = satisfy_argument!([<$arg _one>] [<$arg _two>] $arg_type);
                         )*
-                        ast::Node::$name { $($arg,)* }
+                        expir::Node::$name { $($arg,)* }
                     })*
                     (current, _) => unreachable!("Trying to request {:?} from {:?}", requested, current)
                 }
@@ -54,3 +56,31 @@ macro_rules! generate_satisfiers {
 }
 
 with_operations!(generate_satisfiers);
+
+macro_rules! lower_element {
+    ($arg:ident [$_arg_type:ident] $error:ident) => {
+        $arg.as_ref().expect(&$error).iter().map(|e| e.expect(&$error)).collect()
+    };
+    ($arg:ident $_arg_type:ident $error:ident) => {
+        $arg.expect(&$error)
+    }
+}
+
+macro_rules! lower_spec_node {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        paste! {
+            fn lower_spec_node(node : &expir::Node) -> ir::Node {
+                let error = format!("Hole not allowed in {:?}", node);
+                match node {
+                    $(expir::Node::$name { $($arg,)* } => {
+                        ir::Node::$name {
+                            $($arg : lower_element!($arg $arg_type error),)*
+                        }
+                    }),*
+                }
+            }
+        }
+    };
+}
+
+with_operations!(lower_spec_node);

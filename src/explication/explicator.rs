@@ -173,7 +173,7 @@ fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutS
 }
 
 fn explicate_funclet_spec(
-    spec: expir::FuncletSpec,
+    spec: &expir::FuncletSpec,
     state: &FuncletOutState,
     context: &StaticContext,
 ) -> ir::FuncletSpec {
@@ -203,17 +203,17 @@ fn explicate_spec_binding(
     context: &StaticContext,
 ) -> ir::FuncletSpecBinding {
     let current = context.get_funclet(funclet);
-    match current.spec_binding {
+    match &current.spec_binding {
         expir::FuncletSpecBinding::None => ir::FuncletSpecBinding::None,
         expir::FuncletSpecBinding::Value {
             value_function_id_opt,
         } => ir::FuncletSpecBinding::Value {
-            value_function_id_opt,
+            value_function_id_opt: value_function_id_opt.clone(),
         },
         expir::FuncletSpecBinding::Timeline {
             function_class_id_opt,
         } => ir::FuncletSpecBinding::Timeline {
-            function_class_id_opt,
+            function_class_id_opt: function_class_id_opt.clone(),
         },
         expir::FuncletSpecBinding::ScheduleExplicit {
             value,
@@ -249,4 +249,27 @@ pub fn explicate_schedule_funclet(
             }
         }
     }
+}
+
+macro_rules! generate_satisfiers {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        paste! {
+            fn satisfy_explication_request(current: ast::Node, requested: &ast::Node) -> ast::Node {
+                match (current, requested) {
+                    $((ast::Node::$name { $($arg : [<$arg _one>],)* },
+                    ast::Node::$name { $($arg : [<$arg _two>],)* }) => {
+                        $(
+                            let $arg = satisfy_argument!([<$arg _one>] [<$arg _two>] $arg_type);
+                        )*
+                        ast::Node::$name { $($arg,)* }
+                    })*
+                    (current, _) => unreachable!("Trying to request {:?} from {:?}", requested, current)
+                }
+            }
+        }
+    };
+}
+
+fn lower_spec_funclet(funclet: FuncletId, context: &StaticContext) -> ir::Funclet {
+    todo!()
 }
