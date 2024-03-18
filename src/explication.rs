@@ -1,17 +1,53 @@
 mod context;
-mod explicator_macros;
-mod explicator;
-mod util;
 pub mod expir;
+mod explicator;
+mod explicator_macros;
+mod util;
 
 pub type Hole<T> = Option<T>;
 
-use context::{InState, StaticContext};
-use crate::stable_vec::StableVec;
 use crate::ir;
+use crate::stable_vec::StableVec;
+use context::{InState, StaticContext};
+
+use self::explicator::{explicate_schedule_funclet, lower_spec_funclet};
 
 fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
-    todo!()
+    context
+        .program()
+        .funclets
+        .iter()
+        .map(|(id, funclet)| match funclet.kind {
+            ir::FuncletKind::Unknown
+            | ir::FuncletKind::Value
+            | ir::FuncletKind::Timeline
+            | ir::FuncletKind::Spatial => lower_spec_funclet(id, context),
+            ir::FuncletKind::ScheduleExplicit => {
+                explicate_schedule_funclet(InState::new(id), context)
+            }
+        })
+        .collect()
+}
+
+fn explicate_program(program: expir::Program) -> ir::Program {
+    let mut context = StaticContext::new(&program);
+    let explicated_funclets = explicate_funclets(&context);
+
+    match program {
+        expir::Program {
+            native_interface,
+            types,
+            funclets,
+            function_classes,
+            pipelines,
+        } => ir::Program {
+            native_interface,
+            types,
+            funclets: explicated_funclets,
+            function_classes,
+            pipelines,
+        },
+    }
 }
 
 // it's probably best to do the lowering pass like this,
@@ -20,10 +56,16 @@ fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
 //   seems cool, but probably too much work
 // arguably this pass should be on the lowered AST rather than on the frontend
 //   but debugging explication is gonna be even harder without names...
-pub fn explicate(program: crate::frontend::ExplicationDefinition) -> crate::frontend::Definition {
-    dbg!(&program);
-    // explicate_funclets(StaticContext::new(program));
-
-    // dbg!(&context);
-    todo!()
+pub fn explicate(
+    definition: crate::frontend::ExplicationDefinition,
+) -> crate::frontend::Definition {
+    match definition {
+        crate::frontend::ExplicationDefinition { version, program } => {
+            let ir_program = explicate_program(program);
+            crate::frontend::Definition {
+                version,
+                program: ir_program,
+            }
+        }
+    }
 }

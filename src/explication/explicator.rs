@@ -8,6 +8,8 @@ use crate::explication::Hole;
 use crate::ir::Place;
 use crate::{explication, frontend, ir};
 
+use super::explicator_macros::force_lower_node;
+
 fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
     ir::Tag {
         quot: tag.quot,
@@ -131,84 +133,129 @@ fn explicate_local_do_builtin(
 // distinct from explication in that we have no request to fulfill
 // panics if no node can be found during any step of the recursion
 fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutState> {
-    todo!()
-    // let maybe_node = state.get_current_node(context);
-    // if let Some(node) = maybe_node {
-    //     match node {
-    //         expir::Node::None => ir::Node::None,
-    //         expir::Node::Phi { index } => todo!(),
-    //         expir::Node::ExtractResult { node_id, index } => todo!(),
-    //         expir::Node::Constant { value, type_id } => todo!(),
-    //         expir::Node::CallFunctionClass { function_id, arguments } => todo!(),
-    //         expir::Node::Select { condition, true_case, false_case } => todo!(),
-    //         expir::Node::AllocTemporary { place, storage_type, buffer_flags } => todo!(),
-    //         expir::Node::Drop { node } => todo!(),
-    //         expir::Node::StaticSubAlloc { node, place, storage_type } => todo!(),
-    //         expir::Node::StaticSplit { spatial_operation, node, sizes, place } => todo!(),
-    //         expir::Node::StaticMerge { spatial_operation, nodes, place } => todo!(),
-    //         expir::Node::ReadRef { storage_type, source } => todo!(),
-    //         expir::Node::BorrowRef { storage_type, source } => todo!(),
-    //         expir::Node::WriteRef { storage_type, destination, source } => todo!(),
-    //         expir::Node::LocalDoBuiltin { operation, inputs, outputs } => todo!(),
-    //         expir::Node::LocalDoExternal { operation, external_function_id, inputs, outputs } => todo!(),
-    //         expir::Node::LocalCopy { input, output } => todo!(),
-    //         expir::Node::BeginEncoding { place, event, encoded, fences } => todo!(),
-    //         expir::Node::EncodeDoExternal { encoder, operation, external_function_id, inputs, outputs } => todo!(),
-    //         expir::Node::EncodeCopy { encoder, input, output } => todo!(),
-    //         expir::Node::Submit { encoder, event } => todo!(),
-    //         expir::Node::SyncFence { fence, event } => todo!(),
-    //         expir::Node::InlineJoin { funclet, captures, continuation } => todo!(),
-    //         expir::Node::SerializedJoin { funclet, captures, continuation } => todo!(),
-    //         expir::Node::DefaultJoin => todo!(),
-    //         expir::Node::PromiseCaptures { count, continuation } => todo!(),
-    //         expir::Node::FulfillCaptures { continuation, haves, needs } => todo!(),
-    //         expir::Node::EncodingEvent { local_past, remote_local_pasts } => todo!(),
-    //         expir::Node::SubmissionEvent { local_past } => todo!(),
-    //         expir::Node::SynchronizationEvent { local_past, remote_local_past } => todo!(),
-    //         expir::Node::SeparatedBufferSpaces { count, space } => todo!(),
-    //     };
-    // }
-    // else {
-    //     todo!()
-    // }
+    if state.is_end_of_funclet(context) {
+        explicate_tail_edge(&state, context)
+    } else {
+        match state.get_current_node(context) {
+            None => {
+                todo!()
+            }
+            Some(node) => {
+                let mut new_state = state.clone();
+                new_state.next_node();
+                match explicate_node(new_state, context) {
+                    None => None,
+                    Some(mut out) => {
+                        out.add_node(force_lower_node(node));
+                        Some(out)
+                    }
+                }
+            }
+        }
+    }
 }
 
-fn explicate_tail_edge(state: &InState, context: &StaticContext) -> ir::TailEdge {
-    match state.get_current_tail_edge(context) {
-        Some(tail_edge) => match tail_edge {
-            expir::TailEdge::Return { return_values } => todo!(),
-            expir::TailEdge::Jump { join, arguments } => todo!(),
-            expir::TailEdge::ScheduleCall {
-                value_operation,
-                timeline_operation,
-                spatial_operation,
-                callee_funclet_id,
-                callee_arguments,
-                continuation_join,
-            } => todo!(),
-            expir::TailEdge::ScheduleSelect {
-                value_operation,
-                timeline_operation,
-                spatial_operation,
-                condition,
-                callee_funclet_ids,
-                callee_arguments,
-                continuation_join,
-            } => todo!(),
-            expir::TailEdge::ScheduleCallYield {
-                value_operation,
-                timeline_operation,
-                spatial_operation,
-                external_function_id,
-                yielded_nodes,
-                continuation_join,
-            } => todo!(),
-            expir::TailEdge::DebugHole { inputs } => todo!(),
-        },
+fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<FuncletOutState> {
+    let tail_edge = match state.get_current_tail_edge(context) {
+        Some(tail_edge) => {
+            let error = format!("Unimplemented hole in tail edge {:?}", tail_edge);
+            match tail_edge {
+                expir::TailEdge::Return { return_values } => ir::TailEdge::Return {
+                    return_values: return_values
+                        .as_ref()
+                        .expect(&error)
+                        .iter()
+                        .map(|v| v.expect(&error))
+                        .collect(),
+                },
+                expir::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
+                    join: join.as_ref().expect(&error).clone(),
+                    arguments: arguments
+                        .as_ref()
+                        .expect(&error)
+                        .iter()
+                        .map(|v| v.expect(&error))
+                        .collect(),
+                },
+                expir::TailEdge::ScheduleCall {
+                    value_operation,
+                    timeline_operation,
+                    spatial_operation,
+                    callee_funclet_id,
+                    callee_arguments,
+                    continuation_join,
+                } => ir::TailEdge::ScheduleCall {
+                    value_operation: value_operation.expect(&error).clone(),
+                    timeline_operation: timeline_operation.expect(&error).clone(),
+                    spatial_operation: spatial_operation.expect(&error).clone(),
+                    callee_funclet_id: callee_funclet_id.expect(&error).clone(),
+                    callee_arguments: callee_arguments
+                        .as_ref()
+                        .expect(&error)
+                        .iter()
+                        .map(|v| v.expect(&error))
+                        .collect(),
+                    continuation_join: continuation_join.expect(&error).clone(),
+                },
+                expir::TailEdge::ScheduleSelect {
+                    value_operation,
+                    timeline_operation,
+                    spatial_operation,
+                    condition,
+                    callee_funclet_ids,
+                    callee_arguments,
+                    continuation_join,
+                } => ir::TailEdge::ScheduleSelect {
+                    value_operation: value_operation.expect(&error).clone(),
+                    timeline_operation: timeline_operation.expect(&error).clone(),
+                    spatial_operation: spatial_operation.expect(&error).clone(),
+                    condition: condition.expect(&error).clone(),
+                    callee_funclet_ids: callee_funclet_ids
+                        .as_ref()
+                        .expect(&error)
+                        .iter()
+                        .map(|v| v.expect(&error))
+                        .collect(),
+                    callee_arguments: callee_arguments
+                        .as_ref()
+                        .expect(&error)
+                        .iter()
+                        .map(|v| v.expect(&error))
+                        .collect(),
+                    continuation_join: continuation_join.expect(&error).clone(),
+                },
+                expir::TailEdge::ScheduleCallYield {
+                    value_operation,
+                    timeline_operation,
+                    spatial_operation,
+                    external_function_id,
+                    yielded_nodes,
+                    continuation_join,
+                } => ir::TailEdge::ScheduleCallYield {
+                    value_operation: value_operation.expect(&error).clone(),
+                    timeline_operation: timeline_operation.expect(&error).clone(),
+                    spatial_operation: spatial_operation.expect(&error).clone(),
+                    external_function_id: external_function_id.expect(&error).clone(),
+                    yielded_nodes: yielded_nodes
+                        .as_ref()
+                        .expect(&error)
+                        .iter()
+                        .map(|v| v.expect(&error))
+                        .collect(),
+                    continuation_join: continuation_join.expect(&error).clone(),
+                },
+                expir::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
+                    inputs: inputs.clone(),
+                },
+            }
+        }
         None => {
             todo!()
         }
-    }
+    };
+    let mut result = FuncletOutState::new();
+    result.set_tail_edge(tail_edge);
+    Some(result)
 }
 
 fn explicate_funclet_spec(
@@ -266,12 +313,8 @@ fn explicate_spec_binding(
     }
 }
 
-pub fn explicate_schedule_funclet(
-    funclet: FuncletId,
-    mut state: InState,
-    context: &StaticContext,
-) -> ir::Funclet {
-    state.enter_funclet(funclet);
+pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -> ir::Funclet {
+    let funclet = state.get_current_funclet();
     let current = context.get_funclet(funclet);
     match explicate_node(state, context) {
         None => panic!("No explication solution found for funclet {:?}", funclet),
@@ -322,7 +365,7 @@ fn lower_spec_tail_edge(tail_edge: &expir::TailEdge, context: &StaticContext) ->
     }
 }
 
-fn lower_spec_funclet(funclet: FuncletId, context: &StaticContext) -> ir::Funclet {
+pub fn lower_spec_funclet(funclet: FuncletId, context: &StaticContext) -> ir::Funclet {
     let func = context.get_funclet(funclet);
     let kind = func.kind.clone();
     let spec_binding = explicate_spec_binding(funclet, None, context);
@@ -332,9 +375,9 @@ fn lower_spec_funclet(funclet: FuncletId, context: &StaticContext) -> ir::Funcle
     let nodes = func
         .nodes
         .iter()
-        .map(|n| explicator_macros::force_lower_node(&n.expect(&error)))
+        .map(|n| explicator_macros::force_lower_node(&n.as_ref().expect(&error)))
         .collect();
-    let tail_edge = lower_spec_tail_edge(&func.tail_edge.expect(&error), context);
+    let tail_edge = lower_spec_tail_edge(&func.tail_edge.as_ref().expect(&error), context);
 
     ir::Funclet {
         kind,

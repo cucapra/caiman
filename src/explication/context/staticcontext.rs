@@ -6,8 +6,8 @@ use crate::ir;
 // These are all getters designed to work with "original" program, before mutations touch things
 // Specifically we want things like lists of funclet names up-front or node names up-front
 
-impl StaticContext {
-    pub fn new(program: expir::Program) -> StaticContext {
+impl<'context> StaticContext<'context> {
+    pub fn new(program: &'context expir::Program) -> StaticContext {
         let spec_explication_data = initialize_declarations(&program);
         StaticContext {
             program,
@@ -63,9 +63,9 @@ impl StaticContext {
     }
 
     pub fn get_funclet(&self, funclet: FuncletId) -> &expir::Funclet {
-        self.program.funclets.get(funclet).expect(&format!(
+        self.program().funclets.get(funclet).expect(&format!(
             "Invalid funclet index {} for funclets {:?}",
-            funclet, &self.program.funclets
+            funclet, &self.program().funclets
         ))
     }
 }

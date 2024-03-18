@@ -218,23 +218,7 @@ fn ordered_map<'a, T>(map: &HashMap<usize, T>) -> Vec<(&usize, &T)> {
     elements
 }
 
-// A function class is just an equivalence class over functions that behave identically for some user-defined definition of identical
-// A schedule can substitute a call to it for an implementation iff that implementation is associated with the function class
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FunctionClass {
-    #[serde(default)]
-    pub name_opt: Option<String>,
-    pub input_types: Box<[TypeId]>,
-    pub output_types: Box<[TypeId]>,
-    // A hint about what funclet the explicator can use to instantiate this class
-    // This doesn't need to exist for caiman to compile if everything is already explicit
-    #[serde(default)]
-    pub default_funclet_id: Option<FuncletId>,
-    // The external functions that implement this function
-    #[serde(default)]
-    pub external_function_ids: BTreeSet<ExternalFunctionId>,
-}
-
+pub type FunctionClass = ir::FunctionClass;
 pub type Pipeline = ir::Pipeline;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

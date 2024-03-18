@@ -7,12 +7,13 @@ use crate::assembly::parser;
 use crate::explication::expir;
 use crate::explication::Hole;
 use crate::ir::ffi;
+use crate::stable_vec::StableVec;
 use crate::{assembly, frontend};
+use paste::paste;
 use std::any::Any;
 use std::collections::{BTreeSet, HashMap};
 
 // for reading GPU stuff
-use crate::stable_vec::StableVec;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
@@ -28,11 +29,8 @@ pub fn undefined<T>(h: Hole<T>) -> T {
 pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
     fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
         b.iter()
-            .map(|x| ffi::TypeId(context.ffi_type_id(x)))
+            .map(|x| context.ffi_type_id(x))
             .collect()
-    }
-    fn type_id(element_type: Box<ast::FFIType>, context: &mut Context) -> ffi::TypeId {
-        ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
     }
     match value {
         ast::FFIType::F32 => ffi::Type::F32,
@@ -50,11 +48,11 @@ pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
             element_type,
             length,
         } => ffi::Type::Array {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
             length,
         },
         ast::FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::Struct {
             fields,
@@ -65,27 +63,27 @@ pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
             fields: box_map(element_types.into_boxed_slice(), context),
         },
         ast::FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::MutRef(element_type) => ffi::Type::MutRef {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
         ast::FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
         ast::FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
     }
 }
@@ -154,11 +152,11 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
     let mut output_types = Vec::new();
 
     for arg in &external.input_args {
-        input_types.push(ffi::TypeId(context.ffi_type_id(&arg.ffi_type)));
+        input_types.push(context.ffi_type_id(&arg.ffi_type));
         input_args.push(arg.name.clone());
     }
     for arg in &external.output_types {
-        output_types.push(ffi::TypeId(context.ffi_type_id(&arg.ffi_type)));
+        output_types.push(context.ffi_type_id(&arg.ffi_type));
         let arg_name = arg.name.clone();
         output_args.push(arg_name);
     }
@@ -254,7 +252,7 @@ fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::Na
     ffi::NativeInterface {
         types,
         external_functions,
-        effects
+        effects,
     }
 }
 
@@ -298,10 +296,70 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<expi
     }
 }
 
-fn ir_non_constant_node(node: &ast::Node, context: &Context) -> expir::Node {
-    // macro
-    todo!()
+macro_rules! lower_element {
+    ($arg:ident [$arg_type:ident] $context:ident) => {
+        $arg.as_ref().map(|v| v.iter().map(|e| lower_element!(e $arg_type $context)).collect())
+    };
+    ($arg:ident Immediate $context:ident) => {
+        // different enough we use a custom function
+        unreachable!()
+    };
+    ($arg:ident Type $context:ident) => {
+        // different enough we use a custom function
+        unreachable!()
+    };
+    ($arg:ident Index $context:ident) => {
+        $arg.clone()
+    };
+    ($arg:ident ExternalFunction $context:ident) => {
+        $arg.as_ref().map(|n| $context.external_funclet_id(n))
+    };
+    ($arg:ident ValueFunction $context:ident) => {
+        $arg.as_ref().map(|n| $context.function_class_id(n) )
+    };
+    ($arg:ident Operation $context:ident) => {
+        $arg.as_ref().map(|n| $context.node_id(n) )
+    };
+    ($arg:ident RemoteOperation $context:ident) => {
+        $arg.as_ref().map(|r| $context.remote_id(r) )
+    };
+    ($arg:ident Place $context:ident) => {
+        $arg.clone()
+    };
+    ($arg:ident Funclet $context:ident) => {
+        $arg.as_ref().map(|n| $context.funclet_id(n) )
+    };
+    ($arg:ident StorageType $context:ident) => {
+        $arg.as_ref().map(|n| match n {
+            ast::TypeId::FFI(ffi) => $context.ffi_type_id(ffi),
+            id => panic!("{:?} must be an FFI type", id)
+        })
+    };
+    ($arg:ident BufferFlags $context:ident) => {
+        $arg.clone()
+    };
 }
+
+macro_rules! lower_node {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        paste! {
+            /*
+             * Lowers by rejecting every hole in the node
+             */
+            pub fn ir_non_constant_node(node : &ast::Node, context: &Context) -> expir::Node {
+                match node {
+                    $(ast::Node::$name { $($arg,)* } => {
+                        expir::Node::$name {
+                            $($arg : lower_element!($arg $arg_type context),)*
+                        }
+                    }),*
+                }
+            }
+        }
+    }
+}
+
+with_operations!(lower_node);
 
 fn ir_node(node: &ast::Node, context: &Context) -> expir::Node {
     match &node {
@@ -368,10 +426,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 value_operation: operation_set.value,
                 timeline_operation: operation_set.timeline,
                 spatial_operation: operation_set.spatial,
-                callee_funclet_id: callee_funclet_id.as_ref().map(|f| {
-                    context
-                        .funclet_id(f)
-                }),
+                callee_funclet_id: callee_funclet_id.as_ref().map(|f| context.funclet_id(f)),
                 callee_arguments: callee_arguments.as_ref().map(|args| {
                     args.iter()
                         .map(|o| o.as_ref().map(|n| context.node_id(n)))
@@ -419,7 +474,7 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 spatial_operation: operation_set.spatial,
                 external_function_id: external_function_id
                     .as_ref()
-                    .map(|id| ffi::ExternalFunctionId(context.external_funclet_id(id))),
+                    .map(|id| context.external_funclet_id(id)),
                 yielded_nodes: yielded_nodes.as_ref().map(|args| {
                     args.iter()
                         .map(|o| o.as_ref().map(|n| context.node_id(n)))
@@ -558,9 +613,7 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> expir::Funclet {
 
     for command in &funclet.commands {
         match command {
-            None => {
-                nodes.push(None)
-            }
+            None => nodes.push(None),
             Some(ast::Command::Node(node)) => {
                 context.location.node_name = node.name.clone();
                 nodes.push(Some(ir_node(&node.node, context)));

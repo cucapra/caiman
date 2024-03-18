@@ -46,14 +46,14 @@ pub struct FuncletOutState {
 }
 
 #[derive(Debug)]
-pub struct StaticContext {
+pub struct StaticContext<'context> {
     // static information we work out before explicating
     // may be updated between explicating individual funclets
 
     // the entire original program, useful for looking things up
     // note that we are constructing a completely fresh program recursively
     // so the original program is not mutated
-    program: expir::Program,
+    program: &'context expir::Program,
 
     // information found about a given spec funclet
     spec_explication_data: HashMap<FuncletId, SpecFuncletData>,

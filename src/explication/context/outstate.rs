@@ -4,6 +4,15 @@ use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
 impl FuncletOutState {
+    pub fn new() -> FuncletOutState {
+        FuncletOutState {
+            allocation_requests: HashMap::new(),
+            to_fill: HashSet::new(),
+            nodes: VecDeque::new(),
+            tail_edge: None,
+        }
+    }
+
     pub fn add_allocation_request(&mut self, typ: StorageTypeId) {
         *self.allocation_requests.entry(typ).or_insert(0) += 1;
     }
@@ -44,7 +53,7 @@ impl FuncletOutState {
         self.to_fill.is_empty()
     }
 
-    pub fn push_node(&mut self, node: ir::Node) {
+    pub fn add_node(&mut self, node: ir::Node) {
         self.nodes.push_front(node);
     }
 

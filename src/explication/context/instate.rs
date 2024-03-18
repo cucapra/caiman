@@ -76,8 +76,8 @@ impl InState {
         self.get_latest_scope_mut().add_explication_hole()
     }
 
-    pub fn get_current_tail_edge<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::TailEdge> {
-        &context.get_funclet(self.get_latest_scope().funclet).tail_edge
+    pub fn get_current_funclet(&self) -> FuncletId {
+        self.get_latest_scope().funclet
     }
 
     pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::Node> {
@@ -86,6 +86,19 @@ impl InState {
             &context.get_funclet(scope.funclet).nodes,
             scope.node.unwrap(),
         )
+    }
+
+    pub fn get_current_tail_edge<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::TailEdge> {
+        &context.get_funclet(self.get_latest_scope().funclet).tail_edge
+    }
+
+    pub fn is_end_of_funclet<'a>(&self, context: &'a StaticContext) -> bool {
+        let scope = self.get_latest_scope();
+        scope.node.unwrap() >= context.get_funclet(scope.funclet).nodes.len()
+    }
+
+    pub fn next_node(&mut self) {
+        self.get_latest_scope_mut().next_node();
     }
 
     // Returns an instantiation if one is available in any scope (most to leexpir recent)

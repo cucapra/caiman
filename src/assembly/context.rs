@@ -273,9 +273,9 @@ impl Context {
         )
     }
 
-    pub fn ffi_type_id(&self, name: &ast::FFIType) -> usize {
+    pub fn ffi_type_id(&self, name: &ast::FFIType) -> crate::rust_wgpu_backend::ffi::TypeId {
         match self.ffi_type_table.get_index(name) {
-            Some(i) => i,
+            Some(i) => crate::rust_wgpu_backend::ffi::TypeId(i),
             None => panic!("Un-indexed FFI type {:?}", name),
         }
     }
@@ -289,7 +289,7 @@ impl Context {
 
     pub fn loc_type_id(&self, typ: &ast::TypeId) -> usize {
         match typ {
-            ast::TypeId::FFI(ft) => self.ffi_type_id(&ft),
+            ast::TypeId::FFI(ft) => self.ffi_type_id(&ft).0,
             ast::TypeId::Local(s) => self.local_type_id(&s),
         }
     }
@@ -307,19 +307,39 @@ impl Context {
         }
     }
 
-    pub fn funclet_id(&self, f: &FuncletId) -> usize {
+    pub fn function_class_id(&self, f: &FunctionClassId) -> expir::FunctionClassId {
+        self.function_classes
+            .get(f)
+            .expect(format!("Unknown function class {:?}", f).as_str())
+    }
+
+    // TODO: Note that the funclet name gets thrown out here, is this a problem?
+    pub fn remote_id(&self, f: &RemoteNodeId) -> expir::Quotient {
+        match &f.node {
+            None => expir::Quotient::None,
+            Some(node) => {
+                let funclet_id = self.meta_lookup(&f.funclet);
+                self.explicit_node_id(&funclet_id, node)
+            }
+        }
+    }
+
+    pub fn funclet_id(&self, f: &FuncletId) -> expir::FuncletId {
         self.funclet_indices
             .get_funclet(&f.0)
             .expect(format!("Unknown funclet {:?}", f).as_str())
     }
 
-    pub fn external_funclet_id(&self, f: &ExternalFunctionId) -> usize {
-        self.funclet_indices
-            .get_funclet(&f.0)
-            .expect(format!("Unknown funclet {:?}", f).as_str())
+    pub fn external_funclet_id(&self, f: &ExternalFunctionId) -> expir::ExternalFunctionId {
+        expir::ExternalFunctionId {
+            0: self
+                .funclet_indices
+                .get_funclet(&f.0)
+                .expect(format!("Unknown funclet {:?}", f).as_str()),
+        }
     }
 
-    pub fn node_id(&self, var: &NodeId) -> usize {
+    pub fn node_id(&self, var: &NodeId) -> expir::NodeId {
         let funclet = &self.location.funclet_name;
         let var_error = format!("Unknown variable name {:?} in funclet {:?}", var, &funclet);
         match self
