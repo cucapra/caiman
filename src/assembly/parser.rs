@@ -547,7 +547,7 @@ impl CaimanAssemblyParser {
             [phi_qualifier, meta_name_hole(funclet_id), name_hole(node_id)] => {
                 Hole::Filled(ast::RemoteNodeId {
                     funclet: funclet_id.opt().map(ast::MetaId).into(),
-                    node: Some(node_id.opt().map(|n| 
+                    node: Some(node_id.opt().map(|n|
                         ast::NodeId(PHI_QUALIFIER.to_owned() + &n))
                     .into())
                 })
@@ -1025,9 +1025,10 @@ impl CaimanAssemblyParser {
                 funclet.commands.insert(
                     index,
                     Hole::Filled(ast::Command::Node(ast::NamedNode {
-                        name: input.name.as_ref().map(|n| 
-                            ast::NodeId(PHI_QUALIFIER.to_owned() + &n.0)
-                        ),
+                        name: input
+                            .name
+                            .as_ref()
+                            .map(|n| ast::NodeId(PHI_QUALIFIER.to_owned() + &n.0)),
                         node: ast::Node::Phi {
                             index: Hole::Filled(index),
                         },

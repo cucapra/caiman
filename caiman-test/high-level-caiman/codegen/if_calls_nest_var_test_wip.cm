@@ -1,0 +1,72 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val base(a: i64) -> i64 {
+    returns 0 if a < 0 else a
+}
+
+fn base_impl(a: i64) -> i64 impls base, time, space {
+    var r;
+    if a < 0 {
+        r = 0;
+    } else {
+        r = a;
+    }
+    r
+}
+
+val one(a: i64, c: bool) -> i64 {
+    returns base(a) if c else base(a * a)
+}
+
+fn one_impl(a: i64, c: bool) -> i64 impls one, time, space {
+    if c {
+        base_impl(a)
+    } else {
+        base_impl(a * a)
+    }
+}
+
+val cond(a: i64, b: i64) -> bool {
+    returns a < b || a >= 2 * b
+}
+
+fn cond_impl(a: i64, b: i64) -> bool impls cond, time, space {
+    a < b || a >= 2 * b
+}
+
+val two(a: i64, b: i64) -> i64 {
+    r :- a * b
+    h :- a + b
+    c :- cond(a, b)
+    returns one(r, c) if c else one(h, c)
+}
+
+fn two_impl(a: i64, b: i64) -> i64 impls two, time, space {
+    let r = a * b;
+    let h = a + b;
+    let c = cond_impl(a, b);
+    var r;
+    if c {
+        r = one_impl(r, c);
+    } else {
+        r = one_impl(h, c);
+    }
+    r
+}
+
+val three(a: i64, b: i64) -> i64 {
+    returns two(a, b) if a == b else two(b, a)
+}
+
+fn three_impl(a: i64, b: i64) -> i64 impls three, time, space {
+    if a == b {
+        two_impl(a, b)
+    } else {
+        two_impl(b, a)
+    }
+}
+
+pipeline main { three_impl }

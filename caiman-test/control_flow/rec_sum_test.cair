@@ -11,17 +11,21 @@ function @main() -> i64;
 function @rec_sum(i64) -> i64;
 
 function @add(i64, i64) -> i64;
-function @lte(i64, i64) -> i64;
+// function @lte(i64, i64) -> i64;
 function @gt(i64, i64) -> i64;
 
+function @loop() -> [];
+
 external-cpu-pure[impl @add] %add(i64, i64) -> i64;
-external-cpu-pure[impl @lte] %lte(i64, i64) -> i64;
+// external-cpu-pure[impl @lte] %lte(i64, i64) -> i64;
 external-cpu-pure[impl @gt] %gt(i64, i64) -> i64;
+external-cpu[impl @loop] %loop() -> [];
+effect<%loop> %eff;
 
 
 // main
 
-value[impl default @main] %main() -> i64 {
+value[impl default @main] %main() -> [%out: i64] {
     %x = constant %ni64 20;
     %y_t = call @rec_sum(%x);
     %y = extract %y_t 0;
@@ -37,25 +41,23 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_head<$time.%e-usable, $time.%e-usable>() ->
-    [%out : $val.%y-usable $space-usable $time.%e-usable %ni64]
+%main_head<$time-usable, $time-usable>() ->
+    [%out : $val.%out-usable $space-usable $time-usable %ni64]
 {
     %x_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_ref;
     %arg = read-ref i64 %x_ref;
 
     %default = default-join;
-    %join = serialized-join %main_ret [] %default;
+    %join = inline-join %main_ret [] %default;
 
-    schedule-call %rec_sum_head[$val.%y_t,
-        $time.%e,
-        $space](%arg) %join;
+    schedule-call %rec_sum_head[$val.%y_t, $time, $space](%arg) %join;
 }
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
-%main_ret<$time.%e-usable, $time.%e-usable>
-    (%y : $val.%y-usable $space-usable $time.%e-usable %ni64) ->
-    [%out : $val.%y-usable $space-usable $time.%e-usable %ni64] 
+%main_ret<$time-usable, $time-usable>
+    (%y : $val.%y-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%y-usable $space-usable $time-usable %ni64] 
 {
 
     return %y;
@@ -64,7 +66,7 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 // rec_sum
 
 
-value[impl default @rec_sum] %rec_sum(%i : %ni64) -> i64 {
+value[impl default @rec_sum] %rec_sum(%i : %ni64) -> [%out: i64] {
     %zero = constant %ni64 0;
     %neg_1 = constant %ni64 -1;
 
@@ -87,9 +89,9 @@ value[impl default @rec_sum] %rec_sum(%i : %ni64) -> i64 {
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_head<$time.%e-usable, $time.%e-usable>
+%rec_sum_head<$time-usable, $time-usable>
     (%arg : $val.%i-usable $space-usable $time-usable %ni64) ->
-    [%out : $val.%result-usable $space-usable $time-usable %ni64] 
+    [%out : $val.%out-usable $space-usable $time-usable %ni64] 
 {
     %zero_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%zero() -> %zero_ref;
@@ -112,15 +114,16 @@ schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
 
     // i <= 0 ? %rec_sum_base : %rec_sum_rec
     // select cond [true, false]
-    schedule-select %cond [%rec_sum_rec, %rec_sum_base] 
-        [$val.%result, $time.%e, $space]
-        (%arg_minus_1) %join;
+    schedule-select %cond [%rec_sum_rec_yield, %rec_sum_base] 
+        [$val.%result, $time, $space]
+        (%arg_minus_1, %arg) %join;
 
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_base<$time.%e-usable, $time.%e-usable>
-    (%arg : $val.%i_minus_1-usable $space-usable $time-usable %ni64) ->
+%rec_sum_base<$time-usable, $time-usable>
+    (%arg_minus_1 : $val.%i_minus_1-usable $space-usable $time-usable %ni64,
+     %arg : phi-$val.%i-usable $space-usable $time-usable %ni64) ->
     [%out : $val.%zero-usable $space-usable $time-usable %ni64] 
 {
     %zero_ref = alloc-temporary local [] i64;
@@ -132,34 +135,54 @@ schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_rec<$time.%e-usable, $time.%e-usable>
-    (%arg : $val.%i_minus_1-usable $space-usable $time-usable %ni64) ->
-    [%out : $val.%r-usable $space-usable $time-usable %ni64] 
+%rec_sum_rec_yield<$time-usable, $time-usable>
+    (%arg_minus_1 : $val.%i_minus_1-usable $space-usable $time-usable %ni64,
+    %arg : phi-$val.%i-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%sum-usable $space-usable $time-usable %ni64] 
 {
     %default = default-join;
-    %join = serialized-join %rec_sum_rec_tail [] %default;
+    %join = serialized-join %rec_sum_rec_head [%arg_minus_1, %arg] %default;
 
-    schedule-call %rec_sum_head[$val.%r_t,
-        $time.%e,
-        $space](%arg) %join;
+    schedule-call-yield %loop[$val, $time, $space]() %join;
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_rec_tail<$time.%e-usable, $time.%e-usable>
-    (%arg : $val.%r-usable $space-usable $time-usable %ni64) ->
-    [%out : $val.%r-usable $space-usable $time-usable %ni64] 
+%rec_sum_rec_head<$time-usable, $time-usable>
+    (%arg_minus_1 : $val.%i_minus_1-usable $space-usable $time-usable %ni64,
+     %i : phi-$val.%i-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%sum-usable $space-usable $time-usable %ni64] 
 {
-    return %arg;
+
+    %default = default-join;
+    %join = serialized-join %rec_sum_rec_tail [%i] %default;
+
+    schedule-call %rec_sum_head[$val.%r_t, $time, $space](%arg_minus_1) %join;
+}
+
+// schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+// %rec_sum_rec_mid<
+
+schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
+%rec_sum_rec_tail<$time-usable, $time-usable>
+    (%i : phi-$val.%i-usable $space-usable $time-usable %ni64,
+     %r : $val.%r-usable $space-usable $time-usable %ni64) ->
+    [%out : $val.%sum-usable $space-usable $time-usable %ni64] 
+{
+
+    %res_ref = alloc-temporary local [] i64;
+    local-do-external %add $val.%sum_t(%i, %r) -> %res_ref;
+    %res = read-ref i64 %res_ref;
+    return %res;
 }
 
 schedule[value $val = %rec_sum, timeline $time = %time, spatial $space = %space]
-%rec_sum_ret<$time.%e-usable, $time.%e-usable>
+%rec_sum_ret<$time-usable, $time-usable>
     (%arg : $val.%result-usable $space-usable $time-usable %ni64) ->
-    [%out : $val.%result-usable $space-usable $time-usable %ni64] 
+    [%out : $val.%out-usable $space-usable $time-usable %ni64] 
 {
     return %arg;
 }
 
 
 
-pipeline "main" = %main_head;
+pipeline "main" = %main_head, effect %eff;

@@ -6,7 +6,7 @@ impl looping_pipeline::CpuFunctions for Callbacks {
         _: &mut dyn caiman_rt::State,
         value: i32,
     ) -> looping_pipeline::outputs::do_thing_on_cpu {
-        return (value + 1,);
+        (value + 1,)
     }
 }
 
