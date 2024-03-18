@@ -13,7 +13,9 @@ use super::explicator_macros::force_lower_node;
 fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
     ir::Tag {
         quot: tag.quot,
-        flow: tag.flow.expect("Unimplemented hole"),
+        flow: tag
+            .flow
+            .expect(&format!("Unimplemented flow hole in tag {:?}", &tag)),
     }
 }
 
@@ -263,23 +265,21 @@ fn explicate_funclet_spec(
     state: &FuncletOutState,
     context: &StaticContext,
 ) -> ir::FuncletSpec {
+    let error = format!("Unimplemented Hole in specification {:?}", spec);
     ir::FuncletSpec {
         funclet_id_opt: spec.funclet_id_opt,
         input_tags: spec
             .input_tags
             .iter()
-            .map(|t| explicate_tag(t.expect("Unimplemented Hole"), context))
+            .map(|t| explicate_tag(t.expect(&error), context))
             .collect(),
         output_tags: spec
             .output_tags
             .iter()
-            .map(|t| explicate_tag(t.expect("Unimplemented Hole"), context))
+            .map(|t| explicate_tag(t.expect(&error), context))
             .collect(),
-        implicit_in_tag: explicate_tag(spec.implicit_in_tag.expect("Unimplemented Hole"), context),
-        implicit_out_tag: explicate_tag(
-            spec.implicit_out_tag.expect("Unimplemented Hole"),
-            context,
-        ),
+        implicit_in_tag: explicate_tag(spec.implicit_in_tag.expect(&error), context),
+        implicit_out_tag: explicate_tag(spec.implicit_out_tag.expect(&error), context),
     }
 }
 
@@ -316,6 +316,7 @@ fn explicate_spec_binding(
 pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -> ir::Funclet {
     let funclet = state.get_current_funclet();
     let current = context.get_funclet(funclet);
+    state.next_node();
     match explicate_node(state, context) {
         None => panic!("No explication solution found for funclet {:?}", funclet),
         Some(mut result) => {

@@ -533,17 +533,17 @@ fn ir_schedule_binding(
     // we want an error to make sure user input isn't being thrown out quietly
     let error_tags = implicit_tags.clone();
     let error_in = format!(
-        "Implicit tag {:?} invalid -- implicit tags must be for the timeline",
+        "Implicit tag {:?} invalid: implicit tags must be for the timeline",
         error_tags.0
     );
     let error_out = format!(
-        "Implicit tag {:?} invalid -- implicit tags must be for the timeline",
+        "Implicit tag {:?} invalid: implicit tags must be for the timeline",
         error_tags.1
     );
-    assert!(!implicit_in_lookup.value.is_none(), error_in);
-    assert!(!implicit_in_lookup.spatial.is_none(), error_in);
-    assert!(!implicit_out_lookup.value.is_none(), error_out);
-    assert!(!implicit_out_lookup.spatial.is_none(), error_out);
+    assert!(implicit_in_lookup.value.is_none(), error_in);
+    assert!(implicit_in_lookup.spatial.is_none(), error_in);
+    assert!(implicit_out_lookup.value.is_none(), error_out);
+    assert!(implicit_out_lookup.spatial.is_none(), error_out);
 
     expir::FuncletSpecBinding::ScheduleExplicit {
         value: expir::FuncletSpec {

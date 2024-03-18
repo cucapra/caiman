@@ -68,8 +68,7 @@ impl InState {
     }
 
     pub fn get_latest_scope_mut(&mut self) -> &mut ScheduleScopeData {
-        todo!()
-        // &mut self.scopes.last_mut().unwrap()
+        self.scopes.last_mut().unwrap()
     }
 
     pub fn add_explication_hole(&mut self, node: NodeId) {

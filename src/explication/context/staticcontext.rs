@@ -65,7 +65,8 @@ impl<'context> StaticContext<'context> {
     pub fn get_funclet(&self, funclet: FuncletId) -> &expir::Funclet {
         self.program().funclets.get(funclet).expect(&format!(
             "Invalid funclet index {} for funclets {:?}",
-            funclet, &self.program().funclets
+            funclet,
+            &self.program().funclets
         ))
     }
 }
@@ -74,10 +75,10 @@ fn initialize_declarations(program: &expir::Program) -> HashMap<FuncletId, SpecF
     let mut result = HashMap::new();
     for (index, funclet) in program.funclets.iter() {
         match &funclet.kind {
-            FuncletKind::Value | FuncletKind::Unknown => {}
-            _ => {
+            ir::FuncletKind::Value | ir::FuncletKind::Spatial | ir::FuncletKind::Timeline => {
                 result = initialize_spec_funclet_info(result, index, funclet);
             }
+            _ => {}
         }
     }
     result
@@ -191,7 +192,7 @@ fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
             vec![space.expect(&error)]
         }
         _ => {
-            unreachable!("Unsupported named specification node type {:?}", &node);
+            panic!("Unsupported named specification node type {:?}", &node);
         }
     };
     dependencies

@@ -50,7 +50,7 @@ impl FuncletOutState {
     }
 
     pub fn has_fills_remaining(&self) -> bool {
-        self.to_fill.is_empty()
+        !self.to_fill.is_empty()
     }
 
     pub fn add_node(&mut self, node: ir::Node) {

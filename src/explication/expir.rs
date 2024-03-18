@@ -103,11 +103,17 @@ with_operations!(make_nodes);
 pub type Quotient = crate::ir::Quotient;
 pub type Flow = crate::ir::Flow;
 #[derive(
-    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default,
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
 pub struct Tag {
     pub quot: Quotient, // What a given value maps to in a specification
     pub flow: Hole<Flow>,     // How this value transforms relative to the specification
+}
+
+impl Default for Tag {
+    fn default() -> Self {
+        Self { quot: Default::default(), flow: Some(crate::ir::Flow::Usable) }
+    }
 }
 
 pub type StaticBufferLayout = crate::ir::StaticBufferLayout;

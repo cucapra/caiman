@@ -46,30 +46,40 @@ impl ScheduleScopeData {
         ScheduleScopeData::new_inner(funclet, HashMap::new(), HashMap::new())
     }
 
-    pub fn new_inner(funclet: FuncletId, 
+    pub fn new_inner(
+        funclet: FuncletId,
         instantiations: HashMap<Location, Vec<(ir::Place, NodeId)>>,
-        allocations: HashMap<OpCode, Vec<NodeId>>) 
-        -> ScheduleScopeData {
-            todo!()
-            // ScheduleScopeData {
-            //     funclet,
-            //     node_index,
-            //     node: None,
-            //     instantiations,
-            //     allocations,
-            //     explication_hole: false,
-            //     spec_functions
-            // }
+        allocations: HashMap<OpCode, Vec<NodeId>>,
+    ) -> ScheduleScopeData {
+        ScheduleScopeData {
+            funclet,
+            node: None,
+            node_index : 0,
+            instantiations,
+            allocations,
+            explication_hole: false,
+            // TODO: update
+            spec_functions: SpecLanguages {
+                value: 0,
+                timeline: 0,
+                spatial: 0,
+            }
         }
+    }
 
     pub fn next_node(&mut self) {
         self.node = match self.node {
             None => Some(0),
-            Some(x) => Some(x + 1)
+            Some(x) => Some(x + 1),
         }
     }
 
-    pub fn add_instantiation(&mut self, schedule_node: NodeId, location: Location, place: expir::Place) {
+    pub fn add_instantiation(
+        &mut self,
+        schedule_node: NodeId,
+        location: Location,
+        place: expir::Place,
+    ) {
         self.instantiations
             .entry(location)
             .or_insert(Vec::new())

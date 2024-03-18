@@ -36,9 +36,9 @@ meta_name_sep = ${ meta_name ~ sep }
 //    ffi_types
 ffi_type_base = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
                       "i16" | "i32" | "i64" | "gpu_buffer_allocator" | "cpu_buffer_allocator" }
-ffi_array_parameters = { "<" ~ ffi_type ~ ("," ~ n)? ~ ">" }
+ffi_array_parameters = { "<" ~ ffi_type ~ "," ~ n ~ ">" }
 ffi_tuple_parameters = { "<" ~ ffi_type ~ ("," ~ ffi_type)* ~ ">" } // must have at least one field
-ffi_parameterized_ref_name = { "const_ref" |
+ffi_parameterized_ref_name = { "erased_length_array" | "const_ref" |
     "mut_ref" | "const_slice" | "mut_slice" | "gpu_buffer_ref" | "gpu_buffer_slice" |
     "cpu_buffer_ref" }
 
@@ -46,8 +46,6 @@ ffi_parameterized_ref = { ffi_parameterized_ref_name ~ "<" ~ ffi_type ~ ">" }
 ffi_parameterized_type = !{ "array" ~ ffi_array_parameters | ffi_parameterized_ref | "tuple" ~ ffi_tuple_parameters }
 ffi_type = { ffi_type_base | ffi_parameterized_type }
 ffi_type_sep = ${ ffi_type ~ sep }
-ffi_type_hole = { ffi_type | hole }
-ffi_type_hole_sep = ${ ffi_type_hole ~ sep }
 
 //   special names
 
@@ -193,9 +191,8 @@ schedule_return = { "[" ~ schedule_args ~ "]" | schedule_typ }
 schedule_header = { schedule_box ~ name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ schedule_args ~ ")" ~ "->" ~ schedule_return }
 
 schedule_command = { schedule_node | tail_edge | node_hole }
-// make its own block to help the parser structure
-schedule_commands = { "{" ~ (schedule_command ~ ";")* ~ "}" }
-schedule_funclet = { schedule_header ~ schedule_commands }
+schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
+
 
 //   tail edges
 
@@ -257,16 +254,15 @@ static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
 static_split_sep = ${ "static-split" ~ sep }
 static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
-// static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
 static_merge_sep = ${ "static-merge" ~ sep }
 static_merge_node = { assign ~ static_merge_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
 
 read_sep = ${ "read-ref" ~ sep }
-read_node = { assign ~ read_sep ~ ffi_type_hole_sep ~ name_hole }
+read_node = { assign ~ read_sep ~ ffi_type_sep ~ name_hole }
 borrow_sep = ${ "borrow-ref" ~ sep }
-borrow_node = { assign ~ borrow_sep ~ ffi_type_hole_sep ~ name_hole }
+borrow_node = { assign ~ borrow_sep ~ type_hole_sep ~ name_hole }
 write_sep = ${ "write-ref" ~ sep }
-write_node = { write_sep ~ ffi_type_hole_sep ~ name_hole ~ "->" ~ name_hole }
+write_node = { write_sep ~ type_hole_sep ~ name_hole ~ "->" ~ name_hole }
 
 local_do_builtin_sep = ${ "local-do-builtin" ~ sep }
 local_do_builtin_node = { local_do_builtin_sep ~ quotient_hole ~ name_call ~ "->" ~ name_box_single }

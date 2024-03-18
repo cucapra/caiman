@@ -59,6 +59,8 @@ fn explicate_program(program: expir::Program) -> ir::Program {
 pub fn explicate(
     definition: crate::frontend::ExplicationDefinition,
 ) -> crate::frontend::Definition {
+    // dbg!(&definition);
+    // todo!();
     match definition {
         crate::frontend::ExplicationDefinition { version, program } => {
             let ir_program = explicate_program(program);
