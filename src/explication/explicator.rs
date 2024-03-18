@@ -1,6 +1,7 @@
 use crate::explication::context::{FuncletOutState, InState, OpCode, StaticContext};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
+use crate::explication::explicator_macros;
 use crate::explication::util::Location;
 use crate::explication::util::*;
 use crate::explication::Hole;
@@ -172,6 +173,44 @@ fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutS
     // }
 }
 
+fn explicate_tail_edge(state: &InState, context: &StaticContext) -> ir::TailEdge {
+    match state.get_current_tail_edge(context) {
+        Some(tail_edge) => match tail_edge {
+            expir::TailEdge::Return { return_values } => todo!(),
+            expir::TailEdge::Jump { join, arguments } => todo!(),
+            expir::TailEdge::ScheduleCall {
+                value_operation,
+                timeline_operation,
+                spatial_operation,
+                callee_funclet_id,
+                callee_arguments,
+                continuation_join,
+            } => todo!(),
+            expir::TailEdge::ScheduleSelect {
+                value_operation,
+                timeline_operation,
+                spatial_operation,
+                condition,
+                callee_funclet_ids,
+                callee_arguments,
+                continuation_join,
+            } => todo!(),
+            expir::TailEdge::ScheduleCallYield {
+                value_operation,
+                timeline_operation,
+                spatial_operation,
+                external_function_id,
+                yielded_nodes,
+                continuation_join,
+            } => todo!(),
+            expir::TailEdge::DebugHole { inputs } => todo!(),
+        },
+        None => {
+            todo!()
+        }
+    }
+}
+
 fn explicate_funclet_spec(
     spec: &expir::FuncletSpec,
     state: &FuncletOutState,
@@ -199,7 +238,7 @@ fn explicate_funclet_spec(
 
 fn explicate_spec_binding(
     funclet: FuncletId,
-    state: &FuncletOutState,
+    state: Option<&FuncletOutState>,
     context: &StaticContext,
 ) -> ir::FuncletSpecBinding {
     let current = context.get_funclet(funclet);
@@ -220,9 +259,9 @@ fn explicate_spec_binding(
             spatial,
             timeline,
         } => ir::FuncletSpecBinding::ScheduleExplicit {
-            value: explicate_funclet_spec(value, state, context),
-            spatial: explicate_funclet_spec(spatial, state, context),
-            timeline: explicate_funclet_spec(timeline, state, context),
+            value: explicate_funclet_spec(value, state.unwrap(), context),
+            spatial: explicate_funclet_spec(spatial, state.unwrap(), context),
+            timeline: explicate_funclet_spec(timeline, state.unwrap(), context),
         },
     }
 }
@@ -238,7 +277,7 @@ pub fn explicate_schedule_funclet(
         None => panic!("No explication solution found for funclet {:?}", funclet),
         Some(mut result) => {
             assert!(!result.has_fills_remaining());
-            let spec_binding = explicate_spec_binding(funclet, &result, context);
+            let spec_binding = explicate_spec_binding(funclet, Some(&result), context);
             ir::Funclet {
                 kind: current.kind.clone(),
                 spec_binding,
@@ -251,25 +290,58 @@ pub fn explicate_schedule_funclet(
     }
 }
 
-macro_rules! generate_satisfiers {
-    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
-        paste! {
-            fn satisfy_explication_request(current: ast::Node, requested: &ast::Node) -> ast::Node {
-                match (current, requested) {
-                    $((ast::Node::$name { $($arg : [<$arg _one>],)* },
-                    ast::Node::$name { $($arg : [<$arg _two>],)* }) => {
-                        $(
-                            let $arg = satisfy_argument!([<$arg _one>] [<$arg _two>] $arg_type);
-                        )*
-                        ast::Node::$name { $($arg,)* }
-                    })*
-                    (current, _) => unreachable!("Trying to request {:?} from {:?}", requested, current)
-                }
-            }
+/*
+ * Forcibly lowers a tail edge, specifically used for spec functions
+ */
+fn lower_spec_tail_edge(tail_edge: &expir::TailEdge, context: &StaticContext) -> ir::TailEdge {
+    let error = format!("Tail edge {:?} cannot have holes in it", tail_edge);
+    match tail_edge {
+        expir::TailEdge::Return { return_values } => ir::TailEdge::Return {
+            return_values: return_values
+                .as_ref()
+                .expect(&error)
+                .iter()
+                .map(|v| v.expect(&error))
+                .collect(),
+        },
+        expir::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
+            join: join.as_ref().expect(&error).clone(),
+            arguments: arguments
+                .as_ref()
+                .expect(&error)
+                .iter()
+                .map(|v| v.expect(&error))
+                .collect(),
+        },
+        expir::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
+            inputs: inputs.clone(),
+        },
+        edge => {
+            panic!("Tail edge {:?} not allowed in spec function", &edge)
         }
-    };
+    }
 }
 
 fn lower_spec_funclet(funclet: FuncletId, context: &StaticContext) -> ir::Funclet {
-    todo!()
+    let func = context.get_funclet(funclet);
+    let kind = func.kind.clone();
+    let spec_binding = explicate_spec_binding(funclet, None, context);
+    let input_types = func.input_types.clone();
+    let output_types = func.output_types.clone();
+    let error = format!("Cannot have a hole in spec funclet {:?}", &funclet);
+    let nodes = func
+        .nodes
+        .iter()
+        .map(|n| explicator_macros::force_lower_node(&n.expect(&error)))
+        .collect();
+    let tail_edge = lower_spec_tail_edge(&func.tail_edge.expect(&error), context);
+
+    ir::Funclet {
+        kind,
+        spec_binding,
+        input_types,
+        output_types,
+        nodes,
+        tail_edge,
+    }
 }

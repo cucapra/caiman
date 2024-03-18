@@ -76,6 +76,10 @@ impl InState {
         self.get_latest_scope_mut().add_explication_hole()
     }
 
+    pub fn get_current_tail_edge<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::TailEdge> {
+        &context.get_funclet(self.get_latest_scope().funclet).tail_edge
+    }
+
     pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::Node> {
         let scope = self.get_latest_scope();
         get_expect_box(

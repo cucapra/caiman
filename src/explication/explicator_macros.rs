@@ -66,10 +66,13 @@ macro_rules! lower_element {
     }
 }
 
-macro_rules! lower_spec_node {
+macro_rules! force_lower_node {
     ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
         paste! {
-            fn lower_spec_node(node : &expir::Node) -> ir::Node {
+            /*
+             * Lowers by rejecting every hole in the node
+             */
+            pub fn force_lower_node(node : &expir::Node) -> ir::Node {
                 let error = format!("Hole not allowed in {:?}", node);
                 match node {
                     $(expir::Node::$name { $($arg,)* } => {
@@ -83,4 +86,4 @@ macro_rules! lower_spec_node {
     };
 }
 
-with_operations!(lower_spec_node);
+with_operations!(force_lower_node);
