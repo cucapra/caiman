@@ -15,12 +15,8 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-<<<<<<< HEAD
-use caiman::assembly::ast::{self as asm, RemoteNodeId};
 use caiman::explication;
-=======
 use caiman::assembly::ast::{self as asm};
->>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
 
 use self::{
     analysis::{

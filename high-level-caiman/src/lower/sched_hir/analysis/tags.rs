@@ -21,112 +21,6 @@ const fn none_tag(spec_type: SpecType, flow: Flow) -> Tag {
     }
 }
 
-<<<<<<< HEAD
-impl From<&mut TripleTag> for TagInfo {
-    fn from(t: &mut TripleTag) -> Self {
-        From::from(&*t)
-    }
-}
-
-impl From<TripleTag> for TagInfo {
-    fn from(t: TripleTag) -> Self {
-        From::from(&t)
-    }
-}
-
-/// Creates a tag with a none quotient for the given spec and flow
-fn none_tag(spec_name: &asm::MetaId, flow: ir::Flow) -> asm::Tag {
-    asm::Tag {
-        quot: Some(asm::RemoteNodeId {
-            funclet: spec_name.clone(),
-            node: None,
-        }),
-        flow: Some(flow),
-    }
-}
-
-impl TagInfo {
-    /// Overwrites all of this type info with the tags from `other`. If
-    /// `other` does not specify a tag, the tag will NOT be updated.
-    pub fn update(&mut self, other: &TripleTag) {
-        // TODO: re-evaluate this approach
-        if let Some(value) = &other.value {
-            self.value = Some(tag_to_tag(value));
-        }
-        if let Some(spatial) = &other.spatial {
-            self.spatial = Some(tag_to_tag(spatial));
-        }
-        if let Some(timeline) = &other.timeline {
-            self.timeline = Some(tag_to_tag(timeline));
-        }
-    }
-
-    pub fn update_info(&mut self, other: Self) {
-        if let Some(value) = other.value {
-            self.value = Some(value);
-        }
-        if let Some(spatial) = other.spatial {
-            self.spatial = Some(spatial);
-        }
-        if let Some(timeline) = other.timeline {
-            self.timeline = Some(timeline);
-        }
-    }
-
-    /// Returns the tag vector for this type. Any unspecified tags will be
-    /// assumed to be `none()-usable` except for references, which will be
-    /// `none()-save` in the spatial dimension
-    pub fn tags_vec_default(self, dtype: &DataType) -> Vec<asm::Tag> {
-        vec![
-            self.value
-                .unwrap_or_else(|| none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable)),
-            self.spatial.unwrap_or_else(|| {
-                none_tag(
-                    &MetaId(META_SPATIAL.to_string()),
-                    match dtype {
-                        DataType::Ref(_) => ir::Flow::Saved,
-                        _ => ir::Flow::Usable,
-                    },
-                )
-            }),
-            self.timeline
-                .unwrap_or_else(|| none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable)),
-        ]
-    }
-
-    /// Returns the indexed tag vector for this type. Any unspecified tags will be
-    /// assumed to be `none()-usable`
-    pub fn tag_info_default(self, dtype: &DataType) -> Self {
-        Self {
-            value: self
-                .value
-                .or_else(|| Some(none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable))),
-            spatial: self.spatial.or_else(|| {
-                Some(none_tag(
-                    &MetaId(META_SPATIAL.to_string()),
-                    match dtype {
-                        DataType::Ref(_) => ir::Flow::Saved,
-                        _ => ir::Flow::Usable,
-                    },
-                ))
-            }),
-            timeline: self
-                .timeline
-                .or_else(|| Some(none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable))),
-            specs: self.specs,
-        }
-    }
-
-    /// Returns the default tag for the specified specifcation type.
-    /// The default tag is `none()-usable`
-    pub fn default_tag(&self, spec_type: SpecType) -> asm::Tag {
-        match spec_type {
-            SpecType::Value => none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Usable),
-            SpecType::Spatial => none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Usable),
-            SpecType::Timeline => none_tag(&MetaId(META_TIMELINE.to_string()), ir::Flow::Usable),
-        }
-    }
-=======
 /// Overrides the unknown information in `tag` with `none()-usable` unless
 /// the specified `dtype` is a reference. Then overrrides the spatial information
 /// with `none()-save`
@@ -144,7 +38,6 @@ fn override_none_usable(mut tag: TripleTag, dtype: &DataType) -> TripleTag {
     tag.value
         .override_unknown_info(none_tag(SpecType::Value, Flow::Usable));
     tag
->>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
 }
 
 /// Tag analysis for determining tags
@@ -190,12 +83,6 @@ impl TagAnalysis {
                 // TODO: the flow itself should be able to be a hole
                 // the the future, also assume that it's save if the flow is not specified
                 // but the quotient is
-<<<<<<< HEAD
-                if tg.spatial.is_none() {
-                    tg.spatial = Some(none_tag(&MetaId(META_SPATIAL.to_string()), ir::Flow::Saved));
-                } else if tg.spatial.as_ref().unwrap().flow != Some(ir::Flow::Saved) {
-                    panic!("Spatial tags for references must be save");
-=======
                 tg.spatial
                     .override_unknown_info(none_tag(SpecType::Spatial, Flow::Save));
                 if let Some(flow) = &tg.spatial.flow {
@@ -203,7 +90,6 @@ impl TagAnalysis {
                         *flow == Flow::Save,
                         "Spatial tags for references must be save"
                     );
->>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
                 }
             }
             let mut in_tg = override_none_usable(tg, &data_types[arg_name]);
@@ -253,15 +139,7 @@ impl TagAnalysis {
             } => {
                 let mut info = lhs_tag.clone();
                 if rhs.is_none() {
-<<<<<<< HEAD
-                    if let Some(val) = info.value.as_mut() {
-                        val.flow = Some(ir::Flow::Dead);
-                    } else {
-                        info.value = Some(none_tag(&MetaId(META_VALUE.to_string()), ir::Flow::Dead));
-                    }
-=======
                     info.value = none_tag(SpecType::Value, Flow::Dead);
->>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
                 } else if let Some(SchedTerm::Var { name, .. }) = rhs {
                     // Taken from RefStore
                     if let Some(rhs_typ) = self.tags.get(name).cloned() {

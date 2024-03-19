@@ -146,11 +146,7 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                 let pipeline = asm::Pipeline {
                     name,
                     funclet: asm::FuncletId(entry),
-<<<<<<< HEAD
-                    effect: None,
-=======
                     effect: Some(asm::EffectId(String::from("_loop_eff"))),
->>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
                 };
                 asm.declarations.push(asm::Declaration::Pipeline(pipeline));
             }

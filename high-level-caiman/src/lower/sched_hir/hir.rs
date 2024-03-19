@@ -4,12 +4,8 @@ use std::collections::{BTreeSet, HashMap};
 use crate::{
     enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{ArgsOrEnc, Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
 };
-<<<<<<< HEAD
-use caiman::assembly::ast::{self as asm};
-=======
 use caiman::assembly::ast as asm;
-pub use caiman::assembly::ast::Hole;
->>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
+pub use caiman::explication::Hole;
 
 use crate::{
     error::Info,
