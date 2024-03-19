@@ -13,6 +13,13 @@ use std::collections::{HashMap, HashSet};
 // Utility stuff
 pub fn reject_hole<T>(h: Hole<T>) -> T {
     match h {
+        Hole::Filled(v) => v,
+        Hole::Empty => unreachable!("Unimplemented Hole"),
+    }
+}
+
+pub fn reject_opt<T>(h: Option<T>) -> T {
+    match h {
         Some(v) => v,
         None => unreachable!("Unimplemented Hole"),
     }
@@ -138,8 +145,8 @@ impl FuncletIndices {
 
     pub fn require_funclet(&self, name: &String) -> usize {
         match self.get_funclet(name) {
-            Some(f) => f,
-            None => panic!("Unknown funclet name {}", name),
+            Hole::Filled(f) => f,
+            Hole::Empty => panic!("Unknown funclet name {}", name),
         }
     }
 }
@@ -202,15 +209,7 @@ impl Context {
                     let mut node_id = 0; // used for skipping tail edges
                     for command in f.commands.iter() {
                         match command {
-                            // ignore phi nodes cause they get handled by the header above
-                            // really they shouldn't be in here I suppose
-                            Some(ast::Command::Node(ast::NamedNode {
-                                node: ast::Node::Phi { index },
-                                name,
-                            })) => {
-                                node_id += 1;
-                            }
-                            Some(ast::Command::Node(ast::NamedNode { node, name })) => {
+                            Hole::Filled(ast::Command::Node(ast::NamedNode { node, name })) => {
                                 // a bit sketchy, but if we only correct this here, we should be ok
                                 // basically we never rebuild the context
                                 // and these names only matter for this context anyway
@@ -362,9 +361,9 @@ impl Context {
     // note that this will return holes for any missing result
     pub fn tag_lookup(&self, operations: &Vec<Hole<ast::Tag>>) -> TagSet {
         let mut result = TagSet {
-            value: None,
-            timeline: None,
-            spatial: None,
+            value: Hole::Empty,
+            timeline: Hole::Empty,
+            spatial: Hole::Empty,
         };
         let error = "Holes in operational lists unsupported";
         for operation in operations {
@@ -377,9 +376,9 @@ impl Context {
                     .node
                     .as_ref()
                     .cloned()
-                    .map(|n| n.unwrap_or_else(|| panic!(error))),
+                    .map(|n| n.opt().unwrap_or_else(|| panic!(error))),
             );
-            let tag = Some(expir::Tag {
+            let tag = Hole::Filled(expir::Tag {
                 quot,
                 flow: unwrapped.flow.clone(),
             });
@@ -388,7 +387,7 @@ impl Context {
                     None => {
                         result.value = tag;
                     }
-                    Some(old) => {
+                    Hole::Filled(old) => {
                         panic!(
                             "Duplicate definitions using value: {:?} and {:?}",
                             old, quot
@@ -399,7 +398,7 @@ impl Context {
                     None => {
                         result.timeline = tag;
                     }
-                    Some(old) => {
+                    Hole::Filled(old) => {
                         panic!(
                             "Duplicate definitions using timeline: {:?} and {:?}",
                             old, quot
@@ -410,7 +409,7 @@ impl Context {
                     None => {
                         result.spatial = tag;
                     }
-                    Some(old) => {
+                    Hole::Filled(old) => {
                         panic!(
                             "Duplicate definitions using spatial: {:?} and {:?}",
                             old, quot

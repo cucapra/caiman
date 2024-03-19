@@ -4,7 +4,7 @@ tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
 
-val main() -> i64 {
+val main() -> zz: i64 {
     pass :- 10
 
     b :- true
@@ -26,12 +26,12 @@ val main() -> i64 {
     returns z
 }
 
-fn foo() -> i64 @ node(main.z)-usable 
+fn foo() -> i64 @ node(val.zz)-usable 
     impls main, time, space
 {
     let d = false;
     let pass = 10;
-    if @ node(main.z) d {
+    if @ node(val.z) d {
         let b = true;
         if b {
             let one = 1;

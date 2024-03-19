@@ -88,7 +88,7 @@ struct RefPropagation {
 impl Fact for RefPropagation {
     fn meet(mut self, other: &Self) -> Self {
         for (k, v) in &other.aliases {
-            assert!(!self.aliases.contains_key(k));
+            assert!(!self.aliases.contains_key(k) || self.aliases[k] == *v);
             self.aliases.insert(k.clone(), v.clone());
         }
         self

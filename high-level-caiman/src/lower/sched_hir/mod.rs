@@ -10,32 +10,30 @@ use std::{
 pub use hir::*;
 
 use crate::{
-    lower::data_type_to_local_type,
+    lower::{data_type_to_local_type, IN_STEM},
     normalize::original_name,
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
+<<<<<<< HEAD
 use caiman::assembly::ast::{self as asm, RemoteNodeId};
 use caiman::explication;
+=======
+use caiman::assembly::ast::{self as asm};
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
 
 use self::{
     analysis::{
         analyze, deduce_val_quots, deref_transform_pass, op_transform_pass, transform_out_ssa,
         transform_to_ssa, InOutFacts, LiveVars, TagAnalysis,
     },
-    cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID},
+    cfg::{BasicBlock, Cfg, Edge, FINAL_BLOCK_ID, START_BLOCK_ID},
 };
-
-pub use analysis::TagInfo;
 mod analysis;
 #[cfg(test)]
 mod test;
 
 pub use analysis::RET_VAR;
-
-pub const META_VALUE : &str = "_VALUE";
-pub const META_TIMELINE : &str = "_TIMELINE";
-pub const META_SPATIAL : &str = "_SPATIAL";
 
 /// Scheduling funclet specs
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -95,10 +93,10 @@ impl<'a> Funclet<'a> {
                     .map(|id| asm::FuncletId(self.parent.funclet_name(id)));
                 let mut res = vec![];
                 if let Some(true_block) = e.next() {
-                    res.push(Some(true_block));
+                    res.push(Hole::Filled(true_block));
                 }
                 if let Some(false_block) = e.next() {
-                    res.push(Some(false_block));
+                    res.push(Hole::Filled(false_block));
                 }
                 assert_eq!(res.len(), 2);
                 res
@@ -107,13 +105,14 @@ impl<'a> Funclet<'a> {
             | Terminator::Return { .. }
             | Terminator::Next(_)
             | Terminator::Call(..)
-            | Terminator::CaptureCall { .. } => {
+            | Terminator::CaptureCall { .. }
+            | Terminator::Yield(_) => {
                 let e = self
                     .parent
                     .cfg
                     .successors(self.block.id)
                     .into_iter()
-                    .map(|id| Some(asm::FuncletId(self.parent.funclet_name(id))));
+                    .map(|id| Hole::Filled(asm::FuncletId(self.parent.funclet_name(id))));
                 let res: Vec<_> = e.collect();
                 assert!(res.len() <= 1);
                 res
@@ -129,15 +128,24 @@ impl<'a> Funclet<'a> {
     /// The returned vector of strings do not contain duplicates and each part of the
     /// result (the captures and non-captures) is sorted alphabetically.
     fn input_vars(&self) -> Vec<String> {
-        let preds = self.parent.cfg.predecessors(self.id());
-        self.parent.exiting_vars(&preds)
+        if self.id() == START_BLOCK_ID {
+            self.parent
+                .finfo
+                .input
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect()
+        } else {
+            let preds = self.parent.cfg.predecessors(self.id());
+            self.parent.exiting_vars(&preds)
+        }
     }
 
     /// Gets the output arguments of this funclet based on the live out variables
     /// of this block. The returned vector of strings do not contain duplicates and
     /// contains captures **and** non-captures. The entire result is sorted
     #[allow(clippy::option_if_let_else)]
-    fn output_vars(&self) -> Vec<(String, TagInfo)> {
+    fn output_vars(&self) -> Vec<(String, TripleTag)> {
         // Schedule call and select occurs "before" funclet ends.
         // Their returns (return of continuation)
         // must match the returns of the funclet.
@@ -149,16 +157,19 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| {
+                .map(|(idx, _)| {
                     let s = format!("{RET_VAR}{idx}");
-                    let dt = self.parent.data_types.get(&s).unwrap();
-                    (s, TagInfo::from(out).tag_info_default(dt))
+                    let t = self.get_out_tag(&s).unwrap().clone();
+                    (s, t)
                 })
                 .collect();
         }
 
         match self.block.terminator {
-            Terminator::Call(..) | Terminator::CaptureCall { .. } | Terminator::Select { .. } => {
+            Terminator::Call(..)
+            | Terminator::CaptureCall { .. }
+            | Terminator::Select { .. }
+            | Terminator::Yield(_) => {
                 let continuation = self.block.ret_block.unwrap();
                 self.parent.get_funclet(continuation).output_vars()
             }
@@ -202,10 +213,13 @@ impl<'a> Funclet<'a> {
                 .finfo
                 .input
                 .iter()
-                .map(|(name, annot)| asm::FuncletArgument {
+                .map(|(name, _)| asm::FuncletArgument {
                     name: Some(asm::NodeId(name.clone())),
                     typ: data_type_to_local_type(self.get_dtype(name).unwrap()),
-                    tags: TagInfo::from(annot).tags_vec_default(&self.parent.data_types[name]),
+                    tags: self
+                        .get_input_tag(&format!("{IN_STEM}{name}"))
+                        .unwrap()
+                        .tags_vec(),
                 })
                 .collect()
         } else if self.id() == FINAL_BLOCK_ID {
@@ -216,12 +230,12 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| {
+                .map(|(idx, _)| {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
-                        name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
+                        tags: self.get_input_tag(&name).unwrap().tags_vec(),
+                        name: Some(asm::NodeId(name)),
                     }
                 })
                 .collect()
@@ -244,14 +258,14 @@ impl<'a> Funclet<'a> {
                                 self.block.src_loc
                             )
                         })
-                        .tags_vec_default(&self.parent.data_types[var]),
+                        .tags_vec(),
                 })
                 .collect()
         }
     }
 
     /// Gets the input tag of the specified variable, handling input overrides
-    fn get_input_tag(&self, var: &str) -> Option<TagInfo> {
+    fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
         let ovr = self
             .parent
             .type_info
@@ -267,9 +281,13 @@ impl<'a> Funclet<'a> {
             ovr,
         ) {
             (orig, None) => orig,
-            (None, Some(ovr)) => Some(ovr),
+            (None, Some(ovr)) => {
+                // for auto generated sequence-ifs, we handle this by creating
+                // an in annotation for the variable
+                Some(ovr)
+            }
             (Some(mut orig), Some(ovr)) => {
-                orig.update_info(ovr);
+                orig.set_specified_info(ovr);
                 Some(orig.clone())
             }
         }
@@ -283,12 +301,12 @@ impl<'a> Funclet<'a> {
                 .output
                 .iter()
                 .enumerate()
-                .map(|(idx, out)| {
+                .map(|(idx, _)| {
                     let name = format!("{RET_VAR}{idx}");
                     asm::FuncletArgument {
-                        name: Some(asm::NodeId(name.clone())),
                         typ: data_type_to_local_type(self.get_dtype(&name).unwrap()),
-                        tags: TagInfo::from(out).tags_vec_default(&self.parent.data_types[&name]),
+                        tags: self.get_out_tag(&name).unwrap().tags_vec(),
+                        name: Some(asm::NodeId(name)),
                     }
                 })
                 .collect()
@@ -310,7 +328,7 @@ impl<'a> Funclet<'a> {
                             )
                         })
                         .clone(),
-                    tags: tag.tags_vec_default(&self.parent.data_types[&var]),
+                    tags: tag.tags_vec(),
                 })
                 .collect()
         }
@@ -325,7 +343,7 @@ impl<'a> Funclet<'a> {
             .iter()
             .cloned()
             .map(asm::NodeId)
-            .map(Some)
+            .map(Hole::Filled)
             .collect()
     }
 
@@ -379,7 +397,7 @@ impl<'a> Funclet<'a> {
 
     /// Gets the tag of the specified variable at the end of the funclet
     #[inline]
-    pub fn get_out_tag(&self, var: &str) -> Option<&TagInfo> {
+    pub fn get_out_tag(&self, var: &str) -> Option<&TripleTag> {
         self.parent.type_info.get_out_fact(self.id()).get_tag(var)
     }
 
@@ -392,9 +410,10 @@ impl<'a> Funclet<'a> {
     }
 
     /// Returns true if the specified tag is a literal node in the value specification
-    pub fn is_literal_value(&self, remote: &RemoteNodeId) -> bool {
-        remote.node.as_ref().map_or(false, |n| {
+    pub fn is_literal_value(&self, t: &asm::RemoteNodeId) -> bool {
+        t.node.as_ref().map_or(false, |n| {
             n.as_ref()
+                .opt()
                 .map_or(false, |r| self.parent.literal_value_classes.contains(&r.0))
         })
     }
@@ -460,6 +479,20 @@ impl Funclets {
                     call,
                     captures,
                 };
+            } else if let Terminator::Return {
+                dests, passthrough, ..
+            } = &mut bb.terminator
+            {
+                let live_out = live_vars.get_out_fact(*id).live_set();
+                for v in live_out {
+                    if !dests.iter().any(|(d, _)| d == v) {
+                        passthrough.push(v.clone());
+                    }
+                }
+            } else if let Terminator::Yield(captures) = &mut bb.terminator {
+                let lives = live_vars.get_out_fact(*id).live_set();
+                *captures = lives.iter().cloned().collect();
+                captured_out.insert(*id, lives.clone());
             }
         }
         captured_out
@@ -468,7 +501,7 @@ impl Funclets {
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
-        let mut cfg = Cfg::new(f.statements, &f.output, specs);
+        let mut cfg = Cfg::new(f.statements, &f.output);
         let (mut types, mut data_types, variables) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
@@ -481,13 +514,9 @@ impl Funclets {
         let mut hir_inputs: Vec<_> = f
             .input
             .iter()
-            .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ, &specs_rc)))
+            .map(|(name, typ)| (name.clone(), TripleTag::from_fulltype_opt(typ)))
             .collect();
-        let mut hir_outputs: Vec<_> = f
-            .output
-            .iter()
-            .map(|typ| TripleTag::from_fulltype(typ, &specs_rc))
-            .collect();
+        let mut hir_outputs: Vec<_> = f.output.iter().map(TripleTag::from_fulltype).collect();
 
         deduce_val_quots(
             &mut hir_inputs,
@@ -495,7 +524,6 @@ impl Funclets {
             &mut cfg,
             &ctx.specs[&specs.value.0],
             ctx,
-            &specs_rc,
         )
         .unwrap();
         cfg = transform_out_ssa(cfg);
@@ -625,12 +653,6 @@ impl Funclets {
             .filter(|v| !captures.contains(*v) && !term_dests.contains(*v))
             .cloned()
             .collect();
-        let _debug: Vec<_> = returns.iter().collect();
-        assert!(
-            term_dests.is_empty() && !returns.is_empty()
-                || returns.is_empty() && !term_dests.is_empty()
-                || returns.is_empty() && term_dests.is_empty()
-        );
         captures
             .into_iter()
             .chain(term_dests.into_iter())

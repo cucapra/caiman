@@ -8,7 +8,7 @@ use crate::{
     lower::BOOL_FFI_TYPE,
     parse::ast::{ClassMembers, DataType, TopLevel},
 };
-use caiman::assembly::ast as asm;
+use caiman::assembly::ast::{self as asm};
 use caiman::ir;
 
 use super::sched::{collect_sched_names, collect_schedule};
@@ -75,6 +75,32 @@ fn gen_type_decls(_tl: &[TopLevel]) -> Vec<asm::Declaration> {
                 buffer_flags: LOCAL_TEMP_FLAGS,
             },
         })),
+    ]
+}
+
+fn get_other_decls() -> Vec<asm::Declaration> {
+    vec![
+        asm::Declaration::FunctionClass(asm::FunctionClass {
+            name: asm::FunctionClassId(String::from("_loop")),
+            input_types: vec![],
+            output_types: vec![],
+        }),
+        asm::Declaration::ExternalFunction(asm::ExternalFunction {
+            kind: asm::ExternalFunctionKind::CPUEffect,
+            value_function_binding: asm::FunctionClassBinding {
+                default: false,
+                function_class: asm::FunctionClassId(String::from("_loop")),
+            },
+            name: String::from("_loop_impl"),
+            input_args: vec![],
+            output_types: vec![],
+        }),
+        asm::Declaration::Effect(asm::EffectDeclaration {
+            name: asm::EffectId(String::from("_loop_eff")),
+            effect: asm::Effect::FullyConnected {
+                effectful_function_ids: vec![asm::ExternalFunctionId(String::from("_loop_impl"))],
+            },
+        }),
     ]
 }
 
@@ -311,7 +337,16 @@ fn collect_class_signatures(
             } => {
                 let sig = NamedSignature {
                     input: input.clone(),
-                    output: output.iter().map(|x| x.1.clone()).collect::<Vec<_>>(),
+                    output: output
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, (name, typ))| {
+                            (
+                                name.clone().unwrap_or_else(|| format!("_out{idx}")),
+                                typ.clone(),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
                 };
                 if let Some(member_sig) = &member_sig {
                     if !sig_match(member_sig, &sig) {
@@ -375,7 +410,7 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
                         SpecType::Spatial,
                         NamedSignature {
                             input: vec![(String::from("bs"), DataType::BufferSpace)],
-                            output: vec![DataType::BufferSpace],
+                            output: vec![(String::from("_out0"), DataType::BufferSpace)],
                         },
                         *info,
                         None,
@@ -389,7 +424,7 @@ fn collect_type_signatures(tl: &[TopLevel], mut ctx: Context) -> Result<Context,
                         SpecType::Timeline,
                         NamedSignature {
                             input: vec![(String::from("e"), DataType::Event)],
-                            output: vec![DataType::Event],
+                            output: vec![(String::from("_out0"), DataType::Event)],
                         },
                         *info,
                         None,
@@ -485,7 +520,10 @@ impl Context {
     pub fn new(tl: &[TopLevel]) -> Result<Self, LocalError> {
         let ctx = Self {
             specs: HashMap::new(),
-            type_decls: gen_type_decls(tl).into_iter().collect(),
+            type_decls: gen_type_decls(tl)
+                .into_iter()
+                .chain(get_other_decls())
+                .collect(),
             signatures: HashMap::new(),
             scheds: HashMap::new(),
         };

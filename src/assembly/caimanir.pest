@@ -62,6 +62,7 @@ buffer_flag = @{ "map_read" | "map_write" | "copy_src" | "copy_dst" | "storage" 
 buffer_flags_elements = !{ (buffer_flag ~ ("," ~ buffer_flag)*)? }
 buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
+phi_qualifier = { "phi-" }
 quotient = !{ meta_name ~ ("." ~ name)? }
 quotient_hole = !{ meta_name ~ ("." ~ name_hole)? | hole }
 flow = { "dead" | "usable" | "saved" | "need" | "?" }

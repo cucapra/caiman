@@ -20,7 +20,7 @@ fn main_func() -> i64 impls main, time, space
     one_func(&y)
 }
 
-fn one_func(a: &i64 @ [input(one.a)-usable, none(space)-saved, none(time)-usable]) -> i64 
+fn one_func(a: &i64 @ [input(val.a)-usable, none(sptl)-saved, none(tmln)-usable]) -> i64 
     impls one, time, space
 {
     var r = *a;

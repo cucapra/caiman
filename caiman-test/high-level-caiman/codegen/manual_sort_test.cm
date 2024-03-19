@@ -1,0 +1,145 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val sort2(a: i64, b: i64) -> (i64, i64) {
+    one :- a if a <= b else b
+    two :- b if a <= b else a
+    returns (one, two)
+}
+
+fn sort2_impl(a: i64, b: i64) -> (i64, i64) impls sort2, time, space {
+    var a2 = a;
+    let a3 = &a2;
+    var b2 = b;
+    let b3 = &b2;
+    let one = if a <= b { *a3 } else { *b3 };
+    let two = if a <= b { *b3 } else { *a3 };
+    (one, two)
+}
+
+val merge3(r: i64, a: i64, b: i64) -> (i64, i64, i64) {
+    one :- r if r <= a else a
+
+    rem :- a if r <= a else r
+
+    two, three :- sort2(rem, b)
+
+    returns (one, two, three)
+}
+
+fn merge3_impl(r_: i64, a_: i64, b: i64) -> (i64, i64, i64) 
+    impls merge3, space, time
+{
+    var rr = r_;
+    var aa = a_;
+    let r = &rr;
+    let a = &aa;
+    
+    let rem = if *r <= *a { *a } else { *r };
+    let one = if *r <= *a { *r } else { *a };
+    let two, three = sort2_impl(rem, b);
+    (one, two, three)
+}
+
+
+val sort4(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64) {
+    x, y :- sort2(a, b)
+    z, w :- sort2(c, d)
+    one :- x if x <= z else z
+
+    rem :- y if x <= z else w
+
+    f :- z if x <= z else x
+    r :- w if x <= z else y
+
+    two, three, four :- merge3(rem, f, r)
+
+    returns (one, two, three, four)
+}
+
+fn sort4_impl(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64) 
+    impls sort4, time, space 
+{
+
+    let x, y = sort2_impl(a, b);
+    let z, w = sort2_impl(c, d);
+
+    // need to make references after the calls since we can't capture save
+    var xx = x;
+    var yy = y;
+    var zz = z;
+    var ww = w;
+    let x2 = &xx;
+    let y2 = &yy;
+    let z2 = &zz;
+    let w2 = &ww;
+
+    let one = if x <= z { *x2 } else { *z2 };
+    let rem = if x <= z { *y2 } else { *w2 };
+
+    let f = if x <= z { *z2 } else { *x2 };
+    let r = if x <= z { *w2 } else { *y2 };
+
+    let two, three, four = merge3_impl(rem, f, r);
+
+    (one, two, three, four)
+}
+
+val main(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) 
+    -> (i64, i64, i64, i64) 
+{
+    x, y, z, w :- sort4(a, b, c, d)
+    i, j, k, l :- sort4(e, f, g, h)
+    s1 :- w - z - y - x
+    s2 :- l - k - j - i
+    one :- x if s1 < s2 else i
+    two :- y if s1 < s2 else j
+    three :- z if s1 < s2 else k
+    four :- w if s1 < s2 else l
+    returns (one, two, three, four)
+}
+
+/// Sorts two lists of 4 numbers `(a, b, c, d)` and `(e, f, g, h)`
+/// Then returns the list, in sorted order, with the smallest resulting
+/// value after reducing greatest to least via subtraction
+fn main_impl(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) 
+    -> (i64, i64, i64, i64) impls main, time, space
+{
+    let x, y, z, w = sort4_impl(a, b, c, d);
+    let i, j, k, l = sort4_impl(e, f, g, h);
+    let s1 = w - z - y - x;
+    let s2 = l - k - j - i;
+
+    // need to use references so we don't consume the arguments and 
+    // copy them instead 
+    var xx = x;
+    var yy = y;
+    var zz = z;
+    var ww = w;
+    var ii = i;
+    var jj = j;
+    var kk = k;
+    var ll = l;
+    let x2 = &xx;
+    let y2 = &yy;
+    let z2 = &zz;
+    let w2 = &ww;
+    let i2 = &ii;
+    let j2 = &jj;
+    let k2 = &kk;
+    let l2 = &ll;
+
+    // TODO: maybe some kind of ref and cpy keywords?
+    // maybe a builtin clone() function?
+    // ex: x.clone()
+
+    let one = if s1 < s2 { *x2 } else { *i2 };
+    let two = if s1 < s2 { *y2 } else { *j2 };
+    let three = if s1 < s2 { *z2 } else { *k2 };
+    let four = if s1 < s2 { *w2 } else { *l2 };
+    (one, two, three, four)
+}
+
+pipeline main { main_impl }

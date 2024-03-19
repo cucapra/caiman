@@ -1,0 +1,60 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
+
+val tie(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64) {
+    returns (a, b, c, d)
+}
+
+fn tie_impl(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64) 
+    impls tie, time, space 
+{
+    (a, b, c, d)
+}
+
+val main(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) 
+    -> (i64, i64, i64, i64) 
+{
+    x, y, z, w :- tie(a, b, c, d)
+    i, j, k, l :- tie(e, f, g, h)
+    s1 :- x + y + z + w
+    s2 :- i + j + k + l
+    one :- x if s1 < s2 else i
+    two :- y if s1 < s2 else j
+    three :- z if s1 < s2 else k
+    four :- w if s1 < s2 else l
+    returns (one, two, three, four)
+}
+
+fn main_impl(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) 
+    -> (i64, i64, i64, i64) impls main, time, space
+{
+    let x, y, z, w = tie_impl(a, b, c, d);
+    let i, j, k, l = tie_impl(e, f, g, h);
+    let s1 = x + y + z + w;
+    let s2 = i + j + k + l;
+    let one = if s1 < s2 {
+        x
+    } else {
+        i
+    };
+    let two = if s1 < s2 {
+        y
+    } else {
+        j
+    };
+    let three = if s1 < s2 {
+        z
+    } else {
+        k
+    };
+    let four = if s1 < s2 {
+        w
+    } else {
+        l
+    };
+    (one, two, three, four)
+}
+
+pipeline main { main_impl }

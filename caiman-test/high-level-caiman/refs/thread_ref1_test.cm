@@ -16,11 +16,11 @@ val id(a: i64) -> i64 {
 fn main_func() -> i64 impls main, time, space  
 {
     var c = 1;
-    let r @ none(space)-save = ref_id(&c);
+    let r @ none(sptl)-saved = ref_id(&c);
     *r
 }
 
-fn ref_id(a: &i64 @ none(space)-save) -> &i64 @ none(space)-save
+fn ref_id(a: &i64 @ none(sptl)-saved) -> &i64 @ none(sptl)-saved
     impls id, time, space
 {
     a

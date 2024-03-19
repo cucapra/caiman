@@ -19,10 +19,12 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use super::context::reject_opt;
+
 pub fn undefined<T>(h: Hole<T>) -> T {
     match h {
-        Some(v) => v,
-        None => panic!(""),
+        Hole::Filled(v) => v,
+        Hole::Empty => panic!(""),
     }
 }
 
@@ -555,7 +557,10 @@ fn ir_schedule_binding(
         },
         timeline: expir::FuncletSpec {
             // assume implicit is timeline for now?
-            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.timeline.1 .0),
+            funclet_id_opt: context
+                .funclet_indices
+                .get_funclet(&meta_map.timeline.1 .0)
+                .into(),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
             implicit_in_tag: implicit_in_lookup.timeline,
@@ -666,6 +671,7 @@ fn ir_function_class(
                         let current_id = context
                             .funclet_indices
                             .get_funclet(&f.header.name.0)
+                            .opt()
                             .unwrap();
                         if binding.default {
                             default_funclet_id = match default_funclet_id {
@@ -688,7 +694,7 @@ fn ir_function_class(
                         )
                     }
                     external_function_ids.insert(ffi::ExternalFunctionId(
-                        context.funclet_indices.get_funclet(&f.name).unwrap(),
+                        context.funclet_indices.get_funclet(&f.name).opt().unwrap(),
                     ));
                 }
             }

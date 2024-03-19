@@ -129,7 +129,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 // value, timeline, spatial order is mandatory (though you can freely omit one of course)
 schedule[value $val = %foo, timeline $time = %tim, spatial $space = %space]
 %sselect<$time.%e-saved, $time.%e-usable>
-(%abc : $time.%e-saved $val.%x-usable %slot0)
+(%abc : phi-$time.%e-saved $val.%x-usable %slot0)
 -> $time.%e-saved $val.%x-dead %slot0 {
     schedule-select %abc [%bar, %scall][?,
         ?,

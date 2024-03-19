@@ -4,24 +4,25 @@
 
 use std::collections::BTreeSet;
 
+<<<<<<< HEAD
 use caiman::assembly::ast::{self as asm, MetaId};
 use caiman::explication::Hole;
+=======
+use caiman::assembly::ast::{self as asm, Hole, MetaMapping, RemoteNodeId};
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
 
 use crate::{
     enum_cast,
     error::{type_error, LocalError},
-    lower::{data_type_to_ffi_type, sched_hir::TagInfo},
-    parse::ast::{DataType, Flow, Quotient, QuotientReference, SchedTerm, SchedulingFunc, Tag},
-    typing::{Context, SpecType, LOCAL_TEMP_FLAGS},
+    lower::{data_type_to_ffi_type, IN_STEM},
+    parse::ast::{self, DataType, Flow, SchedTerm, SchedulingFunc, SpecType, Tag},
+    typing::{Context, LOCAL_TEMP_FLAGS},
 };
 use caiman::ir;
 
 use super::{
     data_type_to_storage_type,
-    sched_hir::{
-        META_SPATIAL, META_TIMELINE, META_VALUE, Funclet, Funclets, HirBody, HirFuncCall, Specs,
-        Terminator, TripleTag,
-    },
+    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag},
     tuple_id,
 };
 
@@ -45,17 +46,11 @@ fn build_copy_cmd(
 ) -> asm::Command {
     let val_quot = src
         .get_tags()
-        .and_then(|t| {
-            TripleTag::from_tags(t, f.specs())
-                .value
-                .as_ref()
-                .and_then(tag_to_quot)
-        })
-        .or_else(|| backup_tag.and_then(|t| (&t.value).as_ref().and_then(tag_to_quot)))
+        .map(|t| tag_to_remote_id(&TripleTag::from_tags(t).value))
+        .or_else(|| backup_tag.map(|t| tag_to_remote_id(&t.value)))
         .or_else(|| {
             if let SchedTerm::Var { name, .. } = src {
-                f.get_out_tag(name)
-                    .and_then(|t| t.value.as_ref().and_then(|t| t.quot.clone()))
+                f.get_out_tag(name).map(|t| tag_to_remote_id(&t.value))
             } else {
                 None
             }
@@ -65,9 +60,9 @@ fn build_copy_cmd(
             return asm::Command::Node(asm::NamedNode {
                 name: None,
                 node: asm::Node::LocalDoBuiltin {
-                    operation: Some(quot),
-                    inputs: Some(vec![]),
-                    outputs: Some(vec![Some(asm::NodeId(dest.to_string()))]),
+                    operation: Hole::Filled(quot),
+                    inputs: Hole::Filled(vec![]),
+                    outputs: Hole::Filled(vec![Hole::Filled(asm::NodeId(dest.to_string()))]),
                 },
             });
         }
@@ -77,17 +72,17 @@ fn build_copy_cmd(
         asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalCopy {
-                input: Some(asm::NodeId(src.clone())),
-                output: Some(asm::NodeId(dest.to_string())),
+                input: Hole::Filled(asm::NodeId(src.clone())),
+                output: Hole::Filled(asm::NodeId(dest.to_string())),
             },
         })
     } else {
         asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::WriteRef {
-                source: Some(asm::NodeId(src.clone())),
-                destination: Some(asm::NodeId(dest.to_string())),
-                storage_type: Some(data_type_to_storage_type(f.get_dtype(dest).unwrap())),
+                source: Hole::Filled(asm::NodeId(src.clone())),
+                destination: Hole::Filled(asm::NodeId(dest.to_string())),
+                storage_type: Hole::Filled(data_type_to_storage_type(f.get_dtype(dest).unwrap())),
             },
         })
     }
@@ -104,25 +99,27 @@ fn lower_flat_decl(
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
-    assert!(dest_tag.is_any_specified());
     let temp_node_name = temp_var_name(temp_id);
     let temp = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(temp_node_name.clone())),
         node: asm::Node::AllocTemporary {
-            place: Some(ir::Place::Local),
-            buffer_flags: Some(LOCAL_TEMP_FLAGS),
-            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            place: Hole::Filled(ir::Place::Local),
+            buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
+            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     });
     let mv = build_copy_cmd(&temp_node_name, rhs, f, Some(dest_tag));
     let rd_ref = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
-            source: Some(asm::NodeId(temp_node_name)),
-            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            source: Hole::Filled(asm::NodeId(temp_node_name)),
+            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     });
-    (vec![Some(temp), Some(mv), Some(rd_ref)], temp_id + 1)
+    (
+        vec![Hole::Filled(temp), Hole::Filled(mv), Hole::Filled(rd_ref)],
+        temp_id + 1,
+    )
 }
 
 /// Lowers a variable declaration
@@ -133,16 +130,16 @@ fn lower_var_decl(
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
-    let mut result = vec![Some(asm::Command::Node(asm::NamedNode {
+    let mut result = vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::AllocTemporary {
-            place: Some(ir::Place::Local),
-            buffer_flags: Some(LOCAL_TEMP_FLAGS),
-            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            place: Hole::Filled(ir::Place::Local),
+            buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
+            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     }))];
     if let Some(rhs) = rhs {
-        result.push(Some(build_copy_cmd(dest, rhs, f, Some(dest_tag))));
+        result.push(Hole::Filled(build_copy_cmd(dest, rhs, f, Some(dest_tag))));
     }
     (result, temp_id)
 }
@@ -156,7 +153,7 @@ fn lower_store(
     f: &Funclet,
 ) -> (CommandVec, usize) {
     (
-        vec![Some(build_copy_cmd(lhs, rhs, f, Some(lhs_tags)))],
+        vec![Hole::Filled(build_copy_cmd(lhs, rhs, f, Some(lhs_tags)))],
         temp_id,
     )
 }
@@ -164,9 +161,17 @@ fn lower_store(
 /// Changes the remote node id to the remote id of the result of the call, before
 /// extracing the result
 fn to_tuple_quotient(q: asm::RemoteNodeId) -> asm::RemoteNodeId {
-    asm::RemoteNodeId {
-        funclet: q.funclet,
-        node: q.node.map(|o| o.map(|n| asm::NodeId(tuple_id(&[n.0])))),
+    if let RemoteNodeId {
+        node: Some(Hole::Filled(asm::NodeId(n))),
+        ..
+    } = q
+    {
+        asm::RemoteNodeId {
+            node: Some(Hole::Filled(asm::NodeId(tuple_id(&[n])))),
+            ..q
+        }
+    } else {
+        q
     }
 }
 
@@ -183,51 +188,49 @@ fn lower_op(
     let temp = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(temp_node_name.clone())),
         node: asm::Node::AllocTemporary {
-            place: Some(ir::Place::Local),
-            buffer_flags: Some(LOCAL_TEMP_FLAGS),
-            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            place: Hole::Filled(ir::Place::Local),
+            buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
+            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     });
     let mut inputs = vec![];
     for arg in args {
         let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
-        inputs.push(Some(asm::NodeId(arg.to_string())));
+        inputs.push(Hole::Filled(asm::NodeId(arg.clone())));
     }
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
         node: asm::Node::LocalDoExternal {
-            operation: Some(
-                dest_tag
-                    .value
-                    .as_ref()
-                    .and_then(|t| tag_to_quot(t).map(to_tuple_quotient))
-                    .expect("Tag must be set for now"),
-            ),
-            inputs: Some(inputs),
-            outputs: Some(vec![Some(asm::NodeId(temp_node_name.clone()))]),
-            external_function_id: Some(asm::ExternalFunctionId(op.to_string())),
+            operation: Hole::Filled(to_tuple_quotient(tag_to_remote_id(&dest_tag.value))),
+            inputs: Hole::Filled(inputs),
+            outputs: Hole::Filled(vec![Hole::Filled(asm::NodeId(temp_node_name.clone()))]),
+            external_function_id: Hole::Filled(asm::ExternalFunctionId(op.to_string())),
         },
     });
     let read_ref = asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(dest.to_string())),
         node: asm::Node::ReadRef {
-            source: Some(asm::NodeId(temp_node_name)),
-            storage_type: Some(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
+            source: Hole::Filled(asm::NodeId(temp_node_name)),
+            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
         },
     });
     (
-        vec![Some(temp), Some(local_do), Some(read_ref)],
+        vec![
+            Hole::Filled(temp),
+            Hole::Filled(local_do),
+            Hole::Filled(read_ref),
+        ],
         temp_id + 1,
     )
 }
 
 fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (CommandVec, usize) {
     (
-        vec![Some(asm::Command::Node(asm::NamedNode {
+        vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(dest.to_string())),
             node: asm::Node::ReadRef {
-                source: Some(asm::NodeId(src.to_string())),
-                storage_type: Some(data_type_to_ffi_type(typ)),
+                source: Hole::Filled(asm::NodeId(src.to_string())),
+                storage_type: Hole::Filled(data_type_to_ffi_type(typ)),
             },
         }))],
         temp_id,
@@ -281,48 +284,95 @@ fn lower_func_call(
     let djoin_name = temp_var_name(djoin_id);
     let join = temp_id + 1;
     let join_var = temp_var_name(join);
-    let tags = TagInfo::from(&call.tag);
     vec![
-        Some(asm::Command::Node(asm::NamedNode {
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(djoin_name.clone())),
             node: asm::Node::DefaultJoin,
         })),
-        Some(asm::Command::Node(asm::NamedNode {
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            // TODO: for greater generality, should be `SerializedJoin`, but I
-            // think that's broken right now
-            // TODO: optimize and use inline join whenever possible
+            // TODO: codegen join semantics are broken, basically there's only
+            // inline join
             node: asm::Node::InlineJoin {
                 funclet: f.next_blocks().first().unwrap().clone(),
-                captures: Some(
+                captures: Hole::Filled(
                     captures
                         .iter()
-                        .map(|x| Some(asm::NodeId(x.clone())))
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
                         .collect(),
                 ),
-                continuation: Some(asm::NodeId(djoin_name)),
+                continuation: Hole::Filled(asm::NodeId(djoin_name)),
             },
         })),
-        Some(asm::Command::TailEdge(asm::TailEdge::ScheduleCall {
-            operations: Some(vec![
-                tags.timeline.as_ref().map_or_else(
-                    || tags.default_tag(SpecType::Timeline).quot,
-                    |x| x.quot.clone(),
-                ),
-                tags.spatial.as_ref().map_or_else(
-                    || tags.default_tag(SpecType::Spatial).quot,
-                    |x| x.quot.clone(),
-                ),
-                tags.value.and_then(|t| t.quot),
-            ]),
-            callee_funclet_id: Some(asm::FuncletId(call.target.clone())),
-            callee_arguments: Some(
-                call.args
-                    .iter()
-                    .map(|x| Some(asm::NodeId(x.clone())))
+        Hole::Filled(asm::Command::TailEdge(asm::TailEdge::ScheduleCall {
+            operations: Hole::Filled(
+                call.tag
+                    .clone()
+                    .tags_vec()
+                    .into_iter()
+                    .map(|x| x.quot)
                     .collect(),
             ),
-            continuation_join: Some(asm::NodeId(join_var)),
+            callee_funclet_id: Hole::Filled(asm::FuncletId(call.target.clone())),
+            callee_arguments: Hole::Filled(
+                call.args
+                    .iter()
+                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .collect(),
+            ),
+            continuation_join: Hole::Filled(asm::NodeId(join_var)),
+        })),
+    ]
+}
+
+/// Lowers a yield terminator into a caiman assembly command
+/// # Arguments
+/// * `captures` - the names of the variables to capture to the continuation
+/// * `temp_id` - the next available temporary id
+/// * `f` - the funclet that contains the yield
+/// # Returns
+/// A vec containing the commands that implement the yield
+fn lower_yield(captures: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+    let djoin_id = temp_id;
+    let djoin_name = temp_var_name(djoin_id);
+    let join = temp_id + 1;
+    let join_var = temp_var_name(join);
+    vec![
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(djoin_name.clone())),
+            node: asm::Node::DefaultJoin,
+        })),
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(join_var.clone())),
+            node: asm::Node::SerializedJoin {
+                funclet: f.next_blocks().first().unwrap().clone(),
+                captures: Hole::Filled(
+                    captures
+                        .iter()
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .collect(),
+                ),
+                continuation: Hole::Filled(asm::NodeId(djoin_name)),
+            },
+        })),
+        Hole::Filled(asm::Command::TailEdge(asm::TailEdge::ScheduleCallYield {
+            operations: Hole::Filled(vec![
+                Hole::Filled(asm::RemoteNodeId {
+                    node: None,
+                    funclet: Hole::Filled(SpecType::Value.get_meta_id()),
+                }),
+                Hole::Filled(asm::RemoteNodeId {
+                    node: None,
+                    funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                }),
+                Hole::Filled(asm::RemoteNodeId {
+                    node: None,
+                    funclet: Hole::Filled(SpecType::Timeline.get_meta_id()),
+                }),
+            ]),
+            external_function_id: Hole::Filled(asm::ExternalFunctionId(String::from("_loop_impl"))),
+            yielded_nodes: Hole::Filled(vec![]),
+            continuation_join: Hole::Filled(asm::NodeId(join_var)),
         })),
     ]
 }
@@ -337,7 +387,8 @@ fn lower_func_call(
 /// * `f` - the funclet that contains the return
 /// # Returns
 /// A tuple containing the commands that implement the return
-fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+fn lower_ret(rets: &[String], passthrough: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
+    assert!(passthrough.len() <= 1 || passthrough.iter().le(passthrough.iter().skip(1)));
     if f.is_final_return() {
         let djoin_id = temp_id;
         let djoin_name = temp_var_name(djoin_id);
@@ -345,27 +396,39 @@ fn lower_ret(rets: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
         let join_var = temp_var_name(join);
         assert_eq!(f.next_blocks().len(), 1);
         vec![
-            Some(asm::Command::Node(asm::NamedNode {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
                 name: Some(asm::NodeId(djoin_name.clone())),
                 node: asm::Node::DefaultJoin,
             })),
-            Some(asm::Command::Node(asm::NamedNode {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
                 name: Some(asm::NodeId(join_var.clone())),
                 node: asm::Node::InlineJoin {
                     funclet: f.next_blocks().first().unwrap().clone(),
-                    captures: Some(vec![]),
-                    continuation: Some(asm::NodeId(djoin_name)),
+                    captures: Hole::Filled(vec![]),
+                    continuation: Hole::Filled(asm::NodeId(djoin_name)),
                 },
             })),
-            Some(asm::Command::TailEdge(asm::TailEdge::Jump {
-                arguments: Some(rets.iter().map(|x| Some(asm::NodeId(x.clone()))).collect()),
-                join: Some(asm::NodeId(join_var)),
+            Hole::Filled(asm::Command::TailEdge(asm::TailEdge::Jump {
+                arguments: Hole::Filled(
+                    rets.iter()
+                        .chain(passthrough.iter())
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .collect(),
+                ),
+                join: Hole::Filled(asm::NodeId(join_var)),
             })),
         ]
     } else {
-        vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-            return_values: Some(rets.iter().map(|x| Some(asm::NodeId(x.clone()))).collect()),
-        }))]
+        vec![Hole::Filled(asm::Command::TailEdge(
+            asm::TailEdge::Return {
+                return_values: Hole::Filled(
+                    rets.iter()
+                        .chain(passthrough.iter())
+                        .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                        .collect(),
+                ),
+            },
+        ))]
     }
 }
 
@@ -377,15 +440,29 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
     // we do not return the new `temp_id` because this is the last instruction
     // in the block
     match t {
-        Terminator::Return { rets, .. } => lower_ret(rets, temp_id, f),
+        Terminator::Return {
+            rets, passthrough, ..
+        } => lower_ret(rets, passthrough, temp_id, f),
         Terminator::Next(vars) => {
-            vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-                return_values: Some(vars.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),
-            }))]
+            vec![Hole::Filled(asm::Command::TailEdge(
+                asm::TailEdge::Return {
+                    return_values: Hole::Filled(
+                        vars.iter()
+                            .map(|v| Hole::Filled(asm::NodeId(v.clone())))
+                            .collect(),
+                    ),
+                },
+            ))]
         }
-        Terminator::FinalReturn(n) => vec![Some(asm::Command::TailEdge(asm::TailEdge::Return {
-            return_values: Some(n.iter().map(|v| Some(asm::NodeId(v.clone()))).collect()),
-        }))],
+        Terminator::FinalReturn(n) => vec![Hole::Filled(asm::Command::TailEdge(
+            asm::TailEdge::Return {
+                return_values: Hole::Filled(
+                    n.iter()
+                        .map(|v| Hole::Filled(asm::NodeId(v.clone())))
+                        .collect(),
+                ),
+            },
+        ))],
         Terminator::Select { guard, tag, .. } => lower_select(guard, tag, temp_id, f),
         // TODO: review this
         Terminator::None => panic!("None terminator not replaced by Next"),
@@ -393,6 +470,7 @@ fn lower_terminator(t: &Terminator, temp_id: usize, f: &Funclet<'_>) -> CommandV
         Terminator::CaptureCall { call, captures, .. } => {
             lower_func_call(call, captures, temp_id, f)
         }
+        Terminator::Yield(captures) => lower_yield(captures, temp_id, f),
     }
 }
 
@@ -405,21 +483,19 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
     let join = temp_id + 1;
     let join_var = temp_var_name(join);
     vec![
-        Some(asm::Command::Node(asm::NamedNode {
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(djoin_name.clone())),
             node: asm::Node::DefaultJoin,
         })),
-        Some(asm::Command::Node(asm::NamedNode {
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            // TODO: for greater generality, should be `SerializedJoin`, but I
-            // think that's broken right now
-            // TODO: optimize and use inline join whenever possible
             node: asm::Node::InlineJoin {
-                funclet: Some(f.join_funclet()),
-                captures: Some(vec![]),
-                continuation: Some(asm::NodeId(djoin_name)),
+                funclet: Hole::Filled(f.join_funclet()),
+                captures: Hole::Filled(vec![]),
+                continuation: Hole::Filled(asm::NodeId(djoin_name)),
             },
         })),
+<<<<<<< HEAD
         Some(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
             operations: Some(vec![
                 tags.value
@@ -449,10 +525,25 @@ fn lower_select(guard_name: &str, tags: &TripleTag, temp_id: usize, f: &Funclet<
             callee_funclet_ids: Some(f.next_blocks()),
             callee_arguments: Some(f.output_args()),
             continuation_join: Some(asm::NodeId(join_var)),
+=======
+        Hole::Filled(asm::Command::TailEdge(asm::TailEdge::ScheduleSelect {
+            operations: Hole::Filled(
+                tags.clone()
+                    .tags_vec()
+                    .into_iter()
+                    .map(|x| x.quot)
+                    .collect(),
+            ),
+            condition: Hole::Filled(asm::NodeId(guard_name.to_string())),
+            callee_funclet_ids: Hole::Filled(f.next_blocks()),
+            callee_arguments: Hole::Filled(f.output_args()),
+            continuation_join: Hole::Filled(asm::NodeId(join_var)),
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
         })),
     ]
 }
 
+<<<<<<< HEAD
 /// Converts a quotient reference (the part that refers to a variable in a spec)
 /// to a remote node id in the assembly
 fn quot_ref_to_remote_node(qr: &QuotientReference) -> asm::RemoteNodeId {
@@ -462,21 +553,35 @@ fn quot_ref_to_remote_node(qr: &QuotientReference) -> asm::RemoteNodeId {
     }
 }
 
+=======
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
 /// Gets the assembly quotient from a high level caiman tag
-pub fn tag_to_quot(t: &Tag) -> Option<asm::RemoteNodeId> {
-    t.quot.as_ref().map_or_else(
-        || t.quot_var.as_ref().map(quot_ref_to_remote_node),
-        |x| match x {
-            Quotient::Node => t.quot_var.as_ref().map(quot_ref_to_remote_node),
-            Quotient::Input => t.quot_var.as_ref().map(quot_ref_to_remote_node),
-            Quotient::Output => t.quot_var.as_ref().map(quot_ref_to_remote_node),
-            Quotient::None => t.quot_var.as_ref().map(quot_ref_to_remote_node),
+pub fn tag_to_remote_id(t: &Tag) -> asm::RemoteNodeId {
+    asm::RemoteNodeId {
+        node: if matches!(t.quot, Some(ast::Quotient::None)) {
+            None
+        } else {
+            Some(
+                t.quot_var
+                    .spec_var
+                    .clone()
+                    .map(|x| {
+                        if matches!(t.quot, Some(ast::Quotient::Input)) {
+                            asm::NodeId(format!("{IN_STEM}{x}"))
+                        } else {
+                            asm::NodeId(x)
+                        }
+                    })
+                    .into(),
+            )
         },
-    )
+        funclet: Hole::Filled(t.quot_var.spec_type.get_meta_id()),
+    }
 }
 
 /// Converts a hlc tag to a tag in the assembly
 pub fn tag_to_tag(t: &Tag) -> asm::Tag {
+<<<<<<< HEAD
     tag_to_tag_def(t)
 }
 
@@ -486,11 +591,16 @@ pub fn tag_to_tag_def(t: &Tag) -> asm::Tag {
     asm::Tag {
         quot: tag_to_quot(t),
         flow: t.flow.as_ref().map(|f| match f {
+=======
+    asm::Tag {
+        quot: Hole::Filled(tag_to_remote_id(t)),
+        flow: match t.flow.expect("TODO: Holes in flow") {
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
             Flow::Dead => ir::Flow::Dead,
             Flow::Need => ir::Flow::Need,
             Flow::Usable => ir::Flow::Usable,
-            Flow::Saved => ir::Flow::Saved,
-        }),
+            Flow::Save => ir::Flow::Saved,
+        },
     }
 }
 
@@ -498,6 +608,15 @@ pub fn tag_to_tag_def(t: &Tag) -> asm::Tag {
 ///
 fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
     let mut commands = vec![];
+    let inputs = funclet.inputs();
+    for idx in 0..inputs.len() {
+        commands.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: None,
+            node: asm::Node::Phi {
+                index: Hole::Filled(idx),
+            },
+        })));
+    }
     let mut temp_id = 0;
     for cmd in funclet.stmts() {
         let (mut new_cmds, new_id) = lower_instr(cmd, temp_id, funclet);
@@ -505,6 +624,7 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         commands.append(&mut new_cmds);
     }
     commands.extend(lower_terminator(funclet.terminator(), temp_id, funclet));
+<<<<<<< HEAD
     let implicit_default = asm::Tag {
         quot: Some(asm::RemoteNodeId {
             funclet: MetaId(META_TIMELINE.to_string()),
@@ -512,18 +632,41 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         }),
         flow: Some(ir::Flow::Usable),
     };
+=======
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
     asm::Funclet {
         kind: ir::FuncletKind::ScheduleExplicit,
         header: asm::FuncletHeader {
             name: asm::FuncletId(funclet.name()),
-            args: funclet.inputs(),
+            args: inputs,
             ret: funclet.outputs(),
             binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
-                implicit_tags: (implicit_default.clone(), implicit_default),
-                meta_map: asm::MetaMapping {
-                    value: (MetaId(META_VALUE.to_string()), funclet.specs().value.clone()),
-                    timeline: (MetaId(META_TIMELINE.to_string()), funclet.specs().timeline.clone()),
-                    spatial: (MetaId(META_SPATIAL.to_string()), funclet.specs().spatial.clone()),
+                implicit_tags: (
+                    asm::Tag {
+                        flow: ir::Flow::Usable,
+                        quot: Hole::Filled(RemoteNodeId {
+                            funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                            node: None,
+                        }),
+                    },
+                    asm::Tag {
+                        flow: ir::Flow::Usable,
+                        quot: Hole::Filled(RemoteNodeId {
+                            funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                            node: None,
+                        }),
+                    },
+                ),
+                meta_map: MetaMapping {
+                    value: (SpecType::Value.get_meta_id(), funclet.specs().value.clone()),
+                    timeline: (
+                        SpecType::Timeline.get_meta_id(),
+                        funclet.specs().timeline.clone(),
+                    ),
+                    spatial: (
+                        SpecType::Spatial.get_meta_id(),
+                        funclet.specs().spatial.clone(),
+                    ),
                 },
             }),
         },

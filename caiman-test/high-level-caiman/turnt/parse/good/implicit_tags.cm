@@ -1,10 +1,10 @@
 #version 0.1.0
 
-fn foo(a: i64 @ main-usable, b: i64 @ main.x-usable, c: i32) -> (i32 @ output(main.y)-usable,) 
+fn foo(a: i64 @ val-usable, b: i64 @ val.x-usable, c: i32) -> (i32 @ node(val.y)-usable,) 
     impls main 
 {
-    let x @ main-usable = 10;
-    let y @ node(main)-usable = 10;
-    let z @ node(main.x) = 20;
-    let w: i64 @ main.y-usable = 30;
+    let x @ val-usable = 10;
+    let y @ node(val)-usable = 10;
+    let z @ node(val.x) = 20;
+    let w: i64 @ val.y-usable = 30;
 }

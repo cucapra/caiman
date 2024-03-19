@@ -1,162 +1,143 @@
 #![allow(clippy::module_name_repetitions)]
-use std::{
-    collections::{BTreeSet, HashMap},
-    rc::Rc,
-};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    enum_cast,
-    lower::tuple_id,
-    parse::ast::{
-        ArgsOrEnc, Binop, DataType, FullType, NestedExpr, QuotientReference, SchedExpr,
-        SchedFuncCall, Tag, Tags, Uop,
-    },
+    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{ArgsOrEnc, Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
 };
+<<<<<<< HEAD
 use caiman::assembly::ast::{self as asm};
+=======
+use caiman::assembly::ast as asm;
+pub use caiman::assembly::ast::Hole;
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
 
 use crate::{
     error::Info,
     parse::ast::{Name, SchedStmt, SchedTerm},
 };
 
-use super::{META_VALUE, META_TIMELINE, META_SPATIAL, Specs};
-
+/// A tag in the HIR with the value, spatial, and timeline information separated.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TripleTag {
-    pub value: Option<Tag>,
-    pub spatial: Option<Tag>,
-    pub timeline: Option<Tag>,
-    pub specs: Rc<Specs>,
+    pub value: Tag,
+    pub spatial: Tag,
+    pub timeline: Tag,
 }
 
 impl TripleTag {
-    pub fn from_opt(tags: &Option<Tags>, specs: &Rc<Specs>) -> Self {
-        tags.as_ref().map_or_else(
-            || Self::from_owned_opt(None, specs),
-            |tags| Self::from_tags(tags, specs),
-        )
+    pub const fn new_unspecified() -> Self {
+        Self {
+            value: Tag::new_unspecified(SpecType::Value),
+            spatial: Tag::new_unspecified(SpecType::Spatial),
+            timeline: Tag::new_unspecified(SpecType::Timeline),
+        }
+    }
+    pub fn from_opt(tags: &Option<Tags>) -> Self {
+        tags.as_ref().map_or_else(|| Self::from_owned_opt(None), |tags| Self::from_tags(tags))
     }
 
-    pub fn from_owned_opt(tags: Option<Tags>, specs: &Rc<Specs>) -> Self {
-        tags.map_or_else(
-            || Self {
-                value: None,
-                spatial: None,
-                timeline: None,
-                specs: specs.clone(),
-            },
-            |tags| Self::from_tag_vec(tags, specs),
-        )
+    pub fn from_owned_opt(tags: Option<Tags>) -> Self {
+        tags.map_or_else(|| Self {
+                value: Tag::new_unspecified(SpecType::Value),
+                spatial: Tag::new_unspecified(SpecType::Spatial),
+                timeline: Tag::new_unspecified(SpecType::Timeline),
+            }, Self::from_tag_vec)
     }
 
-    pub fn from_tag_vec(tags: Vec<Tag>, specs: &Rc<Specs>) -> Self {
+    pub fn from_tag_vec(tags: Vec<Tag>) -> Self {
         let mut value = None;
         let mut spatial = None;
         let mut timeline = None;
         for tag in tags {
-            if let Tag {
-                quot_var: Some(QuotientReference { spec_name, .. }),
-                ..
-            } = &tag
-            {
-                if &specs.value.0 == spec_name {
-                    let mut new_tag = tag.clone();
-                    new_tag.quot_var = new_tag.quot_var.map(|qv| QuotientReference {
-                        spec_name: META_VALUE.to_string(),
-                        spec_var: qv.spec_var
-                    });
-                    value = Some(new_tag);
-                } else if &specs.spatial.0 == spec_name {
-                    let mut new_tag = tag.clone();
-                    new_tag.quot_var = new_tag.quot_var.map(|qv| QuotientReference {
-                        spec_name: META_SPATIAL.to_string(),
-                        spec_var: qv.spec_var
-                    });
-                    spatial = Some(new_tag);
-                } else if &specs.timeline.0 == spec_name {
-                    let mut new_tag = tag.clone();
-                    new_tag.quot_var = new_tag.quot_var.map(|qv| QuotientReference {
-                        spec_name: META_TIMELINE.to_string(),
-                        spec_var: qv.spec_var
-                    });
-                    timeline = Some(new_tag);
-                }
-            }
+                match tag.quot_var.spec_type {
+                    SpecType::Value => value = Some(tag.clone()),
+                    SpecType::Spatial => spatial = Some(tag.clone()),
+                    SpecType::Timeline => timeline = Some(tag.clone()),
+                }     
         }
         Self {
-            value,
-            spatial,
-            timeline,
-            specs: specs.clone(),
+            value: value.unwrap_or_else(|| Tag::new_unspecified(SpecType::Value)),
+            spatial: spatial.unwrap_or_else(|| Tag::new_unspecified(SpecType::Spatial)),
+            timeline: timeline.unwrap_or_else(|| Tag::new_unspecified(SpecType::Timeline),)
         }
     }
 
-    pub fn from_tags(tags: &[Tag], specs: &Rc<Specs>) -> Self {
+    pub fn from_tags(tags: &[Tag]) -> Self {
         let mut value = None;
         let mut spatial = None;
         let mut timeline = None;
         for tag in tags {
-            if let Tag {
-                quot_var: Some(QuotientReference { spec_name, .. }),
-                ..
-            } = tag
-            {
-                if &specs.value.0 == spec_name {
-                    value = Some(tag.clone());
-                } else if &specs.spatial.0 == spec_name {
-                    spatial = Some(tag.clone());
-                } else if &specs.timeline.0 == spec_name {
-                    timeline = Some(tag.clone());
+                match tag.quot_var.spec_type {
+                    SpecType::Value => value = Some(tag.clone()),
+                    SpecType::Spatial => spatial = Some(tag.clone()),
+                    SpecType::Timeline => timeline = Some(tag.clone()),
                 }
-            }
         }
         Self {
-            value,
-            spatial,
-            timeline,
-            specs: specs.clone(),
+            value: value.unwrap_or_else(|| Tag::new_unspecified(SpecType::Value)),
+            spatial: spatial.unwrap_or_else(|| Tag::new_unspecified(SpecType::Spatial)),
+            timeline: timeline.unwrap_or_else(|| Tag::new_unspecified(SpecType::Timeline)),
         }
     }
 
-    pub fn from_fulltype(ft: &FullType, specs: &Rc<Specs>) -> Self {
-        Self::from_tags(&ft.tags, specs)
+    pub fn from_fulltype(ft: &FullType) -> Self {
+        Self::from_tags(&ft.tags)
     }
 
-    pub fn from_fulltype_opt(ft: &Option<FullType>, specs: &Rc<Specs>) -> Self {
-        ft.as_ref().map_or_else(
-            || Self::from_owned_opt(None, specs),
-            |ft| Self::from_fulltype(ft, specs),
-        )
+    pub fn from_fulltype_opt(ft: &Option<FullType>) -> Self {
+        ft.as_ref().map_or_else(|| Self::from_owned_opt(None), Self::from_fulltype)
     }
 
-    pub const fn is_any_specified(&self) -> bool {
-        self.value.is_some() || self.spatial.is_some() || self.timeline.is_some()
+    /// Updates the tag so that all non-null parts of `other` are added to `self`
+    pub fn set_specified_info(&mut self, other: Self) {
+        self.value.set_specified_info(other.value);
+        self.spatial.set_specified_info(other.spatial);
+        self.timeline.set_specified_info(other.timeline);
     }
+
+    /// Updates the tag so that all unknown parts of `self` are overridden by `other`
+    pub fn override_unknown_info(&mut self, other: Self) {
+        self.value.override_unknown_info(other.value);
+        self.spatial.override_unknown_info(other.spatial);
+        self.timeline.override_unknown_info(other.timeline);
+    }
+
+    /// Asserts that the given tag has no holes in its quotient or flow
+    fn assert_tag_no_hole(tag: &Tag) {
+        assert!(tag.quot.is_some(), "Tag must have a quotient");
+        assert!(tag.flow.is_some(), "Tag must have a flow");
+    }
+
+    /// Asserts that the triple tag has no holes
+    fn assert_no_holes(&self) {
+        Self::assert_tag_no_hole(&self.value);
+        Self::assert_tag_no_hole(&self.spatial);
+        Self::assert_tag_no_hole(&self.timeline);
+    }
+
+    /// Converts a triple tag into an assembly tag vector, using
+    /// the given data type to determine the default flow for the spatial tag.
+    pub fn tags_vec(&self) -> Vec<asm::Tag> {
+        self.assert_no_holes();
+        vec![
+            tag_to_tag(&self.value),
+            tag_to_tag(&self.spatial),
+            tag_to_tag(&self.timeline),
+        ]
+    }
+
 }
+
 
 impl From<TripleTag> for Tags {
     fn from(val: TripleTag) -> Self {
-        let mut tags = Self::new();
-        if let Some(value) = val.value {
-            tags.push(value);
-        }
-        if let Some(spatial) = val.spatial {
-            tags.push(spatial);
-        }
-        if let Some(timeline) = val.timeline {
-            tags.push(timeline);
-        }
-        tags
+        vec![val.value, val.spatial, val.timeline]
     }
 }
 
 impl From<TripleTag> for Option<Tags> {
     fn from(val: TripleTag) -> Self {
-        if val.is_any_specified() {
-            Some(val.into())
-        } else {
-            None
-        }
+        Some(Tags::from(val))
     }
 }
 
@@ -211,7 +192,7 @@ pub enum HirBody {
     OutAnnotation(Info, Vec<(String, TripleTag)>),
     Phi {
         dest: Name,
-        /// Map from incoming block id to the incoming variable name
+        /// Map from incoming block id to the incoming variable name 
         /// from that block
         inputs: HashMap<usize, Name>,
         /// original name of the variable
@@ -253,7 +234,7 @@ pub struct HirFuncCall {
 }
 
 impl HirFuncCall {
-    pub fn new(value: SchedFuncCall, specs: &Rc<Specs>) -> Self {
+    pub fn new(value: SchedFuncCall) ->Self {
         if let NestedExpr::Term(SchedTerm::Var { name, .. }) = *value.target {
             if let ArgsOrEnc::Args(args) = *value.args {
                 let args = args
@@ -269,7 +250,7 @@ impl HirFuncCall {
                 return Self {
                     target: name,
                     args,
-                    tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag, specs)),
+                    tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
                 };
             }
         }
@@ -277,10 +258,8 @@ impl HirFuncCall {
     }
 
     fn to_tuple_tag(mut tag: TripleTag) -> TripleTag {
-        if let Some(val) = tag.value.as_mut() {
-            if let Some(qv) = val.quot_var.as_mut() {
-                qv.spec_var = qv.spec_var.as_ref().map(|sv| tuple_id(&[sv.clone()]));
-            }
+        if let Some(val) = tag.value.quot_var.spec_var.as_mut() {
+            *val = tuple_id(&[val.clone()]);
         }
         tag
     }
@@ -321,6 +300,9 @@ pub enum Terminator {
         dests: Vec<(String, TripleTag)>,
         /// The returned variables in the child scope
         rets: Vec<String>,
+        /// The variables that aren't directly returned by the user but are
+        /// captured by the select
+        passthrough: Vec<String>,
     },
     /// The final return statement in the final basic block. This is **NOT**
     /// a return statement in the frontend, but rather a special return statement
@@ -333,6 +315,9 @@ pub enum Terminator {
     None,
     /// No terminator, continue to next block with the specified returns
     Next(Vec<String>),
+    /// A yield which will capture its arguments to pass them to the
+    /// continuation
+    Yield(Vec<String>),
 }
 
 /// How a variable is used in a statement.
@@ -378,7 +363,7 @@ impl Hir for Terminator {
             }
             // we don't consider the defs of a select to be defs of this terminator,
             // but rather they are the defs of the left and right funclets
-            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => None,
+            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) | Self::Yield(_) => None,
         }
     }
 
@@ -392,12 +377,12 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 uses.insert(guard.clone());
             }
-            Self::Return { rets, .. } | Self::Next(rets) => {
-                for node in rets {
+            Self::Return { rets, passthrough, ..}  => {
+                for node in rets.iter().chain(passthrough.iter()) {
                     uses.insert(node.clone());
                 }
             }
-            Self::FinalReturn(names) => {
+            Self::FinalReturn(names) | Self::Next(names) | Self::Yield(names)=> {
                 uses.extend(names.iter().cloned());
             }
             Self::None => (),
@@ -414,8 +399,18 @@ impl Hir for Terminator {
             Self::Select { guard, .. } => {
                 *guard = f(guard, UseType::Read);
             }
-            Self::Return { rets, .. } | Self::Next(rets) | Self::FinalReturn(rets) => {
+            Self::Next(rets) | Self::FinalReturn(rets) => {
                 for node in rets {
+                    *node = f(node, UseType::Read);
+                }
+            }
+            Self::Yield(names) => {
+                for name in names.iter_mut() {
+                    *name = f(name, UseType::Read);
+                }
+            }
+            Self::Return { rets, passthrough, .. } => {
+                for node in rets.iter_mut().chain(passthrough.iter_mut()) {
                     *node = f(node, UseType::Read);
                 }
             }
@@ -432,7 +427,7 @@ impl Hir for Terminator {
                     *dest = f(dest);
                 }
             }
-            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) => (),
+            Self::FinalReturn(_) | Self::Select { .. } | Self::None | Self::Next(..) | Self::Yield(_) => (),
         }
     }
 }
@@ -470,22 +465,27 @@ impl std::ops::DerefMut for HirInstr<'_> {
 }
 
 impl HirBody {
-    pub fn new(stmt: SchedStmt, specs: &Rc<Specs>) -> Self {
+    pub fn new(stmt: SchedStmt) -> Self {
         // TODO: operations
         match stmt {
-            SchedStmt::Assign { info, lhs, rhs, .. } => {
-                if let SchedExpr::Term(SchedTerm::Var { name, tag, .. }) = lhs {
-                    let rhs = enum_cast!(SchedExpr::Term, rhs);
+            SchedStmt::Assign {
+                info,
+                lhs,
+                rhs,
+                ..
+            } => {   
+                if let SchedExpr::Term(SchedTerm::Var { name, tag, ..}) = lhs {
+                        let rhs = enum_cast!(SchedExpr::Term, rhs);
                     Self::RefStore {
                         info,
-                        lhs_tags: TripleTag::from_opt(&tag, specs),
+                        lhs_tags: TripleTag::from_opt(&tag),
                         lhs: name,
                         rhs,
                     }
                 } else {
                     panic!("Invalid assignment")
-                }
-            }
+                }       
+            },
             SchedStmt::Decl {
                 info,
                 lhs,
@@ -495,7 +495,7 @@ impl HirBody {
                 SchedExpr::Term(rhs) => Self::ConstDecl {
                     info,
                     lhs: lhs[0].0.clone(),
-                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
+                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
                     rhs,
                 },
                 SchedExpr::Binop {
@@ -509,24 +509,24 @@ impl HirBody {
                     Self::Op {
                         info,
                         dest: lhs[0].0.clone(),
-                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
+                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
                         op: HirOp::Binary(op),
                         args: vec![lhs_term.clone(), rhs_term.clone()],
                     }
-                }
-                SchedExpr::Uop { info, op, expr } => {
+                },
+                SchedExpr::Uop { 
+                    info, op, expr
+                } => {
                     let term = enum_cast!(SchedExpr::Term, *expr);
                     Self::Op {
                         info,
                         dest: lhs[0].0.clone(),
-                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
+                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
                         op: HirOp::Unary(op),
                         args: vec![term],
                     }
-                }
-                SchedExpr::Conditional { .. } => {
-                    panic!("Inline conditonal expresssions not allowed in schedule")
-                }
+                },
+                SchedExpr::Conditional { .. } => panic!("Inline conditonal expresssions not allowed in schedule"),
             },
             SchedStmt::Decl {
                 info,
@@ -538,7 +538,7 @@ impl HirBody {
                 Self::VarDecl {
                     info,
                     lhs: lhs[0].0.clone(),
-                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1, specs),
+                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
                     rhs,
                 }
             }
@@ -551,18 +551,8 @@ impl HirBody {
                 panic!("Unexpected stmt")
             }
             SchedStmt::Hole(info) => Self::Hole(info),
-            SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(
-                info,
-                tags.into_iter()
-                    .map(|(name, tags)| (name, TripleTag::from_tag_vec(tags, specs)))
-                    .collect(),
-            ),
-            SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(
-                info,
-                tags.into_iter()
-                    .map(|(name, tags)| (name, TripleTag::from_tag_vec(tags, specs)))
-                    .collect(),
-            ),
+            SchedStmt::InEdgeAnnotation { info, tags } => Self::InAnnotation(info, tags.into_iter().map(|(name, tags)| (name, TripleTag::from_tag_vec(tags))).collect()),
+            SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(info, tags.into_iter().map(|(name, tags)| (name, TripleTag::from_tag_vec(tags))).collect()),
         }
     }
 }
@@ -592,7 +582,7 @@ impl Hir for HirBody {
                 }
             }
             Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::Hole(..) => (),
-            Self::Phi { inputs, .. } => {
+            Self::Phi {inputs, ..} => {
                 res.extend(inputs.iter().map(|(_, name)| name.clone()));
             }
         }
@@ -617,11 +607,9 @@ impl Hir for HirBody {
 
     fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String) {
         match self {
-            Self::ConstDecl { lhs, .. }
-            | Self::VarDecl { lhs, .. }
-            | Self::RefLoad { dest: lhs, .. }
-            | Self::Op { dest: lhs, .. }
-            | Self::Phi { dest: lhs, .. } => {
+            Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } 
+            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} |
+            Self::Phi { dest: lhs, ..} => {
                 *lhs = f(lhs);
             }
             Self::Hole(..)
@@ -650,21 +638,23 @@ impl Hir for HirBody {
             }
             Self::Phi { .. } => {
                 // don't rename uses of phi nodes
-            }
+
+            },
             Self::InAnnotation(_, annots) | Self::OutAnnotation(_, annots) => {
                 for (name, _) in annots {
                     *name = f(name, UseType::Read);
                 }
             }
-            Self::Hole(..) | Self::VarDecl { rhs: None, .. } => (),
+            Self::Hole(..)
+            | Self::VarDecl { rhs: None, .. } => (),
         }
     }
 }
 
 /// Convert a list of `SchedStmts` to a list of Hirs
 #[allow(clippy::module_name_repetitions)]
-pub fn stmts_to_hir(stmts: Vec<SchedStmt>, specs: &Rc<Specs>) -> Vec<HirBody> {
-    stmts.into_iter().map(|s| HirBody::new(s, specs)).collect()
+pub fn stmts_to_hir(stmts: Vec<SchedStmt>, ) -> Vec<HirBody> {
+    stmts.into_iter().map(HirBody::new).collect()
 }
 
 /// Get the uses in a `SchedTerm`

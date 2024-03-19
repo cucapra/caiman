@@ -1,0 +1,32 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val foo(a: i64) -> i64 {
+    returns 1 if a <= 0 else
+            bar(a - 1) * a
+}
+
+val bar(a: i64) -> i64 {
+    returns 1 if a <= 0 else
+            foo(a - 1) + a
+}
+
+fn foo_impl(a: i64) -> i64 impls foo, time, space {
+    if a <= 0 {
+        1
+    } else {
+        bar_impl(a - 1) * a
+    }
+}
+
+fn bar_impl(a: i64) -> i64 impls bar, time, space {
+    if a <= 0 {
+        1
+    } else {
+        foo_impl(a - 1) + a
+    }
+}
+
+pipeline main { foo_impl }

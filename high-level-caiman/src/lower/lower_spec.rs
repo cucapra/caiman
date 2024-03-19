@@ -1,13 +1,21 @@
 use crate::{
     enum_cast,
+    lower::IN_STEM,
     parse::ast::{
         Binop, ClassMembers, DataType, NestedExpr, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
         TopLevel,
     },
     typing::{Context, SpecInfo},
 };
+<<<<<<< HEAD
 use caiman::{assembly::ast as asm, ir};
 use caiman::explication;
+=======
+use caiman::{
+    assembly::ast::{self as asm, Hole},
+    ir,
+};
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
 
 use super::{binop_to_str, data_type_to_local_type, tuple_id};
 
@@ -17,20 +25,20 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
         SpecTerm::Lit { lit, .. } => match lit {
             SpecLiteral::Int(v) => asm::Node::Constant {
                 // TODO: different int widths
-                value: Some(v),
-                type_id: Some(asm::TypeId::Local(String::from("i64"))),
+                value: Hole::Filled(v),
+                type_id: Hole::Filled(asm::TypeId::Local(String::from("i64"))),
             },
             SpecLiteral::Bool(v) => asm::Node::Constant {
-                value: Some(if v {
+                value: Hole::Filled(if v {
                     String::from("1")
                 } else {
                     String::from("0")
                 }),
-                type_id: Some(asm::TypeId::Local(String::from("bool"))),
+                type_id: Hole::Filled(asm::TypeId::Local(String::from("bool"))),
             },
             SpecLiteral::Float(v) => asm::Node::Constant {
-                value: Some(v),
-                type_id: Some(asm::TypeId::Local(String::from("f64"))),
+                value: Hole::Filled(v),
+                type_id: Hole::Filled(asm::TypeId::Local(String::from("f64"))),
             },
             _ => todo!(),
         },
@@ -53,27 +61,27 @@ fn lower_spec_call(
     )
     .clone();
     let tuple_id = tuple_id(&lhs);
-    let mut r = vec![Some(asm::Command::Node(asm::NamedNode {
+    let mut r = vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
         name: Some(asm::NodeId(tuple_id.clone())),
         node: asm::Node::CallFunctionClass {
-            function_id: Some(asm::FunctionClassId(function)),
-            arguments: Some(
+            function_id: Hole::Filled(asm::FunctionClassId(function)),
+            arguments: Hole::Filled(
                 args.into_iter()
                     .map(|x| {
                         let t = enum_cast!(NestedExpr::Term, x);
                         let v = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-                        Some(asm::NodeId(v))
+                        Hole::Filled(asm::NodeId(v))
                     })
                     .collect(),
             ),
         },
     }))];
     for (i, name) in lhs.into_iter().enumerate() {
-        r.push(Some(asm::Command::Node(asm::NamedNode {
+        r.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(name)),
             node: asm::Node::ExtractResult {
-                node_id: Some(asm::NodeId(tuple_id.clone())),
-                index: Some(i),
+                node_id: Hole::Filled(asm::NodeId(tuple_id.clone())),
+                index: Hole::Filled(i),
             },
         })));
     }
@@ -103,22 +111,25 @@ fn lower_binop(
     let op_rhs = term_to_name(op_rhs);
     let temp = tuple_id(&[dest.clone()]);
     vec![
-        Some(asm::Command::Node(asm::NamedNode {
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(temp.clone())),
             node: asm::Node::CallFunctionClass {
-                function_id: Some(asm::FunctionClassId(binop_to_str(
+                function_id: Hole::Filled(asm::FunctionClassId(binop_to_str(
                     op,
                     &format!("{:#}", type_ctx.types.get(&op_lhs).unwrap()),
                     &format!("{:#}", type_ctx.types.get(&op_rhs).unwrap()),
                 ))),
-                arguments: Some(vec![Some(asm::NodeId(op_lhs)), Some(asm::NodeId(op_rhs))]),
+                arguments: Hole::Filled(vec![
+                    Hole::Filled(asm::NodeId(op_lhs)),
+                    Hole::Filled(asm::NodeId(op_rhs)),
+                ]),
             },
         })),
-        Some(asm::Command::Node(asm::NamedNode {
+        Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(dest)),
             node: asm::Node::ExtractResult {
-                node_id: Some(asm::NodeId(temp)),
-                index: Some(0),
+                node_id: Hole::Filled(asm::NodeId(temp)),
+                index: Hole::Filled(0),
             },
         })),
     ]
@@ -147,12 +158,12 @@ fn lower_spec_assign(
             let guard_id = term_to_name(*guard);
             let true_id = term_to_name(*if_true);
             let false_id = term_to_name(*if_false);
-            vec![Some(asm::Command::Node(asm::NamedNode {
+            vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
                 name: Some(asm::NodeId(lhs.swap_remove(0))),
                 node: asm::Node::Select {
-                    condition: Some(asm::NodeId(guard_id)),
-                    true_case: Some(asm::NodeId(true_id)),
-                    false_case: Some(asm::NodeId(false_id)),
+                    condition: Hole::Filled(asm::NodeId(guard_id)),
+                    true_case: Hole::Filled(asm::NodeId(true_id)),
+                    false_case: Hole::Filled(asm::NodeId(false_id)),
                 },
             }))]
         }
@@ -162,7 +173,7 @@ fn lower_spec_assign(
         NestedExpr::Term(t) => {
             assert_eq!(lhs.len(), 1);
             let node = lower_spec_term(t);
-            vec![Some(asm::Command::Node(asm::NamedNode {
+            vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
                 name: Some(asm::NodeId(lhs.swap_remove(0))),
                 node,
             }))]
@@ -185,13 +196,14 @@ fn lower_spec_assign(
         NestedExpr::Uop { .. } => todo!(),
     }
 }
-/// Lower a list of spec statements into a list of assembly commands.
+/// Lower a list of spec statements into a list of assembly commands by appending
+/// the commands to the given vector `res`.
 fn lower_spec_stmts(
     stmts: Vec<SpecStmt>,
     ctx: &Context,
     spec_name: &str,
-) -> Vec<Option<asm::Command>> {
-    let mut res = vec![];
+    mut res: Vec<Hole<asm::Command>>,
+) -> Vec<Hole<asm::Command>> {
     for stmt in stmts {
         match stmt {
             SpecStmt::Assign { lhs, rhs, .. } => {
@@ -208,19 +220,23 @@ fn lower_spec_stmts(
                     ..
                 }) = e
                 {
-                    res.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
-                        return_values: Some(
-                            names
-                                .into_iter()
-                                .map(|x| Some(asm::NodeId(term_to_name(x))))
-                                .collect(),
-                        ),
-                    })));
+                    res.push(Hole::Filled(asm::Command::TailEdge(
+                        asm::TailEdge::Return {
+                            return_values: Hole::Filled(
+                                names
+                                    .into_iter()
+                                    .map(|x| Hole::Filled(asm::NodeId(term_to_name(x))))
+                                    .collect(),
+                            ),
+                        },
+                    )));
                 } else {
                     let v = term_to_name(e);
-                    res.push(Some(asm::Command::TailEdge(asm::TailEdge::Return {
-                        return_values: Some(vec![Some(asm::NodeId(v))]),
-                    })));
+                    res.push(Hole::Filled(asm::Command::TailEdge(
+                        asm::TailEdge::Return {
+                            return_values: Hole::Filled(vec![Hole::Filled(asm::NodeId(v))]),
+                        },
+                    )));
                 }
             }
         }
@@ -245,7 +261,19 @@ fn lower_spec_funclet(
     statements: Vec<SpecStmt>,
     class_name: Option<&str>,
     ctx: &Context,
-) -> (asm::FuncletHeader, Vec<Option<asm::Command>>) {
+) -> (asm::FuncletHeader, Vec<Hole<asm::Command>>) {
+    let phi_nodes: Vec<_> = input
+        .iter()
+        .enumerate()
+        .map(|(idx, (name, _))| {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(name.to_string())),
+                node: asm::Node::Phi {
+                    index: Hole::Filled(idx),
+                },
+            }))
+        })
+        .collect();
     (
         asm::FuncletHeader {
             name: asm::FuncletId(name.to_string()),
@@ -254,7 +282,7 @@ fn lower_spec_funclet(
                 .map(|x| {
                     let (name, dt) = x;
                     asm::FuncletArgument {
-                        name: Some(asm::NodeId(name)),
+                        name: Some(asm::NodeId(format!("{IN_STEM}{name}"))),
                         typ: data_type_to_local_type(&dt),
                         tags: Vec::new(),
                     }
@@ -262,13 +290,11 @@ fn lower_spec_funclet(
                 .collect(),
             ret: output
                 .into_iter()
-                .map(|x| {
-                    let (name, dt) = x;
-                    asm::FuncletArgument {
-                        name: name.map(asm::NodeId),
-                        typ: data_type_to_local_type(&dt),
-                        tags: Vec::new(),
-                    }
+                .enumerate()
+                .map(|(id, (name, dt))| asm::FuncletArgument {
+                    name: Some(asm::NodeId(name.unwrap_or_else(|| format!("_out{id}")))),
+                    typ: data_type_to_local_type(&dt),
+                    tags: Vec::new(),
                 })
                 .collect(),
             binding: class_name.map_or(asm::FuncletBinding::None, |name| {
@@ -278,7 +304,7 @@ fn lower_spec_funclet(
                 })
             }),
         },
-        lower_spec_stmts(statements, ctx, name),
+        lower_spec_stmts(statements, ctx, name, phi_nodes),
     )
 }
 

@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    rc::Rc,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::{
     enum_cast,
@@ -11,7 +8,7 @@ use crate::{
 
 use super::{
     analysis::{compute_continuations, Succs},
-    stmts_to_hir, HirBody, HirFuncCall, Specs, Terminator, TripleTag,
+    stmts_to_hir, HirBody, HirFuncCall, Terminator, TripleTag,
 };
 
 /// The id of the final block of the canonicalized CFG.
@@ -107,11 +104,10 @@ fn make_block(
     term: Terminator,
     cont_block: Option<usize>,
     src_loc: Info,
-    specs: &Rc<Specs>,
 ) -> BasicBlock {
     let res = BasicBlock {
         id: *cur_id,
-        stmts: stmts_to_hir(std::mem::take(cur_stmt), specs),
+        stmts: stmts_to_hir(std::mem::take(cur_stmt)),
         terminator: term,
         ret_block: cont_block,
         src_loc,
@@ -208,21 +204,15 @@ fn flatten_stmts(stmts: Vec<SchedStmt>) -> Vec<SchedStmt> {
     res
 }
 
-fn ast_to_hir_named_tags(
-    tags: Vec<(String, Option<Tags>)>,
-    specs: &Rc<Specs>,
-) -> Vec<(String, TripleTag)> {
+fn ast_to_hir_named_tags(tags: Vec<(String, Option<Tags>)>) -> Vec<(String, TripleTag)> {
     tags.into_iter()
-        .map(|(n, t)| (n, TripleTag::from_owned_opt(t, specs)))
+        .map(|(n, t)| (n, TripleTag::from_owned_opt(t)))
         .collect()
 }
 
-fn ast_to_hir_fulltype(
-    tags: Vec<(String, Option<FullType>)>,
-    specs: &Rc<Specs>,
-) -> Vec<(String, TripleTag)> {
+fn ast_to_hir_fulltype(tags: Vec<(String, Option<FullType>)>) -> Vec<(String, TripleTag)> {
     tags.into_iter()
-        .map(|(n, t)| (n, TripleTag::from_owned_opt(t.map(|t| t.tags), specs)))
+        .map(|(n, t)| (n, TripleTag::from_owned_opt(t.map(|t| t.tags))))
         .collect()
 }
 
@@ -248,7 +238,6 @@ fn handle_return(
     join_edge: Edge,
     end: Info,
     ret_names: Vec<(String, Option<Tags>)>,
-    specs: &Rc<Specs>,
 ) {
     let old_id = *cur_id;
     let info = Info::new_range(
@@ -261,12 +250,12 @@ fn handle_return(
             cur_id,
             cur_stmts,
             Terminator::Return {
-                dests: ast_to_hir_named_tags(ret_names, specs),
+                dests: ast_to_hir_named_tags(ret_names),
                 rets: expr_to_multi_node_id(sched_expr),
+                passthrough: vec![],
             },
             None,
             info,
-            specs,
         ),
     );
     edges.insert(old_id, join_edge);
@@ -299,7 +288,6 @@ fn handle_select(
     end_info: Info,
     children: &mut Vec<PendingChild>,
     dests: Vec<(String, Option<Tags>)>,
-    specs: &Rc<Specs>,
 ) {
     let parent_id = *cur_id;
     let info = Info::new_range(
@@ -313,13 +301,12 @@ fn handle_select(
             cur_id,
             cur_stmts,
             Terminator::Select {
-                dests: ast_to_hir_named_tags(dests, specs),
+                dests: ast_to_hir_named_tags(dests),
                 guard: expr_to_node_id(guard),
-                tag: TripleTag::from_owned_opt(tag, specs),
+                tag: TripleTag::from_owned_opt(tag),
             },
             Some(*cur_id + 1),
             info,
-            specs,
         ),
     );
     //  `cur_id` incremented in `make_block`, so it currently points to the
@@ -355,7 +342,6 @@ fn handle_call(
     lhs: Vec<(String, Option<FullType>)>,
     call: SchedFuncCall,
     info: Info,
-    specs: &Rc<Specs>,
 ) {
     let info = Info::new_range(
         cur_stmts
@@ -364,20 +350,40 @@ fn handle_call(
         &info,
     );
     edges.insert(*cur_id, Edge::Next(*cur_id + 1));
-    blocks.insert(
-        *cur_id,
-        make_block(
-            cur_id,
-            cur_stmts,
-            Terminator::Call(
-                ast_to_hir_fulltype(lhs, specs),
-                HirFuncCall::new(call, specs),
+    if call.yield_call {
+        blocks.insert(
+            *cur_id,
+            make_block(
+                cur_id,
+                cur_stmts,
+                Terminator::Yield(vec![]),
+                Some(*cur_id + 1),
+                info,
             ),
-            Some(*cur_id + 1),
-            info,
-            specs,
-        ),
-    );
+        );
+        edges.insert(*cur_id, Edge::Next(*cur_id + 1));
+        blocks.insert(
+            *cur_id,
+            make_block(
+                cur_id,
+                &mut vec![],
+                Terminator::Call(ast_to_hir_fulltype(lhs), HirFuncCall::new(call)),
+                Some(*cur_id + 1),
+                info,
+            ),
+        );
+    } else {
+        blocks.insert(
+            *cur_id,
+            make_block(
+                cur_id,
+                cur_stmts,
+                Terminator::Call(ast_to_hir_fulltype(lhs), HirFuncCall::new(call)),
+                Some(*cur_id + 1),
+                info,
+            ),
+        );
+    }
 }
 
 /// Handles a sequence statement by constructing a new block with the sequence as the terminator
@@ -405,7 +411,6 @@ fn handle_seq(
     blocks: &mut HashMap<usize, BasicBlock>,
     children: &mut Vec<PendingChild>,
     last_info: &mut Info,
-    specs: &Rc<Specs>,
 ) {
     if let SchedStmt::If {
         guard,
@@ -434,7 +439,6 @@ fn handle_seq(
             if_info,
             children,
             dests.clone(),
-            specs,
         );
         // add an in edge annotation to the continuation block
         // the destination of the select is a meet point, so we need to add
@@ -473,7 +477,6 @@ fn make_blocks(
     stmts: Vec<SchedStmt>,
     join_edge: Edge,
     ret_names: &[(String, Option<Tags>)],
-    specs: &Rc<Specs>,
 ) -> usize {
     let mut cur_stmts = vec![];
     let root_id = *cur_id;
@@ -501,7 +504,6 @@ fn make_blocks(
                     join_edge,
                     end,
                     ret_names.to_vec(),
-                    specs,
                 );
             }
             SchedStmt::If {
@@ -526,7 +528,6 @@ fn make_blocks(
                     end_info,
                     &mut children,
                     vec![],
-                    specs,
                 );
             }
             SchedStmt::Seq {
@@ -545,7 +546,6 @@ fn make_blocks(
                     blocks,
                     &mut children,
                     &mut last_info,
-                    specs,
                 );
             }
             SchedStmt::Decl {
@@ -555,16 +555,7 @@ fn make_blocks(
                 expr: Some(SchedExpr::Term(SchedTerm::Call(_, call))),
             } => {
                 last_info = info;
-                handle_call(
-                    edges,
-                    blocks,
-                    cur_id,
-                    &mut cur_stmts,
-                    lhs,
-                    call,
-                    info,
-                    specs,
-                );
+                handle_call(edges, blocks, cur_id, &mut cur_stmts, lhs, call, info);
             }
             SchedStmt::Call(end, call_info) => {
                 last_info = end;
@@ -576,7 +567,6 @@ fn make_blocks(
                     vec![],
                     call_info,
                     end,
-                    specs,
                 );
             }
             // not a tail edge
@@ -600,11 +590,11 @@ fn make_blocks(
         let info = cur_stmts.last().map_or(last_info, |x| *x.get_info());
         blocks.insert(
             *cur_id,
-            make_block(cur_id, &mut cur_stmts, Terminator::None, None, info, specs),
+            make_block(cur_id, &mut cur_stmts, Terminator::None, None, info),
         );
         edges.insert(old_id, join_edge);
     }
-    make_child_blocks(children, cur_id, blocks, edges, specs);
+    make_child_blocks(children, cur_id, blocks, edges);
     root_id
 }
 
@@ -619,7 +609,6 @@ fn make_child_blocks(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
-    specs: &Rc<Specs>,
 ) {
     for PendingChild {
         parent_id,
@@ -630,11 +619,9 @@ fn make_child_blocks(
     } in children
     {
         let join_edge = Edge::Next(join_id);
-        let true_branch = make_blocks(
-            cur_id, blocks, edges, true_block, join_edge, &ret_names, specs,
-        );
-        let false_branch = false_block
-            .map(|f| make_blocks(cur_id, blocks, edges, f, join_edge, &ret_names, specs));
+        let true_branch = make_blocks(cur_id, blocks, edges, true_block, join_edge, &ret_names);
+        let false_branch =
+            false_block.map(|f| make_blocks(cur_id, blocks, edges, f, join_edge, &ret_names));
         if let Some(false_branch) = false_branch {
             edges.insert(
                 parent_id,
@@ -655,7 +642,7 @@ impl Cfg {
     /// # Arguments
     /// * `stmts` - The list of scheduling statements to convert to blocks.
     /// * `output_len` - The number of outputs of the scheduling function.
-    pub fn new(stmts: Vec<SchedStmt>, outputs: &[FullType], specs: &Specs) -> Self {
+    pub fn new(stmts: Vec<SchedStmt>, outputs: &[FullType]) -> Self {
         use crate::lower::sched_hir::RET_VAR;
         let mut blocks = HashMap::new();
         blocks.insert(
@@ -686,7 +673,6 @@ impl Cfg {
                 .enumerate()
                 .map(|(id, typ)| (format!("{RET_VAR}{id}"), Some(typ.tags.clone())))
                 .collect::<Vec<_>>(),
-            &Rc::new(specs.clone()),
         );
         compute_continuations(
             Self {

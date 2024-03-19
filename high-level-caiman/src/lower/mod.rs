@@ -40,6 +40,9 @@ macro_rules! enum_cast {
 // TODO: only i32, i64, and u64 are currently supported in the IR
 // change this to u8 or i8 once we support those types
 pub const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
+/// The prefix for the name of the actual input arguments in spec funclets
+/// (as opposed to the phi node which is the same name without the prefix).
+const IN_STEM: &str = "_in_";
 
 /// Converts a high-level caiman data type to a caiman assembly type id.
 fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
@@ -143,7 +146,11 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                 let pipeline = asm::Pipeline {
                     name,
                     funclet: asm::FuncletId(entry),
+<<<<<<< HEAD
                     effect: None,
+=======
+                    effect: Some(asm::EffectId(String::from("_loop_eff"))),
+>>>>>>> d111fb29cd177c2d4297ca3a597dd6e78251d99f
                 };
                 asm.declarations.push(asm::Declaration::Pipeline(pipeline));
             }
@@ -210,11 +217,11 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
 const fn binop_name(op: Binop) -> &'static str {
     match op {
         Binop::Lt => "lt",
-        Binop::Leq => "le",
+        Binop::Leq => "leq",
         Binop::Gt => "gt",
-        Binop::Geq => "ge",
+        Binop::Geq => "geq",
         Binop::Eq => "eq",
-        Binop::Neq => "ne",
+        Binop::Neq => "neq",
         Binop::Add => "add",
         Binop::Sub => "sub",
         Binop::Mul => "mul",

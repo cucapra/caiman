@@ -13,19 +13,19 @@ val main() -> i64 {
     returns g
 }
 
-fn main_impl() -> i64 @ node(main.g)-usable
+fn main_impl() -> i64 @ val-usable
     impls main, time, space
 {
-    let a @ node(main.a) = 5;
-    let cond @ node(main.cond) = false;
-    let b @ node(main.b) = if @ node(main.b) cond {
+    let a @ node(val.a) = 5;
+    let cond @ node(val.cond) = false;
+    let b @ node(val.b) = if @ node(val.b) cond {
         a
     } else {
         a
     };
-    let c @ node(main.c) = b + b;
-    let d @ node(main.d) = b + b;
-    let g @ node(main.g) = c + d;
+    let c @ node(val.c) = b + b;
+    let d @ node(val.d) = b + b;
+    let g @ node(val.g) = c + d;
     g
     
 }

@@ -222,20 +222,36 @@ fn collect_seq_body(
     stmt: &SchedStmt,
     mutables: &mut HashMap<String, Info>,
 ) -> Result<(Vec<String>, Vec<String>), LocalError> {
-    if let SchedStmt::If {
-        true_block,
-        false_block,
-        ..
-    } = stmt
-    {
-        let true_rets =
-            collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
-        let false_rets =
-            collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
-        Ok((true_rets, false_rets))
-    } else {
-        unreachable!()
+    match stmt {
+        SchedStmt::If {
+            true_block,
+            false_block,
+            ..
+        } => {
+            let true_rets =
+                collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
+            let false_rets =
+                collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
+            Ok((true_rets, false_rets))
+        }
+        x => {
+            collect_sched_helper(ctx, env, std::iter::once(x), 1, mutables).map(|x| (x.clone(), x))
+        }
     }
+    // if let SchedStmt::If {
+    //     true_block,
+    //     false_block,
+    //     ..
+    // } = stmt
+    // {
+    //     let true_rets =
+    //         collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
+    //     let false_rets =
+    //         collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
+    //     Ok((true_rets, false_rets))
+    // } else {
+    //     unreachable!()
+    // }
 }
 
 /// Collects constraints for a sequence of statements.
@@ -291,6 +307,7 @@ fn collect_if(
     let true_rets = collect_sched_helper(ctx, env, true_block.iter(), true_block.len(), mutables)?;
     let false_rets =
         collect_sched_helper(ctx, env, false_block.iter(), false_block.len(), mutables)?;
+    // ifs that return values should have been converted to sequences
     assert!(true_rets.is_empty() && false_rets.is_empty());
     Ok(())
 }
@@ -515,7 +532,7 @@ pub fn collect_schedule(
     env: &mut DTypeEnv,
     stmts: &[SchedStmt],
     fn_out: &[FullType],
-    sig_outs: &[DataType],
+    sig_outs: &[(String, DataType)],
     info: Info,
     fn_name: &str,
 ) -> Result<HashMap<String, Info>, LocalError> {
@@ -546,7 +563,7 @@ pub fn collect_schedule(
             base: Some(anot), ..
         } = fn_t
         {
-            if !anot.base.refines(sig_t) {
+            if !anot.base.refines(&sig_t.1) {
                 return Err(type_error(
                     info,
                     &format!(

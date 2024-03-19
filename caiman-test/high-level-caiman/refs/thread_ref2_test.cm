@@ -16,6 +16,7 @@ fn main_func() -> i64 impls main, time, space
 {
     var c = 2;
     let c = id_func(&c);
+    // @in { c: node(val) };
     *id_func(c)
 }
 

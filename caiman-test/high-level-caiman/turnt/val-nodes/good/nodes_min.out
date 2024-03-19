@@ -134,6 +134,43 @@ Program {
         FunctionClass(
             FunctionClass {
                 name: FunctionClassId(
+                    "_loop",
+                ),
+                input_types: [],
+                output_types: [],
+            },
+        ),
+        ExternalFunction(
+            ExternalFunction {
+                kind: CPUEffect,
+                value_function_binding: FunctionClassBinding {
+                    default: false,
+                    function_class: FunctionClassId(
+                        "_loop",
+                    ),
+                },
+                name: "_loop_impl",
+                input_args: [],
+                output_types: [],
+            },
+        ),
+        Effect(
+            EffectDeclaration {
+                name: EffectId(
+                    "_loop_eff",
+                ),
+                effect: FullyConnected {
+                    effectful_function_ids: [
+                        ExternalFunctionId(
+                            "_loop_impl",
+                        ),
+                    ],
+                },
+            },
+        ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
                     "_lt_i64_i64",
                 ),
                 input_types: [
@@ -190,7 +227,7 @@ Program {
                         FuncletArgument {
                             name: Some(
                                 NodeId(
-                                    "e",
+                                    "_in_e",
                                 ),
                             ),
                             typ: Local(
@@ -201,7 +238,11 @@ Program {
                     ],
                     ret: [
                         FuncletArgument {
-                            name: None,
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
                             typ: Local(
                                 "Event",
                             ),
@@ -211,12 +252,28 @@ Program {
                     binding: None,
                 },
                 commands: [
-                    Some(
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "e",
+                                    ),
+                                ),
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
                         TailEdge(
                             Return {
-                                return_values: Some(
+                                return_values: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             NodeId(
                                                 "e",
                                             ),
@@ -240,7 +297,7 @@ Program {
                         FuncletArgument {
                             name: Some(
                                 NodeId(
-                                    "bs",
+                                    "_in_bs",
                                 ),
                             ),
                             typ: Local(
@@ -251,7 +308,11 @@ Program {
                     ],
                     ret: [
                         FuncletArgument {
-                            name: None,
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
                             typ: Local(
                                 "BufferSpace",
                             ),
@@ -261,12 +322,28 @@ Program {
                     binding: None,
                 },
                 commands: [
-                    Some(
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: Some(
+                                    NodeId(
+                                        "bs",
+                                    ),
+                                ),
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
                         TailEdge(
                             Return {
-                                return_values: Some(
+                                return_values: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             NodeId(
                                                 "bs",
                                             ),
@@ -289,14 +366,18 @@ Program {
                     args: [],
                     ret: [
                         FuncletArgument {
-                            name: None,
+                            name: Some(
+                                NodeId(
+                                    "_out0",
+                                ),
+                            ),
                             typ: Local(
                                 "i64",
                             ),
                             tags: [],
                         },
                     ],
-                    binding: ValueBinding(
+                    binding: SpecBinding(
                         FunctionClassBinding {
                             default: false,
                             function_class: FunctionClassId(
@@ -306,7 +387,7 @@ Program {
                     ),
                 },
                 commands: [
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -315,10 +396,10 @@ Program {
                                     ),
                                 ),
                                 node: Constant {
-                                    value: Some(
+                                    value: Filled(
                                         "2",
                                     ),
-                                    type_id: Some(
+                                    type_id: Filled(
                                         Local(
                                             "i64",
                                         ),
@@ -327,7 +408,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -336,10 +417,10 @@ Program {
                                     ),
                                 ),
                                 node: Constant {
-                                    value: Some(
+                                    value: Filled(
                                         "1",
                                     ),
-                                    type_id: Some(
+                                    type_id: Filled(
                                         Local(
                                             "i64",
                                         ),
@@ -348,7 +429,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -357,19 +438,19 @@ Program {
                                     ),
                                 ),
                                 node: CallFunctionClass {
-                                    function_id: Some(
+                                    function_id: Filled(
                                         FunctionClassId(
                                             "_lt_i64_i64",
                                         ),
                                     ),
-                                    arguments: Some(
+                                    arguments: Filled(
                                         [
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_f0",
                                                 ),
                                             ),
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_f1",
                                                 ),
@@ -380,7 +461,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -389,19 +470,19 @@ Program {
                                     ),
                                 ),
                                 node: ExtractResult {
-                                    node_id: Some(
+                                    node_id: Filled(
                                         NodeId(
                                             "_t_f2",
                                         ),
                                     ),
-                                    index: Some(
+                                    index: Filled(
                                         0,
                                     ),
                                 },
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -410,10 +491,10 @@ Program {
                                     ),
                                 ),
                                 node: Constant {
-                                    value: Some(
+                                    value: Filled(
                                         "2",
                                     ),
-                                    type_id: Some(
+                                    type_id: Filled(
                                         Local(
                                             "i64",
                                         ),
@@ -422,7 +503,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -431,10 +512,10 @@ Program {
                                     ),
                                 ),
                                 node: Constant {
-                                    value: Some(
+                                    value: Filled(
                                         "1",
                                     ),
-                                    type_id: Some(
+                                    type_id: Filled(
                                         Local(
                                             "i64",
                                         ),
@@ -443,7 +524,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -452,17 +533,17 @@ Program {
                                     ),
                                 ),
                                 node: Select {
-                                    condition: Some(
+                                    condition: Filled(
                                         NodeId(
                                             "_f2",
                                         ),
                                     ),
-                                    true_case: Some(
+                                    true_case: Filled(
                                         NodeId(
                                             "_f3",
                                         ),
                                     ),
-                                    false_case: Some(
+                                    false_case: Filled(
                                         NodeId(
                                             "_f4",
                                         ),
@@ -471,12 +552,12 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         TailEdge(
                             Return {
-                                return_values: Some(
+                                return_values: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             NodeId(
                                                 "_f5",
                                             ),
@@ -521,51 +602,47 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: Output(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
                                                 ),
-                                                node: Some(
+                                            ),
+                                            node: Some(
+                                                Filled(
                                                     NodeId(
-                                                        "_f5",
+                                                        "_out0",
                                                     ),
                                                 ),
-                                            },
-                                        ),
+                                            ),
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "tmln",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
@@ -584,51 +661,47 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: Output(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
                                                 ),
-                                                node: Some(
+                                            ),
+                                            node: Some(
+                                                Filled(
                                                     NodeId(
-                                                        "_f5",
+                                                        "_out0",
                                                     ),
                                                 ),
-                                            },
-                                        ),
+                                            ),
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "tmln",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
@@ -637,32 +710,82 @@ Program {
                     ],
                     binding: ScheduleBinding(
                         ScheduleBinding {
-                            implicit_tags: None,
-                            value: Some(
-                                FuncletId(
-                                    "min",
-                                ),
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
                             ),
-                            timeline: Some(
-                                FuncletId(
-                                    "time",
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "min",
+                                    ),
                                 ),
-                            ),
-                            spatial: Some(
-                                FuncletId(
-                                    "space",
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "time",
+                                    ),
                                 ),
-                            ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
                         },
                     ),
                 },
                 commands: [
-                    Some(
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
                         TailEdge(
                             Return {
-                                return_values: Some(
+                                return_values: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             NodeId(
                                                 "_out0",
                                             ),
@@ -691,51 +814,47 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: Output(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
                                                 ),
-                                                node: Some(
+                                            ),
+                                            node: Some(
+                                                Filled(
                                                     NodeId(
-                                                        "_f5",
+                                                        "_out0",
                                                     ),
                                                 ),
-                                            },
-                                        ),
+                                            ),
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "tmln",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
@@ -744,27 +863,65 @@ Program {
                     ],
                     binding: ScheduleBinding(
                         ScheduleBinding {
-                            implicit_tags: None,
-                            value: Some(
-                                FuncletId(
-                                    "min",
-                                ),
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
                             ),
-                            timeline: Some(
-                                FuncletId(
-                                    "time",
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "min",
+                                    ),
                                 ),
-                            ),
-                            spatial: Some(
-                                FuncletId(
-                                    "space",
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "time",
+                                    ),
                                 ),
-                            ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
                         },
                     ),
                 },
                 commands: [
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -773,15 +930,15 @@ Program {
                                     ),
                                 ),
                                 node: AllocTemporary {
-                                    place: Some(
+                                    place: Filled(
                                         Local,
                                     ),
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    buffer_flags: Some(
+                                    buffer_flags: Filled(
                                         BufferFlags {
                                             map_read: true,
                                             map_write: true,
@@ -795,35 +952,33 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: None,
                                 node: LocalDoBuiltin {
-                                    operation: Some(
-                                        Node(
-                                            Some(
-                                                RemoteNodeId {
-                                                    funclet: Some(
-                                                        FuncletId(
-                                                            "min",
-                                                        ),
-                                                    ),
-                                                    node: Some(
-                                                        NodeId(
-                                                            "_f0",
-                                                        ),
-                                                    ),
-                                                },
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
+                                                ),
                                             ),
-                                        ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f0",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
                                     ),
-                                    inputs: Some(
+                                    inputs: Filled(
                                         [],
                                     ),
-                                    outputs: Some(
+                                    outputs: Filled(
                                         [
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_t0",
                                                 ),
@@ -834,7 +989,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -843,12 +998,12 @@ Program {
                                     ),
                                 ),
                                 node: ReadRef {
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    source: Some(
+                                    source: Filled(
                                         NodeId(
                                             "_t0",
                                         ),
@@ -857,7 +1012,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -866,15 +1021,15 @@ Program {
                                     ),
                                 ),
                                 node: AllocTemporary {
-                                    place: Some(
+                                    place: Filled(
                                         Local,
                                     ),
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    buffer_flags: Some(
+                                    buffer_flags: Filled(
                                         BufferFlags {
                                             map_read: true,
                                             map_write: true,
@@ -888,35 +1043,33 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: None,
                                 node: LocalDoBuiltin {
-                                    operation: Some(
-                                        Node(
-                                            Some(
-                                                RemoteNodeId {
-                                                    funclet: Some(
-                                                        FuncletId(
-                                                            "min",
-                                                        ),
-                                                    ),
-                                                    node: Some(
-                                                        NodeId(
-                                                            "_f1",
-                                                        ),
-                                                    ),
-                                                },
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
+                                                ),
                                             ),
-                                        ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f1",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
                                     ),
-                                    inputs: Some(
+                                    inputs: Filled(
                                         [],
                                     ),
-                                    outputs: Some(
+                                    outputs: Filled(
                                         [
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_t1",
                                                 ),
@@ -927,7 +1080,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -936,12 +1089,12 @@ Program {
                                     ),
                                 ),
                                 node: ReadRef {
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    source: Some(
+                                    source: Filled(
                                         NodeId(
                                             "_t1",
                                         ),
@@ -950,7 +1103,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -959,15 +1112,15 @@ Program {
                                     ),
                                 ),
                                 node: AllocTemporary {
-                                    place: Some(
+                                    place: Filled(
                                         Local,
                                     ),
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I32,
                                         ),
                                     ),
-                                    buffer_flags: Some(
+                                    buffer_flags: Filled(
                                         BufferFlags {
                                             map_read: true,
                                             map_write: true,
@@ -981,51 +1134,49 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: None,
                                 node: LocalDoExternal {
-                                    operation: Some(
-                                        Node(
-                                            Some(
-                                                RemoteNodeId {
-                                                    funclet: Some(
-                                                        FuncletId(
-                                                            "min",
-                                                        ),
-                                                    ),
-                                                    node: Some(
-                                                        NodeId(
-                                                            "_t_f2",
-                                                        ),
-                                                    ),
-                                                },
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
+                                                ),
                                             ),
-                                        ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_t_f2",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
                                     ),
-                                    external_function_id: Some(
+                                    external_function_id: Filled(
                                         ExternalFunctionId(
                                             "_lt_i64_i64",
                                         ),
                                     ),
-                                    inputs: Some(
+                                    inputs: Filled(
                                         [
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_f0_0",
                                                 ),
                                             ),
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_f1_0",
                                                 ),
                                             ),
                                         ],
                                     ),
-                                    outputs: Some(
+                                    outputs: Filled(
                                         [
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_t2",
                                                 ),
@@ -1036,7 +1187,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1045,12 +1196,12 @@ Program {
                                     ),
                                 ),
                                 node: ReadRef {
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I32,
                                         ),
                                     ),
-                                    source: Some(
+                                    source: Filled(
                                         NodeId(
                                             "_t2",
                                         ),
@@ -1059,7 +1210,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1071,7 +1222,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1080,15 +1231,15 @@ Program {
                                     ),
                                 ),
                                 node: InlineJoin {
-                                    funclet: Some(
+                                    funclet: Filled(
                                         FuncletId(
                                             "_min_impl2",
                                         ),
                                     ),
-                                    captures: Some(
+                                    captures: Filled(
                                         [],
                                     ),
-                                    continuation: Some(
+                                    continuation: Filled(
                                         NodeId(
                                             "_t3",
                                         ),
@@ -1097,78 +1248,72 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         TailEdge(
                             ScheduleSelect {
-                                value_operation: Some(
-                                    Node(
-                                        Some(
+                                operations: Filled(
+                                    [
+                                        Filled(
                                             RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
+                                                funclet: Filled(
+                                                    MetaId(
+                                                        "val",
                                                     ),
                                                 ),
                                                 node: Some(
-                                                    NodeId(
-                                                        "_f5",
+                                                    Filled(
+                                                        NodeId(
+                                                            "_f5",
+                                                        ),
                                                     ),
                                                 ),
                                             },
                                         ),
-                                    ),
-                                ),
-                                timeline_operation: Some(
-                                    None(
-                                        Some(
+                                        Filled(
                                             RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
+                                                funclet: Filled(
+                                                    MetaId(
+                                                        "sptl",
                                                     ),
                                                 ),
                                                 node: None,
                                             },
                                         ),
-                                    ),
-                                ),
-                                spatial_operation: Some(
-                                    None(
-                                        Some(
+                                        Filled(
                                             RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
+                                                funclet: Filled(
+                                                    MetaId(
+                                                        "tmln",
                                                     ),
                                                 ),
                                                 node: None,
                                             },
                                         ),
-                                    ),
+                                    ],
                                 ),
-                                condition: Some(
+                                condition: Filled(
                                     NodeId(
                                         "_f2_0",
                                     ),
                                 ),
-                                callee_funclet_ids: Some(
+                                callee_funclet_ids: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             FuncletId(
                                                 "_min_impl3",
                                             ),
                                         ),
-                                        Some(
+                                        Filled(
                                             FuncletId(
                                                 "_min_impl4",
                                             ),
                                         ),
                                     ],
                                 ),
-                                callee_arguments: Some(
+                                callee_arguments: Filled(
                                     [],
                                 ),
-                                continuation_join: Some(
+                                continuation_join: Filled(
                                     NodeId(
                                         "_t4",
                                     ),
@@ -1198,51 +1343,47 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: Node(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
                                                 ),
-                                                node: Some(
+                                            ),
+                                            node: Some(
+                                                Filled(
                                                     NodeId(
                                                         "_f5",
                                                     ),
                                                 ),
-                                            },
-                                        ),
+                                            ),
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "tmln",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
@@ -1257,51 +1398,47 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: Output(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
                                                 ),
-                                                node: Some(
+                                            ),
+                                            node: Some(
+                                                Filled(
                                                     NodeId(
-                                                        "_f5",
+                                                        "_out0",
                                                     ),
                                                 ),
-                                            },
-                                        ),
+                                            ),
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "tmln",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
@@ -1310,27 +1447,77 @@ Program {
                     ],
                     binding: ScheduleBinding(
                         ScheduleBinding {
-                            implicit_tags: None,
-                            value: Some(
-                                FuncletId(
-                                    "min",
-                                ),
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
                             ),
-                            timeline: Some(
-                                FuncletId(
-                                    "time",
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "min",
+                                    ),
                                 ),
-                            ),
-                            spatial: Some(
-                                FuncletId(
-                                    "space",
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "time",
+                                    ),
                                 ),
-                            ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
                         },
                     ),
                 },
                 commands: [
-                    Some(
+                    Filled(
+                        Node(
+                            NamedNode {
+                                name: None,
+                                node: Phi {
+                                    index: Filled(
+                                        0,
+                                    ),
+                                },
+                            },
+                        ),
+                    ),
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1342,7 +1529,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1351,15 +1538,15 @@ Program {
                                     ),
                                 ),
                                 node: InlineJoin {
-                                    funclet: Some(
+                                    funclet: Filled(
                                         FuncletId(
                                             "_min_impl0",
                                         ),
                                     ),
-                                    captures: Some(
+                                    captures: Filled(
                                         [],
                                     ),
-                                    continuation: Some(
+                                    continuation: Filled(
                                         NodeId(
                                             "_t0",
                                         ),
@@ -1368,17 +1555,17 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         TailEdge(
                             Jump {
-                                join: Some(
+                                join: Filled(
                                     NodeId(
                                         "_t1",
                                     ),
                                 ),
-                                arguments: Some(
+                                arguments: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             NodeId(
                                                 "r_0",
                                             ),
@@ -1407,51 +1594,47 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: Node(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
                                                 ),
-                                                node: Some(
+                                            ),
+                                            node: Some(
+                                                Filled(
                                                     NodeId(
                                                         "_f3",
                                                     ),
                                                 ),
-                                            },
-                                        ),
+                                            ),
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "tmln",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
@@ -1460,27 +1643,65 @@ Program {
                     ],
                     binding: ScheduleBinding(
                         ScheduleBinding {
-                            implicit_tags: None,
-                            value: Some(
-                                FuncletId(
-                                    "min",
-                                ),
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
                             ),
-                            timeline: Some(
-                                FuncletId(
-                                    "time",
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "min",
+                                    ),
                                 ),
-                            ),
-                            spatial: Some(
-                                FuncletId(
-                                    "space",
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "time",
+                                    ),
                                 ),
-                            ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
                         },
                     ),
                 },
                 commands: [
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1489,15 +1710,15 @@ Program {
                                     ),
                                 ),
                                 node: AllocTemporary {
-                                    place: Some(
+                                    place: Filled(
                                         Local,
                                     ),
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    buffer_flags: Some(
+                                    buffer_flags: Filled(
                                         BufferFlags {
                                             map_read: true,
                                             map_write: true,
@@ -1511,35 +1732,33 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: None,
                                 node: LocalDoBuiltin {
-                                    operation: Some(
-                                        Node(
-                                            Some(
-                                                RemoteNodeId {
-                                                    funclet: Some(
-                                                        FuncletId(
-                                                            "min",
-                                                        ),
-                                                    ),
-                                                    node: Some(
-                                                        NodeId(
-                                                            "_f3",
-                                                        ),
-                                                    ),
-                                                },
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
+                                                ),
                                             ),
-                                        ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f3",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
                                     ),
-                                    inputs: Some(
+                                    inputs: Filled(
                                         [],
                                     ),
-                                    outputs: Some(
+                                    outputs: Filled(
                                         [
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_t0",
                                                 ),
@@ -1550,7 +1769,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1559,12 +1778,12 @@ Program {
                                     ),
                                 ),
                                 node: ReadRef {
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    source: Some(
+                                    source: Filled(
                                         NodeId(
                                             "_t0",
                                         ),
@@ -1573,12 +1792,12 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         TailEdge(
                             Return {
-                                return_values: Some(
+                                return_values: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             NodeId(
                                                 "_f3_0",
                                             ),
@@ -1607,51 +1826,47 @@ Program {
                             ),
                             tags: [
                                 Tag {
-                                    quot: Node(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "min",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
                                                 ),
-                                                node: Some(
+                                            ),
+                                            node: Some(
+                                                Filled(
                                                     NodeId(
                                                         "_f4",
                                                     ),
                                                 ),
-                                            },
-                                        ),
+                                            ),
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "space",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
                                 Tag {
-                                    quot: None(
-                                        Some(
-                                            RemoteNodeId {
-                                                funclet: Some(
-                                                    FuncletId(
-                                                        "time",
-                                                    ),
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "tmln",
                                                 ),
-                                                node: None,
-                                            },
-                                        ),
+                                            ),
+                                            node: None,
+                                        },
                                     ),
                                     flow: Usable,
                                 },
@@ -1660,27 +1875,65 @@ Program {
                     ],
                     binding: ScheduleBinding(
                         ScheduleBinding {
-                            implicit_tags: None,
-                            value: Some(
-                                FuncletId(
-                                    "min",
-                                ),
+                            implicit_tags: (
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
+                                Tag {
+                                    quot: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "sptl",
+                                                ),
+                                            ),
+                                            node: None,
+                                        },
+                                    ),
+                                    flow: Usable,
+                                },
                             ),
-                            timeline: Some(
-                                FuncletId(
-                                    "time",
+                            meta_map: MetaMapping {
+                                value: (
+                                    MetaId(
+                                        "val",
+                                    ),
+                                    FuncletId(
+                                        "min",
+                                    ),
                                 ),
-                            ),
-                            spatial: Some(
-                                FuncletId(
-                                    "space",
+                                timeline: (
+                                    MetaId(
+                                        "tmln",
+                                    ),
+                                    FuncletId(
+                                        "time",
+                                    ),
                                 ),
-                            ),
+                                spatial: (
+                                    MetaId(
+                                        "sptl",
+                                    ),
+                                    FuncletId(
+                                        "space",
+                                    ),
+                                ),
+                            },
                         },
                     ),
                 },
                 commands: [
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1689,15 +1942,15 @@ Program {
                                     ),
                                 ),
                                 node: AllocTemporary {
-                                    place: Some(
+                                    place: Filled(
                                         Local,
                                     ),
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    buffer_flags: Some(
+                                    buffer_flags: Filled(
                                         BufferFlags {
                                             map_read: true,
                                             map_write: true,
@@ -1711,35 +1964,33 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: None,
                                 node: LocalDoBuiltin {
-                                    operation: Some(
-                                        Node(
-                                            Some(
-                                                RemoteNodeId {
-                                                    funclet: Some(
-                                                        FuncletId(
-                                                            "min",
-                                                        ),
-                                                    ),
-                                                    node: Some(
-                                                        NodeId(
-                                                            "_f4",
-                                                        ),
-                                                    ),
-                                                },
+                                    operation: Filled(
+                                        RemoteNodeId {
+                                            funclet: Filled(
+                                                MetaId(
+                                                    "val",
+                                                ),
                                             ),
-                                        ),
+                                            node: Some(
+                                                Filled(
+                                                    NodeId(
+                                                        "_f4",
+                                                    ),
+                                                ),
+                                            ),
+                                        },
                                     ),
-                                    inputs: Some(
+                                    inputs: Filled(
                                         [],
                                     ),
-                                    outputs: Some(
+                                    outputs: Filled(
                                         [
-                                            Some(
+                                            Filled(
                                                 NodeId(
                                                     "_t0",
                                                 ),
@@ -1750,7 +2001,7 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         Node(
                             NamedNode {
                                 name: Some(
@@ -1759,12 +2010,12 @@ Program {
                                     ),
                                 ),
                                 node: ReadRef {
-                                    storage_type: Some(
+                                    storage_type: Filled(
                                         FFI(
                                             I64,
                                         ),
                                     ),
-                                    source: Some(
+                                    source: Filled(
                                         NodeId(
                                             "_t0",
                                         ),
@@ -1773,12 +2024,12 @@ Program {
                             },
                         ),
                     ),
-                    Some(
+                    Filled(
                         TailEdge(
                             Return {
-                                return_values: Some(
+                                return_values: Filled(
                                     [
-                                        Some(
+                                        Filled(
                                             NodeId(
                                                 "_f4_0",
                                             ),
@@ -1796,6 +2047,11 @@ Program {
                 name: "main",
                 funclet: FuncletId(
                     "min_impl",
+                ),
+                effect: Some(
+                    EffectId(
+                        "_loop_eff",
+                    ),
                 ),
             },
         ),

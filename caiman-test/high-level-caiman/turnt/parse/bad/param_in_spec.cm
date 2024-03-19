@@ -1,4 +1,4 @@
 #version 0.1.0
-sptl g(f: i32) -> (i32,) {
+sptl g(f: i32) -> i32 {
     x :- f'<10>(f)
 }
