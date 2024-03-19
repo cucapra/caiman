@@ -1,0 +1,79 @@
+// equivalent to the following implementation of
+//   return (x + 1) + (x + 1 + 1):
+// int add_twice(int x) {
+//     int y = x + 1;
+//     int z = y;
+//     y = y + 1;
+//     return y + z;
+// }
+
+version 0.0.2
+
+pipeline "main" = %add_twice_head;
+
+type i64;
+event %event0;
+buffer_space %buffspace;
+native_value %i64n : i64;
+
+function @add(i64, i64) -> i64;
+
+external-cpu-pure[impl @add] %add(i64, i64) -> i64;
+
+function @add_twice(i64) -> i64;
+
+value[impl default @add_twice] %add_twice(%x : i64) -> i64 {
+    %one = constant %i64n 1;
+    
+    %left_t = call @add(%x, %one);
+    %left = extract %left_t 0;
+
+    %right_t = call @add(%left, %one);
+    %right = extract %right_t 0;
+
+    %result_t = call @add(%left, %right);
+    %result = extract %result_t 0;
+
+    return %result;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+// implement add_twice
+
+schedule[value $val = %add_twice, timeline $time = %time, spatial $space = %space] 
+%add_twice_head
+<$time-usable, $time-usable>
+    (%x     : $val.%x-usable $time-usable $space-usable %i64n)
+    -> 
+    $val.%result-usable $time-usable $space-usable %i64n
+{
+    %one_ref = alloc-temporary local [storage, map_write] i64;
+    %y_ref = alloc-temporary local [storage, map_write, map_read] i64;
+    %z_ref = alloc-temporary local [storage, map_write] i64;
+    %result_ref = alloc-temporary local [storage, map_write] i64;
+
+    local-do-builtin $val.%one() -> %one_ref;
+    %one = read-ref i64 %one_ref;
+
+    local-do-external %add $val.%left_t(%x, %one) -> %y_ref;
+    local-copy %y_ref -> %z_ref;
+
+    %y = read-ref i64 %y_ref;
+    %left = read-ref i64 %z_ref;
+
+    local-do-external %add $val.%right_t(%y, %one) -> %y_ref;
+
+    %right = read-ref i64 %y_ref;
+
+    local-do-external %add $val.%result_t(%left, %right) -> %result_ref;
+    %result = read-ref i64 %result_ref;
+
+    return %result;
+}
