@@ -5,56 +5,6 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use crate::explication::Hole;
 
-// Explication and frontend AST
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Hole<T> {
-    Empty,
-    Filled(T),
-}
-
-impl<T> Hole<T> {
-    pub fn as_ref(&self) -> Hole<&T> {
-        match self {
-            Hole::Empty => Hole::Empty,
-            Hole::Filled(x) => Hole::Filled(x),
-        }
-    }
-
-    pub fn opt(self) -> Option<T> {
-        self.into()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Hole::Empty => true,
-            Hole::Filled(_) => false,
-        }
-    }
-
-    pub fn is_filled(&self) -> bool {
-        !self.is_empty()
-    }
-}
-
-impl<T> From<Option<T>> for Hole<T> {
-    fn from(x: Option<T>) -> Self {
-        match x {
-            Some(x) => Hole::Filled(x),
-            None => Hole::Empty,
-        }
-    }
-}
-
-impl<T> From<Hole<T>> for Option<T> {
-    fn from(x: Hole<T>) -> Self {
-        match x {
-            Hole::Filled(x) => Some(x),
-            Hole::Empty => None,
-        }
-    }
-}
-
 #[macro_export]
 macro_rules! def_assembly_id_type {
     ( $type : ident ) => {

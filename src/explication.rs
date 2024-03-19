@@ -4,13 +4,62 @@ mod explicator;
 mod explicator_macros;
 mod util;
 
-pub type Hole<T> = Option<T>;
-
 use crate::ir;
 use crate::stable_vec::StableVec;
 use context::{InState, StaticContext};
+use serde_derive::{Deserialize, Serialize};
 
 use self::explicator::{explicate_schedule_funclet, lower_spec_funclet};
+
+// Explication and frontend AST
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Hole<T> {
+    Empty,
+    Filled(T),
+}
+
+impl<T> Hole<T> {
+    pub fn as_ref(&self) -> Hole<&T> {
+        match self {
+            Hole::Empty => Hole::Empty,
+            Hole::Filled(x) => Hole::Filled(x),
+        }
+    }
+
+    pub fn opt(self) -> Option<T> {
+        self.into()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Hole::Empty => true,
+            Hole::Filled(_) => false,
+        }
+    }
+
+    pub fn is_filled(&self) -> bool {
+        !self.is_empty()
+    }
+}
+
+impl<T> From<Option<T>> for Hole<T> {
+    fn from(x: Option<T>) -> Self {
+        match x {
+            Some(x) => Hole::Filled(x),
+            None => Hole::Empty,
+        }
+    }
+}
+
+impl<T> From<Hole<T>> for Option<T> {
+    fn from(x: Hole<T>) -> Self {
+        match x {
+            Hole::Filled(x) => Some(x),
+            Hole::Empty => None,
+        }
+    }
+}
 
 fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
     context

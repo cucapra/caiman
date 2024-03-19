@@ -79,7 +79,7 @@ impl InState {
         self.get_latest_scope().funclet
     }
 
-    pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::Node> {
+    pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::Node> {
         let scope = self.get_latest_scope();
         get_expect_box(
             &context.get_funclet(scope.funclet).nodes,
@@ -87,7 +87,7 @@ impl InState {
         )
     }
 
-    pub fn get_current_tail_edge<'a>(&self, context: &'a StaticContext) -> &'a Option<expir::TailEdge> {
+    pub fn get_current_tail_edge<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::TailEdge> {
         &context.get_funclet(self.get_latest_scope().funclet).tail_edge
     }
 
@@ -237,10 +237,10 @@ macro_rules! match_op_args {
         match ($arg1, $arg2) {
             // matching each arrangement
             // we want to check for more specific matches
-            (None, None) => Some($n),
-            (Some(_), None) => None,
-            (None, Some(_)) => Some($n),
-            (Some(s1), Some(s2)) => match_op_args!(@ $nested (s1, s2, $n))
+            (Hole::Empty, Hole::Empty) => Some($n),
+            (Hole::Filled(_), Hole::Empty) => None,
+            (Hole::Empty, Hole::Filled(_)) => Some($n),
+            (Hole::Filled(s1), Hole::Filled(s2)) => match_op_args!(@ $nested (s1, s2, $n))
         }
     };
     (@ false ($left:ident, $right:ident, $n:ident)) => {

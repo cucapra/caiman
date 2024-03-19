@@ -1,6 +1,7 @@
 use crate::ir;
 use crate::explication::expir;
 use crate::explication::expir::Node;
+use crate::explication::Hole;
 use paste::paste;
 
 macro_rules! satisfy_argument {
@@ -15,15 +16,15 @@ macro_rules! satisfy_argument {
             // matching each arrangement
             // we want to add stuff if it's currently none
             // if both are vectors, then we also wanna handle that
-            (None, None) => None,
-            (Some(v), None) => Some(v.clone()),
-            (None, Some(v)) => Some(v.clone()),
-            (Some(left), Some(right)) => { satisfy_argument!{@ $nested (left right)} }
+            (Hole::Empty, Hole::Empty) => Hole::Empty,
+            (Hole::Filled(v), Hole::Empty) => Hole::Filled(v.clone()),
+            (Hole::Empty, Hole::Filled(v)) => Hole::Filled(v.clone()),
+            (Hole::Filled(left), Hole::Filled(right)) => { satisfy_argument!{@ $nested (left right)} }
         }
     };
     (@ false ($left:ident $right:ident)) => {
         assert_eq!($left, $right); // safety check
-        Some($left.clone())
+        Hole::Filled($left.clone())
     };
     (@ true ($left:ident $right:ident)) => {
         assert_eq!($left.len(), $right.len());  // safety check
@@ -32,7 +33,7 @@ macro_rules! satisfy_argument {
             let right_value = &$right[index];
             result.push(satisfy_argument!(@ left_value right_value false))
         };
-        Some(result.into_boxed_slice())
+        Hole::Filled(result.into_boxed_slice())
     }
 }
 
@@ -59,10 +60,10 @@ with_operations!(generate_satisfiers);
 
 macro_rules! lower_element {
     ($arg:ident [$_arg_type:ident] $error:ident) => {
-        $arg.as_ref().expect(&$error).iter().map(|e| e.expect(&$error)).collect()
+        $arg.as_ref().opt().expect(&$error).iter().map(|e| e.clone().opt().expect(&$error)).collect()
     };
     ($arg:ident $_arg_type:ident $error:ident) => {
-        $arg.expect(&$error)
+        $arg.clone().opt().expect(&$error)
     }
 }
 

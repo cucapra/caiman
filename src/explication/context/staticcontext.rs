@@ -29,8 +29,8 @@ impl<'context> StaticContext<'context> {
         let mut index_map = HashMap::new();
         for (index, ret) in returns.into_iter().enumerate() {
             match ret {
-                None => {}
-                Some(name) => {
+                Hole::Empty => {}
+                Hole::Filled(name) => {
                     index_map.insert(name.clone(), index);
                 }
             }
@@ -38,12 +38,12 @@ impl<'context> StaticContext<'context> {
         let spec_data = self.get_spec_data(funclet);
         for node in self.get_funclet(funclet).nodes.iter() {
             match node {
-                Some(expir::Node::ExtractResult { node_id, index }) => {
+                Hole::Filled(expir::Node::ExtractResult { node_id, index }) => {
                     // lots of potentially panicking unwraps here
                     // none of these should be `None` at this point
                     let dependency = spec_data
                         .node_dependencies
-                        .get(node_id.as_ref().unwrap())
+                        .get(node_id.as_ref().opt().unwrap())
                         .unwrap()
                         .first()
                         .unwrap();
@@ -93,15 +93,15 @@ fn initialize_spec_funclet_info(
     let mut tail_dependencies = Vec::new();
     for (index, node) in funclet.nodes.as_ref().iter().enumerate() {
         match &node {
-            None => {}
-            Some(node) => {
+            Hole::Empty => {}
+            Hole::Filled(node) => {
                 node_dependencies.insert(index, identify_node_deps(node));
             }
         }
     }
     match &funclet.tail_edge {
-        None => {}
-        Some(t) => {
+        Hole::Empty => {}
+        Hole::Filled(t) => {
             identify_tailedge_deps(t);
         }
     }
@@ -112,9 +112,9 @@ fn initialize_spec_funclet_info(
         ir::FuncletKind::Value => {
             for node in funclet.nodes.as_ref() {
                 match node {
-                    None => {}
+                    Hole::Empty => {}
                     // TODO: ???
-                    Some(n) => {}
+                    Hole::Filled(n) => {}
                 }
             }
         }
@@ -143,7 +143,7 @@ fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
             vec![]
         }
         expir::Node::ExtractResult { node_id, index } => {
-            vec![node_id.expect(&error)]
+            vec![node_id.clone().opt().expect(&error)]
         }
         expir::Node::Constant { value, type_id } => vec![],
         expir::Node::CallFunctionClass {
@@ -151,9 +151,10 @@ fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
             arguments,
         } => arguments
             .as_ref()
+            .opt()
             .expect(&error)
             .iter()
-            .map(|n| n.expect(&error))
+            .map(|n| n.clone().opt().expect(&error))
             .collect(),
         expir::Node::Select {
             condition,
@@ -161,35 +162,40 @@ fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
             false_case,
         } => {
             vec![
-                condition.expect(&error),
-                true_case.expect(&error),
-                false_case.expect(&error),
+                condition.clone().opt().expect(&error),
+                true_case.clone().opt().expect(&error),
+                false_case.clone().opt().expect(&error),
             ]
         }
         expir::Node::EncodingEvent {
             local_past,
             remote_local_pasts,
-        } => vec![local_past.expect(&error)]
+        } => vec![local_past.clone().opt().expect(&error)]
             .into_iter()
             .chain(
                 remote_local_pasts
+                    .clone()
+                    .opt()
                     .as_ref()
                     .expect(&error)
                     .iter()
-                    .map(|n| n.expect(&error)),
+                    .map(|n| n.clone().opt().expect(&error)),
             )
             .collect(),
         expir::Node::SubmissionEvent { local_past } => {
-            vec![local_past.expect(&error)]
+            vec![local_past.clone().opt().expect(&error)]
         }
         expir::Node::SynchronizationEvent {
             local_past,
             remote_local_past,
         } => {
-            vec![local_past.expect(&error), remote_local_past.expect(&error)]
+            vec![
+                local_past.clone().opt().expect(&error),
+                remote_local_past.clone().opt().expect(&error),
+            ]
         }
         expir::Node::SeparatedBufferSpaces { count, space } => {
-            vec![space.expect(&error)]
+            vec![space.clone().opt().expect(&error)]
         }
         _ => {
             panic!("Unsupported named specification node type {:?}", &node);
@@ -207,19 +213,22 @@ fn identify_tailedge_deps(edge: &expir::TailEdge) -> Vec<NodeId> {
     let dependencies = match edge {
         expir::TailEdge::DebugHole { inputs } => inputs.iter().map(|n| n.clone()).collect(),
         expir::TailEdge::Return { return_values } => return_values
+            .clone()
+            .opt()
             .as_ref()
             .expect(&error)
             .iter()
-            .map(|n| n.expect(&error))
+            .map(|n| n.clone().opt().expect(&error))
             .collect(),
-        expir::TailEdge::Jump { join, arguments } => vec![join.expect(&error)]
+        expir::TailEdge::Jump { join, arguments } => vec![join.clone().opt().expect(&error)]
             .into_iter()
             .chain(
-                arguments
+                arguments.clone()
+                    .opt()
                     .as_ref()
                     .expect(&error)
                     .iter()
-                    .map(|n| n.expect(&error)),
+                    .map(|n| n.clone().opt().expect(&error)),
             )
             .collect(),
         _ => {
@@ -258,15 +267,15 @@ fn deduce_type(
         "Invalid hole in {:?}, cannot have an explication hole in a spec funclet",
         &node
     );
-    let typ = match node.clone().expect(&error) {
+    let typ = match node.clone().opt().expect(&error) {
         expir::Node::Phi { index } => {
-            vec![get_expect_box(&funclet.input_types, index.expect(&error)).clone()]
+            vec![get_expect_box(&funclet.input_types, index.opt().expect(&error)).clone()]
         }
         expir::Node::ExtractResult { node_id, index } => {
-            let index = index.expect(&error);
+            let index = index.opt().expect(&error);
             vec![get_type_info(
                 funclet,
-                *node_id.as_ref().expect(&error),
+                *node_id.as_ref().opt().expect(&error),
                 node_dependencies,
                 type_map,
             )

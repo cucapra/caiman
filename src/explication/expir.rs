@@ -51,14 +51,14 @@ macro_rules! map_refs {
     // When mapping referenced nodes, we only care about mapping the Operation types,
     // since those are the actual references.
     ($map:ident, $arg:ident : Operation) => {
-        $arg.map(|x| $map(x.clone()))
+        $arg.clone().opt().map(|x| $map(x)).into()
     };
     ($map:ident, $arg:ident : [Operation]) => {
-        $arg.as_ref().map(|lst| {
+        $arg.as_ref().opt().map(|lst| {
             lst.iter()
                 .map(|arg_hole| arg_hole.clone())
                 .collect()
-        })
+        }).into()
     };
     ($_map:ident, $arg:ident : $_arg_type:tt) => {
         $arg.clone()
@@ -103,7 +103,7 @@ with_operations!(make_nodes);
 pub type Quotient = crate::ir::Quotient;
 pub type Flow = crate::ir::Flow;
 #[derive(
-    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash,
+    Serialize, Deserialize, Debug, Clone, PartialEq, Eq
 )]
 pub struct Tag {
     pub quot: Quotient, // What a given value maps to in a specification
@@ -112,7 +112,7 @@ pub struct Tag {
 
 impl Default for Tag {
     fn default() -> Self {
-        Self { quot: Default::default(), flow: Some(crate::ir::Flow::Usable) }
+        Self { quot: Default::default(), flow: Hole::Filled(crate::ir::Flow::Usable) }
     }
 }
 

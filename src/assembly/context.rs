@@ -144,10 +144,7 @@ impl FuncletIndices {
     }
 
     pub fn require_funclet(&self, name: &String) -> usize {
-        match self.get_funclet(name) {
-            Hole::Filled(f) => f,
-            Hole::Empty => panic!("Unknown funclet name {}", name),
-        }
+        self.get_funclet(name).expect(&format!("Unknown funclet name {}", name))
     }
 }
 
@@ -293,11 +290,11 @@ impl Context {
         }
     }
 
-    pub fn explicit_node_id(&self, funclet: &FuncletId, node: &Option<NodeId>) -> expir::Quotient {
+    pub fn explicit_node_id(&self, funclet: &FuncletId, node: &Hole<NodeId>) -> expir::Quotient {
         match self.variable_map.get(funclet) {
             Some(f) => match node {
-                None => expir::Quotient::None,
-                Some(var) => f
+                Hole::Empty => expir::Quotient::None,
+                Hole::Filled(var) => f
                     .get(var)
                     .expect(format!("Unknown node {} in funclet {}", var, funclet).as_str())
                     .clone(),
@@ -367,8 +364,8 @@ impl Context {
         };
         let error = "Holes in operational lists unsupported";
         for operation in operations {
-            let unwrapped = operation.as_ref().unwrap_or_else(|| panic!(error));
-            let remote = unwrapped.quot.as_ref().unwrap_or_else(|| panic!(error));
+            let unwrapped = operation.as_ref().opt().expect(&error);
+            let remote = unwrapped.quot.as_ref().opt().expect(&error);
             let (fnid, kind) = self.meta_lookup_loc(&remote.funclet);
             let quot = self.explicit_node_id(
                 &fnid,
@@ -376,7 +373,7 @@ impl Context {
                     .node
                     .as_ref()
                     .cloned()
-                    .map(|n| n.opt().unwrap_or_else(|| panic!(error))),
+                    .map(|n| n.opt().expect(&error)).into(),
             );
             let tag = Hole::Filled(expir::Tag {
                 quot,
@@ -384,7 +381,7 @@ impl Context {
             });
             match kind {
                 expir::FuncletKind::Value => match result.value {
-                    None => {
+                    Hole::Empty => {
                         result.value = tag;
                     }
                     Hole::Filled(old) => {
@@ -395,7 +392,7 @@ impl Context {
                     }
                 },
                 expir::FuncletKind::Timeline => match result.timeline {
-                    None => {
+                    Hole::Empty => {
                         result.timeline = tag;
                     }
                     Hole::Filled(old) => {
@@ -406,7 +403,7 @@ impl Context {
                     }
                 },
                 expir::FuncletKind::Spatial => match result.spatial {
-                    None => {
+                    Hole::Empty => {
                         result.spatial = tag;
                     }
                     Hole::Filled(old) => {
@@ -430,24 +427,24 @@ impl Context {
         operations: &Hole<Vec<Hole<ast::RemoteNodeId>>>,
     ) -> OperationSet {
         match operations.as_ref() {
-            None => OperationSet {
-                value: None,
-                timeline: None,
-                spatial: None,
+            Hole::Empty => OperationSet {
+                value: Hole::Empty,
+                timeline: Hole::Empty,
+                spatial: Hole::Empty,
             },
-            Some(ops) => {
+            Hole::Filled(ops) => {
                 let tags = ops.iter().map(|quot| {
-                    Some(ast::Tag {
+                    Hole::Filled(ast::Tag {
                         quot: quot.clone(),
                         // the dumb part, this doesn't matter
-                        flow: None,
+                        flow: Hole::Empty,
                     })
                 });
                 let result = self.tag_lookup(&tags.collect());
                 OperationSet {
-                    value: result.value.map(|t| t.quot),
-                    timeline: result.timeline.map(|t| t.quot),
-                    spatial: result.spatial.map(|t| t.quot),
+                    value: result.value.opt().map(|t| t.quot).into(),
+                    timeline: result.timeline.opt().map(|t| t.quot).into(),
+                    spatial: result.spatial.opt().map(|t| t.quot).into(),
                 }
             }
         }

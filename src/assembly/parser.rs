@@ -283,14 +283,14 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn meta_name(input: Node) -> ParseResult<String> {
+    fn meta_name(input: Node) -> ParseResult<MetaId> {
         Ok(match_nodes!(input.into_children();
-            [id(s)] => s,
-            [throwaway] => "_".to_string()
+            [id(s)] => MetaId(s),
+            [throwaway] => MetaId("_".to_string())
         ))
     }
 
-    fn meta_name_sep(input: Node) -> ParseResult<String> {
+    fn meta_name_sep(input: Node) -> ParseResult<MetaId> {
         Ok(match_nodes!(input.into_children();
             [meta_name(name)] => name
         ))
@@ -490,27 +490,27 @@ impl CaimanAssemblyParser {
 
     fn quotient(input: Node) -> ParseResult<ast::RemoteNodeId> {
         Ok(match_nodes!(input.into_children();
-            [phi_qualifier, meta_name(funclet_id)] => {
+            [phi_qualifier, meta_name(funclet)] => {
                 ast::RemoteNodeId {
-                    funclet: Hole::Filled(ast::MetaId(funclet_id)),
+                    funclet,
                     node: None
                 }
             },
-            [meta_name(funclet_id)] => {
+            [meta_name(funclet)] => {
                 ast::RemoteNodeId {
-                    funclet: ast::MetaId(funclet_id),
+                    funclet,
                     node: None
                 }
             },
-            [phi_qualifier, meta_name(funclet_id), name(node_id)] => {
+            [phi_qualifier, meta_name(funclet), name(node_id)] => {
                 ast::RemoteNodeId {
-                    funclet: Hole::Filled(ast::MetaId(funclet_id)),
+                    funclet,
                     node: Some(Hole::Filled(ast::NodeId(PHI_QUALIFIER.to_owned() + &node_id)))
                 }
             },
-            [meta_name(funclet_id), name(node_id)] => {
+            [meta_name(funclet), name(node_id)] => {
                 ast::RemoteNodeId {
-                    funclet: ast::MetaId(funclet_id),
+                    funclet,
                     node: Some(Hole::Filled(ast::NodeId(node_id)))
                 }
             },
@@ -519,29 +519,29 @@ impl CaimanAssemblyParser {
 
     fn quotient_hole(input: Node) -> ParseResult<Hole<ast::RemoteNodeId>> {
         Ok(match_nodes!(input.into_children();
-            [phi_qualifier, meta_name(funclet_id)] => {
+            [phi_qualifier, meta_name(funclet)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.opt().map(ast::MetaId).into(),
+                    funclet,
                     node: None
                 })
             },
-            [meta_name(funclet_id)] => {
+            [meta_name(funclet)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.opt().map(ast::MetaId).into(),
+                    funclet,
                     node: None
                 })
             },
-            [phi_qualifier, meta_name(funclet_id), name_hole(node_id)] => {
+            [phi_qualifier, meta_name(funclet), name_hole(node_id)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.opt().map(ast::MetaId).into(),
+                    funclet,
                     node: Some(node_id.opt().map(|n|
                         ast::NodeId(PHI_QUALIFIER.to_owned() + &n))
                     .into())
                 })
             },
-            [meta_name(funclet_id), name_hole(node_id)] => {
+            [meta_name(funclet), name_hole(node_id)] => {
                 Hole::Filled(ast::RemoteNodeId {
-                    funclet: funclet_id.opt().map(ast::MetaId).into(),
+                    funclet,
                     node: Some(node_id.opt().map(ast::NodeId).into())
                 })
             },
@@ -557,11 +557,11 @@ impl CaimanAssemblyParser {
             .parse::<String>()
             .map_err(|e| input.error(e))
             .and_then(|s| match s.as_str() {
-                "dead" => Ok(Some(ir::Flow::Dead)),
-                "usable" => Ok(Some(ir::Flow::Usable)),
-                "saved" => Ok(Some(ir::Flow::Saved)),
-                "need" => Ok(Some(ir::Flow::Need)),
-                "?" => Ok(None),
+                "dead" => Ok(Hole::Filled(ir::Flow::Dead)),
+                "usable" => Ok(Hole::Filled(ir::Flow::Usable)),
+                "saved" => Ok(Hole::Filled(ir::Flow::Saved)),
+                "need" => Ok(Hole::Filled(ir::Flow::Need)),
+                "?" => Ok(Hole::Empty),
                 _ => unreachable!(),
             })
     }
@@ -977,21 +977,21 @@ impl CaimanAssemblyParser {
         // the type is a bit of a lie here, but it reflects the AST better
         Ok(match_nodes!(input.into_children();
             [value_sep, meta_name(meta_name), name(name)] =>
-            (MetaId(meta_name), FuncletId(name))
+            (meta_name, FuncletId(name))
         ))
     }
 
     fn schedule_box_timeline(input: Node) -> ParseResult<(MetaId, FuncletId)> {
         Ok(match_nodes!(input.into_children();
             [value_sep, meta_name(meta_name), name(name)] =>
-            (MetaId(meta_name), FuncletId(name))
+            (meta_name, FuncletId(name))
         ))
     }
 
     fn schedule_box_spatial(input: Node) -> ParseResult<(MetaId, FuncletId)> {
         Ok(match_nodes!(input.into_children();
             [value_sep, meta_name(meta_name), name(name)] =>
-            (MetaId(meta_name), FuncletId(name))
+            (meta_name, FuncletId(name))
         ))
     }
 

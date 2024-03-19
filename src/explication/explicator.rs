@@ -11,11 +11,13 @@ use crate::{explication, frontend, ir};
 use super::explicator_macros::force_lower_node;
 
 fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
+    let error = format!("Unimplemented flow hole in tag {:?}", &tag);
     ir::Tag {
         quot: tag.quot,
         flow: tag
             .flow
-            .expect(&format!("Unimplemented flow hole in tag {:?}", &tag)),
+            .opt()
+            .expect(&error),
     }
 }
 
@@ -139,10 +141,10 @@ fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutS
         explicate_tail_edge(&state, context)
     } else {
         match state.get_current_node(context) {
-            None => {
+            Hole::Empty => {
                 todo!()
             }
-            Some(node) => {
+            Hole::Filled(node) => {
                 let mut new_state = state.clone();
                 new_state.next_node();
                 match explicate_node(new_state, context) {
@@ -159,24 +161,26 @@ fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutS
 
 fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<FuncletOutState> {
     let tail_edge = match state.get_current_tail_edge(context) {
-        Some(tail_edge) => {
+        Hole::Filled(tail_edge) => {
             let error = format!("Unimplemented hole in tail edge {:?}", tail_edge);
             match tail_edge {
                 expir::TailEdge::Return { return_values } => ir::TailEdge::Return {
                     return_values: return_values
                         .as_ref()
+                        .opt()
                         .expect(&error)
                         .iter()
-                        .map(|v| v.expect(&error))
+                        .map(|v| v.clone().opt().expect(&error))
                         .collect(),
                 },
                 expir::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-                    join: join.as_ref().expect(&error).clone(),
+                    join: join.as_ref().opt().expect(&error).clone(),
                     arguments: arguments
                         .as_ref()
+                        .opt()
                         .expect(&error)
                         .iter()
-                        .map(|v| v.expect(&error))
+                        .map(|v| v.clone().opt().expect(&error))
                         .collect(),
                 },
                 expir::TailEdge::ScheduleCall {
@@ -187,17 +191,18 @@ fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<Funcl
                     callee_arguments,
                     continuation_join,
                 } => ir::TailEdge::ScheduleCall {
-                    value_operation: value_operation.expect(&error).clone(),
-                    timeline_operation: timeline_operation.expect(&error).clone(),
-                    spatial_operation: spatial_operation.expect(&error).clone(),
-                    callee_funclet_id: callee_funclet_id.expect(&error).clone(),
+                    value_operation: value_operation.clone().opt().expect(&error).clone(),
+                    timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
+                    spatial_operation: spatial_operation.clone().opt().expect(&error).clone(),
+                    callee_funclet_id: callee_funclet_id.clone().opt().expect(&error).clone(),
                     callee_arguments: callee_arguments
                         .as_ref()
+                        .opt()
                         .expect(&error)
                         .iter()
-                        .map(|v| v.expect(&error))
+                        .map(|v| v.clone().opt().expect(&error))
                         .collect(),
-                    continuation_join: continuation_join.expect(&error).clone(),
+                    continuation_join: continuation_join.clone().opt().expect(&error).clone(),
                 },
                 expir::TailEdge::ScheduleSelect {
                     value_operation,
@@ -208,23 +213,25 @@ fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<Funcl
                     callee_arguments,
                     continuation_join,
                 } => ir::TailEdge::ScheduleSelect {
-                    value_operation: value_operation.expect(&error).clone(),
-                    timeline_operation: timeline_operation.expect(&error).clone(),
-                    spatial_operation: spatial_operation.expect(&error).clone(),
-                    condition: condition.expect(&error).clone(),
+                    value_operation: value_operation.clone().opt().expect(&error).clone(),
+                    timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
+                    spatial_operation: spatial_operation.clone().opt().expect(&error).clone(),
+                    condition: condition.clone().opt().expect(&error).clone(),
                     callee_funclet_ids: callee_funclet_ids
                         .as_ref()
+                        .opt()
                         .expect(&error)
                         .iter()
-                        .map(|v| v.expect(&error))
+                        .map(|v| v.clone().opt().expect(&error))
                         .collect(),
                     callee_arguments: callee_arguments
                         .as_ref()
+                        .opt()
                         .expect(&error)
                         .iter()
-                        .map(|v| v.expect(&error))
+                        .map(|v| v.clone().opt().expect(&error))
                         .collect(),
-                    continuation_join: continuation_join.expect(&error).clone(),
+                    continuation_join: continuation_join.clone().opt().expect(&error).clone(),
                 },
                 expir::TailEdge::ScheduleCallYield {
                     value_operation,
@@ -234,24 +241,25 @@ fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<Funcl
                     yielded_nodes,
                     continuation_join,
                 } => ir::TailEdge::ScheduleCallYield {
-                    value_operation: value_operation.expect(&error).clone(),
-                    timeline_operation: timeline_operation.expect(&error).clone(),
-                    spatial_operation: spatial_operation.expect(&error).clone(),
-                    external_function_id: external_function_id.expect(&error).clone(),
+                    value_operation: value_operation.clone().opt().expect(&error).clone(),
+                    timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
+                    spatial_operation: spatial_operation.clone().opt().expect(&error).clone(),
+                    external_function_id: external_function_id.clone().opt().expect(&error).clone(),
                     yielded_nodes: yielded_nodes
                         .as_ref()
+                        .opt()
                         .expect(&error)
                         .iter()
-                        .map(|v| v.expect(&error))
+                        .map(|v| v.clone().opt().expect(&error))
                         .collect(),
-                    continuation_join: continuation_join.expect(&error).clone(),
+                    continuation_join: continuation_join.clone().opt().expect(&error).clone(),
                 },
                 expir::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
                     inputs: inputs.clone(),
                 },
             }
         }
-        None => {
+        Hole::Empty => {
             todo!()
         }
     };
@@ -271,15 +279,15 @@ fn explicate_funclet_spec(
         input_tags: spec
             .input_tags
             .iter()
-            .map(|t| explicate_tag(t.expect(&error), context))
+            .map(|t| explicate_tag(t.clone().opt().expect(&error), context))
             .collect(),
         output_tags: spec
             .output_tags
             .iter()
-            .map(|t| explicate_tag(t.expect(&error), context))
+            .map(|t| explicate_tag(t.clone().opt().expect(&error), context))
             .collect(),
-        implicit_in_tag: explicate_tag(spec.implicit_in_tag.expect(&error), context),
-        implicit_out_tag: explicate_tag(spec.implicit_out_tag.expect(&error), context),
+        implicit_in_tag: explicate_tag(spec.implicit_in_tag.clone().opt().expect(&error), context),
+        implicit_out_tag: explicate_tag(spec.implicit_out_tag.clone().opt().expect(&error), context),
     }
 }
 
@@ -343,18 +351,20 @@ fn lower_spec_tail_edge(tail_edge: &expir::TailEdge, context: &StaticContext) ->
         expir::TailEdge::Return { return_values } => ir::TailEdge::Return {
             return_values: return_values
                 .as_ref()
+                .opt()
                 .expect(&error)
                 .iter()
-                .map(|v| v.expect(&error))
+                .map(|v| v.clone().opt().expect(&error))
                 .collect(),
         },
         expir::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-            join: join.as_ref().expect(&error).clone(),
+            join: join.as_ref().opt().expect(&error).clone(),
             arguments: arguments
                 .as_ref()
+                .opt()
                 .expect(&error)
                 .iter()
-                .map(|v| v.expect(&error))
+                .map(|v| v.clone().opt().expect(&error))
                 .collect(),
         },
         expir::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
@@ -376,9 +386,9 @@ pub fn lower_spec_funclet(funclet: FuncletId, context: &StaticContext) -> ir::Fu
     let nodes = func
         .nodes
         .iter()
-        .map(|n| explicator_macros::force_lower_node(&n.as_ref().expect(&error)))
+        .map(|n| explicator_macros::force_lower_node(&n.as_ref().opt().expect(&error)))
         .collect();
-    let tail_edge = lower_spec_tail_edge(&func.tail_edge.as_ref().expect(&error), context);
+    let tail_edge = lower_spec_tail_edge(&func.tail_edge.as_ref().opt().expect(&error), context);
 
     ir::Funclet {
         kind,

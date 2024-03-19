@@ -20,10 +20,10 @@ pub fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
     let mut result = Vec::new();
     for (index, hole) in v.into_iter().enumerate() {
         match hole {
-            Some(value) => {
+            Hole::Filled(value) => {
                 result.push((index, value));
             }
-            None => {}
+            Hole::Empty => {}
         }
     }
     result
@@ -34,8 +34,8 @@ where
     T: Clone,
 {
     match h {
-        Some(v) => find_filled(v),
-        None => Vec::new(),
+        Hole::Filled(v) => find_filled(v),
+        Hole::Empty => Vec::new(),
     }
 }
 
