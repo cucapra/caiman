@@ -1,0 +1,23 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val ack(m: i64, n: i64) -> i64 {
+    returns n + 1 if m <= 0 else
+            ack(m - 1, 1) if n <= 0 else
+            ack(m - 1, ack(m, n - 1))
+}
+
+fn ack_impl(m: i64, n: i64) -> i64 impls ack, time, space {
+    if m <= 0 {
+        n + 1
+    } else if n <= 0 {
+        ack_impl(m - 1, 1)
+    } else {
+        let m1 = m - 1;
+        ack_impl(m1, ack_impl(m, n - 1))
+    }
+}
+
+pipeline main { ack_impl }

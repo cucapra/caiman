@@ -1,0 +1,19 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val gcd(a: i64, b: i64) -> i64 {
+    returns a if b == 0
+            else gcd(b, a % b)
+}
+
+fn gcd_impl(a: i64, b: i64) -> i64 impls gcd, time, space {
+    if b == 0 {
+        a
+    } else {
+        gcd_impl(b, a % b)
+    }
+}
+
+pipeline main { gcd_impl }

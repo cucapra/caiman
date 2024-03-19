@@ -1,0 +1,81 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val head_head(m: i64, n: i64) -> i64 {
+    returns skip_1(m, n) if m == n else
+            skip_2(m, n - m) if m < n else
+            skip_3(m - n, n)
+}
+
+val head(m: i64, n: i64) -> i64 {
+    returns 0 if m == n else
+            skip_1(m, n)
+}
+
+val skip_1(m: i64, n: i64) -> i64 {
+    returns 0 if m <= 0 else
+            skip_2(m, n) + m
+}
+
+val skip_2(m: i64, n: i64) -> i64 {
+    returns 0 if n <= 0 else
+            skip_3(m, n) + n
+}
+
+val skip_3(m: i64, n: i64) -> i64 {
+    returns head(m - n, n) if n < m else
+            head(m, n - m) if m < n else
+            skip_1(m - 1, n - 1)
+}
+
+fn head_head_impl(m: i64, n: i64) -> i64 impls head_head, time, space {
+    if m == n {
+        skip_1_impl(m, n)
+    } else if m < n {
+        skip_2_impl(m, n - m)
+    } else {
+        skip_3_impl(m - n, n)
+    }
+}
+
+fn head_impl(m: i64, n: i64) -> i64 impls head, time, space {
+    if m == n {
+        0
+    } else {
+        skip_1_impl(m, n)
+    }
+}
+
+fn skip_1_impl(m: i64, n: i64) -> i64 impls skip_1, time, space {
+    if m <= 0 {
+        0
+    } else {
+        var m2 = m;
+        let m2 = &m2;
+        skip_2_impl(*m2, n) + m
+    }
+}
+
+fn skip_2_impl(m: i64, n: i64) -> i64 impls skip_2, time, space {
+    if n <= 0 {
+        0
+    } else {
+        var n2 = n;
+        let n2 = &n2;
+        skip_3_impl(m, *n2) + n
+    }
+}
+
+fn skip_3_impl(m: i64, n: i64) -> i64 impls skip_3, time, space {
+    if n < m {
+        head_impl(m - n, n)
+    } else if m < n {
+        head_impl(m, n - m)
+    } else {
+        skip_1_impl(m - 1, n - 1)
+    }
+}
+
+pipeline main { head_head_impl }

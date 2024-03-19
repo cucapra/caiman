@@ -503,7 +503,8 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
         env = match &block.terminator {
             Terminator::CaptureCall { dests, call, .. } => unify_call(dests, call, ctx, env)?,
             Terminator::Call(..) => unreachable!(),
-            Terminator::Return { dests, rets } => {
+            Terminator::Return { dests, rets, .. } => {
+                // pass through is ignored (like next)
                 // the destination tag is the tag for the merged node, we handle this
                 for ((dest, _), ret) in dests.iter().zip(rets.iter()) {
                     env = add_var_constraint(dest, ret, Info::default(), env)?;
@@ -524,7 +525,10 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                 }
                 env
             }
-            Terminator::Select { .. } | Terminator::None | Terminator::Next(..) => env,
+            Terminator::Select { .. }
+            | Terminator::None
+            | Terminator::Next(..)
+            | Terminator::Yield(_) => env,
         }
     }
     Ok((env, selects))
@@ -662,7 +666,10 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
             Terminator::Call(..) | Terminator::None => unreachable!(),
             // TODO: check the return, I think this is right bc returns should be handled
             // by Phi nodes
-            Terminator::Next(..) | Terminator::FinalReturn(..) | Terminator::Return { .. } => {}
+            Terminator::Next(..)
+            | Terminator::FinalReturn(..)
+            | Terminator::Return { .. }
+            | Terminator::Yield(_) => {}
         }
         while let Some((idx, stmt)) = insertions.pop() {
             block.stmts.insert(idx, stmt);

@@ -131,6 +131,43 @@ Program {
                 },
             ),
         ),
+        FunctionClass(
+            FunctionClass {
+                name: FunctionClassId(
+                    "_loop",
+                ),
+                input_types: [],
+                output_types: [],
+            },
+        ),
+        ExternalFunction(
+            ExternalFunction {
+                kind: CPUEffect,
+                value_function_binding: FunctionClassBinding {
+                    default: false,
+                    function_class: FunctionClassId(
+                        "_loop",
+                    ),
+                },
+                name: "_loop_impl",
+                input_args: [],
+                output_types: [],
+            },
+        ),
+        Effect(
+            EffectDeclaration {
+                name: EffectId(
+                    "_loop_eff",
+                ),
+                effect: FullyConnected {
+                    effectful_function_ids: [
+                        ExternalFunctionId(
+                            "_loop_impl",
+                        ),
+                    ],
+                },
+            },
+        ),
         Funclet(
             Funclet {
                 kind: Timeline,
@@ -3635,7 +3672,11 @@ Program {
                 funclet: FuncletId(
                     "foo",
                 ),
-                effect: None,
+                effect: Some(
+                    EffectId(
+                        "_loop_eff",
+                    ),
+                ),
             },
         ),
     ],

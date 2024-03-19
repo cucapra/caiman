@@ -302,7 +302,7 @@ impl Fact for TagAnalysis {
                     );
                 }
             }
-            HirInstr::Tail(Terminator::Return { dests, rets }) => {
+            HirInstr::Tail(Terminator::Return { dests, rets, .. }) => {
                 assert_eq!(dests.len(), rets.len());
                 for ((idx, _), out) in dests.iter().zip(rets.iter()) {
                     let tag = self.tags.get(out).cloned().unwrap();
@@ -313,7 +313,10 @@ impl Fact for TagAnalysis {
                 }
             }
             HirInstr::Tail(
-                Terminator::None | Terminator::Next(..) | Terminator::FinalReturn(_),
+                Terminator::None
+                | Terminator::Next(..)
+                | Terminator::FinalReturn(_)
+                | Terminator::Yield(_),
             ) => (),
             HirInstr::Stmt(stmt) => self.transfer_stmt(stmt),
         }

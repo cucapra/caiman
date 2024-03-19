@@ -10,7 +10,7 @@ pub struct CallGraph<'a> {
     // place every time
     /// Map from source function name to a list of (edge_id, destination function name)
     /// Edge ids are indices into the `edges` vector
-    adj: BTreeMap<String, BTreeMap<String, usize>>,
+    adj: BTreeMap<String, Vec<(String, usize)>>,
     edges: Vec<&'a mut SchedFuncCall>,
 }
 
@@ -18,7 +18,7 @@ impl<'a> CallGraph<'a> {
     /// Constructs a new call graph from a program. Requires that the program is
     /// flattened.
     pub fn new(program: &'a mut Program) -> Self {
-        let mut adj: BTreeMap<_, BTreeMap<String, usize>> = BTreeMap::new();
+        let mut adj: BTreeMap<_, Vec<(String, usize)>> = BTreeMap::new();
         let mut edges = Vec::new();
         for decl in program {
             if let TopLevel::SchedulingFunc {
@@ -37,7 +37,7 @@ impl<'a> CallGraph<'a> {
     fn search_for_calls<T: Iterator<Item = &'a mut SchedStmt>>(
         func_name: &str,
         stmts: T,
-        adj: &mut BTreeMap<String, BTreeMap<String, usize>>,
+        adj: &mut BTreeMap<String, Vec<(String, usize)>>,
         edges: &mut Vec<&'a mut SchedFuncCall>,
     ) {
         for stmt in stmts {
@@ -53,14 +53,11 @@ impl<'a> CallGraph<'a> {
                 }
                 | SchedStmt::Return(_, SchedExpr::Term(SchedTerm::Call(_, call))) => {
                     if let NestedExpr::Term(SchedTerm::Var { name: dest, .. }) = &*call.target {
-                        let map = adj.entry(func_name.to_string()).or_default();
-                        if !map.contains_key(dest) {
-                            let edge_id = edges.len();
-                            adj.entry(func_name.to_string())
-                                .or_default()
-                                .insert(dest.clone(), edge_id);
-                            edges.push(call);
-                        }
+                        let edge_id = edges.len();
+                        adj.entry(func_name.to_string())
+                            .or_default()
+                            .push((dest.clone(), edge_id));
+                        edges.push(call);
                     } else {
                         panic!("Call target is not a variable");
                     }
@@ -105,29 +102,36 @@ impl<'a> CallGraph<'a> {
     /// * `node` - The node to start the search from
     /// * `visited` - The set of nodes that have been visited (updated by the function)
     /// * `backedges` - The set of backedges in the graph (updated by the function)
-    fn dfs(&self, node: &str, visited: &mut HashSet<String>, backedges: &mut HashSet<usize>) {
+    fn dfs(
+        &self,
+        node: &str,
+        visited: &mut HashSet<String>,
+        finished: &mut HashSet<String>,
+        backedges: &mut HashSet<usize>,
+    ) {
         visited.insert(node.to_string());
         if self.adj.contains_key(node) {
             for (dest, edge_id) in &self.adj[node] {
-                if visited.contains(dest) {
-                    backedges.insert(*edge_id);
-                } else {
-                    self.dfs(dest, visited, backedges);
+                if !finished.contains(dest) {
+                    if visited.contains(dest) {
+                        backedges.insert(*edge_id);
+                    } else {
+                        self.dfs(dest, visited, finished, backedges);
+                    }
                 }
             }
         }
+        finished.insert(node.to_string());
     }
 
     /// Finds all backedges in the call graph by iterating over the adjacency list
     /// and performing a depth first search from each node
     fn find_all_backedges(&self) -> HashSet<usize> {
         let mut backedges = HashSet::new();
-        let mut visited = HashSet::new();
+        let mut completed = HashSet::new();
         for node in self.adj.keys() {
-            if !visited.contains(node) {
-                let mut local_visited = HashSet::new();
-                self.dfs(node, &mut local_visited, &mut backedges);
-                visited.extend(local_visited);
+            if !completed.contains(node) {
+                self.dfs(node, &mut HashSet::new(), &mut completed, &mut backedges);
             }
         }
         backedges
@@ -140,6 +144,11 @@ impl<'a> CallGraph<'a> {
         // This is a simple method which puts a yield at every backedge in the call graph.
         // It puts in more yields than necessary since finding the minimal set of yields
         // is the minimum feedback arc set problem which is NP-hard.
+        let _debug: Vec<(_, Vec<_>)> = self
+            .adj
+            .iter()
+            .map(|(k, v)| (k, v.iter().collect()))
+            .collect();
         let backedges = self.find_all_backedges();
         for edge in backedges {
             let call = self.edges.get_mut(edge).unwrap();
