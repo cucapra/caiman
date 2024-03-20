@@ -13,6 +13,7 @@ pub mod ir;
 pub mod stable_vec;
 //mod ir_builders;
 pub mod frontend;
+pub mod debug_map;
 mod rust_wgpu_backend;
 mod scheduling_state;
 mod shadergen;
