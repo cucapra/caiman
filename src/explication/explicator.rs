@@ -279,12 +279,12 @@ fn explicate_funclet_spec(
         input_tags: spec
             .input_tags
             .iter()
-            .map(|t| explicate_tag(t.clone().opt().expect(&error), context))
+            .map(|t| explicate_tag(t.clone().opt().unwrap_or_default(), context))
             .collect(),
         output_tags: spec
             .output_tags
             .iter()
-            .map(|t| explicate_tag(t.clone().opt().expect(&error), context))
+            .map(|t| explicate_tag(t.clone().opt().unwrap_or_default(), context))
             .collect(),
         implicit_in_tag: explicate_tag(spec.implicit_in_tag.clone().opt().expect(&error), context),
         implicit_out_tag: explicate_tag(spec.implicit_out_tag.clone().opt().expect(&error), context),

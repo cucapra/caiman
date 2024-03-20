@@ -63,8 +63,8 @@ buffer_flags_elements = !{ (buffer_flag ~ ("," ~ buffer_flag)*)? }
 buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
 phi_qualifier = { "phi-" }
-quotient = !{ meta_name ~ ("." ~ name)? }
-quotient_hole = !{ meta_name ~ ("." ~ name_hole)? | hole }
+quotient = !{ phi_qualifier? ~ meta_name ~ ("." ~ name)? }
+quotient_hole = !{ phi_qualifier? ~ meta_name ~ ("." ~ name_hole)? | hole }
 flow = { "dead" | "usable" | "saved" | "need" | "?" }
 tag = ${ quotient ~ "-" ~ flow }
 
