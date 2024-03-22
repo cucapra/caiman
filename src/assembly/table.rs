@@ -86,4 +86,8 @@ where
     pub fn len(&mut self) -> usize {
         return self.indices.len();
     }
+
+    pub fn drain(mut self, default: T) -> Vec<T> {
+        self.indices.drain(..).map(|o| o.unwrap_or(default.clone())).collect()
+    }
 }

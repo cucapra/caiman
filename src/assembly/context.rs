@@ -4,6 +4,7 @@ use crate::assembly::ast::{
     RemoteNodeId, StorageTypeId, TypeId,
 };
 use crate::assembly::table::Table;
+use crate::debug_map::{DebugMap, FuncletDebugMap};
 use crate::explication::expir;
 use crate::explication::Hole;
 use crate::rust_wgpu_backend::ffi;
@@ -144,7 +145,8 @@ impl FuncletIndices {
     }
 
     pub fn require_funclet(&self, name: &String) -> usize {
-        self.get_funclet(name).expect(&format!("Unknown funclet name {}", name))
+        self.get_funclet(name)
+            .expect(&format!("Unknown funclet name {}", name))
     }
 }
 
@@ -373,7 +375,8 @@ impl Context {
                     .node
                     .as_ref()
                     .cloned()
-                    .map(|n| n.opt().expect(&error)).into(),
+                    .map(|n| n.opt().expect(&error))
+                    .into(),
             );
             let tag = Hole::Filled(expir::Tag {
                 quot,
@@ -474,5 +477,61 @@ impl Context {
 
     pub fn reset_meta_map(&mut self) {
         self.meta_map = None
+    }
+
+    pub fn drain_into_debug_map(mut self) -> DebugMap {
+        match self {
+            Context {
+                path,
+                ffi_type_table,
+                local_type_table,
+                native_type_map,
+                mut variable_map,
+                meta_map,
+                location,
+                funclet_indices,
+                function_classes,
+                effects,
+            } => {
+                let type_map = local_type_table
+                    .drain("_UNNAMED_TYPE_".to_string())
+                    .into_iter()
+                    .enumerate()
+                    .collect();
+                let function_class_map = function_classes
+                    .drain(FunctionClassId("_UNNAMED_CLASS_".to_string()))
+                    .into_iter()
+                    .map(|s| s.0)
+                    .enumerate()
+                    .collect();
+                let external_function_map = funclet_indices
+                    .external_funclet_table
+                    .drain(ExternalFunctionId("_UNNAMED_EXTERNAL_".to_string()))
+                    .into_iter()
+                    .map(|s| s.0)
+                    .enumerate()
+                    .collect();
+                let mut funclet_map = HashMap::new();
+                for (index, funclet) in funclet_indices
+                    .local_funclet_table
+                    .drain(FuncletId("_UNNAMED_FUNCLET_".to_string())).into_iter().enumerate()
+                {
+                    let mut node_map = HashMap::new();
+                    for (node, quot) in variable_map.get_mut(&funclet).unwrap().drain() {
+                        node_map.insert(quot, node.0);
+                    }
+                    funclet_map.insert(index, FuncletDebugMap {
+                        name: funclet.0,
+                        node_map
+                    });
+                }
+                DebugMap {
+                    type_map,
+                    function_class_map,
+                    external_function_map,
+                    funclet_map,
+                }
+            }
+        }
     }
 }
