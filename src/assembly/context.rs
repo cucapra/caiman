@@ -4,7 +4,7 @@ use crate::assembly::ast::{
     RemoteNodeId, StorageTypeId, TypeId,
 };
 use crate::assembly::table::Table;
-use crate::debug_map::{DebugMap, FuncletDebugMap};
+use crate::debug_info::{DebugInfo, FuncletDebugMap};
 use crate::explication::expir;
 use crate::explication::Hole;
 use crate::rust_wgpu_backend::ffi;
@@ -479,7 +479,7 @@ impl Context {
         self.meta_map = None
     }
 
-    pub fn drain_into_debug_map(mut self) -> DebugMap {
+    pub fn drain_into_debug_map(mut self) -> DebugInfo {
         match self {
             Context {
                 path,
@@ -525,7 +525,7 @@ impl Context {
                         node_map
                     });
                 }
-                DebugMap {
+                DebugInfo {
                     type_map,
                     function_class_map,
                     external_function_map,

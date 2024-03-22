@@ -4,7 +4,7 @@ mod explicator;
 mod explicator_macros;
 mod util;
 
-use crate::ir;
+use crate::{debug_info::DebugInfo, ir};
 use crate::stable_vec::StableVec;
 use context::{InState, StaticContext};
 use serde_derive::{Deserialize, Serialize};
@@ -78,8 +78,8 @@ fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
         .collect()
 }
 
-fn explicate_program(program: expir::Program) -> ir::Program {
-    let mut context = StaticContext::new(&program);
+fn explicate_program(program: expir::Program, debug_map: &DebugInfo) -> ir::Program {
+    let mut context = StaticContext::new(&program, debug_map);
     let explicated_funclets = explicate_funclets(&context);
 
     match program {
@@ -112,7 +112,7 @@ pub fn explicate(
     // todo!();
     match definition {
         crate::frontend::ExplicationDefinition { version, debug_map, program } => {
-            let ir_program = explicate_program(program);
+            let ir_program = explicate_program(program, &debug_map);
             crate::frontend::Definition {
                 version,
                 debug_map,

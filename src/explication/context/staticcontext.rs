@@ -1,4 +1,4 @@
-use self::expir::FuncletKind;
+use self::{DebugInfo, expir::FuncletKind};
 
 use super::*;
 use crate::ir;
@@ -7,10 +7,14 @@ use crate::ir;
 // Specifically we want things like lists of funclet names up-front or node names up-front
 
 impl<'context> StaticContext<'context> {
-    pub fn new(program: &'context expir::Program) -> StaticContext {
+    pub fn new(
+        program: &'context expir::Program,
+        debug_map: &'context DebugInfo,
+    ) -> StaticContext<'context> {
         let spec_explication_data = initialize_declarations(&program);
         StaticContext {
             program,
+            debug_map,
             spec_explication_data,
         }
     }
@@ -223,7 +227,8 @@ fn identify_tailedge_deps(edge: &expir::TailEdge) -> Vec<NodeId> {
         expir::TailEdge::Jump { join, arguments } => vec![join.clone().opt().expect(&error)]
             .into_iter()
             .chain(
-                arguments.clone()
+                arguments
+                    .clone()
                     .opt()
                     .as_ref()
                     .expect(&error)

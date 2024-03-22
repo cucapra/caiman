@@ -11,7 +11,7 @@ fn unknown_quot(quot: &ir::Quotient) -> String {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-pub struct DebugMap {
+pub struct DebugInfo {
     // Maps from program indices to original strings in the assembly AST
     // The intention here is purely to recover error messages
     // This structure is decoupled from any one IR/AST
@@ -29,7 +29,7 @@ pub struct FuncletDebugMap {
     pub node_map: HashMap<ir::Quotient, String>,
 }
 
-impl DebugMap {
+impl DebugInfo {
     pub fn get_type(&self, index: &usize) -> String {
         self.type_map.get(index).unwrap_or(&unknown(index)).clone()
     }

@@ -188,7 +188,7 @@ pub enum Flow {
     Dead,   // Does not transform, can only be discarded and not read
     Usable, // Transforms forwards with state changes
     Need,   // Transforms backwards with state changes
-    Saved,   // Usable has met Need and associated state will not change, but can still be read
+    Saved,  // Usable has met Need and associated state will not change, but can still be read
 }
 
 // Save is a zero value that cannot be discarded or duplicated

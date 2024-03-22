@@ -1,6 +1,6 @@
 use crate::explication;
 use crate::ir;
-use crate::debug_map::DebugMap;
+use crate::debug_info::DebugInfo;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::default::Default;
@@ -8,14 +8,14 @@ use std::default::Default;
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct ExplicationDefinition {
     pub version: (u32, u32, u32),
-    pub debug_map: DebugMap,
+    pub debug_map: DebugInfo,
     pub program: explication::expir::Program,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Definition {
     pub version: (u32, u32, u32),
-    pub debug_map: DebugMap,
+    pub debug_map: DebugInfo,
     pub program: ir::Program,
 }
 

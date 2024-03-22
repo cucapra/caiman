@@ -5,6 +5,7 @@ pub mod staticcontext;
 
 use super::util::*;
 use super::Hole;
+use crate::debug_info::DebugInfo;
 use crate::ir;
 use crate::stable_vec;
 use crate::explication::expir;
@@ -54,6 +55,8 @@ pub struct StaticContext<'context> {
     // note that we are constructing a completely fresh program recursively
     // so the original program is not mutated
     program: &'context expir::Program,
+
+    pub debug_map: &'context DebugInfo,
 
     // information found about a given spec funclet
     spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
