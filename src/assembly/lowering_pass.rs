@@ -90,7 +90,7 @@ pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
 
 // Translation
 
-fn ir_version(version: &ast::Version, _: &mut Context) -> (u32, u32, u32) {
+fn ir_version(version: &ast::Version) -> (u32, u32, u32) {
     let result = (
         u32::try_from(version.major).unwrap(),
         u32::try_from(version.minor).unwrap(),
@@ -724,16 +724,14 @@ fn ir_effect(declaration: &ast::EffectDeclaration, context: &mut Context) -> ffi
 }
 
 fn ir_pipeline(pipeline: &ast::Pipeline, context: &mut Context) -> expir::Pipeline {
-    match context.funclet_indices.get_funclet(&pipeline.funclet.0) {
-        Some(entry_funclet) => expir::Pipeline {
-            name: pipeline.name.clone(),
-            entry_funclet: entry_funclet.clone(),
-            effect_id_opt: None,
-        },
-        None => panic!(
-            "Unknown funclet name {} in pipeline {}",
-            &pipeline.funclet.0, &pipeline.name
-        ),
+    expir::Pipeline {
+        name: pipeline.name.clone(),
+        entry_funclet: context
+            .funclet_indices
+            .get_funclet(&pipeline.funclet.0)
+            .unwrap()
+            .clone(),
+        effect_id_opt: pipeline.effect.as_ref().map(|e| context.effect_lookup(e)),
     }
 }
 
@@ -778,13 +776,15 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> expir::Program {
     }
 }
 
-pub fn lower(mut program: ast::Program) -> frontend::ExplicationDefinition {
+pub fn lower(mut original: ast::Program) -> frontend::ExplicationDefinition {
     // should probably handle errors with a result, future problem though
-    let mut context = Context::new(&program);
+    let mut context = Context::new(&original);
     // dbg!(&program);
     // todo!();
+    let version = ir_version(&original.version);
+    let program = ir_program(&original, &mut context);
     frontend::ExplicationDefinition {
-        version: ir_version(&program.version, &mut context),
-        program: ir_program(&program, &mut context),
+        version,
+        program,
     }
 }

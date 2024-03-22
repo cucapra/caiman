@@ -111,10 +111,11 @@ pub fn explicate(
     // dbg!(&definition);
     // todo!();
     match definition {
-        crate::frontend::ExplicationDefinition { version, program } => {
+        crate::frontend::ExplicationDefinition { version, debug_map, program } => {
             let ir_program = explicate_program(program);
             crate::frontend::Definition {
                 version,
+                debug_map,
                 program: ir_program,
             }
         }
