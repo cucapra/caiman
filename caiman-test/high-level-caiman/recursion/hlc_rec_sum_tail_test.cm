@@ -1,0 +1,22 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val rec_sum(a: i64, b: i64, r: i64) -> i64 {
+    returns r if a > b else 
+            a + r if a == b else
+            rec_sum(a + 1, b, r + a)
+}
+
+fn rec_sum_impl(a: i64, b: i64, r: i64) -> i64 impls rec_sum, time, space {
+    if a > b {
+        r
+    } else if a == b {
+        a + r
+    } else {
+        rec_sum_impl(a + 1, b, r + a)
+    }
+}
+
+pipeline main { rec_sum_impl }

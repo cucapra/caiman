@@ -1,0 +1,35 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+
+val rec_add(a: i64, b: i64) -> i64 {
+    returns a if b <= 0 else
+            rec_add(a + 1, b - 1)
+}
+
+fn rec_add_impl(a: i64, b: i64) -> i64 impls rec_add, time, space {
+    if b <= 0 {
+        a
+    } else {
+        rec_add_impl(a + 1, b - 1)
+    }
+}
+
+val rec_mul(a: i64, b: i64, r: i64) -> i64 {
+    returns r if b <= 0 else
+            rec_mul(a, b - 1, rec_add(a, r))
+}
+
+fn rec_mul_impl(a: i64, b: i64, r: i64) -> i64 impls rec_mul, time, space {
+    if b <= 0 {
+        r
+    } else {
+        var a_cpy = a;
+        let a_cpy = &a_cpy;
+        rec_mul_impl(a, b - 1, rec_add_impl(*a_cpy, r))
+    }
+}
+
+pipeline main { rec_mul_impl }

@@ -1,0 +1,30 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+val foo(a: i64) -> i64 {
+    x :- a + 1
+    returns x * x
+}
+
+fn foo_impl(a: i64) -> i64 impls foo, time, space {
+    (a + 1) * (a + 1)
+}
+
+val main(m: i64, n: i64) -> i64 {
+    returns foo(m) if m < n else foo(n)
+}
+
+fn main_impl(m: i64, n: i64) -> i64 impls main, time, space {
+    let c = m < n;
+    let a = foo_impl(m);
+    let b = foo_impl(n);
+    if c {
+        a
+    } else {
+        b
+    }
+}
+
+pipeline main { main_impl }
