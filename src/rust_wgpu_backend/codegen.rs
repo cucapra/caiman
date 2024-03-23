@@ -810,6 +810,8 @@ impl<'program> CodeGen<'program> {
     ///   is compiled
     /// * `func_inline` - Whether the current funclet is being inlined as a call
     /// * `branch_inline` - Whether the current funclet is being inlined as a branch
+    /// * `pipeline_rets` - The return types of the pipeline. Used to determine if its possible to
+    ///  return early from the pipeline when we encounter a caiman `return`.
     /// # Returns
     /// * None for no unhandled split points, otherwise, a tuple of the
     ///     unhandled split point node results and a boolean indicating whether
@@ -868,16 +870,12 @@ impl<'program> CodeGen<'program> {
                 if branch_inline {
                     *default_join_point_id_opt = continuation_join_point_id_opt;
                     let argument_var_ids = NodeResult::collect_vars(&return_node_results);
+                    // build return so that we can return if we optimize away the continuation
                     self.code_generator.build_return(
                         &argument_var_ids,
                         &argument_ffi_types,
                         pipeline_rets.iter().eq(argument_ffi_types.iter()),
                     );
-                    // self.code_generator
-                    //     .build_indirect_stack_jump_to_popped_serialized_join(
-                    //         &argument_var_ids,
-                    //         &argument_ffi_types,
-                    //     );
                     return None;
                 } else {
                     return Some((return_node_results, true));
@@ -1203,8 +1201,6 @@ impl<'program> CodeGen<'program> {
                     match &join_point {
                         JoinPoint::RootJoinPoint(_) | JoinPoint::SimpleJoinPoint(_) => {
                             // tail edge must be a return
-                            // inlined branches are already handled
-                            //if !branch_inline {
                             let return_var_ids =
                                 NodeResult::collect_vars(&current_out_node_results);
                             let types = &self.program.funclets[funclet_id].output_types;
@@ -1221,7 +1217,6 @@ impl<'program> CodeGen<'program> {
                                 &types.into_boxed_slice(),
                                 may_return,
                             );
-                            //}
                         }
                         JoinPoint::CallJoinPoint(simple_join_point) => {
                             // schedule call
