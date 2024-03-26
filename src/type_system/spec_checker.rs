@@ -200,7 +200,10 @@ impl<'program> FuncletSpecChecker<'program> {
 
             match scalar.flow {
                 ir::Flow::Usable => (), // Can borrow
-                _ => panic!("Capturing {:?} is unsupported", scalar.flow),
+                _ => panic!(
+                    "Capturing {:?} is unsupported\n{}",
+                    scalar.flow, error_context
+                ),
             }
             assert_eq!(
                 funclet_spec.input_tags[capture_index].flow, scalar.flow,
@@ -269,8 +272,12 @@ impl<'program> FuncletSpecChecker<'program> {
         let immutable_self: &Self = self;
         let error_contextualizer =
             |writer: &mut std::fmt::Write| immutable_self.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         check_tag_compatibility_interior(
             error_context,
@@ -281,9 +288,14 @@ impl<'program> FuncletSpecChecker<'program> {
 
         assert_eq!(argument_node_ids.len(), continuation_join.input_tags.len());
         for index in 0..argument_node_ids.len() {
-            let Some(scalar) = self.scalar_nodes.get(& argument_node_ids[index]) else {
-				panic!("Jump input #{}, impl node #{} has no tag for spec\n{}", index, argument_node_ids[index], error_context)
-			};
+            let Some(scalar) = self.scalar_nodes.get(&argument_node_ids[index]) else {
+                panic!(
+                    "Jump input {}, impl node {} has no tag for spec\n{}",
+                    error_context.debug_node(index),
+                    error_context.debug_node(argument_node_ids[index]),
+                    error_context
+                )
+            };
 
             check_tag_compatibility_interior(
                 error_context,
@@ -303,8 +315,12 @@ impl<'program> FuncletSpecChecker<'program> {
     ) -> Result<(), Error> {
         let return_error_contextualizer =
             |writer: &mut std::fmt::Write| self.contextualize_error(writer);
-        let return_error_context =
-            ErrorContext::new(Some(old_error_context), Some(&return_error_contextualizer));
+        let return_error_context = ErrorContext::new(
+            Some(old_error_context),
+            Some(&return_error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         check_tag_compatibility_interior(
             &return_error_context,
@@ -452,8 +468,12 @@ impl<'program> FuncletSpecChecker<'program> {
         let captured_context = self.capture_error_context();
         let error_contextualizer =
             |writer: &mut std::fmt::Write| captured_context.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         match operation {
             ir::Quotient::Node { node_id } => {
@@ -462,7 +482,9 @@ impl<'program> FuncletSpecChecker<'program> {
                     arguments,
                 } = &self.spec_funclet.nodes[node_id]
                 {
-                    let Some(callee_spec_funclet_id) = callee_funclet_spec.funclet_id_opt else { panic!("Does not have a spec funclet id") };
+                    let Some(callee_spec_funclet_id) = callee_funclet_spec.funclet_id_opt else {
+                        panic!("Does not have a spec funclet id")
+                    };
                     let callee_spec_funclet = &self.program.funclets[callee_spec_funclet_id];
                     match &callee_spec_funclet.spec_binding {
                         ir::FuncletSpecBinding::Value {
@@ -496,7 +518,10 @@ impl<'program> FuncletSpecChecker<'program> {
                 input_impl_node_ids,
                 callee_funclet_spec,
             ),
-            _ => panic!("Unsupported: {:?}", operation),
+            _ => panic!(
+                "Unsupported: {:?}",
+                error_context.debug_quotient(&operation)
+            ),
         }
     }
 
@@ -522,8 +547,12 @@ impl<'program> FuncletSpecChecker<'program> {
             write!(writer, "\tSpecs {:?}\n", choice_specs)?;
             captured_context.contextualize_error(writer)
         };
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         assert_eq!(choice_remaps.len(), choice_specs.len());
         for choice_index in 0..choice_specs.len() {
@@ -602,8 +631,12 @@ impl<'program> FuncletSpecChecker<'program> {
         tag: ir::Tag,
     ) -> Result<(), Error> {
         let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         //assert_eq!(tag, self.current_implicit_tag);
         check_tag_compatibility_interior(
@@ -623,12 +656,20 @@ impl<'program> FuncletSpecChecker<'program> {
         tag: ir::Tag,
     ) -> Result<(), Error> {
         let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
-        let Some(scalar) = self.scalar_nodes.get(& node_id) else {
-			panic!("Impl node #{} has no tag for this spec\n{}", node_id, error_context)
-		};
+        let Some(scalar) = self.scalar_nodes.get(&node_id) else {
+            panic!(
+                "Impl node {} has no tag for this spec\n{}",
+                error_context.debug_node(node_id),
+                error_context
+            )
+        };
         //assert_eq!(*scalar, tag);
         check_tag_compatibility_interior(error_context, self.spec_funclet, *scalar, tag)?;
         /* .map_err(
@@ -649,8 +690,12 @@ impl<'program> FuncletSpecChecker<'program> {
         node_id: ir::NodeId,
     ) -> Result<(), Error> {
         let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         self.check_node_tag(error_context, node_id, self.current_implicit_tag)
     }
@@ -661,8 +706,12 @@ impl<'program> FuncletSpecChecker<'program> {
         node_id: ir::NodeId,
     ) -> Result<(), Error> {
         let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         let scalar = self.scalar_nodes.get(&node_id).unwrap();
         assert!(scalar.flow.is_readable(), "{}", error_context);
@@ -691,8 +740,12 @@ impl<'program> FuncletSpecChecker<'program> {
         reader_tag: ir::Tag,
     ) -> Result<(), Error> {
         let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         let scalar = self.scalar_nodes.get(&node_id).unwrap();
         assert!(scalar.flow.is_readable(), "{}", error_context);
@@ -731,8 +784,12 @@ impl<'program> FuncletSpecChecker<'program> {
         implicit_in_tag: ir::Tag,
     ) -> Result<(), Error> {
         let error_contextualizer = |writer: &mut std::fmt::Write| self.contextualize_error(writer);
-        let error_context =
-            &ErrorContext::new(Some(old_error_context), Some(&error_contextualizer));
+        let error_context = &ErrorContext::new(
+            Some(old_error_context),
+            Some(&error_contextualizer),
+            old_error_context.debug_info(),
+            old_error_context.funclet_id(),
+        );
 
         let join = self.join_nodes.get(&node_id).unwrap();
         //assert_eq!(*scalar, tag);
@@ -948,7 +1005,9 @@ fn check_tag_compatibility_enter(
         _ => {
             panic!(
                 "Ill-formed: {:?} to {:?} via enter\n{}",
-                caller_tag, callee_tag, error_context
+                error_context.debug_tag(&caller_tag),
+                error_context.debug_tag(&callee_tag),
+                error_context
             )
             /*return Err(Error::Generic {
                 message: format!("Ill-formed: {:?} to {:?} via enter", caller_tag, callee_tag),
@@ -994,14 +1053,18 @@ fn check_tag_compatibility_exit(
                 );
             } else {
                 panic!(
-                    "Target operation is not a result extraction: #{:?} {:?}\n{}",
-                    node_id, node, error_context
+                    "Target operation is not a result extraction: node {:?}, {:?}\n{}",
+                    error_context.debug_node(node_id),
+                    node,
+                    error_context
                 );
             }
         }
         _ => panic!(
             "Ill-formed: {:?} to {:?}\n{}",
-            source_tag, destination_tag, error_context
+            error_context.debug_tag(&source_tag),
+            error_context.debug_tag(&destination_tag),
+            error_context
         ),
     };
 
@@ -1076,8 +1139,8 @@ fn check_tag_compatibility_interior(
             } else {
                 panic!(
                     "While checking interior compatibility of {:?} to {:?}: {:?} is not a phi\n{}",
-                    source_tag,
-                    destination_tag,
+                    error_context.debug_tag(&source_tag),
+                    error_context.debug_tag(&destination_tag),
                     current_value_funclet.nodes[remote_node_id],
                     error_context
                 );
@@ -1095,8 +1158,8 @@ fn check_tag_compatibility_interior(
             } else {
                 panic!(
                     "While checking interior compatibility of {:?} to {:?}: {:?} is not a phi\n{}",
-                    source_tag,
-                    destination_tag,
+                    error_context.debug_tag(&source_tag),
+                    error_context.debug_tag(&destination_tag),
                     current_value_funclet.nodes[remote_node_id],
                     error_context
                 );
@@ -1135,7 +1198,9 @@ fn check_tag_compatibility_interior(
         }
         _ => panic!(
             "Ill-formed: {:?} to {:?}\n{}",
-            source_tag, destination_tag, error_context
+            error_context.debug_tag(&source_tag),
+            error_context.debug_tag(&destination_tag),
+            error_context
         ),
     }
 

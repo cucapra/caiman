@@ -34,7 +34,7 @@ pub fn explicate_and_execute(
         println!("{:#?}", definition);
         return;
     }
-    match crate::type_system::check_program(&definition.program) {
+    match crate::type_system::check_program(&definition.program, &definition.debug_info) {
         Ok(_) => (),
         Err(error) => panic!("Type checking failed:\n{}", error),
     }

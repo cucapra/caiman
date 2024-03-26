@@ -92,7 +92,7 @@ pub fn compile_caiman(
     // dbg!(&definition);
     assert_eq!(definition.version, (0, 0, 2));
     //ir::validation::validate_program(&definition.program);
-    match crate::type_system::check_program(&definition.program) {
+    match crate::type_system::check_program(&definition.program, &definition.debug_info) {
         Ok(_) => (),
         Err(error) => panic!("Type checking failed:\n{}", error),
     }
