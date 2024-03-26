@@ -30,22 +30,22 @@ pub struct FuncletDebugMap {
 }
 
 impl DebugInfo {
-    pub fn get_type(&self, index: &usize) -> String {
+    pub fn typ(&self, index: &usize) -> String {
         self.type_map.get(index).unwrap_or(&unknown(index)).clone()
     }
-    pub fn get_function_class(&self, index: &usize) -> String {
+    pub fn function_class(&self, index: &usize) -> String {
         self.function_class_map.get(index).unwrap_or(&unknown(index)).clone()
     }
-    pub fn get_external_function(&self, index: &usize) -> String {
+    pub fn external_function(&self, index: &usize) -> String {
         self.external_function_map.get(index).unwrap_or(&unknown(index)).clone()
     }
-    pub fn get_funclet(&self, index: &usize) -> String {
+    pub fn funclet(&self, index: &usize) -> String {
         self.funclet_map
             .get(index)
             .map(|f| f.name.clone())
             .unwrap_or(unknown(index))
     }
-    pub fn get_node(&self, funclet_index: &usize, node_index: &ir::Quotient) -> String {
+    pub fn node(&self, funclet_index: &usize, node_index: &ir::Quotient) -> String {
         match self.funclet_map.get(funclet_index) {
             None => format!("({}, {})", unknown(funclet_index), unknown_quot(node_index)),
             Some(f) => f

@@ -1,4 +1,7 @@
-use self::{DebugInfo, expir::FuncletKind};
+use self::{
+    expir::{FuncletKind, TailEdge},
+    DebugInfo,
+};
 
 use super::*;
 use crate::ir;
@@ -11,7 +14,7 @@ impl<'context> StaticContext<'context> {
         program: &'context expir::Program,
         debug_map: &'context DebugInfo,
     ) -> StaticContext<'context> {
-        let spec_explication_data = initialize_declarations(&program);
+        let spec_explication_data = initialize_declarations(&program, debug_map);
         StaticContext {
             program,
             debug_map,
@@ -26,7 +29,7 @@ impl<'context> StaticContext<'context> {
 
     pub fn get_matching_operation(
         &self,
-        funclet: FuncletId,
+        funclet: &FuncletId,
         returns: Vec<Hole<&NodeId>>,
     ) -> Option<&NodeId> {
         let mut result = None;
@@ -60,14 +63,14 @@ impl<'context> StaticContext<'context> {
         result
     }
 
-    fn get_spec_data(&self, funclet: FuncletId) -> &SpecFuncletData {
+    fn get_spec_data(&self, funclet: &FuncletId) -> &SpecFuncletData {
         self.spec_explication_data
             .get(&funclet)
             .expect(&format!("Unknown specification function {:?}", funclet))
     }
 
-    pub fn get_funclet(&self, funclet: FuncletId) -> &expir::Funclet {
-        self.program().funclets.get(funclet).expect(&format!(
+    pub fn get_funclet(&self, funclet: &FuncletId) -> &expir::Funclet {
+        self.program().funclets.get(*funclet).expect(&format!(
             "Invalid funclet index {} for funclets {:?}",
             funclet,
             &self.program().funclets
@@ -75,12 +78,20 @@ impl<'context> StaticContext<'context> {
     }
 }
 
-fn initialize_declarations(program: &expir::Program) -> HashMap<FuncletId, SpecFuncletData> {
+fn initialize_declarations(
+    program: &expir::Program,
+    debug_map: &DebugInfo,
+) -> HashMap<FuncletId, SpecFuncletData> {
     let mut result = HashMap::new();
     for (index, funclet) in program.funclets.iter() {
         match &funclet.kind {
             ir::FuncletKind::Value | ir::FuncletKind::Spatial | ir::FuncletKind::Timeline => {
-                result = initialize_spec_funclet_info(result, index, funclet);
+                result = initialize_spec_funclet_info(
+                    result,
+                    &debug_map.funclet(&index),
+                    index,
+                    funclet,
+                );
             }
             _ => {}
         }
@@ -90,23 +101,24 @@ fn initialize_declarations(program: &expir::Program) -> HashMap<FuncletId, SpecF
 
 fn initialize_spec_funclet_info(
     mut result: HashMap<FuncletId, SpecFuncletData>,
-    index: usize,
+    debug_funclet: &str,
+    funclet_id: usize,
     funclet: &expir::Funclet,
 ) -> HashMap<FuncletId, SpecFuncletData> {
     let mut node_dependencies = HashMap::new();
     let mut tail_dependencies = Vec::new();
-    for (index, node) in funclet.nodes.as_ref().iter().enumerate() {
+    for (i, node) in funclet.nodes.as_ref().iter().enumerate() {
         match &node {
             Hole::Empty => {}
             Hole::Filled(node) => {
-                node_dependencies.insert(index, identify_node_deps(node));
+                node_dependencies.insert(i, identify_node_deps(node));
             }
         }
     }
     match &funclet.tail_edge {
         Hole::Empty => {}
         Hole::Filled(t) => {
-            identify_tailedge_deps(t);
+            identify_tailedge_deps(&debug_funclet, t);
         }
     }
 
@@ -126,7 +138,7 @@ fn initialize_spec_funclet_info(
     }
 
     result.insert(
-        index,
+        funclet_id,
         SpecFuncletData {
             node_dependencies,
             tail_dependencies,
@@ -209,10 +221,10 @@ fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
 }
 
 // helper methods for reading information
-fn identify_tailedge_deps(edge: &expir::TailEdge) -> Vec<NodeId> {
+fn identify_tailedge_deps(debug_funclet: &str, edge: &TailEdge) -> Vec<NodeId> {
     let error = format!(
-        "Invalid hole in {:?}, cannot have an explication hole in a spec funclet",
-        &edge
+        "Invalid hole in {:?}, cannot have an explication hole in a spec funclet {}",
+        &edge, debug_funclet
     );
     let dependencies = match edge {
         expir::TailEdge::DebugHole { inputs } => inputs.iter().map(|n| n.clone()).collect(),

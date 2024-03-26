@@ -9,7 +9,7 @@ function @main() -> i64;
 
 value[impl default @main] %foo() -> i64 {
     %x = constant %ni64 4;
-    return %x;
+    return ?;
 }
 
 timeline %time(%e : %event0) -> %event0 {

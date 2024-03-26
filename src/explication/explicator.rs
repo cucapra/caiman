@@ -11,13 +11,10 @@ use crate::{explication, frontend, ir};
 use super::explicator_macros::force_lower_node;
 
 fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
-    let error = format!("Unimplemented flow hole in tag {:?}", &tag);
+    let error = format!("Unimplemented flow hole in with quotient {:?}", &tag);
     ir::Tag {
         quot: tag.quot,
-        flow: tag
-            .flow
-            .opt()
-            .expect(&error),
+        flow: tag.flow.opt().expect(&error),
     }
 }
 
@@ -137,6 +134,7 @@ fn explicate_local_do_builtin(
 // distinct from explication in that we have no request to fulfill
 // panics if no node can be found during any step of the recursion
 fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutState> {
+    let debug_funclet = context.debug_map.funclet(&state.get_current_funclet());
     if state.is_end_of_funclet(context) {
         explicate_tail_edge(&state, context)
     } else {
@@ -150,7 +148,10 @@ fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutS
                 match explicate_node(new_state, context) {
                     None => None,
                     Some(mut out) => {
-                        out.add_node(force_lower_node(node));
+                        out.add_node(force_lower_node(
+                            node,
+                            &debug_funclet,
+                        ));
                         Some(out)
                     }
                 }
@@ -287,16 +288,19 @@ fn explicate_funclet_spec(
             .map(|t| explicate_tag(t.clone().opt().unwrap_or_default(), context))
             .collect(),
         implicit_in_tag: explicate_tag(spec.implicit_in_tag.clone().opt().expect(&error), context),
-        implicit_out_tag: explicate_tag(spec.implicit_out_tag.clone().opt().expect(&error), context),
+        implicit_out_tag: explicate_tag(
+            spec.implicit_out_tag.clone().opt().expect(&error),
+            context,
+        ),
     }
 }
 
 fn explicate_spec_binding(
-    funclet: FuncletId,
+    funclet: &FuncletId,
     state: Option<&FuncletOutState>,
     context: &StaticContext,
 ) -> ir::FuncletSpecBinding {
-    let current = context.get_funclet(funclet);
+    let current = context.get_funclet(&funclet);
     match &current.spec_binding {
         expir::FuncletSpecBinding::None => ir::FuncletSpecBinding::None,
         expir::FuncletSpecBinding::Value {
@@ -323,13 +327,16 @@ fn explicate_spec_binding(
 
 pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -> ir::Funclet {
     let funclet = state.get_current_funclet();
-    let current = context.get_funclet(funclet);
+    let current = context.get_funclet(&funclet);
     state.next_node();
     match explicate_node(state, context) {
-        None => panic!("No explication solution found for funclet {:?}", funclet),
+        None => panic!(
+            "No explication solution found for funclet {:?}",
+            context.debug_map.funclet(&funclet)
+        ),
         Some(mut result) => {
             assert!(!result.has_fills_remaining());
-            let spec_binding = explicate_spec_binding(funclet, Some(&result), context);
+            let spec_binding = explicate_spec_binding(&funclet, Some(&result), context);
             ir::Funclet {
                 kind: current.kind.clone(),
                 spec_binding,
@@ -344,10 +351,21 @@ pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -
 
 /*
  * Forcibly lowers a tail edge, specifically used for spec functions
+ * The funclet id is passed in rather than the tail edge for error context
  */
-fn lower_spec_tail_edge(tail_edge: &expir::TailEdge, context: &StaticContext) -> ir::TailEdge {
-    let error = format!("Tail edge {:?} cannot have holes in it", tail_edge);
-    match tail_edge {
+fn lower_spec_tail_edge(funclet: &FuncletId, context: &StaticContext) -> ir::TailEdge {
+    let debug_funclet = context.debug_map.funclet(funclet);
+    let tail_edge = context
+        .get_funclet(funclet)
+        .tail_edge
+        .as_ref()
+        .opt()
+        .expect(&format!("Missing tail edge for funclet {}", &debug_funclet));
+    let error = format!(
+        "Tail edge {:?} is part of the spec funclet {} and cannot have holes in it",
+        tail_edge, debug_funclet
+    );
+    match &tail_edge {
         expir::TailEdge::Return { return_values } => ir::TailEdge::Return {
             return_values: return_values
                 .as_ref()
@@ -370,25 +388,41 @@ fn lower_spec_tail_edge(tail_edge: &expir::TailEdge, context: &StaticContext) ->
         expir::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
             inputs: inputs.clone(),
         },
-        edge => {
-            panic!("Tail edge {:?} not allowed in spec function", &edge)
+        expir::TailEdge::ScheduleCall { .. } => {
+            panic!(
+                "ScheduleCall not allowed in spec funclet {:?}",
+                debug_funclet
+            )
         }
+        expir::TailEdge::ScheduleSelect { .. } => {
+            panic!(
+                "ScheduleSelect not allowed in spec funclet {:?}",
+                debug_funclet
+            )
+        }
+        expir::TailEdge::ScheduleCallYield { .. } => panic!(
+            "ScheduleCallYield not allowed in spec funclet {:?}",
+            debug_funclet
+        ),
     }
 }
 
-pub fn lower_spec_funclet(funclet: FuncletId, context: &StaticContext) -> ir::Funclet {
-    let func = context.get_funclet(funclet);
+pub fn lower_spec_funclet(funclet: &FuncletId, context: &StaticContext) -> ir::Funclet {
+    let func = context.get_funclet(&funclet);
     let kind = func.kind.clone();
     let spec_binding = explicate_spec_binding(funclet, None, context);
     let input_types = func.input_types.clone();
     let output_types = func.output_types.clone();
-    let error = format!("Cannot have a hole in spec funclet {:?}", &funclet);
+    let debug_funclet = &context.debug_map.funclet(&funclet);
+    let error = format!("Cannot have a hole in spec funclet {:?}", debug_funclet);
     let nodes = func
         .nodes
         .iter()
-        .map(|n| explicator_macros::force_lower_node(&n.as_ref().opt().expect(&error)))
+        .map(|n| {
+            explicator_macros::force_lower_node(&n.as_ref().opt().expect(&error), &debug_funclet)
+        })
         .collect();
-    let tail_edge = lower_spec_tail_edge(&func.tail_edge.as_ref().opt().expect(&error), context);
+    let tail_edge = lower_spec_tail_edge(&funclet, context);
 
     ir::Funclet {
         kind,

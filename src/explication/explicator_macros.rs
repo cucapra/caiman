@@ -73,8 +73,8 @@ macro_rules! force_lower_node {
             /*
              * Lowers by rejecting every hole in the node
              */
-            pub fn force_lower_node(node : &expir::Node) -> ir::Node {
-                let error = format!("Hole not allowed in {:?}", node);
+            pub fn force_lower_node(node : &expir::Node, debug_funclet: &str) -> ir::Node {
+                let error = format!("Hole not allowed in funclet {}", debug_funclet);
                 match node {
                     $(expir::Node::$name { $($arg,)* } => {
                         ir::Node::$name {

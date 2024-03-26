@@ -82,18 +82,18 @@ impl InState {
     pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::Node> {
         let scope = self.get_latest_scope();
         get_expect_box(
-            &context.get_funclet(scope.funclet).nodes,
+            &context.get_funclet(&scope.funclet).nodes,
             scope.node.unwrap(),
         )
     }
 
     pub fn get_current_tail_edge<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::TailEdge> {
-        &context.get_funclet(self.get_latest_scope().funclet).tail_edge
+        &context.get_funclet(&self.get_latest_scope().funclet).tail_edge
     }
 
     pub fn is_end_of_funclet<'a>(&self, context: &'a StaticContext) -> bool {
         let scope = self.get_latest_scope();
-        scope.node.unwrap() >= context.get_funclet(scope.funclet).nodes.len()
+        scope.node.unwrap() >= context.get_funclet(&scope.funclet).nodes.len()
     }
 
     pub fn next_node(&mut self) {
