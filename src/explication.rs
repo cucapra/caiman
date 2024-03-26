@@ -78,8 +78,8 @@ fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
         .collect()
 }
 
-fn explicate_program(program: expir::Program, debug_map: &DebugInfo) -> ir::Program {
-    let mut context = StaticContext::new(&program, debug_map);
+fn explicate_program(program: expir::Program, debug_info: &DebugInfo) -> ir::Program {
+    let mut context = StaticContext::new(&program, debug_info);
     let explicated_funclets = explicate_funclets(&context);
 
     match program {
@@ -111,11 +111,11 @@ pub fn explicate(
     // dbg!(&definition);
     // todo!();
     match definition {
-        crate::frontend::ExplicationDefinition { version, debug_map, program } => {
-            let ir_program = explicate_program(program, &debug_map);
+        crate::frontend::ExplicationDefinition { version, debug_info, program } => {
+            let ir_program = explicate_program(program, &debug_info);
             crate::frontend::Definition {
                 version,
-                debug_map,
+                debug_info,
                 program: ir_program,
             }
         }

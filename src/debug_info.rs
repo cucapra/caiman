@@ -1,6 +1,6 @@
 use crate::ir;
-use std::collections::HashMap;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 fn unknown(index: &usize) -> String {
     format!("_UNKNOWN_{}", index)
@@ -34,10 +34,16 @@ impl DebugInfo {
         self.type_map.get(index).unwrap_or(&unknown(index)).clone()
     }
     pub fn function_class(&self, index: &usize) -> String {
-        self.function_class_map.get(index).unwrap_or(&unknown(index)).clone()
+        self.function_class_map
+            .get(index)
+            .unwrap_or(&unknown(index))
+            .clone()
     }
     pub fn external_function(&self, index: &usize) -> String {
-        self.external_function_map.get(index).unwrap_or(&unknown(index)).clone()
+        self.external_function_map
+            .get(index)
+            .unwrap_or(&unknown(index))
+            .clone()
     }
     pub fn funclet(&self, index: &usize) -> String {
         self.funclet_map
@@ -45,14 +51,22 @@ impl DebugInfo {
             .map(|f| f.name.clone())
             .unwrap_or(unknown(index))
     }
-    pub fn node(&self, funclet_index: &usize, node_index: &ir::Quotient) -> String {
+    pub fn quot(&self, funclet_index: &usize, quotient: &ir::Quotient) -> String {
         match self.funclet_map.get(funclet_index) {
-            None => format!("({}, {})", unknown(funclet_index), unknown_quot(node_index)),
+            None => format!("({}, {})", unknown(funclet_index), unknown_quot(quotient)),
             Some(f) => f
                 .node_map
-                .get(node_index)
-                .unwrap_or(&format!("({}, {})", &f.name, unknown_quot(node_index)))
+                .get(quotient)
+                .unwrap_or(&format!("({}, {})", &f.name, unknown_quot(quotient)))
                 .clone(),
         }
+    }
+    pub fn node(&self, funclet_index: &usize, node_index: usize) -> String {
+        self.quot(
+            funclet_index,
+            &ir::Quotient::Node {
+                node_id: node_index,
+            },
+        )
     }
 }

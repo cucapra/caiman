@@ -783,10 +783,10 @@ pub fn lower(mut original: ast::Program) -> frontend::ExplicationDefinition {
     // todo!();
     let version = ir_version(&original.version);
     let program = ir_program(&original, &mut context);
-    let debug_map = context.drain_into_debug_map();
+    let debug_info = context.drain_into_debug_info();
     frontend::ExplicationDefinition {
         version,
-        debug_map,
+        debug_info,
         program,
     }
 }

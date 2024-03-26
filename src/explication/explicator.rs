@@ -134,7 +134,7 @@ fn explicate_local_do_builtin(
 // distinct from explication in that we have no request to fulfill
 // panics if no node can be found during any step of the recursion
 fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutState> {
-    let debug_funclet = context.debug_map.funclet(&state.get_current_funclet());
+    let debug_funclet = context.debug_info.funclet(&state.get_current_funclet());
     if state.is_end_of_funclet(context) {
         explicate_tail_edge(&state, context)
     } else {
@@ -332,7 +332,7 @@ pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -
     match explicate_node(state, context) {
         None => panic!(
             "No explication solution found for funclet {:?}",
-            context.debug_map.funclet(&funclet)
+            context.debug_info.funclet(&funclet)
         ),
         Some(mut result) => {
             assert!(!result.has_fills_remaining());
@@ -354,7 +354,7 @@ pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -
  * The funclet id is passed in rather than the tail edge for error context
  */
 fn lower_spec_tail_edge(funclet: &FuncletId, context: &StaticContext) -> ir::TailEdge {
-    let debug_funclet = context.debug_map.funclet(funclet);
+    let debug_funclet = context.debug_info.funclet(funclet);
     let tail_edge = context
         .get_funclet(funclet)
         .tail_edge
@@ -365,7 +365,7 @@ fn lower_spec_tail_edge(funclet: &FuncletId, context: &StaticContext) -> ir::Tai
         "Tail edge {:?} is part of the spec funclet {} and cannot have holes in it",
         tail_edge, debug_funclet
     );
-    match &tail_edge {
+    match tail_edge {
         expir::TailEdge::Return { return_values } => ir::TailEdge::Return {
             return_values: return_values
                 .as_ref()
@@ -388,22 +388,13 @@ fn lower_spec_tail_edge(funclet: &FuncletId, context: &StaticContext) -> ir::Tai
         expir::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
             inputs: inputs.clone(),
         },
-        expir::TailEdge::ScheduleCall { .. } => {
+        edge => {
             panic!(
-                "ScheduleCall not allowed in spec funclet {:?}",
-                debug_funclet
+                "Spec funclet {} has disallowed tail edge {:?}",
+                debug_funclet,
+                edge
             )
         }
-        expir::TailEdge::ScheduleSelect { .. } => {
-            panic!(
-                "ScheduleSelect not allowed in spec funclet {:?}",
-                debug_funclet
-            )
-        }
-        expir::TailEdge::ScheduleCallYield { .. } => panic!(
-            "ScheduleCallYield not allowed in spec funclet {:?}",
-            debug_funclet
-        ),
     }
 }
 
@@ -413,7 +404,7 @@ pub fn lower_spec_funclet(funclet: &FuncletId, context: &StaticContext) -> ir::F
     let spec_binding = explicate_spec_binding(funclet, None, context);
     let input_types = func.input_types.clone();
     let output_types = func.output_types.clone();
-    let debug_funclet = &context.debug_map.funclet(&funclet);
+    let debug_funclet = &context.debug_info.funclet(&funclet);
     let error = format!("Cannot have a hole in spec funclet {:?}", debug_funclet);
     let nodes = func
         .nodes

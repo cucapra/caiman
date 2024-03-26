@@ -479,7 +479,7 @@ impl Context {
         self.meta_map = None
     }
 
-    pub fn drain_into_debug_map(mut self) -> DebugInfo {
+    pub fn drain_into_debug_info(mut self) -> DebugInfo {
         match self {
             Context {
                 path,

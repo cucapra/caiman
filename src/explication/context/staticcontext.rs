@@ -12,12 +12,12 @@ use crate::ir;
 impl<'context> StaticContext<'context> {
     pub fn new(
         program: &'context expir::Program,
-        debug_map: &'context DebugInfo,
+        debug_info: &'context DebugInfo,
     ) -> StaticContext<'context> {
-        let spec_explication_data = initialize_declarations(&program, debug_map);
+        let spec_explication_data = initialize_declarations(&program, debug_info);
         StaticContext {
             program,
-            debug_map,
+            debug_info,
             spec_explication_data,
         }
     }
@@ -42,8 +42,9 @@ impl<'context> StaticContext<'context> {
                 }
             }
         }
+        let debug_funclet = self.debug_info.funclet(funclet);
         let spec_data = self.get_spec_data(funclet);
-        for node in self.get_funclet(funclet).nodes.iter() {
+        for (index, node) in self.get_funclet(funclet).nodes.iter().enumerate() {
             match node {
                 Hole::Filled(expir::Node::ExtractResult { node_id, index }) => {
                     // lots of potentially panicking unwraps here
@@ -57,41 +58,43 @@ impl<'context> StaticContext<'context> {
                     // every extraction of one function should match to that function
                     result = assign_or_compare(result, dependency);
                 }
-                _ => panic!("Attempted to treat {:?} as an extract operation", node),
+                _ => {
+                    panic!(
+                        "Attempted to treat {} as an extract operation",
+                        self.debug_info.node(funclet, index)
+                    )
+                }
             }
         }
         result
     }
 
     fn get_spec_data(&self, funclet: &FuncletId) -> &SpecFuncletData {
-        self.spec_explication_data
-            .get(&funclet)
-            .expect(&format!("Unknown specification function {:?}", funclet))
+        self.spec_explication_data.get(&funclet).expect(&format!(
+            "Unknown specification function {:?}",
+            self.debug_info.funclet(funclet)
+        ))
     }
 
     pub fn get_funclet(&self, funclet: &FuncletId) -> &expir::Funclet {
         self.program().funclets.get(*funclet).expect(&format!(
-            "Invalid funclet index {} for funclets {:?}",
+            "Invalid funclet index {} for funclets {:?} corresponding with funclet {}",
             funclet,
-            &self.program().funclets
+            &self.program().funclets,
+            self.debug_info.funclet(funclet)
         ))
     }
 }
 
 fn initialize_declarations(
     program: &expir::Program,
-    debug_map: &DebugInfo,
+    debug_info: &DebugInfo,
 ) -> HashMap<FuncletId, SpecFuncletData> {
     let mut result = HashMap::new();
     for (index, funclet) in program.funclets.iter() {
         match &funclet.kind {
             ir::FuncletKind::Value | ir::FuncletKind::Spatial | ir::FuncletKind::Timeline => {
-                result = initialize_spec_funclet_info(
-                    result,
-                    &debug_map.funclet(&index),
-                    index,
-                    funclet,
-                );
+                result = initialize_spec_funclet_info(result, debug_info, index, funclet);
             }
             _ => {}
         }
@@ -101,7 +104,7 @@ fn initialize_declarations(
 
 fn initialize_spec_funclet_info(
     mut result: HashMap<FuncletId, SpecFuncletData>,
-    debug_funclet: &str,
+    debug_info: &DebugInfo,
     funclet_id: usize,
     funclet: &expir::Funclet,
 ) -> HashMap<FuncletId, SpecFuncletData> {
@@ -111,14 +114,17 @@ fn initialize_spec_funclet_info(
         match &node {
             Hole::Empty => {}
             Hole::Filled(node) => {
-                node_dependencies.insert(i, identify_node_deps(node));
+                node_dependencies.insert(
+                    i,
+                    identify_node_deps(&debug_info.node(&funclet_id, i), node),
+                );
             }
         }
     }
     match &funclet.tail_edge {
         Hole::Empty => {}
         Hole::Filled(t) => {
-            identify_tailedge_deps(&debug_funclet, t);
+            identify_tailedge_deps(&debug_info.funclet(&funclet_id), t);
         }
     }
 
@@ -149,7 +155,7 @@ fn initialize_spec_funclet_info(
     result
 }
 
-fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
+fn identify_node_deps(debug_node: &str, node: &expir::Node) -> Vec<NodeId> {
     let error = format!(
         "Invalid hole in {:?}, cannot have an explication hole in a spec funclet",
         &node
@@ -214,7 +220,7 @@ fn identify_node_deps(node: &expir::Node) -> Vec<NodeId> {
             vec![space.clone().opt().expect(&error)]
         }
         _ => {
-            panic!("Unsupported named specification node type {:?}", &node);
+            panic!("Unsupported node {} of type {:?}", debug_node, &node);
         }
     };
     dependencies

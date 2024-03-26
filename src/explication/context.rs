@@ -56,7 +56,7 @@ pub struct StaticContext<'context> {
     // so the original program is not mutated
     program: &'context expir::Program,
 
-    pub debug_map: &'context DebugInfo,
+    pub debug_info: &'context DebugInfo,
 
     // information found about a given spec funclet
     spec_explication_data: HashMap<FuncletId, SpecFuncletData>,
