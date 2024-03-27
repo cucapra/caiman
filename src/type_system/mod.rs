@@ -22,7 +22,7 @@ pub fn check_program(
             continue;
         }
 
-        let mut funclet_checker = scheduling::FuncletChecker::new(&program, funclet);
+        let mut funclet_checker = scheduling::FuncletChecker::new(&program, funclet_id, funclet, debug_info);
 
         for (current_node_id, node) in funclet.nodes.iter().enumerate() {
             let node_error_contextualizer = |writer: &mut dyn std::fmt::Write| {

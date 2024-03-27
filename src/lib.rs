@@ -38,7 +38,7 @@ pub fn explicate_and_execute(
         Ok(_) => (),
         Err(error) => panic!("Type checking failed:\n{}", error),
     }
-    let mut codegen = rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
+    let mut codegen = rust_wgpu_backend::codegen::CodeGen::new(&definition.program, &definition.debug_info);
     codegen.set_print_codgen_debug_info(true);
     let output_string = codegen.generate();
     match output {

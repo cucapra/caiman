@@ -96,7 +96,7 @@ pub fn compile_caiman(
         Ok(_) => (),
         Err(error) => panic!("Type checking failed:\n{}", error),
     }
-    let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
+    let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program, &definition.debug_info);
     codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
     let output_string = codegen.generate();
     Ok(output_string)

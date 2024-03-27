@@ -44,6 +44,8 @@ struct JoinPoint {
 #[derive(Debug)]
 pub struct FuncletSpecChecker<'program> {
     pub program: &'program ir::Program,
+    // the name of this funclet for errors if needed
+    pub funclet_id: usize,
     pub spec_funclet: &'program ir::Funclet,
     pub funclet_spec: &'program ir::FuncletSpec,
     pub scalar_nodes: HashMap<ir::NodeId, Scalar>,
@@ -121,12 +123,14 @@ impl CapturedErrorContext {
 impl<'program> FuncletSpecChecker<'program> {
     pub fn new(
         program: &'program ir::Program,
+        funclet_id: usize,
         spec_funclet: &'program ir::Funclet,
         funclet_spec: &'program ir::FuncletSpec,
         language_string: &'static str,
     ) -> Self {
         let mut state = Self {
             program,
+            funclet_id,
             spec_funclet,
             funclet_spec,
             scalar_nodes: HashMap::new(),
@@ -230,7 +234,9 @@ impl<'program> FuncletSpecChecker<'program> {
 
         assert_eq!(
             funclet_spec.output_tags.len(),
-            continuation_join.input_tags.len()
+            continuation_join.input_tags.len(),
+            "\n{}",
+            error_context
         );
         for index in 0..funclet_spec.output_tags.len() {
             //assert_eq!(funclet_spec.output_tags[index].flow, ir::Flow::Have, "\n{}", error_context);
@@ -286,7 +292,12 @@ impl<'program> FuncletSpecChecker<'program> {
             continuation_join.implicit_tag,
         )?;
 
-        assert_eq!(argument_node_ids.len(), continuation_join.input_tags.len());
+        assert_eq!(
+            argument_node_ids.len(),
+            continuation_join.input_tags.len(),
+            "\n{}",
+            error_context
+        );
         for index in 0..argument_node_ids.len() {
             let Some(scalar) = self.scalar_nodes.get(&argument_node_ids[index]) else {
                 panic!(
@@ -331,7 +342,9 @@ impl<'program> FuncletSpecChecker<'program> {
 
         assert_eq!(
             return_value_node_ids.len(),
-            self.funclet_spec.output_tags.len()
+            self.funclet_spec.output_tags.len(),
+            "\n{}",
+            old_error_context
         );
         for index in 0..return_value_node_ids.len() {
             let scalar = &self.scalar_nodes[&return_value_node_ids[index]];
@@ -371,7 +384,9 @@ impl<'program> FuncletSpecChecker<'program> {
 
         assert_eq!(
             argument_node_ids.len(),
-            callee_funclet_spec.input_tags.len()
+            callee_funclet_spec.input_tags.len(),
+            "\n{}",
+            error_context
         );
         for index in 0..argument_node_ids.len() {
             let scalar = &self.scalar_nodes[&argument_node_ids[index]];
@@ -386,7 +401,9 @@ impl<'program> FuncletSpecChecker<'program> {
 
         assert_eq!(
             continuation_join.input_tags.len(),
-            callee_funclet_spec.output_tags.len()
+            callee_funclet_spec.output_tags.len(),
+            "\n{}",
+            error_context
         );
         for index in 0..callee_funclet_spec.output_tags.len() {
             check_tag_compatibility_interior(
@@ -427,7 +444,9 @@ impl<'program> FuncletSpecChecker<'program> {
 
         assert_eq!(
             input_impl_node_ids.len(),
-            callee_funclet_spec.input_tags.len()
+            callee_funclet_spec.input_tags.len(),
+            "\n{}",
+            error_context
         );
         for index in 0..input_impl_node_ids.len() {
             let scalar = &self.scalar_nodes[&input_impl_node_ids[index]];
@@ -442,7 +461,9 @@ impl<'program> FuncletSpecChecker<'program> {
 
         assert_eq!(
             continuation_join.input_tags.len(),
-            callee_funclet_spec.output_tags.len()
+            callee_funclet_spec.output_tags.len(),
+            "\n{}",
+            error_context
         );
         for index in 0..callee_funclet_spec.output_tags.len() {
             check_tag_compatibility_exit(
@@ -554,7 +575,12 @@ impl<'program> FuncletSpecChecker<'program> {
             old_error_context.funclet_id(),
         );
 
-        assert_eq!(choice_remaps.len(), choice_specs.len());
+        assert_eq!(
+            choice_remaps.len(),
+            choice_specs.len(),
+            "\n{}",
+            error_context
+        );
         for choice_index in 0..choice_specs.len() {
             let choice_spec = &choice_specs[choice_index];
             let choice_remap = choice_remaps[choice_index];
@@ -566,7 +592,12 @@ impl<'program> FuncletSpecChecker<'program> {
                 choice_spec.implicit_in_tag,
             )?;
 
-            assert_eq!(input_impl_node_ids.len(), choice_spec.input_tags.len());
+            assert_eq!(
+                input_impl_node_ids.len(),
+                choice_spec.input_tags.len(),
+                "\n{}",
+                error_context
+            );
             for index in 0..input_impl_node_ids.len() {
                 let scalar = &self.scalar_nodes[&input_impl_node_ids[index]];
 
@@ -589,7 +620,9 @@ impl<'program> FuncletSpecChecker<'program> {
 
             assert_eq!(
                 continuation_join.input_tags.len(),
-                choice_spec.output_tags.len()
+                choice_spec.output_tags.len(),
+                "\n{}",
+                error_context
             );
             for index in 0..choice_spec.output_tags.len() {
                 check_tag_compatibility_interior_cast(
@@ -749,7 +782,7 @@ impl<'program> FuncletSpecChecker<'program> {
 
         let scalar = self.scalar_nodes.get(&node_id).unwrap();
         assert!(scalar.flow.is_readable(), "{}", error_context);
-        assert_eq!(reader_tag.flow, ir::Flow::Usable, "{}", error_context);
+        assert_eq!(reader_tag.flow, ir::Flow::Usable, "\n{}", error_context);
         let tag = ir::Tag {
             quot: reader_tag.quot,
             flow: scalar.flow,
@@ -992,14 +1025,17 @@ fn check_tag_compatibility_enter(
     caller_tag: ir::Tag,
     callee_tag: ir::Tag,
 ) -> Result<(), Error> {
-    assert_eq!(caller_tag.flow, callee_tag.flow);
+    assert_eq!(caller_tag.flow, callee_tag.flow, "\n{}", error_context);
     match (caller_tag.quot, callee_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (ir::Quotient::Node { node_id }, ir::Quotient::Input { index }) => {
             assert_eq!(
-                input_spec_node_ids[index], node_id,
-                "{:?} -> {:?}\n{}",
-                caller_tag, callee_tag, error_context
+                input_spec_node_ids[index],
+                node_id,
+                "{} -> {}\n{}",
+                error_context.debug_tag(&caller_tag),
+                error_context.debug_tag(&callee_tag),
+                error_context
             );
         }
         _ => {
@@ -1025,8 +1061,13 @@ fn check_tag_compatibility_exit(
     source_tag: ir::Tag,
     destination_tag: ir::Tag,
 ) -> Result<(), Error> {
-    assert_eq!(source_tag.flow, ir::Flow::Usable, "{}", error_context);
-    assert_eq!(destination_tag.flow, ir::Flow::Usable, "{}", error_context);
+    assert_eq!(source_tag.flow, ir::Flow::Usable, "\n{}", error_context);
+    assert_eq!(
+        destination_tag.flow,
+        ir::Flow::Usable,
+        "\n{}",
+        error_context
+    );
     match (source_tag.quot, destination_tag.quot) {
         (ir::Quotient::None, ir::Quotient::None) => (),
         (
@@ -1042,14 +1083,20 @@ fn check_tag_compatibility_exit(
             } = node
             {
                 assert_eq!(
-                    *index, output_index,
-                    "{:?} -> {:?}\n{}",
-                    source_tag, destination_tag, error_context
+                    *index,
+                    output_index,
+                    "{} -> {}\n{}",
+                    error_context.debug_tag(&source_tag),
+                    error_context.debug_tag(&destination_tag),
+                    error_context
                 );
                 assert_eq!(
-                    *call_node_id, caller_spec_node_id,
+                    *call_node_id,
+                    caller_spec_node_id,
                     "{:?} -> {:?}\n{}",
-                    source_tag, destination_tag, error_context
+                    error_context.debug_tag(&source_tag),
+                    error_context.debug_tag(&destination_tag),
+                    error_context
                 );
             } else {
                 panic!(
@@ -1157,7 +1204,7 @@ fn check_tag_compatibility_interior(
                 assert_eq!(*phi_index, index);
             } else {
                 panic!(
-                    "While checking interior compatibility of {:?} to {:?}: {:?} is not a phi\n{}",
+                    "While checking interior compatibility of {} to {}: {:?} is not a phi\n{}",
                     error_context.debug_tag(&source_tag),
                     error_context.debug_tag(&destination_tag),
                     current_value_funclet.nodes[remote_node_id],
@@ -1179,7 +1226,7 @@ fn check_tag_compatibility_interior(
             match &current_value_funclet.tail_edge {
                 ir::TailEdge::Return { return_values } => {
                     //error_ifn_eq!(error_context, return_values[index], node_id)?;
-                    assert_eq!(return_values[index], node_id, "{}", error_context);
+                    assert_eq!(return_values[index], node_id, "\n{}", error_context);
                 }
                 _ => panic!("Not a unit\n{}", error_context),
             }
@@ -1188,13 +1235,15 @@ fn check_tag_compatibility_interior(
             if flow == ir::Flow::Need =>
         {
             match &current_value_funclet.tail_edge {
-                ir::TailEdge::Return { return_values } => assert_eq!(return_values[index], node_id),
+                ir::TailEdge::Return { return_values } => {
+                    assert_eq!(return_values[index], node_id, "\n{}", error_context)
+                }
                 _ => panic!("Not a unit\n{}", error_context),
             }
         }
         (ir::Quotient::Output { index }, ir::Quotient::Output { index: index_2 }) => {
             //assert_eq!(funclet_id, funclet_id_2);
-            assert_eq!(index, index_2);
+            assert_eq!(index, index_2, "\n{}", error_context);
         }
         _ => panic!(
             "Ill-formed: {:?} to {:?}\n{}",
