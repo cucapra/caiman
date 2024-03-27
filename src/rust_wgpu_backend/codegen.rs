@@ -1,4 +1,4 @@
-use crate::ir::{self, Program, Type};
+use crate::ir::{self, Funclet, Program, Type};
 use crate::rust_wgpu_backend::code_generator;
 use crate::rust_wgpu_backend::code_generator::{CodeGenerator, SubmissionId, VarId};
 use crate::shadergen;
@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::default::{self, Default};
 use std::fmt::Write;
+use std::future::pending;
 
 use crate::rust_wgpu_backend::ffi;
 
@@ -809,6 +810,8 @@ impl<'program> CodeGen<'program> {
     ///   is compiled
     /// * `func_inline` - Whether the current funclet is being inlined as a call
     /// * `branch_inline` - Whether the current funclet is being inlined as a branch
+    /// * `pipeline_rets` - The return types of the pipeline. Used to determine if its possible to
+    ///  return early from the pipeline when we encounter a caiman `return`.
     /// # Returns
     /// * None for no unhandled split points, otherwise, a tuple of the
     ///     unhandled split point node results and a boolean indicating whether
@@ -822,6 +825,7 @@ impl<'program> CodeGen<'program> {
         default_join_point_id_opt: &mut Option<JoinPointId>,
         func_inline: bool,
         branch_inline: bool,
+        pipeline_rets: &[ffi::TypeId],
     ) -> Option<(Box<[NodeResult]>, bool)> {
         let split_point = self.compile_scheduling_funclet(
             current_funclet_id,
@@ -866,14 +870,15 @@ impl<'program> CodeGen<'program> {
                 if branch_inline {
                     *default_join_point_id_opt = continuation_join_point_id_opt;
                     let argument_var_ids = NodeResult::collect_vars(&return_node_results);
-                    self.code_generator
-                        .build_indirect_stack_jump_to_popped_serialized_join(
-                            &argument_var_ids,
-                            &argument_ffi_types,
-                        );
+                    // build return so that we can return if we optimize away the continuation
+                    self.code_generator.build_return(
+                        &argument_var_ids,
+                        &argument_ffi_types,
+                        pipeline_rets.iter().eq(argument_ffi_types.iter()),
+                    );
                     return None;
                 } else {
-                    return Some((return_node_results, false));
+                    return Some((return_node_results, true));
                 }
             }
             SplitPoint::Yield {
@@ -1180,6 +1185,7 @@ impl<'program> CodeGen<'program> {
                 &mut default_join_point_id_opt,
                 func_inline,
                 branch_inline,
+                pipeline_rets,
             ) {
                 current_out_node_results = cur_out;
                 force_process_join = force_process;
@@ -1195,25 +1201,22 @@ impl<'program> CodeGen<'program> {
                     match &join_point {
                         JoinPoint::RootJoinPoint(_) | JoinPoint::SimpleJoinPoint(_) => {
                             // tail edge must be a return
-                            // inlined branches are already handled
-                            if !branch_inline {
-                                let return_var_ids =
-                                    NodeResult::collect_vars(&current_out_node_results);
-                                let types = &self.program.funclets[funclet_id].output_types;
-                                let types: Vec<_> = types
-                                    .iter()
-                                    .map(|x| self.get_cpu_useable_type(*x))
-                                    .collect();
-                                // if the output types don't match the pipeline return types,
-                                // then there's no way for us to return adn we must
-                                // call something off the join stack
-                                let may_return = pipeline_rets.iter().eq(types.iter());
-                                self.code_generator.build_return(
-                                    &return_var_ids,
-                                    &types.into_boxed_slice(),
-                                    may_return,
-                                );
-                            }
+                            let return_var_ids =
+                                NodeResult::collect_vars(&current_out_node_results);
+                            let types = &self.program.funclets[funclet_id].output_types;
+                            let types: Vec<_> = types
+                                .iter()
+                                .map(|x| self.get_cpu_useable_type(*x))
+                                .collect();
+                            // if the output types don't match the pipeline return types,
+                            // then there's no way for us to return adn we must
+                            // call something off the join stack
+                            let may_return = pipeline_rets.iter().eq(types.iter());
+                            self.code_generator.build_return(
+                                &return_var_ids,
+                                &types.into_boxed_slice(),
+                                may_return,
+                            );
                         }
                         JoinPoint::CallJoinPoint(simple_join_point) => {
                             // schedule call
@@ -1286,6 +1289,179 @@ impl<'program> CodeGen<'program> {
         }
 
         return input_var_ids.into_boxed_slice();
+    }
+
+    /// Determines if a continuation of the given funclet can be optimized away.
+    /// A funclet is trivial if it has no captures and it
+    /// only contains phis, returns of all phi nodes, or jumps to other trivial funclets.
+    /// # Arguments
+    /// * `funclet_id` - The continuation target
+    /// * `captures_len` - The number of captures for the continuation
+    /// # Returns
+    /// * True if the continuation can be optimized away, otherwise false
+    fn is_trivial_funclet(&self, funclet_id: usize, captures_len: usize) -> bool {
+        if captures_len != 0 {
+            return false;
+        }
+        let f = &self.program.funclets[funclet_id];
+        for node in f.nodes.iter() {
+            if !matches!(
+                node,
+                ir::Node::Phi { .. } | ir::Node::DefaultJoin { .. } | ir::Node::InlineJoin { .. }
+            ) {
+                return false;
+            }
+        }
+        match &f.tail_edge {
+            ir::TailEdge::Return { return_values } => {
+                let mut v: Vec<_> = return_values.iter().cloned().collect();
+                v.sort();
+                return_values.len() == f.input_types.len()
+                    && return_values.iter().eq(v.iter())
+                    && return_values
+                        .iter()
+                        .all(|x| matches!(f.nodes[*x], ir::Node::Phi { .. }))
+            }
+            ir::TailEdge::Jump {
+                arguments: return_values,
+                join,
+            } => {
+                let mut v: Vec<_> = return_values.iter().cloned().collect();
+                v.sort();
+                return_values.len() == f.input_types.len()
+                    && return_values
+                        .iter()
+                        .all(|x| matches!(f.nodes[*x], ir::Node::Phi { .. }))
+                    && return_values.iter().eq(v.iter())
+                    && match &f.nodes[*join] {
+                        ir::Node::InlineJoin {
+                            funclet, captures, ..
+                        } => self.is_trivial_funclet(*funclet, captures.len()),
+                        _ => false,
+                    }
+            }
+            _ => false,
+        }
+    }
+
+    /// Inlines the pending join point
+    /// # Arguments
+    /// * `pending_inline_join` - The pending join which will be inlined. Must not be None.
+    ///    The tuple contains the funclet id, the captures, the continuation join node id, and the current node id.
+    fn do_inline_join(
+        &mut self,
+        funclet_scoped_state: &mut FuncletScopedState,
+        pipeline_context: &mut PipelineContext,
+        pending_inline_join: Option<(&ir::FuncletId, &Box<[ir::NodeId]>, &ir::NodeId, ir::NodeId)>,
+    ) {
+        let (funclet_id, captures, continuation_join_node_id, current_node_id) =
+            pending_inline_join.unwrap();
+        let mut captured_node_results = Vec::<NodeResult>::new();
+        let join_funclet = &self.program.funclets[*funclet_id];
+
+        // Join points can only be constructed for the value funclet they are created in
+        assert_eq!(
+            join_funclet
+                .spec_binding
+                .get_value_spec()
+                .funclet_id_opt
+                .unwrap(),
+            funclet_scoped_state.value_funclet_id
+        );
+
+        for (capture_index, capture_node_id) in captures.iter().enumerate() {
+            let node_result = funclet_scoped_state
+                .move_node_result(*capture_node_id)
+                .unwrap();
+            captured_node_results.push(node_result);
+        }
+
+        let continuation_join_point_id = funclet_scoped_state
+            .move_node_join_point_id(*continuation_join_node_id)
+            .unwrap();
+        let continuation_join_point = pipeline_context
+            .join_graph
+            .get_join(continuation_join_point_id);
+
+        let join_point_id = pipeline_context
+            .join_graph
+            .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
+                value_funclet_id: join_funclet
+                    .spec_binding
+                    .get_value_spec()
+                    .funclet_id_opt
+                    .unwrap(),
+                scheduling_funclet_id: *funclet_id,
+                captures: captured_node_results.into_boxed_slice(),
+                continuation_join_point_id,
+            }));
+        funclet_scoped_state
+            .node_results
+            .insert(current_node_id, NodeResult::Join { join_point_id });
+    }
+
+    /// Serializes the given join point
+    /// # Arguments
+    /// * `pending_inline_join` - The pending join which will be serialized. Must not be None.
+    ///     The tuple contains the funclet id, the captures, the continuation join node id, and the current node id.
+    fn do_serialized_join(
+        &mut self,
+        funclet_scoped_state: &mut FuncletScopedState,
+        pipeline_context: &mut PipelineContext,
+        pending_inline_join: Option<(&ir::FuncletId, &Box<[ir::NodeId]>, &ir::NodeId, ir::NodeId)>,
+    ) {
+        let (funclet_id, captures, continuation_join_node_id, current_node_id) =
+            pending_inline_join.unwrap();
+        let mut captured_node_results = Vec::<NodeResult>::new();
+        let join_funclet = &self.program.funclets[*funclet_id];
+
+        // Join points can only be constructed for the value funclet they are created in
+        assert_eq!(
+            join_funclet
+                .spec_binding
+                .get_value_spec()
+                .funclet_id_opt
+                .unwrap(),
+            funclet_scoped_state.value_funclet_id
+        );
+
+        for (capture_index, capture_node_id) in captures.iter().enumerate() {
+            let node_result = funclet_scoped_state
+                .move_node_result(*capture_node_id)
+                .unwrap();
+            captured_node_results.push(node_result);
+        }
+
+        let argument_ffi_types = join_funclet.input_types[captures.len()..]
+            .iter()
+            .map(|type_id| self.get_cpu_useable_type(*type_id))
+            .collect::<Box<[ir::ffi::TypeId]>>();
+
+        let continuation_join_point_id = funclet_scoped_state
+            .move_node_join_point_id(*continuation_join_node_id)
+            .unwrap();
+        let continuation_join_point = pipeline_context
+            .join_graph
+            .get_join(continuation_join_point_id);
+
+        self.build_push_serialized_join(*funclet_id, captured_node_results.as_slice());
+        pipeline_context.pending_funclet_ids.push(*funclet_id);
+
+        let join_point_id = pipeline_context
+            .join_graph
+            .create(JoinPoint::SerializedJoinPoint(SerializedJoinPoint {
+                value_funclet_id: join_funclet
+                    .spec_binding
+                    .get_value_spec()
+                    .funclet_id_opt
+                    .unwrap(),
+                scheduling_funclet_id: *funclet_id,
+                argument_ffi_types,
+                continuation_join_point_id,
+            }));
+        funclet_scoped_state
+            .node_results
+            .insert(current_node_id, NodeResult::Join { join_point_id });
     }
 
     /// Compiles the current funclet and returns the split point for the tail edge
@@ -1967,115 +2143,6 @@ impl<'program> CodeGen<'program> {
             );
         }
 
-        let mut do_inline_join =
-            |this: &mut CodeGen<'_>,
-             funclet_scoped_state: &mut FuncletScopedState,
-             pipeline_context: &mut PipelineContext| {
-                let (funclet_id, captures, continuation_join_node_id, current_node_id) =
-                    pending_inline_join.unwrap();
-                let mut captured_node_results = Vec::<NodeResult>::new();
-                let join_funclet = &this.program.funclets[*funclet_id];
-
-                // Join points can only be constructed for the value funclet they are created in
-                assert_eq!(
-                    join_funclet
-                        .spec_binding
-                        .get_value_spec()
-                        .funclet_id_opt
-                        .unwrap(),
-                    funclet_scoped_state.value_funclet_id
-                );
-
-                for (capture_index, capture_node_id) in captures.iter().enumerate() {
-                    let node_result = funclet_scoped_state
-                        .move_node_result(*capture_node_id)
-                        .unwrap();
-                    captured_node_results.push(node_result);
-                }
-
-                let continuation_join_point_id = funclet_scoped_state
-                    .move_node_join_point_id(*continuation_join_node_id)
-                    .unwrap();
-                let continuation_join_point = pipeline_context
-                    .join_graph
-                    .get_join(continuation_join_point_id);
-
-                let join_point_id = pipeline_context
-                    .join_graph
-                    .create(JoinPoint::SimpleJoinPoint(SimpleJoinPoint {
-                        value_funclet_id: join_funclet
-                            .spec_binding
-                            .get_value_spec()
-                            .funclet_id_opt
-                            .unwrap(),
-                        scheduling_funclet_id: *funclet_id,
-                        captures: captured_node_results.into_boxed_slice(),
-                        continuation_join_point_id,
-                    }));
-                funclet_scoped_state
-                    .node_results
-                    .insert(current_node_id, NodeResult::Join { join_point_id });
-            };
-
-        let mut do_serialized_join =
-            |this: &mut CodeGen,
-             funclet_scoped_state: &mut FuncletScopedState,
-             pipeline_context: &mut PipelineContext| {
-                let (funclet_id, captures, continuation_join_node_id, current_node_id) =
-                    pending_inline_join.unwrap();
-                let mut captured_node_results = Vec::<NodeResult>::new();
-                let join_funclet = &this.program.funclets[*funclet_id];
-
-                // Join points can only be constructed for the value funclet they are created in
-                assert_eq!(
-                    join_funclet
-                        .spec_binding
-                        .get_value_spec()
-                        .funclet_id_opt
-                        .unwrap(),
-                    funclet_scoped_state.value_funclet_id
-                );
-
-                for (capture_index, capture_node_id) in captures.iter().enumerate() {
-                    let node_result = funclet_scoped_state
-                        .move_node_result(*capture_node_id)
-                        .unwrap();
-                    captured_node_results.push(node_result);
-                }
-
-                let argument_ffi_types = join_funclet.input_types[captures.len()..]
-                    .iter()
-                    .map(|type_id| this.get_cpu_useable_type(*type_id))
-                    .collect::<Box<[ir::ffi::TypeId]>>();
-
-                let continuation_join_point_id = funclet_scoped_state
-                    .move_node_join_point_id(*continuation_join_node_id)
-                    .unwrap();
-                let continuation_join_point = pipeline_context
-                    .join_graph
-                    .get_join(continuation_join_point_id);
-
-                this.build_push_serialized_join(*funclet_id, captured_node_results.as_slice());
-                pipeline_context.pending_funclet_ids.push(*funclet_id);
-
-                let join_point_id =
-                    pipeline_context
-                        .join_graph
-                        .create(JoinPoint::SerializedJoinPoint(SerializedJoinPoint {
-                            value_funclet_id: join_funclet
-                                .spec_binding
-                                .get_value_spec()
-                                .funclet_id_opt
-                                .unwrap(),
-                            scheduling_funclet_id: *funclet_id,
-                            argument_ffi_types,
-                            continuation_join_point_id,
-                        }));
-                funclet_scoped_state
-                    .node_results
-                    .insert(current_node_id, NodeResult::Join { join_point_id });
-            };
-
         self.code_generator
             .insert_comment(format!(" tail edge: {:?}", funclet.tail_edge).as_str());
         let split_point = match &funclet.tail_edge {
@@ -2119,7 +2186,11 @@ impl<'program> CodeGen<'program> {
                 continuation_join: continuation_join_node_id,
             } => {
                 if pending_inline_join.is_some() {
-                    do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
+                    self.do_serialized_join(
+                        &mut funclet_scoped_state,
+                        pipeline_context,
+                        pending_inline_join,
+                    );
                 }
                 let continuation_join_point_id = funclet_scoped_state
                     .move_node_join_point_id(*continuation_join_node_id)
@@ -2145,7 +2216,11 @@ impl<'program> CodeGen<'program> {
             }
             ir::TailEdge::Jump { join, arguments } => {
                 if pending_inline_join.is_some() {
-                    do_inline_join(self, &mut funclet_scoped_state, pipeline_context);
+                    self.do_inline_join(
+                        &mut funclet_scoped_state,
+                        pipeline_context,
+                        pending_inline_join,
+                    );
                 }
                 let mut join_point_id = funclet_scoped_state.move_node_join_point_id(*join); //.unwrap();
 
@@ -2182,7 +2257,20 @@ impl<'program> CodeGen<'program> {
                 continuation_join: continuation_join_node_id,
             } => {
                 if pending_inline_join.is_some() {
-                    do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
+                    let (funclet_id, captures, ..) = pending_inline_join.as_ref().unwrap();
+                    if self.is_trivial_funclet(**funclet_id, captures.len()) {
+                        self.do_inline_join(
+                            &mut funclet_scoped_state,
+                            pipeline_context,
+                            pending_inline_join,
+                        );
+                    } else {
+                        self.do_serialized_join(
+                            &mut funclet_scoped_state,
+                            pipeline_context,
+                            pending_inline_join,
+                        );
+                    }
                 }
                 let callee_scheduling_funclet_id = *callee_scheduling_funclet_id_ref;
 
@@ -2236,7 +2324,20 @@ impl<'program> CodeGen<'program> {
                 continuation_join: continuation_join_node_id,
             } => {
                 if pending_inline_join.is_some() {
-                    do_serialized_join(self, &mut funclet_scoped_state, pipeline_context);
+                    let (funclet_id, captures, ..) = pending_inline_join.as_ref().unwrap();
+                    if self.is_trivial_funclet(**funclet_id, captures.len()) {
+                        self.do_inline_join(
+                            &mut funclet_scoped_state,
+                            pipeline_context,
+                            pending_inline_join,
+                        );
+                    } else {
+                        self.do_serialized_join(
+                            &mut funclet_scoped_state,
+                            pipeline_context,
+                            pending_inline_join,
+                        );
+                    }
                 }
                 let condition_slot_id = funclet_scoped_state
                     .get_node_var_id(*condition_slot_node_id)
