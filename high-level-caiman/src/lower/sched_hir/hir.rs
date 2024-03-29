@@ -176,11 +176,10 @@ pub enum HirBody {
         rhs: Option<SchedTerm>,
     },
     Hole(Info),
-    /// Built-in operation (performs a const decl)
+    /// External operation (performs a const decl for the destinations)
     Op {
         info: Info,
-        dest: Name,
-        dest_tag: TripleTag,
+        dests: Vec<(Name, TripleTag)>,
         op: HirOp,
         args: Vec<SchedTerm>,
     },
@@ -214,7 +213,6 @@ pub enum HirOp {
     /// an unlowered binary operation
     Binary(Binop),
     /// an unlowered unary operation
-    #[allow(dead_code)]
     Unary(Uop),
     /// a lowered operation into an external call
     FFI(Name, OpType),
@@ -535,8 +533,7 @@ impl HirBody {
                     let args = enum_cast!(ArgsOrEnc::Args, &*call.args);
                     Self::Op {
                         info,
-                        dest: lhs[0].0.clone(),
-                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                        dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                         op: HirOp::FFI(target.clone(), OpType::External),
                         args: args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
                     }
@@ -557,10 +554,10 @@ impl HirBody {
             } => {
                 let lhs_term = enum_cast!(SchedExpr::Term, op_lhs.as_ref());
                 let rhs_term = enum_cast!(SchedExpr::Term, op_rhs.as_ref());
+                assert_eq!(lhs.len(), 1);
                 Self::Op {
                     info,
-                    dest: lhs[0].0.clone(),
-                    dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                    dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                     op: HirOp::Binary(op),
                     args: vec![lhs_term.clone(), rhs_term.clone()],
                 }
@@ -569,10 +566,10 @@ impl HirBody {
                 info, op, expr
             } => {
                 let term = enum_cast!(SchedExpr::Term, *expr);
+                assert_eq!(lhs.len(), 1);
                 Self::Op {
                     info,
-                    dest: lhs[0].0.clone(),
-                    dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                    dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                     op: HirOp::Unary(op),
                     args: vec![term],
                 }
@@ -617,9 +614,12 @@ impl Hir for HirBody {
     fn get_defs(&self) -> Option<Vec<String>> {
         match self {
             Self::ConstDecl { lhs,  .. } | Self::VarDecl { lhs, .. } 
-            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} |
+            | Self::RefLoad { dest: lhs, ..} | 
             Self::Phi { dest: lhs, ..}=> {
                 Some(vec![lhs.clone()])
+            }
+            Self::Op { dests, ..} => {
+                Some(dests.iter().map(|(name, _)| name.clone()).collect())
             }
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
@@ -634,9 +634,14 @@ impl Hir for HirBody {
     fn rename_defs(&mut self, f: &mut dyn FnMut(&str) -> String) {
         match self {
             Self::ConstDecl { lhs, .. } | Self::VarDecl { lhs, .. } 
-            | Self::RefLoad { dest: lhs, ..} | Self::Op { dest: lhs, ..} |
+            | Self::RefLoad { dest: lhs, ..} |
             Self::Phi { dest: lhs, ..} => {
                 *lhs = f(lhs);
+            }
+            Self::Op { dests, ..} => {
+                for (name, _) in dests {
+                    *name = f(name);
+                }
             }
             Self::Hole(..)
             | Self::RefStore { .. }

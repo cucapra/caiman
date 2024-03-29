@@ -7,6 +7,7 @@ impl main::CpuFunctions for Callbacks {
     fn foof(&self, _: &mut dyn caiman_rt::State, a: i64) -> (i64,) {
         (a + 10,)
     }
+
     fn bar(&self, _: &mut dyn caiman_rt::State, a: i64) -> (i64,) {
         (a * 2,)
     }

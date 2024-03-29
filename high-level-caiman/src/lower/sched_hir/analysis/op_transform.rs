@@ -47,14 +47,15 @@ fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType
     match instr {
         HirBody::Op {
             op: HirOp::Unary(Uop::Deref),
-            dest,
+            dests,
             args,
             ..
         } => {
             assert_eq!(args.len(), 1);
+            assert_eq!(dests.len(), 1);
             let src = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
             *instr = HirBody::RefLoad {
-                dest: dest.clone(),
+                dest: dests[0].0.clone(),
                 src: src.clone(),
                 typ: deref_data_type(data_types[src].clone()),
             }

@@ -153,41 +153,39 @@ fn lower_store(
     )
 }
 
-/// Changes the remote node id to the remote id of the result of the call, before
-/// extracing the result
-fn to_tuple_quotient(q: asm::RemoteNodeId) -> asm::RemoteNodeId {
-    if let RemoteNodeId {
-        node: Some(Hole::Filled(asm::NodeId(n))),
-        ..
-    } = q
-    {
-        asm::RemoteNodeId {
-            node: Some(Hole::Filled(asm::NodeId(tuple_id(&[n])))),
-            ..q
-        }
-    } else {
-        q
-    }
-}
-
 /// Lowers an operation into a local-do-external and read-ref
 fn lower_op(
-    dest: &str,
-    dest_tag: &TripleTag,
+    dests: &[(String, TripleTag)],
     op: &str,
     args: &[SchedTerm],
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
-    let temp_node_name = temp_var_name(temp_id);
-    let temp = asm::Command::Node(asm::NamedNode {
-        name: Some(asm::NodeId(temp_node_name.clone())),
-        node: asm::Node::AllocTemporary {
-            place: Hole::Filled(ir::Place::Local),
-            buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
-            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
-        },
-    });
+    // alloc temps for each destination
+    let temps: Vec<_> = dests
+        .iter()
+        .enumerate()
+        .map(|(id, (name, _))| {
+            let temp_node_name = temp_var_name(temp_id + id);
+            (
+                temp_node_name.clone(),
+                asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(temp_node_name)),
+                    node: asm::Node::AllocTemporary {
+                        place: Hole::Filled(ir::Place::Local),
+                        buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
+                        storage_type: Hole::Filled(data_type_to_ffi_type(
+                            f.get_dtype(name).unwrap(),
+                        )),
+                    },
+                }),
+            )
+        })
+        .collect();
+    let called_vars = dests
+        .iter()
+        .map(|(_, t)| t.value.quot_var.spec_var.as_ref().unwrap().clone())
+        .collect::<Vec<_>>();
     let mut inputs = vec![];
     for arg in args {
         let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
@@ -196,26 +194,42 @@ fn lower_op(
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
         node: asm::Node::LocalDoExternal {
-            operation: Hole::Filled(to_tuple_quotient(tag_to_remote_id(&dest_tag.value))),
+            operation: Hole::Filled(asm::RemoteNodeId {
+                funclet: Hole::Filled(SpecType::Value.get_meta_id()),
+                node: Some(Hole::Filled(asm::NodeId(tuple_id(&called_vars)))),
+            }),
             inputs: Hole::Filled(inputs),
-            outputs: Hole::Filled(vec![Hole::Filled(asm::NodeId(temp_node_name.clone()))]),
+            outputs: Hole::Filled(
+                temps
+                    .iter()
+                    .map(|(n, _)| Hole::Filled(asm::NodeId(n.clone())))
+                    .collect(),
+            ),
             external_function_id: Hole::Filled(asm::ExternalFunctionId(op.to_string())),
         },
     });
-    let read_ref = asm::Command::Node(asm::NamedNode {
-        name: Some(asm::NodeId(dest.to_string())),
-        node: asm::Node::ReadRef {
-            source: Hole::Filled(asm::NodeId(temp_node_name)),
-            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
-        },
-    });
+    // read ref for each destination
+    let read_refs: Vec<_> = dests
+        .iter()
+        .zip(temps.iter())
+        .map(|((name, _), (temp, _))| {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(name.clone())),
+                node: asm::Node::ReadRef {
+                    source: Hole::Filled(asm::NodeId(temp.clone())),
+                    storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(name).unwrap())),
+                },
+            }))
+        })
+        .collect();
     (
-        vec![
-            Hole::Filled(temp),
-            Hole::Filled(local_do),
-            Hole::Filled(read_ref),
-        ],
-        temp_id + 1,
+        temps
+            .into_iter()
+            .map(|(_, c)| Hole::Filled(c))
+            .chain(std::iter::once(Hole::Filled(local_do)))
+            .chain(read_refs)
+            .collect(),
+        temp_id + dests.len(),
     )
 }
 
@@ -251,12 +265,8 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         // annotations don't lower to anything
         HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) => (vec![], temp_id),
         HirBody::Op {
-            dest,
-            dest_tag,
-            op,
-            args,
-            ..
-        } => lower_op(dest, dest_tag, &op.lower(), args, temp_id, f),
+            dests, op, args, ..
+        } => lower_op(dests, &op.lower(), args, temp_id, f),
         x @ HirBody::Hole(_) => todo!("{x:?}"),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
     }
