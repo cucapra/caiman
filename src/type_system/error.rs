@@ -81,7 +81,7 @@ impl<'scope> ErrorContext<'scope> {
     }
 
     pub fn debug_tag(&self, tag: &crate::ir::Tag) -> String {
-        format!("Tag: {}, {:?}", self.debug_quotient(&tag.quot), &tag.flow)
+        self.debug_info.tag(&self.current_funclet_id, tag)
     }
 }
 

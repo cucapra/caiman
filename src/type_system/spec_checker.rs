@@ -1,4 +1,7 @@
+use itertools::Itertools;
+
 use super::error::{Error, ErrorContext};
+use crate::debug_info::DebugInfo;
 use crate::ir;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::default::Default;
@@ -53,6 +56,7 @@ pub struct FuncletSpecChecker<'program> {
     //current_node_id: ir::NodeId,
     pub current_implicit_tag: ir::Tag,
     pub language_string: &'static str,
+    debug_info: &'program DebugInfo
 }
 
 //{tags : &[ir::Tag], flows : &[ir::Flow], implicit_tag : ir::Tag, stage : bool},
@@ -127,6 +131,7 @@ impl<'program> FuncletSpecChecker<'program> {
         spec_funclet: &'program ir::Funclet,
         funclet_spec: &'program ir::FuncletSpec,
         language_string: &'static str,
+        debug_info: &'program DebugInfo,
     ) -> Self {
         let mut state = Self {
             program,
@@ -138,6 +143,7 @@ impl<'program> FuncletSpecChecker<'program> {
             //current_node_id: 0,
             current_implicit_tag: funclet_spec.implicit_in_tag,
             language_string,
+            debug_info
         };
         state.initialize();
         state
@@ -173,7 +179,16 @@ impl<'program> FuncletSpecChecker<'program> {
     }
 
     fn contextualize_error(&self, writer: &mut dyn std::fmt::Write) -> Result<(), std::fmt::Error> {
-        write!(writer, "Checking {} spec funclet\nSpec {:?}\nSpec Funclet {:?}\nScalar Nodes {:?}\nJoin Nodes {:?}\nImplicit Tag {:?}\n", self.language_string, self.funclet_spec, self.spec_funclet, self.scalar_nodes, self.join_nodes, self.current_implicit_tag)
+        write!(writer, "Checking {} spec funclet\nSpec {}\nSpec Funclet {}\nScalar Nodes {:?}\nJoin Nodes {:?}\nImplicit Tag {}\n",
+        self.language_string, 
+        self.debug_info.spec(self.funclet_spec),
+        self.debug_info.funclet(&self.funclet_id),
+        self.scalar_nodes.iter().map(|n| self.debug_info.tag(&self.funclet_id, &n.1)).collect_vec(),
+        self.join_nodes.iter().map(|j| format!("JoinPoint: {}, {:?}",
+            self.debug_info.tag(&self.funclet_id, &j.1.implicit_tag),
+            j.1.input_tags.iter().map(|n| self.debug_info.tag(&self.funclet_id, &n))
+            .collect_vec())).collect_vec(),
+        self.debug_info.tag(&self.funclet_id, &self.current_implicit_tag))
     }
 
     fn capture_error_context(&self) -> CapturedErrorContext {

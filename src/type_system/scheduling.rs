@@ -230,9 +230,14 @@ fn advance_forward_value_copy<'program>(
     output_impl_node_id: ir::NodeId,
 ) -> Result<(), Error> {
     let scalar = &value_spec_checker.scalar_nodes[&input_impl_node_id];
-    assert!(scalar.flow.is_readable());
+    assert!(scalar.flow.is_readable(), "\n{}", error_context);
     //value_spec_checker.check_node_tag(output_impl_node_id, ir::Tag{quot: scalar.quot, flow: ir::Flow::None})?;
-    assert!(value_spec_checker.can_drop_node(output_impl_node_id));
+    assert!(
+        value_spec_checker.can_drop_node(output_impl_node_id),
+        "node {}\n{}",
+        error_context.debug_info().node(&value_spec_checker.funclet_id, output_impl_node_id),
+        error_context
+    );
     value_spec_checker.update_scalar_node(output_impl_node_id, scalar.quot, ir::Flow::Usable);
     return Ok(());
 }
@@ -254,7 +259,12 @@ fn advance_forward_value_do<'program>(
             // Outputs
             assert_eq!(output_impl_node_ids.len(), 1, "\n{}", error_context);
             //value_spec_checker.check_node_tag(output_impl_node_ids[0], ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::None})?;
-            assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
+            assert!(
+                value_spec_checker.can_drop_node(output_impl_node_ids[0]),
+                "node {}\n{}",
+                error_context.debug_info().node(&value_spec_checker.funclet_id, output_impl_node_ids[0]),
+                error_context
+            );
             value_spec_checker.update_scalar_node(
                 output_impl_node_ids[0],
                 ir::Quotient::Node {
@@ -279,15 +289,26 @@ fn advance_forward_value_do<'program>(
                     ir::Quotient::Node {
                         node_id: *input_spec_node_id
                     },
-                    // "{} =/= {}\n{}",
-                    // error_context.debug_info().
+                    "\n\n{} =/= {}\n\n{}",
+                    error_context
+                        .debug_info()
+                        .quot(&value_spec_checker.funclet_id, &scalar.quot),
+                    error_context
+                        .debug_info()
+                        .node(&value_spec_checker.funclet_id, *input_spec_node_id),
+                    error_context
                 );
-                assert!(scalar.flow.is_readable());
+                assert!(scalar.flow.is_readable(), "\n{}", error_context);
             }
             // Outputs
             assert_eq!(output_impl_node_ids.len(), 1, "\n{}", error_context);
             //value_spec_checker.check_node_tag(output_impl_node_ids[0], ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::None})?;
-            assert!(value_spec_checker.can_drop_node(output_impl_node_ids[0]));
+            assert!(
+                value_spec_checker.can_drop_node(output_impl_node_ids[0]),
+                "node {}\n{}",
+                error_context.debug_info().node(&value_spec_checker.funclet_id, output_impl_node_ids[0]),
+                error_context
+            );
             value_spec_checker.update_scalar_node(
                 output_impl_node_ids[0],
                 ir::Quotient::Node {
@@ -314,14 +335,27 @@ fn advance_forward_value_do<'program>(
                     scalar.quot,
                     ir::Quotient::Node {
                         node_id: *input_spec_node_id
-                    }
+                    },
+                    "\n\n{} =/= {}\n\n{}",
+                    error_context
+                        .debug_info()
+                        .quot(&value_spec_checker.funclet_id, &scalar.quot),
+                    error_context
+                        .debug_info()
+                        .node(&value_spec_checker.funclet_id, *input_spec_node_id),
+                    error_context
                 );
-                assert!(scalar.flow.is_readable());
+                assert!(scalar.flow.is_readable(), "\n{}", error_context);
             }
             // Outputs
             for (output_index, output_impl_node_id) in output_impl_node_ids.iter().enumerate() {
                 // To do: Check that spec node is really an extractresult
-                assert!(value_spec_checker.can_drop_node(*output_impl_node_id));
+                assert!(
+                    value_spec_checker.can_drop_node(*output_impl_node_id),
+                    "node {}\n{}",
+                    error_context.debug_info().node(&value_spec_checker.funclet_id, *output_impl_node_id),
+                    error_context
+                );
                 //value_spec_checker.check_node_tag(*output_impl_node_id, ir::Tag{quot: ir::Quotient::Node{node_id: spec_node_id}, flow: ir::Flow::Need})?;
                 value_spec_checker.update_scalar_node(
                     *output_impl_node_id,
@@ -490,9 +524,14 @@ impl<'program> FuncletChecker<'program> {
         program: &'program ir::Program,
         scheduling_funclet_id: usize,
         scheduling_funclet: &'program ir::Funclet,
-        debug_info: &DebugInfo,
+        debug_info: &'program DebugInfo,
     ) -> Self {
-        assert_eq!(scheduling_funclet.kind, ir::FuncletKind::ScheduleExplicit);
+        assert_eq!(
+            scheduling_funclet.kind,
+            ir::FuncletKind::ScheduleExplicit,
+            "for funclet {}",
+            debug_info.funclet(&scheduling_funclet_id)
+        );
         let value_spec = scheduling_funclet.spec_binding.get_value_spec();
         let spatial_spec = scheduling_funclet.spec_binding.get_spatial_spec();
         let timeline_spec = scheduling_funclet.spec_binding.get_timeline_spec();
@@ -503,7 +542,7 @@ impl<'program> FuncletChecker<'program> {
         assert_eq!(
             value_funclet.kind,
             ir::FuncletKind::Value,
-            "funclet {}",
+            "for funclet {}",
             debug_info.funclet(&value_index)
         );
         let mut state = Self {
@@ -521,6 +560,7 @@ impl<'program> FuncletChecker<'program> {
                 value_funclet,
                 value_spec,
                 "Value",
+                debug_info
             )),
             timeline_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
@@ -528,6 +568,7 @@ impl<'program> FuncletChecker<'program> {
                 &program.funclets[timeline_index],
                 timeline_spec,
                 "Timeline",
+                debug_info
             )),
             spatial_spec_checker_opt: Some(FuncletSpecChecker::new(
                 program,
@@ -535,6 +576,7 @@ impl<'program> FuncletChecker<'program> {
                 &program.funclets[spatial_index],
                 spatial_spec,
                 "Spatial",
+                debug_info
             )),
             node_join_points: HashMap::new(),
             node_types: HashMap::new(),
@@ -551,7 +593,11 @@ impl<'program> FuncletChecker<'program> {
                 ir::Node::Phi { .. } => true,
                 _ => false,
             };
-            assert!(is_valid, "in funclet {}", debug_info.funclet(&self.scheduling_funclet_id));
+            assert!(
+                is_valid,
+                "in funclet {}",
+                debug_info.funclet(&self.scheduling_funclet_id)
+            );
 
             let node_type = match &self.program.types[*input_type_id] {
                 ir::Type::NativeValue { storage_type } => NodeType::LocalVar(LocalVar {
@@ -780,8 +826,8 @@ impl<'program> FuncletChecker<'program> {
         {
             return Err(Error::Generic {
                 message: format!(
-                    "External function #{} does not implement function class #{}",
-                    external_function_id, function_id
+                    "External function {} does not implement function class {}\n{}",
+                    error_context.debug_info().external_function(&external_function_id.0), error_context.debug_info().function_class(&function_id), error_context
                 ),
             });
         }
@@ -853,8 +899,25 @@ impl<'program> FuncletChecker<'program> {
                     message: String::from("Expected extract result"),
                 });
             };
-            assert_eq!(call_node_id, *node_id);
-            assert_eq!(*argument_index, index);
+            assert_eq!(
+                call_node_id,
+                *node_id,
+                "\n\n{} =/= {}\n\n{}",
+                error_context
+                    .debug_info()
+                    .node(&spec_funclet_id, call_node_id),
+                error_context.debug_info().node(&spec_funclet_id, *node_id),
+                error_context
+            );
+            assert_eq!(
+                *argument_index,
+                index,
+                "Extraction index doesn't match in {}\n{}",
+                error_context
+                    .debug_info()
+                    .node(&spec_funclet_id, extract_node_id),
+                error_context
+            );
             continuation_input_tags.push(ir::Tag {
                 quot: ir::Quotient::Node {
                     node_id: extract_node_id,
@@ -884,7 +947,7 @@ impl<'program> FuncletChecker<'program> {
         error_context: &ErrorContext,
         current_node_id: ir::NodeId,
     ) -> Result<(), Error> {
-        assert_eq!(self.current_node_id, current_node_id);
+        assert_eq!(self.current_node_id, current_node_id, "\n{}", error_context);
         let current_node = &self.scheduling_funclet.nodes[current_node_id];
         match current_node {
             ir::Node::None => (),
@@ -909,7 +972,9 @@ impl<'program> FuncletChecker<'program> {
                 let spatial_spec_checker = self.spatial_spec_checker_opt.as_mut().unwrap();
                 assert_eq!(
                     spatial_spec_checker.current_implicit_tag.flow,
-                    ir::Flow::Usable
+                    ir::Flow::Usable,
+                    "\n{}",
+                    error_context
                 );
                 spatial_spec_checker.update_scalar_node(
                     current_node_id,
@@ -929,7 +994,12 @@ impl<'program> FuncletChecker<'program> {
                 node: dropped_node_id,
             } => {
                 if let Some(node_type) = self.node_types.remove(dropped_node_id) {
-                    assert!(self.can_drop_node(*dropped_node_id), "\n{}", error_context);
+                    assert!(
+                        self.can_drop_node(*dropped_node_id),
+                        "node {}\n{}",
+                        error_context.debug_node(*dropped_node_id),
+                        error_context
+                    );
                 } else {
                     panic!(
                         "No node at {}\n{}",
@@ -1100,11 +1170,18 @@ impl<'program> FuncletChecker<'program> {
                         );
 
                         for (input_index, input_node_id) in arguments.iter().enumerate() {
+                            let node_type = self.node_types[&inputs[input_index]]
+                                .storage_type()
+                                .unwrap();
                             assert_eq!(
-                                self.node_types[&inputs[input_index]]
-                                    .storage_type()
-                                    .unwrap(),
-                                cpu_operation.input_types[input_index]
+                                node_type,
+                                cpu_operation.input_types[input_index],
+                                "\n\n{} =/= {}\n\n{}",
+                                error_context.debug_info().typ(&node_type.0),
+                                error_context
+                                    .debug_info()
+                                    .typ(&cpu_operation.input_types[input_index].0),
+                                error_context
                             );
                         }
                     }
@@ -1165,9 +1242,13 @@ impl<'program> FuncletChecker<'program> {
                         function_id,
                         arguments,
                     } => {
-                        assert!(self.program.function_classes[*function_id]
-                            .external_function_ids
-                            .contains(external_function_id), "\n{}", error_context);
+                        assert!(
+                            self.program.function_classes[*function_id]
+                                .external_function_ids
+                                .contains(external_function_id),
+                            "\n{}",
+                            error_context
+                        );
 
                         let function = &self.program.native_interface.external_functions
                             [external_function_id.0];
@@ -1248,7 +1329,11 @@ impl<'program> FuncletChecker<'program> {
                                 kernel.output_of_forwarding_input(input_index)
                             {
                                 // Must be the same location
-                                assert_eq!(outputs[forwarded_output_index], *input_impl_node_id);
+                                assert_eq!(
+                                    outputs[forwarded_output_index], *input_impl_node_id,
+                                    "\n{}",
+                                    error_context
+                                );
                                 forwarding_input_scheduling_node_ids.insert(*input_impl_node_id);
                                 forwarded_output_scheduling_node_ids
                                     .insert(outputs[forwarded_output_index]);
@@ -1258,9 +1343,15 @@ impl<'program> FuncletChecker<'program> {
                         //output_of_forwarding_input
 
                         for (index, output_type_id) in kernel.output_types.iter().enumerate() {
+                            let node_type =
+                                self.node_types[&outputs[index]].storage_type().unwrap();
                             assert_eq!(
                                 self.node_types[&outputs[index]].storage_type().unwrap(),
-                                kernel.output_types[index]
+                                kernel.output_types[index],
+                                "\n\n{} =/= {}\n\n{}",
+                                error_context.debug_info().typ(&node_type.0),
+                                error_context.debug_info().typ(&kernel.output_types[index].0),
+                                error_context
                             );
 
                             let output_impl_node_id = outputs[index];
@@ -1405,7 +1496,8 @@ impl<'program> FuncletChecker<'program> {
                 else {
                     panic!(
                         "Source of local_copy (node {}) is not a ref \n{}",
-                        error_context.debug_node(*input), error_context
+                        error_context.debug_node(*input),
+                        error_context
                     );
                 };
                 let Some(NodeType::Slot(Slot {
@@ -1415,18 +1507,21 @@ impl<'program> FuncletChecker<'program> {
                 else {
                     panic!(
                         "Destination of local_copy (node {}) is not a ref \n{}",
-                        error_context.debug_node(*output), error_context
+                        error_context.debug_node(*output),
+                        error_context
                     );
                 };
                 assert!(
                     input_buffer_flags.map_read,
                     "Source of local_copy (node {}) must be marked with map_read\n{}",
-                    error_context.debug_node(*input), error_context
+                    error_context.debug_node(*input),
+                    error_context
                 );
                 assert!(
                     output_buffer_flags.map_write,
                     "Destination of local_copy (node {}) must be marked with map_write\n{}",
-                    error_context.debug_node(*output), error_context
+                    error_context.debug_node(*output),
+                    error_context
                 );
 
                 advance_forward_value_copy(
@@ -1824,11 +1919,14 @@ impl<'program> FuncletChecker<'program> {
                         predecessor_static_layout,
                     )?;
 
-                    assert!(self
-                        .value_spec_checker_opt
-                        .as_mut()
-                        .unwrap()
-                        .can_drop_node(impl_node_id), "\n{}", error_context);
+                    assert!(
+                        self.value_spec_checker_opt
+                            .as_mut()
+                            .unwrap()
+                            .can_drop_node(impl_node_id),
+                        "\n{}",
+                        error_context
+                    );
                     self.timeline_spec_checker_opt
                         .as_mut()
                         .unwrap()
@@ -2093,7 +2191,11 @@ impl<'program> FuncletChecker<'program> {
                         }),
                     );
                 } else {
-                    panic!("No static buffer at node {}\n{}", error_context.debug_node(*buffer_node_id), error_context)
+                    panic!(
+                        "No static buffer at node {}\n{}",
+                        error_context.debug_node(*buffer_node_id),
+                        error_context
+                    )
                 }
             }
             /*ir::Node::PromiseCaptures => {
@@ -2206,7 +2308,13 @@ impl<'program> FuncletChecker<'program> {
         for (join_output_index, join_output_type) in join_funclet.output_types.iter().enumerate() {
             assert_eq!(
                 *join_output_type,
-                continuation_join_input_types[join_output_index]
+                continuation_join_input_types[join_output_index],
+                "\n\n{} =/= {}\n\n{}",
+                error_context.debug_info().typ(&join_output_type),
+                error_context
+                    .debug_info()
+                    .typ(&continuation_join_input_types[join_output_index]),
+                error_context,
             );
         }
 
@@ -2255,8 +2363,9 @@ impl<'program> FuncletChecker<'program> {
                 for (return_index, return_node_id) in return_values.iter().enumerate() {
                     let Some(node_type) = self.node_types.remove(return_node_id) else {
                         return Err(error_context.generic_error(&format!(
-                            "Returning nonexistent node #{}. Was it already used?",
-                            return_node_id
+                            "Returning nonexistent node {}. Was it already used?\n{}",
+                            error_context.debug_node(*return_node_id),
+                            error_context
                         )));
                         //return Err(Error::Generic{message: format!("Returning nonexistent node #{}. Was it already used?", return_node_id)});
                     };
@@ -2341,7 +2450,12 @@ impl<'program> FuncletChecker<'program> {
                 }
 
                 let callee_funclet = &self.program.funclets[callee_scheduling_funclet_id];
-                assert_eq!(callee_funclet.kind, ir::FuncletKind::ScheduleExplicit);
+                assert_eq!(
+                    callee_funclet.kind,
+                    ir::FuncletKind::ScheduleExplicit,
+                    "\n{}",
+                    error_context
+                );
 
                 /*{
                     let value_spec = self.get_funclet_value_spec(callee_funclet);
@@ -2414,7 +2528,11 @@ impl<'program> FuncletChecker<'program> {
                 {
                     assert_eq!(
                         *callee_output_type,
-                        continuation_join_point.input_types[callee_output_index]
+                        continuation_join_point.input_types[callee_output_index],
+                        "\n\n{} =/= {}\n\n{}",
+                        error_context.debug_info().typ(callee_output_type),
+                        error_context.debug_info().typ(&continuation_join_point.input_types[callee_output_index]),
+                        error_context
                     );
                 }
             }
@@ -2472,11 +2590,23 @@ impl<'program> FuncletChecker<'program> {
 
                 assert_eq!(
                     self.value_funclet_id,
-                    true_funclet_value_spec.funclet_id_opt.unwrap()
+                    true_funclet_value_spec.funclet_id_opt.unwrap(),
+                    "\n\n{} =/= {}\n\n{}",
+                    error_context.debug_info().funclet(&self.value_funclet_id),
+                    error_context
+                        .debug_info()
+                        .funclet(&true_funclet_value_spec.funclet_id_opt.unwrap()),
+                    error_context
                 );
                 assert_eq!(
                     self.value_funclet_id,
-                    true_funclet_value_spec.funclet_id_opt.unwrap()
+                    false_funclet_value_spec.funclet_id_opt.unwrap(),
+                    "\n\n{} =/= {}\n\n{}",
+                    error_context.debug_info().funclet(&self.value_funclet_id),
+                    error_context
+                        .debug_info()
+                        .funclet(&false_funclet_value_spec.funclet_id_opt.unwrap()),
+                    error_context
                 );
 
                 assert_eq!(
@@ -2530,7 +2660,7 @@ impl<'program> FuncletChecker<'program> {
                         error_context
                             .debug_info()
                             .node(&self.value_funclet_id, *value_operation_node_id),
-                            error_context
+                        error_context
                     )
                 };
                 self.timeline_spec_checker_opt
@@ -2585,11 +2715,19 @@ impl<'program> FuncletChecker<'program> {
                 for (output_index, _) in true_funclet.output_types.iter().enumerate() {
                     assert_eq!(
                         true_funclet.output_types[output_index],
-                        continuation_join_point.input_types[output_index]
+                        continuation_join_point.input_types[output_index],
+                        "\n\n{} =/= {}\n\n{}",
+                        error_context.debug_info().typ(&true_funclet.output_types[output_index]),
+                        error_context.debug_info().typ(&continuation_join_point.input_types[output_index]),
+                        error_context
                     );
                     assert_eq!(
                         false_funclet.output_types[output_index],
-                        continuation_join_point.input_types[output_index]
+                        continuation_join_point.input_types[output_index],
+                        "\n\n{} =/= {}\n\n{}",
+                        error_context.debug_info().typ(&false_funclet.output_types[output_index]),
+                        error_context.debug_info().typ(&continuation_join_point.input_types[output_index]),
+                        error_context
                     );
                 }
             }
@@ -2717,7 +2855,12 @@ impl<'program> FuncletChecker<'program> {
 
         // Enforce use of all nodes
         for (node_id, node_type) in self.node_types.iter() {
-            assert!(self.can_drop_node(*node_id) || self.is_neutral_node(*node_id));
+            assert!(
+                self.can_drop_node(*node_id) || self.is_neutral_node(*node_id),
+                "node {}\n{}",
+                error_context.debug_node(*node_id),
+                error_context
+            );
             //self.drop_node(*dropped_node_id)
         }
 

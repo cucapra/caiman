@@ -1,13 +1,14 @@
 use crate::ir;
+use itertools::Itertools;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 fn unknown(index: &usize) -> String {
-    format!("_UNKNOWN_{}", index)
+    format!("__UNNAMED: {}", index)
 }
 
 fn unknown_quot(quot: &ir::Quotient) -> String {
-    format!("_UNKNOWN_{:?}", quot)
+    format!("__UNNAMED: {:?}", quot)
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -53,12 +54,11 @@ impl DebugInfo {
     }
     pub fn quot(&self, funclet_index: &usize, quotient: &ir::Quotient) -> String {
         match self.funclet_map.get(funclet_index) {
-            None => format!("({}, {})", unknown(funclet_index), unknown_quot(quotient)),
-            Some(f) => f
-                .node_map
+            None => format!("{}.{}", unknown(funclet_index), unknown_quot(quotient)),
+            Some(f) => format!("{}.{}", &f.name, f.node_map
                 .get(quotient)
-                .unwrap_or(&format!("({}, {})", &f.name, unknown_quot(quotient)))
-                .clone(),
+                .unwrap_or(&unknown_quot(quotient))
+                .clone()),
         }
     }
     pub fn node(&self, funclet_index: &usize, node_index: usize) -> String {
@@ -68,5 +68,23 @@ impl DebugInfo {
                 node_id: node_index,
             },
         )
+    }
+    pub fn tag(&self, funclet_index: &usize, tag: &ir::Tag) -> String {
+        format!(
+            "Tag: {}, {:?}",
+            self.quot(funclet_index, &tag.quot),
+            &tag.flow
+        )
+    }
+    pub fn spec(&self, spec: &ir::FuncletSpec) -> String {
+        match &spec.funclet_id_opt {
+            None => "FuncletSpec { no_id }".to_string(),
+            Some(funclet_index) => format!("FuncletSpec {{ Funclet {}, inputs: {:?}, outputs: {:?}, implicit_in: {}, implicit_out: {}}}",
+                self.funclet(funclet_index),
+                spec.input_tags.iter().map(|t| self.tag(&funclet_index, &t)).collect_vec(),
+                spec.output_tags.iter().map(|t| self.tag(&funclet_index, &t)).collect_vec(),
+                self.tag(funclet_index, &spec.implicit_in_tag),
+                self.tag(funclet_index, &spec.implicit_out_tag))
+        }
     }
 }
