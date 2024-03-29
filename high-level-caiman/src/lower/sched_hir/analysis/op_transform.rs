@@ -6,7 +6,7 @@ use crate::{
         binop_to_str,
         sched_hir::{
             cfg::{BasicBlock, Cfg},
-            HirBody, HirOp,
+            HirBody, HirOp, OpType,
         },
         uop_to_str,
     },
@@ -64,20 +64,26 @@ fn op_transform_instr(instr: &mut HirBody, data_types: &HashMap<String, DataType
                 assert_eq!(args.len(), 2);
                 let arg_l = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
                 let arg_r = enum_cast!(SchedTerm::Var { name, .. }, name, &args[1]);
-                *op = HirOp::FFI(binop_to_str(
-                    *bin,
-                    &format!("{}", data_types[arg_l]),
-                    &format!("{}", data_types[arg_r]),
-                ));
+                *op = HirOp::FFI(
+                    binop_to_str(
+                        *bin,
+                        &format!("{}", data_types[arg_l]),
+                        &format!("{}", data_types[arg_r]),
+                    ),
+                    OpType::Binary,
+                );
             }
             HirOp::Unary(unary @ (Uop::Neg | Uop::Not | Uop::LNot)) => {
                 assert_eq!(args.len(), 1);
                 let arg = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
-                *op = HirOp::FFI(uop_to_str(*unary, &format!("{}", data_types[arg])));
+                *op = HirOp::FFI(
+                    uop_to_str(*unary, &format!("{}", data_types[arg])),
+                    OpType::Unary,
+                );
             }
-            HirOp::Unary(Uop::Ref) => (),
+            HirOp::Unary(Uop::Ref) | HirOp::FFI(_, OpType::External) => (),
             HirOp::Unary(Uop::Deref) => panic!("Unexpected deref op"),
-            HirOp::FFI(_) => panic!("Unexpected FFI op"),
+            HirOp::FFI(_, _) => panic!("Unexpected transformed op"),
         },
         _ => {}
     }

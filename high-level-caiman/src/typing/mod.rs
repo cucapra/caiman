@@ -349,7 +349,7 @@ impl SchedOrExtern {
     pub fn unwrap_sched(&self) -> &SchedInfo {
         match self {
             Self::Sched(s) => s,
-            Self::Extern(_) => panic!("Expected schedule, got extern"),
+            Self::Extern(..) => panic!("Expected schedule, got extern"),
         }
     }
 
@@ -360,7 +360,7 @@ impl SchedOrExtern {
     pub fn unwrap_sched_mut(&mut self) -> &mut SchedInfo {
         match self {
             Self::Sched(s) => s,
-            Self::Extern(_) => panic!("Expected schedule, got extern"),
+            Self::Extern(..) => panic!("Expected schedule, got extern"),
         }
     }
 }
@@ -496,6 +496,8 @@ pub struct Context {
     pub specs: HashMap<String, SpecInfo>,
     /// Map from function name to specs it implements.
     pub scheds: HashMap<String, SchedOrExtern>,
+    /// Set of external function names.
+    pub externs: HashSet<String>,
 }
 
 /// A typed binary operation.

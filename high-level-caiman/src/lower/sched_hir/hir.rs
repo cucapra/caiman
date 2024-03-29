@@ -196,7 +196,18 @@ pub enum HirBody {
     },
 }
 
-/// A high level IR operation.
+/// The type of an FFI external operation. 
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash)]
+pub enum OpType {
+    /// An external operation for a built-in binary operation
+    Binary,
+    /// An external operation for a built-in unary operation
+    Unary,
+    /// An external operation for a user-supplied external function
+    External
+}
+
+/// A high level IR external operation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum HirOp {
@@ -206,7 +217,7 @@ pub enum HirOp {
     #[allow(dead_code)]
     Unary(Uop),
     /// a lowered operation into an external call
-    FFI(Name),
+    FFI(Name, OpType),
 }
 
 impl HirOp {
@@ -215,7 +226,7 @@ impl HirOp {
     pub fn lower(&self) -> Name {
         match self {
             Self::Binary(_) | Self::Unary(_) => panic!("Cannot lower unlowered operation"),
-            Self::FFI(name) => name.clone(),
+            Self::FFI(name, _) => name.clone(),
         }
     }
 }
@@ -462,7 +473,6 @@ impl std::ops::DerefMut for HirInstr<'_> {
 
 impl HirBody {
     pub fn new(stmt: SchedStmt) -> Self {
-        // TODO: operations
         match stmt {
             SchedStmt::Assign {
                 info,
@@ -487,43 +497,7 @@ impl HirBody {
                 lhs,
                 expr: Some(expr),
                 is_const: true,
-            } => match expr {
-                SchedExpr::Term(rhs) => Self::ConstDecl {
-                    info,
-                    lhs: lhs[0].0.clone(),
-                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                    rhs,
-                },
-                SchedExpr::Binop {
-                    info,
-                    op,
-                    lhs: op_lhs,
-                    rhs: op_rhs,
-                } => {
-                    let lhs_term = enum_cast!(SchedExpr::Term, op_lhs.as_ref());
-                    let rhs_term = enum_cast!(SchedExpr::Term, op_rhs.as_ref());
-                    Self::Op {
-                        info,
-                        dest: lhs[0].0.clone(),
-                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                        op: HirOp::Binary(op),
-                        args: vec![lhs_term.clone(), rhs_term.clone()],
-                    }
-                },
-                SchedExpr::Uop { 
-                    info, op, expr
-                } => {
-                    let term = enum_cast!(SchedExpr::Term, *expr);
-                    Self::Op {
-                        info,
-                        dest: lhs[0].0.clone(),
-                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
-                        op: HirOp::Unary(op),
-                        args: vec![term],
-                    }
-                },
-                SchedExpr::Conditional { .. } => panic!("Inline conditonal expresssions not allowed in schedule"),
-            },
+            } => Self::from_const_decl(expr, info, lhs),
             SchedStmt::Decl {
                 info,
                 lhs,
@@ -551,6 +525,62 @@ impl HirBody {
             SchedStmt::OutEdgeAnnotation { info, tags } => Self::OutAnnotation(info, tags.into_iter().map(|(name, tags)| (name, TripleTag::from_tag_vec(tags))).collect()),
         }
     }
+
+    /// Constructs a new `HirBody` from a constant declaration.
+    fn from_const_decl(expr: SchedExpr, info: Info, lhs: Vec<(String, Option<FullType>)>) -> Self {
+        match expr {
+            SchedExpr::Term(rhs) => {
+                if let SchedTerm::Call(info, call) = rhs {
+                    let target = enum_cast!(SchedTerm::Var { name, ..}, name, enum_cast!(SchedExpr::Term, &*call.target));
+                    let args = enum_cast!(ArgsOrEnc::Args, &*call.args);
+                    Self::Op {
+                        info,
+                        dest: lhs[0].0.clone(),
+                        dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                        op: HirOp::FFI(target.clone(), OpType::External),
+                        args: args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
+                    }
+                } else {
+                    Self::ConstDecl {
+                        info,
+                        lhs: lhs[0].0.clone(),
+                        lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                        rhs,
+                    }
+                }
+            },
+            SchedExpr::Binop {
+                info,
+                op,
+                lhs: op_lhs,
+                rhs: op_rhs,
+            } => {
+                let lhs_term = enum_cast!(SchedExpr::Term, op_lhs.as_ref());
+                let rhs_term = enum_cast!(SchedExpr::Term, op_rhs.as_ref());
+                Self::Op {
+                    info,
+                    dest: lhs[0].0.clone(),
+                    dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                    op: HirOp::Binary(op),
+                    args: vec![lhs_term.clone(), rhs_term.clone()],
+                }
+            },
+            SchedExpr::Uop { 
+                info, op, expr
+            } => {
+                let term = enum_cast!(SchedExpr::Term, *expr);
+                Self::Op {
+                    info,
+                    dest: lhs[0].0.clone(),
+                    dest_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                    op: HirOp::Unary(op),
+                    args: vec![term],
+                }
+            },
+            SchedExpr::Conditional { .. } => panic!("Inline conditonal expresssions not allowed in schedule"),
+        }
+    }
+
 }
 impl Hir for HirBody {
     fn get_uses(&self, res: &mut BTreeSet<String>) {

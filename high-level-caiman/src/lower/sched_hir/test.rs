@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use crate::{
     error::Info,
     parse::ast::{NestedExpr, SchedExpr, SchedLiteral, SchedStmt, SchedTerm},
+    typing::Context,
 };
 
 use super::cfg::Cfg;
@@ -83,7 +84,7 @@ fn cfg_gen() {
             }),
         ),
     ];
-    let cfg = Cfg::new(stmts, &[]);
+    let cfg = Cfg::new(stmts, &[], &Context::new(&[]).unwrap());
     let mut ordered_graph = BTreeMap::new();
     for (id, edge) in cfg.graph {
         ordered_graph.insert(id, edge);
@@ -148,7 +149,7 @@ fn if_gen() {
             }),
         ),
     ];
-    let cfg = Cfg::new(stmts, &[]);
+    let cfg = Cfg::new(stmts, &[], &Context::new(&[]).unwrap());
     let mut ordered_graph = BTreeMap::new();
     for (id, edge) in cfg.graph {
         ordered_graph.insert(id, edge);
@@ -218,7 +219,7 @@ fn if_ret() {
             }),
         ),
     ];
-    let cfg = Cfg::new(stmts, &[]);
+    let cfg = Cfg::new(stmts, &[], &Context::new(&[]).unwrap());
     let mut ordered_graph = BTreeMap::new();
     for (id, edge) in cfg.graph {
         ordered_graph.insert(id, edge);

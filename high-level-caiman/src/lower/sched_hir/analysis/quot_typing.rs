@@ -62,7 +62,7 @@ use crate::{
     lower::{
         sched_hir::{
             cfg::{Cfg, Edge, START_BLOCK_ID},
-            HirBody, HirFuncCall, HirOp, Terminator, TripleTag,
+            HirBody, HirFuncCall, HirOp, OpType, Terminator, TripleTag,
         },
         tuple_id,
     },
@@ -240,7 +240,7 @@ fn unify_decl(
 fn hir_op_to_binop(op: &HirOp) -> Binop {
     match op {
         HirOp::Binary(binop) => *binop,
-        HirOp::FFI(name) => {
+        HirOp::FFI(name, OpType::Binary) => {
             let mut parts: Vec<_> = name.split('_').collect();
             match parts.swap_remove(1) {
                 "add" => Binop::Add,
@@ -266,6 +266,7 @@ fn hir_op_to_binop(op: &HirOp) -> Binop {
             }
         }
         HirOp::Unary(_) => panic!("Not a binary operator"),
+        HirOp::FFI(_, b) => panic!("Unexpected op type: {b:?}"),
     }
 }
 
@@ -286,6 +287,7 @@ fn unify_op(
     op: &HirOp,
     args: &[SchedTerm],
     info: Info,
+    ctx: &Context,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     let mut arg_names = vec![];
@@ -298,16 +300,41 @@ fn unify_op(
             _ => unreachable!(),
         }
     }
-    env = add_constraint(
-        dest,
-        &ValQuot::Bop(
-            hir_op_to_binop(op),
-            MetaVar::new_var_name(&arg_names[0]),
-            MetaVar::new_var_name(&arg_names[1]),
-        ),
-        info,
-        env,
-    )?;
+    match op {
+        HirOp::FFI(_, OpType::Binary) => {
+            env = add_constraint(
+                dest,
+                &ValQuot::Bop(
+                    hir_op_to_binop(op),
+                    MetaVar::new_var_name(&arg_names[0]),
+                    MetaVar::new_var_name(&arg_names[1]),
+                ),
+                info,
+                env,
+            )?;
+        }
+        HirOp::FFI(target, OpType::External) => {
+            // The name of an external function is the name of its value spec
+            let f_class = ctx.specs[target].feq.clone().unwrap();
+            env = add_constraint(
+                &format!("!{dest}"),
+                &ValQuot::Call(
+                    f_class,
+                    arg_names.iter().map(MetaVar::new_var_name).collect(),
+                ),
+                info,
+                env,
+            )?;
+            env = add_constraint(
+                dest,
+                &ValQuot::Extract(MetaVar::new_var_name(&format!("!{dest}")), 0),
+                info,
+                env,
+            )?;
+        }
+        HirOp::FFI(..) => todo!(),
+        _ => unreachable!(),
+    }
     add_type_annot(dest, dest_tag, env)
 }
 
@@ -488,7 +515,7 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     dest_tag,
                     op,
                     args,
-                } => unify_op(dest, dest_tag, op, args, *info, env)?,
+                } => unify_op(dest, dest_tag, op, args, *info, ctx, env)?,
                 HirBody::Phi { dest, inputs, .. } => unify_phi(
                     dest,
                     inputs,

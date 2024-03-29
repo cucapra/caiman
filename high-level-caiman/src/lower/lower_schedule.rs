@@ -286,8 +286,6 @@ fn lower_func_call(
         })),
         Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            // TODO: codegen join semantics are broken, basically there's only
-            // inline join
             node: asm::Node::InlineJoin {
                 funclet: f.next_blocks().first().unwrap().clone(),
                 captures: Hole::Filled(

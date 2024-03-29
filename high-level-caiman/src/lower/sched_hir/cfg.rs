@@ -4,6 +4,7 @@ use crate::{
     enum_cast,
     error::Info,
     parse::ast::{FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, Tags},
+    typing::Context,
 };
 
 use super::{
@@ -477,6 +478,7 @@ fn make_blocks(
     stmts: Vec<SchedStmt>,
     join_edge: Edge,
     ret_names: &[(String, Option<Tags>)],
+    ctx: &Context,
 ) -> usize {
     let mut cur_stmts = vec![];
     let root_id = *cur_id;
@@ -553,11 +555,26 @@ fn make_blocks(
                 lhs,
                 is_const: _,
                 expr: Some(SchedExpr::Term(SchedTerm::Call(_, call))),
-            } => {
+            } if !ctx.externs.contains(
+                if let SchedExpr::Term(SchedTerm::Var { name, .. }) = &*call.target {
+                    name
+                } else {
+                    unreachable!()
+                },
+            ) =>
+            {
                 last_info = info;
                 handle_call(edges, blocks, cur_id, &mut cur_stmts, lhs, call, info);
             }
-            SchedStmt::Call(end, call_info) => {
+            SchedStmt::Call(end, call_info)
+                if !ctx.externs.contains(
+                    if let SchedExpr::Term(SchedTerm::Var { name, .. }) = &*call_info.target {
+                        name
+                    } else {
+                        unreachable!()
+                    },
+                ) =>
+            {
                 last_info = end;
                 handle_call(
                     edges,
@@ -594,7 +611,7 @@ fn make_blocks(
         );
         edges.insert(old_id, join_edge);
     }
-    make_child_blocks(children, cur_id, blocks, edges);
+    make_child_blocks(children, cur_id, blocks, edges, ctx);
     root_id
 }
 
@@ -609,6 +626,7 @@ fn make_child_blocks(
     cur_id: &mut usize,
     blocks: &mut HashMap<usize, BasicBlock>,
     edges: &mut HashMap<usize, Edge>,
+    ctx: &Context,
 ) {
     for PendingChild {
         parent_id,
@@ -619,9 +637,11 @@ fn make_child_blocks(
     } in children
     {
         let join_edge = Edge::Next(join_id);
-        let true_branch = make_blocks(cur_id, blocks, edges, true_block, join_edge, &ret_names);
+        let true_branch = make_blocks(
+            cur_id, blocks, edges, true_block, join_edge, &ret_names, ctx,
+        );
         let false_branch =
-            false_block.map(|f| make_blocks(cur_id, blocks, edges, f, join_edge, &ret_names));
+            false_block.map(|f| make_blocks(cur_id, blocks, edges, f, join_edge, &ret_names, ctx));
         if let Some(false_branch) = false_branch {
             edges.insert(
                 parent_id,
@@ -642,7 +662,7 @@ impl Cfg {
     /// # Arguments
     /// * `stmts` - The list of scheduling statements to convert to blocks.
     /// * `output_len` - The number of outputs of the scheduling function.
-    pub fn new(stmts: Vec<SchedStmt>, outputs: &[FullType]) -> Self {
+    pub fn new(stmts: Vec<SchedStmt>, outputs: &[FullType], ctx: &Context) -> Self {
         use crate::lower::sched_hir::RET_VAR;
         let mut blocks = HashMap::new();
         blocks.insert(
@@ -673,6 +693,7 @@ impl Cfg {
                 .enumerate()
                 .map(|(id, typ)| (format!("{RET_VAR}{id}"), Some(typ.tags.clone())))
                 .collect::<Vec<_>>(),
+            ctx,
         );
         compute_continuations(
             Self {

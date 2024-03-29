@@ -496,7 +496,7 @@ impl Funclets {
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
-        let mut cfg = Cfg::new(f.statements, &f.output);
+        let mut cfg = Cfg::new(f.statements, &f.output, ctx);
         let (mut types, mut data_types, variables) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 

@@ -372,12 +372,19 @@ fn collect_class_signatures(
                 info,
                 ..
             } => {
-                let sig = Signature {
-                    input: input.iter().map(|x| x.1.clone()).collect::<Vec<_>>(),
-                    output: output.iter().map(|x| x.1.clone()).collect::<Vec<_>>(),
+                let sig = NamedSignature {
+                    input: input
+                        .iter()
+                        .map(|x| (x.0.clone().unwrap_or_default(), x.1.clone()))
+                        .collect::<Vec<_>>(),
+                    output: output
+                        .iter()
+                        .map(|x| (x.0.clone().unwrap_or_default(), x.1.clone()))
+                        .collect::<Vec<_>>(),
                 };
+                let unnamed_sig = Signature::from(&sig);
                 if let Some(member_sig) = &member_sig {
-                    if member_sig != &sig {
+                    if member_sig != &unnamed_sig {
                         return Err(type_error(
                             *info,
                             &format!(
@@ -386,9 +393,17 @@ fn collect_class_signatures(
                         ));
                     }
                 } else {
-                    member_sig = Some(sig.clone());
+                    member_sig = Some(unnamed_sig.clone());
                 }
-                ctx.signatures.insert(name.to_string(), sig);
+                // extern can be called directly from a schedule or a spec
+                ctx.scheds
+                    .insert(name.to_string(), SchedOrExtern::Extern(unnamed_sig.clone()));
+                ctx.signatures.insert(name.to_string(), unnamed_sig.clone());
+                ctx.specs.insert(
+                    name.to_string(),
+                    SpecInfo::new(SpecType::Value, sig, *info, Some(class_name)),
+                );
+                ctx.externs.insert(name.to_string());
             }
         }
     }
@@ -526,6 +541,7 @@ impl Context {
                 .collect(),
             signatures: HashMap::new(),
             scheds: HashMap::new(),
+            externs: HashSet::new(),
         };
         let ctx = collect_type_signatures(tl, ctx)?;
         let ctx = collect_sched_signatures(tl, ctx)?;
