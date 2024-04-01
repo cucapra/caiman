@@ -71,9 +71,7 @@
                         },
                     ),
                     templates: None,
-                    args: Args(
-                        [],
-                    ),
+                    args: [],
                     tag: None,
                     yield_call: false,
                 },
@@ -146,121 +144,117 @@
                             ],
                         ),
                     ),
-                    args: Args(
-                        [
-                            Term(
-                                Lit {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            6,
-                                            16,
-                                        ),
-                                        end_ln_and_col: (
-                                            6,
-                                            18,
-                                        ),
-                                    },
-                                    lit: Int(
-                                        "10",
+                    args: [
+                        Term(
+                            Lit {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        16,
                                     ),
-                                    tag: None,
+                                    end_ln_and_col: (
+                                        6,
+                                        18,
+                                    ),
                                 },
-                            ),
-                            Term(
-                                Lit {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            6,
-                                            20,
-                                        ),
-                                        end_ln_and_col: (
-                                            6,
-                                            33,
-                                        ),
-                                    },
-                                    lit: Array(
-                                        [
-                                            Term(
-                                                Lit {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            6,
-                                                            21,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            6,
-                                                            23,
-                                                        ),
-                                                    },
-                                                    lit: Int(
-                                                        "30",
+                                lit: Int(
+                                    "10",
+                                ),
+                                tag: None,
+                            },
+                        ),
+                        Term(
+                            Lit {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        6,
+                                        20,
+                                    ),
+                                    end_ln_and_col: (
+                                        6,
+                                        33,
+                                    ),
+                                },
+                                lit: Array(
+                                    [
+                                        Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        6,
+                                                        21,
                                                     ),
-                                                    tag: None,
+                                                    end_ln_and_col: (
+                                                        6,
+                                                        23,
+                                                    ),
                                                 },
-                                            ),
-                                            Term(
-                                                Call(
-                                                    Info {
-                                                        start_ln_and_col: (
-                                                            6,
-                                                            25,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            6,
-                                                            28,
-                                                        ),
-                                                    },
-                                                    SchedFuncCall {
-                                                        target: Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        6,
-                                                                        25,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        6,
-                                                                        26,
-                                                                    ),
-                                                                },
-                                                                name: "f",
-                                                                tag: None,
-                                                            },
-                                                        ),
-                                                        templates: None,
-                                                        args: Args(
-                                                            [],
-                                                        ),
-                                                        tag: None,
-                                                        yield_call: false,
-                                                    },
+                                                lit: Int(
+                                                    "30",
                                                 ),
-                                            ),
-                                            Term(
-                                                Lit {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            6,
-                                                            30,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            6,
-                                                            32,
-                                                        ),
-                                                    },
-                                                    lit: Int(
-                                                        "40",
+                                                tag: None,
+                                            },
+                                        ),
+                                        Term(
+                                            Call(
+                                                Info {
+                                                    start_ln_and_col: (
+                                                        6,
+                                                        25,
                                                     ),
+                                                    end_ln_and_col: (
+                                                        6,
+                                                        28,
+                                                    ),
+                                                },
+                                                SchedFuncCall {
+                                                    target: Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    6,
+                                                                    25,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    6,
+                                                                    26,
+                                                                ),
+                                                            },
+                                                            name: "f",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    templates: None,
+                                                    args: [],
                                                     tag: None,
+                                                    yield_call: false,
                                                 },
                                             ),
-                                        ],
-                                    ),
-                                    tag: None,
-                                },
-                            ),
-                        ],
-                    ),
+                                        ),
+                                        Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        6,
+                                                        30,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        6,
+                                                        32,
+                                                    ),
+                                                },
+                                                lit: Int(
+                                                    "40",
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
+                                    ],
+                                ),
+                                tag: None,
+                            },
+                        ),
+                    ],
                     tag: None,
                     yield_call: false,
                 },
@@ -306,9 +300,7 @@
                                 },
                             ),
                             templates: None,
-                            args: Args(
-                                [],
-                            ),
+                            args: [],
                             tag: None,
                             yield_call: false,
                         },

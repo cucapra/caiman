@@ -31,13 +31,13 @@ fn foo_main(x: i32) -> i32
     impls foo, foo_time, foo_space
 {
     let c : i32'<storage> = 1 @ [node(val.c)-?];
-    let e = new_gpu_encoder();
-    e.encode_cpy[x_gpu <- x];
-    e.encode[y_gpu <- simple'<c, c, c>(x_gpu)];
-    let f = e.submit();
+    let e = encode-begin gpu;
+    encode e.copy[x_gpu <- x];
+    encode e.call[y_gpu <- simple'<c, c, c>(x_gpu)];
+    let f = submit e;
 
 
-    let y = await(f);
+    let y = await f;
     let result = y.y_gpu;
     result
 

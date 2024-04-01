@@ -191,9 +191,7 @@
                                             },
                                         ),
                                         templates: None,
-                                        args: Args(
-                                            [],
-                                        ),
+                                        args: [],
                                         tag: Some(
                                             [
                                                 Tag {

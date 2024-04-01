@@ -1,4 +1,4 @@
 #version 0.1.0
 fn foo(c: i32) impls a {
-    let x = e.encode_cpy[x <- c];
+    encode e.encode_cpy[x <- c];
 }

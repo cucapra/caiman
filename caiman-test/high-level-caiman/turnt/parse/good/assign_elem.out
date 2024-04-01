@@ -72,28 +72,26 @@
                                     },
                                 ),
                                 templates: None,
-                                args: Args(
-                                    [
-                                        Term(
-                                            Lit {
-                                                info: Info {
-                                                    start_ln_and_col: (
-                                                        4,
-                                                        9,
-                                                    ),
-                                                    end_ln_and_col: (
-                                                        4,
-                                                        11,
-                                                    ),
-                                                },
-                                                lit: Int(
-                                                    "10",
+                                args: [
+                                    Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    4,
+                                                    9,
                                                 ),
-                                                tag: None,
+                                                end_ln_and_col: (
+                                                    4,
+                                                    11,
+                                                ),
                                             },
-                                        ),
-                                    ],
-                                ),
+                                            lit: Int(
+                                                "10",
+                                            ),
+                                            tag: None,
+                                        },
+                                    ),
+                                ],
                                 tag: None,
                                 yield_call: false,
                             },
@@ -201,46 +199,44 @@
                                         },
                                     ),
                                     templates: None,
-                                    args: Args(
-                                        [
-                                            Term(
-                                                Lit {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            5,
-                                                            13,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            5,
-                                                            14,
-                                                        ),
-                                                    },
-                                                    lit: Int(
-                                                        "2",
+                                    args: [
+                                        Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        5,
+                                                        13,
                                                     ),
-                                                    tag: None,
-                                                },
-                                            ),
-                                            Term(
-                                                Lit {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            5,
-                                                            16,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            5,
-                                                            17,
-                                                        ),
-                                                    },
-                                                    lit: Int(
-                                                        "3",
+                                                    end_ln_and_col: (
+                                                        5,
+                                                        14,
                                                     ),
-                                                    tag: None,
                                                 },
-                                            ),
-                                        ],
-                                    ),
+                                                lit: Int(
+                                                    "2",
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
+                                        Term(
+                                            Lit {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        5,
+                                                        16,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        5,
+                                                        17,
+                                                    ),
+                                                },
+                                                lit: Int(
+                                                    "3",
+                                                ),
+                                                tag: None,
+                                            },
+                                        ),
+                                    ],
                                     tag: None,
                                     yield_call: false,
                                 },

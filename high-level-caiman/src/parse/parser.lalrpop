@@ -23,6 +23,7 @@ match {
   "true", "false", "import",
   "pure",
   "node","none","input","output","usable","saved","need","dead",
+  "encode", "submit", "await", "encode-begin",
 
 
   r"\s*" => { }, // Whitespace
@@ -277,6 +278,7 @@ SchedStmt: SchedStmt = {
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
     <@L> "@in" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
     <@L> "@out" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
+    <@L> "encode" <Id> "." <Id> "[" <EncodedStmt> "]" <TagOp?> ";" <@R> =>? astf.sched_encode(<>),
 }
 
 // A sequence of scheduling statements which may end with an expression that
@@ -347,6 +349,9 @@ MatchedIf: SchedStmt = {
 #[inline]
 SchedTerm: SchedTerm = {
     <@L> <SchedCall> <@R> => astf.sched_call_expr(<>),
+    <@L> "submit" <TagOp?> <Atom<Literal>> <@R> => astf.sched_submit(<>),
+    <@L> "await" <TagOp?> <Atom<Literal>> <@R> => astf.sched_await(<>),
+    <@L> "encode-begin" <TagOp?> <Id> <@R> => astf.sched_begin_encode(<>),
 }
 
 #[inline]
@@ -357,8 +362,6 @@ SchedCall: SchedFuncCall = {
 
 SchedCallStmt: SchedFuncCall = {
     <SchedCall> => <>,
-    <Term> "[" <EncodedStmt> "]" 
-        <TagOp?> => astf.sched_encode(<>),
 }
 
 // parameterize on the literal type (number or no number)

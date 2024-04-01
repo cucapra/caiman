@@ -300,28 +300,26 @@
                                     ),
                                 },
                                 templates: None,
-                                args: Args(
-                                    [
-                                        Term(
-                                            Lit {
-                                                info: Info {
-                                                    start_ln_and_col: (
-                                                        9,
-                                                        24,
-                                                    ),
-                                                    end_ln_and_col: (
-                                                        9,
-                                                        30,
-                                                    ),
-                                                },
-                                                lit: Float(
-                                                    "10.302",
+                                args: [
+                                    Term(
+                                        Lit {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    9,
+                                                    24,
                                                 ),
-                                                tag: None,
+                                                end_ln_and_col: (
+                                                    9,
+                                                    30,
+                                                ),
                                             },
-                                        ),
-                                    ],
-                                ),
+                                            lit: Float(
+                                                "10.302",
+                                            ),
+                                            tag: None,
+                                        },
+                                    ),
+                                ],
                                 tag: None,
                                 yield_call: false,
                             },

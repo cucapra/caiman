@@ -657,7 +657,7 @@
                     ),
                     end_ln_and_col: (
                         34,
-                        31,
+                        30,
                     ),
                 },
                 lhs: [
@@ -669,15 +669,126 @@
                 is_const: true,
                 expr: Some(
                     Term(
-                        Call(
-                            Info {
+                        TimelineOperation {
+                            info: Info {
                                 start_ln_and_col: (
                                     34,
                                     13,
                                 ),
                                 end_ln_and_col: (
                                     34,
-                                    30,
+                                    29,
+                                ),
+                            },
+                            op: EncodeBegin,
+                            arg: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            0,
+                                            0,
+                                        ),
+                                        end_ln_and_col: (
+                                            0,
+                                            0,
+                                        ),
+                                    },
+                                    name: "gpu",
+                                    tag: None,
+                                },
+                            ),
+                            tag: None,
+                        },
+                    ),
+                ),
+            },
+            Encode {
+                info: Info {
+                    start_ln_and_col: (
+                        35,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        35,
+                        31,
+                    ),
+                },
+                stmt: EncodedStmt {
+                    info: Info {
+                        start_ln_and_col: (
+                            35,
+                            19,
+                        ),
+                        end_ln_and_col: (
+                            35,
+                            29,
+                        ),
+                    },
+                    lhs: [
+                        (
+                            "x_gpu",
+                            None,
+                        ),
+                    ],
+                    rhs: Term(
+                        Var {
+                            info: Info {
+                                start_ln_and_col: (
+                                    35,
+                                    28,
+                                ),
+                                end_ln_and_col: (
+                                    35,
+                                    29,
+                                ),
+                            },
+                            name: "x",
+                            tag: None,
+                        },
+                    ),
+                },
+                encoder: "e",
+                cmd: Copy,
+                tag: None,
+            },
+            Encode {
+                info: Info {
+                    start_ln_and_col: (
+                        36,
+                        5,
+                    ),
+                    end_ln_and_col: (
+                        36,
+                        53,
+                    ),
+                },
+                stmt: EncodedStmt {
+                    info: Info {
+                        start_ln_and_col: (
+                            36,
+                            19,
+                        ),
+                        end_ln_and_col: (
+                            36,
+                            51,
+                        ),
+                    },
+                    lhs: [
+                        (
+                            "y_gpu",
+                            None,
+                        ),
+                    ],
+                    rhs: Term(
+                        Call(
+                            Info {
+                                start_ln_and_col: (
+                                    36,
+                                    28,
+                                ),
+                                end_ln_and_col: (
+                                    36,
+                                    51,
                                 ),
                             },
                             SchedFuncCall {
@@ -685,314 +796,97 @@
                                     Var {
                                         info: Info {
                                             start_ln_and_col: (
-                                                34,
-                                                13,
-                                            ),
-                                            end_ln_and_col: (
-                                                34,
+                                                36,
                                                 28,
                                             ),
+                                            end_ln_and_col: (
+                                                36,
+                                                34,
+                                            ),
                                         },
-                                        name: "new_gpu_encoder",
+                                        name: "simple",
                                         tag: None,
                                     },
                                 ),
-                                templates: None,
-                                args: Args(
-                                    [],
+                                templates: Some(
+                                    Vals(
+                                        [
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            36,
+                                                            36,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            36,
+                                                            37,
+                                                        ),
+                                                    },
+                                                    name: "c",
+                                                },
+                                            ),
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            36,
+                                                            39,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            36,
+                                                            40,
+                                                        ),
+                                                    },
+                                                    name: "c",
+                                                },
+                                            ),
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            36,
+                                                            42,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            36,
+                                                            43,
+                                                        ),
+                                                    },
+                                                    name: "c",
+                                                },
+                                            ),
+                                        ],
+                                    ),
                                 ),
+                                args: [
+                                    Term(
+                                        Var {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    36,
+                                                    45,
+                                                ),
+                                                end_ln_and_col: (
+                                                    36,
+                                                    50,
+                                                ),
+                                            },
+                                            name: "x_gpu",
+                                            tag: None,
+                                        },
+                                    ),
+                                ],
                                 tag: None,
                                 yield_call: false,
                             },
                         ),
                     ),
-                ),
+                },
+                encoder: "e",
+                cmd: Invoke,
+                tag: None,
             },
-            Call(
-                Info {
-                    start_ln_and_col: (
-                        35,
-                        5,
-                    ),
-                    end_ln_and_col: (
-                        35,
-                        30,
-                    ),
-                },
-                SchedFuncCall {
-                    target: Binop {
-                        info: Info {
-                            start_ln_and_col: (
-                                35,
-                                5,
-                            ),
-                            end_ln_and_col: (
-                                35,
-                                17,
-                            ),
-                        },
-                        op: Dot,
-                        lhs: Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        35,
-                                        5,
-                                    ),
-                                    end_ln_and_col: (
-                                        35,
-                                        6,
-                                    ),
-                                },
-                                name: "e",
-                                tag: None,
-                            },
-                        ),
-                        rhs: Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        35,
-                                        7,
-                                    ),
-                                    end_ln_and_col: (
-                                        35,
-                                        17,
-                                    ),
-                                },
-                                name: "encode_cpy",
-                                tag: None,
-                            },
-                        ),
-                    },
-                    templates: None,
-                    args: Encode(
-                        Move {
-                            info: Info {
-                                start_ln_and_col: (
-                                    35,
-                                    18,
-                                ),
-                                end_ln_and_col: (
-                                    35,
-                                    28,
-                                ),
-                            },
-                            lhs: [
-                                (
-                                    "x_gpu",
-                                    None,
-                                ),
-                            ],
-                            rhs: Term(
-                                Var {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            35,
-                                            27,
-                                        ),
-                                        end_ln_and_col: (
-                                            35,
-                                            28,
-                                        ),
-                                    },
-                                    name: "x",
-                                    tag: None,
-                                },
-                            ),
-                        },
-                    ),
-                    tag: None,
-                    yield_call: false,
-                },
-            ),
-            Call(
-                Info {
-                    start_ln_and_col: (
-                        36,
-                        5,
-                    ),
-                    end_ln_and_col: (
-                        36,
-                        48,
-                    ),
-                },
-                SchedFuncCall {
-                    target: Binop {
-                        info: Info {
-                            start_ln_and_col: (
-                                36,
-                                5,
-                            ),
-                            end_ln_and_col: (
-                                36,
-                                13,
-                            ),
-                        },
-                        op: Dot,
-                        lhs: Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        36,
-                                        5,
-                                    ),
-                                    end_ln_and_col: (
-                                        36,
-                                        6,
-                                    ),
-                                },
-                                name: "e",
-                                tag: None,
-                            },
-                        ),
-                        rhs: Term(
-                            Var {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        36,
-                                        7,
-                                    ),
-                                    end_ln_and_col: (
-                                        36,
-                                        13,
-                                    ),
-                                },
-                                name: "encode",
-                                tag: None,
-                            },
-                        ),
-                    },
-                    templates: None,
-                    args: Encode(
-                        Move {
-                            info: Info {
-                                start_ln_and_col: (
-                                    36,
-                                    14,
-                                ),
-                                end_ln_and_col: (
-                                    36,
-                                    46,
-                                ),
-                            },
-                            lhs: [
-                                (
-                                    "y_gpu",
-                                    None,
-                                ),
-                            ],
-                            rhs: Term(
-                                Call(
-                                    Info {
-                                        start_ln_and_col: (
-                                            36,
-                                            23,
-                                        ),
-                                        end_ln_and_col: (
-                                            36,
-                                            46,
-                                        ),
-                                    },
-                                    SchedFuncCall {
-                                        target: Term(
-                                            Var {
-                                                info: Info {
-                                                    start_ln_and_col: (
-                                                        36,
-                                                        23,
-                                                    ),
-                                                    end_ln_and_col: (
-                                                        36,
-                                                        29,
-                                                    ),
-                                                },
-                                                name: "simple",
-                                                tag: None,
-                                            },
-                                        ),
-                                        templates: Some(
-                                            Vals(
-                                                [
-                                                    Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    36,
-                                                                    31,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    36,
-                                                                    32,
-                                                                ),
-                                                            },
-                                                            name: "c",
-                                                        },
-                                                    ),
-                                                    Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    36,
-                                                                    34,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    36,
-                                                                    35,
-                                                                ),
-                                                            },
-                                                            name: "c",
-                                                        },
-                                                    ),
-                                                    Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    36,
-                                                                    37,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    36,
-                                                                    38,
-                                                                ),
-                                                            },
-                                                            name: "c",
-                                                        },
-                                                    ),
-                                                ],
-                                            ),
-                                        ),
-                                        args: Args(
-                                            [
-                                                Term(
-                                                    Var {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                36,
-                                                                40,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                36,
-                                                                45,
-                                                            ),
-                                                        },
-                                                        name: "x_gpu",
-                                                        tag: None,
-                                                    },
-                                                ),
-                                            ],
-                                        ),
-                                        tag: None,
-                                        yield_call: false,
-                                    },
-                                ),
-                            ),
-                        },
-                    ),
-                    tag: None,
-                    yield_call: false,
-                },
-            ),
             Decl {
                 info: Info {
                     start_ln_and_col: (
@@ -1001,7 +895,7 @@
                     ),
                     end_ln_and_col: (
                         37,
-                        24,
+                        22,
                     ),
                 },
                 lhs: [
@@ -1013,71 +907,36 @@
                 is_const: true,
                 expr: Some(
                     Term(
-                        Call(
-                            Info {
+                        TimelineOperation {
+                            info: Info {
                                 start_ln_and_col: (
                                     37,
                                     13,
                                 ),
                                 end_ln_and_col: (
                                     37,
-                                    23,
+                                    21,
                                 ),
                             },
-                            SchedFuncCall {
-                                target: Binop {
+                            op: Submit,
+                            arg: Term(
+                                Var {
                                     info: Info {
                                         start_ln_and_col: (
                                             37,
-                                            13,
+                                            20,
                                         ),
                                         end_ln_and_col: (
                                             37,
                                             21,
                                         ),
                                     },
-                                    op: Dot,
-                                    lhs: Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    37,
-                                                    13,
-                                                ),
-                                                end_ln_and_col: (
-                                                    37,
-                                                    14,
-                                                ),
-                                            },
-                                            name: "e",
-                                            tag: None,
-                                        },
-                                    ),
-                                    rhs: Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    37,
-                                                    15,
-                                                ),
-                                                end_ln_and_col: (
-                                                    37,
-                                                    21,
-                                                ),
-                                            },
-                                            name: "submit",
-                                            tag: None,
-                                        },
-                                    ),
+                                    name: "e",
+                                    tag: None,
                                 },
-                                templates: None,
-                                args: Args(
-                                    [],
-                                ),
-                                tag: None,
-                                yield_call: false,
-                            },
-                        ),
+                            ),
+                            tag: None,
+                        },
                     ),
                 ),
             },
@@ -1089,7 +948,7 @@
                     ),
                     end_ln_and_col: (
                         40,
-                        22,
+                        21,
                     ),
                 },
                 lhs: [
@@ -1101,59 +960,36 @@
                 is_const: true,
                 expr: Some(
                     Term(
-                        Call(
-                            Info {
+                        TimelineOperation {
+                            info: Info {
                                 start_ln_and_col: (
                                     40,
                                     13,
                                 ),
                                 end_ln_and_col: (
                                     40,
-                                    21,
+                                    20,
                                 ),
                             },
-                            SchedFuncCall {
-                                target: Term(
-                                    Var {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                40,
-                                                13,
-                                            ),
-                                            end_ln_and_col: (
-                                                40,
-                                                18,
-                                            ),
-                                        },
-                                        name: "await",
-                                        tag: None,
-                                    },
-                                ),
-                                templates: None,
-                                args: Args(
-                                    [
-                                        Term(
-                                            Var {
-                                                info: Info {
-                                                    start_ln_and_col: (
-                                                        40,
-                                                        19,
-                                                    ),
-                                                    end_ln_and_col: (
-                                                        40,
-                                                        20,
-                                                    ),
-                                                },
-                                                name: "f",
-                                                tag: None,
-                                            },
+                            op: Await,
+                            arg: Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            40,
+                                            19,
                                         ),
-                                    ],
-                                ),
-                                tag: None,
-                                yield_call: false,
-                            },
-                        ),
+                                        end_ln_and_col: (
+                                            40,
+                                            20,
+                                        ),
+                                    },
+                                    name: "f",
+                                    tag: None,
+                                },
+                            ),
+                            tag: None,
+                        },
                     ),
                 ),
             },

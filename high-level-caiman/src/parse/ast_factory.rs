@@ -385,18 +385,13 @@ impl ASTFactory {
                 yield_call: _,
             }) if (templates.is_none() || matches!(templates, Some(TemplateArgs::Type(_)))) && tag.is_none() => {
                 let target = Self::sched_to_spec_expr(*target)?;
-                match *args {
-                   ArgsOrEnc::Encode(_) => Err(custom_parse_error!(info, 
-                    "An encoded statement cannot occur in this context")),
-                   ArgsOrEnc::Args(args) => {
-                        let args = args.into_iter().map(Self::sched_to_spec_expr).collect::<Result<Vec<_>, _>>()?;
-                        Ok(SpecTerm::Call { info, function: Box::new(target), args, template: templates.and_then(|t| match t {
-                            TemplateArgs::Type(t) => Some(t),
-                            TemplateArgs::Vals(_) => None,
-                        }) })
-                   }
-                }
+                let args = args.into_iter().map(Self::sched_to_spec_expr).collect::<Result<Vec<_>, _>>()?;
+                Ok(SpecTerm::Call { info, function: Box::new(target), args, template: templates.and_then(|t| match t {
+                    TemplateArgs::Type(t) => Some(t),
+                    TemplateArgs::Vals(_) => None,
+                }) })
             },
+            SchedTerm::TimelineOperation { info, .. } => Err(custom_parse_error!(info, "Cannot occur in this context")),
             SchedTerm::Call(info, ..) => Err(custom_parse_error!(info, 
                 "Cannot parameterize a function call with non-type template arguments nor specify a tag in this context")),
             SchedTerm::Hole(info) => Err(custom_parse_error!(info, 
@@ -512,6 +507,16 @@ impl ASTFactory {
     struct_variant_factory!(sched_lit(lit: SchedLiteral, tag: Option<Tags>) -> SchedTerm:SchedTerm::Lit);
     struct_variant_factory!(sched_var(name: Name, tag: Option<Tags>) -> SchedTerm:SchedTerm::Var);
     tuple_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole);
+    struct_variant_factory!(sched_submit(tag: Option<Tags>, e: SchedExpr) -> 
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
+    struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag });
+    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, device: Name) ->
+        SchedTerm:SchedTerm::TimelineOperation { 
+            op: TimelineOperation::EncodeBegin, 
+            arg: Box::new(SchedExpr::Term(
+                SchedTerm::Var{name: device, info: Info::default(), tag: None})),
+         tag: tag });
 
 
     // scheduling function calls:
@@ -523,7 +528,7 @@ impl ASTFactory {
         SchedFuncCall {
             target: Box::new(target),
             templates: templates,
-            args: Box::new(ArgsOrEnc::Args(args)),
+            args: args,
             yield_call: false,
             tag,
         }
@@ -544,17 +549,22 @@ impl ASTFactory {
     tuple_variant_factory!(sched_call_expr(call: SchedFuncCall) -> SchedTerm:SchedTerm::Call);
 
     /// Constructs an encoded statement
-    #[must_use]
-    pub fn sched_encode(&self, target: SchedExpr, encoding: EncodedStmt, tag: Option<Tags>) 
-        -> SchedFuncCall {
-            SchedFuncCall {
-                target: Box::new(target),
-                templates: None,
-                args: Box::new(ArgsOrEnc::Encode(encoding)),
-                tag,
-                yield_call: false,
-            }
-        }
+    /// # Errors
+    /// Returns an error if the statement is not a valid encoded statement
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn sched_encode(&self, l: usize, encoder: Name, command: Name, stmt: EncodedStmt, tag: Option<Tags>, r: usize) -> Result<SchedStmt, ParserError> {
+        let info = self.info(l, r);
+        let cmd = if command == "copy" { EncodedCommand::Copy} else if command == "call" { EncodedCommand::Invoke} else {
+            return Err(custom_parse_error!(info, "Unrecognized encode operation {command}"))
+        };
+        Ok(SchedStmt::Encode {
+            info,
+            stmt,
+            encoder,
+            cmd,
+            tag
+        })
+    }
     
     struct_variant_factory!(sched_let_decl(lhs: Vec<(String, Option<FullType>)>, rhs: SchedExpr) 
         -> SchedStmt:SchedStmt::Decl {
@@ -584,7 +594,14 @@ impl ASTFactory {
             is_const: false
         });
 
-    struct_variant_factory!(encoded_stmt(lhs: Vec<(String, Option<FlaggedType>)>, rhs: SchedExpr) -> EncodedStmt:EncodedStmt::Move);
+    #[must_use]
+    pub fn encoded_stmt(&self, l: usize, lhs: Vec<(String, Option<FlaggedType>)>, rhs: SchedExpr, r: usize) -> EncodedStmt {
+        EncodedStmt {
+            info: self.info(l, r),
+            lhs,
+            rhs,
+        }
+    }
     // TOP-Level:
 
     struct_variant_factory!(value_funclet(name: String, input: Vec<Arg<DataType>>, 

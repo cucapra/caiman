@@ -2,7 +2,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{ArgsOrEnc, Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
+    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -241,23 +241,21 @@ pub struct HirFuncCall {
 impl HirFuncCall {
     pub fn new(value: SchedFuncCall) ->Self {
         if let NestedExpr::Term(SchedTerm::Var { name, .. }) = *value.target {
-            if let ArgsOrEnc::Args(args) = *value.args {
-                let args = args
-                    .into_iter()
-                    .map(|a| {
-                        enum_cast!(
-                            SchedTerm::Var { name, .. },
-                            name,
-                            enum_cast!(SchedExpr::Term, a)
-                        )
-                    })
-                    .collect();
-                return Self {
-                    target: name,
-                    args,
-                    tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
-                };
-            }
+            let args = value.args
+                .into_iter()
+                .map(|a| {
+                    enum_cast!(
+                        SchedTerm::Var { name, .. },
+                        name,
+                        enum_cast!(SchedExpr::Term, a)
+                    )
+                })
+                .collect();
+            return Self {
+                target: name,
+                args,
+                tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
+            };
         }
         panic!("Invalid internal function call")
     }
@@ -510,6 +508,7 @@ impl HirBody {
                     rhs,
                 }
             }
+            SchedStmt::Encode {.. } => todo!(),
             SchedStmt::Decl { .. } => panic!("Invalid declaration"),
             SchedStmt::Return(..)
             | SchedStmt::Block(..)
@@ -530,12 +529,11 @@ impl HirBody {
             SchedExpr::Term(rhs) => {
                 if let SchedTerm::Call(info, call) = rhs {
                     let target = enum_cast!(SchedTerm::Var { name, ..}, name, enum_cast!(SchedExpr::Term, &*call.target));
-                    let args = enum_cast!(ArgsOrEnc::Args, &*call.args);
                     Self::Op {
                         info,
                         dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
                         op: HirOp::FFI(target.clone(), OpType::External),
-                        args: args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
+                        args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
                     }
                 } else {
                     Self::ConstDecl {
@@ -695,7 +693,7 @@ fn term_get_uses(t: &SchedTerm, res: &mut BTreeSet<String>) {
             res.insert(name.clone());
         }
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
-        SchedTerm::Call(..) => todo!(),
+        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } => todo!(),
     }
 }
 
@@ -704,7 +702,7 @@ fn term_rename_uses(t: &mut SchedTerm, f: &mut dyn FnMut(&str) -> String) {
     match t {
         SchedTerm::Var { name, .. } => *name = f(name),
         SchedTerm::Hole(..) | SchedTerm::Lit { .. } => (),
-        SchedTerm::Call(..) => todo!(),
+        SchedTerm::Call(..) | SchedTerm::TimelineOperation { .. } => todo!(),
     }
 }
 

@@ -139,9 +139,7 @@ fn find_closest(p: f32, pts: [f32; N], start: i64,
         e.copy[p_gpu <- p];
         e.call[r <- closest_point_gpu'<8, 8>(p_gpu, slice)];
 
-        let f = e.submit();
-        let res = await(f);
-        res.r
+        (await (submit e)).r
     } else {
         let mdpt = (start + end) / 2;
 

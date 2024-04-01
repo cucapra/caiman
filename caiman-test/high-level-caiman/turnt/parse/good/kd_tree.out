@@ -2243,9 +2243,7 @@
                                         ),
                                     },
                                     templates: None,
-                                    args: Args(
-                                        [],
-                                    ),
+                                    args: [],
                                     tag: None,
                                     yield_call: false,
                                 },
@@ -2325,26 +2323,24 @@
                                                 },
                                             ),
                                             templates: None,
-                                            args: Args(
-                                                [
-                                                    Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    78,
-                                                                    32,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    78,
-                                                                    33,
-                                                                ),
-                                                            },
-                                                            name: "a",
-                                                            tag: None,
+                                            args: [
+                                                Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                78,
+                                                                32,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                78,
+                                                                33,
+                                                            ),
                                                         },
-                                                    ),
-                                                ],
-                                            ),
+                                                        name: "a",
+                                                        tag: None,
+                                                    },
+                                                ),
+                                            ],
                                             tag: None,
                                             yield_call: false,
                                         },
@@ -2440,42 +2436,40 @@
                                                         },
                                                     ),
                                                     templates: None,
-                                                    args: Args(
-                                                        [
-                                                            Term(
-                                                                Var {
-                                                                    info: Info {
-                                                                        start_ln_and_col: (
-                                                                            79,
-                                                                            33,
-                                                                        ),
-                                                                        end_ln_and_col: (
-                                                                            79,
-                                                                            34,
-                                                                        ),
-                                                                    },
-                                                                    name: "p",
-                                                                    tag: None,
+                                                    args: [
+                                                        Term(
+                                                            Var {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        79,
+                                                                        33,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        79,
+                                                                        34,
+                                                                    ),
                                                                 },
-                                                            ),
-                                                            Term(
-                                                                Var {
-                                                                    info: Info {
-                                                                        start_ln_and_col: (
-                                                                            79,
-                                                                            36,
-                                                                        ),
-                                                                        end_ln_and_col: (
-                                                                            79,
-                                                                            40,
-                                                                        ),
-                                                                    },
-                                                                    name: "a_hd",
-                                                                    tag: None,
+                                                                name: "p",
+                                                                tag: None,
+                                                            },
+                                                        ),
+                                                        Term(
+                                                            Var {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        79,
+                                                                        36,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        79,
+                                                                        40,
+                                                                    ),
                                                                 },
-                                                            ),
-                                                        ],
-                                                    ),
+                                                                name: "a_hd",
+                                                                tag: None,
+                                                            },
+                                                        ),
+                                                    ],
                                                     tag: None,
                                                     yield_call: false,
                                                 },
@@ -2511,42 +2505,40 @@
                                                         },
                                                     ),
                                                     templates: None,
-                                                    args: Args(
-                                                        [
-                                                            Term(
-                                                                Var {
-                                                                    info: Info {
-                                                                        start_ln_and_col: (
-                                                                            79,
-                                                                            50,
-                                                                        ),
-                                                                        end_ln_and_col: (
-                                                                            79,
-                                                                            51,
-                                                                        ),
-                                                                    },
-                                                                    name: "p",
-                                                                    tag: None,
+                                                    args: [
+                                                        Term(
+                                                            Var {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        79,
+                                                                        50,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        79,
+                                                                        51,
+                                                                    ),
                                                                 },
-                                                            ),
-                                                            Term(
-                                                                Var {
-                                                                    info: Info {
-                                                                        start_ln_and_col: (
-                                                                            79,
-                                                                            53,
-                                                                        ),
-                                                                        end_ln_and_col: (
-                                                                            79,
-                                                                            61,
-                                                                        ),
-                                                                    },
-                                                                    name: "min_dist",
-                                                                    tag: None,
+                                                                name: "p",
+                                                                tag: None,
+                                                            },
+                                                        ),
+                                                        Term(
+                                                            Var {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        79,
+                                                                        53,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        79,
+                                                                        61,
+                                                                    ),
                                                                 },
-                                                            ),
-                                                        ],
-                                                    ),
+                                                                name: "min_dist",
+                                                                tag: None,
+                                                            },
+                                                        ),
+                                                    ],
                                                     tag: None,
                                                     yield_call: false,
                                                 },
@@ -2613,58 +2605,56 @@
                                             },
                                         ),
                                         templates: None,
-                                        args: Args(
-                                            [
-                                                Term(
-                                                    Var {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                80,
-                                                                32,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                80,
-                                                                33,
-                                                            ),
-                                                        },
-                                                        name: "p",
-                                                        tag: None,
+                                        args: [
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            80,
+                                                            32,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            80,
+                                                            33,
+                                                        ),
                                                     },
-                                                ),
-                                                Term(
-                                                    Var {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                80,
-                                                                35,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                80,
-                                                                39,
-                                                            ),
-                                                        },
-                                                        name: "a_tl",
-                                                        tag: None,
+                                                    name: "p",
+                                                    tag: None,
+                                                },
+                                            ),
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            80,
+                                                            35,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            80,
+                                                            39,
+                                                        ),
                                                     },
-                                                ),
-                                                Term(
-                                                    Var {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                80,
-                                                                41,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                80,
-                                                                44,
-                                                            ),
-                                                        },
-                                                        name: "min",
-                                                        tag: None,
+                                                    name: "a_tl",
+                                                    tag: None,
+                                                },
+                                            ),
+                                            Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            80,
+                                                            41,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            80,
+                                                            44,
+                                                        ),
                                                     },
-                                                ),
-                                            ],
-                                        ),
+                                                    name: "min",
+                                                    tag: None,
+                                                },
+                                            ),
+                                        ],
                                         tag: None,
                                         yield_call: false,
                                     },
@@ -2970,9 +2960,7 @@
                                         ),
                                     },
                                     templates: None,
-                                    args: Args(
-                                        [],
-                                    ),
+                                    args: [],
                                     tag: None,
                                     yield_call: false,
                                 },
@@ -3129,26 +3117,24 @@
                                                         },
                                                     ),
                                                     templates: None,
-                                                    args: Args(
-                                                        [
-                                                            Term(
-                                                                Var {
-                                                                    info: Info {
-                                                                        start_ln_and_col: (
-                                                                            94,
-                                                                            32,
-                                                                        ),
-                                                                        end_ln_and_col: (
-                                                                            94,
-                                                                            33,
-                                                                        ),
-                                                                    },
-                                                                    name: "a",
-                                                                    tag: None,
+                                                    args: [
+                                                        Term(
+                                                            Var {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        94,
+                                                                        32,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        94,
+                                                                        33,
+                                                                    ),
                                                                 },
-                                                            ),
-                                                        ],
-                                                    ),
+                                                                name: "a",
+                                                                tag: None,
+                                                            },
+                                                        ),
+                                                    ],
                                                     tag: None,
                                                     yield_call: false,
                                                 },
@@ -3197,58 +3183,56 @@
                                                     },
                                                 ),
                                                 templates: None,
-                                                args: Args(
-                                                    [
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        95,
-                                                                        32,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        95,
-                                                                        33,
-                                                                    ),
-                                                                },
-                                                                name: "p",
-                                                                tag: None,
+                                                args: [
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    95,
+                                                                    32,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    95,
+                                                                    33,
+                                                                ),
                                                             },
-                                                        ),
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        95,
-                                                                        35,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        95,
-                                                                        39,
-                                                                    ),
-                                                                },
-                                                                name: "a_tl",
-                                                                tag: None,
+                                                            name: "p",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    95,
+                                                                    35,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    95,
+                                                                    39,
+                                                                ),
                                                             },
-                                                        ),
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        95,
-                                                                        41,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        95,
-                                                                        45,
-                                                                    ),
-                                                                },
-                                                                name: "a_hd",
-                                                                tag: None,
+                                                            name: "a_tl",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    95,
+                                                                    41,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    95,
+                                                                    45,
+                                                                ),
                                                             },
-                                                        ),
-                                                    ],
-                                                ),
+                                                            name: "a_hd",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                ],
                                                 tag: None,
                                                 yield_call: false,
                                             },
@@ -5326,7 +5310,7 @@
                 1,
             ),
             end_ln_and_col: (
-                166,
+                164,
                 2,
             ),
         },
@@ -5522,7 +5506,7 @@
                         5,
                     ),
                     end_ln_and_col: (
-                        164,
+                        162,
                         7,
                     ),
                 },
@@ -5539,7 +5523,7 @@
                             13,
                         ),
                         end_ln_and_col: (
-                            164,
+                            162,
                             6,
                         ),
                     },
@@ -5691,9 +5675,7 @@
                                                 },
                                             ),
                                             templates: None,
-                                            args: Args(
-                                                [],
-                                            ),
+                                            args: [],
                                             tag: None,
                                             yield_call: false,
                                         },
@@ -5701,8 +5683,8 @@
                                 ),
                             ),
                         },
-                        Call(
-                            Info {
+                        Encode {
+                            info: Info {
                                 start_ln_and_col: (
                                     138,
                                     9,
@@ -5712,24 +5694,63 @@
                                     50,
                                 ),
                             },
-                            SchedFuncCall {
-                                target: Binop {
+                            stmt: EncodedStmt {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        138,
+                                        23,
+                                    ),
+                                    end_ln_and_col: (
+                                        138,
+                                        55,
+                                    ),
+                                },
+                                lhs: [
+                                    (
+                                        "slice",
+                                        Some(
+                                            FlaggedType {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        138,
+                                                        30,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        138,
+                                                        34,
+                                                    ),
+                                                },
+                                                base: UserDefined(
+                                                    "gbuf",
+                                                ),
+                                                flags: [],
+                                                settings: [],
+                                            },
+                                        ),
+                                    ),
+                                ],
+                                rhs: Binop {
                                     info: Info {
                                         start_ln_and_col: (
                                             138,
-                                            9,
+                                            38,
                                         ),
                                         end_ln_and_col: (
                                             138,
+<<<<<<< HEAD
                                             15,
+=======
+                                            55,
+>>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                         ),
                                     },
-                                    op: Dot,
+                                    op: Index,
                                     lhs: Term(
                                         Var {
                                             info: Info {
                                                 start_ln_and_col: (
                                                     138,
+<<<<<<< HEAD
                                                     9,
                                                 ),
                                                 end_ln_and_col: (
@@ -5822,8 +5843,33 @@
                                                     name: "pts",
                                                     tag: None,
                                                 },
+=======
+                                                    38,
+                                                ),
+                                                end_ln_and_col: (
+                                                    138,
+                                                    41,
+                                                ),
+                                            },
+                                            name: "pts",
+                                            tag: None,
+                                        },
+                                    ),
+                                    rhs: Binop {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                138,
+                                                42,
+>>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                             ),
-                                            rhs: Binop {
+                                            end_ln_and_col: (
+                                                138,
+                                                54,
+                                            ),
+                                        },
+                                        op: Range,
+                                        lhs: Term(
+                                            Var {
                                                 info: Info {
                                                     start_ln_and_col: (
                                                         138,
@@ -5832,6 +5878,7 @@
                                                     end_ln_and_col: (
                                                         138,
                                                         47,
+<<<<<<< HEAD
                                                     ),
                                                 },
                                                 op: Range,
@@ -5867,16 +5914,39 @@
                                                         tag: None,
                                                     },
                                                 ),
+=======
+                                                    ),
+                                                },
+                                                name: "start",
+                                                tag: None,
                                             },
-                                        },
+                                        ),
+                                        rhs: Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        138,
+                                                        51,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        138,
+                                                        54,
+                                                    ),
+                                                },
+                                                name: "end",
+                                                tag: None,
+>>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
+                                            },
+                                        ),
                                     },
-                                ),
-                                tag: None,
-                                yield_call: false,
+                                },
                             },
-                        ),
-                        Call(
-                            Info {
+                            encoder: "e",
+                            cmd: Copy,
+                            tag: None,
+                        },
+                        Encode {
+                            info: Info {
                                 start_ln_and_col: (
                                     139,
                                     9,
@@ -5886,6 +5956,7 @@
                                     28,
                                 ),
                             },
+<<<<<<< HEAD
                             SchedFuncCall {
                                 target: Binop {
                                     info: Info {
@@ -5930,21 +6001,42 @@
                                             name: "copy",
                                             tag: None,
                                         },
+=======
+                            stmt: EncodedStmt {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        139,
+                                        23,
+                                    ),
+                                    end_ln_and_col: (
+                                        139,
+                                        33,
+>>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                     ),
                                 },
-                                templates: None,
-                                args: Encode(
-                                    Move {
+                                lhs: [
+                                    (
+                                        "p_gpu",
+                                        None,
+                                    ),
+                                ],
+                                rhs: Term(
+                                    Var {
                                         info: Info {
                                             start_ln_and_col: (
                                                 139,
+<<<<<<< HEAD
                                                 16,
+=======
+                                                32,
+>>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                             ),
                                             end_ln_and_col: (
                                                 139,
                                                 26,
                                             ),
                                         },
+<<<<<<< HEAD
                                         lhs: [
                                             (
                                                 "p_gpu",
@@ -5967,11 +6059,14 @@
                                                 tag: None,
                                             },
                                         ),
+=======
+                                        name: "p",
+                                        tag: None,
+>>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                     },
                                 ),
-                                tag: None,
-                                yield_call: false,
                             },
+<<<<<<< HEAD
                         ),
                         Call(
                             Info {
@@ -6166,38 +6261,191 @@
                             },
                         ),
                         Decl {
+=======
+                            encoder: "e",
+                            cmd: Copy,
+                            tag: None,
+                        },
+                        Encode {
+>>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                             info: Info {
+                                start_ln_and_col: (
+                                    140,
+                                    9,
+                                ),
+                                end_ln_and_col: (
+                                    140,
+                                    68,
+                                ),
+                            },
+                            stmt: EncodedStmt {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        140,
+                                        23,
+                                    ),
+                                    end_ln_and_col: (
+                                        140,
+                                        66,
+                                    ),
+                                },
+                                lhs: [
+                                    (
+                                        "r",
+                                        None,
+                                    ),
+                                ],
+                                rhs: Term(
+                                    Call(
+                                        Info {
+                                            start_ln_and_col: (
+                                                140,
+                                                28,
+                                            ),
+                                            end_ln_and_col: (
+                                                140,
+                                                66,
+                                            ),
+                                        },
+                                        SchedFuncCall {
+                                            target: Term(
+                                                Var {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            140,
+                                                            28,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            140,
+                                                            45,
+                                                        ),
+                                                    },
+                                                    name: "closest_point_gpu",
+                                                    tag: None,
+                                                },
+                                            ),
+                                            templates: Some(
+                                                Vals(
+                                                    [
+                                                        Term(
+                                                            Lit {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        140,
+                                                                        47,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        140,
+                                                                        48,
+                                                                    ),
+                                                                },
+                                                                lit: Int(
+                                                                    "8",
+                                                                ),
+                                                            },
+                                                        ),
+                                                        Term(
+                                                            Lit {
+                                                                info: Info {
+                                                                    start_ln_and_col: (
+                                                                        140,
+                                                                        50,
+                                                                    ),
+                                                                    end_ln_and_col: (
+                                                                        140,
+                                                                        51,
+                                                                    ),
+                                                                },
+                                                                lit: Int(
+                                                                    "8",
+                                                                ),
+                                                            },
+                                                        ),
+                                                    ],
+                                                ),
+                                            ),
+                                            args: [
+                                                Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                140,
+                                                                53,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                140,
+                                                                58,
+                                                            ),
+                                                        },
+                                                        name: "p_gpu",
+                                                        tag: None,
+                                                    },
+                                                ),
+                                                Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                140,
+                                                                60,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                140,
+                                                                65,
+                                                            ),
+                                                        },
+                                                        name: "slice",
+                                                        tag: None,
+                                                    },
+                                                ),
+                                            ],
+                                            tag: None,
+                                            yield_call: false,
+                                        },
+                                    ),
+                                ),
+                            },
+                            encoder: "e",
+                            cmd: Invoke,
+                            tag: None,
+                        },
+                        Return(
+                            Info {
                                 start_ln_and_col: (
                                     142,
                                     9,
                                 ),
                                 end_ln_and_col: (
                                     142,
-                                    28,
+                                    29,
                                 ),
                             },
-                            lhs: [
-                                (
-                                    "f",
-                                    None,
-                                ),
-                            ],
-                            is_const: true,
-                            expr: Some(
-                                Term(
-                                    Call(
-                                        Info {
+                            Binop {
+                                info: Info {
+                                    start_ln_and_col: (
+                                        142,
+                                        9,
+                                    ),
+                                    end_ln_and_col: (
+                                        142,
+                                        29,
+                                    ),
+                                },
+                                op: Dot,
+                                lhs: Term(
+                                    TimelineOperation {
+                                        info: Info {
                                             start_ln_and_col: (
                                                 142,
-                                                17,
+                                                10,
                                             ),
                                             end_ln_and_col: (
                                                 142,
-                                                27,
+                                                26,
                                             ),
                                         },
-                                        SchedFuncCall {
-                                            target: Binop {
+                                        op: Await,
+                                        arg: Term(
+                                            TimelineOperation {
                                                 info: Info {
                                                     start_ln_and_col: (
                                                         142,
@@ -6208,163 +6456,26 @@
                                                         25,
                                                     ),
                                                 },
-                                                op: Dot,
-                                                lhs: Term(
+                                                op: Submit,
+                                                arg: Term(
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
                                                                 142,
-                                                                17,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                142,
-                                                                18,
-                                                            ),
-                                                        },
-                                                        name: "e",
-                                                        tag: None,
-                                                    },
-                                                ),
-                                                rhs: Term(
-                                                    Var {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                142,
-                                                                19,
+                                                                24,
                                                             ),
                                                             end_ln_and_col: (
                                                                 142,
                                                                 25,
                                                             ),
                                                         },
-                                                        name: "submit",
+                                                        name: "e",
                                                         tag: None,
                                                     },
                                                 ),
+                                                tag: None,
                                             },
-                                            templates: None,
-                                            args: Args(
-                                                [],
-                                            ),
-                                            tag: None,
-                                            yield_call: false,
-                                        },
-                                    ),
-                                ),
-                            ),
-                        },
-                        Decl {
-                            info: Info {
-                                start_ln_and_col: (
-                                    143,
-                                    9,
-                                ),
-                                end_ln_and_col: (
-                                    143,
-                                    28,
-                                ),
-                            },
-                            lhs: [
-                                (
-                                    "res",
-                                    None,
-                                ),
-                            ],
-                            is_const: true,
-                            expr: Some(
-                                Term(
-                                    Call(
-                                        Info {
-                                            start_ln_and_col: (
-                                                143,
-                                                19,
-                                            ),
-                                            end_ln_and_col: (
-                                                143,
-                                                27,
-                                            ),
-                                        },
-                                        SchedFuncCall {
-                                            target: Term(
-                                                Var {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            143,
-                                                            19,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            143,
-                                                            24,
-                                                        ),
-                                                    },
-                                                    name: "await",
-                                                    tag: None,
-                                                },
-                                            ),
-                                            templates: None,
-                                            args: Args(
-                                                [
-                                                    Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    143,
-                                                                    25,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    143,
-                                                                    26,
-                                                                ),
-                                                            },
-                                                            name: "f",
-                                                            tag: None,
-                                                        },
-                                                    ),
-                                                ],
-                                            ),
-                                            tag: None,
-                                            yield_call: false,
-                                        },
-                                    ),
-                                ),
-                            ),
-                        },
-                        Return(
-                            Info {
-                                start_ln_and_col: (
-                                    144,
-                                    9,
-                                ),
-                                end_ln_and_col: (
-                                    144,
-                                    14,
-                                ),
-                            },
-                            Binop {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        144,
-                                        9,
-                                    ),
-                                    end_ln_and_col: (
-                                        144,
-                                        14,
-                                    ),
-                                },
-                                op: Dot,
-                                lhs: Term(
-                                    Var {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                144,
-                                                9,
-                                            ),
-                                            end_ln_and_col: (
-                                                144,
-                                                12,
-                                            ),
-                                        },
-                                        name: "res",
+                                        ),
                                         tag: None,
                                     },
                                 ),
@@ -6372,12 +6483,12 @@
                                     Var {
                                         info: Info {
                                             start_ln_and_col: (
-                                                144,
-                                                13,
+                                                142,
+                                                28,
                                             ),
                                             end_ln_and_col: (
-                                                144,
-                                                14,
+                                                142,
+                                                29,
                                             ),
                                         },
                                         name: "r",
@@ -6391,11 +6502,11 @@
                         Block(
                             Info {
                                 start_ln_and_col: (
-                                    145,
+                                    143,
                                     12,
                                 ),
                                 end_ln_and_col: (
-                                    164,
+                                    162,
                                     6,
                                 ),
                             },
@@ -6403,11 +6514,11 @@
                                 Decl {
                                     info: Info {
                                         start_ln_and_col: (
-                                            146,
+                                            144,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            146,
+                                            144,
                                             38,
                                         ),
                                     },
@@ -6422,11 +6533,11 @@
                                         Binop {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    146,
+                                                    144,
                                                     20,
                                                 ),
                                                 end_ln_and_col: (
-                                                    146,
+                                                    144,
                                                     37,
                                                 ),
                                             },
@@ -6434,11 +6545,11 @@
                                             lhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        146,
+                                                        144,
                                                         21,
                                                     ),
                                                     end_ln_and_col: (
-                                                        146,
+                                                        144,
                                                         32,
                                                     ),
                                                 },
@@ -6447,11 +6558,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                146,
+                                                                144,
                                                                 21,
                                                             ),
                                                             end_ln_and_col: (
-                                                                146,
+                                                                144,
                                                                 26,
                                                             ),
                                                         },
@@ -6463,11 +6574,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                146,
+                                                                144,
                                                                 29,
                                                             ),
                                                             end_ln_and_col: (
-                                                                146,
+                                                                144,
                                                                 32,
                                                             ),
                                                         },
@@ -6480,11 +6591,11 @@
                                                 Lit {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            146,
+                                                            144,
                                                             36,
                                                         ),
                                                         end_ln_and_col: (
-                                                            146,
+                                                            144,
                                                             37,
                                                         ),
                                                     },
@@ -6500,11 +6611,11 @@
                                 Decl {
                                     info: Info {
                                         start_ln_and_col: (
-                                            148,
+                                            146,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            148,
+                                            146,
                                             31,
                                         ),
                                     },
@@ -6520,11 +6631,11 @@
                                             Var {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        148,
+                                                        146,
                                                         25,
                                                     ),
                                                     end_ln_and_col: (
-                                                        148,
+                                                        146,
                                                         30,
                                                     ),
                                                 },
@@ -6537,22 +6648,22 @@
                                 If {
                                     info: Info {
                                         start_ln_and_col: (
-                                            149,
+                                            147,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            151,
+                                            149,
                                             10,
                                         ),
                                     },
                                     guard: Binop {
                                         info: Info {
                                             start_ln_and_col: (
-                                                149,
+                                                147,
                                                 12,
                                             ),
                                             end_ln_and_col: (
-                                                149,
+                                                147,
                                                 80,
                                             ),
                                         },
@@ -6560,11 +6671,11 @@
                                         lhs: Binop {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    149,
+                                                    147,
                                                     12,
                                                 ),
                                                 end_ln_and_col: (
-                                                    149,
+                                                    147,
                                                     44,
                                                 ),
                                             },
@@ -6572,11 +6683,11 @@
                                             lhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         12,
                                                     ),
                                                     end_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         20,
                                                     ),
                                                 },
@@ -6585,11 +6696,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 12,
                                                             ),
                                                             end_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 15,
                                                             ),
                                                         },
@@ -6601,11 +6712,11 @@
                                                     Lit {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 19,
                                                             ),
                                                             end_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 20,
                                                             ),
                                                         },
@@ -6619,11 +6730,11 @@
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         24,
                                                     ),
                                                     end_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         44,
                                                     ),
                                                 },
@@ -6631,11 +6742,11 @@
                                                 lhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             24,
                                                         ),
                                                         end_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             28,
                                                         ),
                                                     },
@@ -6644,11 +6755,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     24,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     25,
                                                                 ),
                                                             },
@@ -6660,11 +6771,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     26,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     28,
                                                                 ),
                                                             },
@@ -6676,11 +6787,11 @@
                                                 rhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             32,
                                                         ),
                                                         end_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             44,
                                                         ),
                                                     },
@@ -6688,11 +6799,11 @@
                                                     lhs: Binop {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 32,
                                                             ),
                                                             end_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 41,
                                                             ),
                                                         },
@@ -6701,11 +6812,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         32,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         35,
                                                                     ),
                                                                 },
@@ -6717,11 +6828,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         36,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         40,
                                                                     ),
                                                                 },
@@ -6734,11 +6845,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     42,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     44,
                                                                 ),
                                                             },
@@ -6752,11 +6863,11 @@
                                         rhs: Binop {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    149,
+                                                    147,
                                                     48,
                                                 ),
                                                 end_ln_and_col: (
-                                                    149,
+                                                    147,
                                                     80,
                                                 ),
                                             },
@@ -6764,11 +6875,11 @@
                                             lhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         48,
                                                     ),
                                                     end_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         56,
                                                     ),
                                                 },
@@ -6777,11 +6888,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 48,
                                                             ),
                                                             end_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 51,
                                                             ),
                                                         },
@@ -6793,11 +6904,11 @@
                                                     Lit {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 55,
                                                             ),
                                                             end_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 56,
                                                             ),
                                                         },
@@ -6811,11 +6922,11 @@
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         60,
                                                     ),
                                                     end_ln_and_col: (
-                                                        149,
+                                                        147,
                                                         80,
                                                     ),
                                                 },
@@ -6823,11 +6934,11 @@
                                                 lhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             60,
                                                         ),
                                                         end_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             64,
                                                         ),
                                                     },
@@ -6836,11 +6947,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     60,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     61,
                                                                 ),
                                                             },
@@ -6852,11 +6963,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     62,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     64,
                                                                 ),
                                                             },
@@ -6868,11 +6979,11 @@
                                                 rhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             68,
                                                         ),
                                                         end_ln_and_col: (
-                                                            149,
+                                                            147,
                                                             80,
                                                         ),
                                                     },
@@ -6880,11 +6991,11 @@
                                                     lhs: Binop {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 68,
                                                             ),
                                                             end_ln_and_col: (
-                                                                149,
+                                                                147,
                                                                 77,
                                                             ),
                                                         },
@@ -6893,11 +7004,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         68,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         71,
                                                                     ),
                                                                 },
@@ -6909,11 +7020,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         72,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        149,
+                                                                        147,
                                                                         76,
                                                                     ),
                                                                 },
@@ -6926,11 +7037,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     78,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    149,
+                                                                    147,
                                                                     80,
                                                                 ),
                                                             },
@@ -6947,11 +7058,11 @@
                                         Assign {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    150,
+                                                    148,
                                                     13,
                                                 ),
                                                 end_ln_and_col: (
-                                                    150,
+                                                    148,
                                                     34,
                                                 ),
                                             },
@@ -6959,11 +7070,11 @@
                                                 Var {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            150,
+                                                            148,
                                                             13,
                                                         ),
                                                         end_ln_and_col: (
-                                                            150,
+                                                            148,
                                                             22,
                                                         ),
                                                     },
@@ -6974,11 +7085,11 @@
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        150,
+                                                        148,
                                                         25,
                                                     ),
                                                     end_ln_and_col: (
-                                                        150,
+                                                        148,
                                                         33,
                                                     ),
                                                 },
@@ -6987,11 +7098,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                150,
+                                                                148,
                                                                 25,
                                                             ),
                                                             end_ln_and_col: (
-                                                                150,
+                                                                148,
                                                                 29,
                                                             ),
                                                         },
@@ -7003,11 +7114,11 @@
                                                     Lit {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                150,
+                                                                148,
                                                                 32,
                                                             ),
                                                             end_ln_and_col: (
-                                                                150,
+                                                                148,
                                                                 33,
                                                             ),
                                                         },
@@ -7026,11 +7137,11 @@
                                 Decl {
                                     info: Info {
                                         start_ln_and_col: (
-                                            153,
+                                            151,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            153,
+                                            151,
                                             27,
                                         ),
                                     },
@@ -7046,11 +7157,11 @@
                                             Var {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        153,
+                                                        151,
                                                         23,
                                                     ),
                                                     end_ln_and_col: (
-                                                        153,
+                                                        151,
                                                         26,
                                                     ),
                                                 },
@@ -7063,22 +7174,22 @@
                                 If {
                                     info: Info {
                                         start_ln_and_col: (
-                                            154,
+                                            152,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            156,
+                                            154,
                                             10,
                                         ),
                                     },
                                     guard: Binop {
                                         info: Info {
                                             start_ln_and_col: (
-                                                154,
+                                                152,
                                                 12,
                                             ),
                                             end_ln_and_col: (
-                                                154,
+                                                152,
                                                 78,
                                             ),
                                         },
@@ -7086,11 +7197,11 @@
                                         lhs: Binop {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    154,
+                                                    152,
                                                     12,
                                                 ),
                                                 end_ln_and_col: (
-                                                    154,
+                                                    152,
                                                     43,
                                                 ),
                                             },
@@ -7098,11 +7209,11 @@
                                             lhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         12,
                                                     ),
                                                     end_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         20,
                                                     ),
                                                 },
@@ -7111,11 +7222,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 12,
                                                             ),
                                                             end_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 15,
                                                             ),
                                                         },
@@ -7127,11 +7238,11 @@
                                                     Lit {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 19,
                                                             ),
                                                             end_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 20,
                                                             ),
                                                         },
@@ -7145,11 +7256,11 @@
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         24,
                                                     ),
                                                     end_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         43,
                                                     ),
                                                 },
@@ -7157,11 +7268,11 @@
                                                 lhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             24,
                                                         ),
                                                         end_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             28,
                                                         ),
                                                     },
@@ -7170,11 +7281,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     24,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     25,
                                                                 ),
                                                             },
@@ -7186,11 +7297,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     26,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     28,
                                                                 ),
                                                             },
@@ -7202,11 +7313,11 @@
                                                 rhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             31,
                                                         ),
                                                         end_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             43,
                                                         ),
                                                     },
@@ -7214,11 +7325,11 @@
                                                     lhs: Binop {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 31,
                                                             ),
                                                             end_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 40,
                                                             ),
                                                         },
@@ -7227,11 +7338,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         31,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         34,
                                                                     ),
                                                                 },
@@ -7243,11 +7354,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         35,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         39,
                                                                     ),
                                                                 },
@@ -7260,11 +7371,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     41,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     43,
                                                                 ),
                                                             },
@@ -7278,11 +7389,11 @@
                                         rhs: Binop {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    154,
+                                                    152,
                                                     47,
                                                 ),
                                                 end_ln_and_col: (
-                                                    154,
+                                                    152,
                                                     78,
                                                 ),
                                             },
@@ -7290,11 +7401,11 @@
                                             lhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         47,
                                                     ),
                                                     end_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         55,
                                                     ),
                                                 },
@@ -7303,11 +7414,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 47,
                                                             ),
                                                             end_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 50,
                                                             ),
                                                         },
@@ -7319,11 +7430,11 @@
                                                     Lit {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 54,
                                                             ),
                                                             end_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 55,
                                                             ),
                                                         },
@@ -7337,11 +7448,11 @@
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         59,
                                                     ),
                                                     end_ln_and_col: (
-                                                        154,
+                                                        152,
                                                         78,
                                                     ),
                                                 },
@@ -7349,11 +7460,11 @@
                                                 lhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             59,
                                                         ),
                                                         end_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             63,
                                                         ),
                                                     },
@@ -7362,11 +7473,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     59,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     60,
                                                                 ),
                                                             },
@@ -7378,11 +7489,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     61,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     63,
                                                                 ),
                                                             },
@@ -7394,11 +7505,11 @@
                                                 rhs: Binop {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             66,
                                                         ),
                                                         end_ln_and_col: (
-                                                            154,
+                                                            152,
                                                             78,
                                                         ),
                                                     },
@@ -7406,11 +7517,11 @@
                                                     lhs: Binop {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 66,
                                                             ),
                                                             end_ln_and_col: (
-                                                                154,
+                                                                152,
                                                                 75,
                                                             ),
                                                         },
@@ -7419,11 +7530,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         66,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         69,
                                                                     ),
                                                                 },
@@ -7435,11 +7546,11 @@
                                                             Var {
                                                                 info: Info {
                                                                     start_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         70,
                                                                     ),
                                                                     end_ln_and_col: (
-                                                                        154,
+                                                                        152,
                                                                         74,
                                                                     ),
                                                                 },
@@ -7452,11 +7563,11 @@
                                                         Var {
                                                             info: Info {
                                                                 start_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     76,
                                                                 ),
                                                                 end_ln_and_col: (
-                                                                    154,
+                                                                    152,
                                                                     78,
                                                                 ),
                                                             },
@@ -7473,11 +7584,11 @@
                                         Assign {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    155,
+                                                    153,
                                                     13,
                                                 ),
                                                 end_ln_and_col: (
-                                                    155,
+                                                    153,
                                                     32,
                                                 ),
                                             },
@@ -7485,11 +7596,11 @@
                                                 Var {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            155,
+                                                            153,
                                                             13,
                                                         ),
                                                         end_ln_and_col: (
-                                                            155,
+                                                            153,
                                                             20,
                                                         ),
                                                     },
@@ -7500,11 +7611,11 @@
                                             rhs: Binop {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        155,
+                                                        153,
                                                         23,
                                                     ),
                                                     end_ln_and_col: (
-                                                        155,
+                                                        153,
                                                         31,
                                                     ),
                                                 },
@@ -7513,11 +7624,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                155,
+                                                                153,
                                                                 23,
                                                             ),
                                                             end_ln_and_col: (
-                                                                155,
+                                                                153,
                                                                 27,
                                                             ),
                                                         },
@@ -7529,11 +7640,11 @@
                                                     Lit {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                155,
+                                                                153,
                                                                 30,
                                                             ),
                                                             end_ln_and_col: (
-                                                                155,
+                                                                153,
                                                                 31,
                                                             ),
                                                         },
@@ -7552,11 +7663,11 @@
                                 Decl {
                                     info: Info {
                                         start_ln_and_col: (
-                                            158,
+                                            156,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            158,
+                                            156,
                                             25,
                                         ),
                                     },
@@ -7572,11 +7683,11 @@
                                             Lit {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        158,
+                                                        156,
                                                         23,
                                                     ),
                                                     end_ln_and_col: (
-                                                        158,
+                                                        156,
                                                         24,
                                                     ),
                                                 },
@@ -7591,22 +7702,22 @@
                                 If {
                                     info: Info {
                                         start_ln_and_col: (
-                                            159,
+                                            157,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            161,
+                                            159,
                                             10,
                                         ),
                                     },
                                     guard: Binop {
                                         info: Info {
                                             start_ln_and_col: (
-                                                159,
+                                                157,
                                                 12,
                                             ),
                                             end_ln_and_col: (
-                                                159,
+                                                157,
                                                 20,
                                             ),
                                         },
@@ -7615,11 +7726,11 @@
                                             Var {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        159,
+                                                        157,
                                                         12,
                                                     ),
                                                     end_ln_and_col: (
-                                                        159,
+                                                        157,
                                                         15,
                                                     ),
                                                 },
@@ -7631,11 +7742,11 @@
                                             Lit {
                                                 info: Info {
                                                     start_ln_and_col: (
-                                                        159,
+                                                        157,
                                                         19,
                                                     ),
                                                     end_ln_and_col: (
-                                                        159,
+                                                        157,
                                                         20,
                                                     ),
                                                 },
@@ -7651,11 +7762,11 @@
                                         Assign {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    160,
+                                                    158,
                                                     13,
                                                 ),
                                                 end_ln_and_col: (
-                                                    160,
+                                                    158,
                                                     25,
                                                 ),
                                             },
@@ -7663,11 +7774,11 @@
                                                 Var {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            160,
+                                                            158,
                                                             13,
                                                         ),
                                                         end_ln_and_col: (
-                                                            160,
+                                                            158,
                                                             20,
                                                         ),
                                                     },
@@ -7679,11 +7790,11 @@
                                                 Lit {
                                                     info: Info {
                                                         start_ln_and_col: (
-                                                            160,
+                                                            158,
                                                             23,
                                                         ),
                                                         end_ln_and_col: (
-                                                            160,
+                                                            158,
                                                             24,
                                                         ),
                                                     },
@@ -7701,11 +7812,11 @@
                                 Return(
                                     Info {
                                         start_ln_and_col: (
-                                            163,
+                                            161,
                                             9,
                                         ),
                                         end_ln_and_col: (
-                                            163,
+                                            161,
                                             59,
                                         ),
                                     },
@@ -7713,11 +7824,11 @@
                                         Call(
                                             Info {
                                                 start_ln_and_col: (
-                                                    163,
+                                                    161,
                                                     9,
                                                 ),
                                                 end_ln_and_col: (
-                                                    163,
+                                                    161,
                                                     59,
                                                 ),
                                             },
@@ -7726,11 +7837,11 @@
                                                     Var {
                                                         info: Info {
                                                             start_ln_and_col: (
-                                                                163,
+                                                                161,
                                                                 9,
                                                             ),
                                                             end_ln_and_col: (
-                                                                163,
+                                                                161,
                                                                 21,
                                                             ),
                                                         },
@@ -7739,90 +7850,88 @@
                                                     },
                                                 ),
                                                 templates: None,
-                                                args: Args(
-                                                    [
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        163,
-                                                                        22,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        163,
-                                                                        23,
-                                                                    ),
-                                                                },
-                                                                name: "p",
-                                                                tag: None,
+                                                args: [
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    161,
+                                                                    22,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    161,
+                                                                    23,
+                                                                ),
                                                             },
-                                                        ),
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        163,
-                                                                        25,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        163,
-                                                                        28,
-                                                                    ),
-                                                                },
-                                                                name: "pts",
-                                                                tag: None,
+                                                            name: "p",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    161,
+                                                                    25,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    161,
+                                                                    28,
+                                                                ),
                                                             },
-                                                        ),
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        163,
-                                                                        30,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        163,
-                                                                        40,
-                                                                    ),
-                                                                },
-                                                                name: "next_start",
-                                                                tag: None,
+                                                            name: "pts",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    161,
+                                                                    30,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    161,
+                                                                    40,
+                                                                ),
                                                             },
-                                                        ),
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        163,
-                                                                        42,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        163,
-                                                                        49,
-                                                                    ),
-                                                                },
-                                                                name: "nxt_end",
-                                                                tag: None,
+                                                            name: "next_start",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    161,
+                                                                    42,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    161,
+                                                                    49,
+                                                                ),
                                                             },
-                                                        ),
-                                                        Term(
-                                                            Var {
-                                                                info: Info {
-                                                                    start_ln_and_col: (
-                                                                        163,
-                                                                        51,
-                                                                    ),
-                                                                    end_ln_and_col: (
-                                                                        163,
-                                                                        58,
-                                                                    ),
-                                                                },
-                                                                name: "nxt_idx",
-                                                                tag: None,
+                                                            name: "nxt_end",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                    Term(
+                                                        Var {
+                                                            info: Info {
+                                                                start_ln_and_col: (
+                                                                    161,
+                                                                    51,
+                                                                ),
+                                                                end_ln_and_col: (
+                                                                    161,
+                                                                    58,
+                                                                ),
                                                             },
-                                                        ),
-                                                    ],
-                                                ),
+                                                            name: "nxt_idx",
+                                                            tag: None,
+                                                        },
+                                                    ),
+                                                ],
                                                 tag: None,
                                                 yield_call: false,
                                             },
@@ -7838,11 +7947,11 @@
             Return(
                 Info {
                     start_ln_and_col: (
-                        165,
+                        163,
                         5,
                     ),
                     end_ln_and_col: (
-                        165,
+                        163,
                         6,
                     ),
                 },
@@ -7850,11 +7959,11 @@
                     Var {
                         info: Info {
                             start_ln_and_col: (
-                                165,
+                                163,
                                 5,
                             ),
                             end_ln_and_col: (
-                                165,
+                                163,
                                 6,
                             ),
                         },
@@ -7868,11 +7977,11 @@
     FunctionClass {
         info: Info {
             start_ln_and_col: (
-                168,
+                166,
                 1,
             ),
             end_ln_and_col: (
-                170,
+                168,
                 2,
             ),
         },
@@ -7881,11 +7990,11 @@
             ValueFunclet {
                 info: Info {
                     start_ln_and_col: (
-                        168,
+                        166,
                         1,
                     ),
                     end_ln_and_col: (
-                        170,
+                        168,
                         2,
                     ),
                 },
@@ -7907,11 +8016,11 @@
                                 Var {
                                     info: Info {
                                         start_ln_and_col: (
-                                            168,
+                                            166,
                                             41,
                                         ),
                                         end_ln_and_col: (
-                                            168,
+                                            166,
                                             42,
                                         ),
                                     },
@@ -7933,11 +8042,11 @@
                     Returns(
                         Info {
                             start_ln_and_col: (
-                                169,
+                                167,
                                 5,
                             ),
                             end_ln_and_col: (
-                                169,
+                                167,
                                 40,
                             ),
                         },
@@ -7945,11 +8054,11 @@
                             Call {
                                 info: Info {
                                     start_ln_and_col: (
-                                        169,
+                                        167,
                                         13,
                                     ),
                                     end_ln_and_col: (
-                                        169,
+                                        167,
                                         40,
                                     ),
                                 },
@@ -7957,11 +8066,11 @@
                                     Var {
                                         info: Info {
                                             start_ln_and_col: (
-                                                169,
+                                                167,
                                                 13,
                                             ),
                                             end_ln_and_col: (
-                                                169,
+                                                167,
                                                 25,
                                             ),
                                         },
@@ -7973,11 +8082,11 @@
                                         Var {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     26,
                                                 ),
                                                 end_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     27,
                                                 ),
                                             },
@@ -7988,11 +8097,11 @@
                                         Var {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     29,
                                                 ),
                                                 end_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     30,
                                                 ),
                                             },
@@ -8003,11 +8112,11 @@
                                         Lit {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     32,
                                                 ),
                                                 end_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     33,
                                                 ),
                                             },
@@ -8020,11 +8129,11 @@
                                         Var {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     35,
                                                 ),
                                                 end_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     36,
                                                 ),
                                             },
@@ -8035,11 +8144,11 @@
                                         Lit {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     38,
                                                 ),
                                                 end_ln_and_col: (
-                                                    169,
+                                                    167,
                                                     39,
                                                 ),
                                             },
@@ -8060,11 +8169,11 @@
     SchedulingFunc {
         info: Info {
             start_ln_and_col: (
-                172,
+                170,
                 1,
             ),
             end_ln_and_col: (
-                177,
+                175,
                 2,
             ),
         },
@@ -8078,11 +8187,11 @@
                             FlaggedType {
                                 info: Info {
                                     start_ln_and_col: (
-                                        172,
+                                        170,
                                         26,
                                     ),
                                     end_ln_and_col: (
-                                        172,
+                                        170,
                                         29,
                                     ),
                                 },
@@ -8105,11 +8214,11 @@
                             FlaggedType {
                                 info: Info {
                                     start_ln_and_col: (
-                                        172,
+                                        170,
                                         34,
                                     ),
                                     end_ln_and_col: (
-                                        172,
+                                        170,
                                         42,
                                     ),
                                 },
@@ -8121,11 +8230,11 @@
                                         Var {
                                             info: Info {
                                                 start_ln_and_col: (
-                                                    172,
+                                                    170,
                                                     40,
                                                 ),
                                                 end_ln_and_col: (
-                                                    172,
+                                                    170,
                                                     41,
                                                 ),
                                             },
@@ -8148,11 +8257,11 @@
                     FlaggedType {
                         info: Info {
                             start_ln_and_col: (
-                                173,
+                                171,
                                 8,
                             ),
                             end_ln_and_col: (
-                                173,
+                                171,
                                 11,
                             ),
                         },
@@ -8175,11 +8284,11 @@
             Return(
                 Info {
                     start_ln_and_col: (
-                        175,
+                        173,
                         5,
                     ),
                     end_ln_and_col: (
-                        175,
+                        173,
                         32,
                     ),
                 },
@@ -8187,11 +8296,11 @@
                     Call(
                         Info {
                             start_ln_and_col: (
-                                175,
+                                173,
                                 5,
                             ),
                             end_ln_and_col: (
-                                175,
+                                173,
                                 32,
                             ),
                         },
@@ -8200,11 +8309,11 @@
                                 Var {
                                     info: Info {
                                         start_ln_and_col: (
-                                            175,
+                                            173,
                                             5,
                                         ),
                                         end_ln_and_col: (
-                                            175,
+                                            173,
                                             17,
                                         ),
                                     },
@@ -8213,94 +8322,92 @@
                                 },
                             ),
                             templates: None,
-                            args: Args(
-                                [
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    175,
-                                                    18,
-                                                ),
-                                                end_ln_and_col: (
-                                                    175,
-                                                    19,
-                                                ),
-                                            },
-                                            name: "p",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    175,
-                                                    21,
-                                                ),
-                                                end_ln_and_col: (
-                                                    175,
-                                                    22,
-                                                ),
-                                            },
-                                            name: "a",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Lit {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    175,
-                                                    24,
-                                                ),
-                                                end_ln_and_col: (
-                                                    175,
-                                                    25,
-                                                ),
-                                            },
-                                            lit: Int(
-                                                "0",
+                            args: [
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                173,
+                                                18,
                                             ),
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    175,
-                                                    27,
-                                                ),
-                                                end_ln_and_col: (
-                                                    175,
-                                                    28,
-                                                ),
-                                            },
-                                            name: "N",
-                                            tag: None,
-                                        },
-                                    ),
-                                    Term(
-                                        Lit {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    175,
-                                                    30,
-                                                ),
-                                                end_ln_and_col: (
-                                                    175,
-                                                    31,
-                                                ),
-                                            },
-                                            lit: Int(
-                                                "0",
+                                            end_ln_and_col: (
+                                                173,
+                                                19,
                                             ),
-                                            tag: None,
                                         },
-                                    ),
-                                ],
-                            ),
+                                        name: "p",
+                                        tag: None,
+                                    },
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                173,
+                                                21,
+                                            ),
+                                            end_ln_and_col: (
+                                                173,
+                                                22,
+                                            ),
+                                        },
+                                        name: "a",
+                                        tag: None,
+                                    },
+                                ),
+                                Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                173,
+                                                24,
+                                            ),
+                                            end_ln_and_col: (
+                                                173,
+                                                25,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "0",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                                Term(
+                                    Var {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                173,
+                                                27,
+                                            ),
+                                            end_ln_and_col: (
+                                                173,
+                                                28,
+                                            ),
+                                        },
+                                        name: "N",
+                                        tag: None,
+                                    },
+                                ),
+                                Term(
+                                    Lit {
+                                        info: Info {
+                                            start_ln_and_col: (
+                                                173,
+                                                30,
+                                            ),
+                                            end_ln_and_col: (
+                                                173,
+                                                31,
+                                            ),
+                                        },
+                                        lit: Int(
+                                            "0",
+                                        ),
+                                        tag: None,
+                                    },
+                                ),
+                            ],
                             tag: None,
                             yield_call: false,
                         },
@@ -8312,11 +8419,11 @@
     Pipeline {
         info: Info {
             start_ln_and_col: (
-                179,
+                177,
                 1,
             ),
             end_ln_and_col: (
-                181,
+                179,
                 2,
             ),
         },

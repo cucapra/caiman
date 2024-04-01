@@ -362,22 +362,6 @@ pub struct FullType {
     pub tags: Vec<Tag>,
 }
 
-/// A function arguments or its encoded statement
-/// A function can either be called with a list of arguments or with an encoded
-/// statement, but not both
-#[derive(Clone, Debug)]
-pub enum ArgsOrEnc {
-    Args(Vec<SchedExpr>),
-    Encode(EncodedStmt),
-}
-
-impl ArgsOrEnc {
-    #[must_use]
-    pub const fn is_args(&self) -> bool {
-        matches!(self, Self::Args(_))
-    }
-}
-
 /// A list of expressions or a type
 /// Used for template arguments
 #[derive(Clone, Debug)]
@@ -395,37 +379,17 @@ pub type Tags = Vec<Tag>;
 pub struct SchedFuncCall {
     pub target: Box<SchedExpr>,
     pub templates: Option<TemplateArgs>,
-    pub args: Box<ArgsOrEnc>,
+    pub args: Vec<SchedExpr>,
     pub tag: Option<Tags>,
     pub yield_call: bool,
 }
 
+/// A timeline operation that is also an expression
 #[derive(Clone, Debug)]
-pub struct SchedLocalCall<'a> {
-    pub target: &'a SchedExpr,
-    pub templates: &'a Option<TemplateArgs>,
-    pub args: &'a [SchedExpr],
-    pub tag: &'a Option<Tags>,
-    pub yield_call: bool,
-}
-
-impl SchedFuncCall {
-    /// Unwraps the call into a local call
-    /// # Panics
-    /// If the call is an encoded statement
-    #[must_use]
-    pub fn unwrap_local_call(&self) -> SchedLocalCall {
-        match &*self.args {
-            ArgsOrEnc::Args(args) => SchedLocalCall {
-                target: &self.target,
-                templates: &self.templates,
-                args,
-                tag: &self.tag,
-                yield_call: self.yield_call,
-            },
-            ArgsOrEnc::Encode(..) => panic!("Expected local call"),
-        }
-    }
+pub enum TimelineOperation {
+    EncodeBegin,
+    Submit,
+    Await,
 }
 
 /// A term (bottom level) of a scheduling expression
@@ -443,13 +407,21 @@ pub enum SchedTerm {
     },
     Call(Info, SchedFuncCall),
     Hole(Info),
+    TimelineOperation {
+        info: Info,
+        op: TimelineOperation,
+        arg: Box<SchedExpr>,
+        tag: Option<Tags>,
+    },
 }
 
 impl SchedTerm {
     #[must_use]
     pub const fn get_tags(&self) -> Option<&Tags> {
         match self {
-            Self::Lit { tag, .. } | Self::Var { tag, .. } => tag.as_ref(),
+            Self::Lit { tag, .. } | Self::Var { tag, .. } | Self::TimelineOperation { tag, .. } => {
+                tag.as_ref()
+            }
             Self::Call(_, call) => call.tag.as_ref(),
             Self::Hole(_) => None,
         }
@@ -462,13 +434,16 @@ pub type SchedExpr = NestedExpr<SchedTerm>;
 /// An encoded statement in the scheduling language
 /// Ex. `e.encode_copy[x <- y]` the `x <- y` is the encoded statement
 #[derive(Clone, Debug)]
-pub enum EncodedStmt {
-    Move {
-        info: Info,
-        lhs: Vec<(Name, Option<FlaggedType>)>,
-        rhs: SchedExpr,
-    },
-    // Invoke(Info, SchedFuncCall),
+pub struct EncodedStmt {
+    pub info: Info,
+    pub lhs: Vec<(Name, Option<FlaggedType>)>,
+    pub rhs: SchedExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
+pub enum EncodedCommand {
+    Copy,
+    Invoke,
 }
 
 /// Statements for the scheduling language
@@ -512,6 +487,13 @@ pub enum SchedStmt {
         block: Box<SchedStmt>,
         is_const: bool,
     },
+    Encode {
+        info: Info,
+        stmt: EncodedStmt,
+        encoder: Name,
+        cmd: EncodedCommand,
+        tag: Option<Tags>,
+    },
 }
 
 impl SchedStmt {
@@ -528,7 +510,8 @@ impl SchedStmt {
             | Self::Return(info, _)
             | Self::Hole(info)
             | Self::Call(info, _)
-            | Self::Seq { info, .. } => info,
+            | Self::Seq { info, .. }
+            | Self::Encode { info, .. } => info,
         }
     }
 }

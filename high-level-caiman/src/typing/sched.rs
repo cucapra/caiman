@@ -4,8 +4,8 @@ use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     parse::ast::{
-        Binop, DataType, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedLocalCall,
-        SchedStmt, SchedTerm, Uop,
+        Binop, DataType, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm,
+        Uop,
     },
 };
 use std::iter::once;
@@ -317,12 +317,11 @@ fn collect_assign_call(
     ctx: &Context,
     env: &mut DTypeEnv,
     dest: &[(String, Option<FullType>)],
-    call_info: &SchedLocalCall,
+    call_info: &SchedFuncCall,
     info: Info,
 ) -> Result<(), LocalError> {
     let mut arg_names = Vec::new();
-    // TODO: encoding
-    for arg in call_info.args {
+    for arg in &call_info.args {
         let arg_name = enum_cast!(
             SchedTerm::Var { name, .. },
             name,
@@ -333,7 +332,7 @@ fn collect_assign_call(
     let fn_name = enum_cast!(
         SchedTerm::Var { name, .. },
         name,
-        enum_cast!(SchedExpr::Term, call_info.target)
+        enum_cast!(SchedExpr::Term, &*call_info.target)
     );
     let sig = ctx
         .scheds
@@ -443,12 +442,11 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => collect_assign_var(dest, name, env, *info)?,
             SchedStmt::Decl {
                 lhs: dest,
-                expr:
-                    Some(SchedExpr::Term(SchedTerm::Call(_, call_info @ SchedFuncCall { args, .. }))),
+                expr: Some(SchedExpr::Term(SchedTerm::Call(_, call_info))),
                 info,
                 ..
-            } if args.is_args() => {
-                collect_assign_call(ctx, env, dest, &call_info.unwrap_local_call(), *info)?;
+            } => {
+                collect_assign_call(ctx, env, dest, call_info, *info)?;
             }
             SchedStmt::Assign {
                 lhs: SchedExpr::Term(SchedTerm::Var { name: dest, .. }),
@@ -482,8 +480,8 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
-            SchedStmt::Call(info, call_info @ SchedFuncCall { args, .. }) if args.is_args() => {
-                collect_assign_call(ctx, env, &[], &call_info.unwrap_local_call(), *info)?;
+            SchedStmt::Call(info, call_info) => {
+                collect_assign_call(ctx, env, &[], call_info, *info)?;
             }
             SchedStmt::Return(_, e) => {
                 assert_eq!(num_stmts, 0);
