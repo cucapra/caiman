@@ -498,6 +498,11 @@ impl Context {
                     .into_iter()
                     .enumerate()
                     .collect();
+                let ffi_type_map = ffi_type_table
+                    .drain(FFIType::Unknown)
+                    .into_iter()
+                    .enumerate()
+                    .collect();
                 let function_class_map = function_classes
                     .drain(FunctionClassId("_UNNAMED_CLASS_".to_string()))
                     .into_iter()
@@ -527,6 +532,7 @@ impl Context {
                 }
                 DebugInfo {
                     type_map,
+                    ffi_type_map,
                     function_class_map,
                     external_function_map,
                     funclet_map,

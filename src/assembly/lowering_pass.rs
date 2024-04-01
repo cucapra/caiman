@@ -85,6 +85,8 @@ pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
         ast::FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
             element_type: context.ffi_type_id(element_type.as_ref()),
         },
+        ast::FFIType::GpuFence => ffi::Type::GpuFence,
+        ast::FFIType::Unknown => unreachable!()
     }
 }
 

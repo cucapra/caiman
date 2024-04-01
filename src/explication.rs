@@ -4,8 +4,8 @@ mod explicator;
 mod explicator_macros;
 mod util;
 
-use crate::{debug_info::DebugInfo, ir};
 use crate::stable_vec::StableVec;
+use crate::{debug_info::DebugInfo, ir};
 use context::{InState, StaticContext};
 use serde_derive::{Deserialize, Serialize};
 
@@ -13,7 +13,7 @@ use self::explicator::{explicate_schedule_funclet, lower_spec_funclet};
 
 // Explication and frontend AST
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Hole<T> {
     Empty,
     Filled(T),
@@ -57,6 +57,19 @@ impl<T> From<Hole<T>> for Option<T> {
         match x {
             Hole::Filled(x) => Some(x),
             Hole::Empty => None,
+        }
+    }
+}
+
+impl<T> std::fmt::Display for Hole<T>
+where
+    T: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => write!(f, "Empty"),
+            // don't write "Filled" when it's filled
+            Self::Filled(arg0) => write!(f, "{}", arg0),
         }
     }
 }
@@ -111,7 +124,11 @@ pub fn explicate(
     // dbg!(&definition);
     // todo!();
     match definition {
-        crate::frontend::ExplicationDefinition { version, debug_info, program } => {
+        crate::frontend::ExplicationDefinition {
+            version,
+            debug_info,
+            program,
+        } => {
             let ir_program = explicate_program(program, &debug_info);
             crate::frontend::Definition {
                 version,

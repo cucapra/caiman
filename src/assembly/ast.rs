@@ -94,6 +94,9 @@ pub enum FFIType {
     GpuBufferAllocator,
     CpuBufferAllocator,
     CpuBufferRef(Box<FFIType>),
+    GpuFence,
+    // useful for debugging stuff
+    Unknown
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -201,6 +204,27 @@ macro_rules! make_parser_nodes {
 }
 
 with_operations!(make_parser_nodes);
+
+// macro_rules! map_display {
+//     ($arg:ident [$arg_type:ident] $self:ident) => {
+//     }
+// }
+
+macro_rules! node_display {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        impl std::fmt::Display for Node {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(Node::$name { $($arg,)* } => {
+                        f.debug_struct("Node")$(.field(&format!("{}", $arg_type), &self.$arg))*.finish()
+                    })*
+                }
+            }
+        }
+    }
+}
+
+with_operations!(node_display);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge {

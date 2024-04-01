@@ -1,5 +1,8 @@
+use crate::assembly;
 use crate::ir;
+use crate::rust_wgpu_backend::ffi;
 use itertools::Itertools;
+use paste::paste;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -17,6 +20,7 @@ pub struct DebugInfo {
     // The intention here is purely to recover error messages
     // This structure is decoupled from any one IR/AST
     pub type_map: HashMap<usize, String>,
+    pub ffi_type_map: HashMap<usize, assembly::ast::FFIType>,
     pub function_class_map: HashMap<usize, String>,
     pub external_function_map: HashMap<usize, String>,
     pub funclet_map: HashMap<usize, FuncletDebugMap>,
@@ -31,6 +35,13 @@ pub struct FuncletDebugMap {
 }
 
 impl DebugInfo {
+    pub fn ffi_typ(&self, index: &usize) -> String {
+        self.ffi_type_map
+            .get(index)
+            .as_ref()
+            .map(|f| format!("{:?}", f))
+            .unwrap_or(unknown(index))
+    }
     pub fn typ(&self, index: &usize) -> String {
         self.type_map.get(index).unwrap_or(&unknown(index)).clone()
     }
@@ -55,10 +66,14 @@ impl DebugInfo {
     pub fn quot(&self, funclet_index: &usize, quotient: &ir::Quotient) -> String {
         match self.funclet_map.get(funclet_index) {
             None => format!("{}.{}", unknown(funclet_index), unknown_quot(quotient)),
-            Some(f) => format!("{}.{}", &f.name, f.node_map
-                .get(quotient)
-                .unwrap_or(&unknown_quot(quotient))
-                .clone()),
+            Some(f) => format!(
+                "{}.{}",
+                &f.name,
+                f.node_map
+                    .get(quotient)
+                    .unwrap_or(&unknown_quot(quotient))
+                    .clone()
+            ),
         }
     }
     pub fn node(&self, funclet_index: &usize, node_index: usize) -> String {
@@ -88,3 +103,75 @@ impl DebugInfo {
         }
     }
 }
+
+macro_rules! recover_element {
+    ($arg:ident [$arg_type:ident] $self:ident $funclet:ident) => {
+        Some($arg.iter().map(|v| recover_element!(v $arg_type $self $funclet)).collect()).into()
+    };
+    ($arg:ident Immediate $self:ident $funclet:ident) => {
+        Some(format!("{:?}", $arg.clone())).into()
+    };
+    ($arg:ident Type $self:ident $funclet:ident) => {
+        $self.type_map.get($arg).map(|s| assembly::ast::TypeId::Local(s.to_string())).into()
+    };
+    ($arg:ident Index $self:ident $funclet:ident) => {
+        Some($arg.clone()).into()
+    };
+    ($arg:ident ExternalFunction $self:ident $funclet:ident) => {
+        $self.external_function_map.get(&$arg.0)
+        .map(|s| assembly::ast::ExternalFunctionId(s.to_string())).into()
+    };
+    ($arg:ident ValueFunction $self:ident $funclet:ident) => {
+        $self.function_class_map.get(&$arg).map(|s| assembly::ast::FunctionClassId(s.to_string())).into()
+    };
+    ($arg:ident Operation $self:ident $funclet:ident) => {
+        $self.funclet_map.get(&$funclet)
+        .and_then(|f| f.node_map.get(&ir::Quotient::Node { node_id: *$arg })
+        .map(|s| assembly::ast::NodeId(s.to_string()))).into()
+    };
+    ($arg:ident RemoteOperation $self:ident $funclet:ident) => {
+        $self.funclet_map.get(&$funclet)
+        .and_then(|f| Some(
+            assembly::ast::RemoteNodeId {
+                funclet: assembly::ast::MetaId(f.name.clone()),
+                node: Some(f.node_map.get(&$arg)
+                    .map(|s| assembly::ast::NodeId(s.to_string()))
+                    .into())
+        }) ).into()
+    };
+    ($arg:ident Place $self:ident $funclet:ident) => {
+        Some($arg.clone()).into()
+    };
+    ($arg:ident Funclet $self:ident $funclet:ident) => {
+        $self.funclet_map.get(&$arg).map(|f| assembly::ast::FuncletId(f.name.clone())).into()
+    };
+    ($arg:ident StorageType $self:ident $funclet:ident) => {
+        $self.ffi_type_map.get(&$arg.clone().0).map(|f| assembly::ast::TypeId::FFI(f.clone())).into()
+    };
+    ($arg:ident BufferFlags $self:ident $context:ident) => {
+        Some($arg.clone()).into()
+    };
+}
+
+macro_rules! setup_node_full {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        paste! {
+            /*
+             * Expands out the node with full debug information
+             */
+            impl DebugInfo {
+                pub fn node_full(&self, funclet_id: usize, node : &ir::Node) -> String {
+                    match node {
+                        $(ir::Node::$name { $($arg,)* } => {
+                            format!("{}", assembly::ast::Node::$name {
+                                $($arg : recover_element!($arg $arg_type self funclet_id),)*
+                            })
+                        }),*
+                    }
+                }
+            }
+        }
+    }
+}
+
+with_operations!(setup_node_full);
