@@ -386,7 +386,7 @@
                                             ),
                                         },
                                         args: [],
-                                        template: None,
+                                        templates: None,
                                     },
                                 ),
                             },

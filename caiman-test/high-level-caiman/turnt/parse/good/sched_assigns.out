@@ -57,7 +57,7 @@
                                 },
                                 base: Bool,
                                 flags: [
-                                    "storage",
+                                    Storage,
                                 ],
                                 settings: [],
                             },
@@ -104,7 +104,7 @@
                             I32,
                         ),
                         flags: [
-                            "storage",
+                            Storage,
                         ],
                         settings: [],
                     },

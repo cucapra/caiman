@@ -108,7 +108,7 @@
                                             },
                                         ),
                                     ],
-                                    template: None,
+                                    templates: None,
                                 },
                             ),
                             rhs: Term(

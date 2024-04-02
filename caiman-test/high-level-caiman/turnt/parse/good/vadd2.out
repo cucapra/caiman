@@ -331,7 +331,7 @@
                                         },
                                     ),
                                 ],
-                                template: None,
+                                templates: None,
                             },
                         ),
                     },
@@ -411,7 +411,7 @@
                                         },
                                     ),
                                 ],
-                                template: None,
+                                templates: None,
                             },
                         ),
                     },
@@ -746,7 +746,7 @@
                                                     },
                                                 ),
                                             ],
-                                            template: None,
+                                            templates: None,
                                         },
                                     ),
                                     Term(
@@ -793,11 +793,11 @@
                                                     },
                                                 ),
                                             ],
-                                            template: None,
+                                            templates: None,
                                         },
                                     ),
                                 ],
-                                template: None,
+                                templates: None,
                             },
                         ),
                     },
@@ -874,7 +874,7 @@
                                             },
                                         ),
                                     ],
-                                    template: None,
+                                    templates: None,
                                 },
                             ),
                             rhs: Term(
@@ -921,7 +921,7 @@
                                             },
                                         ),
                                     ],
-                                    template: None,
+                                    templates: None,
                                 },
                             ),
                         },
@@ -1027,7 +1027,7 @@
                                         ),
                                     },
                                     args: [],
-                                    template: None,
+                                    templates: None,
                                 },
                             ),
                             if_false: Binop {
@@ -1593,41 +1593,43 @@
                                 },
                             ),
                         ],
-                        template: Some(
-                            FlaggedType {
-                                info: Info {
-                                    start_ln_and_col: (
-                                        34,
-                                        16,
-                                    ),
-                                    end_ln_and_col: (
-                                        34,
-                                        24,
-                                    ),
-                                },
-                                base: Array(
-                                    Int(
-                                        I32,
-                                    ),
-                                    Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    34,
-                                                    22,
-                                                ),
-                                                end_ln_and_col: (
-                                                    34,
-                                                    23,
-                                                ),
+                        templates: Some(
+                            Type(
+                                FlaggedType {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            34,
+                                            16,
+                                        ),
+                                        end_ln_and_col: (
+                                            34,
+                                            24,
+                                        ),
+                                    },
+                                    base: Array(
+                                        Int(
+                                            I32,
+                                        ),
+                                        Term(
+                                            Var {
+                                                info: Info {
+                                                    start_ln_and_col: (
+                                                        34,
+                                                        22,
+                                                    ),
+                                                    end_ln_and_col: (
+                                                        34,
+                                                        23,
+                                                    ),
+                                                },
+                                                name: "N",
                                             },
-                                            name: "N",
-                                        },
+                                        ),
                                     ),
-                                ),
-                                flags: [],
-                                settings: [],
-                            },
+                                    flags: [],
+                                    settings: [],
+                                },
+                            ),
                         ),
                     },
                 ),
@@ -1693,7 +1695,7 @@
                                 },
                             ),
                         ],
-                        template: None,
+                        templates: None,
                     },
                 ),
             },

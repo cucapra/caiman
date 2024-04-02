@@ -1397,7 +1397,7 @@
                                             },
                                         ),
                                     ],
-                                    template: None,
+                                    templates: None,
                                 },
                             ),
                             guard: Binop {
@@ -1558,7 +1558,7 @@
                                             },
                                         },
                                     ],
-                                    template: None,
+                                    templates: None,
                                 },
                             ),
                         },

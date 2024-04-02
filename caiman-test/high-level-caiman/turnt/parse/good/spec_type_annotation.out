@@ -132,7 +132,7 @@
                                     },
                                 ),
                                 args: [],
-                                template: None,
+                                templates: None,
                             },
                         ),
                     },
@@ -181,41 +181,43 @@
                                     },
                                 ),
                                 args: [],
-                                template: Some(
-                                    FlaggedType {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                5,
-                                                16,
-                                            ),
-                                            end_ln_and_col: (
-                                                5,
-                                                24,
-                                            ),
-                                        },
-                                        base: Array(
-                                            Int(
-                                                I32,
-                                            ),
-                                            Term(
-                                                Var {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            5,
-                                                            22,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            5,
-                                                            23,
-                                                        ),
+                                templates: Some(
+                                    Type(
+                                        FlaggedType {
+                                            info: Info {
+                                                start_ln_and_col: (
+                                                    5,
+                                                    16,
+                                                ),
+                                                end_ln_and_col: (
+                                                    5,
+                                                    24,
+                                                ),
+                                            },
+                                            base: Array(
+                                                Int(
+                                                    I32,
+                                                ),
+                                                Term(
+                                                    Var {
+                                                        info: Info {
+                                                            start_ln_and_col: (
+                                                                5,
+                                                                22,
+                                                            ),
+                                                            end_ln_and_col: (
+                                                                5,
+                                                                23,
+                                                            ),
+                                                        },
+                                                        name: "N",
                                                     },
-                                                    name: "N",
-                                                },
+                                                ),
                                             ),
-                                        ),
-                                        flags: [],
-                                        settings: [],
-                                    },
+                                            flags: [],
+                                            settings: [],
+                                        },
+                                    ),
                                 ),
                             },
                         ),

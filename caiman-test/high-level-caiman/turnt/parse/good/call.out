@@ -96,7 +96,7 @@
                                         },
                                     ),
                                 ],
-                                template: None,
+                                templates: None,
                             },
                         ),
                     ),

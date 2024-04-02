@@ -26,7 +26,7 @@
                 I32,
             ),
             flags: [
-                "storage",
+                Storage,
             ],
             settings: [],
         },
@@ -64,7 +64,7 @@
                                     "gint",
                                 ),
                                 flags: [
-                                    "map_write",
+                                    MapWrite,
                                 ],
                                 settings: [],
                             },
@@ -131,12 +131,11 @@
                                     I64,
                                 ),
                                 flags: [
-                                    "map_read",
+                                    MapRead,
                                 ],
                                 settings: [
-                                    (
-                                        "alignment_bits",
-                                        "512",
+                                    AlignmentBits(
+                                        512,
                                     ),
                                 ],
                             },
@@ -193,8 +192,8 @@
                             I32,
                         ),
                         flags: [
-                            "storage",
-                            "map_write",
+                            Storage,
+                            MapWrite,
                         ],
                         settings: [],
                     },
@@ -240,7 +239,7 @@
                                             I32,
                                         ),
                                         flags: [
-                                            "map_read",
+                                            MapRead,
                                         ],
                                         settings: [],
                                     },

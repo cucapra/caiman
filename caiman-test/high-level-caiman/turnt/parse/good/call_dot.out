@@ -120,7 +120,7 @@
                                                     },
                                                 ),
                                             ],
-                                            template: None,
+                                            templates: None,
                                         },
                                     ),
                                     rhs: Term(
@@ -158,7 +158,7 @@
                                         },
                                     ),
                                 ],
-                                template: None,
+                                templates: None,
                             },
                         ),
                     ),
@@ -267,7 +267,7 @@
                                                             },
                                                         ),
                                                     ],
-                                                    template: None,
+                                                    templates: None,
                                                 },
                                             ),
                                             rhs: Term(
@@ -323,7 +323,7 @@
                                             },
                                         ),
                                     ],
-                                    template: None,
+                                    templates: None,
                                 },
                             ),
                             rhs: Term(
