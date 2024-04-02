@@ -17,7 +17,10 @@ use caiman::ir;
 
 use super::{
     data_type_to_storage_type,
-    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag},
+    sched_hir::{
+        DataMovement, FenceOp, Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator,
+        TripleTag,
+    },
     tuple_id,
 };
 
@@ -63,7 +66,7 @@ fn build_copy_cmd(
         }
     }
     let src = enum_cast!(SchedTerm::Var { name, .. }, name, src);
-    if f.is_var_or_ref(src) {
+    if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {
         asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalCopy {
@@ -246,6 +249,156 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
     )
 }
 
+/// Lowers a begin-encode operation into a caiman assembly command
+/// # Arguments
+/// * `device` - the device to encode on
+/// * `device_vars` - the names of the variables to encode
+/// * `encoder` - the name of the encoder to use
+/// * `tags` - the tags for the operation
+/// * `temp_id` - the next available temporary id
+/// * `f` - the funclet that contains the operation
+fn lower_begin_encode(
+    device: &str,
+    _device_vars: &[String],
+    encoder: &str,
+    tags: &TripleTag,
+    temp_id: usize,
+    f: &Funclet,
+) -> (CommandVec, usize) {
+    let place = match device {
+        "gpu" => ir::Place::Gpu,
+        "cpu" => ir::Place::Cpu,
+        _ => ir::Place::Local,
+    };
+    // TODO: proper device vars to support multiple encodings in a single function
+    // TODO: check if device variables should have reference semantics (as implemented here)
+    let mut cmds = vec![];
+    for (k, v) in f.get_flags() {
+        cmds.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(k.clone())),
+            node: asm::Node::AllocTemporary {
+                place: Hole::Filled(place),
+                buffer_flags: Hole::Filled(*v),
+                storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(k).unwrap())),
+            },
+        })));
+    }
+    cmds.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(encoder.to_string())),
+        node: asm::Node::BeginEncoding {
+            place: Hole::Filled(place),
+            event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+            encoded: Hole::Filled(
+                f.get_flags()
+                    .iter()
+                    .map(|(k, _)| Hole::Filled(asm::NodeId(k.clone())))
+                    .collect(),
+            ),
+            fences: Hole::Filled(vec![]),
+        },
+    })));
+    (cmds, temp_id)
+}
+
+/// Lowers a device copy operation into a caiman assembly command
+/// # Arguments
+/// * `dest` - the name of the variable to store the result in. Should be a device variable
+/// * `src` - the name of the variable to copy from. Should be a host variable
+/// * `dir` - the direction of the copy. Must be `HostToDevice` for now
+/// * `encoder` - the name of the encoder to use
+/// * `temp_id` - the next available temporary id
+fn lower_device_copy(
+    dest: &str,
+    src: &str,
+    dir: DataMovement,
+    encoder: &str,
+    temp_id: usize,
+) -> (CommandVec, usize) {
+    assert_eq!(dir, DataMovement::HostToDevice);
+    (
+        vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: None,
+            node: asm::Node::EncodeCopy {
+                encoder: Hole::Filled(asm::NodeId(encoder.to_string())),
+                input: Hole::Filled(asm::NodeId(src.to_string())),
+                output: Hole::Filled(asm::NodeId(dest.to_string())),
+            },
+        }))],
+        temp_id,
+    )
+}
+
+/// Lowers an encode-do operation into a caiman assembly command
+/// # Arguments
+/// * `dests` - the names of the variables to store the result in. These should be
+///            device variables
+/// * `func` - the function to call
+/// * `encoder` - the name of the encoder to use
+/// * `temp_id` - the next available temporary id
+fn lower_encode_do(
+    dests: &[String],
+    func: &HirFuncCall,
+    encoder: &str,
+    temp_id: usize,
+) -> (CommandVec, usize) {
+    let local_do = asm::Command::Node(asm::NamedNode {
+        name: None,
+        node: asm::Node::EncodeDoExternal {
+            operation: Hole::Filled(tag_to_remote_id(&func.tag.value)),
+            encoder: Hole::Filled(asm::NodeId(encoder.to_string())),
+            inputs: Hole::Filled(
+                func.args
+                    .iter()
+                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .collect(),
+            ),
+            outputs: Hole::Filled(
+                dests
+                    .iter()
+                    .map(|n| Hole::Filled(asm::NodeId(n.clone())))
+                    .collect(),
+            ),
+            external_function_id: Hole::Filled(asm::ExternalFunctionId(func.target.to_string())),
+        },
+    });
+    (vec![Hole::Filled(local_do)], temp_id)
+}
+
+/// Lowers a fence operation into a caiman assembly command
+/// # Arguments
+/// * `dest` - the name of the variable to store the result in. May be `None`
+/// * `op` - the type of fence operation
+/// * `src` - the name of the variable to synchronize on for a sync fence or the
+///          encoder to submit for a submit fence
+/// * `tags` - the tags for the fence
+/// * `temp_id` - the next available temporary id
+fn lower_fence_op(
+    dest: &Option<String>,
+    op: FenceOp,
+    src: &SchedTerm,
+    tags: &TripleTag,
+    temp_id: usize,
+) -> (CommandVec, usize) {
+    let src = enum_cast!(SchedTerm::Var { name, .. }, name, src).clone();
+    let local_do = match op {
+        FenceOp::Submit => asm::Command::Node(asm::NamedNode {
+            name: dest.as_ref().map(|x| asm::NodeId(x.clone())),
+            node: asm::Node::Submit {
+                encoder: Hole::Filled(asm::NodeId(src)),
+                event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+            },
+        }),
+        FenceOp::Sync => asm::Command::Node(asm::NamedNode {
+            name: None,
+            node: asm::Node::SyncFence {
+                fence: Hole::Filled(asm::NodeId(src)),
+                event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+            },
+        }),
+    };
+    (vec![Hole::Filled(local_do)], temp_id)
+}
+
 /// Lowers a scheduling statement into a caiman assembly command
 /// # Returns
 /// A tuple containing the commands that implement the statement
@@ -269,6 +422,33 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         } => lower_op(dests, &op.lower(), args, temp_id, f),
         x @ HirBody::Hole(_) => todo!("{x:?}"),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
+        HirBody::BeginEncoding {
+            device,
+            device_vars,
+            tags,
+            encoder,
+            ..
+        } => lower_begin_encode(device, device_vars, encoder, tags, temp_id, f),
+        HirBody::DeviceCopy {
+            dest,
+            src,
+            dir,
+            encoder,
+            ..
+        } => lower_device_copy(dest, src, *dir, encoder, temp_id),
+        HirBody::EncodeDo {
+            dests,
+            func,
+            encoder,
+            ..
+        } => lower_encode_do(dests, func, encoder, temp_id),
+        HirBody::FenceOp {
+            dest,
+            op,
+            src,
+            tags,
+            ..
+        } => lower_fence_op(dest, *op, src, tags, temp_id),
     }
 }
 

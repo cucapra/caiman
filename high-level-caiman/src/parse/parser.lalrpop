@@ -247,7 +247,7 @@ QuotRef: QuotientReference = {
 
 // Flagged type: base type with flags and settings
 FlaggedType: FlaggedType = {
-    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> => astf.flagged_type(<>)
+    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_type(<>)
 }
 
 // Flag or setting. A flag is a name with no value. A setting is a name with a value

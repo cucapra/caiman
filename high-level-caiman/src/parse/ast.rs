@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use caiman::ir;
+
 use crate::error::Info;
 
 pub type Name = String;
@@ -187,7 +189,7 @@ pub enum SpecTerm {
         info: Info,
         function: Box<SpecExpr>,
         args: Vec<SpecExpr>,
-        template: Option<FlaggedType>,
+        templates: Option<TemplateArgs>,
     },
 }
 
@@ -338,6 +340,73 @@ impl PartialEq for Tag {
 
 impl Eq for Tag {}
 
+/// WGPU flags that can be applied to a buffer
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+pub enum WGPUFlags {
+    Storage,
+    MapWrite,
+    MapRead,
+    CopySrc,
+    CopyDst,
+    Uniform,
+}
+
+impl TryFrom<&str> for WGPUFlags {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "storage" => Ok(Self::Storage),
+            "map_write" => Ok(Self::MapWrite),
+            "map_read" => Ok(Self::MapRead),
+            "copy_src" => Ok(Self::CopySrc),
+            "copy_dst" => Ok(Self::CopyDst),
+            "uniform" => Ok(Self::Uniform),
+            _ => Err(format!("Invalid WGPU flag: {value}")),
+        }
+    }
+}
+
+impl WGPUFlags {
+    /// Applies the flag to a buffer flags struct
+    pub fn apply_flag(self, flags: &mut ir::BufferFlags) {
+        match self {
+            Self::Storage => flags.storage = true,
+            Self::MapWrite => flags.map_write = true,
+            Self::MapRead => flags.map_read = true,
+            Self::CopySrc => flags.copy_src = true,
+            Self::CopyDst => flags.copy_dst = true,
+            Self::Uniform => flags.uniform = true,
+        }
+    }
+}
+
+/// WGPU settings that can be applied to a buffer. Settings
+/// are flags that can have values, such as `alignment_bits`
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+pub enum WGPUSettings {
+    AlignmentBits(usize),
+    ByteSize(usize),
+}
+
+impl WGPUSettings {
+    /// Converts a key-value pair to a WGPU setting
+    /// # Errors
+    /// Returns an error if the key is not a valid WGPU setting or if the value
+    /// cannot be parsed to the type the key expects
+    pub fn try_from_kv(key: &str, val: &str) -> Result<Self, String> {
+        match (key, val) {
+            ("alignment_bits", val) => Ok(Self::AlignmentBits(
+                val.parse::<usize>().map_err(|e| e.to_string())?,
+            )),
+            ("byte_size", val) => Ok(Self::ByteSize(
+                val.parse::<usize>().map_err(|e| e.to_string())?,
+            )),
+            (k, _) => Err(format!("Invalid WGPU setting: {k:?}")),
+        }
+    }
+}
+
 /// A flagged type is a base type parameterized by an optional set of WGPU
 /// flags and settings
 /// Ex. `i64<storage, map_write, alignment_bits=8>`
@@ -346,10 +415,10 @@ pub struct FlaggedType {
     pub info: Info,
     pub base: DataType,
     /// WGPU flags, can be empty
-    pub flags: Vec<String>,
+    pub flags: Vec<WGPUFlags>,
     /// WGPU settings, (flags that can have values, such as `alignment_bits`)
     /// can be empty
-    pub settings: Vec<(String, String)>,
+    pub settings: Vec<WGPUSettings>,
 }
 
 /// A full scheduling type:
@@ -385,7 +454,7 @@ pub struct SchedFuncCall {
 }
 
 /// A timeline operation that is also an expression
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Copy)]
 pub enum TimelineOperation {
     EncodeBegin,
     Submit,

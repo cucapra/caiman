@@ -168,7 +168,7 @@ impl TagAnalysis {
                     }
                 }
             }
-            HirBody::RefLoad { dest, src, .. } => {
+            HirBody::RefLoad { dest, src, .. } | HirBody::DeviceCopy { dest, src, .. } => {
                 let mut tag = self
                     .tags
                     .get(src)
@@ -218,6 +218,7 @@ impl TagAnalysis {
                 }
             }
             HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
+            HirBody::BeginEncoding { .. } | HirBody::EncodeDo { .. } | HirBody::FenceOp { .. } => {}
         }
     }
 }

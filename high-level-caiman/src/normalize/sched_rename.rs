@@ -183,13 +183,14 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
                         rename_expr_uses(&mut stmt.rhs, &cur_names);
                     }
                 };
-                for (name, _) in &mut stmt.lhs {
-                    *name = get_new_name(
-                        name,
-                        latest_names,
-                        encode_names.entry(encoder.clone()).or_default(),
-                    );
-                }
+                // TODO: handle renaming somehow
+                // for (name, _) in &mut stmt.lhs {
+                //     *name = get_new_name(
+                //         name,
+                //         latest_names,
+                //         encode_names.entry(encoder.clone()).or_default(),
+                //     );
+                // }
             }
         }
     }

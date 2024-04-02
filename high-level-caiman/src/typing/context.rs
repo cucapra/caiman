@@ -248,6 +248,9 @@ fn type_check_schedules(tl: &[TopLevel], mut ctx: Context) -> Result<Context, Lo
                     ));
                 }
             }
+            for (k, v) in env.flags {
+                sched_info.flags.insert(k, v);
+            }
         }
     }
     Ok(ctx)

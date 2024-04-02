@@ -300,29 +300,34 @@ impl ASTFactory {
 
     /// Constructs a flagged type from a data type and a list of flags/settings
     /// Flags/settings are optional
-    #[must_use]
-    pub fn flagged_type(&self, l: usize, t: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> FlaggedType {
+    /// # Errors
+    /// Returns an error if the flags/settings are invalid
+    pub fn flagged_type(&self, l: usize, t: DataType, flags: Option<Vec<(String, Option<String>)>>, r: usize) -> Result<FlaggedType, ParserError> {
         // are there a limited set of WGPU flags/setting we should check for?
-        match flags {
-            Some(flags) => FlaggedType {
+        Ok(match flags {
+            Some(flags) => {
+                let mut args = vec![];
+                let mut settings = vec![];
+                for (key, val) in flags {
+                    if let Some(val) = val {
+                        settings.push(WGPUSettings::try_from_kv(&key, &val).map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
+                    } else {
+                        args.push(key[..].try_into().map_err(|e| custom_parse_error!(self.info(l, r), "{e}"))?);
+                    }
+                }
+                FlaggedType {
                 info: self.info(l, r),
                 base: t,
-                flags: flags.iter().filter_map(|(k, v)| 
-                    if v.is_none() {
-                        Some(k.to_string())
-                    } else { None }
-                ).collect(),
-                settings: flags.iter().filter_map(|(k, v)| {
-                    v.as_ref().map(|v| (k.to_string(), v.to_string()))
-                }).collect(),
-            },
+                flags: args,
+                settings,
+            }},
             None => FlaggedType {
                 info: self.info(l, r),
                 base: t,
                 flags: Vec::new(),
                 settings: Vec::new(),
             }
-        }
+        })
     }
 
     #[must_use]
@@ -383,13 +388,10 @@ impl ASTFactory {
                 args,
                 tag,
                 yield_call: _,
-            }) if (templates.is_none() || matches!(templates, Some(TemplateArgs::Type(_)))) && tag.is_none() => {
+            }) if tag.is_none() => {
                 let target = Self::sched_to_spec_expr(*target)?;
                 let args = args.into_iter().map(Self::sched_to_spec_expr).collect::<Result<Vec<_>, _>>()?;
-                Ok(SpecTerm::Call { info, function: Box::new(target), args, template: templates.and_then(|t| match t {
-                    TemplateArgs::Type(t) => Some(t),
-                    TemplateArgs::Vals(_) => None,
-                }) })
+                Ok(SpecTerm::Call { info, function: Box::new(target), args, templates })
             },
             SchedTerm::TimelineOperation { info, .. } => Err(custom_parse_error!(info, "Cannot occur in this context")),
             SchedTerm::Call(info, ..) => Err(custom_parse_error!(info, 

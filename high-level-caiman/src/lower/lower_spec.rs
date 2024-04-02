@@ -43,7 +43,96 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
     }
 }
 
+/// Special encode begin function name
+const ENCODE_BEGIN: &str = "encode_begin";
+/// Special submit event function name
+const SUBMIT: &str = "submit_event";
+/// Special sync event function name
+const SYNC: &str = "sync_event";
+
+/// Lowers a call to the special `encode_begin` function into caiman assembly.
+fn lower_spec_encode_event(
+    tuple_id: &asm::NodeId,
+    args: Vec<NestedExpr<SpecTerm>>,
+    lhs: Vec<String>,
+) -> Vec<Hole<asm::Command>> {
+    assert!(!args.is_empty());
+    let mut res = vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+        node: asm::Node::EncodingEvent {
+            local_past: Hole::Filled(asm::NodeId(enum_cast!(
+                SpecTerm::Var { name, .. },
+                name,
+                enum_cast!(NestedExpr::Term, &args[0]).clone()
+            ))),
+            remote_local_pasts: Hole::Filled(
+                args.into_iter()
+                    .skip(1)
+                    .map(|x| {
+                        Hole::Filled(asm::NodeId(enum_cast!(
+                            SpecTerm::Var { name, .. },
+                            name,
+                            enum_cast!(NestedExpr::Term, x)
+                        )))
+                    })
+                    .collect(),
+            ),
+        },
+        name: Some(tuple_id.clone()),
+    }))];
+    for (i, lhs) in lhs.into_iter().enumerate() {
+        res.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(lhs)),
+            node: asm::Node::ExtractResult {
+                node_id: Hole::Filled(tuple_id.clone()),
+                index: Hole::Filled(i),
+            },
+        })));
+    }
+    res
+}
+
+/// Lowers a spec submission event into caiman assembly.
+fn lower_spec_submission_event(
+    args: &[NestedExpr<SpecTerm>],
+    tuple_id: asm::NodeId,
+) -> Vec<Hole<asm::Command>> {
+    assert_eq!(args.len(), 1);
+    vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+        name: Some(tuple_id),
+        node: asm::Node::SubmissionEvent {
+            local_past: Hole::Filled(asm::NodeId(enum_cast!(
+                SpecTerm::Var { name, .. },
+                name,
+                enum_cast!(SpecExpr::Term, &args[0]).clone()
+            ))),
+        },
+    }))]
+}
+/// Lowers a call to the special `sync` function into caiman assembly.
+fn lower_spec_sync_event(
+    args: &[NestedExpr<SpecTerm>],
+    tuple_id: asm::NodeId,
+) -> Vec<Hole<asm::Command>> {
+    assert_eq!(args.len(), 2);
+    vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+        name: Some(tuple_id),
+        node: asm::Node::SynchronizationEvent {
+            local_past: Hole::Filled(asm::NodeId(enum_cast!(
+                SpecTerm::Var { name, .. },
+                name,
+                enum_cast!(SpecExpr::Term, &args[0]).clone()
+            ))),
+            remote_local_past: Hole::Filled(asm::NodeId(enum_cast!(
+                SpecTerm::Var { name, .. },
+                name,
+                enum_cast!(SpecExpr::Term, &args[1]).clone()
+            ))),
+        },
+    }))]
+}
+
 /// Lowers a spec call into caiman assembly call and extract.
+/// Special functions are handled separately
 fn lower_spec_call(
     lhs: Vec<String>,
     function: &NestedExpr<SpecTerm>,
@@ -55,32 +144,39 @@ fn lower_spec_call(
         enum_cast!(NestedExpr::Term, function)
     )
     .clone();
-    let tuple_id = tuple_id(&lhs);
-    let mut r = vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
-        name: Some(asm::NodeId(tuple_id.clone())),
-        node: asm::Node::CallFunctionClass {
-            function_id: Hole::Filled(asm::FunctionClassId(function)),
-            arguments: Hole::Filled(
-                args.into_iter()
-                    .map(|x| {
-                        let t = enum_cast!(NestedExpr::Term, x);
-                        let v = enum_cast!(SpecTerm::Var { name, .. }, name, t);
-                        Hole::Filled(asm::NodeId(v))
-                    })
-                    .collect(),
-            ),
-        },
-    }))];
-    for (i, name) in lhs.into_iter().enumerate() {
-        r.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(name)),
-            node: asm::Node::ExtractResult {
-                node_id: Hole::Filled(asm::NodeId(tuple_id.clone())),
-                index: Hole::Filled(i),
-            },
-        })));
+    let tuple_id = asm::NodeId(tuple_id(&lhs));
+    match function.as_str() {
+        ENCODE_BEGIN => lower_spec_encode_event(&tuple_id, args, lhs),
+        SUBMIT => lower_spec_submission_event(&args, tuple_id),
+        SYNC => lower_spec_sync_event(&args, tuple_id),
+        _ => {
+            let mut r = vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(tuple_id.clone()),
+                node: asm::Node::CallFunctionClass {
+                    function_id: Hole::Filled(asm::FunctionClassId(function)),
+                    arguments: Hole::Filled(
+                        args.into_iter()
+                            .map(|x| {
+                                let t = enum_cast!(NestedExpr::Term, x);
+                                let v = enum_cast!(SpecTerm::Var { name, .. }, name, t);
+                                Hole::Filled(asm::NodeId(v))
+                            })
+                            .collect(),
+                    ),
+                },
+            }))];
+            for (i, name) in lhs.into_iter().enumerate() {
+                r.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(name)),
+                    node: asm::Node::ExtractResult {
+                        node_id: Hole::Filled(tuple_id.clone()),
+                        index: Hole::Filled(i),
+                    },
+                })));
+            }
+            r
+        }
     }
-    r
 }
 
 /// Converts a term to its node name, assuming that the term is a variable

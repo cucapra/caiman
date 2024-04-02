@@ -17,13 +17,13 @@ extern(gpu) simple(x: i32) -> out: i32 {
 
 val foo(x: i32) -> i32 {
     c : i32 :- 1
-    returns simple(x)
+    returns simple'<c, c, c>(x)
 }
 
 tmln foo_time(e: Event) -> Event {
-    enc1, enc2 :- encoding_event(e, [])
-    sub :- submission_event(enc2)
-    snc :- synchronization_event(enc1, sub)
+    enc1, enc2 :- encode_event(e, [])
+    sub :- submit_event(enc2)
+    snc :- sync_event(enc1, sub)
     returns snc
 }
 
@@ -31,7 +31,7 @@ fn foo_main(x: i32) -> i32
     impls foo, foo_time, foo_space
 {
     let c : i32'<storage> = 1 @ [node(val.c)-?];
-    let e = encode-begin gpu;
+    let e = encode-begin gpu; // { y_gpu: i32'<map_read> };
     encode e.copy[x_gpu <- x];
     encode e.call[y_gpu <- simple'<c, c, c>(x_gpu)];
     let f = submit e;

@@ -2,7 +2,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{Binop, DataType, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecType, Tag, Tags, Uop}
+    enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop}
 };
 use caiman::assembly::ast as asm;
 pub use caiman::assembly::ast::Hole;
@@ -137,6 +137,17 @@ impl From<TripleTag> for Option<Tags> {
     }
 }
 
+#[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
+pub enum DataMovement {
+    HostToDevice,
+}
+
+#[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]
+pub enum FenceOp {
+    Submit,
+    Sync
+}
+
 /// High-level caiman IR, excluding tail edges.
 ///
 /// This is an intermediary representation for going from the frontend to assembly.
@@ -147,7 +158,6 @@ impl From<TripleTag> for Option<Tags> {
 /// which enforces the flattening and splitting assumptions.
 #[derive(Debug)]
 pub enum HirBody {
-    // TODO: encodings
     /// A data movement into a mutable variable
     RefStore {
         info: Info,
@@ -160,6 +170,39 @@ pub enum HirBody {
         dest: Name,
         typ: DataType,
         src: Name,
+    },
+    /// Data movement from pointers across different memory spaces
+    /// Does not create a new variable, but rather moves the data
+    /// from one variable to another
+    DeviceCopy {
+        info: Info,
+        dest: Name,
+        src: Name,
+        dir: DataMovement,
+        encoder: Name,
+    },
+    /// Begin encoding for a device, definining all of `device_vars`
+    BeginEncoding {
+        info: Info,
+        device: String,
+        device_vars: Vec<Name>,
+        tags: TripleTag,
+        encoder: String,
+    },
+    /// Invoke a function on the device, storing the results into the dest
+    /// pointers
+    EncodeDo {
+        info: Info,
+        dests: Vec<Name>,
+        func: HirFuncCall,
+        encoder: Name,
+    },
+    FenceOp {
+        info: Info,
+        dest: Option<Name>,
+        op: FenceOp,
+        src: SchedTerm,
+        tags: TripleTag,
     },
     /// Declaration of an immutable variable
     ConstDecl {
@@ -241,7 +284,22 @@ pub struct HirFuncCall {
 impl HirFuncCall {
     pub fn new(value: SchedFuncCall) ->Self {
         if let NestedExpr::Term(SchedTerm::Var { name, .. }) = *value.target {
-            let args = value.args
+            let mut starting_args = vec![];
+            match value.templates {
+                Some(TemplateArgs::Vals(vs)) => {
+                    for v in vs {
+                        if let NestedExpr::Term(SpecTerm::Var { name, .. }) = v {
+                            starting_args.push(name);
+                        } else {
+                            panic!("Invalid template argument")
+                        }
+                    }
+                },
+                Some(TemplateArgs::Type(_)) => todo!(),
+                None => (),
+
+            }
+            let args = starting_args.into_iter().chain(value.args
                 .into_iter()
                 .map(|a| {
                     enum_cast!(
@@ -249,7 +307,7 @@ impl HirFuncCall {
                         name,
                         enum_cast!(SchedExpr::Term, a)
                     )
-                })
+                }))
                 .collect();
             return Self {
                 target: name,
@@ -508,7 +566,26 @@ impl HirBody {
                     rhs,
                 }
             }
-            SchedStmt::Encode {.. } => todo!(),
+            SchedStmt::Encode { info, stmt, encoder, cmd, .. } => {
+                // TODO: encoder scoping
+                match cmd {
+                    EncodedCommand::Copy => {
+                        assert_eq!(stmt.lhs.len(), 1);  
+                        Self::DeviceCopy { info, dest: stmt.lhs[0].0.clone(), 
+                            src: enum_cast!(SchedTerm::Var {name, ..}, name, enum_cast!(SchedExpr::Term, stmt.rhs)), 
+                            dir: DataMovement::HostToDevice, encoder }
+                    },
+                    EncodedCommand::Invoke => {
+                        let dests = stmt.lhs.into_iter().map(|(name, _)| name).collect();
+                        if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, stmt.rhs) {
+                            let func = HirFuncCall::new(call);
+                            Self::EncodeDo { info, dests, func, encoder}
+                        } else {
+                            panic!("Invalid encode")
+                        }
+                    },
+                }
+            }
             SchedStmt::Decl { .. } => panic!("Invalid declaration"),
             SchedStmt::Return(..)
             | SchedStmt::Block(..)
@@ -527,16 +604,37 @@ impl HirBody {
     fn from_const_decl(expr: SchedExpr, info: Info, lhs: Vec<(String, Option<FullType>)>) -> Self {
         match expr {
             SchedExpr::Term(rhs) => {
-                if let SchedTerm::Call(info, call) = rhs {
-                    let target = enum_cast!(SchedTerm::Var { name, ..}, name, enum_cast!(SchedExpr::Term, &*call.target));
-                    Self::Op {
-                        info,
-                        dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
-                        op: HirOp::FFI(target.clone(), OpType::External),
-                        args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
-                    }
-                } else {
-                    Self::ConstDecl {
+                match rhs {
+                    SchedTerm::Call(info, call) => {
+                        let target = enum_cast!(SchedTerm::Var { name, ..}, name, enum_cast!(SchedExpr::Term, &*call.target));
+                        Self::Op {
+                            info,
+                            dests: lhs.into_iter().map(|(name, tags)| (name, TripleTag::from_fulltype_opt(&tags))).collect(),
+                            op: HirOp::FFI(target.clone(), OpType::External),
+                            args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
+                        }
+                    },
+                    SchedTerm::TimelineOperation { info, op, arg, tag } => {
+                        match op {
+                            TimelineOperation::EncodeBegin => {
+                                let device = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *arg));
+                                Self::BeginEncoding {
+                                    info,
+                                    device,
+                                    device_vars: vec![],
+                                    tags: TripleTag::from_opt(&tag),
+                                    encoder: lhs[0].0.clone(),
+                                }
+                            },
+                            x @ (TimelineOperation::Submit | TimelineOperation::Await) => {
+                                Self::FenceOp { info, dest: Some(lhs[0].0.clone()), 
+                                    op: if x == TimelineOperation::Submit { FenceOp::Submit } else { FenceOp::Sync }, 
+                                    src: enum_cast!(SchedExpr::Term, *arg), 
+                                    tags: TripleTag::from_opt(&tag) }
+                            },
+                            }
+                        }
+                    _ => Self::ConstDecl {
                         info,
                         lhs: lhs[0].0.clone(),
                         lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
@@ -544,6 +642,16 @@ impl HirBody {
                     }
                 }
             },
+            SchedExpr::Binop { info, op: Binop::Dot, lhs: _, rhs: op_rhs} => {
+                assert_eq!(lhs.len(), 1);
+                // TODO: encoder scope naming
+                Self::ConstDecl {
+                    info,
+                    lhs: lhs[0].0.clone(),
+                    lhs_tag: TripleTag::from_fulltype_opt(&lhs[0].1),
+                    rhs: enum_cast!(SchedExpr::Term, op_rhs.as_ref().clone()),
+                }
+            }
             SchedExpr::Binop {
                 info,
                 op,
@@ -602,10 +710,25 @@ impl Hir for HirBody {
                     term_get_uses(arg, res);
                 }
             }
-            Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::Hole(..) => (),
+            Self::InAnnotation(..) | Self::OutAnnotation(..) | Self::Hole(..) | Self::BeginEncoding { .. } => (),
             Self::Phi {inputs, ..} => {
                 res.extend(inputs.iter().map(|(_, name)| name.clone()));
             }
+            Self::EncodeDo { dests, func, ..} => {
+                for arg in &func.args {
+                    res.insert(arg.clone());
+                }
+                for name in dests {
+                    res.insert(name.clone());
+                }
+            }
+            Self::DeviceCopy { dest, src, .. } => {
+                res.insert(dest.clone());
+                res.insert(src.clone());
+            }
+            Self::FenceOp { src, .. } => 
+                term_get_uses(src, res),
+            
         }
     }
 
@@ -613,19 +736,25 @@ impl Hir for HirBody {
         match self {
             Self::ConstDecl { lhs,  .. } | Self::VarDecl { lhs, .. } 
             | Self::RefLoad { dest: lhs, ..} | 
-            Self::Phi { dest: lhs, ..}=> {
+            Self::Phi { dest: lhs, ..} => {
                 Some(vec![lhs.clone()])
             }
             Self::Op { dests, ..} => {
                 Some(dests.iter().map(|(name, _)| name.clone()).collect())
             }
+            Self::BeginEncoding { device_vars, .. } => {
+                Some(device_vars.clone())
+            }
+            Self::FenceOp { dest, ..} => dest.as_ref().map(|d| vec![d.clone()]),
             // TODO: re-evaluate the move instruction.
             // Viewing it as a write to a reference, then it had no defs
             Self::Hole(..)
             // RefStore doesn't have a def bc it's a store to a reference
             | Self::RefStore { .. }
             | Self::InAnnotation(..)
-            | Self::OutAnnotation(..) => None,
+            | Self::OutAnnotation(..) 
+            | Self::DeviceCopy { .. }
+            | Self::EncodeDo {..} => None,
         }
     }
 
@@ -641,10 +770,22 @@ impl Hir for HirBody {
                     *name = f(name);
                 }
             }
+            Self::BeginEncoding { device_vars, ..  } => {
+                for name in device_vars {
+                    *name = f(name);
+                }
+            }
+            Self::FenceOp { dest, ..} => {
+                if let Some(dest) = dest {
+                    *dest = f(dest);
+                }
+            }
             Self::Hole(..)
             | Self::RefStore { .. }
             | Self::InAnnotation(..)
-            | Self::OutAnnotation(..) => (),
+            | Self::OutAnnotation(..) 
+            | Self::EncodeDo {..} 
+            | Self::DeviceCopy {..}=> (),
         }
     }
 
@@ -667,15 +808,27 @@ impl Hir for HirBody {
             }
             Self::Phi { .. } => {
                 // don't rename uses of phi nodes
-
             },
             Self::InAnnotation(_, annots) | Self::OutAnnotation(_, annots) => {
                 for (name, _) in annots {
                     *name = f(name, UseType::Read);
                 }
             }
+            Self::DeviceCopy { src, dest, ..} => {
+                *src = f(src, UseType::Read);
+                *dest = f(dest, UseType::Write);
+            }
+            Self::EncodeDo { func, ..} => {
+                for arg in &mut func.args {
+                    *arg = f(arg, UseType::Read);
+                }
+            }
+            Self::FenceOp { src, ..} => {
+                term_rename_uses(src, &mut |name| f(name, UseType::Read));
+            }
             Self::Hole(..)
-            | Self::VarDecl { rhs: None, .. } => (),
+            | Self::VarDecl { rhs: None, .. } 
+            | Self::BeginEncoding { .. } => (),
         }
     }
 }

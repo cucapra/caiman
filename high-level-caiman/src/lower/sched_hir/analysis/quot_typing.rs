@@ -519,7 +519,6 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     }
                     env
                 }
-                HirBody::Hole(_) => env,
                 HirBody::Op {
                     info,
                     dests,
@@ -535,6 +534,12 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     &mut selects,
                     env,
                 )?,
+                // TODO
+                HirBody::BeginEncoding { .. }
+                | HirBody::DeviceCopy { .. }
+                | HirBody::EncodeDo { .. }
+                | HirBody::FenceOp { .. }
+                | HirBody::Hole(..) => env,
             }
         }
         env = match &block.terminator {
@@ -670,7 +675,13 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                         fill_val_quotient(name, tag, env, block.id);
                     }
                 }
-                HirBody::Hole(_) | HirBody::RefLoad { .. } => {}
+                // TODO: typing for encodings
+                HirBody::Hole(_)
+                | HirBody::RefLoad { .. }
+                | HirBody::BeginEncoding { .. }
+                | HirBody::DeviceCopy { .. }
+                | HirBody::EncodeDo { .. }
+                | HirBody::FenceOp { .. } => {}
                 HirBody::Phi { dest, .. } => {
                     insertions.push((
                         idx,
