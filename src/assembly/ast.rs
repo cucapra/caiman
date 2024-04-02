@@ -105,6 +105,16 @@ pub enum TypeId {
     Local(String),
 }
 
+impl std::fmt::Display for TypeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TypeId::FFI(typ) => write!(f, "{:?}", typ),
+            TypeId::Local(s) => write!(f, "{}", s)
+        };
+        Ok(())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExternalGpuFunctionResourceBinding {
     pub group: usize,
@@ -122,6 +132,16 @@ pub struct RemoteNodeId {
     // we need an option of a hole
     // since None is explicitly different than ?
     pub node: Option<Hole<NodeId>>,
+}
+
+impl std::fmt::Display for RemoteNodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}.{}", self.funclet, match &self.node {
+            None => "None".to_string(),
+            Some(n) => format!("{}", n)
+        });
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -205,10 +225,23 @@ macro_rules! make_parser_nodes {
 
 with_operations!(make_parser_nodes);
 
-// macro_rules! map_display {
-//     ($arg:ident [$arg_type:ident] $self:ident) => {
-//     }
-// }
+macro_rules! map_display {
+    ($arg:ident [$arg_type:ident] $f:ident) => {
+        write!($f, "[");
+        match $arg {
+            Hole::Empty => { write!($f, "Empty"); }
+            Hole::Filled(v) => {
+                for item in v.iter() {
+                    map_display!(item $arg_type $f);
+                }
+            }
+        }
+        write!($f, "], ");
+    };
+    ($arg:ident $arg_type:ident $f:ident) => {
+        write!($f, "{}, ", $arg);
+    }
+}
 
 macro_rules! node_display {
     ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
@@ -216,7 +249,11 @@ macro_rules! node_display {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
                     $(Node::$name { $($arg,)* } => {
-                        f.debug_struct("Node")$(.field(&format!("{}", $arg_type), &self.$arg))*.finish()
+                        write!(f, "{} {{ ", stringify!($name));
+                        $(write!(f, "{} : ", stringify!($arg)); 
+                            map_display!($arg $arg_type f);)*
+                        write!(f, "}}");
+                        Ok(())
                     })*
                 }
             }
