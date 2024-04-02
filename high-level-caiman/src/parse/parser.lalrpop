@@ -276,8 +276,8 @@ SchedStmt: SchedStmt = {
     <BlockSeq> => <>,
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
-    <@L> "@in" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
-    <@L> "@out" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
+    <@L> "@in" "{" <CommaList<InOutArg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
+    <@L> "@out" "{" <CommaList<InOutArg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
     <@L> "encode" <Id> "." <Id> "[" <EncodedStmt> "]" <TagOp?> ";" <@R> =>? astf.sched_encode(<>),
 }
 
@@ -398,6 +398,14 @@ EncodedStmt: EncodedStmt = {
 
 // An argument is an identifier followed by a production of `T`
 Arg<T>: Arg<T> = { <i: Id> ":" <t: T> => (i, t) }
+
+// An identifier followed by a production of `T` or the keyword input/output
+// followed by a production of `T`
+InOutArg<T>: Arg<T> = {
+    "input" ":" <t: T> => (String::from("input"), t),
+    "output" ":" <t: T> => (String::from("output"), t),
+    <i: Id> ":" <t: T> => (i, t),
+}
 
 // argument with optional type
 MaybeArg<T> : (String, Option<T>) = {

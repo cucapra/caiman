@@ -64,7 +64,8 @@ use std::collections::HashMap;
 use regex::Regex;
 
 use crate::parse::ast::{
-    EncodedCommand, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm,
+    FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr, SpecLiteral,
+    SpecTerm, TemplateArgs,
 };
 
 /// Returns the internal name of a variable, given its original name and id.
@@ -96,10 +97,10 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
     stmts: T,
     latest_names: &mut HashMap<String, u64>,
     mut cur_names: HashMap<String, u64>,
-    mut encode_names: HashMap<String, HashMap<String, u64>>,
 ) {
     for s in stmts {
         match s {
+            //TODO: rename timeline operations
             SchedStmt::Decl { lhs, expr, .. } => {
                 if let Some(expr) = expr {
                     rename_expr_uses(expr, &cur_names);
@@ -119,33 +120,17 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
                 ..
             } => {
                 rename_expr_uses(guard, &cur_names);
-                rename_vars_rec(
-                    true_block.iter_mut(),
-                    latest_names,
-                    cur_names.clone(),
-                    encode_names.clone(),
-                );
-                rename_vars_rec(
-                    false_block.iter_mut(),
-                    latest_names,
-                    cur_names.clone(),
-                    encode_names.clone(),
-                );
+                rename_vars_rec(true_block.iter_mut(), latest_names, cur_names.clone());
+                rename_vars_rec(false_block.iter_mut(), latest_names, cur_names.clone());
             }
             SchedStmt::Block(_, stmts) => {
-                rename_vars_rec(
-                    stmts.iter_mut(),
-                    latest_names,
-                    cur_names.clone(),
-                    encode_names.clone(),
-                );
+                rename_vars_rec(stmts.iter_mut(), latest_names, cur_names.clone());
             }
             SchedStmt::Seq { dests, block, .. } => {
                 rename_vars_rec(
                     std::iter::once(&mut **block),
                     latest_names,
                     cur_names.clone(),
-                    encode_names.clone(),
                 );
                 for (dest, _) in dests {
                     *dest = get_new_name(dest, latest_names, &mut cur_names);
@@ -160,37 +145,27 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
             SchedStmt::Return(_, e) => {
                 rename_expr_uses(e, &cur_names);
             }
-            SchedStmt::Call(_, SchedFuncCall { args, .. }) => {
+            SchedStmt::Call(
+                _,
+                SchedFuncCall {
+                    args, templates, ..
+                },
+            ) => {
                 for arg in args {
                     rename_expr_uses(arg, &cur_names);
                 }
+                if let Some(TemplateArgs::Vals(vs)) = templates {
+                    for v in vs {
+                        rename_spec_expr_uses(v, &cur_names);
+                    }
+                }
             }
             SchedStmt::Hole(_) => {}
-            SchedStmt::Encode {
-                stmt, cmd, encoder, ..
-            } => {
-                // TODO: support encoder aliasing
-                match cmd {
-                    EncodedCommand::Copy => {
-                        rename_expr_uses(&mut stmt.rhs, &cur_names);
-                    }
-                    EncodedCommand::Invoke => {
-                        rename_expr_uses(
-                            &mut stmt.rhs,
-                            encode_names.entry(encoder.clone()).or_default(),
-                        );
-                        // Anything that's still not renamed, use the current names (local)
-                        rename_expr_uses(&mut stmt.rhs, &cur_names);
-                    }
-                };
-                // TODO: handle renaming somehow
-                // for (name, _) in &mut stmt.lhs {
-                //     *name = get_new_name(
-                //         name,
-                //         latest_names,
-                //         encode_names.entry(encoder.clone()).or_default(),
-                //     );
-                // }
+            SchedStmt::Encode { encoder, stmt, .. } => {
+                // TODO: support encoder aliasing?
+                rename_expr_uses(&mut stmt.rhs, &cur_names);
+                *encoder = get_cur_name(encoder, &cur_names);
+                // TODO: handle renaming dests for multiple encoders?
             }
         }
     }
@@ -204,11 +179,10 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
 pub fn rename_vars(stmts: &mut [SchedStmt], inputs: &mut [(String, Option<FullType>)]) {
     let mut latest_names = HashMap::new();
     let mut cur_names = HashMap::new();
-    let encode_names = HashMap::new();
     for (name, _) in inputs {
         *name = get_new_name(name, &mut latest_names, &mut cur_names);
     }
-    rename_vars_rec(stmts.iter_mut(), &mut latest_names, cur_names, encode_names);
+    rename_vars_rec(stmts.iter_mut(), &mut latest_names, cur_names);
 }
 
 /// Returns the next internal name of a variable, given its original name.
@@ -244,9 +218,19 @@ fn rename_expr_uses(expr: &mut SchedExpr, cur_names: &HashMap<String, u64>) {
         SchedExpr::Uop { expr, .. } => {
             rename_expr_uses(expr, cur_names);
         }
-        SchedExpr::Term(SchedTerm::Call(_, SchedFuncCall { args, .. })) => {
+        SchedExpr::Term(SchedTerm::Call(
+            _,
+            SchedFuncCall {
+                args, templates, ..
+            },
+        )) => {
             for arg in args {
                 rename_expr_uses(arg, cur_names);
+            }
+            if let Some(TemplateArgs::Vals(templates)) = templates {
+                for t in templates {
+                    rename_spec_expr_uses(t, cur_names);
+                }
             }
         }
         SchedExpr::Term(SchedTerm::Lit {
@@ -264,5 +248,36 @@ fn rename_expr_uses(expr: &mut SchedExpr, cur_names: &HashMap<String, u64>) {
         SchedExpr::Conditional { .. } => {
             panic!("Conditional expressions are not supported in schedules")
         }
+    }
+}
+
+/// Renames all uses of variables in a spec expression to their current internal names.
+fn rename_spec_expr_uses(expr: &mut SpecExpr, cur_names: &HashMap<String, u64>) {
+    match expr {
+        SpecExpr::Term(SpecTerm::Var { name, .. }) => {
+            *name = get_cur_name(name, cur_names);
+        }
+        SpecExpr::Binop { lhs, rhs, .. } => {
+            rename_spec_expr_uses(lhs, cur_names);
+            rename_spec_expr_uses(rhs, cur_names);
+        }
+        SpecExpr::Uop { expr, .. } => {
+            rename_spec_expr_uses(expr, cur_names);
+        }
+        SpecExpr::Term(SpecTerm::Lit {
+            lit: SpecLiteral::Tuple(e) | SpecLiteral::Array(e),
+            ..
+        }) => {
+            for e in e {
+                rename_spec_expr_uses(e, cur_names);
+            }
+        }
+        SpecExpr::Conditional { .. } => {
+            panic!("Conditional expressions are not supported in templates")
+        }
+        SpecExpr::Term(SpecTerm::Call { .. }) => {
+            panic!("Function calls are not supported in templates")
+        }
+        SpecExpr::Term(SpecTerm::Lit { .. }) => (),
     }
 }

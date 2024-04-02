@@ -291,7 +291,7 @@ impl HirFuncCall {
                         if let NestedExpr::Term(SpecTerm::Var { name, .. }) = v {
                             starting_args.push(name);
                         } else {
-                            panic!("Invalid template argument")
+                            panic!("Invalid template argument {v:?}")
                         }
                     }
                 },
@@ -312,13 +312,13 @@ impl HirFuncCall {
             return Self {
                 target: name,
                 args,
-                tag: Self::to_tuple_tag(TripleTag::from_opt(&value.tag)),
+                tag: Self::to_val_tuple_tag(TripleTag::from_opt(&value.tag)),
             };
         }
         panic!("Invalid internal function call")
     }
 
-    fn to_tuple_tag(mut tag: TripleTag) -> TripleTag {
+    fn to_val_tuple_tag(mut tag: TripleTag) -> TripleTag {
         if let Some(val) = tag.value.quot_var.spec_var.as_mut() {
             *val = tuple_id(&[val.clone()]);
         }
@@ -600,6 +600,15 @@ impl HirBody {
         }
     }
 
+    /// Converts a tag into a timeline tag, setting the timeline to the tuple id of the
+    /// existing timeline variable if it exists.
+    fn to_tmln_tuple_tag(mut tag: TripleTag) -> TripleTag {
+        if let Some(val) = tag.timeline.quot_var.spec_var.as_mut() {
+            *val = tuple_id(&[val.clone()]);
+        }
+        tag
+    }
+
     /// Constructs a new `HirBody` from a constant declaration.
     fn from_const_decl(expr: SchedExpr, info: Info, lhs: Vec<(String, Option<FullType>)>) -> Self {
         match expr {
@@ -622,7 +631,7 @@ impl HirBody {
                                     info,
                                     device,
                                     device_vars: vec![],
-                                    tags: TripleTag::from_opt(&tag),
+                                    tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
                                     encoder: lhs[0].0.clone(),
                                 }
                             },
@@ -714,17 +723,19 @@ impl Hir for HirBody {
             Self::Phi {inputs, ..} => {
                 res.extend(inputs.iter().map(|(_, name)| name.clone()));
             }
-            Self::EncodeDo { dests, func, ..} => {
+            Self::EncodeDo { dests, func, encoder, ..} => {
                 for arg in &func.args {
                     res.insert(arg.clone());
                 }
                 for name in dests {
                     res.insert(name.clone());
                 }
+                res.insert(encoder.clone());
             }
-            Self::DeviceCopy { dest, src, .. } => {
+            Self::DeviceCopy { dest, src, encoder, .. } => {
                 res.insert(dest.clone());
                 res.insert(src.clone());
+                res.insert(encoder.clone());
             }
             Self::FenceOp { src, .. } => 
                 term_get_uses(src, res),
@@ -742,8 +753,11 @@ impl Hir for HirBody {
             Self::Op { dests, ..} => {
                 Some(dests.iter().map(|(name, _)| name.clone()).collect())
             }
-            Self::BeginEncoding { device_vars, .. } => {
-                Some(device_vars.clone())
+            Self::BeginEncoding { device_vars, encoder, .. } => {
+                let mut res = device_vars.clone();
+                res.push(encoder.clone());
+                Some(res)
+                
             }
             Self::FenceOp { dest, ..} => dest.as_ref().map(|d| vec![d.clone()]),
             // TODO: re-evaluate the move instruction.
@@ -770,10 +784,11 @@ impl Hir for HirBody {
                     *name = f(name);
                 }
             }
-            Self::BeginEncoding { device_vars, ..  } => {
+            Self::BeginEncoding { device_vars, encoder, ..  } => {
                 for name in device_vars {
                     *name = f(name);
                 }
+                *encoder = f(encoder);
             }
             Self::FenceOp { dest, ..} => {
                 if let Some(dest) = dest {
@@ -814,14 +829,16 @@ impl Hir for HirBody {
                     *name = f(name, UseType::Read);
                 }
             }
-            Self::DeviceCopy { src, dest, ..} => {
+            Self::DeviceCopy { src, dest, encoder, ..} => {
                 *src = f(src, UseType::Read);
                 *dest = f(dest, UseType::Write);
+                *encoder = f(encoder, UseType::Read);
             }
-            Self::EncodeDo { func, ..} => {
+            Self::EncodeDo { func, encoder, ..} => {
                 for arg in &mut func.args {
                     *arg = f(arg, UseType::Read);
                 }
+                *encoder = f(encoder, UseType::Read);
             }
             Self::FenceOp { src, ..} => {
                 term_rename_uses(src, &mut |name| f(name, UseType::Read));

@@ -729,6 +729,12 @@ impl ClassMembers {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ImplicitTags {
+    pub input: Option<Tag>,
+    pub output: Option<Tag>,
+}
+
 /// A top level statement in the source language
 #[derive(Clone, Debug)]
 pub enum TopLevel {

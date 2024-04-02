@@ -26,8 +26,8 @@ pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
     map_write: true,
     storage: false,
     uniform: false,
-    copy_dst: false,
-    copy_src: false,
+    copy_dst: true,
+    copy_src: true,
 };
 
 /// A typing environement for deducing quotients.

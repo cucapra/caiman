@@ -576,7 +576,7 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
 }
 
 fn collect_encode(
-    ctx: &Context,
+    _ctx: &Context,
     env: &mut DTypeEnv,
     stmt: &EncodedStmt,
     cmd: EncodedCommand,
@@ -595,21 +595,23 @@ fn collect_encode(
             Ok(())
         }
         EncodedCommand::Invoke => {
-            if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
-                collect_assign_call(
-                    ctx,
-                    env,
-                    &stmt
-                        .lhs
-                        .iter()
-                        .map(|(x, _)| (x.clone(), None))
-                        .collect::<Vec<_>>(),
-                    call,
-                    *info,
-                )
-            } else {
-                unreachable!();
-            }
+            // TODO: typing encode-do
+            // if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
+            //     collect_assign_call(
+            //         ctx,
+            //         env,
+            //         &stmt
+            //             .lhs
+            //             .iter()
+            //             .map(|(x, _)| (x.clone(), None))
+            //             .collect::<Vec<_>>(),
+            //         call,
+            //         *info,
+            //     )
+            // } else {
+            //     unreachable!();
+            // }
+            Ok(())
         }
     }
 }

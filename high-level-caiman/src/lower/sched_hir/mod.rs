@@ -262,7 +262,7 @@ impl<'a> Funclet<'a> {
     }
 
     /// Gets the input tag of the specified variable, handling input overrides
-    fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
+    pub fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
         let ovr = self
             .parent
             .type_info

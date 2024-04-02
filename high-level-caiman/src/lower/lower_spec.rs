@@ -3,7 +3,7 @@ use crate::{
     lower::IN_STEM,
     parse::ast::{
         Binop, ClassMembers, DataType, NestedExpr, SpecExpr, SpecLiteral, SpecStmt, SpecTerm,
-        TopLevel,
+        TemplateArgs, TopLevel,
     },
     typing::{Context, SpecInfo},
 };
@@ -44,7 +44,7 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
 }
 
 /// Special encode begin function name
-const ENCODE_BEGIN: &str = "encode_begin";
+const ENCODE_BEGIN: &str = "encode_event";
 /// Special submit event function name
 const SUBMIT: &str = "submit_event";
 /// Special sync event function name
@@ -52,10 +52,10 @@ const SYNC: &str = "sync_event";
 
 /// Lowers a call to the special `encode_begin` function into caiman assembly.
 fn lower_spec_encode_event(
-    tuple_id: &asm::NodeId,
     args: Vec<NestedExpr<SpecTerm>>,
     lhs: Vec<String>,
 ) -> Vec<Hole<asm::Command>> {
+    let tuple_id = asm::NodeId(tuple_id(&lhs));
     assert!(!args.is_empty());
     let mut res = vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
         node: asm::Node::EncodingEvent {
@@ -94,11 +94,12 @@ fn lower_spec_encode_event(
 /// Lowers a spec submission event into caiman assembly.
 fn lower_spec_submission_event(
     args: &[NestedExpr<SpecTerm>],
-    tuple_id: asm::NodeId,
+    dests: &[String],
 ) -> Vec<Hole<asm::Command>> {
     assert_eq!(args.len(), 1);
+    assert_eq!(dests.len(), 1);
     vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
-        name: Some(tuple_id),
+        name: Some(asm::NodeId(dests[0].clone())),
         node: asm::Node::SubmissionEvent {
             local_past: Hole::Filled(asm::NodeId(enum_cast!(
                 SpecTerm::Var { name, .. },
@@ -111,11 +112,12 @@ fn lower_spec_submission_event(
 /// Lowers a call to the special `sync` function into caiman assembly.
 fn lower_spec_sync_event(
     args: &[NestedExpr<SpecTerm>],
-    tuple_id: asm::NodeId,
+    dests: &[String],
 ) -> Vec<Hole<asm::Command>> {
     assert_eq!(args.len(), 2);
+    assert_eq!(dests.len(), 1);
     vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
-        name: Some(tuple_id),
+        name: Some(asm::NodeId(dests[0].clone())),
         node: asm::Node::SynchronizationEvent {
             local_past: Hole::Filled(asm::NodeId(enum_cast!(
                 SpecTerm::Var { name, .. },
@@ -136,7 +138,8 @@ fn lower_spec_sync_event(
 fn lower_spec_call(
     lhs: Vec<String>,
     function: &NestedExpr<SpecTerm>,
-    args: Vec<NestedExpr<SpecTerm>>,
+    mut args: Vec<NestedExpr<SpecTerm>>,
+    templates: Option<TemplateArgs>,
 ) -> Vec<asm::Hole<asm::Command>> {
     let function = enum_cast!(
         SpecTerm::Var { name, .. },
@@ -144,12 +147,16 @@ fn lower_spec_call(
         enum_cast!(NestedExpr::Term, function)
     )
     .clone();
-    let tuple_id = asm::NodeId(tuple_id(&lhs));
+    if let Some(TemplateArgs::Vals(mut vs)) = templates {
+        vs.append(&mut args);
+        args = vs;
+    }
     match function.as_str() {
-        ENCODE_BEGIN => lower_spec_encode_event(&tuple_id, args, lhs),
-        SUBMIT => lower_spec_submission_event(&args, tuple_id),
-        SYNC => lower_spec_sync_event(&args, tuple_id),
+        ENCODE_BEGIN => lower_spec_encode_event(args, lhs),
+        SUBMIT => lower_spec_submission_event(&args, &lhs),
+        SYNC => lower_spec_sync_event(&args, &lhs),
         _ => {
+            let tuple_id = asm::NodeId(tuple_id(&lhs));
             let mut r = vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
                 name: Some(tuple_id.clone()),
                 node: asm::Node::CallFunctionClass {
@@ -258,9 +265,12 @@ fn lower_spec_assign(
                 },
             }))]
         }
-        NestedExpr::Term(SpecTerm::Call { function, args, .. }) => {
-            lower_spec_call(lhs, &function, args)
-        }
+        NestedExpr::Term(SpecTerm::Call {
+            function,
+            args,
+            templates,
+            ..
+        }) => lower_spec_call(lhs, &function, args, templates),
         NestedExpr::Term(t) => {
             assert_eq!(lhs.len(), 1);
             let node = lower_spec_term(t);
