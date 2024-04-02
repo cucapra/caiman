@@ -28,7 +28,7 @@ pub fn check_program(
             let node_error_contextualizer = |writer: &mut dyn std::fmt::Write| {
                 write!(
                     writer,
-                    "While type checking node {}: {:?}",
+                    "While type checking node {}: {}",
                     debug_info.node(&funclet_id, current_node_id),
                     debug_info.node_full(funclet_id, node)
                 )

@@ -227,19 +227,20 @@ with_operations!(make_parser_nodes);
 
 macro_rules! map_display {
     ($arg:ident [$arg_type:ident] $f:ident) => {
-        write!($f, "[");
         match $arg {
             Hole::Empty => { write!($f, "Empty"); }
             Hole::Filled(v) => {
+                write!($f, "[");
                 for item in v.iter() {
                     map_display!(item $arg_type $f);
+                    write!($f, ", ");
                 }
+                write!($f, "]");
             }
         }
-        write!($f, "], ");
     };
     ($arg:ident $arg_type:ident $f:ident) => {
-        write!($f, "{}, ", $arg);
+        write!($f, "{}", $arg);
     }
 }
 
@@ -249,10 +250,11 @@ macro_rules! node_display {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self {
                     $(Node::$name { $($arg,)* } => {
-                        write!(f, "{} {{ ", stringify!($name));
-                        $(write!(f, "{} : ", stringify!($arg)); 
-                            map_display!($arg $arg_type f);)*
-                        write!(f, "}}");
+                        writeln!(f, "{} {{ ", stringify!($name));
+                        $(write!(f, "\t{} : ", stringify!($arg)); 
+                            map_display!($arg $arg_type f);
+                            writeln!(f, "");)*
+                        writeln!(f, "}}");
                         Ok(())
                     })*
                 }
