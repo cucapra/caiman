@@ -46,7 +46,7 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     %y = read-ref i64 %y_loc;
     local-do-external %add $val.%n1_t(%x, %y) -> %n1_loc;
     %n1 = read-ref i64 %n1_loc;
-    local-do-external %add $val.%n1_t(%x, %n1) -> %n2_loc;
+    local-do-external %add $val.%n2_t(%x, %n1) -> %n2_loc;
     %n2 = read-ref i64 %n2_loc;
     local-do-external %add $val.%res_t(%n1, %n2) -> %res_loc;
     
