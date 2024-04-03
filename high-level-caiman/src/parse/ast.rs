@@ -481,6 +481,7 @@ pub enum SchedTerm {
         op: TimelineOperation,
         arg: Box<SchedExpr>,
         tag: Option<Tags>,
+        extra_args: Vec<String>,
     },
 }
 

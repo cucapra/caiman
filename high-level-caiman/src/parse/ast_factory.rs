@@ -510,15 +510,17 @@ impl ASTFactory {
     struct_variant_factory!(sched_var(name: Name, tag: Option<Tags>) -> SchedTerm:SchedTerm::Var);
     tuple_variant_factory!(sched_hole_expr() -> SchedTerm:SchedTerm::Hole);
     struct_variant_factory!(sched_submit(tag: Option<Tags>, e: SchedExpr) -> 
-        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag });
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Submit, arg: Box::new(e), tag: tag, extra_args: vec![] });
     struct_variant_factory!(sched_await(tag: Option<Tags>, e: SchedExpr) -> 
-        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag });
-    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, device: Name) ->
+        SchedTerm:SchedTerm::TimelineOperation { op: TimelineOperation::Await, arg: Box::new(e), tag: tag, extra_args: vec![] });
+    struct_variant_factory!(sched_begin_encode(tag: Option<Tags>, captures: Option<Vec<String>>, device: Name) ->
         SchedTerm:SchedTerm::TimelineOperation { 
             op: TimelineOperation::EncodeBegin, 
             arg: Box::new(SchedExpr::Term(
                 SchedTerm::Var{name: device, info: Info::default(), tag: None})),
-         tag: tag });
+            extra_args: captures.unwrap_or_default(),
+            tag: tag 
+        });
 
 
     // scheduling function calls:

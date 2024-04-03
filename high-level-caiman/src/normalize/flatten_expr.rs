@@ -540,7 +540,13 @@ fn flatten_sched_term(
                 }),
             )
         }
-        SchedTerm::TimelineOperation { info, op, arg, tag } => {
+        SchedTerm::TimelineOperation {
+            info,
+            op,
+            arg,
+            tag,
+            extra_args,
+        } => {
             let (instrs, temp_num, new_arg) = flatten_rec(
                 *arg,
                 &build_sched_var_factory(info),
@@ -556,6 +562,7 @@ fn flatten_sched_term(
                     op,
                     arg: Box::new(new_arg),
                     tag,
+                    extra_args,
                 }),
             )
         }

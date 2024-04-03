@@ -351,7 +351,7 @@ SchedTerm: SchedTerm = {
     <@L> <SchedCall> <@R> => astf.sched_call_expr(<>),
     <@L> "submit" <TagOp?> <Atom<Literal>> <@R> => astf.sched_submit(<>),
     <@L> "await" <TagOp?> <Atom<Literal>> <@R> => astf.sched_await(<>),
-    <@L> "encode-begin" <TagOp?> <Id> <@R> => astf.sched_begin_encode(<>),
+    <@L> "encode-begin" <TagOp?> <("{" <CommaList<Id>> "}")?> <Id> <@R> => astf.sched_begin_encode(<>),
 }
 
 #[inline]

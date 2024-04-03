@@ -623,14 +623,14 @@ impl HirBody {
                             args: call.args.iter().map(|x| enum_cast!(SchedExpr::Term, x)).cloned().collect(),
                         }
                     },
-                    SchedTerm::TimelineOperation { info, op, arg, tag } => {
+                    SchedTerm::TimelineOperation { info, op, arg, tag, extra_args } => {
                         match op {
                             TimelineOperation::EncodeBegin => {
                                 let device = enum_cast!(SchedTerm::Var { name, .. }, name, enum_cast!(SchedExpr::Term, *arg));
                                 Self::BeginEncoding {
                                     info,
                                     device,
-                                    device_vars: vec![],
+                                    device_vars: extra_args,
                                     tags: Self::to_tmln_tuple_tag(TripleTag::from_opt(&tag)),
                                     encoder: lhs[0].0.clone(),
                                 }

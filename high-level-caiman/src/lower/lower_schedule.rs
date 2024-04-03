@@ -262,7 +262,7 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
 /// * `f` - the funclet that contains the operation
 fn lower_begin_encode(
     device: &str,
-    _device_vars: &[String],
+    device_vars: &[String],
     encoder: &str,
     tags: &TripleTag,
     temp_id: usize,
@@ -276,13 +276,13 @@ fn lower_begin_encode(
     // TODO: proper device vars to support multiple encodings in a single function
     // TODO: check if device variables should have reference semantics (as implemented here)
     let mut cmds = vec![];
-    for (k, v) in f.get_flags() {
+    for var in device_vars {
         cmds.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
-            name: Some(asm::NodeId(k.clone())),
+            name: Some(asm::NodeId(var.clone())),
             node: asm::Node::AllocTemporary {
                 place: Hole::Filled(place),
-                buffer_flags: Hole::Filled(*v),
-                storage_type: Hole::Filled(data_type_to_storage_type(f.get_dtype(k).unwrap())),
+                buffer_flags: Hole::Filled(f.get_flags()[var]),
+                storage_type: Hole::Filled(data_type_to_storage_type(f.get_dtype(var).unwrap())),
             },
         })));
     }
@@ -292,9 +292,9 @@ fn lower_begin_encode(
             place: Hole::Filled(place),
             event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
             encoded: Hole::Filled(
-                f.get_flags()
+                device_vars
                     .iter()
-                    .map(|(k, _)| Hole::Filled(asm::NodeId(k.clone())))
+                    .map(|k| Hole::Filled(asm::NodeId(k.clone())))
                     .collect(),
             ),
             fences: Hole::Filled(vec![]),
