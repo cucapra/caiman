@@ -110,7 +110,7 @@ macro_rules! make_op_codes {
 with_operations!(make_op_codes);
 
 #[derive(Debug, Clone)]
-struct ScheduleScopeData {
+pub struct ScheduleScopeData {
     // structure to manage the explication information for the current scope
     // the rule is more-to-less specific, then go up to the next scope out
 
