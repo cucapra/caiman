@@ -5689,7 +5689,7 @@
                                 ),
                                 end_ln_and_col: (
                                     138,
-                                    50,
+                                    57,
                                 ),
                             },
                             stmt: EncodedStmt {
@@ -5735,11 +5735,7 @@
                                         ),
                                         end_ln_and_col: (
                                             138,
-<<<<<<< HEAD
-                                            15,
-=======
                                             55,
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                         ),
                                     },
                                     op: Index,
@@ -5748,100 +5744,6 @@
                                             info: Info {
                                                 start_ln_and_col: (
                                                     138,
-<<<<<<< HEAD
-                                                    9,
-                                                ),
-                                                end_ln_and_col: (
-                                                    138,
-                                                    10,
-                                                ),
-                                            },
-                                            name: "e",
-                                            tag: None,
-                                        },
-                                    ),
-                                    rhs: Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    138,
-                                                    11,
-                                                ),
-                                                end_ln_and_col: (
-                                                    138,
-                                                    15,
-                                                ),
-                                            },
-                                            name: "copy",
-                                            tag: None,
-                                        },
-                                    ),
-                                },
-                                templates: None,
-                                args: Encode(
-                                    Move {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                138,
-                                                16,
-                                            ),
-                                            end_ln_and_col: (
-                                                138,
-                                                48,
-                                            ),
-                                        },
-                                        lhs: [
-                                            (
-                                                "slice",
-                                                Some(
-                                                    FlaggedType {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                138,
-                                                                23,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                138,
-                                                                27,
-                                                            ),
-                                                        },
-                                                        base: UserDefined(
-                                                            "gbuf",
-                                                        ),
-                                                        flags: [],
-                                                        settings: [],
-                                                    },
-                                                ),
-                                            ),
-                                        ],
-                                        rhs: Binop {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    138,
-                                                    31,
-                                                ),
-                                                end_ln_and_col: (
-                                                    138,
-                                                    48,
-                                                ),
-                                            },
-                                            op: Index,
-                                            lhs: Term(
-                                                Var {
-                                                    info: Info {
-                                                        start_ln_and_col: (
-                                                            138,
-                                                            31,
-                                                        ),
-                                                        end_ln_and_col: (
-                                                            138,
-                                                            34,
-                                                        ),
-                                                    },
-                                                    name: "pts",
-                                                    tag: None,
-                                                },
-=======
                                                     38,
                                                 ),
                                                 end_ln_and_col: (
@@ -5858,7 +5760,6 @@
                                             start_ln_and_col: (
                                                 138,
                                                 42,
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                             ),
                                             end_ln_and_col: (
                                                 138,
@@ -5871,48 +5772,11 @@
                                                 info: Info {
                                                     start_ln_and_col: (
                                                         138,
-                                                        35,
+                                                        42,
                                                     ),
                                                     end_ln_and_col: (
                                                         138,
                                                         47,
-<<<<<<< HEAD
-                                                    ),
-                                                },
-                                                op: Range,
-                                                lhs: Term(
-                                                    Var {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                138,
-                                                                35,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                138,
-                                                                40,
-                                                            ),
-                                                        },
-                                                        name: "start",
-                                                        tag: None,
-                                                    },
-                                                ),
-                                                rhs: Term(
-                                                    Var {
-                                                        info: Info {
-                                                            start_ln_and_col: (
-                                                                138,
-                                                                44,
-                                                            ),
-                                                            end_ln_and_col: (
-                                                                138,
-                                                                47,
-                                                            ),
-                                                        },
-                                                        name: "end",
-                                                        tag: None,
-                                                    },
-                                                ),
-=======
                                                     ),
                                                 },
                                                 name: "start",
@@ -5933,7 +5797,6 @@
                                                 },
                                                 name: "end",
                                                 tag: None,
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                             },
                                         ),
                                     },
@@ -5951,55 +5814,9 @@
                                 ),
                                 end_ln_and_col: (
                                     139,
-                                    28,
+                                    35,
                                 ),
                             },
-<<<<<<< HEAD
-                            SchedFuncCall {
-                                target: Binop {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            139,
-                                            9,
-                                        ),
-                                        end_ln_and_col: (
-                                            139,
-                                            15,
-                                        ),
-                                    },
-                                    op: Dot,
-                                    lhs: Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    139,
-                                                    9,
-                                                ),
-                                                end_ln_and_col: (
-                                                    139,
-                                                    10,
-                                                ),
-                                            },
-                                            name: "e",
-                                            tag: None,
-                                        },
-                                    ),
-                                    rhs: Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    139,
-                                                    11,
-                                                ),
-                                                end_ln_and_col: (
-                                                    139,
-                                                    15,
-                                                ),
-                                            },
-                                            name: "copy",
-                                            tag: None,
-                                        },
-=======
                             stmt: EncodedStmt {
                                 info: Info {
                                     start_ln_and_col: (
@@ -6009,7 +5826,6 @@
                                     end_ln_and_col: (
                                         139,
                                         33,
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                     ),
                                 },
                                 lhs: [
@@ -6023,249 +5839,23 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 139,
-<<<<<<< HEAD
-                                                16,
-=======
                                                 32,
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                             ),
                                             end_ln_and_col: (
                                                 139,
-                                                26,
+                                                33,
                                             ),
                                         },
-<<<<<<< HEAD
-                                        lhs: [
-                                            (
-                                                "p_gpu",
-                                                None,
-                                            ),
-                                        ],
-                                        rhs: Term(
-                                            Var {
-                                                info: Info {
-                                                    start_ln_and_col: (
-                                                        139,
-                                                        25,
-                                                    ),
-                                                    end_ln_and_col: (
-                                                        139,
-                                                        26,
-                                                    ),
-                                                },
-                                                name: "p",
-                                                tag: None,
-                                            },
-                                        ),
-=======
                                         name: "p",
                                         tag: None,
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                                     },
                                 ),
                             },
-<<<<<<< HEAD
-                        ),
-                        Call(
-                            Info {
-                                start_ln_and_col: (
-                                    140,
-                                    9,
-                                ),
-                                end_ln_and_col: (
-                                    140,
-                                    61,
-                                ),
-                            },
-                            SchedFuncCall {
-                                target: Binop {
-                                    info: Info {
-                                        start_ln_and_col: (
-                                            140,
-                                            9,
-                                        ),
-                                        end_ln_and_col: (
-                                            140,
-                                            15,
-                                        ),
-                                    },
-                                    op: Dot,
-                                    lhs: Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    140,
-                                                    9,
-                                                ),
-                                                end_ln_and_col: (
-                                                    140,
-                                                    10,
-                                                ),
-                                            },
-                                            name: "e",
-                                            tag: None,
-                                        },
-                                    ),
-                                    rhs: Term(
-                                        Var {
-                                            info: Info {
-                                                start_ln_and_col: (
-                                                    140,
-                                                    11,
-                                                ),
-                                                end_ln_and_col: (
-                                                    140,
-                                                    15,
-                                                ),
-                                            },
-                                            name: "call",
-                                            tag: None,
-                                        },
-                                    ),
-                                },
-                                templates: None,
-                                args: Encode(
-                                    Move {
-                                        info: Info {
-                                            start_ln_and_col: (
-                                                140,
-                                                16,
-                                            ),
-                                            end_ln_and_col: (
-                                                140,
-                                                59,
-                                            ),
-                                        },
-                                        lhs: [
-                                            (
-                                                "r",
-                                                None,
-                                            ),
-                                        ],
-                                        rhs: Term(
-                                            Call(
-                                                Info {
-                                                    start_ln_and_col: (
-                                                        140,
-                                                        21,
-                                                    ),
-                                                    end_ln_and_col: (
-                                                        140,
-                                                        59,
-                                                    ),
-                                                },
-                                                SchedFuncCall {
-                                                    target: Term(
-                                                        Var {
-                                                            info: Info {
-                                                                start_ln_and_col: (
-                                                                    140,
-                                                                    21,
-                                                                ),
-                                                                end_ln_and_col: (
-                                                                    140,
-                                                                    38,
-                                                                ),
-                                                            },
-                                                            name: "closest_point_gpu",
-                                                            tag: None,
-                                                        },
-                                                    ),
-                                                    templates: Some(
-                                                        Vals(
-                                                            [
-                                                                Term(
-                                                                    Lit {
-                                                                        info: Info {
-                                                                            start_ln_and_col: (
-                                                                                140,
-                                                                                40,
-                                                                            ),
-                                                                            end_ln_and_col: (
-                                                                                140,
-                                                                                41,
-                                                                            ),
-                                                                        },
-                                                                        lit: Int(
-                                                                            "8",
-                                                                        ),
-                                                                    },
-                                                                ),
-                                                                Term(
-                                                                    Lit {
-                                                                        info: Info {
-                                                                            start_ln_and_col: (
-                                                                                140,
-                                                                                43,
-                                                                            ),
-                                                                            end_ln_and_col: (
-                                                                                140,
-                                                                                44,
-                                                                            ),
-                                                                        },
-                                                                        lit: Int(
-                                                                            "8",
-                                                                        ),
-                                                                    },
-                                                                ),
-                                                            ],
-                                                        ),
-                                                    ),
-                                                    args: Args(
-                                                        [
-                                                            Term(
-                                                                Var {
-                                                                    info: Info {
-                                                                        start_ln_and_col: (
-                                                                            140,
-                                                                            46,
-                                                                        ),
-                                                                        end_ln_and_col: (
-                                                                            140,
-                                                                            51,
-                                                                        ),
-                                                                    },
-                                                                    name: "p_gpu",
-                                                                    tag: None,
-                                                                },
-                                                            ),
-                                                            Term(
-                                                                Var {
-                                                                    info: Info {
-                                                                        start_ln_and_col: (
-                                                                            140,
-                                                                            53,
-                                                                        ),
-                                                                        end_ln_and_col: (
-                                                                            140,
-                                                                            58,
-                                                                        ),
-                                                                    },
-                                                                    name: "slice",
-                                                                    tag: None,
-                                                                },
-                                                            ),
-                                                        ],
-                                                    ),
-                                                    tag: None,
-                                                    yield_call: false,
-                                                },
-                                            ),
-                                        ),
-                                    },
-                                ),
-                                tag: None,
-                                yield_call: false,
-                            },
-                        ),
-                        Decl {
-=======
                             encoder: "e",
                             cmd: Copy,
                             tag: None,
                         },
                         Encode {
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
                             info: Info {
                                 start_ln_and_col: (
                                     140,
@@ -6472,9 +6062,11 @@
                                                     },
                                                 ),
                                                 tag: None,
+                                                extra_args: [],
                                             },
                                         ),
                                         tag: None,
+                                        extra_args: [],
                                     },
                                 ),
                                 rhs: Term(

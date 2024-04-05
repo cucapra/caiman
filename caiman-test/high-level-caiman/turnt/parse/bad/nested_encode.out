@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-Error: At "nested_encode.cm" 3:38, 
-=======
-Error: At nested_encode.cm:3:33, 
->>>>>>> 5144f17 (Parsing and AST changes for timeline ops)
+Error: At "nested_encode.cm" 3:33, 
   Parsing Error: Unrecognized token: '<-', expected one of [
     "\"!=\"",
     "\"%\"",
