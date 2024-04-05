@@ -2,7 +2,7 @@
 fn foo(a: i32, b: bool'<storage> @ [val-?, sptl-usable])
     -> (i32'<storage> @ [node(val)-?, none(val)-?, none(sptl)-usable], i32)
     impls n, v, sp
-{
-    var x = a + a * a;
+{ 
+    var x = a + a * a; 
     x = b;
 }

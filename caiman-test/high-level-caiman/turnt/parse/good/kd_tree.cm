@@ -31,8 +31,8 @@ fn dist2(a: f32, b: f32) -> f32
 }
 
 feq closest_point {
-    extern(gpu) closest_point_gpu(p: f32, a: [f32]) 
-        -> out: f32 
+    extern(gpu) closest_point_gpu(p: f32, a: [[foo]; N]) 
+        -> out: foo
     {
         path : "kd_tree.comp",
         entry : "main",
@@ -134,10 +134,10 @@ fn find_closest(p: f32, pts: [f32; N], start: i64,
     end: i64, idx: i64) -> f32 impls find_closest, tm, sp
 {
     let r = if end - start <= LN {
-        let e = create_gpu_encoder();
-        e.encode_copy[slice: gbuf <- pts[start .. end]];
-        e.encode_copy[p_gpu <- p];
-        e.encode_cmd[r <- closest_point_gpu'<8, 8>(p_gpu, slice)];
+        let e: foo = create_gpu_encoder();
+        e.copy[slice: gbuf <- pts[start .. end]];
+        e.copy[p_gpu <- p];
+        e.call[r <- closest_point_gpu'<8, 8>(p_gpu, slice)];
 
         let f = e.submit();
         let res = await(f);

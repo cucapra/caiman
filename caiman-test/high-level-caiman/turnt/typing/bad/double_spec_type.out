@@ -1,2 +1,2 @@
-Error: At double_spec_type.cm:12:1, 
+Error: At "double_spec_type.cm" 12:1 - 18:2, 
   Type Error: 12:1 - 18:2: Duplicate timeline specs time and man

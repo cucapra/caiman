@@ -1,4 +1,4 @@
-Error: At flag_in_spec_out.cm:2:21, 
+Error: At "flag_in_spec_out.cm" 2:21, 
   Parsing Error: Unrecognized token: ''', expected one of [
     "\")\"",
     "\",\"",

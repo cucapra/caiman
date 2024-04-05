@@ -92,11 +92,16 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.error.location {
             ErrorLocation::Single(l, c) => {
-                write!(f, "At {}:{}:{}, \n  ", self.filename, l, c)?;
+                write!(f, "At \"{}\" {}:{}, \n  ", self.filename, l, c)?;
             }
             ErrorLocation::Double(info) => {
                 let (l, c) = info.start_ln_and_col;
-                write!(f, "At {}:{}:{}, \n  ", self.filename, l, c)?;
+                let (end_line, end_col) = info.end_ln_and_col;
+                write!(
+                    f,
+                    "At \"{}\" {}:{} - {end_line}:{end_col}, \n  ",
+                    self.filename, l, c
+                )?;
             }
         }
         match &self.error.kind {

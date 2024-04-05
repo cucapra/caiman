@@ -1,4 +1,4 @@
-Error: At assign_val.cm:4:11, 
+Error: At "assign_val.cm" 4:11, 
   Parsing Error: Unrecognized token: '=', expected one of [
     "\"!=\"",
     "\"%\"",

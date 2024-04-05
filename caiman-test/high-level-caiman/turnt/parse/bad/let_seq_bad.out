@@ -1,4 +1,4 @@
-Error: At let_seq_bad.cm:5:6, 
+Error: At "let_seq_bad.cm" 5:6, 
   Parsing Error: Unrecognized token: ';', expected one of [
     "\"else\"",
 ]

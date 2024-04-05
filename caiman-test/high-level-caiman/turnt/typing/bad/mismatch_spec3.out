@@ -1,2 +1,2 @@
-Error: At mismatch_spec3.cm:11:1, 
+Error: At "mismatch_spec3.cm" 11:1 - 17:2, 
   Type Error: 11:1 - 17:2: Declared function returns of main_impl are incompatible with value specification

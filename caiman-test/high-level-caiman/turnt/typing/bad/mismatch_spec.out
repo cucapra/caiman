@@ -1,2 +1,2 @@
-Error: At mismatch_spec.cm:11:1, 
+Error: At "mismatch_spec.cm" 11:1 - 17:2, 
   Type Error: Function inputs of main_impl do not match the spec main

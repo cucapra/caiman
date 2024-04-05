@@ -1,4 +1,4 @@
-Error: At flow_as_var.cm:4:9, 
+Error: At "flow_as_var.cm" 4:9, 
   Parsing Error: Unrecognized token: 'usable', expected one of [
     "\"=\"",
     "r#\"[a-zA-Z][a-zA-Z0-9_]*\"#",

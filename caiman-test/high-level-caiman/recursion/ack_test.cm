@@ -20,4 +20,6 @@ fn ack_impl(m: i64, n: i64) -> i64 impls ack, time, space {
     }
 }
 
-pipeline main { ack_impl }
+pipeline main { 
+    ack_impl 
+}

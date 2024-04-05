@@ -1,2 +1,2 @@
-Error: At bad_version.cm:0:0, 
+Error: At "bad_version.cm" 0:0, 
   Parsing Error: Version mismatch: expected 0.1.0 but found 0.0.1

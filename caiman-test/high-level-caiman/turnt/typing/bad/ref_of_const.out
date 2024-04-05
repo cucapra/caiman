@@ -1,2 +1,2 @@
-Error: At ref_of_const.cm:19:13, 
+Error: At "ref_of_const.cm" 19:13 - 19:15, 
   Type Error: Immutable variable c_0 cannot be assigned to or have its reference taken
