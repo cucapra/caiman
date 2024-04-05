@@ -1,2 +1,2 @@
-Error: At mutate_spec.cm:9:5, 
+Error: At "mutate_spec.cm" 9:5 - 9:12, 
   Type Error: Duplicate node: a

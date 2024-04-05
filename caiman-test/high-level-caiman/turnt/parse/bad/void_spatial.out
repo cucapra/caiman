@@ -1,4 +1,4 @@
-Error: At void_spatial.cm:2:20, 
+Error: At "void_spatial.cm" 2:20, 
   Parsing Error: Unrecognized token: '{', expected one of [
     "\"->\"",
 ]

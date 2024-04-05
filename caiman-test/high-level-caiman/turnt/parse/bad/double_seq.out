@@ -1,4 +1,4 @@
-Error: At double_seq.cm:6:5, 
+Error: At "double_seq.cm" 6:5, 
   Parsing Error: Unrecognized token: 'let', expected one of [
     "\"!=\"",
     "\"%\"",

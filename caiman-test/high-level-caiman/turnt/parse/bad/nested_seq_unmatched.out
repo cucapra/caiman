@@ -1,4 +1,4 @@
-Error: At nested_seq_unmatched.cm:13:5, 
+Error: At "nested_seq_unmatched.cm" 13:5, 
   Parsing Error: Unrecognized token: '}', expected one of [
     "\"else\"",
 ]

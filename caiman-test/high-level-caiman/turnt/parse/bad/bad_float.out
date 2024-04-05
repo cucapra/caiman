@@ -1,4 +1,4 @@
-Error: At bad_float.cm:3:15, 
+Error: At "bad_float.cm" 3:15, 
   Parsing Error: Unrecognized token: '6', expected one of [
     "\"(\"",
     "\"?\"",

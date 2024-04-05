@@ -3,7 +3,6 @@
 tmln time(e: Event) -> Event { returns e }
 sptl space(bs: BufferSpace) -> BufferSpace { returns bs }
 
-
 val main() -> i64 {
     returns (1 if true else 2) if false else (3 if false else 4)
 }

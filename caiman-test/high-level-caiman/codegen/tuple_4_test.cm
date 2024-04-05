@@ -14,7 +14,7 @@ fn tie_impl(a: i64, b: i64, c: i64, d: i64) -> (i64, i64, i64, i64)
 }
 
 val main(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) 
-    -> (i64, i64, i64, i64) 
+    -> (i64, i64, i64, i64)
 {
     x, y, z, w :- tie(a, b, c, d)
     i, j, k, l :- tie(e, f, g, h)

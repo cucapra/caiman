@@ -46,6 +46,11 @@ struct Arguments {
     /// When this parameter is set, outputs the compiled code to the given file.
     #[clap(long, short, takes_value = true)]
     output: Option<String>,
+
+    /// When this flag is enabled, the compiler will not print any output
+    /// except for errors.
+    #[clap(long, short)]
+    quiet: bool,
 }
 
 fn main() -> Result<(), error::Error> {
@@ -54,9 +59,17 @@ fn main() -> Result<(), error::Error> {
 }
 
 fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
-    let ast = parse::parse_file(&args.filename)?;
+    let ast = match args.filename.as_str() {
+        "-" => parse::parse_read(std::io::stdin(), "stdin").map_err(|e| error::Error {
+            error: e,
+            filename: "stdin".to_string(),
+        })?,
+        filename => parse::parse_file(filename)?,
+    };
     if args.parse {
-        println!("{ast:#?}");
+        if !args.quiet {
+            println!("{ast:#?}");
+        }
         return Ok(());
     }
     let ast = normalize::normalize_ast(ast).map_err(|e| error::Error {
@@ -64,7 +77,9 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         filename: args.filename.clone(),
     })?;
     if args.normalize {
-        println!("{ast:#?}");
+        if !args.quiet {
+            println!("{ast:#?}");
+        }
         return Ok(());
     }
     let ctx = typing::Context::new(&ast).map_err(|e| error::Error {
@@ -72,7 +87,9 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         filename: args.filename.clone(),
     })?;
     if args.typecheck {
-        println!("Data types valid");
+        if !args.quiet {
+            println!("Data types valid");
+        }
         return Ok(());
     }
     let lowered = lower(ast, &ctx).map_err(|e| error::Error {
@@ -80,7 +97,9 @@ fn compile_new_lang(args: Arguments) -> Result<(), error::Error> {
         filename: args.filename.clone(),
     })?;
     if args.lower {
-        println!("{lowered:#?}");
+        if !args.quiet {
+            println!("{lowered:#?}");
+        }
         return Ok(());
     }
     caiman::explicate_and_execute(args.output, lowered, args.explicate_only);

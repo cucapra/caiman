@@ -1,2 +1,2 @@
-Error: At bad_const_def.cm:2:11, 
+Error: At "bad_const_def.cm" 2:11, 
   Parsing Error: Non constant expression found in a constant context at 2:11 - 2:22

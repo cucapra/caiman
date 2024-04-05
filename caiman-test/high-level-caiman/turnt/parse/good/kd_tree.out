@@ -1007,9 +1007,26 @@
                         Some(
                             "a",
                         ),
-                        Slice(
-                            UserDefined(
-                                "f32",
+                        Array(
+                            Slice(
+                                UserDefined(
+                                    "foo",
+                                ),
+                            ),
+                            Term(
+                                Var {
+                                    info: Info {
+                                        start_ln_and_col: (
+                                            34,
+                                            54,
+                                        ),
+                                        end_ln_and_col: (
+                                            34,
+                                            55,
+                                        ),
+                                    },
+                                    name: "N",
+                                },
                             ),
                         ),
                     ),
@@ -1020,7 +1037,7 @@
                             "out",
                         ),
                         UserDefined(
-                            "f32",
+                            "foo",
                         ),
                     ),
                 ],
@@ -5610,13 +5627,36 @@
                                 ),
                                 end_ln_and_col: (
                                     137,
-                                    38,
+                                    43,
                                 ),
                             },
                             lhs: [
                                 (
                                     "e",
-                                    None,
+                                    Some(
+                                        FullType {
+                                            base: Some(
+                                                FlaggedType {
+                                                    info: Info {
+                                                        start_ln_and_col: (
+                                                            137,
+                                                            16,
+                                                        ),
+                                                        end_ln_and_col: (
+                                                            137,
+                                                            19,
+                                                        ),
+                                                    },
+                                                    base: UserDefined(
+                                                        "foo",
+                                                    ),
+                                                    flags: [],
+                                                    settings: [],
+                                                },
+                                            ),
+                                            tags: [],
+                                        },
+                                    ),
                                 ),
                             ],
                             is_const: true,
@@ -5626,11 +5666,11 @@
                                         Info {
                                             start_ln_and_col: (
                                                 137,
-                                                17,
+                                                22,
                                             ),
                                             end_ln_and_col: (
                                                 137,
-                                                37,
+                                                42,
                                             ),
                                         },
                                         SchedFuncCall {
@@ -5639,11 +5679,11 @@
                                                     info: Info {
                                                         start_ln_and_col: (
                                                             137,
-                                                            17,
+                                                            22,
                                                         ),
                                                         end_ln_and_col: (
                                                             137,
-                                                            35,
+                                                            40,
                                                         ),
                                                     },
                                                     name: "create_gpu_encoder",
@@ -5669,7 +5709,7 @@
                                 ),
                                 end_ln_and_col: (
                                     138,
-                                    57,
+                                    50,
                                 ),
                             },
                             SchedFuncCall {
@@ -5681,7 +5721,7 @@
                                         ),
                                         end_ln_and_col: (
                                             138,
-                                            22,
+                                            15,
                                         ),
                                     },
                                     op: Dot,
@@ -5710,10 +5750,10 @@
                                                 ),
                                                 end_ln_and_col: (
                                                     138,
-                                                    22,
+                                                    15,
                                                 ),
                                             },
-                                            name: "encode_copy",
+                                            name: "copy",
                                             tag: None,
                                         },
                                     ),
@@ -5724,11 +5764,11 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 138,
-                                                23,
+                                                16,
                                             ),
                                             end_ln_and_col: (
                                                 138,
-                                                55,
+                                                48,
                                             ),
                                         },
                                         lhs: [
@@ -5739,11 +5779,11 @@
                                                         info: Info {
                                                             start_ln_and_col: (
                                                                 138,
-                                                                30,
+                                                                23,
                                                             ),
                                                             end_ln_and_col: (
                                                                 138,
-                                                                34,
+                                                                27,
                                                             ),
                                                         },
                                                         base: UserDefined(
@@ -5759,11 +5799,11 @@
                                             info: Info {
                                                 start_ln_and_col: (
                                                     138,
-                                                    38,
+                                                    31,
                                                 ),
                                                 end_ln_and_col: (
                                                     138,
-                                                    55,
+                                                    48,
                                                 ),
                                             },
                                             op: Index,
@@ -5772,11 +5812,11 @@
                                                     info: Info {
                                                         start_ln_and_col: (
                                                             138,
-                                                            38,
+                                                            31,
                                                         ),
                                                         end_ln_and_col: (
                                                             138,
-                                                            41,
+                                                            34,
                                                         ),
                                                     },
                                                     name: "pts",
@@ -5787,11 +5827,11 @@
                                                 info: Info {
                                                     start_ln_and_col: (
                                                         138,
-                                                        42,
+                                                        35,
                                                     ),
                                                     end_ln_and_col: (
                                                         138,
-                                                        54,
+                                                        47,
                                                     ),
                                                 },
                                                 op: Range,
@@ -5800,11 +5840,11 @@
                                                         info: Info {
                                                             start_ln_and_col: (
                                                                 138,
-                                                                42,
+                                                                35,
                                                             ),
                                                             end_ln_and_col: (
                                                                 138,
-                                                                47,
+                                                                40,
                                                             ),
                                                         },
                                                         name: "start",
@@ -5816,11 +5856,11 @@
                                                         info: Info {
                                                             start_ln_and_col: (
                                                                 138,
-                                                                51,
+                                                                44,
                                                             ),
                                                             end_ln_and_col: (
                                                                 138,
-                                                                54,
+                                                                47,
                                                             ),
                                                         },
                                                         name: "end",
@@ -5843,7 +5883,7 @@
                                 ),
                                 end_ln_and_col: (
                                     139,
-                                    35,
+                                    28,
                                 ),
                             },
                             SchedFuncCall {
@@ -5855,7 +5895,7 @@
                                         ),
                                         end_ln_and_col: (
                                             139,
-                                            22,
+                                            15,
                                         ),
                                     },
                                     op: Dot,
@@ -5884,10 +5924,10 @@
                                                 ),
                                                 end_ln_and_col: (
                                                     139,
-                                                    22,
+                                                    15,
                                                 ),
                                             },
-                                            name: "encode_copy",
+                                            name: "copy",
                                             tag: None,
                                         },
                                     ),
@@ -5898,11 +5938,11 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 139,
-                                                23,
+                                                16,
                                             ),
                                             end_ln_and_col: (
                                                 139,
-                                                33,
+                                                26,
                                             ),
                                         },
                                         lhs: [
@@ -5916,11 +5956,11 @@
                                                 info: Info {
                                                     start_ln_and_col: (
                                                         139,
-                                                        32,
+                                                        25,
                                                     ),
                                                     end_ln_and_col: (
                                                         139,
-                                                        33,
+                                                        26,
                                                     ),
                                                 },
                                                 name: "p",
@@ -5941,7 +5981,7 @@
                                 ),
                                 end_ln_and_col: (
                                     140,
-                                    67,
+                                    61,
                                 ),
                             },
                             SchedFuncCall {
@@ -5953,7 +5993,7 @@
                                         ),
                                         end_ln_and_col: (
                                             140,
-                                            21,
+                                            15,
                                         ),
                                     },
                                     op: Dot,
@@ -5982,10 +6022,10 @@
                                                 ),
                                                 end_ln_and_col: (
                                                     140,
-                                                    21,
+                                                    15,
                                                 ),
                                             },
-                                            name: "encode_cmd",
+                                            name: "call",
                                             tag: None,
                                         },
                                     ),
@@ -5996,11 +6036,11 @@
                                         info: Info {
                                             start_ln_and_col: (
                                                 140,
-                                                22,
+                                                16,
                                             ),
                                             end_ln_and_col: (
                                                 140,
-                                                65,
+                                                59,
                                             ),
                                         },
                                         lhs: [
@@ -6014,11 +6054,11 @@
                                                 Info {
                                                     start_ln_and_col: (
                                                         140,
-                                                        27,
+                                                        21,
                                                     ),
                                                     end_ln_and_col: (
                                                         140,
-                                                        65,
+                                                        59,
                                                     ),
                                                 },
                                                 SchedFuncCall {
@@ -6027,11 +6067,11 @@
                                                             info: Info {
                                                                 start_ln_and_col: (
                                                                     140,
-                                                                    27,
+                                                                    21,
                                                                 ),
                                                                 end_ln_and_col: (
                                                                     140,
-                                                                    44,
+                                                                    38,
                                                                 ),
                                                             },
                                                             name: "closest_point_gpu",
@@ -6046,11 +6086,11 @@
                                                                         info: Info {
                                                                             start_ln_and_col: (
                                                                                 140,
-                                                                                46,
+                                                                                40,
                                                                             ),
                                                                             end_ln_and_col: (
                                                                                 140,
-                                                                                47,
+                                                                                41,
                                                                             ),
                                                                         },
                                                                         lit: Int(
@@ -6063,11 +6103,11 @@
                                                                         info: Info {
                                                                             start_ln_and_col: (
                                                                                 140,
-                                                                                49,
+                                                                                43,
                                                                             ),
                                                                             end_ln_and_col: (
                                                                                 140,
-                                                                                50,
+                                                                                44,
                                                                             ),
                                                                         },
                                                                         lit: Int(
@@ -6085,11 +6125,11 @@
                                                                     info: Info {
                                                                         start_ln_and_col: (
                                                                             140,
-                                                                            52,
+                                                                            46,
                                                                         ),
                                                                         end_ln_and_col: (
                                                                             140,
-                                                                            57,
+                                                                            51,
                                                                         ),
                                                                     },
                                                                     name: "p_gpu",
@@ -6101,11 +6141,11 @@
                                                                     info: Info {
                                                                         start_ln_and_col: (
                                                                             140,
-                                                                            59,
+                                                                            53,
                                                                         ),
                                                                         end_ln_and_col: (
                                                                             140,
-                                                                            64,
+                                                                            58,
                                                                         ),
                                                                     },
                                                                     name: "slice",
