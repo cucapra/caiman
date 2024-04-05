@@ -75,8 +75,6 @@ where
 }
 
 fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
-    dbg!(&context);
-    todo!();
     context
         .program()
         .funclets

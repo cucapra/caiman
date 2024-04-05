@@ -18,6 +18,7 @@ pub use crate::rust_wgpu_backend::ffi;
 
 pub type Place = ir::Place;
 pub type Constant = ir::Constant;
+pub type BufferFlags = ir::BufferFlags;
 
 pub type ExternalFunctionId = ffi::ExternalFunctionId;
 pub type FuncletId = usize;

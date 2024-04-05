@@ -43,27 +43,23 @@ impl InstantiatedNodes {
 
 impl ScheduleScopeData {
     pub fn new(funclet: FuncletId) -> ScheduleScopeData {
-        ScheduleScopeData::new_inner(funclet, HashMap::new(), HashMap::new())
+        ScheduleScopeData::new_inner(funclet, HashMap::new(), HashMap::new(), HashMap::new())
     }
 
-    pub fn new_inner(
+    fn new_inner(
         funclet: FuncletId,
         instantiations: HashMap<Location, Vec<(ir::Place, NodeId)>>,
-        allocations: HashMap<OpCode, Vec<NodeId>>,
+        allocations: HashMap<TypeId, Vec<(ir::Place, NodeId)>>,
+        available_operations: HashMap<OpCode, Vec<NodeId>>,
     ) -> ScheduleScopeData {
         ScheduleScopeData {
             funclet,
             node: None,
-            node_index : 0,
+            node_index: 0,
             instantiations,
             allocations,
+            available_operations,
             explication_hole: false,
-            // TODO: update
-            spec_functions: SpecLanguages {
-                value: 0,
-                timeline: 0,
-                spatial: 0,
-            }
         }
     }
 
@@ -76,9 +72,9 @@ impl ScheduleScopeData {
 
     pub fn add_instantiation(
         &mut self,
-        schedule_node: NodeId,
         location: Location,
         place: expir::Place,
+        schedule_node: NodeId,
     ) {
         self.instantiations
             .entry(location)
@@ -86,9 +82,16 @@ impl ScheduleScopeData {
             .push((place, schedule_node));
     }
 
-    pub fn add_allocation(&mut self, node: NodeId, operation: OpCode) {
+    pub fn add_allocation(&mut self, typ: TypeId, place: expir::Place, schedule_node: NodeId) {
+        self.allocations
+            .entry(typ)
+            .or_insert(Vec::new())
+            .push((place, schedule_node));
+    }
+
+    pub fn add_available_operation(&mut self, node: NodeId, operation: OpCode) {
         let vec = self
-            .allocations
+            .available_operations
             .entry(operation)
             .or_insert_with(|| Vec::new());
         // safety check that the algorithm isn't reinserting operations

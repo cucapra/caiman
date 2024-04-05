@@ -1,4 +1,5 @@
 use crate::assembly;
+use crate::explication::expir;
 use crate::ir;
 use crate::rust_wgpu_backend::ffi;
 use itertools::Itertools;
@@ -104,9 +105,9 @@ impl DebugInfo {
     }
 }
 
-macro_rules! recover_element {
+macro_rules! recover_element_ir {
     ($arg:ident [$arg_type:ident] $self:ident $funclet:ident) => {
-        Some($arg.iter().map(|v| recover_element!(v $arg_type $self $funclet)).collect()).into()
+        Some($arg.iter().map(|v| recover_element_ir!(v $arg_type $self $funclet)).collect()).into()
     };
     ($arg:ident Immediate $self:ident $funclet:ident) => {
         Some(format!("{:?}", $arg.clone())).into()
@@ -153,18 +154,18 @@ macro_rules! recover_element {
     };
 }
 
-macro_rules! setup_node_full {
+macro_rules! setup_node_ir {
     ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
         paste! {
             /*
              * Expands out the node with full debug information
              */
             impl DebugInfo {
-                pub fn node_full(&self, funclet_id: usize, node : &ir::Node) -> String {
+                pub fn node_ir(&self, funclet_id: usize, node : &ir::Node) -> String {
                     match node {
                         $(ir::Node::$name { $($arg,)* } => {
                             format!("{}", assembly::ast::Node::$name {
-                                $($arg : recover_element!($arg $arg_type self funclet_id),)*
+                                $($arg : recover_element_ir!($arg $arg_type self funclet_id),)*
                             })
                         }),*
                     }
@@ -174,4 +175,81 @@ macro_rules! setup_node_full {
     }
 }
 
-with_operations!(setup_node_full);
+with_operations!(setup_node_ir);
+
+macro_rules! recover_element_expir {
+    ($arg:ident [$arg_type:ident] $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().map(|o| o.iter().map(|v| recover_element_expir!(v $arg_type $self $funclet)).collect()).into()
+    };
+    ($arg:ident Immediate $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().map(|o| format!("{:?}", o)).into()
+    };
+    ($arg:ident Type $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().and_then(|o| $self.type_map.get(o).map(|s| assembly::ast::TypeId::Local(s.to_string()))).into()
+    };
+    ($arg:ident Index $self:ident $funclet:ident) => {
+        $arg.clone()
+    };
+    ($arg:ident ExternalFunction $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().and_then(|o| $self.external_function_map.get(&o.0)
+        .map(|s| assembly::ast::ExternalFunctionId(s.to_string()))).into()
+    };
+    ($arg:ident ValueFunction $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().and_then(|o| $self.function_class_map.get(o)
+        .map(|s| assembly::ast::FunctionClassId(s.to_string()))).into()
+    };
+    ($arg:ident Operation $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().and_then(|o|
+            $self.funclet_map.get(&$funclet)
+            .and_then(|f| f.node_map.get(&ir::Quotient::Node { node_id: *o })
+            .map(|s| assembly::ast::NodeId(s.to_string())))).into()
+    };
+    ($arg:ident RemoteOperation $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().and_then(|o|
+            $self.funclet_map.get(&$funclet)
+            .and_then(|f| Some(
+                assembly::ast::RemoteNodeId {
+                    funclet: assembly::ast::MetaId(f.name.clone()),
+                    node: Some(f.node_map.get(o)
+                        .map(|s| assembly::ast::NodeId(s.to_string()))
+                        .into())
+        }) )).into()
+    };
+    ($arg:ident Place $self:ident $funclet:ident) => {
+        $arg.clone()
+    };
+    ($arg:ident Funclet $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().and_then(|o| $self.funclet_map.get(o)
+        .map(|f| assembly::ast::FuncletId(f.name.clone()))).into()
+    };
+    ($arg:ident StorageType $self:ident $funclet:ident) => {
+        $arg.as_ref().opt().and_then(|o| $self.ffi_type_map.get(&o.0)
+        .map(|f| assembly::ast::TypeId::FFI(f.clone()))).into()
+    };
+    ($arg:ident BufferFlags $self:ident $context:ident) => {
+        $arg.clone()
+    };
+}
+
+macro_rules! setup_node_expir {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        paste! {
+            /*
+             * Expands out the node with full debug information
+             */
+            impl DebugInfo {
+                pub fn node_expir(&self, funclet_id: usize, node : &expir::Node) -> String {
+                    match node {
+                        $(expir::Node::$name { $($arg,)* } => {
+                            format!("{}", assembly::ast::Node::$name {
+                                $($arg : recover_element_expir!($arg $arg_type self funclet_id),)*
+                            })
+                        }),*
+                    }
+                }
+            }
+        }
+    }
+}
+
+with_operations!(setup_node_expir);

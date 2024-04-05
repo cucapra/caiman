@@ -16,18 +16,6 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet: FuncletId) {
-        let instantiations = self
-            .scopes
-            .last()
-            .cloned()
-            .map(|le| le.instantiations)
-            .unwrap_or(HashMap::default());
-        let allocations = self
-            .scopes
-            .last()
-            .cloned()
-            .map(|le| le.allocations)
-            .unwrap_or(HashMap::default());
         self.scopes.push(ScheduleScopeData::new(funclet));
     }
     pub fn exit_funclet(&mut self) -> bool {
@@ -38,6 +26,55 @@ impl InState {
         }
         self.scopes.len() == 0
     }
+
+    pub fn add_allocation(&mut self, typ: TypeId, place: expir::Place, schedule_node: NodeId) {
+        let scope = self.get_latest_scope_mut();
+        scope.add_allocation(typ, place, schedule_node);
+    }
+
+    // gets a list of the nodes of the available allocations in this scope (if there are any)
+    pub fn available_allocations(&self, typ: TypeId, place: expir::Place) -> Vec<Location> {
+        for scope in self.scopes.iter().rev() {
+            let matches: Vec<_> = scope
+                .allocations
+                .get(&typ)
+                .expect(&format!("Unknown type {}", typ))
+                .iter()
+                .filter(|(p, _)| place == *p)
+                .map(|v| Location {
+                    funclet: scope.funclet,
+                    node: v.1,
+                })
+                .collect();
+            if matches.len() > 0 {
+                return matches;
+            }
+        }
+        vec![]
+    }
+
+    pub fn consume_allocation(&mut self, typ: TypeId, location: Location) {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.funclet == location.funclet {
+                let mut to_remove = None;
+                let mut allocations = scope
+                    .allocations
+                    .get_mut(&typ)
+                    .expect(&format!("Missing typ {}", typ));
+                for (index, allocation) in allocations.iter().enumerate() {
+                    if allocation.1 == location.node {
+                        assert!(to_remove.is_none());
+                        to_remove = Some(index)
+                    }
+                }
+                allocations
+                    .remove(to_remove.expect(&format!("Unknown location node {:?}", location)));
+                return;
+            }
+        }
+        panic!("Unknown location funclet {:?}", location);
+    }
+
     pub fn add_instantiation(
         &mut self,
         schedule_node: NodeId,
@@ -46,14 +83,10 @@ impl InState {
     ) {
         let scope = self.get_latest_scope_mut();
         for spec_remote in &spec_remotes {
-            scope.add_instantiation(schedule_node.clone(), spec_remote.clone(), place);
+            scope.add_instantiation(spec_remote.clone(), place, schedule_node.clone());
         }
         let name = scope.funclet.clone();
         let explication_data = self.schedule_explication_data.get_mut(&name).unwrap();
-        // let instantiated = InstantiatedNodes::new(&explication_data.type_instantiations, spec_remotes);
-        // explication_data
-        //     .type_instantiations
-        //     .insert(schedule_node, instantiated);
     }
 
     pub fn expect_location(&self) -> Location {
@@ -71,12 +104,16 @@ impl InState {
         self.scopes.last_mut().unwrap()
     }
 
-    pub fn add_explication_hole(&mut self, node: NodeId) {
+    pub fn add_explication_hole(&mut self) {
         self.get_latest_scope_mut().add_explication_hole()
     }
 
-    pub fn get_current_funclet(&self) -> FuncletId {
+    pub fn get_current_funclet_id(&self) -> FuncletId {
         self.get_latest_scope().funclet
+    }
+
+    pub fn get_current_node_id(&self) -> Option<NodeId> {
+        self.get_latest_scope().node
     }
 
     pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::Node> {
@@ -87,8 +124,13 @@ impl InState {
         )
     }
 
-    pub fn get_current_tail_edge<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::TailEdge> {
-        &context.get_funclet(&self.get_latest_scope().funclet).tail_edge
+    pub fn get_current_tail_edge<'a>(
+        &self,
+        context: &'a StaticContext,
+    ) -> &'a Hole<expir::TailEdge> {
+        &context
+            .get_funclet(&self.get_latest_scope().funclet)
+            .tail_edge
     }
 
     pub fn is_end_of_funclet<'a>(&self, context: &'a StaticContext) -> bool {

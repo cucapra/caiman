@@ -7,7 +7,7 @@ native_value %ni64 : i64;
 
 function @main() -> i64;
 
-value[impl default @main] %foo() -> i64 {
+value[impl default @main] %value() -> i64 {
     %x = constant %ni64 4;
     return %x;
 }
@@ -20,13 +20,13 @@ spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-<none-have, none-have>
-%bar() -> %ni64 {
-    %x_ref = alloc-temporary local i64;
-    local-do-builtin node($val.%x)() -> ?;
+schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
+%foo<$time-usable, $time-usable>() ->
+[%out : $val.%x-usable $time-usable $space-usable %ni64] {
+    %x_ref = alloc-temporary local [] i64;
+    local-do-builtin $val.%x() -> ?;
     %result = read-ref i64 %x_ref;
     return %result;
 }
 
-pipeline "main" = %bar;
+pipeline "main" = %foo;
