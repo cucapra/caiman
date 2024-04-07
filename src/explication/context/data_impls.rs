@@ -1,55 +1,22 @@
 use super::*;
 use crate::explication::util::*;
 
-impl InstantiatedNodes {
-    pub fn new(specs: &SpecLanguages, remotes: Vec<Location>) -> InstantiatedNodes {
-        let mut result = InstantiatedNodes {
-            value: None,
-            timeline: None,
-            spatial: None,
-        };
-        let error = format!("Duplicate value node definitions in {:?}", &remotes);
-        for remote in remotes {
-            let funclet = remote.funclet;
-            let node = remote.node;
-            if &funclet == &specs.value {
-                if result.value.is_some() {
-                    panic!(error);
-                }
-                result.value = Some(node);
-            } else if &funclet == &specs.timeline {
-                if result.timeline.is_some() {
-                    panic!(error);
-                }
-                result.timeline = Some(node);
-            } else if &funclet == &specs.spatial {
-                if result.spatial.is_some() {
-                    panic!(error);
-                }
-                result.spatial = Some(node);
-            }
-        }
-        result
-    }
-
-    pub fn get(&self, spec: &SpecLanguage) -> Option<&NodeId> {
-        match spec {
-            SpecLanguage::Value => self.value.as_ref(),
-            SpecLanguage::Timeline => self.timeline.as_ref(),
-            SpecLanguage::Spatial => self.spatial.as_ref(),
-        }
-    }
-}
-
 impl ScheduleScopeData {
     pub fn new(funclet: FuncletId) -> ScheduleScopeData {
-        ScheduleScopeData::new_inner(funclet, HashMap::new(), HashMap::new(), HashMap::new())
+        ScheduleScopeData::new_inner(
+            funclet,
+            HashMap::new(),
+            HashMap::new(),
+            Vec::new(),
+            HashMap::new(),
+        )
     }
 
     fn new_inner(
         funclet: FuncletId,
-        instantiations: HashMap<Location, Vec<(ir::Place, NodeId)>>,
-        allocations: HashMap<TypeId, Vec<(ir::Place, NodeId)>>,
+        instantiations: HashMap<Location, Vec<NodeId>>,
+        node_type_information: HashMap<NodeId, (Location, expir::Type)>,
+        allocations: Vec<(NodeId, expir::Type)>,
         available_operations: HashMap<OpCode, Vec<NodeId>>,
     ) -> ScheduleScopeData {
         ScheduleScopeData {
@@ -57,6 +24,7 @@ impl ScheduleScopeData {
             node: None,
             node_index: 0,
             instantiations,
+            node_type_information,
             allocations,
             available_operations,
             explication_hole: false,
@@ -73,23 +41,40 @@ impl ScheduleScopeData {
     pub fn add_instantiation(
         &mut self,
         location: Location,
-        place: expir::Place,
+        typ: expir::Type,
         schedule_node: NodeId,
+        context: &StaticContext,
     ) {
         self.instantiations
-            .entry(location)
+            .entry(location.clone())
             .or_insert(Vec::new())
-            .push((place, schedule_node));
+            .push(schedule_node);
+        let check = self
+            .node_type_information
+            .insert(schedule_node, (location, typ));
+        assert!(
+            check.is_none(),
+            "duplicate add of scheduling node index {}, aka node {}",
+            schedule_node,
+            context.debug_info.node(&self.funclet, schedule_node)
+        );
     }
 
-    pub fn add_allocation(&mut self, typ: TypeId, place: expir::Place, schedule_node: NodeId) {
-        self.allocations
-            .entry(typ)
-            .or_insert(Vec::new())
-            .push((place, schedule_node));
+    pub fn add_allocation(
+        &mut self,
+        schedule_node: NodeId,
+        typ: expir::Type,
+        context: &StaticContext,
+    ) {
+        self.allocations.push((schedule_node, typ));
     }
 
-    pub fn add_available_operation(&mut self, node: NodeId, operation: OpCode) {
+    pub fn add_available_operation(
+        &mut self,
+        node: NodeId,
+        operation: OpCode,
+        context: &StaticContext,
+    ) {
         let vec = self
             .available_operations
             .entry(operation)

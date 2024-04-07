@@ -53,18 +53,22 @@ fn explicate_allocate_temporary(
                 .expect("Unreachable")
         )
     );
-    let place = expir_place.as_ref().opt().expect(&error).clone();
+    let storage_place = expir_place.as_ref().opt().expect(&error).clone();
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
     let buffer_flags = expir_buffer_flags.as_ref().opt().expect(&error).clone();
     let mut new_state = state.clone();
     new_state.add_allocation(
         storage_type.0.clone(),
-        place,
-        state.get_current_node_id().unwrap(),
+        expir::Type::Ref {
+            storage_type,
+            storage_place,
+            buffer_flags,
+        },
+        context
     );
     new_state.next_node();
     let node = ir::Node::AllocTemporary {
-        place,
+        place: storage_place,
         storage_type,
         buffer_flags,
     };
@@ -95,21 +99,54 @@ fn explicate_local_do_builtin(
                 .expect("Unreachable")
         )
     );
+    let mut new_state = state.clone();
     let operation = expir_operation.as_ref().opt().expect(&error).clone();
+    let node_id = match operation {
+        expir::Quotient::Node { node_id } => node_id,
+        _ => panic!(
+            "Expected node operation for local do builtin {}",
+            context.debug_info.node_expir(
+                state.get_current_funclet_id(),
+                state.get_current_node(context).as_ref().opt().unwrap()
+            )
+        ),
+    };
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
     for input in expir_inputs.as_ref().opt().expect(&error).iter() {
-        let current = input.as_ref().opt().expect(&error);
-        
+        let input_open = input.as_ref().opt().expect(&error).clone();
+        inputs.push(input_open);
     }
-    let mut new_state = state.clone();
-    for input in inputs.iter() {}
-    new_state.next_node();
+    for output in expir_outputs.as_ref().opt().expect(&error).iter() {
+        let output_open = output.as_ref().opt().expect(&error).clone();
+        let typ = new_state.consume_allocation(Location {
+            funclet: state.get_current_funclet_id(),
+            node: output_open,
+        });
+        new_state.add_instantiation(
+            output_open,
+            vec![Location {
+                funclet: state
+                    .get_funclet_spec(
+                        state.get_current_funclet_id(),
+                        &expir::FuncletKind::Value,
+                        context,
+                    )
+                    .funclet_id_opt
+                    .unwrap(),
+                node: node_id,
+            }],
+            typ,
+            context
+        );
+        outputs.push(output_open);
+    }
     let node = ir::Node::LocalDoBuiltin {
         operation,
         inputs: inputs.into_boxed_slice(),
         outputs: outputs.into_boxed_slice(),
     };
+    new_state.next_node();
     match explicate_node(new_state, context) {
         None => None,
         Some(mut out) => {
@@ -125,7 +162,37 @@ fn explicate_read_ref(
     state: InState,
     context: &StaticContext,
 ) -> Option<FuncletOutState> {
-    todo!()
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let source = expir_source.as_ref().opt().expect(&error).clone();
+    let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
+
+    let instantiation_location = state.get_node_instantiation(source, context);
+    new_state.add_instantiation(
+        state.get_current_node_id().unwrap(),
+        vec![instantiation_location],
+        expir::Type::NativeValue { storage_type },
+        context
+    );
+    let node = ir::Node::ReadRef { storage_type, source };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
 }
 
 // initially setup a node that hasn't yet been read

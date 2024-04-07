@@ -3,6 +3,7 @@ pub mod instate;
 pub mod outstate;
 pub mod staticcontext;
 
+use super::expir::BufferFlags;
 use super::util::*;
 use super::Hole;
 use crate::debug_info::DebugInfo;
@@ -46,19 +47,6 @@ struct SpecFuncletData {
     tail_dependencies: Vec<NodeId>,
 }
 
-#[derive(Clone, Debug)]
-pub struct InstantiatedNodes {
-    pub value: Option<NodeId>,
-    pub timeline: Option<NodeId>,
-    pub spatial: Option<NodeId>,
-}
-
-#[derive(Debug, Clone)]
-struct ScheduleFuncletData {
-    // map from the scheduled allocations to what things they are instantiating (if known)
-    type_instantiations: HashMap<NodeId, InstantiatedNodes>,
-}
-
 // NOTE: we use "available" here to mean "either not filled or not used yet"
 // so basically partially defined holes that the explicator can use
 
@@ -77,9 +65,6 @@ with_operations!(make_op_codes);
 #[derive(Debug, Clone)]
 pub struct InState {
     // state information needs to be duplicated as we recurse
-
-    // information found about a given schedule funclet
-    schedule_explication_data: HashMap<FuncletId, ScheduleFuncletData>,
 
     // most recent scoped information found when constructing the current schedule
     // this represents a stack, so should be popped when scope ends
@@ -109,10 +94,14 @@ pub struct ScheduleScopeData {
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
     // we only care about local information
-    instantiations: HashMap<Location, Vec<(expir::Place, NodeId)>>,
+    instantiations: HashMap<Location, Vec<NodeId>>,
 
-    // stable vec from type ids to available memory allocations
-    allocations: HashMap<TypeId, Vec<(expir::Place, NodeId)>>,
+    // map from node id to which remote it instantiates, and what type it has
+    // we really do need both directions here, annoyingly
+    node_type_information: HashMap<NodeId, (Location, expir::Type)>,
+
+    // list of available memory allocations, with associated type information
+    allocations: Vec<(NodeId, expir::Type)>,
 
     // map from operation code to a vector of "available" operations with holes
     // for now, these consist of exactly allocations where we don't yet know the type

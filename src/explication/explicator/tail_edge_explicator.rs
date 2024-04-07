@@ -6,6 +6,7 @@ use crate::explication::util::Location;
 use crate::explication::util::*;
 use crate::explication::Hole;
 use crate::ir::Place;
+use crate::rust_wgpu_backend::ffi;
 use crate::{explication, frontend, ir};
 
 fn explicate_return(
@@ -13,6 +14,10 @@ fn explicate_return(
     state: &InState,
     context: &StaticContext,
 ) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in tail_edge of funclet {}",
+        context.debug_info.funclet(&state.get_current_funclet_id())
+    );
     match return_values {
         Hole::Filled(values) => {
             let mut result = FuncletOutState::new();
@@ -25,10 +30,55 @@ fn explicate_return(
             Some(result)
         }
         Hole::Empty => {
-            let funclet = state.get_current_funclet_id();
-            dbg!(&state);
-            dbg!(&context.get_funclet(&funclet).output_types);
-            todo!()
+            let mut result = FuncletOutState::new();
+            let funclet_id = state.get_current_funclet_id();
+            let funclet = context.get_funclet(&funclet_id);
+            let outputs = &funclet.output_types;
+            // TODO: expand to triple
+            let value_tags = &state
+                .get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context)
+                .output_tags;
+            assert!(
+                value_tags.len() == 1 && outputs.len() == 1,
+                "Expected only one output to use a return in funclet {}",
+                context.debug_info.funclet(&state.get_current_funclet_id())
+            );
+            let target_node = match value_tags
+                .get(0)
+                .unwrap()
+                .as_ref()
+                .opt()
+                .expect(&error)
+                .quot
+            {
+                ir::Quotient::Node { node_id } => node_id,
+                _ => todo!(),
+            };
+            // TODO: I don't think this matters, oddly enough, but we should verify this
+            let target_type = &expir::Type::NativeValue {
+                storage_type: ffi::TypeId(outputs.get(0).unwrap().clone()),
+            };
+            let instantiation = state.find_instantiation(
+                &Location {
+                    funclet: state
+                        .get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context)
+                        .funclet_id_opt
+                        .unwrap(),
+                    node: target_node,
+                },
+                target_type,
+                context,
+            );
+            // we couldn't find anything in our funclet
+            if instantiation.funclet != funclet_id {
+                // TODO try and explicate something
+                todo!()
+            } else {
+                result.set_tail_edge(ir::TailEdge::Return {
+                    return_values: vec![instantiation.node].into_boxed_slice(),
+                });
+                Some(result)
+            }
         }
     }
 }

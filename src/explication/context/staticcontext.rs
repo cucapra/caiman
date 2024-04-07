@@ -326,4 +326,28 @@ impl<'context> StaticContext<'context> {
             self.debug_info.funclet(funclet)
         ))
     }
+
+    pub fn get_node(&self, location: Location) -> &expir::Node {
+        self.program()
+            .funclets
+            .get(location.funclet)
+            .expect(&format!(
+                "Invalid funclet index {} corresponding with funclet {}",
+                location.funclet,
+                self.debug_info.funclet(&location.funclet)
+            ))
+            .nodes
+            .get(location.node)
+            .expect(&format!(
+                "Invalid node index {} for funclet {}",
+                location.node,
+                self.debug_info.funclet(&location.funclet)
+            ))
+            .as_ref()
+            .opt()
+            .expect(&format!(
+                "Spec funclet {} cannot have hole",
+                self.debug_info.funclet(&location.funclet)
+            ))
+    }
 }
