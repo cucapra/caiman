@@ -13,26 +13,53 @@ use crate::rust_wgpu_backend::ffi;
 use super::force_lower_node;
 use super::tail_edge_explicator;
 
-fn read_phi_node(expir_location: &Location, index: usize, context: &StaticContext) -> expir::Node {
-    todo!()
-    // let current_funclet = context.get_funclet(&location.funclet);
-    // let argument = current_funclet.header.args.get(index).unwrap_or_else(|| {
-    //     panic!(
-    //         "Index {} out of bounds for header in location {:?}",
-    //         index, location
-    //     )
-    // });
-    // let mut remotes = Vec::new();
-    // for tag in &argument.tags {
-    //     let quotient = tag_quotient(tag);
-    //     match quotient {
-    //         None => {}
-    //         Some(remote) => remotes.push(remote.clone()),
-    //     }
-    // }
-    // let place = context.get_type_place(&argument.typ);
-    // context.add_instantiation(location.node.clone(), remotes, place.cloned());
-    // expir::Node::Phi { index: Some(index) }
+fn explicate_phi_node(
+    index: usize,
+    state: InState,
+    context: &StaticContext,
+) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let funclet_id = state.get_current_funclet_id();
+    let node_id = state.get_current_node_id().unwrap();
+    // TODO: make triple
+    let value_spec = state.get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context);
+    new_state.add_instantiation(
+        node_id,
+        vec![Location {
+            funclet: value_spec.funclet_id_opt.unwrap(),
+            node: node_id,
+        }],
+        context
+            .get_type(
+                state
+                    .get_current_funclet(context)
+                    .input_types
+                    .get(index)
+                    .unwrap(),
+            )
+            .clone(),
+        context,
+    );
+    let node = ir::Node::Phi { index };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
 }
 
 fn explicate_allocate_temporary(
@@ -58,13 +85,13 @@ fn explicate_allocate_temporary(
     let buffer_flags = expir_buffer_flags.as_ref().opt().expect(&error).clone();
     let mut new_state = state.clone();
     new_state.add_allocation(
-        storage_type.0.clone(),
+        state.get_current_node_id().unwrap(),
         expir::Type::Ref {
             storage_type,
             storage_place,
             buffer_flags,
         },
-        context
+        context,
     );
     new_state.next_node();
     let node = ir::Node::AllocTemporary {
@@ -137,7 +164,7 @@ fn explicate_local_do_builtin(
                 node: node_id,
             }],
             typ,
-            context
+            context,
         );
         outputs.push(output_open);
     }
@@ -182,9 +209,12 @@ fn explicate_read_ref(
         state.get_current_node_id().unwrap(),
         vec![instantiation_location],
         expir::Type::NativeValue { storage_type },
-        context
+        context,
     );
-    let node = ir::Node::ReadRef { storage_type, source };
+    let node = ir::Node::ReadRef {
+        storage_type,
+        source,
+    };
     new_state.next_node();
     match explicate_node(new_state, context) {
         None => None,
@@ -210,6 +240,16 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
                 explicate_node(new_state, context);
                 todo!()
             }
+            Hole::Filled(expir::Node::Phi { index }) => explicate_phi_node(
+                index.as_ref().opt().expect(&format!(
+                    "Cannot have a hole for index in Phi node {}",
+                    context
+                        .debug_info
+                        .node_expir(state.get_current_funclet_id(), state.get_current_node(context))
+                )).clone(),
+                state,
+                context,
+            ),
             Hole::Filled(expir::Node::AllocTemporary {
                 place,
                 storage_type,

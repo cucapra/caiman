@@ -350,4 +350,13 @@ impl<'context> StaticContext<'context> {
                 self.debug_info.funclet(&location.funclet)
             ))
     }
+
+    pub fn get_type(&self, type_id: &TypeId) -> &expir::Type {
+        self.program().types.get(*type_id).expect(&format!(
+            "Invalid funclet index {} for type {:?} corresponding with type {}",
+            type_id,
+            &self.program().types,
+            self.debug_info.typ(type_id)
+        ))
+    }
 }

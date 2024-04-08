@@ -61,7 +61,7 @@ impl InState {
         vec![]
     }
 
-    // Consume an allocation and return the type information
+    // Consume any allocation and return the type information
     pub fn consume_allocation(&mut self, location: Location) -> expir::Type {
         for scope in self.scopes.iter_mut().rev() {
             if scope.funclet == location.funclet {

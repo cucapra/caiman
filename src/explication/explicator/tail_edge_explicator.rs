@@ -39,46 +39,47 @@ fn explicate_return(
                 .get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context)
                 .output_tags;
             assert!(
-                value_tags.len() == 1 && outputs.len() == 1,
-                "Expected only one output to use a return in funclet {}",
+                value_tags.len() == outputs.len(),
+                "Expected only equal tag and output lengths {}",
                 context.debug_info.funclet(&state.get_current_funclet_id())
             );
-            let target_node = match value_tags
-                .get(0)
-                .unwrap()
-                .as_ref()
-                .opt()
-                .expect(&error)
-                .quot
-            {
-                ir::Quotient::Node { node_id } => node_id,
-                _ => todo!(),
+            let mut nodes = Vec::new();
+            for (output, value_tag) in outputs.iter().zip(value_tags.iter()) {
+                let target_node = match value_tag
+                    .as_ref()
+                    .opt()
+                    .expect(&error)
+                    .quot
+                {
+                    ir::Quotient::Node { node_id } => node_id,
+                    _ => todo!(),
+                };
+                // TODO: I don't think this matters, oddly enough, but we should verify this
+                let target_type = &expir::Type::NativeValue {
+                    storage_type: ffi::TypeId(output.clone()),
+                };
+                let instantiation = state.find_instantiation(
+                    &Location {
+                        funclet: state
+                            .get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context)
+                            .funclet_id_opt
+                            .unwrap(),
+                        node: target_node,
+                    },
+                    target_type,
+                    context,
+                );
+                // we couldn't find anything in our funclet
+                if instantiation.funclet != funclet_id {
+                    // TODO try and explicate something
+                    todo!()
+                };
+                nodes.push(instantiation.node);
             };
-            // TODO: I don't think this matters, oddly enough, but we should verify this
-            let target_type = &expir::Type::NativeValue {
-                storage_type: ffi::TypeId(outputs.get(0).unwrap().clone()),
-            };
-            let instantiation = state.find_instantiation(
-                &Location {
-                    funclet: state
-                        .get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context)
-                        .funclet_id_opt
-                        .unwrap(),
-                    node: target_node,
-                },
-                target_type,
-                context,
-            );
-            // we couldn't find anything in our funclet
-            if instantiation.funclet != funclet_id {
-                // TODO try and explicate something
-                todo!()
-            } else {
-                result.set_tail_edge(ir::TailEdge::Return {
-                    return_values: vec![instantiation.node].into_boxed_slice(),
-                });
-                Some(result)
-            }
+            result.set_tail_edge(ir::TailEdge::Return {
+                return_values: nodes.into_boxed_slice(),
+            });
+            Some(result)
         }
     }
 }
