@@ -233,7 +233,8 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
     if state.is_end_of_funclet(context) {
         tail_edge_explicator::explicate_tail_edge(&state, context)
     } else {
-        match state.get_current_node(context) {
+        let current_node = state.get_current_node(context);
+        match current_node {
             Hole::Empty => {
                 let mut new_state = state.clone();
                 new_state.add_explication_hole();
@@ -241,12 +242,16 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
                 todo!()
             }
             Hole::Filled(expir::Node::Phi { index }) => explicate_phi_node(
-                index.as_ref().opt().expect(&format!(
-                    "Cannot have a hole for index in Phi node {}",
-                    context
-                        .debug_info
-                        .node_expir(state.get_current_funclet_id(), state.get_current_node(context))
-                )).clone(),
+                index
+                    .as_ref()
+                    .opt()
+                    .expect(&format!(
+                        "Cannot have a hole for index in Phi node {}",
+                        context
+                            .debug_info
+                            .node_expir(state.get_current_funclet_id(), current_node.as_ref.opt().unwrap())
+                    ))
+                    .clone(),
                 state,
                 context,
             ),
