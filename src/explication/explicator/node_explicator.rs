@@ -249,7 +249,7 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
                         "Cannot have a hole for index in Phi node {}",
                         context
                             .debug_info
-                            .node_expir(state.get_current_funclet_id(), current_node.as_ref.opt().unwrap())
+                            .node_expir(state.get_current_funclet_id(), current_node.as_ref().opt().unwrap())
                     ))
                     .clone(),
                 state,
