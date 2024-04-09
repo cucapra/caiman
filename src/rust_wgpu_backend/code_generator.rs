@@ -1650,7 +1650,7 @@ impl<'program> CodeGenerator<'program> {
         let type_name = self.get_stripped_type_name(type_id);
         write!(
             self.code_writer,
-            "instance.glocals.alloc_gpu::<{type_name}>({}, wgpu::BufferUsages::empty()",
+            "instance.glocals.alloc_gpu::<{type_name}>(instance.state, {}, wgpu::BufferUsages::empty()",
             variable_id.0
         );
         if buffer_flags.map_read {
