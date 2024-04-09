@@ -38,7 +38,7 @@ impl ScheduleScopeData {
         }
     }
 
-    pub fn add_instantiation(
+    pub fn set_instantiation(
         &mut self,
         location: Location,
         typ: expir::Type,
@@ -49,15 +49,12 @@ impl ScheduleScopeData {
             .entry(location.clone())
             .or_insert(Vec::new())
             .push(schedule_node);
-        let check = self
+        // note that this may overwrite what an allocation instantiates
+        // this is, of course, completely fine mechanically
+        // but is also why backtracking is needed/complicated
+        self
             .node_type_information
             .insert(schedule_node, (location, typ));
-        assert!(
-            check.is_none(),
-            "duplicate add of scheduling node index {}, aka node {}",
-            schedule_node,
-            context.debug_info.node(&self.funclet, schedule_node)
-        );
     }
 
     pub fn add_allocation(

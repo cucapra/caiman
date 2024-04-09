@@ -61,30 +61,25 @@ impl InState {
         vec![]
     }
 
-    // Consume any allocation and return the type information
-    pub fn consume_allocation(&mut self, location: Location) -> expir::Type {
+    // Read any allocation and return the type information
+    pub fn read_allocation(&mut self, location: Location) -> expir::Type {
         for scope in self.scopes.iter_mut().rev() {
             if scope.funclet == location.funclet {
-                let mut result = None;
-                let mut to_remove = None;
                 for (index, allocation) in scope.allocations.iter().enumerate() {
                     if allocation.0 == location.node {
-                        assert!(to_remove.is_none());
-                        to_remove = Some(index);
-                        result = Some(allocation.1.clone());
+                        return allocation.1.clone();
                     }
                 }
-                scope.allocations.remove(to_remove.expect(&format!(
+                panic!(
                     "Missing allocation {:?} (was it already consumed?)",
                     location
-                )));
-                return result.unwrap();
+                );
             }
         }
         panic!("Missing scope for {:?}", location);
     }
 
-    pub fn add_instantiation(
+    pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
         spec_remotes: Vec<Location>,
@@ -93,7 +88,7 @@ impl InState {
     ) {
         let scope = self.get_latest_scope_mut();
         for spec_remote in &spec_remotes {
-            scope.add_instantiation(
+            scope.set_instantiation(
                 spec_remote.clone(),
                 typ.clone(),
                 schedule_node.clone(),
@@ -209,17 +204,16 @@ impl InState {
         self.get_latest_scope_mut().next_node();
     }
 
-    pub fn get_node_instantiation(&self, node_id: NodeId, context: &StaticContext) -> Location {
+    pub fn get_node_information(
+        &self,
+        node_id: NodeId,
+        context: &StaticContext,
+    ) -> &(Location, expir::Type) {
         let scope = self.get_latest_scope();
-        scope
-            .node_type_information
-            .get(&node_id)
-            .expect(&format!(
-                "Missing instantiation for node {}",
-                context.debug_info.node(&scope.funclet, node_id)
-            ))
-            .0
-            .clone()
+        scope.node_type_information.get(&node_id).expect(&format!(
+            "Missing instantiation for node {}",
+            context.debug_info.node(&scope.funclet, node_id)
+        ))
     }
 
     // Returns true if two types are "close enough" to equal

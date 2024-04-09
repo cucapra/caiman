@@ -294,7 +294,7 @@ def main():
             inputs.append(Path(file))
     if args.command == "run":
         ret = build(test_dir, inputs, args.quiet)
-        ret |= run(test_dir, args.files)
+        ret |= run(test_dir, inputs)
         exit(ret)
     elif args.command == "build":
         build(test_dir, inputs, args.quiet)
