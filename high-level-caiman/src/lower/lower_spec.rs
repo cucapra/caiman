@@ -7,8 +7,9 @@ use crate::{
     },
     typing::{Context, SpecInfo},
 };
+use caiman::explication::Hole;
 use caiman::{
-    assembly::ast::{self as asm, Hole},
+    assembly::ast::{self as asm},
     ir,
 };
 
@@ -48,7 +49,7 @@ fn lower_spec_call(
     lhs: Vec<String>,
     function: &NestedExpr<SpecTerm>,
     args: Vec<NestedExpr<SpecTerm>>,
-) -> Vec<asm::Hole<asm::Command>> {
+) -> Vec<Hole<asm::Command>> {
     let function = enum_cast!(
         SpecTerm::Var { name, .. },
         name,
@@ -101,7 +102,7 @@ fn lower_binop(
     op_lhs: NestedExpr<SpecTerm>,
     op_rhs: NestedExpr<SpecTerm>,
     type_ctx: &SpecInfo,
-) -> Vec<asm::Hole<asm::Command>> {
+) -> Vec<Hole<asm::Command>> {
     let op_lhs = term_to_name(op_lhs);
     let op_rhs = term_to_name(op_rhs);
     let temp = tuple_id(&[dest.clone()]);
@@ -141,7 +142,7 @@ fn lower_spec_assign(
     e: NestedExpr<SpecTerm>,
     global_ctx: &Context,
     spec_name: &str,
-) -> Vec<asm::Hole<asm::Command>> {
+) -> Vec<Hole<asm::Command>> {
     match e {
         NestedExpr::Conditional {
             if_true,

@@ -7,11 +7,13 @@ extern crate core;
 #[macro_use]
 mod operations;
 pub mod assembly;
+pub mod explication;
 mod id_generator;
 pub mod ir;
 pub mod stable_vec;
 //mod ir_builders;
 pub mod frontend;
+pub mod debug_info;
 mod rust_wgpu_backend;
 mod scheduling_state;
 mod shadergen;
@@ -26,16 +28,17 @@ pub fn explicate_and_execute(
     let version = &program.version;
     assert_eq!((version.major, version.minor, version.detailed), (0, 0, 2));
 
-    let definition = assembly::lowering_pass::lower(program);
+    let exp_defininition = assembly::lowering_pass::lower(program);
+    let definition = explication::explicate(exp_defininition);
     if explicate_only {
         println!("{:#?}", definition);
         return;
     }
-    match crate::type_system::check_program(&definition.program) {
+    match crate::type_system::check_program(&definition.program, &definition.debug_info) {
         Ok(_) => (),
         Err(error) => panic!("Type checking failed:\n{}", error),
     }
-    let mut codegen = rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
+    let mut codegen = rust_wgpu_backend::codegen::CodeGen::new(&definition.program, &definition.debug_info);
     codegen.set_print_codgen_debug_info(true);
     let output_string = codegen.generate();
     match output {

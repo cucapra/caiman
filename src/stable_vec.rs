@@ -125,6 +125,14 @@ impl<T> StableVec<T> {
             .enumerate()
             .filter_map(|(a, b)| Some((a, b.used_mut()?)))
     }
+
+    /// Returns the number of elements
+    pub fn len(&self) -> usize {
+        self.storage.iter().fold(0, |v, e| match e {
+            Entry::Used { contents : _ } => v + 1,
+            Entry::Free { next : _ } => v,
+        })
+    }
 }
 impl<T> std::default::Default for StableVec<T> {
     fn default() -> Self {
@@ -134,6 +142,18 @@ impl<T> std::default::Default for StableVec<T> {
 impl<T: std::fmt::Debug> std::fmt::Debug for StableVec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
+    }
+}
+impl<T> core::iter::FromIterator<T> for StableVec<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut storage = Vec::new();
+        for contents in iter {
+            storage.push(Entry::Used { contents });
+        };
+        Self {
+            storage,
+            free_head : INVALID_KEY
+        }
     }
 }
 impl<T> core::ops::Index<Key> for StableVec<T> {
@@ -242,9 +262,14 @@ mod tests {
     #[test]
     fn add() {
         let mut sv = StableVec::new();
+
+        assert_eq!(sv.len(), 0);
+
         let seven = sv.add(7i32);
         let four = sv.add(4i32);
         let nfive = sv.add(-5i32);
+
+        assert_eq!(sv.len(), 3);
 
         assert_eq!(sv[seven], 7);
         assert_eq!(sv[four], 4);
@@ -264,8 +289,12 @@ mod tests {
         let a = sv.add(7i32);
         let b = sv.add(4i32);
 
+        assert_eq!(sv.len(), 2);
+
         *sv.get_mut(a).unwrap() = 62;
         sv[b] = 108;
+
+        assert_eq!(sv.len(), 2);
 
         assert_eq!(sv[a], 62);
         assert_eq!(sv.get(b), Some(&108));
@@ -276,18 +305,24 @@ mod tests {
         let a = sv.add(1234);
         let b = sv.add(5678);
         let c = sv.add(9101112);
+
+        assert_eq!(sv.len(), 3);
         // In general, I can't test that it will fill the most recently freed entry, since I don't
         // want to make that guarantee. But if there's only one entry free then it must fill it.
         sv.remove(a);
+        assert_eq!(sv.len(), 2);
         let d = sv.add(4321);
         // This will break if generational indices are added
         assert_eq!(a, d);
         assert_eq!(sv[d], 4321);
+        assert_eq!(sv.len(), 3);
         sv.remove(a);
         let _ = sv.add(1324); // should fill in a again
+        assert_eq!(sv.len(), 3);
         sv.remove(b);
         sv.remove(c);
         sv.remove(a);
+        assert_eq!(sv.len(), 0);
         let _ = sv.add(1);
         let _ = sv.add(2);
         let _ = sv.add(3);
@@ -392,6 +427,21 @@ mod tests {
         sv5.remove(a5);
         sv5.remove(b5);
         assert_ne!(sv1, sv5);
+    }
+    #[test]
+    fn collect_equality() {
+        let mut sv1 = StableVec::new();
+        let _ = sv1.add(8i32);
+        let _ = sv1.add(7i32);
+        let sv2 = vec![8i32, 7i32].into_iter().collect();
+        let sv3 = vec![6i32, 7i32].into_iter().collect();
+        let sv4 = vec![8i32, 7i32, 6i32].into_iter().collect();
+        let sv5 = vec![7i32, 6i32, 5i32].into_iter().map(|v| v+1).collect();
+
+        assert_eq!(sv1, sv2);
+        assert_ne!(sv1, sv3);
+        assert_ne!(sv1, sv4);
+        assert_eq!(sv4, sv5);
     }
     #[test]
     fn serde() {

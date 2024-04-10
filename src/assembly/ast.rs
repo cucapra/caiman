@@ -3,56 +3,7 @@ use crate::rust_wgpu_backend::ffi;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-
-// Explication and frontend AST
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Hole<T> {
-    Empty,
-    Filled(T),
-}
-
-impl<T> Hole<T> {
-    pub fn as_ref(&self) -> Hole<&T> {
-        match self {
-            Hole::Empty => Hole::Empty,
-            Hole::Filled(x) => Hole::Filled(x),
-        }
-    }
-
-    pub fn opt(self) -> Option<T> {
-        self.into()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Hole::Empty => true,
-            Hole::Filled(_) => false,
-        }
-    }
-
-    pub fn is_filled(&self) -> bool {
-        !self.is_empty()
-    }
-}
-
-impl<T> From<Option<T>> for Hole<T> {
-    fn from(x: Option<T>) -> Self {
-        match x {
-            Some(x) => Hole::Filled(x),
-            None => Hole::Empty,
-        }
-    }
-}
-
-impl<T> From<Hole<T>> for Option<T> {
-    fn from(x: Hole<T>) -> Self {
-        match x {
-            Hole::Filled(x) => Some(x),
-            Hole::Empty => None,
-        }
-    }
-}
+use crate::explication::Hole;
 
 #[macro_export]
 macro_rules! def_assembly_id_type {
@@ -143,12 +94,25 @@ pub enum FFIType {
     GpuBufferAllocator,
     CpuBufferAllocator,
     CpuBufferRef(Box<FFIType>),
+    GpuFence,
+    // useful for debugging stuff
+    Unknown
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum TypeId {
     FFI(FFIType),
     Local(String),
+}
+
+impl std::fmt::Display for TypeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TypeId::FFI(typ) => write!(f, "{:?}", typ),
+            TypeId::Local(s) => write!(f, "{}", s)
+        };
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -162,16 +126,28 @@ pub struct ExternalGpuFunctionResourceBinding {
 // keeping this idea around for the frontend, easier to reason about for tags
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteNodeId {
-    pub funclet: Hole<MetaId>,
+    // a funclet must always be present syntactically
+    // otherwise inference here makes no sense
+    pub funclet: MetaId,
     // we need an option of a hole
     // since None is explicitly different than ?
     pub node: Option<Hole<NodeId>>,
 }
 
+impl std::fmt::Display for RemoteNodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}.{}", self.funclet, match &self.node {
+            None => "None".to_string(),
+            Some(n) => format!("{}", n)
+        });
+        Ok(())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Tag {
-    pub quot: Hole<RemoteNodeId>, // What a given value maps to in a specification
-    pub flow: ir::Flow,           // How this value transforms relative to the specification
+    pub quot: Hole<RemoteNodeId>,   // What a given value maps to in a specification
+    pub flow: Hole<ir::Flow>,       // How this value transforms relative to the specification
 }
 
 // Super Jank, but whatever
@@ -180,9 +156,6 @@ macro_rules! lookup_abstract_type_parser {
 	([$elem_type:ident]) => { Vec<Hole<lookup_abstract_type_parser!($elem_type)>> };
 	(Type) => { TypeId };
 	(Immediate) => { String };
-	(ImmediateI64) => { i64 };
-	(ImmediateI32) => { i32 };
-	(ImmediateU64) => { u64 };
 	(Index) => { usize };
 	(ExternalFunction) => { ExternalFunctionId };
 	(ValueFunction) => { FunctionClassId };
@@ -251,6 +224,46 @@ macro_rules! make_parser_nodes {
 }
 
 with_operations!(make_parser_nodes);
+
+macro_rules! map_display {
+    ($arg:ident [$arg_type:ident] $f:ident) => {
+        match $arg {
+            Hole::Empty => { write!($f, "Empty"); }
+            Hole::Filled(v) => {
+                write!($f, "[");
+                for item in v.iter() {
+                    map_display!(item $arg_type $f);
+                    write!($f, ", ");
+                }
+                write!($f, "]");
+            }
+        }
+    };
+    ($arg:ident $arg_type:ident $f:ident) => {
+        write!($f, "{}", $arg);
+    }
+}
+
+macro_rules! node_display {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        impl std::fmt::Display for Node {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(Node::$name { $($arg,)* } => {
+                        writeln!(f, "{} {{ ", stringify!($name));
+                        $(write!(f, "\t{} : ", stringify!($arg)); 
+                            map_display!($arg $arg_type f);
+                            writeln!(f, "");)*
+                        writeln!(f, "}}");
+                        Ok(())
+                    })*
+                }
+            }
+        }
+    }
+}
+
+with_operations!(node_display);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TailEdge {

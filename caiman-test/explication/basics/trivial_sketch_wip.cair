@@ -21,12 +21,12 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%bar<none-have, none-have>() ->
-[%out : %ni64] {
-    ???;
-    local-do-builtin node($val.%x)() -> ?;
-    %result = read-ref i64 %x_ref;
-    return %result;
+<none-have, none-have>
+%bar() -> %ni64 {
+    %_ = alloc-temporary ? ?;
+    local-do-builtin ? -> ?;
+    %_ = read-ref ? ?;
+    return ?;
 }
 
 pipeline "main" = %bar;

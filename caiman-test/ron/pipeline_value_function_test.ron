@@ -303,5 +303,12 @@
 		pipelines : [
 			(name : "pipeline_with_value_function", entry_funclet : 13),
 		]
+	),
+	debug_info : DebugInfo (
+		type_map: {},
+		ffi_type_map: {},
+		function_class_map: {},
+		external_function_map: {},
+		funclet_map: {},
 	)
 )

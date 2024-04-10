@@ -4,7 +4,8 @@
 
 use std::collections::BTreeSet;
 
-use caiman::assembly::ast::{self as asm, Hole, MetaMapping, RemoteNodeId};
+use caiman::assembly::ast::{self as asm, MetaMapping, RemoteNodeId};
+use caiman::explication::Hole;
 
 use crate::{
     enum_cast,
@@ -354,15 +355,15 @@ fn lower_yield(captures: &[String], temp_id: usize, f: &Funclet) -> CommandVec {
             operations: Hole::Filled(vec![
                 Hole::Filled(asm::RemoteNodeId {
                     node: None,
-                    funclet: Hole::Filled(SpecType::Value.get_meta_id()),
+                    funclet: SpecType::Value.get_meta_id(),
                 }),
                 Hole::Filled(asm::RemoteNodeId {
                     node: None,
-                    funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                    funclet: SpecType::Spatial.get_meta_id(),
                 }),
                 Hole::Filled(asm::RemoteNodeId {
                     node: None,
-                    funclet: Hole::Filled(SpecType::Timeline.get_meta_id()),
+                    funclet: SpecType::Timeline.get_meta_id(),
                 }),
             ]),
             external_function_id: Hole::Filled(asm::ExternalFunctionId(String::from("_loop_impl"))),
@@ -526,7 +527,7 @@ pub fn tag_to_remote_id(t: &Tag) -> asm::RemoteNodeId {
                     .into(),
             )
         },
-        funclet: Hole::Filled(t.quot_var.spec_type.get_meta_id()),
+        funclet: t.quot_var.spec_type.get_meta_id(),
     }
 }
 
@@ -535,10 +536,10 @@ pub fn tag_to_tag(t: &Tag) -> asm::Tag {
     asm::Tag {
         quot: Hole::Filled(tag_to_remote_id(t)),
         flow: match t.flow.expect("TODO: Holes in flow") {
-            Flow::Dead => ir::Flow::Dead,
-            Flow::Need => ir::Flow::Need,
-            Flow::Usable => ir::Flow::Usable,
-            Flow::Save => ir::Flow::Saved,
+            Flow::Dead => Hole::Filled(ir::Flow::Dead),
+            Flow::Need => Hole::Filled(ir::Flow::Need),
+            Flow::Usable => Hole::Filled(ir::Flow::Usable),
+            Flow::Save => Hole::Filled(ir::Flow::Saved),
         },
     }
 }
@@ -572,16 +573,16 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
             binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
                 implicit_tags: (
                     asm::Tag {
-                        flow: ir::Flow::Usable,
+                        flow: Hole::Filled(ir::Flow::Usable),
                         quot: Hole::Filled(RemoteNodeId {
-                            funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                            funclet: SpecType::Timeline.get_meta_id(),
                             node: None,
                         }),
                     },
                     asm::Tag {
-                        flow: ir::Flow::Usable,
+                        flow: Hole::Filled(ir::Flow::Usable),
                         quot: Hole::Filled(RemoteNodeId {
-                            funclet: Hole::Filled(SpecType::Spatial.get_meta_id()),
+                            funclet: SpecType::Timeline.get_meta_id(),
                             node: None,
                         }),
                     },

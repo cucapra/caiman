@@ -101,8 +101,8 @@ schedule[value $val = %foo,  timeline $time = %time, spatial $space = %space] %b
     local-do-builtin $val(%x, %3) -> [%4, %0];
     local-do-external %do_pure_thing_on_cpu ?(%x, %3) -> [%4, %0];
     local-copy %x -> %3;
-    %_ = begin-encoding local ?.?[%x, %3] [%4, %0];
-    encode-do %x %do_pure_thing_on_cpu ?.%2() -> %x;
+    %_ = begin-encoding local ?[%x, %3] [%4, %0];
+    encode-do %x %do_pure_thing_on_cpu $val.%2() -> %x;
     encode-do %x %do_pure_thing_on_cpu $val.?() -> [%x, %y];
     encode-copy %z %x -> %y;
     %6 = submit %x ?;

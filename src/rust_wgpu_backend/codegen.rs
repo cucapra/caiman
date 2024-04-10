@@ -1,3 +1,4 @@
+use crate::debug_info::DebugInfo;
 use crate::ir::{self, Funclet, Program, Type};
 use crate::rust_wgpu_backend::code_generator;
 use crate::rust_wgpu_backend::code_generator::{CodeGenerator, SubmissionId, VarId};
@@ -358,6 +359,7 @@ impl PipelineContext {
 
 pub struct CodeGen<'program> {
     program: &'program ir::Program,
+    debug_info: &'program DebugInfo,
     code_generator: CodeGenerator<'program>,
     print_codegen_debug_info: bool,
     generated_local_slot_ffi_type_map: HashMap<ir::TypeId, ir::ffi::TypeId>,
@@ -366,12 +368,13 @@ pub struct CodeGen<'program> {
 }
 
 impl<'program> CodeGen<'program> {
-    pub fn new(program: &'program ir::Program) -> Self {
+    pub fn new(program: &'program ir::Program, debug_info: &'program DebugInfo) -> Self {
         let mut code_generator = CodeGenerator::new(&program.native_interface);
         let default_usize_ffi_type_id = code_generator.create_ffi_type(ir::ffi::Type::USize);
         let default_u64_ffi_type_id = code_generator.create_ffi_type(ir::ffi::Type::U64);
         Self {
             program: &program,
+            debug_info,
             code_generator,
             print_codegen_debug_info: false,
             generated_local_slot_ffi_type_map: HashMap::new(),
@@ -1492,7 +1495,7 @@ impl<'program> CodeGen<'program> {
             funclet_id,
         );
         let mut funclet_checker =
-            type_system::scheduling::FuncletChecker::new(&self.program, funclet);
+            type_system::scheduling::FuncletChecker::new(&self.program, funclet_id, funclet, &self.debug_info);
 
         if self.print_codegen_debug_info {
             println!(

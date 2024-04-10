@@ -1,19 +1,19 @@
 use crate::assembly::ast;
 use crate::assembly::ast::FFIType;
-use crate::assembly::ast::Hole;
 use crate::assembly::ast::NodeId;
 use crate::assembly::context;
-use crate::assembly::context::reject_hole;
 use crate::assembly::context::Context;
-use crate::assembly::explication;
 use crate::assembly::parser;
+use crate::explication::expir;
+use crate::explication::Hole;
 use crate::ir::ffi;
-use crate::{assembly, frontend, ir};
+use crate::stable_vec::StableVec;
+use crate::{assembly, frontend};
+use paste::paste;
 use std::any::Any;
 use std::collections::{BTreeSet, HashMap};
 
 // for reading GPU stuff
-use crate::stable_vec::StableVec;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
@@ -30,72 +30,69 @@ pub fn undefined<T>(h: Hole<T>) -> T {
 
 pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
     fn box_map(b: Box<[FFIType]>, context: &mut Context) -> Box<[ffi::TypeId]> {
-        b.iter()
-            .map(|x| ffi::TypeId(context.ffi_type_id(x)))
-            .collect()
-    }
-    fn type_id(element_type: Box<FFIType>, context: &mut Context) -> ffi::TypeId {
-        ffi::TypeId(context.ffi_type_id(element_type.as_ref()))
+        b.iter().map(|x| context.ffi_type_id(x)).collect()
     }
     match value {
-        FFIType::F32 => ffi::Type::F32,
-        FFIType::F64 => ffi::Type::F64,
-        FFIType::U8 => ffi::Type::U8,
-        FFIType::U16 => ffi::Type::U16,
-        FFIType::U32 => ffi::Type::U32,
-        FFIType::U64 => ffi::Type::U64,
-        FFIType::USize => ffi::Type::USize,
-        FFIType::I8 => ffi::Type::I8,
-        FFIType::I16 => ffi::Type::I16,
-        FFIType::I32 => ffi::Type::I32,
-        FFIType::I64 => ffi::Type::I64,
-        FFIType::Array {
+        ast::FFIType::F32 => ffi::Type::F32,
+        ast::FFIType::F64 => ffi::Type::F64,
+        ast::FFIType::U8 => ffi::Type::U8,
+        ast::FFIType::U16 => ffi::Type::U16,
+        ast::FFIType::U32 => ffi::Type::U32,
+        ast::FFIType::U64 => ffi::Type::U64,
+        ast::FFIType::USize => ffi::Type::USize,
+        ast::FFIType::I8 => ffi::Type::I8,
+        ast::FFIType::I16 => ffi::Type::I16,
+        ast::FFIType::I32 => ffi::Type::I32,
+        ast::FFIType::I64 => ffi::Type::I64,
+        ast::FFIType::Array {
             element_type,
             length,
         } => ffi::Type::Array {
-            element_type: type_id(element_type, context),
+            element_type: context.ffi_type_id(element_type.as_ref()),
             length,
         },
-        FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
-            element_type: type_id(element_type, context),
+        ast::FFIType::ErasedLengthArray(element_type) => ffi::Type::ErasedLengthArray {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
-        FFIType::Struct {
+        ast::FFIType::Struct {
             fields,
             byte_alignment,
             byte_size,
         } => todo!(),
-        FFIType::Tuple(element_types) => ffi::Type::Tuple {
+        ast::FFIType::Tuple(element_types) => ffi::Type::Tuple {
             fields: box_map(element_types.into_boxed_slice(), context),
         },
-        FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
-            element_type: type_id(element_type, context),
+        ast::FFIType::ConstRef(element_type) => ffi::Type::ConstRef {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
-        FFIType::MutRef(element_type) => ffi::Type::MutRef {
-            element_type: type_id(element_type, context),
+        ast::FFIType::MutRef(element_type) => ffi::Type::MutRef {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
-        FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
-            element_type: type_id(element_type, context),
+        ast::FFIType::ConstSlice(element_type) => ffi::Type::ConstSlice {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
-        FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
-            element_type: type_id(element_type, context),
+        ast::FFIType::MutSlice(element_type) => ffi::Type::MutSlice {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
-        FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
-            element_type: type_id(element_type, context),
+        ast::FFIType::GpuBufferRef(element_type) => ffi::Type::GpuBufferRef {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
-        FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
-            element_type: type_id(element_type, context),
+        ast::FFIType::GpuBufferSlice(element_type) => ffi::Type::GpuBufferSlice {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
-        FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
-        FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
-        FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
-            element_type: type_id(element_type, context),
+        ast::FFIType::GpuBufferAllocator => ffi::Type::GpuBufferAllocator,
+        ast::FFIType::CpuBufferAllocator => ffi::Type::CpuBufferAllocator,
+        ast::FFIType::CpuBufferRef(element_type) => ffi::Type::CpuBufferRef {
+            element_type: context.ffi_type_id(element_type.as_ref()),
         },
+        ast::FFIType::GpuFence => ffi::Type::GpuFence,
+        ast::FFIType::Unknown => unreachable!()
     }
 }
 
 // Translation
 
-fn ir_version(version: &ast::Version, _: &mut Context) -> (u32, u32, u32) {
+fn ir_version(version: &ast::Version) -> (u32, u32, u32) {
     let result = (
         u32::try_from(version.major).unwrap(),
         u32::try_from(version.minor).unwrap(),
@@ -103,13 +100,6 @@ fn ir_version(version: &ast::Version, _: &mut Context) -> (u32, u32, u32) {
     );
     assert_eq!(result, (0, 0, 2));
     result
-}
-
-fn ir_tag(tag: &ast::Tag, context: &mut Context) -> ir::Tag {
-    ir::Tag {
-        quot: context.remote_node_id(&reject_hole(tag.quot.clone())),
-        flow: tag.flow.clone(),
-    }
 }
 
 fn ir_external_gpu_resource(
@@ -164,11 +154,11 @@ fn ir_external(external: &ast::ExternalFunction, context: &mut Context) -> ffi::
     let mut output_types = Vec::new();
 
     for arg in &external.input_args {
-        input_types.push(ffi::TypeId(context.ffi_type_id(&arg.ffi_type)));
+        input_types.push(context.ffi_type_id(&arg.ffi_type));
         input_args.push(arg.name.clone());
     }
     for arg in &external.output_types {
-        output_types.push(ffi::TypeId(context.ffi_type_id(&arg.ffi_type)));
+        output_types.push(context.ffi_type_id(&arg.ffi_type));
         let arg_name = arg.name.clone();
         output_args.push(arg_name);
     }
@@ -268,377 +258,164 @@ fn ir_native_interface(program: &ast::Program, context: &mut Context) -> ffi::Na
     }
 }
 
-fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<ir::Type> {
+fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<expir::Type> {
     match type_decl {
         ast::TypeDecl::Local(typ) => {
             Some(match &typ.data {
                 // only supported custom types atm
-                ast::LocalTypeInfo::NativeValue { storage_type } => ir::Type::NativeValue {
+                ast::LocalTypeInfo::NativeValue { storage_type } => expir::Type::NativeValue {
                     storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
                 },
                 ast::LocalTypeInfo::Ref {
                     storage_type,
                     storage_place,
                     buffer_flags,
-                } => ir::Type::Ref {
+                } => expir::Type::Ref {
                     storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
                     storage_place: storage_place.clone(),
                     buffer_flags: buffer_flags.clone(),
                 },
-                ast::LocalTypeInfo::Fence { queue_place } => ir::Type::Fence {
+                ast::LocalTypeInfo::Fence { queue_place } => expir::Type::Fence {
                     queue_place: queue_place.clone(),
                 },
                 ast::LocalTypeInfo::Buffer {
                     storage_place,
                     static_layout_opt,
                     flags,
-                } => ir::Type::Buffer {
+                } => expir::Type::Buffer {
                     storage_place: storage_place.clone(),
                     static_layout_opt: static_layout_opt.clone(),
                     flags: flags.clone(),
                 },
-                ast::LocalTypeInfo::Encoder { queue_place } => ir::Type::Encoder {
+                ast::LocalTypeInfo::Encoder { queue_place } => expir::Type::Encoder {
                     queue_place: queue_place.clone(),
                 },
-                ast::LocalTypeInfo::Event {} => ir::Type::Event {},
-                ast::LocalTypeInfo::BufferSpace => ir::Type::BufferSpace,
+                ast::LocalTypeInfo::Event {} => expir::Type::Event {},
+                ast::LocalTypeInfo::BufferSpace => expir::Type::BufferSpace,
             })
         }
         ast::TypeDecl::FFI(name) => None,
     }
 }
 
-fn ir_node(node: &ast::NamedNode, context: &mut Context) -> ir::Node {
-    match &node.node {
-        ast::Node::None => ir::Node::None,
-        ast::Node::Phi { index } => ir::Node::Phi {
-            index: reject_hole(index.as_ref()).clone(),
-        },
-        ast::Node::ExtractResult { node_id, index } => ir::Node::ExtractResult {
-            node_id: context.node_id(reject_hole(node_id.as_ref())),
-            index: reject_hole(index.as_ref()).clone(),
-        },
+macro_rules! lower_element {
+    ($arg:ident [$arg_type:ident] $context:ident) => {
+        $arg.as_ref().opt().map(|v| v.iter().map(|e| lower_element!(e $arg_type $context)).collect()).into()
+    };
+    ($arg:ident Immediate $context:ident) => {
+        // different enough we use a custom function
+        unreachable!()
+    };
+    ($arg:ident Type $context:ident) => {
+        // different enough we use a custom function
+        unreachable!()
+    };
+    ($arg:ident Index $context:ident) => {
+        $arg.clone()
+    };
+    ($arg:ident ExternalFunction $context:ident) => {
+        $arg.as_ref().opt().map(|n| $context.external_funclet_id(n)).into()
+    };
+    ($arg:ident ValueFunction $context:ident) => {
+        $arg.as_ref().opt().map(|n| $context.function_class_id(n)).into()
+    };
+    ($arg:ident Operation $context:ident) => {
+        $arg.as_ref().opt().map(|n| $context.node_id(n)).into()
+    };
+    ($arg:ident RemoteOperation $context:ident) => {
+        $arg.as_ref().opt().map(|r| $context.remote_id(r)).into()
+    };
+    ($arg:ident Place $context:ident) => {
+        $arg.clone()
+    };
+    ($arg:ident Funclet $context:ident) => {
+        $arg.as_ref().opt().map(|n| $context.funclet_id(n)).into()
+    };
+    ($arg:ident StorageType $context:ident) => {
+        $arg.as_ref().opt().map(|n| match n {
+            ast::TypeId::FFI(ffi) => $context.ffi_type_id(ffi),
+            id => panic!("{:?} must be an FFI type", id)
+        }).into()
+    };
+    ($arg:ident BufferFlags $context:ident) => {
+        $arg.clone()
+    };
+}
+
+macro_rules! lower_node {
+    ($($_lang:ident $name:ident ($($arg:ident : $arg_type:tt,)*) -> $_output:ident;)*) => {
+        paste! {
+            /*
+             * Lowers by rejecting every hole in the node
+             */
+            pub fn ir_non_constant_node(node : &ast::Node, context: &Context) -> expir::Node {
+                match node {
+                    $(ast::Node::$name { $($arg,)* } => {
+                        expir::Node::$name {
+                            $($arg : lower_element!($arg $arg_type context),)*
+                        }
+                    }),*
+                }
+            }
+        }
+    }
+}
+
+with_operations!(lower_node);
+
+fn ir_node(node: &ast::Node, context: &Context) -> expir::Node {
+    match &node {
         ast::Node::Constant { value, type_id } => {
-            let unwrapped_value = reject_hole(value.clone());
-            let unwrapped_type = reject_hole(type_id.clone());
+            // we don't allow holes for constants
+            let error = format!("Constant {:?} cannot have explication holes", &node);
+            let unwrapped_value = value.as_ref().opt().expect(&error).clone();
+            let unwrapped_type = type_id.as_ref().opt().expect(&error).clone();
             let parsed_value = match &unwrapped_type {
                 ast::TypeId::Local(name) => match context.native_type_map.get(name) {
                     None => panic!("{:?} must have a direct FFI storage type", type_id),
                     Some(t) => match t {
-                        FFIType::U64 => ir::Constant::U64(unwrapped_value.parse::<u64>().unwrap()),
-                        FFIType::I32 => ir::Constant::I32(unwrapped_value.parse::<i32>().unwrap()),
-                        FFIType::I64 => ir::Constant::I64(unwrapped_value.parse::<i64>().unwrap()),
+                        ast::FFIType::U64 => {
+                            expir::Constant::U64(unwrapped_value.parse::<u64>().unwrap())
+                        }
+                        ast::FFIType::I32 => {
+                            expir::Constant::I32(unwrapped_value.parse::<i32>().unwrap())
+                        }
+                        ast::FFIType::I64 => {
+                            expir::Constant::I64(unwrapped_value.parse::<i64>().unwrap())
+                        }
                         _ => panic!("Unsupported constant type {:?}", type_id),
                     },
                 },
                 ast::TypeId::FFI(_) => panic!("Cannot directly type a constant with an ffi type"),
             };
-            ir::Node::Constant {
-                value: parsed_value,
-                type_id: context.loc_type_id(&unwrapped_type),
+            expir::Node::Constant {
+                value: Hole::Filled(parsed_value),
+                type_id: Hole::Filled(context.loc_type_id(&unwrapped_type)),
             }
         }
-        ast::Node::CallFunctionClass {
-            function_id,
-            arguments,
-        } => {
-            let name = reject_hole(function_id.clone());
-            let mapped_arguments: Vec<ir::NodeId> = reject_hole(arguments.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect();
-            ir::Node::CallFunctionClass {
-                function_id: context
-                    .function_classes
-                    .get(&ast::FunctionClassId(name.0.clone()))
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Function class {:?} not found in {:?}",
-                            name.0, context.function_classes
-                        )
-                    }),
-                arguments: mapped_arguments.into_boxed_slice(),
-            }
-        }
-        ast::Node::Select {
-            condition,
-            true_case,
-            false_case,
-        } => ir::Node::Select {
-            condition: context.node_id(reject_hole(condition.as_ref())),
-            true_case: context.node_id(reject_hole(true_case.as_ref())),
-            false_case: context.node_id(reject_hole(false_case.as_ref())),
-        },
-        ast::Node::AllocTemporary {
-            place,
-            storage_type,
-            buffer_flags,
-        } => ir::Node::AllocTemporary {
-            place: reject_hole(place.clone()),
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-            buffer_flags: reject_hole(buffer_flags.clone()),
-        },
-        ast::Node::Drop { node } => ir::Node::Drop {
-            node: context.node_id(reject_hole(node.as_ref())),
-        },
-        ast::Node::StaticSubAlloc {
-            node,
-            place,
-            storage_type,
-        } => ir::Node::StaticSubAlloc {
-            node: context.node_id(reject_hole(node.as_ref())),
-            place: reject_hole(place.as_ref()).clone(),
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-        },
-        ast::Node::StaticSplit {
-            spatial_operation,
-            node,
-            sizes,
-            place,
-        } => ir::Node::StaticSplit {
-            spatial_operation: context.remote_node_id(reject_hole(spatial_operation.as_ref())),
-            node: context.node_id(reject_hole(node.as_ref())),
-            sizes: reject_hole(sizes.as_ref())
-                .iter()
-                .map(|n| reject_hole(n.as_ref()).clone())
-                .collect(),
-            place: reject_hole(place.as_ref()).clone(),
-        },
-        ast::Node::StaticMerge {
-            spatial_operation,
-            nodes,
-            place,
-        } => ir::Node::StaticMerge {
-            spatial_operation: context.remote_node_id(reject_hole(spatial_operation.as_ref())),
-            nodes: reject_hole(nodes.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            place: reject_hole(place.as_ref()).clone(),
-        },
-        ast::Node::ReadRef {
-            storage_type,
-            source,
-        } => ir::Node::ReadRef {
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-            source: context.node_id(reject_hole(source.as_ref())),
-        },
-        ast::Node::BorrowRef {
-            storage_type,
-            source,
-        } => ir::Node::BorrowRef {
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-            source: context.node_id(reject_hole(source.as_ref())),
-        },
-        ast::Node::WriteRef {
-            storage_type,
-            destination,
-            source,
-        } => ir::Node::WriteRef {
-            storage_type: ffi::TypeId(context.loc_type_id(reject_hole(storage_type.as_ref()))),
-            destination: context.node_id(reject_hole(destination.as_ref())),
-            source: context.node_id(reject_hole(source.as_ref())),
-        },
-        ast::Node::LocalDoBuiltin {
-            operation,
-            inputs,
-            outputs,
-        } => ir::Node::LocalDoBuiltin {
-            operation: context.remote_node_id(reject_hole(operation.as_ref())),
-            inputs: reject_hole(inputs.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            outputs: reject_hole(outputs.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-        },
-        ast::Node::LocalDoExternal {
-            operation,
-            external_function_id,
-            inputs,
-            outputs,
-        } => ir::Node::LocalDoExternal {
-            operation: context.remote_node_id(reject_hole(operation.as_ref())),
-            external_function_id: reject_opt(
-                context
-                    .funclet_indices
-                    .get_funclet(reject_opt(
-                        external_function_id.as_ref().opt().map(|x| &x.0),
-                    ))
-                    .opt()
-                    .map(ffi::ExternalFunctionId),
-            ),
-            inputs: reject_hole(inputs.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            outputs: reject_hole(outputs.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-        },
-        ast::Node::LocalCopy { input, output } => ir::Node::LocalCopy {
-            input: context.node_id(reject_hole(input.as_ref())),
-            output: context.node_id(reject_hole(output.as_ref())),
-        },
-        ast::Node::BeginEncoding {
-            place,
-            event,
-            encoded,
-            fences,
-        } => ir::Node::BeginEncoding {
-            place: reject_hole(place.as_ref()).clone(),
-            event: context.remote_node_id(reject_hole(event.as_ref())),
-            encoded: reject_hole(encoded.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            fences: reject_hole(fences.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-        },
-        ast::Node::EncodeDoExternal {
-            encoder,
-            operation,
-            external_function_id,
-            inputs,
-            outputs,
-        } => ir::Node::EncodeDoExternal {
-            encoder: context.node_id(reject_hole(encoder.as_ref())),
-            operation: context.remote_node_id(reject_hole(operation.as_ref())),
-            external_function_id: reject_opt(
-                context
-                    .funclet_indices
-                    .get_funclet(reject_opt(
-                        external_function_id.as_ref().opt().map(|x| &x.0),
-                    ))
-                    .opt()
-                    .map(ffi::ExternalFunctionId),
-            ),
-            inputs: reject_hole(inputs.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            outputs: reject_hole(outputs.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-        },
-        ast::Node::EncodeCopy {
-            encoder,
-            input,
-            output,
-        } => ir::Node::EncodeCopy {
-            encoder: context.node_id(reject_hole(encoder.as_ref())),
-            input: context.node_id(reject_hole(input.as_ref())),
-            output: context.node_id(reject_hole(output.as_ref())),
-        },
-        ast::Node::Submit { encoder, event } => ir::Node::Submit {
-            encoder: context.node_id(reject_hole(encoder.as_ref())),
-            event: context.remote_node_id(reject_hole(event.as_ref())),
-        },
-        ast::Node::SyncFence { fence, event } => ir::Node::SyncFence {
-            fence: context.node_id(reject_hole(fence.as_ref())),
-            event: context.remote_node_id(reject_hole(event.as_ref())),
-        },
-        ast::Node::InlineJoin {
-            funclet,
-            captures,
-            continuation,
-        } => ir::Node::InlineJoin {
-            funclet: context
-                .funclet_indices
-                .require_funclet(&reject_hole(funclet.as_ref()).0),
-            captures: reject_hole(captures.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            continuation: context.node_id(reject_hole(continuation.as_ref())),
-        },
-        ast::Node::SerializedJoin {
-            funclet,
-            captures,
-            continuation,
-        } => ir::Node::SerializedJoin {
-            funclet: context
-                .funclet_indices
-                .require_funclet(&reject_hole(funclet.as_ref()).0),
-            captures: reject_hole(captures.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            continuation: context.node_id(reject_hole(continuation.as_ref())),
-        },
-        ast::Node::DefaultJoin => ir::Node::DefaultJoin {},
-        ast::Node::PromiseCaptures {
-            count,
-            continuation,
-        } => ir::Node::PromiseCaptures {
-            count: reject_hole(count.as_ref()).clone(),
-            continuation: context.node_id(reject_hole(continuation.as_ref())),
-        },
-        ast::Node::FulfillCaptures {
-            continuation,
-            haves,
-            needs,
-        } => ir::Node::FulfillCaptures {
-            continuation: context.node_id(reject_hole(continuation.as_ref())),
-            haves: reject_hole(haves.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-            needs: reject_hole(needs.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-        },
-        ast::Node::EncodingEvent {
-            local_past,
-            remote_local_pasts,
-        } => ir::Node::EncodingEvent {
-            local_past: context.node_id(reject_hole(local_past.as_ref())),
-            remote_local_pasts: reject_hole(remote_local_pasts.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
-        },
-        ast::Node::SubmissionEvent { local_past } => ir::Node::SubmissionEvent {
-            local_past: context.node_id(reject_hole(local_past.as_ref())),
-        },
-        ast::Node::SynchronizationEvent {
-            local_past,
-            remote_local_past,
-        } => ir::Node::SynchronizationEvent {
-            local_past: context.node_id(reject_hole(local_past.as_ref())),
-            remote_local_past: context.node_id(reject_hole(remote_local_past.as_ref())),
-        },
-        ast::Node::SeparatedBufferSpaces { count, space } => ir::Node::SeparatedBufferSpaces {
-            count: reject_hole(count.as_ref()).clone(),
-            space: context.node_id(reject_hole(space.as_ref())),
-        },
+        _ => ir_non_constant_node(node, context),
     }
 }
 
-fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
+fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge {
     match tail {
-        ast::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
+        ast::TailEdge::DebugHole { inputs } => expir::TailEdge::DebugHole {
             inputs: inputs.iter().map(|n| context.node_id(n)).collect(),
         },
-        ast::TailEdge::Return { return_values } => ir::TailEdge::Return {
-            return_values: reject_hole(return_values.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
+        ast::TailEdge::Return { return_values } => expir::TailEdge::Return {
+            return_values: return_values.as_ref().opt().map(|v| {
+                v.iter()
+                    .map(|n| n.as_ref().opt().map(|id| context.node_id(id)).into())
+                    .collect()
+            }).into(),
         },
-        ast::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-            join: context.node_id(reject_hole(join.as_ref())),
-            arguments: reject_hole(arguments.as_ref())
-                .iter()
-                .map(|n| context.node_id(reject_hole(n.as_ref())))
-                .collect(),
+        ast::TailEdge::Jump { join, arguments } => expir::TailEdge::Jump {
+            join: join.as_ref().opt().map(|n| context.node_id(n)).into(),
+            arguments: arguments.as_ref().opt().map(|args| {
+                args.iter()
+                    .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                    .collect()
+            }).into(),
         },
         ast::TailEdge::ScheduleCall {
             operations,
@@ -646,22 +423,18 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
             callee_arguments,
             continuation_join,
         } => {
-            let operation_set = context.operational_lookup(reject_hole(operations.as_ref()));
-            ir::TailEdge::ScheduleCall {
-                value_operation: reject_hole(operation_set.value),
-                timeline_operation: reject_hole(operation_set.timeline),
-                spatial_operation: reject_hole(operation_set.spatial),
-                callee_funclet_id: context
-                    .funclet_indices
-                    .get_funclet(&reject_hole(callee_funclet_id.as_ref()).0)
-                    .opt()
-                    .unwrap()
-                    .clone(),
-                callee_arguments: reject_hole(callee_arguments.as_ref())
-                    .iter()
-                    .map(|n| context.node_id(reject_hole(n.as_ref())))
-                    .collect(),
-                continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
+            let operation_set = context.operational_lookup(operations);
+            expir::TailEdge::ScheduleCall {
+                value_operation: operation_set.value,
+                timeline_operation: operation_set.timeline,
+                spatial_operation: operation_set.spatial,
+                callee_funclet_id: callee_funclet_id.as_ref().opt().map(|f| context.funclet_id(f)).into(),
+                callee_arguments: callee_arguments.as_ref().opt().map(|args| {
+                    args.iter()
+                        .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                        .collect()
+                }).into(),
+                continuation_join: continuation_join.as_ref().opt().map(|n| context.node_id(n)).into(),
             }
         }
         ast::TailEdge::ScheduleSelect {
@@ -671,28 +444,23 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
             callee_arguments,
             continuation_join,
         } => {
-            let operation_set = context.operational_lookup(reject_hole(operations.as_ref()));
-            ir::TailEdge::ScheduleSelect {
-                value_operation: reject_hole(operation_set.value),
-                timeline_operation: reject_hole(operation_set.timeline),
-                spatial_operation: reject_hole(operation_set.spatial),
-                condition: context.node_id(reject_hole(condition.as_ref())),
-                callee_funclet_ids: reject_hole(callee_funclet_ids.as_ref())
-                    .iter()
-                    .map(|n| {
-                        context
-                            .funclet_indices
-                            .get_funclet(&reject_hole(n.as_ref()).0)
-                            .opt()
-                            .unwrap()
-                            .clone()
-                    })
-                    .collect(),
-                callee_arguments: reject_hole(callee_arguments.as_ref())
-                    .iter()
-                    .map(|n| context.node_id(reject_hole(n.as_ref())))
-                    .collect(),
-                continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
+            let operation_set = context.operational_lookup(operations);
+            expir::TailEdge::ScheduleSelect {
+                value_operation: operation_set.value,
+                timeline_operation: operation_set.timeline,
+                spatial_operation: operation_set.spatial,
+                condition: condition.as_ref().opt().map(|n| context.node_id(n)).into(),
+                callee_funclet_ids: callee_funclet_ids.as_ref().opt().map(|args| {
+                    args.iter()
+                        .map(|o| o.as_ref().opt().map(|f| context.funclet_id(f)).into())
+                        .collect()
+                }).into(),
+                callee_arguments: callee_arguments.as_ref().opt().map(|args| {
+                    args.iter()
+                        .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                        .collect()
+                }).into(),
+                continuation_join: continuation_join.as_ref().opt().map(|n| context.node_id(n)).into(),
             }
         }
         ast::TailEdge::ScheduleCallYield {
@@ -701,24 +469,21 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> ir::TailEdge {
             yielded_nodes,
             continuation_join,
         } => {
-            let operation_set = context.operational_lookup(reject_hole(operations.as_ref()));
-            ir::TailEdge::ScheduleCallYield {
-                value_operation: reject_hole(operation_set.value),
-                timeline_operation: reject_hole(operation_set.timeline),
-                spatial_operation: reject_hole(operation_set.spatial),
-                external_function_id: ffi::ExternalFunctionId(
-                    context
-                        .funclet_indices
-                        .get_funclet(&reject_hole(external_function_id.as_ref()).0)
-                        .opt()
-                        .unwrap()
-                        .clone(),
-                ),
-                yielded_nodes: reject_hole(yielded_nodes.as_ref())
-                    .iter()
-                    .map(|n| context.node_id(reject_hole(n.as_ref())))
-                    .collect(),
-                continuation_join: context.node_id(reject_hole(continuation_join.as_ref())),
+            let operation_set = context.operational_lookup(operations);
+            expir::TailEdge::ScheduleCallYield {
+                value_operation: operation_set.value,
+                timeline_operation: operation_set.timeline,
+                spatial_operation: operation_set.spatial,
+                external_function_id: external_function_id
+                    .as_ref()
+                    .opt()
+                    .map(|id| context.external_funclet_id(id)).into(),
+                yielded_nodes: yielded_nodes.as_ref().opt().map(|args| {
+                    args.iter()
+                        .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                        .collect()
+                }).into(),
+                continuation_join: continuation_join.as_ref().opt().map(|n| context.node_id(n)).into(),
             }
         }
     }
@@ -730,18 +495,13 @@ fn ir_schedule_binding(
     implicit_tags: &(ast::Tag, ast::Tag),
     meta_map: &ast::MetaMapping,
     context: &mut Context,
-) -> ir::FuncletSpecBinding {
+) -> expir::FuncletSpecBinding {
     context.set_meta_map(meta_map.clone());
 
-    let default_tag = ir::Tag {
-        quot: ir::Quotient::None,
-        flow: ir::Flow::Usable,
-    };
-
     struct TagBindings {
-        value_tags: Vec<ir::Tag>,
-        spatial_tags: Vec<ir::Tag>,
-        timeline_tags: Vec<ir::Tag>,
+        value_tags: Vec<Hole<expir::Tag>>,
+        spatial_tags: Vec<Hole<expir::Tag>>,
+        timeline_tags: Vec<Hole<expir::Tag>>,
     }
 
     let mut input_tags = TagBindings {
@@ -757,45 +517,46 @@ fn ir_schedule_binding(
 
     for arg in &funclet_header.args {
         let tags = context.tag_lookup(&arg.tags.iter().map(|t| Hole::Filled(t.clone())).collect());
-        input_tags
-            .value_tags
-            .push(tags.value.opt().unwrap_or(default_tag).clone());
-        input_tags
-            .spatial_tags
-            .push(tags.spatial.opt().unwrap_or(default_tag).clone());
-        input_tags
-            .timeline_tags
-            .push(tags.timeline.opt().unwrap_or(default_tag).clone());
+        input_tags.value_tags.push(tags.value.clone());
+        input_tags.spatial_tags.push(tags.spatial.clone());
+        input_tags.timeline_tags.push(tags.timeline.clone());
     }
 
     for ret in &funclet_header.ret {
         let tags = context.tag_lookup(&ret.tags.iter().map(|t| Hole::Filled(t.clone())).collect());
-        output_tags
-            .value_tags
-            .push(tags.value.opt().unwrap_or(default_tag).clone());
-        output_tags
-            .spatial_tags
-            .push(tags.spatial.opt().unwrap_or(default_tag).clone());
-        output_tags
-            .timeline_tags
-            .push(tags.timeline.opt().unwrap_or(default_tag).clone());
+        output_tags.value_tags.push(tags.value.clone());
+        output_tags.spatial_tags.push(tags.spatial.clone());
+        output_tags.timeline_tags.push(tags.timeline.clone());
     }
 
-    let implicit_in_tag = ir_tag(&implicit_tags.0, context);
-    let implicit_out_tag = ir_tag(&implicit_tags.1, context);
+    // get and validate the implicit tags to be timeline tags
+    let implicit_in_lookup = context.tag_lookup(&vec![Hole::Filled(implicit_tags.0.clone())]);
+    let implicit_out_lookup = context.tag_lookup(&vec![Hole::Filled(implicit_tags.1.clone())]);
 
-    ir::FuncletSpecBinding::ScheduleExplicit {
-        value: ir::FuncletSpec {
-            funclet_id_opt: context
-                .funclet_indices
-                .get_funclet(&meta_map.value.1 .0)
-                .into(),
+    // we want an error to make sure user input isn't being thrown out quietly
+    let error_tags = implicit_tags.clone();
+    let error_in = format!(
+        "Implicit tag {:?} invalid: implicit tags must be for the timeline",
+        error_tags.0
+    );
+    let error_out = format!(
+        "Implicit tag {:?} invalid: implicit tags must be for the timeline",
+        error_tags.1
+    );
+    assert!(implicit_in_lookup.value.opt().is_none(), error_in);
+    assert!(implicit_in_lookup.spatial.opt().is_none(), error_in);
+    assert!(implicit_out_lookup.value.opt().is_none(), error_out);
+    assert!(implicit_out_lookup.spatial.opt().is_none(), error_out);
+
+    expir::FuncletSpecBinding::ScheduleExplicit {
+        value: expir::FuncletSpec {
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.value.1 .0),
             input_tags: input_tags.value_tags.into_boxed_slice(),
             output_tags: output_tags.value_tags.into_boxed_slice(),
-            implicit_in_tag: Default::default(),
-            implicit_out_tag: Default::default(),
+            implicit_in_tag: Hole::Filled(Default::default()),
+            implicit_out_tag: Hole::Filled(Default::default()),
         },
-        timeline: ir::FuncletSpec {
+        timeline: expir::FuncletSpec {
             // assume implicit is timeline for now?
             funclet_id_opt: context
                 .funclet_indices
@@ -803,18 +564,15 @@ fn ir_schedule_binding(
                 .into(),
             input_tags: input_tags.timeline_tags.into_boxed_slice(),
             output_tags: output_tags.timeline_tags.into_boxed_slice(),
-            implicit_in_tag,
-            implicit_out_tag,
+            implicit_in_tag: implicit_in_lookup.timeline,
+            implicit_out_tag: implicit_out_lookup.timeline,
         },
-        spatial: ir::FuncletSpec {
-            funclet_id_opt: context
-                .funclet_indices
-                .get_funclet(&meta_map.spatial.1 .0)
-                .into(),
+        spatial: expir::FuncletSpec {
+            funclet_id_opt: context.funclet_indices.get_funclet(&meta_map.spatial.1 .0),
             input_tags: input_tags.spatial_tags.into_boxed_slice(),
             output_tags: output_tags.spatial_tags.into_boxed_slice(),
-            implicit_in_tag: Default::default(),
-            implicit_out_tag: Default::default(),
+            implicit_in_tag: Hole::Filled(Default::default()),
+            implicit_out_tag: Hole::Filled(Default::default()),
         },
     }
 }
@@ -822,16 +580,16 @@ fn ir_schedule_binding(
 fn ir_spec_binding(
     funclet_header: &ast::FuncletHeader,
     context: &mut Context,
-) -> ir::FuncletSpecBinding {
+) -> expir::FuncletSpecBinding {
     match &funclet_header.binding {
-        ast::FuncletBinding::None => ir::FuncletSpecBinding::None,
+        ast::FuncletBinding::None => expir::FuncletSpecBinding::None,
         ast::FuncletBinding::SpecBinding(ast::FunctionClassBinding {
             default,
             function_class,
         }) => {
             let value_function_id_opt =
                 Some(context.function_classes.get(&function_class).unwrap());
-            ir::FuncletSpecBinding::Value {
+            expir::FuncletSpecBinding::Value {
                 value_function_id_opt,
             }
         }
@@ -842,14 +600,14 @@ fn ir_spec_binding(
     }
 }
 
-fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
+fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> expir::Funclet {
     context.location.funclet_name = funclet.header.name.clone();
     // note that this is stateful, updates the value_funclet in context potentially
     let spec_binding = ir_spec_binding(&funclet.header, context);
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut nodes = Vec::new();
-    let mut tail_edge = None;
+    let mut tail_edge = Hole::Empty;
 
     for arg in &funclet.header.args {
         input_types.push(context.loc_type_id(&arg.typ));
@@ -860,16 +618,17 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     }
 
     for command in &funclet.commands {
-        match reject_hole(command.as_ref()) {
-            ast::Command::Node(node) => {
+        match command {
+            Hole::Empty => nodes.push(Hole::Empty),
+            Hole::Filled(ast::Command::Node(node)) => {
                 context.location.node_name = node.name.clone();
-                nodes.push(ir_node(&node, context));
+                nodes.push(Hole::Filled(ir_node(&node.node, context)));
             }
-            ast::Command::TailEdge(tail) => {
-                if tail_edge.is_some() {
+            Hole::Filled(ast::Command::TailEdge(tail)) => {
+                if tail_edge.opt().is_some() {
                     panic!("More than one tail edge in {:?}", funclet.header.name);
                 }
-                tail_edge = Some(ir_tail_edge(tail, context));
+                tail_edge = Hole::Filled(ir_tail_edge(tail, context));
             }
         }
     }
@@ -877,27 +636,13 @@ fn ir_funclet(funclet: &ast::Funclet, context: &mut Context) -> ir::Funclet {
     // help avoid reuse issues
     context.reset_meta_map();
 
-    ir::Funclet {
+    expir::Funclet {
         kind: funclet.kind.clone(),
         spec_binding,
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
         nodes: nodes.into_boxed_slice(),
-        tail_edge: tail_edge.unwrap(), // actually safe, oddly enough
-    }
-}
-
-fn ir_effect(declaration: &ast::EffectDeclaration, context: &mut Context) -> ffi::Effect {
-    match &declaration.effect {
-        ast::Effect::Unrestricted => ffi::Effect::Unrestricted,
-        ast::Effect::FullyConnected {
-            effectful_function_ids,
-        } => ffi::Effect::FullyConnected {
-            effectful_function_ids: effectful_function_ids
-                .iter()
-                .map(|fid| context.external_lookup(fid))
-                .collect(),
-        },
+        tail_edge,
     }
 }
 
@@ -905,7 +650,7 @@ fn ir_function_class(
     declarations: &Vec<ast::Declaration>,
     function: &ast::FunctionClass,
     context: &mut Context,
-) -> ir::FunctionClass {
+) -> expir::FunctionClass {
     let mut input_types = Vec::new();
     let mut output_types = Vec::new();
     let mut default_funclet_id = None;
@@ -927,7 +672,6 @@ fn ir_function_class(
                         let current_id = context
                             .funclet_indices
                             .get_funclet(&f.header.name.0)
-                            .opt()
                             .unwrap();
                         if binding.default {
                             default_funclet_id = match default_funclet_id {
@@ -950,7 +694,7 @@ fn ir_function_class(
                         )
                     }
                     external_function_ids.insert(ffi::ExternalFunctionId(
-                        context.funclet_indices.get_funclet(&f.name).opt().unwrap(),
+                        context.funclet_indices.get_funclet(&f.name).unwrap(),
                     ));
                 }
             }
@@ -958,7 +702,7 @@ fn ir_function_class(
         }
     }
 
-    ir::FunctionClass {
+    expir::FunctionClass {
         name_opt: Some(function.name.0.clone()),
         input_types: input_types.into_boxed_slice(),
         output_types: output_types.into_boxed_slice(),
@@ -967,20 +711,33 @@ fn ir_function_class(
     }
 }
 
-fn ir_pipeline(pipeline: &ast::Pipeline, context: &mut Context) -> ir::Pipeline {
-    ir::Pipeline {
+fn ir_effect(declaration: &ast::EffectDeclaration, context: &mut Context) -> ffi::Effect {
+    match &declaration.effect {
+        ast::Effect::Unrestricted => ffi::Effect::Unrestricted,
+        ast::Effect::FullyConnected {
+            effectful_function_ids,
+        } => ffi::Effect::FullyConnected {
+            effectful_function_ids: effectful_function_ids
+                .iter()
+                .map(|fid| context.external_lookup(fid))
+                .collect(),
+        },
+    }
+}
+
+fn ir_pipeline(pipeline: &ast::Pipeline, context: &mut Context) -> expir::Pipeline {
+    expir::Pipeline {
         name: pipeline.name.clone(),
         entry_funclet: context
             .funclet_indices
             .get_funclet(&pipeline.funclet.0)
-            .opt()
             .unwrap()
             .clone(),
         effect_id_opt: pipeline.effect.as_ref().map(|e| context.effect_lookup(e)),
     }
 }
 
-fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
+fn ir_program(program: &ast::Program, context: &mut Context) -> expir::Program {
     let native_interface = ir_native_interface(&program, context);
     let mut types = StableVec::new();
     let mut funclets = StableVec::new();
@@ -1012,7 +769,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
         }
     }
 
-    ir::Program {
+    expir::Program {
         native_interface,
         types,
         funclets,
@@ -1021,13 +778,17 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> ir::Program {
     }
 }
 
-pub fn lower(mut program: ast::Program) -> frontend::Definition {
+pub fn lower(mut original: ast::Program) -> frontend::ExplicationDefinition {
     // should probably handle errors with a result, future problem though
-    explication::explicate(&mut program);
-    let mut context = Context::new(&program);
-    // dbg!(&context);
-    frontend::Definition {
-        version: ir_version(&program.version, &mut context),
-        program: ir_program(&program, &mut context),
+    let mut context = Context::new(&original);
+    // dbg!(&program);
+    // todo!();
+    let version = ir_version(&original.version);
+    let program = ir_program(&original, &mut context);
+    let debug_info = context.drain_into_debug_info();
+    frontend::ExplicationDefinition {
+        version,
+        debug_info,
+        program,
     }
 }
