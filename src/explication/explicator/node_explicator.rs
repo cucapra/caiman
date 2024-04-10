@@ -35,21 +35,25 @@ fn explicate_phi_node(
     // TODO: make triple
     let value_spec = state.get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context);
     let node_type = context
-    .get_type(
-        state
-            .get_current_funclet(context)
-            .input_types
-            .get(index)
-            .unwrap(),
-    )
-    .clone();
+        .get_type(
+            state
+                .get_current_funclet(context)
+                .input_types
+                .get(index)
+                .unwrap(),
+        )
+        .clone();
 
     match node_type {
         // we need to add this reference to our available allocations
         // TODO: check the flow to see if we can actually do this
-        ir::Type::Ref { storage_type, storage_place, buffer_flags } => {
+        ir::Type::Ref {
+            storage_type,
+            storage_place,
+            buffer_flags,
+        } => {
             new_state.add_allocation(node_id, node_type.clone(), context);
-        },
+        }
         _ => {}
     }
 
@@ -288,6 +292,106 @@ fn explicate_encode_do(
     }
 }
 
+fn explicate_write_ref(
+    expir_source: &Hole<usize>,
+    expir_destination: &Hole<usize>,
+    expir_storage_type: &Hole<ffi::TypeId>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let source = expir_source.as_ref().opt().expect(&error).clone();
+    let destination = expir_destination.as_ref().opt().expect(&error).clone();
+    let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
+    let (instantiation_location, _) = state.get_node_information(source, context);
+    // assume that the typechecker will find a misaligned storage type
+    let allocation_type = state.read_allocation(Location {
+        funclet: state.get_current_funclet_id(),
+        node: destination,
+    });
+    new_state.set_instantiation(
+        destination,
+        vec![instantiation_location.clone()],
+        allocation_type,
+        context,
+    );
+    let node = ir::Node::WriteRef {
+        storage_type,
+        source,
+        destination,
+    };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
+}
+
+fn explicate_borrow_ref(
+    expir_source: &Hole<usize>,
+    expir_storage_type: &Hole<ffi::TypeId>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let source = expir_source.as_ref().opt().expect(&error).clone();
+    let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
+
+    let (instantiation_location, _) = state.get_node_information(source, context);
+    let schedule_node = state.get_current_node_id().unwrap();
+    let ref_type = expir::Type::Ref {
+        storage_type: storage_type.clone(),
+        storage_place: expir::Place::Local,
+        buffer_flags: expir::BufferFlags::new(),
+    };
+
+    new_state.add_allocation(schedule_node, ref_type.clone(), context);
+    new_state.set_instantiation(
+        schedule_node,
+        vec![instantiation_location.clone()],
+        ref_type,
+        context,
+    );
+
+    let node = ir::Node::BorrowRef {
+        storage_type,
+        source,
+    };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
+}
+
 fn explicate_read_ref(
     expir_source: &Hole<usize>,
     expir_storage_type: &Hole<ffi::TypeId>,
@@ -417,6 +521,15 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
                 state,
                 context,
             ),
+            Hole::Filled(expir::Node::WriteRef {
+                storage_type,
+                destination,
+                source,
+            }) => explicate_write_ref(source, destination, storage_type, state, context),
+            Hole::Filled(expir::Node::BorrowRef {
+                source,
+                storage_type,
+            }) => explicate_borrow_ref(source, storage_type, state, context),
             Hole::Filled(expir::Node::ReadRef {
                 source,
                 storage_type,

@@ -62,8 +62,8 @@ impl InState {
     }
 
     // Read any allocation and return the type information
-    pub fn read_allocation(&mut self, location: Location) -> expir::Type {
-        for scope in self.scopes.iter_mut().rev() {
+    pub fn read_allocation(&self, location: Location) -> expir::Type {
+        for scope in self.scopes.iter().rev() {
             if scope.funclet == location.funclet {
                 for (index, allocation) in scope.allocations.iter().enumerate() {
                     if allocation.0 == location.node {

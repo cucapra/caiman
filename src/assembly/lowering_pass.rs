@@ -781,7 +781,7 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> expir::Program {
 pub fn lower(mut original: ast::Program) -> frontend::ExplicationDefinition {
     // should probably handle errors with a result, future problem though
     let mut context = Context::new(&original);
-    // dbg!(&program);
+    // dbg!(&original);
     // todo!();
     let version = ir_version(&original.version);
     let program = ir_program(&original, &mut context);
