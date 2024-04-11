@@ -1,4 +1,4 @@
-Error: At bad_arr_expr2.cm:2:18, 
+Error: At "bad_arr_expr2.cm" 2:18, 
   Parsing Error: Unrecognized token: '+', expected one of [
     "\"]\"",
 ]

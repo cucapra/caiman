@@ -1,2 +1,2 @@
-Error: At non_const_templates.cm:3:16, 
+Error: At "non_const_templates.cm" 3:16, 
   Parsing Error: Non constant expression found in a constant context at 3:16 - 3:19

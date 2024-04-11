@@ -1,2 +1,2 @@
-Error: At bool_int.cm:10:15, 
+Error: At "bool_int.cm" 10:15 - 10:16, 
   Type Error: Failed to unify type constraints of variable a

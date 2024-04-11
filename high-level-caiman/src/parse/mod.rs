@@ -53,7 +53,16 @@ fn parse_string(buf: &str, filename: &str) -> Result<ast::Program, LocalError> {
         .map_err(|e| parse_error_to_error(e, &ast_factory))
 }
 
-fn parse_read<R: std::io::Read>(mut input: R, filename: &str) -> Result<ast::Program, LocalError> {
+/// Parses a string into an AST
+/// # Errors
+/// Returns an error if the string cannot be parsed
+/// # Panics
+/// Panics if the string cannot be read
+#[allow(clippy::module_name_repetitions)]
+pub fn parse_read<R: std::io::Read>(
+    mut input: R,
+    filename: &str,
+) -> Result<ast::Program, LocalError> {
     let mut buf = String::new();
     input.read_to_string(&mut buf).unwrap();
     parse_string(&buf, filename)

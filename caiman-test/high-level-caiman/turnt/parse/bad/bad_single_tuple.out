@@ -1,4 +1,4 @@
-Error: At bad_single_tuple.cm:2:10, 
+Error: At "bad_single_tuple.cm" 2:10, 
   Parsing Error: Unrecognized token: '(', expected one of [
     "\"&\"",
     "\"BufferSpace\"",

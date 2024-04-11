@@ -1,4 +1,4 @@
-Error: At bad_version2.cm:1:13, 
+Error: At "bad_version2.cm" 1:13, 
   Parsing Error: Unexpected EOF, expected one of: [
     "\".\"",
 ]

@@ -1,4 +1,4 @@
-Error: At bad_assign_ref.cm:4:15, 
+Error: At "bad_assign_ref.cm" 4:15, 
   Parsing Error: Unrecognized token: '=', expected one of [
     "\"!=\"",
     "\"%\"",

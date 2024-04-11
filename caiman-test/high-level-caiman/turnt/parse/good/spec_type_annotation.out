@@ -82,8 +82,8 @@
                                 "x",
                                 Some(
                                     Array(
-                                        Int(
-                                            I32,
+                                        UserDefined(
+                                            "foo",
                                         ),
                                         Term(
                                             Var {

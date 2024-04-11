@@ -16,7 +16,7 @@ fn main_func() -> i64 impls main, time, space
 {
     var c = 1;
     let r = &c;
-    23 = r;
+    23 = c;
     id_func(10)
 }
 

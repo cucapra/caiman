@@ -1,2 +1,2 @@
-Error: At duplicate_node.cm:6:1, 
+Error: At "duplicate_node.cm" 6:1 - 9:2, 
   Type Error: Duplicate node: a

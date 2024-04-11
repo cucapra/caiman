@@ -60,6 +60,4 @@ fn vadd_host_rec(v1: [i32; N], v2: [i32; N], result: [i32; N]) -> [i32; N]
     result
 }
 
-pipeline main {
-    vadd_host
-}
+pipeline main { vadd_host }

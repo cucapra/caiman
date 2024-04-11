@@ -1,4 +1,4 @@
-Error: At tag_in_spec_type.cm:2:14, 
+Error: At "tag_in_spec_type.cm" 2:14, 
   Parsing Error: Unrecognized token: '@', expected one of [
     "\")\"",
     "\",\"",
