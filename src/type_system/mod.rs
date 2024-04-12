@@ -30,7 +30,7 @@ pub fn check_program(
                     writer,
                     "While type checking node {}: {}",
                     debug_info.node(&funclet_id, current_node_id),
-                    debug_info.node_full(funclet_id, node)
+                    debug_info.node_ir(funclet_id, node)
                 )
             };
             let node_error_context = error::ErrorContext::new(

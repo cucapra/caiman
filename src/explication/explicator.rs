@@ -1,3 +1,6 @@
+mod tail_edge_explicator;
+mod node_explicator;
+
 use crate::explication::context::{FuncletOutState, InState, OpCode, StaticContext};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
@@ -8,6 +11,7 @@ use crate::explication::Hole;
 use crate::ir::Place;
 use crate::{explication, frontend, ir};
 
+use super::expir::Funclet;
 use super::explicator_macros::force_lower_node;
 
 fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
@@ -16,28 +20,6 @@ fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
         quot: tag.quot,
         flow: tag.flow.opt().expect(&error),
     }
-}
-
-fn read_phi_node(location: &Location, index: usize, context: &StaticContext) -> expir::Node {
-    todo!()
-    // let current_funclet = context.get_funclet(&location.funclet);
-    // let argument = current_funclet.header.args.get(index).unwrap_or_else(|| {
-    //     panic!(
-    //         "Index {} out of bounds for header in location {:?}",
-    //         index, location
-    //     )
-    // });
-    // let mut remotes = Vec::new();
-    // for tag in &argument.tags {
-    //     let quotient = tag_quotient(tag);
-    //     match quotient {
-    //         None => {}
-    //         Some(remote) => remotes.push(remote.clone()),
-    //     }
-    // }
-    // let place = context.get_type_place(&argument.typ);
-    // context.add_instantiation(location.node.clone(), remotes, place.cloned());
-    // expir::Node::Phi { index: Some(index) }
 }
 
 // the function that handles "ok, I have an output, now figure out how to get there"
@@ -71,202 +53,6 @@ fn deduce_operation(
     //         }
     //     }
     // }
-}
-
-fn explicate_local_do_builtin(
-    location: &Location,
-    og_operation: Hole<expir::Quotient>,
-    og_inputs: Hole<Vec<Hole<NodeId>>>,
-    og_outputs: Hole<Vec<Hole<NodeId>>>,
-    context: &StaticContext,
-) -> expir::Node {
-    todo!()
-    // let mut available = false;
-
-    // let deduced_op = match og_operation {
-    //     Some(q) => {
-    //         let op =
-    //             quotient_id(&q).unwrap_or_else(|| panic!("Assuming operations must not be Nones"));
-    //         match &op.node {
-    //             Some(n) => op,
-    //             None => {
-    //                 // kinda stupid, we just ignore the funclet here
-    //                 // but that's ok I think cause a bad funclet will be caught by typechecking
-    //                 deduce_operation(&location, &og_outputs, &SpecLanguage::Value, context)
-    //             }
-    //         }
-    //     }
-    //     None => deduce_operation(&location, &og_outputs, &SpecLanguage::Value, context),
-    // };
-
-    // available = available || deduced_op.funclet.is_none() || deduced_op.node.is_none();
-
-    // let mut expected_inputs = Vec::new();
-    // let mut expected_outputs = Vec::new();
-    // match (&deduced_op.funclet, &deduced_op.node) {
-    //     (Some(f), Some(n)) => {}
-    // }
-
-    // let outputs = match og_outputs {
-    //     None => {
-    //         // match
-    //     }
-    //     Some(ogo) => {
-    //         let mut result = Vec::new();
-    //         for output in ogo {
-    //             match output {
-    //                 Some(out) => Some(out),
-    //                 None => {}
-    //             }
-    //         }
-    //         result
-    //     }
-    // };
-
-    // // if there's stuff left to explicate, make this available and return
-    // if available {
-    //     context.add_available_operation(location.node.clone(), OpCode::LocalDoBuiltin);
-    // }
-    // let operation = Some(expir::Quotient::Node(Some(deduced_op)));
-}
-
-// initially setup a node that hasn't yet been read
-// distinct from explication in that we have no request to fulfill
-// panics if no node can be found during any step of the recursion
-fn explicate_node(state: InState, context: &StaticContext) -> Option<FuncletOutState> {
-    let debug_funclet = context.debug_info.funclet(&state.get_current_funclet());
-    if state.is_end_of_funclet(context) {
-        explicate_tail_edge(&state, context)
-    } else {
-        match state.get_current_node(context) {
-            Hole::Empty => {
-                todo!()
-            }
-            Hole::Filled(node) => {
-                let mut new_state = state.clone();
-                new_state.next_node();
-                match explicate_node(new_state, context) {
-                    None => None,
-                    Some(mut out) => {
-                        out.add_node(force_lower_node(
-                            node,
-                            &debug_funclet,
-                        ));
-                        Some(out)
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn explicate_tail_edge(state: &InState, context: &StaticContext) -> Option<FuncletOutState> {
-    let tail_edge = match state.get_current_tail_edge(context) {
-        Hole::Filled(tail_edge) => {
-            let error = format!("Unimplemented hole in tail edge {:?}", tail_edge);
-            match tail_edge {
-                expir::TailEdge::Return { return_values } => ir::TailEdge::Return {
-                    return_values: return_values
-                        .as_ref()
-                        .opt()
-                        .expect(&error)
-                        .iter()
-                        .map(|v| v.clone().opt().expect(&error))
-                        .collect(),
-                },
-                expir::TailEdge::Jump { join, arguments } => ir::TailEdge::Jump {
-                    join: join.as_ref().opt().expect(&error).clone(),
-                    arguments: arguments
-                        .as_ref()
-                        .opt()
-                        .expect(&error)
-                        .iter()
-                        .map(|v| v.clone().opt().expect(&error))
-                        .collect(),
-                },
-                expir::TailEdge::ScheduleCall {
-                    value_operation,
-                    timeline_operation,
-                    spatial_operation,
-                    callee_funclet_id,
-                    callee_arguments,
-                    continuation_join,
-                } => ir::TailEdge::ScheduleCall {
-                    value_operation: value_operation.clone().opt().expect(&error).clone(),
-                    timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
-                    spatial_operation: spatial_operation.clone().opt().expect(&error).clone(),
-                    callee_funclet_id: callee_funclet_id.clone().opt().expect(&error).clone(),
-                    callee_arguments: callee_arguments
-                        .as_ref()
-                        .opt()
-                        .expect(&error)
-                        .iter()
-                        .map(|v| v.clone().opt().expect(&error))
-                        .collect(),
-                    continuation_join: continuation_join.clone().opt().expect(&error).clone(),
-                },
-                expir::TailEdge::ScheduleSelect {
-                    value_operation,
-                    timeline_operation,
-                    spatial_operation,
-                    condition,
-                    callee_funclet_ids,
-                    callee_arguments,
-                    continuation_join,
-                } => ir::TailEdge::ScheduleSelect {
-                    value_operation: value_operation.clone().opt().expect(&error).clone(),
-                    timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
-                    spatial_operation: spatial_operation.clone().opt().expect(&error).clone(),
-                    condition: condition.clone().opt().expect(&error).clone(),
-                    callee_funclet_ids: callee_funclet_ids
-                        .as_ref()
-                        .opt()
-                        .expect(&error)
-                        .iter()
-                        .map(|v| v.clone().opt().expect(&error))
-                        .collect(),
-                    callee_arguments: callee_arguments
-                        .as_ref()
-                        .opt()
-                        .expect(&error)
-                        .iter()
-                        .map(|v| v.clone().opt().expect(&error))
-                        .collect(),
-                    continuation_join: continuation_join.clone().opt().expect(&error).clone(),
-                },
-                expir::TailEdge::ScheduleCallYield {
-                    value_operation,
-                    timeline_operation,
-                    spatial_operation,
-                    external_function_id,
-                    yielded_nodes,
-                    continuation_join,
-                } => ir::TailEdge::ScheduleCallYield {
-                    value_operation: value_operation.clone().opt().expect(&error).clone(),
-                    timeline_operation: timeline_operation.clone().opt().expect(&error).clone(),
-                    spatial_operation: spatial_operation.clone().opt().expect(&error).clone(),
-                    external_function_id: external_function_id.clone().opt().expect(&error).clone(),
-                    yielded_nodes: yielded_nodes
-                        .as_ref()
-                        .opt()
-                        .expect(&error)
-                        .iter()
-                        .map(|v| v.clone().opt().expect(&error))
-                        .collect(),
-                    continuation_join: continuation_join.clone().opt().expect(&error).clone(),
-                },
-                expir::TailEdge::DebugHole { inputs } => ir::TailEdge::DebugHole {
-                    inputs: inputs.clone(),
-                },
-            }
-        }
-        Hole::Empty => {
-            todo!()
-        }
-    };
-    let mut result = FuncletOutState::new();
-    result.set_tail_edge(tail_edge);
-    Some(result)
 }
 
 fn explicate_funclet_spec(
@@ -326,10 +112,10 @@ fn explicate_spec_binding(
 }
 
 pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -> ir::Funclet {
-    let funclet = state.get_current_funclet();
+    let funclet = state.get_current_funclet_id();
     let current = context.get_funclet(&funclet);
     state.next_node();
-    match explicate_node(state, context) {
+    match node_explicator::explicate_node(state, context) {
         None => panic!(
             "No explication solution found for funclet {:?}",
             context.debug_info.funclet(&funclet)
@@ -391,8 +177,7 @@ fn lower_spec_tail_edge(funclet: &FuncletId, context: &StaticContext) -> ir::Tai
         edge => {
             panic!(
                 "Spec funclet {} has disallowed tail edge {:?}",
-                debug_funclet,
-                edge
+                debug_funclet, edge
             )
         }
     }

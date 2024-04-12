@@ -1,69 +1,33 @@
 use super::*;
 use crate::explication::util::*;
 
-impl InstantiatedNodes {
-    pub fn new(specs: &SpecLanguages, remotes: Vec<Location>) -> InstantiatedNodes {
-        let mut result = InstantiatedNodes {
-            value: None,
-            timeline: None,
-            spatial: None,
-        };
-        let error = format!("Duplicate value node definitions in {:?}", &remotes);
-        for remote in remotes {
-            let funclet = remote.funclet;
-            let node = remote.node;
-            if &funclet == &specs.value {
-                if result.value.is_some() {
-                    panic!(error);
-                }
-                result.value = Some(node);
-            } else if &funclet == &specs.timeline {
-                if result.timeline.is_some() {
-                    panic!(error);
-                }
-                result.timeline = Some(node);
-            } else if &funclet == &specs.spatial {
-                if result.spatial.is_some() {
-                    panic!(error);
-                }
-                result.spatial = Some(node);
-            }
-        }
-        result
-    }
-
-    pub fn get(&self, spec: &SpecLanguage) -> Option<&NodeId> {
-        match spec {
-            SpecLanguage::Value => self.value.as_ref(),
-            SpecLanguage::Timeline => self.timeline.as_ref(),
-            SpecLanguage::Spatial => self.spatial.as_ref(),
-        }
-    }
-}
-
 impl ScheduleScopeData {
     pub fn new(funclet: FuncletId) -> ScheduleScopeData {
-        ScheduleScopeData::new_inner(funclet, HashMap::new(), HashMap::new())
+        ScheduleScopeData::new_inner(
+            funclet,
+            HashMap::new(),
+            HashMap::new(),
+            Vec::new(),
+            HashMap::new(),
+        )
     }
 
-    pub fn new_inner(
+    fn new_inner(
         funclet: FuncletId,
-        instantiations: HashMap<Location, Vec<(ir::Place, NodeId)>>,
-        allocations: HashMap<OpCode, Vec<NodeId>>,
+        instantiations: HashMap<Location, Vec<NodeId>>,
+        node_type_information: HashMap<NodeId, (Location, expir::Type)>,
+        allocations: Vec<(NodeId, expir::Type)>,
+        available_operations: HashMap<OpCode, Vec<NodeId>>,
     ) -> ScheduleScopeData {
         ScheduleScopeData {
             funclet,
             node: None,
-            node_index : 0,
+            node_index: 0,
             instantiations,
+            node_type_information,
             allocations,
+            available_operations,
             explication_hole: false,
-            // TODO: update
-            spec_functions: SpecLanguages {
-                value: 0,
-                timeline: 0,
-                spatial: 0,
-            }
         }
     }
 
@@ -74,21 +38,42 @@ impl ScheduleScopeData {
         }
     }
 
-    pub fn add_instantiation(
+    pub fn set_instantiation(
         &mut self,
-        schedule_node: NodeId,
         location: Location,
-        place: expir::Place,
+        typ: expir::Type,
+        schedule_node: NodeId,
+        context: &StaticContext,
     ) {
         self.instantiations
-            .entry(location)
+            .entry(location.clone())
             .or_insert(Vec::new())
-            .push((place, schedule_node));
+            .push(schedule_node);
+        // note that this may overwrite what an allocation instantiates
+        // this is, of course, completely fine mechanically
+        // but is also why backtracking is needed/complicated
+        self
+            .node_type_information
+            .insert(schedule_node, (location, typ));
     }
 
-    pub fn add_allocation(&mut self, node: NodeId, operation: OpCode) {
+    pub fn add_allocation(
+        &mut self,
+        schedule_node: NodeId,
+        typ: expir::Type,
+        context: &StaticContext,
+    ) {
+        self.allocations.push((schedule_node, typ));
+    }
+
+    pub fn add_available_operation(
+        &mut self,
+        node: NodeId,
+        operation: OpCode,
+        context: &StaticContext,
+    ) {
         let vec = self
-            .allocations
+            .available_operations
             .entry(operation)
             .or_insert_with(|| Vec::new());
         // safety check that the algorithm isn't reinserting operations

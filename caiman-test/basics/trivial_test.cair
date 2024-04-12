@@ -7,7 +7,7 @@ native_value %ni64 : i64;
 
 function @main() -> i64;
 
-value[impl default @main] %foo() -> i64 {
+value[impl default @main] %value() -> i64 {
     %x = constant %ni64 4;
     return %x;
 }
@@ -20,8 +20,8 @@ spatial %space(%bs : %buffspace) -> %buffspace {
     return %bs;
 }
 
-schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
-%bar<$time-usable, $time-usable>() ->
+schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
+%foo<$time-usable, $time-usable>() ->
 [%out : $val.%x-usable $time-usable $space-usable %ni64] {
     %x_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_ref;
@@ -29,4 +29,4 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
     return %result;
 }
 
-pipeline "main" = %bar;
+pipeline "main" = %foo;

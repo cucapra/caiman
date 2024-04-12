@@ -3,6 +3,7 @@ pub mod instate;
 pub mod outstate;
 pub mod staticcontext;
 
+use super::expir::BufferFlags;
 use super::util::*;
 use super::Hole;
 use crate::debug_info::DebugInfo;
@@ -10,41 +11,10 @@ use crate::ir;
 use crate::stable_vec;
 use crate::explication::expir;
 use crate::explication::expir::{NodeId, FuncletId, TypeId, PlaceId, StorageTypeId};
+use crate::stable_vec::StableVec;
 use debug_ignore::DebugIgnore;
 use std::collections::{HashMap, HashSet, VecDeque};
 use crate::rust_wgpu_backend::ffi;
-
-#[derive(Debug, Clone)]
-pub struct InState {
-    // state information needs to be duplicated as we recurse
-
-    // information found about a given schedule funclet
-    schedule_explication_data: HashMap<FuncletId, ScheduleFuncletData>,
-
-    // most recent scoped information found when constructing the current schedule
-    // this represents a stack, so should be popped when scope ends
-    scopes: Vec<ScheduleScopeData>,
-}
-
-#[derive(Debug, Default)]
-pub struct FuncletOutState {
-    // The return type from explicating a single funclet
-
-    // the allocations that still need to be concretized
-    // we map from funclet _index_ to the type to allocate to make recursion easier
-    // note that this necessarily refers to the current state
-    allocation_requests: HashMap<StorageTypeId, usize>,
-
-    // The types that still need explication for this scope
-    // they (by default) will be filled in the most "recent" open slot
-    to_fill: HashSet<Location>,
-
-    // nodes we've built on this particular funclet of the stack
-    nodes: VecDeque<ir::Node>,
-
-    // found tail edge for this funclet (if we managed to explicate one)
-    tail_edge: Option<ir::TailEdge>,
-}
 
 #[derive(Debug)]
 pub struct StaticContext<'context> {
@@ -75,23 +45,6 @@ struct SpecFuncletData {
 
     // tailedge dependencies for scheduling
     tail_dependencies: Vec<NodeId>,
-
-    // connections of which schedules refer to this spec funclet
-    // this can be modified when adding a new schedule
-    connections: Vec<FuncletId>,
-}
-
-#[derive(Clone, Debug)]
-pub struct InstantiatedNodes {
-    pub value: Option<NodeId>,
-    pub timeline: Option<NodeId>,
-    pub spatial: Option<NodeId>,
-}
-
-#[derive(Debug, Clone)]
-struct ScheduleFuncletData {
-    // map from the scheduled allocations to what things they are instantiating (if known)
-    type_instantiations: HashMap<NodeId, InstantiatedNodes>,
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"
@@ -108,6 +61,15 @@ macro_rules! make_op_codes {
 }
 
 with_operations!(make_op_codes);
+
+#[derive(Debug, Clone)]
+pub struct InState {
+    // state information needs to be duplicated as we recurse
+
+    // most recent scoped information found when constructing the current schedule
+    // this represents a stack, so should be popped when scope ends
+    scopes: Vec<ScheduleScopeData>,
+}
 
 #[derive(Debug, Clone)]
 pub struct ScheduleScopeData {
@@ -129,19 +91,43 @@ pub struct ScheduleScopeData {
     // useful to keep track of naming and boring indexing details
     node_index: usize,
 
-    // the spec functions being implemented at this point of the stack
-    spec_functions: SpecLanguages,
-
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
     // we only care about local information
-    instantiations: HashMap<Location, Vec<(expir::Place, usize)>>,
+    instantiations: HashMap<Location, Vec<NodeId>>,
 
-    // map from operation code to a vector of "available" allocations
+    // map from node id to which remote it instantiates, and what type it has
+    // we really do need both directions here, annoyingly
+    node_type_information: HashMap<NodeId, (Location, expir::Type)>,
+
+    // list of available memory allocations, with associated type information
+    allocations: Vec<(NodeId, expir::Type)>,
+
+    // map from operation code to a vector of "available" operations with holes
     // for now, these consist of exactly allocations where we don't yet know the type
-    allocations: HashMap<OpCode, Vec<usize>>,
+    available_operations: HashMap<OpCode, Vec<usize>>,
 
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections
     explication_hole: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct FuncletOutState {
+    // The return type from explicating a single funclet
+
+    // the allocations that still need to be concretized
+    // we map from funclet _index_ to the type to allocate to make recursion easier
+    // note that this necessarily refers to the current state
+    allocation_requests: HashMap<StorageTypeId, usize>,
+
+    // The types that still need explication for this scope
+    // they (by default) will be filled in the most "recent" open slot
+    to_fill: HashSet<Location>,
+
+    // nodes we've built on this particular funclet of the stack
+    nodes: VecDeque<ir::Node>,
+
+    // found tail edge for this funclet (if we managed to explicate one)
+    tail_edge: Option<ir::TailEdge>,
 }
