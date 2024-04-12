@@ -15,8 +15,9 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-use caiman::explication;
 use caiman::assembly::ast::{self as asm};
+use caiman::explication::Hole;
+use caiman::ir;
 
 use self::{
     analysis::{
@@ -66,6 +67,8 @@ pub struct Funclets {
     literal_value_classes: HashSet<String>,
     /// Set of variables used in the schedule
     variables: HashSet<String>,
+    /// Mapping from device variable to its buffer flags
+    flags: HashMap<String, ir::BufferFlags>,
 }
 
 /// A specific funclet in a scheduling function.
@@ -77,7 +80,7 @@ pub struct Funclet<'a> {
 
 impl<'a> Funclet<'a> {
     /// Gets the next blocks in the cfg as `FuncletIds`
-    pub fn next_blocks(&self) -> Vec<explication::Hole<asm::FuncletId>> {
+    pub fn next_blocks(&self) -> Vec<Hole<asm::FuncletId>> {
         match &self.block.terminator {
             Terminator::FinalReturn(_) => vec![],
             Terminator::Select { .. } => {
@@ -261,7 +264,7 @@ impl<'a> Funclet<'a> {
     }
 
     /// Gets the input tag of the specified variable, handling input overrides
-    fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
+    pub fn get_input_tag(&self, var: &str) -> Option<TripleTag> {
         let ovr = self
             .parent
             .type_info
@@ -331,7 +334,7 @@ impl<'a> Funclet<'a> {
     }
 
     /// Gets the nodes that exit this funclet
-    pub fn output_args(&self) -> Vec<explication::Hole<asm::NodeId>> {
+    pub fn output_args(&self) -> Vec<Hole<asm::NodeId>> {
         self.parent
             .live_vars
             .get_out_fact(self.block.id)
@@ -418,6 +421,11 @@ impl<'a> Funclet<'a> {
     pub fn is_var_or_ref(&self, v: &str) -> bool {
         self.parent.variables.contains(v) || matches!(self.get_dtype(v), Some(DataType::Ref(_)))
     }
+
+    /// Gets a map of device variables to their buffer flags
+    pub const fn get_flags(&self) -> &'a HashMap<String, ir::BufferFlags> {
+        self.parent.get_flags()
+    }
 }
 
 impl Funclets {
@@ -497,8 +505,8 @@ impl Funclets {
     /// Creates a new `Funclets` from a scheduling function by performing analyses
     /// and transforming the scheduling func into a canonical CFG of lowered HIR.
     pub fn new(f: SchedulingFunc, specs: &Specs, ctx: &Context) -> Self {
-        let mut cfg = Cfg::new(f.statements, &f.output);
-        let (mut types, mut data_types, variables) =
+        let mut cfg = Cfg::new(f.statements, &f.output, ctx);
+        let (mut types, mut data_types, variables, flags) =
             Self::collect_types(ctx.scheds.get(&f.name).unwrap().unwrap_sched());
 
         op_transform_pass(&mut cfg, &data_types);
@@ -543,6 +551,7 @@ impl Funclets {
             captured_out,
             literal_value_classes: ctx.specs[&specs.value.0].nodes.literal_classes(),
             variables,
+            flags,
         }
     }
 
@@ -554,12 +563,14 @@ impl Funclets {
     /// # Returns
     /// A tuple of the map of variable names to their local types and the map of
     /// variable names to their data types, and a set of mutable variables
+    #[allow(clippy::type_complexity)]
     fn collect_types(
         f: &SchedInfo,
     ) -> (
         HashMap<String, asm::TypeId>,
         HashMap<String, DataType>,
         HashSet<String>,
+        HashMap<String, ir::BufferFlags>,
     ) {
         let mut types = HashMap::new();
         let mut variables = HashSet::new();
@@ -576,7 +587,7 @@ impl Funclets {
             data_types.insert(format!("{RET_VAR}{id}"), out_ty.clone());
             types.insert(format!("{RET_VAR}{id}"), data_type_to_local_type(out_ty));
         }
-        (types, data_types, variables)
+        (types, data_types, variables, f.flags.clone())
     }
 
     /// Gets the funclet with the given id
@@ -654,5 +665,10 @@ impl Funclets {
             .chain(term_dests.into_iter())
             .chain(returns)
             .collect()
+    }
+
+    /// Get's a map of device variables to their buffer flags
+    pub const fn get_flags(&self) -> &HashMap<String, ir::BufferFlags> {
+        &self.flags
     }
 }

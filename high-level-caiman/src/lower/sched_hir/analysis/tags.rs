@@ -168,7 +168,7 @@ impl TagAnalysis {
                     }
                 }
             }
-            HirBody::RefLoad { dest, src, .. } => {
+            HirBody::RefLoad { dest, src, .. } | HirBody::DeviceCopy { dest, src, .. } => {
                 let mut tag = self
                     .tags
                     .get(src)
@@ -184,11 +184,13 @@ impl TagAnalysis {
                 );
             }
             HirBody::Hole(_) => todo!(),
-            HirBody::Op { dest, dest_tag, .. } => {
-                self.tags.insert(
-                    dest.clone(),
-                    override_none_usable(dest_tag.clone(), &self.data_types[dest]),
-                );
+            HirBody::Op { dests, .. } => {
+                for (dest, dest_tag) in dests {
+                    self.tags.insert(
+                        dest.clone(),
+                        override_none_usable(dest_tag.clone(), &self.data_types[dest]),
+                    );
+                }
             }
             HirBody::OutAnnotation(_, tags) => {
                 for (v, tag) in tags {
@@ -216,6 +218,7 @@ impl TagAnalysis {
                 }
             }
             HirBody::Phi { .. } => panic!("Phi nodes should be eliminated"),
+            HirBody::BeginEncoding { .. } | HirBody::EncodeDo { .. } | HirBody::FenceOp { .. } => {}
         }
     }
 }

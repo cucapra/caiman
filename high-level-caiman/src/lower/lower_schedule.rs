@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use caiman::assembly::ast::{self as asm, MetaMapping, RemoteNodeId};
+use caiman::assembly::ast::{self as asm, MetaMapping};
 use caiman::explication::Hole;
 
 use crate::{
@@ -18,7 +18,10 @@ use caiman::ir;
 
 use super::{
     data_type_to_storage_type,
-    sched_hir::{Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator, TripleTag},
+    sched_hir::{
+        DataMovement, FenceOp, Funclet, Funclets, HirBody, HirFuncCall, Specs, Terminator,
+        TripleTag,
+    },
     tuple_id,
 };
 
@@ -64,7 +67,7 @@ fn build_copy_cmd(
         }
     }
     let src = enum_cast!(SchedTerm::Var { name, .. }, name, src);
-    if f.is_var_or_ref(src) {
+    if f.is_var_or_ref(src) || f.get_flags().contains_key(src) {
         asm::Command::Node(asm::NamedNode {
             name: None,
             node: asm::Node::LocalCopy {
@@ -154,41 +157,39 @@ fn lower_store(
     )
 }
 
-/// Changes the remote node id to the remote id of the result of the call, before
-/// extracing the result
-fn to_tuple_quotient(q: asm::RemoteNodeId) -> asm::RemoteNodeId {
-    if let RemoteNodeId {
-        node: Some(Hole::Filled(asm::NodeId(n))),
-        ..
-    } = q
-    {
-        asm::RemoteNodeId {
-            node: Some(Hole::Filled(asm::NodeId(tuple_id(&[n])))),
-            ..q
-        }
-    } else {
-        q
-    }
-}
-
 /// Lowers an operation into a local-do-external and read-ref
 fn lower_op(
-    dest: &str,
-    dest_tag: &TripleTag,
+    dests: &[(String, TripleTag)],
     op: &str,
     args: &[SchedTerm],
     temp_id: usize,
     f: &Funclet,
 ) -> (CommandVec, usize) {
-    let temp_node_name = temp_var_name(temp_id);
-    let temp = asm::Command::Node(asm::NamedNode {
-        name: Some(asm::NodeId(temp_node_name.clone())),
-        node: asm::Node::AllocTemporary {
-            place: Hole::Filled(ir::Place::Local),
-            buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
-            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
-        },
-    });
+    // alloc temps for each destination
+    let temps: Vec<_> = dests
+        .iter()
+        .enumerate()
+        .map(|(id, (name, _))| {
+            let temp_node_name = temp_var_name(temp_id + id);
+            (
+                temp_node_name.clone(),
+                asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(temp_node_name)),
+                    node: asm::Node::AllocTemporary {
+                        place: Hole::Filled(ir::Place::Local),
+                        buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
+                        storage_type: Hole::Filled(data_type_to_ffi_type(
+                            f.get_dtype(name).unwrap(),
+                        )),
+                    },
+                }),
+            )
+        })
+        .collect();
+    let called_vars = dests
+        .iter()
+        .map(|(_, t)| t.value.quot_var.spec_var.as_ref().unwrap().clone())
+        .collect::<Vec<_>>();
     let mut inputs = vec![];
     for arg in args {
         let arg = enum_cast!(SchedTerm::Var { name, .. }, name, arg);
@@ -197,26 +198,42 @@ fn lower_op(
     let local_do = asm::Command::Node(asm::NamedNode {
         name: None,
         node: asm::Node::LocalDoExternal {
-            operation: Hole::Filled(to_tuple_quotient(tag_to_remote_id(&dest_tag.value))),
+            operation: Hole::Filled(asm::RemoteNodeId {
+                funclet: SpecType::Value.get_meta_id(),
+                node: Some(Hole::Filled(asm::NodeId(tuple_id(&called_vars)))),
+            }),
             inputs: Hole::Filled(inputs),
-            outputs: Hole::Filled(vec![Hole::Filled(asm::NodeId(temp_node_name.clone()))]),
+            outputs: Hole::Filled(
+                temps
+                    .iter()
+                    .map(|(n, _)| Hole::Filled(asm::NodeId(n.clone())))
+                    .collect(),
+            ),
             external_function_id: Hole::Filled(asm::ExternalFunctionId(op.to_string())),
         },
     });
-    let read_ref = asm::Command::Node(asm::NamedNode {
-        name: Some(asm::NodeId(dest.to_string())),
-        node: asm::Node::ReadRef {
-            source: Hole::Filled(asm::NodeId(temp_node_name)),
-            storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(dest).unwrap())),
-        },
-    });
+    // read ref for each destination
+    let read_refs: Vec<_> = dests
+        .iter()
+        .zip(temps.iter())
+        .map(|((name, _), (temp, _))| {
+            Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: Some(asm::NodeId(name.clone())),
+                node: asm::Node::ReadRef {
+                    source: Hole::Filled(asm::NodeId(temp.clone())),
+                    storage_type: Hole::Filled(data_type_to_ffi_type(f.get_dtype(name).unwrap())),
+                },
+            }))
+        })
+        .collect();
     (
-        vec![
-            Hole::Filled(temp),
-            Hole::Filled(local_do),
-            Hole::Filled(read_ref),
-        ],
-        temp_id + 1,
+        temps
+            .into_iter()
+            .map(|(_, c)| Hole::Filled(c))
+            .chain(std::iter::once(Hole::Filled(local_do)))
+            .chain(read_refs)
+            .collect(),
+        temp_id + dests.len(),
     )
 }
 
@@ -231,6 +248,194 @@ fn lower_load(dest: &str, typ: &DataType, src: &str, temp_id: usize) -> (Command
         }))],
         temp_id,
     )
+}
+
+/// Lowers a begin-encode operation into a caiman assembly command
+/// # Arguments
+/// * `device` - the device to encode on
+/// * `device_vars` - the names of the variables to encode
+/// * `encoder` - the name of the encoder to use
+/// * `tags` - the tags for the operation
+/// * `temp_id` - the next available temporary id
+/// * `f` - the funclet that contains the operation
+fn lower_begin_encode(
+    device: &str,
+    device_vars: &[String],
+    encoder: &str,
+    tags: &TripleTag,
+    temp_id: usize,
+    f: &Funclet,
+) -> (CommandVec, usize) {
+    let place = match device {
+        "gpu" => ir::Place::Gpu,
+        "cpu" => ir::Place::Cpu,
+        _ => ir::Place::Local,
+    };
+    // TODO: proper device vars to support multiple encodings in a single function
+    // TODO: check if device variables should have reference semantics (as implemented here)
+    let mut cmds = vec![];
+    for var in device_vars {
+        cmds.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+            name: Some(asm::NodeId(var.clone())),
+            node: asm::Node::AllocTemporary {
+                place: Hole::Filled(place),
+                buffer_flags: Hole::Filled(f.get_flags()[var]),
+                storage_type: Hole::Filled(data_type_to_storage_type(f.get_dtype(var).unwrap())),
+            },
+        })));
+    }
+    cmds.push(Hole::Filled(asm::Command::Node(asm::NamedNode {
+        name: Some(asm::NodeId(encoder.to_string())),
+        node: asm::Node::BeginEncoding {
+            place: Hole::Filled(place),
+            event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+            encoded: Hole::Filled(
+                device_vars
+                    .iter()
+                    .map(|k| Hole::Filled(asm::NodeId(k.clone())))
+                    .collect(),
+            ),
+            fences: Hole::Filled(vec![]),
+        },
+    })));
+    (cmds, temp_id)
+}
+
+/// Lowers a device copy operation into a caiman assembly command. Allocates a new
+/// temporary to hold the source if the source is a value.
+/// # Arguments
+/// * `dest` - the name of the variable to store the result in. Should be a device variable
+/// * `src` - the name of the variable to copy from. Should be a host variable
+/// * `dir` - the direction of the copy. Must be `HostToDevice` for now
+/// * `encoder` - the name of the encoder to use
+/// * `temp_id` - the next available temporary id
+fn lower_device_copy(
+    dest: &str,
+    src: &str,
+    dir: DataMovement,
+    encoder: &str,
+    temp_id: usize,
+    f: &Funclet,
+) -> (CommandVec, usize) {
+    assert_eq!(dir, DataMovement::HostToDevice);
+    if f.is_var_or_ref(src) {
+        (
+            vec![Hole::Filled(asm::Command::Node(asm::NamedNode {
+                name: None,
+                node: asm::Node::EncodeCopy {
+                    encoder: Hole::Filled(asm::NodeId(encoder.to_string())),
+                    input: Hole::Filled(asm::NodeId(src.to_string())),
+                    output: Hole::Filled(asm::NodeId(dest.to_string())),
+                },
+            }))],
+            temp_id,
+        )
+    } else {
+        (
+            vec![
+                Hole::Filled(asm::Command::Node(asm::NamedNode {
+                    name: Some(asm::NodeId(temp_var_name(temp_id))),
+                    node: asm::Node::AllocTemporary {
+                        place: Hole::Filled(ir::Place::Local),
+                        storage_type: Hole::Filled(data_type_to_ffi_type(
+                            f.get_dtype(src).unwrap(),
+                        )),
+                        buffer_flags: Hole::Filled(LOCAL_TEMP_FLAGS),
+                    },
+                })),
+                Hole::Filled(asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::WriteRef {
+                        source: Hole::Filled(asm::NodeId(src.to_string())),
+                        destination: Hole::Filled(asm::NodeId(temp_var_name(temp_id))),
+                        storage_type: Hole::Filled(data_type_to_ffi_type(
+                            f.get_dtype(src).unwrap(),
+                        )),
+                    },
+                })),
+                Hole::Filled(asm::Command::Node(asm::NamedNode {
+                    name: None,
+                    node: asm::Node::EncodeCopy {
+                        encoder: Hole::Filled(asm::NodeId(encoder.to_string())),
+                        input: Hole::Filled(asm::NodeId(temp_var_name(temp_id))),
+                        output: Hole::Filled(asm::NodeId(dest.to_string())),
+                    },
+                })),
+            ],
+            temp_id + 1,
+        )
+    }
+}
+
+/// Lowers an encode-do operation into a caiman assembly command
+/// # Arguments
+/// * `dests` - the names of the variables to store the result in. These should be
+///            device variables
+/// * `func` - the function to call
+/// * `encoder` - the name of the encoder to use
+/// * `temp_id` - the next available temporary id
+fn lower_encode_do(
+    dests: &[String],
+    func: &HirFuncCall,
+    encoder: &str,
+    temp_id: usize,
+) -> (CommandVec, usize) {
+    let local_do = asm::Command::Node(asm::NamedNode {
+        name: None,
+        node: asm::Node::EncodeDoExternal {
+            operation: Hole::Filled(tag_to_remote_id(&func.tag.value)),
+            encoder: Hole::Filled(asm::NodeId(encoder.to_string())),
+            inputs: Hole::Filled(
+                func.args
+                    .iter()
+                    .map(|x| Hole::Filled(asm::NodeId(x.clone())))
+                    .collect(),
+            ),
+            outputs: Hole::Filled(
+                dests
+                    .iter()
+                    .map(|n| Hole::Filled(asm::NodeId(n.clone())))
+                    .collect(),
+            ),
+            external_function_id: Hole::Filled(asm::ExternalFunctionId(func.target.to_string())),
+        },
+    });
+    (vec![Hole::Filled(local_do)], temp_id)
+}
+
+/// Lowers a fence operation into a caiman assembly command
+/// # Arguments
+/// * `dest` - the name of the variable to store the result in. May be `None`
+/// * `op` - the type of fence operation
+/// * `src` - the name of the variable to synchronize on for a sync fence or the
+///          encoder to submit for a submit fence
+/// * `tags` - the tags for the fence
+/// * `temp_id` - the next available temporary id
+fn lower_fence_op(
+    dest: &Option<String>,
+    op: FenceOp,
+    src: &SchedTerm,
+    tags: &TripleTag,
+    temp_id: usize,
+) -> (CommandVec, usize) {
+    let src = enum_cast!(SchedTerm::Var { name, .. }, name, src).clone();
+    let local_do = match op {
+        FenceOp::Submit => asm::Command::Node(asm::NamedNode {
+            name: dest.as_ref().map(|x| asm::NodeId(x.clone())),
+            node: asm::Node::Submit {
+                encoder: Hole::Filled(asm::NodeId(src)),
+                event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+            },
+        }),
+        FenceOp::Sync => asm::Command::Node(asm::NamedNode {
+            name: None,
+            node: asm::Node::SyncFence {
+                fence: Hole::Filled(asm::NodeId(src)),
+                event: Hole::Filled(tag_to_remote_id(&tags.timeline)),
+            },
+        }),
+    };
+    (vec![Hole::Filled(local_do)], temp_id)
 }
 
 /// Lowers a scheduling statement into a caiman assembly command
@@ -252,14 +457,37 @@ fn lower_instr(s: &HirBody, temp_id: usize, f: &Funclet) -> (CommandVec, usize) 
         // annotations don't lower to anything
         HirBody::InAnnotation(..) | HirBody::OutAnnotation(..) => (vec![], temp_id),
         HirBody::Op {
-            dest,
-            dest_tag,
-            op,
-            args,
-            ..
-        } => lower_op(dest, dest_tag, &op.lower(), args, temp_id, f),
+            dests, op, args, ..
+        } => lower_op(dests, &op.lower(), args, temp_id, f),
         x @ HirBody::Hole(_) => todo!("{x:?}"),
         HirBody::Phi { .. } => panic!("Attempting to lower intermediate form"),
+        HirBody::BeginEncoding {
+            device,
+            device_vars,
+            tags,
+            encoder,
+            ..
+        } => lower_begin_encode(device, device_vars, encoder, tags, temp_id, f),
+        HirBody::DeviceCopy {
+            dest,
+            src,
+            dir,
+            encoder,
+            ..
+        } => lower_device_copy(dest, src, *dir, encoder, temp_id, f),
+        HirBody::EncodeDo {
+            dests,
+            func,
+            encoder,
+            ..
+        } => lower_encode_do(dests, func, encoder, temp_id),
+        HirBody::FenceOp {
+            dest,
+            op,
+            src,
+            tags,
+            ..
+        } => lower_fence_op(dest, *op, src, tags, temp_id),
     }
 }
 
@@ -287,8 +515,6 @@ fn lower_func_call(
         })),
         Hole::Filled(asm::Command::Node(asm::NamedNode {
             name: Some(asm::NodeId(join_var.clone())),
-            // TODO: codegen join semantics are broken, basically there's only
-            // inline join
             node: asm::Node::InlineJoin {
                 funclet: f.next_blocks().first().unwrap().clone(),
                 captures: Hole::Filled(
@@ -564,6 +790,30 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
         commands.append(&mut new_cmds);
     }
     commands.extend(lower_terminator(funclet.terminator(), temp_id, funclet));
+    // TODO: implicit timeline tag deduction
+    let get_tag = |name: &str| {
+        let t = if name == "input" {
+            funclet.get_input_tag(name)
+        } else {
+            funclet.get_out_tag(name).cloned()
+        };
+        t.map_or(
+            asm::Tag {
+                quot: Hole::Filled(asm::RemoteNodeId {
+                    node: None,
+                    funclet: SpecType::Timeline.get_meta_id(),
+                }),
+                flow: Hole::Filled(ir::Flow::Usable),
+            },
+            |mut t| {
+                if t.timeline.flow.is_none() {
+                    t.timeline.flow = Some(Flow::Usable);
+                }
+                assert!(t.timeline.quot_var.spec_var.is_some());
+                tag_to_tag(&t.timeline)
+            },
+        )
+    };
     asm::Funclet {
         kind: ir::FuncletKind::ScheduleExplicit,
         header: asm::FuncletHeader {
@@ -571,22 +821,7 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
             args: inputs,
             ret: funclet.outputs(),
             binding: asm::FuncletBinding::ScheduleBinding(asm::ScheduleBinding {
-                implicit_tags: (
-                    asm::Tag {
-                        flow: Hole::Filled(ir::Flow::Usable),
-                        quot: Hole::Filled(RemoteNodeId {
-                            funclet: SpecType::Timeline.get_meta_id(),
-                            node: None,
-                        }),
-                    },
-                    asm::Tag {
-                        flow: Hole::Filled(ir::Flow::Usable),
-                        quot: Hole::Filled(RemoteNodeId {
-                            funclet: SpecType::Timeline.get_meta_id(),
-                            node: None,
-                        }),
-                    },
-                ),
+                implicit_tags: (get_tag("input"), get_tag("output")),
                 meta_map: MetaMapping {
                     value: (SpecType::Value.get_meta_id(), funclet.specs().value.clone()),
                     timeline: (

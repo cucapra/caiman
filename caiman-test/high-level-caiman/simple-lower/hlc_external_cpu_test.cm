@@ -1,0 +1,34 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+extern(cpu) pure foof(i64) -> i64
+
+feq double {
+    extern(cpu) pure bar(i64) -> i64
+
+    val baz(a: i64) -> i64 {
+        returns a + a
+    }
+}
+
+val main() -> i64 {
+    c :- 1
+    g :- foof(c)
+    h :- foof(c)
+    returns double(g) + double(h)
+}
+
+fn baz_impl(a: i64) -> i64 impls baz, time, space {
+    a + a
+}
+
+fn main_impl() -> i64 impls main, time, space  {
+    let c = 1;
+    let g = foof(c);
+    let h = foof(c);
+    bar(g) + baz_impl(h)
+}
+
+pipeline main { main_impl }

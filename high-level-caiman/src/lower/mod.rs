@@ -1,7 +1,10 @@
+use core::panic;
+
 use crate::{
-    error,
+    error::{self, type_error, Info, LocalError},
     parse::ast::{
-        Binop, ClassMembers, DataType, FloatSize, IntSize, SchedulingFunc, TopLevel, Uop,
+        Binop, ClassMembers, DataType, ExternDef, FloatSize, InputOrOutputVal, IntSize,
+        SchedulingFunc, TopLevel, Uop,
     },
     typing::Context,
 };
@@ -164,7 +167,15 @@ pub fn lower(hlc: Vec<TopLevel>, typing_ctx: &Context) -> Result<asm::Program, e
                             let funclet = lower_val_funclet(f, &name, typing_ctx);
                             asm.declarations.push(asm::Declaration::Funclet(funclet));
                         }
-                        ClassMembers::Extern { .. } => todo!(),
+                        ClassMembers::Extern {
+                            name,
+                            device,
+                            pure,
+                            input,
+                            output,
+                            def,
+                            info,
+                        } => asm.declarations.push(extern_to_asm(&name, device, pure, input, output, def, info, &class.name)?),
                     }
                 }
                 asm.declarations
@@ -272,4 +283,91 @@ pub fn tuple_id(names: &[String]) -> String {
     } else {
         format!("_t_{}", names.join("_"))
     }
+}
+
+/// Converts an extern def into an assembly external gpu info.
+/// Returns `None` if the extern def is `None`.
+fn get_gpu_info(def: Option<ExternDef>) -> Option<asm::ExternalGPUInfo> {
+    def.map(|def| asm::ExternalGPUInfo {
+        shader_module: def.path,
+        entry_point: def.entry,
+        dimensionality: def.dimensions,
+        resource_bindings: def
+            .resources
+            .into_iter()
+            .map(|res| {
+                let input;
+                let output;
+                match res.caiman_val {
+                    InputOrOutputVal::Input(i) => {
+                        input = Some(asm::NodeId(i));
+                        output = None;
+                    }
+                    InputOrOutputVal::Output(o) => {
+                        input = None;
+                        output = Some(asm::NodeId(o));
+                    }
+                };
+                asm::ExternalGpuFunctionResourceBinding {
+                    input,
+                    output,
+                    group: res.group,
+                    binding: res.binding,
+                }
+            })
+            .collect(),
+    })
+}
+
+/// Converts an extern def into a declaration for an assembly external function
+/// # Errors
+/// Returns an error if the device is not recognized.
+/// # Panics
+/// Panics if types could not be converted to FFI types
+#[allow(clippy::too_many_arguments)]
+fn extern_to_asm(
+    name: &str,
+    device: String,
+    pure: bool,
+    input: Vec<(Option<String>, DataType)>,
+    output: Vec<(Option<String>, DataType)>,
+    def: Option<ExternDef>,
+    info: Info,
+    class_name: &asm::FunctionClassId,
+) -> Result<asm::Declaration, LocalError> {
+    Ok(asm::Declaration::ExternalFunction(asm::ExternalFunction {
+        name: name.to_string(),
+        kind: match (device, pure) {
+            (d, true) if d == "cpu" => asm::ExternalFunctionKind::CPUPure,
+            (d, false) if d == "cpu" => asm::ExternalFunctionKind::CPUEffect,
+            (d, _) if d == "gpu" => asm::ExternalFunctionKind::GPU(
+                get_gpu_info(def).map_or_else(|| Err(type_error(info, 
+                    &format!("{name} is declared to be a gpu external function but contains no GPU info"))), Ok)?,
+            ),
+            (d, _) => {
+                return Err(type_error(
+                    info,
+                    &format!(
+                        "Unknown external function device {d} for function {name}"
+                    ),
+                ))
+            }
+        },
+        input_args: input
+            .into_iter()
+            .map(|(n, t)| asm::ExternalArgument{
+                name: n.map(asm::NodeId),
+                ffi_type: data_type_to_ffi(&t).unwrap(),
+            })
+            .collect(),
+        output_types: output.into_iter().map(|(n, t)| asm::ExternalArgument {
+            name: n.map(asm::NodeId),
+            ffi_type: data_type_to_ffi(&t).unwrap(),
+        }).collect(),
+        value_function_binding: asm::FunctionClassBinding {
+            default: false,
+            function_class: class_name.clone(),
+        },
+        
+    }))
 }

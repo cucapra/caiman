@@ -4,7 +4,7 @@ mod specs;
 
 use crate::{
     error::{type_error, Info, LocalError},
-    parse::ast::{Binop, DataType, SpecType, Uop},
+    parse::ast::{Binop, DataType, SpecType, Uop, WGPUFlags},
 };
 use caiman::{assembly::ast as asm, ir};
 
@@ -26,8 +26,8 @@ pub const LOCAL_TEMP_FLAGS: ir::BufferFlags = ir::BufferFlags {
     map_write: true,
     storage: false,
     uniform: false,
-    copy_dst: false,
-    copy_src: false,
+    copy_dst: true,
+    copy_src: true,
 };
 
 /// A typing environement for deducing quotients.
@@ -196,18 +196,22 @@ impl NodeEnv {
 #[derive(Debug)]
 pub struct DTypeEnv {
     env: Env<CDataType, ADataType>,
+    flags: HashMap<String, ir::BufferFlags>,
 }
 
 impl Default for DTypeEnv {
     fn default() -> Self {
-        Self { env: Env::new() }
+        Self {
+            env: Env::new(),
+            flags: HashMap::new(),
+        }
     }
 }
 
 impl DTypeEnv {
     #[must_use]
     pub fn new() -> Self {
-        Self { env: Env::new() }
+        Self::default()
     }
     /// Adds a constraint that a variable must adhere to a certain type.
     /// # Errors
@@ -225,6 +229,22 @@ impl DTypeEnv {
                 &format!("Failed to unify type constraints of variable {name}"),
             )
         })
+    }
+
+    /// Adds a constraint that a device variable is used in a particular way.
+    pub fn add_usage(&mut self, name: &str, flag: WGPUFlags) {
+        let f = self
+            .flags
+            .entry(name.to_string())
+            .or_insert_with(|| ir::BufferFlags {
+                map_read: false,
+                map_write: false,
+                storage: true,
+                uniform: false,
+                copy_dst: false,
+                copy_src: false,
+            });
+        flag.apply_flag(f);
     }
 
     /// Adds a constraint that a variable must have a certain type.
@@ -325,6 +345,8 @@ pub struct SchedInfo {
     /// Set of defined names and mapping from defined name to
     /// whether it is a constant. Non-constants are references.
     pub defined_names: HashMap<String, Mutability>,
+    /// Map from device variable name to flags.
+    pub flags: HashMap<String, ir::BufferFlags>,
 }
 
 #[derive(Debug, Clone)]
@@ -349,7 +371,7 @@ impl SchedOrExtern {
     pub fn unwrap_sched(&self) -> &SchedInfo {
         match self {
             Self::Sched(s) => s,
-            Self::Extern(_) => panic!("Expected schedule, got extern"),
+            Self::Extern(..) => panic!("Expected schedule, got extern"),
         }
     }
 
@@ -360,7 +382,7 @@ impl SchedOrExtern {
     pub fn unwrap_sched_mut(&mut self) -> &mut SchedInfo {
         match self {
             Self::Sched(s) => s,
-            Self::Extern(_) => panic!("Expected schedule, got extern"),
+            Self::Extern(..) => panic!("Expected schedule, got extern"),
         }
     }
 }
@@ -438,6 +460,7 @@ impl SchedInfo {
             spatial: spatial.unwrap(),
             types: HashMap::new(),
             defined_names: HashMap::new(),
+            flags: HashMap::new(),
         })
     }
 }
@@ -496,6 +519,8 @@ pub struct Context {
     pub specs: HashMap<String, SpecInfo>,
     /// Map from function name to specs it implements.
     pub scheds: HashMap<String, SchedOrExtern>,
+    /// Set of external function names.
+    pub externs: HashSet<String>,
 }
 
 /// A typed binary operation.

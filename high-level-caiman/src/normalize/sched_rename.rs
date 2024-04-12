@@ -64,7 +64,8 @@ use std::collections::HashMap;
 use regex::Regex;
 
 use crate::parse::ast::{
-    ArgsOrEnc, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm,
+    FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedStmt, SchedTerm, SpecExpr, SpecLiteral,
+    SpecTerm, TemplateArgs,
 };
 
 /// Returns the internal name of a variable, given its original name and id.
@@ -87,6 +88,11 @@ pub fn original_name(name: &str) -> String {
 }
 
 /// Recursive helper to `rename_vars`.
+/// # Arguments
+/// * `stmts` - The statements to rename
+/// * `latest_names` - The latest name of each variable, used to generate unique names
+/// * `cur_names` - The current name of each variable, used to rename uses
+/// * `encode_names` - The current name of each variable in each encoder, used to rename uses
 fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
     stmts: T,
     latest_names: &mut HashMap<String, u64>,
@@ -94,6 +100,7 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
 ) {
     for s in stmts {
         match s {
+            //TODO: rename timeline operations
             SchedStmt::Decl { lhs, expr, .. } => {
                 if let Some(expr) = expr {
                     rename_expr_uses(expr, &cur_names);
@@ -138,14 +145,28 @@ fn rename_vars_rec<'a, T: Iterator<Item = &'a mut SchedStmt>>(
             SchedStmt::Return(_, e) => {
                 rename_expr_uses(e, &cur_names);
             }
-            SchedStmt::Call(_, SchedFuncCall { args, .. }) => {
-                if let ArgsOrEnc::Args(args) = &mut **args {
-                    for arg in args {
-                        rename_expr_uses(arg, &cur_names);
+            SchedStmt::Call(
+                _,
+                SchedFuncCall {
+                    args, templates, ..
+                },
+            ) => {
+                for arg in args {
+                    rename_expr_uses(arg, &cur_names);
+                }
+                if let Some(TemplateArgs::Vals(vs)) = templates {
+                    for v in vs {
+                        rename_spec_expr_uses(v, &cur_names);
                     }
                 }
             }
             SchedStmt::Hole(_) => {}
+            SchedStmt::Encode { encoder, stmt, .. } => {
+                // TODO: support encoder aliasing?
+                rename_expr_uses(&mut stmt.rhs, &cur_names);
+                *encoder = get_cur_name(encoder, &cur_names);
+                // TODO: handle renaming dests for multiple encoders?
+            }
         }
     }
 }
@@ -197,10 +218,18 @@ fn rename_expr_uses(expr: &mut SchedExpr, cur_names: &HashMap<String, u64>) {
         SchedExpr::Uop { expr, .. } => {
             rename_expr_uses(expr, cur_names);
         }
-        SchedExpr::Term(SchedTerm::Call(_, SchedFuncCall { args, .. })) => {
-            if let ArgsOrEnc::Args(args) = &mut **args {
-                for arg in args {
-                    rename_expr_uses(arg, cur_names);
+        SchedExpr::Term(SchedTerm::Call(
+            _,
+            SchedFuncCall {
+                args, templates, ..
+            },
+        )) => {
+            for arg in args {
+                rename_expr_uses(arg, cur_names);
+            }
+            if let Some(TemplateArgs::Vals(templates)) = templates {
+                for t in templates {
+                    rename_spec_expr_uses(t, cur_names);
                 }
             }
         }
@@ -213,8 +242,42 @@ fn rename_expr_uses(expr: &mut SchedExpr, cur_names: &HashMap<String, u64>) {
             }
         }
         SchedExpr::Term(SchedTerm::Lit { .. } | SchedTerm::Hole(_)) => {}
+        SchedExpr::Term(SchedTerm::TimelineOperation { arg, .. }) => {
+            rename_expr_uses(arg, cur_names);
+        }
         SchedExpr::Conditional { .. } => {
             panic!("Conditional expressions are not supported in schedules")
         }
+    }
+}
+
+/// Renames all uses of variables in a spec expression to their current internal names.
+fn rename_spec_expr_uses(expr: &mut SpecExpr, cur_names: &HashMap<String, u64>) {
+    match expr {
+        SpecExpr::Term(SpecTerm::Var { name, .. }) => {
+            *name = get_cur_name(name, cur_names);
+        }
+        SpecExpr::Binop { lhs, rhs, .. } => {
+            rename_spec_expr_uses(lhs, cur_names);
+            rename_spec_expr_uses(rhs, cur_names);
+        }
+        SpecExpr::Uop { expr, .. } => {
+            rename_spec_expr_uses(expr, cur_names);
+        }
+        SpecExpr::Term(SpecTerm::Lit {
+            lit: SpecLiteral::Tuple(e) | SpecLiteral::Array(e),
+            ..
+        }) => {
+            for e in e {
+                rename_spec_expr_uses(e, cur_names);
+            }
+        }
+        SpecExpr::Conditional { .. } => {
+            panic!("Conditional expressions are not supported in templates")
+        }
+        SpecExpr::Term(SpecTerm::Call { .. }) => {
+            panic!("Function calls are not supported in templates")
+        }
+        SpecExpr::Term(SpecTerm::Lit { .. }) => (),
     }
 }

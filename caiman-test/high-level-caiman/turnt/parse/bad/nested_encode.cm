@@ -1,4 +1,4 @@
 #version 0.1.0
 fn foo() impls a, b, c {
-    e.encode_cmd[x <- e.encode_cmd[y <- z]];
+    encode e.call[x <- e.call[y <- z]];
 }

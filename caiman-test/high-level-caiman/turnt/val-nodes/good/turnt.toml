@@ -1,2 +1,2 @@
 [envs.val-nodes]
-command = "../../../../../target/debug/hlc --lower {filename}"
+command = "../../../../../target/debug/hlc --lower -q {filename}"

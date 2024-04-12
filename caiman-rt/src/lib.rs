@@ -201,10 +201,8 @@ const GPU_BUFFERS: usize = 5;
 /// reference live at the same time (ie. mutable borrow from two different
 /// objects instead of one).
 pub struct GpuLocals {
-    // one allocator for each buffer usage, index of buffer usage
-    // maps to the index of the allocator
-    gpu_allocators: [GpuAllocator; GPU_BUFFERS],
-    usages: [wgpu::BufferUsages; GPU_BUFFERS],
+    // one buffer for each local variable
+    gpu_allocators: Vec<GpuAllocator>,
     // maps variable ids to the index of the gpu allocator that holds them
     alloc_map: HashMap<usize, usize>,
     // maps variable ids to their type ids. Used only for runtime checks
@@ -289,25 +287,8 @@ impl LocalVars {
 
 impl GpuLocals {
     pub fn new(state: &mut dyn State) -> Self {
-        let usages = [
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_WRITE,
-            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::STORAGE,
-            wgpu::BufferUsages::MAP_READ
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::STORAGE,
-        ];
         Self {
-            gpu_allocators: [
-                GpuAllocator::new(state, usages[0]),
-                GpuAllocator::new(state, usages[1]),
-                GpuAllocator::new(state, usages[2]),
-                GpuAllocator::new(state, usages[3]),
-                GpuAllocator::new(state, usages[4]),
-            ],
-            usages,
+            gpu_allocators: vec![],
             alloc_map: HashMap::new(),
             type_ids: HashMap::new(),
         }
@@ -323,21 +304,25 @@ impl GpuLocals {
     }
 
     /// Allocates a GPU local variable with the given id, size, and alignment.
-    pub fn alloc_gpu<T: Sized + Any>(&mut self, id: usize, usage: wgpu::BufferUsages) {
-        for (idx, u) in self.usages.iter().enumerate() {
-            if u.contains(usage) {
-                self.alloc_map.insert(id, idx);
-                self.type_ids.insert(id, std::any::TypeId::of::<T>());
-                self.gpu_allocators[idx].alloc(
-                    id,
-                    std::mem::size_of::<T>(),
-                    std::mem::align_of::<T>()
-                        .max(wgpu::Limits::default().min_storage_buffer_offset_alignment as usize),
-                );
-                return;
-            }
-        }
-        panic!("No suitable GPU buffer usage found for {:?}", usage);
+    pub fn alloc_gpu<T: Sized + Any>(
+        &mut self,
+        state: &mut dyn State,
+        id: usize,
+        usage: wgpu::BufferUsages,
+    ) {
+        let idx = self.gpu_allocators.len();
+        self.alloc_map.insert(id, idx);
+        self.type_ids.insert(id, std::any::TypeId::of::<T>());
+        // TODO: we can simplify this and avoid the need for a `GpuAllocator`
+        // since we can't actually allocate multiple things from a single
+        // buffer
+        self.gpu_allocators.push(GpuAllocator::new(state, usage));
+        self.gpu_allocators[idx].alloc(
+            id,
+            std::mem::size_of::<T>(),
+            std::mem::align_of::<T>()
+                .max(wgpu::Limits::default().min_storage_buffer_offset_alignment as usize),
+        );
     }
 
     /// Gets a GPU mutable pointer to the start of the allocation for the given id.

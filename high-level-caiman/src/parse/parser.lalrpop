@@ -23,6 +23,7 @@ match {
   "true", "false", "import",
   "pure",
   "node","none","input","output","usable","saved","need","dead",
+  "encode", "submit", "await", "encode-begin",
 
 
   r"\s*" => { }, // Whitespace
@@ -246,7 +247,7 @@ QuotRef: QuotientReference = {
 
 // Flagged type: base type with flags and settings
 FlaggedType: FlaggedType = {
-    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> => astf.flagged_type(<>)
+    <@L> <BaseType> <("'" "<" <CommaList<FlagOrSetting>> ">")?> <@R> =>? astf.flagged_type(<>)
 }
 
 // Flag or setting. A flag is a name with no value. A setting is a name with a value
@@ -275,8 +276,9 @@ SchedStmt: SchedStmt = {
     <BlockSeq> => <>,
     <@L> "???" ";" <@R> => astf.sched_hole_stmt(<>),
     <@L> <SchedCallStmt> ";" <@R> => astf.sched_call_stmt(<>),
-    <@L> "@in" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
-    <@L> "@out" "{" <CommaList<Arg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
+    <@L> "@in" "{" <CommaList<InOutArg<Tags>>> "}" ";" <@R> => astf.sched_in_annotation(<>),
+    <@L> "@out" "{" <CommaList<InOutArg<Tags>>> "}" ";" <@R> => astf.sched_out_annotation(<>),
+    <@L> "encode" <Id> "." <Id> "[" <EncodedStmt> "]" <TagOp?> ";" <@R> =>? astf.sched_encode(<>),
 }
 
 // A sequence of scheduling statements which may end with an expression that
@@ -347,6 +349,9 @@ MatchedIf: SchedStmt = {
 #[inline]
 SchedTerm: SchedTerm = {
     <@L> <SchedCall> <@R> => astf.sched_call_expr(<>),
+    <@L> "submit" <TagOp?> <Atom<Literal>> <@R> => astf.sched_submit(<>),
+    <@L> "await" <TagOp?> <Atom<Literal>> <@R> => astf.sched_await(<>),
+    <@L> "encode-begin" <TagOp?> <("{" <CommaList<Id>> "}")?> <Id> <@R> => astf.sched_begin_encode(<>),
 }
 
 #[inline]
@@ -357,8 +362,6 @@ SchedCall: SchedFuncCall = {
 
 SchedCallStmt: SchedFuncCall = {
     <SchedCall> => <>,
-    <Term> "[" <EncodedStmt> "]" 
-        <TagOp?> => astf.sched_encode(<>),
 }
 
 // parameterize on the literal type (number or no number)
@@ -395,6 +398,14 @@ EncodedStmt: EncodedStmt = {
 
 // An argument is an identifier followed by a production of `T`
 Arg<T>: Arg<T> = { <i: Id> ":" <t: T> => (i, t) }
+
+// An identifier followed by a production of `T` or the keyword input/output
+// followed by a production of `T`
+InOutArg<T>: Arg<T> = {
+    "input" ":" <t: T> => (String::from("input"), t),
+    "output" ":" <t: T> => (String::from("output"), t),
+    <i: Id> ":" <t: T> => (i, t),
+}
 
 // argument with optional type
 MaybeArg<T> : (String, Option<T>) = {

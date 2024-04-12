@@ -1,4 +1,4 @@
-Error: At "nested_encode.cm" 3:38, 
+Error: At "nested_encode.cm" 3:33, 
   Parsing Error: Unrecognized token: '<-', expected one of [
     "\"!=\"",
     "\"%\"",

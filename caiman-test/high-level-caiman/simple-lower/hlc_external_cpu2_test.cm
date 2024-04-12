@@ -1,0 +1,45 @@
+#version 0.1.0
+
+tmln time(e: Event) -> Event { returns e }
+sptl space(s: BufferSpace) -> BufferSpace { returns s }
+
+extern(cpu) pure sort5(i64, i64, i64, i64, i64) -> (i64, i64, i64, i64, i64)
+
+feq double {
+    val bar(a: i64) -> i64 {
+        returns a * 2
+    }
+
+    val baz(a: i64) -> i64 {
+        returns a + a
+    }
+}
+
+val main(a: i64, b: i64, c: i64) -> (i64, i64, i64, i64, i64) {
+    h :- 1
+    j :- 10
+    x, y, z, w, q :- sort5(a, b, c, j, h)
+    x2 :- double(x)
+    y2 :- double(y)
+    z2 :- double(z)
+    w2 :- double(w)
+    q2 :- double(q)
+    returns (x2, y2, z2, w2, q2)
+}
+
+fn baz_impl(a: i64) -> i64 impls baz, time, space {
+    a + a
+}
+
+fn bar_impl(a: i64) -> i64 impls bar, time, space {
+    a * 2
+}
+
+fn main_impl(a: i64, b: i64, c: i64) -> (i64, i64, i64, i64, i64) 
+    impls main, time, space  
+{
+    let x, y, z, w, q = sort5(a, b, c, 10, 1);
+    (bar_impl(x), baz_impl(y), baz_impl(z), bar_impl(w), baz_impl(q))
+}
+
+pipeline main { main_impl }

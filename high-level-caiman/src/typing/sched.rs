@@ -4,8 +4,8 @@ use crate::{
     enum_cast,
     error::{type_error, Info, LocalError},
     parse::ast::{
-        Binop, DataType, FullType, SchedExpr, SchedFuncCall, SchedLiteral, SchedLocalCall,
-        SchedStmt, SchedTerm, Uop,
+        Binop, DataType, EncodedCommand, EncodedStmt, FullType, SchedExpr, SchedFuncCall,
+        SchedLiteral, SchedStmt, SchedTerm, Uop, WGPUFlags,
     },
 };
 use std::iter::once;
@@ -73,7 +73,16 @@ pub fn collect_sched_names<'a, T: Iterator<Item = &'a SchedStmt>>(
                 );
                 assert!(names.contains_key(lhs));
             }
-            _ => (),
+            SchedStmt::Encode { stmt, .. } => {
+                for (s, _) in &stmt.lhs {
+                    names.insert(s.clone(), Mutability::Const);
+                }
+            }
+            SchedStmt::Call(..)
+            | SchedStmt::Return(..)
+            | SchedStmt::InEdgeAnnotation { .. }
+            | SchedStmt::OutEdgeAnnotation { .. }
+            | SchedStmt::Hole(_) => (),
         }
     }
     Ok(())
@@ -317,12 +326,11 @@ fn collect_assign_call(
     ctx: &Context,
     env: &mut DTypeEnv,
     dest: &[(String, Option<FullType>)],
-    call_info: &SchedLocalCall,
+    call_info: &SchedFuncCall,
     info: Info,
 ) -> Result<(), LocalError> {
     let mut arg_names = Vec::new();
-    // TODO: encoding
-    for arg in call_info.args {
+    for arg in &call_info.args {
         let arg_name = enum_cast!(
             SchedTerm::Var { name, .. },
             name,
@@ -333,7 +341,7 @@ fn collect_assign_call(
     let fn_name = enum_cast!(
         SchedTerm::Var { name, .. },
         name,
-        enum_cast!(SchedExpr::Term, call_info.target)
+        enum_cast!(SchedExpr::Term, &*call_info.target)
     );
     let sig = ctx
         .scheds
@@ -399,6 +407,40 @@ fn collect_null_decl(
     Ok(())
 }
 
+/// Collects constraints for the binary dot operator.
+fn collect_dot(
+    env: &mut DTypeEnv,
+    dest: &[(String, Option<FullType>)],
+    _lhs: &SchedExpr,
+    rhs: &SchedExpr,
+    info: Info,
+) -> Result<(), LocalError> {
+    let rhs_name = enum_cast!(
+        SchedTerm::Var { name, .. },
+        name,
+        enum_cast!(SchedExpr::Term, rhs)
+    );
+    if dest.len() != 1 {
+        return Err(type_error(
+            info,
+            &format!(
+                "{info}: Dot operator has 1 destination, found {}",
+                dest.len()
+            ),
+        ));
+    }
+    let (dest_name, dest_annot) = &dest[0];
+    if let Some(FullType {
+        base: Some(anot), ..
+    }) = dest_annot
+    {
+        env.add_dtype_constraint(dest_name, anot.base.clone(), info)?;
+    }
+    env.add_var_equiv(dest_name, rhs_name, info)?;
+    env.add_usage(rhs_name, WGPUFlags::MapRead);
+    Ok(())
+}
+
 /// Unifies base types for a schedule.
 /// # Returns
 /// The type variables of the values being returned to the parent scope.
@@ -419,6 +461,17 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 info,
                 ..
             } => collect_null_decl(env, dest, *info)?,
+            SchedStmt::Decl {
+                lhs: dest,
+                expr:
+                    Some(SchedExpr::Binop {
+                        info,
+                        op: Binop::Dot,
+                        lhs,
+                        rhs,
+                    }),
+                ..
+            } => collect_dot(env, dest, lhs, rhs, *info)?,
             SchedStmt::Decl {
                 lhs: dest,
                 expr: Some(SchedExpr::Binop { info, op, lhs, rhs }),
@@ -443,12 +496,11 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
             } => collect_assign_var(dest, name, env, *info)?,
             SchedStmt::Decl {
                 lhs: dest,
-                expr:
-                    Some(SchedExpr::Term(SchedTerm::Call(_, call_info @ SchedFuncCall { args, .. }))),
+                expr: Some(SchedExpr::Term(SchedTerm::Call(_, call_info))),
                 info,
                 ..
-            } if args.is_args() => {
-                collect_assign_call(ctx, env, dest, &call_info.unwrap_local_call(), *info)?;
+            } => {
+                collect_assign_call(ctx, env, dest, call_info, *info)?;
             }
             SchedStmt::Assign {
                 lhs: SchedExpr::Term(SchedTerm::Var { name: dest, .. }),
@@ -479,11 +531,16 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                 info,
                 ..
             } => collect_if(ctx, env, guard, true_block, false_block, *info, mutables)?,
-            SchedStmt::InEdgeAnnotation { .. }
+            // TODO: implement timeline operations
+            SchedStmt::Decl {
+                expr: Some(SchedExpr::Term(SchedTerm::TimelineOperation { .. })),
+                ..
+            }
+            | SchedStmt::InEdgeAnnotation { .. }
             | SchedStmt::OutEdgeAnnotation { .. }
             | SchedStmt::Hole(_) => (),
-            SchedStmt::Call(info, call_info @ SchedFuncCall { args, .. }) if args.is_args() => {
-                collect_assign_call(ctx, env, &[], &call_info.unwrap_local_call(), *info)?;
+            SchedStmt::Call(info, call_info) => {
+                collect_assign_call(ctx, env, &[], call_info, *info)?;
             }
             SchedStmt::Return(_, e) => {
                 assert_eq!(num_stmts, 0);
@@ -509,10 +566,54 @@ fn collect_sched_helper<'a, T: Iterator<Item = &'a SchedStmt>>(
                     _ => unreachable!(),
                 }
             }
+            SchedStmt::Encode {
+                stmt, cmd, info, ..
+            } => collect_encode(ctx, env, stmt, *cmd, *info)?,
             _ => unreachable!("{:#?}", stmt),
         }
     }
     Ok(vec![])
+}
+
+fn collect_encode(
+    _ctx: &Context,
+    env: &mut DTypeEnv,
+    stmt: &EncodedStmt,
+    cmd: EncodedCommand,
+    info: Info,
+) -> Result<(), LocalError> {
+    match cmd {
+        EncodedCommand::Copy => {
+            let src = enum_cast!(
+                SchedTerm::Var { name, .. },
+                name,
+                enum_cast!(SchedExpr::Term, &stmt.rhs)
+            );
+            let dest = stmt.lhs[0].0.clone();
+            env.add_var_equiv(src, &dest, info)?;
+            env.add_usage(&dest, WGPUFlags::CopyDst);
+            Ok(())
+        }
+        EncodedCommand::Invoke => {
+            // TODO: typing encode-do
+            // if let SchedTerm::Call(info, call) = enum_cast!(SchedExpr::Term, &stmt.rhs) {
+            //     collect_assign_call(
+            //         ctx,
+            //         env,
+            //         &stmt
+            //             .lhs
+            //             .iter()
+            //             .map(|(x, _)| (x.clone(), None))
+            //             .collect::<Vec<_>>(),
+            //         call,
+            //         *info,
+            //     )
+            // } else {
+            //     unreachable!();
+            // }
+            Ok(())
+        }
+    }
 }
 
 /// Collects constraints for a schedule. Requires that the input constraints

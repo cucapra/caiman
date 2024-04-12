@@ -62,7 +62,7 @@ use crate::{
     lower::{
         sched_hir::{
             cfg::{Cfg, Edge, START_BLOCK_ID},
-            HirBody, HirFuncCall, HirOp, Terminator, TripleTag,
+            HirBody, HirFuncCall, HirOp, OpType, Terminator, TripleTag,
         },
         tuple_id,
     },
@@ -240,7 +240,7 @@ fn unify_decl(
 fn hir_op_to_binop(op: &HirOp) -> Binop {
     match op {
         HirOp::Binary(binop) => *binop,
-        HirOp::FFI(name) => {
+        HirOp::FFI(name, OpType::Binary) => {
             let mut parts: Vec<_> = name.split('_').collect();
             match parts.swap_remove(1) {
                 "add" => Binop::Add,
@@ -266,6 +266,7 @@ fn hir_op_to_binop(op: &HirOp) -> Binop {
             }
         }
         HirOp::Unary(_) => panic!("Not a binary operator"),
+        HirOp::FFI(_, b) => panic!("Unexpected op type: {b:?}"),
     }
 }
 
@@ -281,11 +282,11 @@ fn hir_op_to_binop(op: &HirOp) -> Binop {
 /// # Returns
 /// The updated environment
 fn unify_op(
-    dest: &str,
-    dest_tag: &TripleTag,
+    dests: &[(String, TripleTag)],
     op: &HirOp,
     args: &[SchedTerm],
     info: Info,
+    ctx: &Context,
     mut env: NodeEnv,
 ) -> Result<NodeEnv, LocalError> {
     let mut arg_names = vec![];
@@ -298,17 +299,54 @@ fn unify_op(
             _ => unreachable!(),
         }
     }
-    env = add_constraint(
-        dest,
-        &ValQuot::Bop(
-            hir_op_to_binop(op),
-            MetaVar::new_var_name(&arg_names[0]),
-            MetaVar::new_var_name(&arg_names[1]),
-        ),
-        info,
-        env,
-    )?;
-    add_type_annot(dest, dest_tag, env)
+    match op {
+        HirOp::FFI(_, OpType::Binary) => {
+            assert_eq!(dests.len(), 1);
+            env = add_constraint(
+                &dests[0].0,
+                &ValQuot::Bop(
+                    hir_op_to_binop(op),
+                    MetaVar::new_var_name(&arg_names[0]),
+                    MetaVar::new_var_name(&arg_names[1]),
+                ),
+                info,
+                env,
+            )?;
+        }
+        HirOp::FFI(target, OpType::External) => {
+            // The name of an external function is the name of its value spec
+            let f_class = ctx.specs[target].feq.clone().unwrap();
+            let dest_tuple = tuple_id(
+                &dests
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Vec<_>>(),
+            );
+            env = add_constraint(
+                &format!("!{dest_tuple}"),
+                &ValQuot::Call(
+                    f_class,
+                    arg_names.iter().map(MetaVar::new_var_name).collect(),
+                ),
+                info,
+                env,
+            )?;
+            for (id, (dest, _)) in dests.iter().enumerate() {
+                env = add_constraint(
+                    dest,
+                    &ValQuot::Extract(MetaVar::new_var_name(&format!("!{dest_tuple}")), id),
+                    info,
+                    env,
+                )?;
+            }
+        }
+        HirOp::FFI(..) => todo!(),
+        _ => unreachable!(),
+    }
+    for (dest, dest_tag) in dests {
+        env = add_type_annot(dest, dest_tag, env)?;
+    }
+    Ok(env)
 }
 
 /// Unifies a phi node with the given name and inputs
@@ -481,14 +519,12 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     }
                     env
                 }
-                HirBody::Hole(_) => env,
                 HirBody::Op {
                     info,
-                    dest,
-                    dest_tag,
+                    dests,
                     op,
                     args,
-                } => unify_op(dest, dest_tag, op, args, *info, env)?,
+                } => unify_op(dests, op, args, *info, ctx, env)?,
                 HirBody::Phi { dest, inputs, .. } => unify_phi(
                     dest,
                     inputs,
@@ -498,6 +534,12 @@ fn unify_nodes<'a, T: Iterator<Item = &'a String>>(
                     &mut selects,
                     env,
                 )?,
+                // TODO
+                HirBody::BeginEncoding { .. }
+                | HirBody::DeviceCopy { .. }
+                | HirBody::EncodeDo { .. }
+                | HirBody::FenceOp { .. }
+                | HirBody::Hole(..) => env,
             }
         }
         env = match &block.terminator {
@@ -620,20 +662,26 @@ fn fill_type_info(env: &NodeEnv, cfg: &mut Cfg, selects: &HashMap<usize, String>
                     lhs,
                     lhs_tags: lhs_tag,
                     ..
-                }
-                | HirBody::Op {
-                    dest: lhs,
-                    dest_tag: lhs_tag,
-                    ..
                 } => {
                     fill_val_quotient(lhs, lhs_tag, env, block.id);
+                }
+                HirBody::Op { dests, .. } => {
+                    for (d, t) in dests {
+                        fill_val_quotient(d, t, env, block.id);
+                    }
                 }
                 HirBody::InAnnotation(_, tags) | HirBody::OutAnnotation(_, tags) => {
                     for (name, tag) in tags {
                         fill_val_quotient(name, tag, env, block.id);
                     }
                 }
-                HirBody::Hole(_) | HirBody::RefLoad { .. } => {}
+                // TODO: typing for encodings
+                HirBody::Hole(_)
+                | HirBody::RefLoad { .. }
+                | HirBody::BeginEncoding { .. }
+                | HirBody::DeviceCopy { .. }
+                | HirBody::EncodeDo { .. }
+                | HirBody::FenceOp { .. } => {}
                 HirBody::Phi { dest, .. } => {
                     insertions.push((
                         idx,

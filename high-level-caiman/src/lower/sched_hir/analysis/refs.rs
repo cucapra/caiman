@@ -104,14 +104,15 @@ impl Fact for RefPropagation {
         });
         if let HirInstr::Stmt(HirBody::Op {
             op: HirOp::Unary(Uop::Ref),
-            dest,
+            dests,
             args,
             ..
         }) = stmt
         {
             assert!(args.len() == 1);
+            assert_eq!(dests.len(), 1);
             let src = enum_cast!(SchedTerm::Var { name, .. }, name, &args[0]);
-            self.aliases.insert(dest.clone(), src.clone());
+            self.aliases.insert(dests[0].0.clone(), src.clone());
         }
     }
 
