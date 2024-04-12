@@ -92,7 +92,7 @@ impl ScheduleScopeData {
     }
 
     // helper for match_triple
-    fn unify_instantiations(
+    fn intersect_instantiations(
         &self,
         current: Option<HashSet<usize>>,
         location: &Option<Location>,
@@ -105,7 +105,7 @@ impl ScheduleScopeData {
             None => current,
             Some(matches) => match current {
                 None => Some(matches),
-                Some(current_matches) => Some(matches.union(&current_matches).cloned().collect()),
+                Some(current_matches) => Some(matches.intersection(&current_matches).cloned().collect()),
             },
         }
     }
@@ -121,9 +121,9 @@ impl ScheduleScopeData {
         context: &StaticContext,
     ) -> HashSet<NodeId> {
         let mut result = None;
-        result = self.unify_instantiations(result, &triple.value, context);
-        result = self.unify_instantiations(result, &triple.timeline, context);
-        result = self.unify_instantiations(result, &triple.spatial, context);
+        result = self.intersect_instantiations(result, &triple.value, context);
+        result = self.intersect_instantiations(result, &triple.timeline, context);
+        result = self.intersect_instantiations(result, &triple.spatial, context);
         result.unwrap_or_default()
     }
 

@@ -142,9 +142,9 @@ impl InState {
         match &context.get_funclet(&funclet).spec_binding {
             expir::FuncletSpecBinding::ScheduleExplicit {
                 value,
-                spatial,
                 timeline,
-            } => (value, spatial, timeline),
+                spatial,
+            } => (value, timeline, spatial),
             _ => unreachable!(
                 "{} is not a scheduling funclet",
                 context.debug_info.funclet(&funclet)
@@ -287,27 +287,25 @@ impl InState {
         target_location_triple: &LocationTriple,
         target_type: &expir::Type,
         context: &StaticContext,
-    ) -> Location {
+    ) -> Option<Location> {
         for scope in self.scopes.iter().rev() {
             // sort the results so we go bottom to top of the funclet
-            dbg!(&target_location_triple);
             for node in scope
                 .match_triple(target_location_triple, context)
                 .iter()
                 .sorted_by(|x, y| x.cmp(y))
                 .rev()
             {
-                dbg!(&node);
                 let node_info = scope.node_type_information.get(&node).unwrap();
                 if self.compare_types(&node_info.1, target_type) {
-                    return Location {
+                    return Some(Location {
                         funclet: scope.funclet.clone(),
                         node: node.clone(),
-                    };
+                    });
                 }
             }
-        }
-        todo!()
+        };
+        None
         // let nodes = vec![
         //     expir::Node::AllocTemporary {
         //         buffer_flags,

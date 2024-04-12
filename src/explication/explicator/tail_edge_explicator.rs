@@ -30,37 +30,34 @@ fn explicate_return(
             Some(result)
         }
         Hole::Empty => {
-            // dbg!(&state);
             let mut result = FuncletOutState::new();
             let funclet_id = state.get_current_funclet_id();
             let funclet = context.get_funclet(&funclet_id);
-            let outputs = &funclet.output_types;
             let mut nodes = Vec::new();
-            for output in outputs.iter() {
-                let location_triple = LocationTriple::new_triple_mapped(
+            for output in funclet.output_types.iter() {
+                let target_location_triple = LocationTriple::new_triple_mapped(
                     spec_output,
                     funclet_id,
                     output.clone(),
                     state,
                     context,
                 );
-                // TODO: I don't think this matters, oddly enough, but we should verify this
-                let target_type = &expir::Type::NativeValue {
-                    storage_type: ffi::TypeId(output.clone()),
-                };
-                let instantiation = state.find_instantiation(
-                    &location_triple,
+                let target_type = context.get_type(output);
+                match state.find_instantiation(
+                    &target_location_triple,
                     target_type,
                     context,
-                );
-                dbg!(&instantiation);
-                todo!();
-                // we couldn't find anything in our funclet
-                if instantiation.funclet != funclet_id {
-                    // TODO try and explicate something
-                    todo!()
-                };
-                nodes.push(instantiation.node);
+                ) {
+                    // we couldn't find anything in our funclet
+                    None => todo!("{}", error),
+                    Some(instantiation) => {
+                        if instantiation.funclet != funclet_id {
+                            // TODO try and explicate something
+                            todo!()
+                        };
+                        nodes.push(instantiation.node);
+                    }
+                }
             }
             result.set_tail_edge(ir::TailEdge::Return {
                 return_values: nodes.into_boxed_slice(),
