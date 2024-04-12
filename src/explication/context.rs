@@ -96,9 +96,9 @@ pub struct ScheduleScopeData {
     // we only care about local information
     instantiations: HashMap<Location, Vec<NodeId>>,
 
-    // map from node id to which remote it instantiates, and what type it has
+    // map from node id to which remote(s) it instantiates, and what type it has
     // we really do need both directions here, annoyingly
-    node_type_information: HashMap<NodeId, (Location, expir::Type)>,
+    node_type_information: HashMap<NodeId, (LocationTriple, expir::Type)>,
 
     // list of available memory allocations, with associated type information
     allocations: Vec<(NodeId, expir::Type)>,

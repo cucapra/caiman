@@ -362,9 +362,11 @@ pub enum Command {
     TailEdge(TailEdge),
 }
 
+pub type FuncletKind = ir::FuncletKind;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Funclet {
-    pub kind: ir::FuncletKind,
+    pub kind: FuncletKind,
     pub header: FuncletHeader,
     pub commands: Vec<Hole<Command>>,
 }

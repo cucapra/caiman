@@ -15,7 +15,7 @@ impl ScheduleScopeData {
     fn new_inner(
         funclet: FuncletId,
         instantiations: HashMap<Location, Vec<NodeId>>,
-        node_type_information: HashMap<NodeId, (Location, expir::Type)>,
+        node_type_information: HashMap<NodeId, (LocationTriple, expir::Type)>,
         allocations: Vec<(NodeId, expir::Type)>,
         available_operations: HashMap<OpCode, Vec<NodeId>>,
     ) -> ScheduleScopeData {
@@ -40,21 +40,44 @@ impl ScheduleScopeData {
 
     pub fn set_instantiation(
         &mut self,
-        location: Location,
-        typ: expir::Type,
         schedule_node: NodeId,
+        location_triple: LocationTriple,
+        typ: expir::Type,
         context: &StaticContext,
     ) {
-        self.instantiations
-            .entry(location.clone())
-            .or_insert(Vec::new())
-            .push(schedule_node);
+        match &location_triple.value {
+            None => {},
+            Some(value) => {
+                self.instantiations
+                    .entry(value.clone())
+                    .or_insert(Vec::new())
+                    .push(schedule_node);
+            }
+        }
+        match &location_triple.timeline {
+            None => {},
+            Some(timeline) => {
+                self.instantiations
+                    .entry(timeline.clone())
+                    .or_insert(Vec::new())
+                    .push(schedule_node);
+            }
+        }
+        match &location_triple.spatial {
+            None => {},
+            Some(spatial) => {
+                self.instantiations
+                    .entry(spatial.clone())
+                    .or_insert(Vec::new())
+                    .push(schedule_node);
+            }
+        }
+
         // note that this may overwrite what an allocation instantiates
         // this is, of course, completely fine mechanically
         // but is also why backtracking is needed/complicated
-        self
-            .node_type_information
-            .insert(schedule_node, (location, typ));
+        self.node_type_information
+            .insert(schedule_node, (location_triple, typ));
     }
 
     pub fn add_allocation(

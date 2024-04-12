@@ -82,19 +82,16 @@ impl InState {
     pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
-        spec_remotes: Vec<Location>,
+        location_triple: LocationTriple,
         typ: expir::Type,
         context: &StaticContext,
     ) {
-        let scope = self.get_latest_scope_mut();
-        for spec_remote in &spec_remotes {
-            scope.set_instantiation(
-                spec_remote.clone(),
-                typ.clone(),
-                schedule_node.clone(),
-                context,
-            );
-        }
+        self.get_latest_scope_mut().set_instantiation(
+            schedule_node.clone(),
+            location_triple.clone(),
+            typ.clone(),
+            context,
+        );
     }
 
     pub fn expect_location(&self) -> Location {
@@ -208,7 +205,7 @@ impl InState {
         &self,
         node_id: NodeId,
         context: &StaticContext,
-    ) -> &(Location, expir::Type) {
+    ) -> &(LocationTriple, expir::Type) {
         let scope = self.get_latest_scope();
         scope.node_type_information.get(&node_id).expect(&format!(
             "Missing instantiation for node {}",

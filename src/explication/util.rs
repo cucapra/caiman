@@ -16,6 +16,37 @@ pub struct Location {
     pub node: NodeId,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LocationTriple {
+    pub value: Option<Location>,
+    pub timeline: Option<Location>,
+    pub spatial: Option<Location>
+}
+
+impl LocationTriple {
+    pub fn new_value(value: Location) -> LocationTriple {
+        LocationTriple {
+            value: Some(value),
+            timeline: None,
+            spatial: None
+        }
+    }
+    pub fn new_timeline(timeline: Location) -> LocationTriple {
+        LocationTriple {
+            value: None,
+            timeline: Some(timeline),
+            spatial: None
+        }
+    }
+    pub fn new_spatial(spatial: Location) -> LocationTriple {
+        LocationTriple {
+            value: None,
+            timeline: None,
+            spatial: Some(spatial)
+        }
+    }
+}
+
 pub fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
     let mut result = Vec::new();
     for (index, hole) in v.into_iter().enumerate() {

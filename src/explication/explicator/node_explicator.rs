@@ -13,6 +13,36 @@ use crate::rust_wgpu_backend::ffi;
 use super::force_lower_node;
 use super::tail_edge_explicator;
 
+fn spec_location(
+    spec: &expir::FuncletSpec,
+    funclet_id: FuncletId,
+    node_id: NodeId,
+    error: &str,
+    context: &StaticContext,
+) -> Option<Location> {
+    let index_error = format!(
+        "Funclet {} does not have enough arguments for phi node {}",
+        context.debug_info.funclet(&funclet_id),
+        context.debug_info.node(&funclet_id, node_id)
+    );
+    match &spec.input_tags.get(node_id).expect(&index_error) {
+        Hole::Empty => None,
+        Hole::Filled(t) => match t.quot {
+            ir::Quotient::None => None,
+            ir::Quotient::Node { node_id } | ir::Quotient::Input { index: node_id } => {
+                Some(Location {
+                    funclet: spec.funclet_id_opt.unwrap(),
+                    node: node_id.clone(),
+                })
+            }
+            ir::Quotient::Output { index } => panic!(
+                "Not sure to do with an output as an input for node {}",
+                context.debug_info.node(&funclet_id, node_id)
+            ),
+        },
+    }
+}
+
 fn explicate_phi_node(
     index: usize,
     state: InState,
@@ -32,8 +62,6 @@ fn explicate_phi_node(
     let mut new_state = state.clone();
     let funclet_id = state.get_current_funclet_id();
     let node_id = state.get_current_node_id().unwrap();
-    // TODO: make triple
-    let value_spec = state.get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context);
     let node_type = context
         .get_type(
             state
@@ -57,15 +85,28 @@ fn explicate_phi_node(
         _ => {}
     }
 
-    new_state.set_instantiation(
-        node_id,
-        vec![Location {
-            funclet: value_spec.funclet_id_opt.unwrap(),
-            node: node_id,
-        }],
-        node_type,
-        context,
-    );
+    let (value_spec, timeline_spec, spatial_spec) =
+        match &context.get_funclet(&funclet_id).spec_binding {
+            expir::FuncletSpecBinding::ScheduleExplicit {
+                value,
+                timeline,
+                spatial,
+            } => (value, timeline, spatial),
+            _ => {
+                unreachable!(
+                    "{} is not a scheduling funclet",
+                    context.debug_info.funclet(&funclet_id)
+                )
+            }
+        };
+
+    let location = LocationTriple {
+        value: spec_location(value_spec, funclet_id, node_id, &error, context),
+        timeline: spec_location(timeline_spec, funclet_id, node_id, &error, context),
+        spatial: spec_location(spatial_spec, funclet_id, node_id, &error, context),
+    };
+
+    let value_location = new_state.set_instantiation(node_id, location, node_type, context);
     let node = ir::Node::Phi { index };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -123,11 +164,10 @@ fn explicate_allocate_temporary(
     }
 }
 
-fn explicate_local_do(
+fn explicate_local_do_builtin(
     expir_operation: &Hole<expir::Quotient>,
     expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
     expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
-    expir_external_funclet_id: Option<&Hole<expir::ExternalFunctionId>>,
     state: InState,
     context: &StaticContext,
 ) -> Option<FuncletOutState> {
@@ -160,7 +200,14 @@ fn explicate_local_do(
         let input_open = input.as_ref().opt().expect(&error).clone();
         inputs.push(input_open);
     }
-    for output in expir_outputs.as_ref().opt().expect(&error).iter() {
+    // note that offset refers to the requirement that extracts be in sequence after a do
+    for (offset, output) in expir_outputs
+        .as_ref()
+        .opt()
+        .expect(&error)
+        .iter()
+        .enumerate()
+    {
         let output_open = output.as_ref().opt().expect(&error).clone();
         let typ = new_state.read_allocation(Location {
             funclet: state.get_current_funclet_id(),
@@ -168,7 +215,7 @@ fn explicate_local_do(
         });
         new_state.set_instantiation(
             output_open,
-            vec![Location {
+            LocationTriple::new_value(Location {
                 funclet: state
                     .get_funclet_spec(
                         state.get_current_funclet_id(),
@@ -178,24 +225,104 @@ fn explicate_local_do(
                     .funclet_id_opt
                     .unwrap(),
                 node: node_id,
-            }],
+            }),
             typ,
             context,
         );
         outputs.push(output_open);
     }
-    let node = match expir_external_funclet_id {
-        None => ir::Node::LocalDoBuiltin {
-            operation,
-            inputs: inputs.into_boxed_slice(),
-            outputs: outputs.into_boxed_slice(),
-        },
-        Some(external_id) => ir::Node::LocalDoExternal {
-            operation,
-            external_function_id: external_id.as_ref().opt().expect(&error).clone(),
-            inputs: inputs.into_boxed_slice(),
-            outputs: outputs.into_boxed_slice(),
-        },
+    let node = ir::Node::LocalDoBuiltin {
+        operation,
+        inputs: inputs.into_boxed_slice(),
+        outputs: outputs.into_boxed_slice(),
+    };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
+}
+
+fn explicate_local_do_external(
+    expir_operation: &Hole<expir::Quotient>,
+    expir_inputs: &Hole<Box<[Hole<NodeId>]>>,
+    expir_outputs: &Hole<Box<[Hole<NodeId>]>>,
+    expir_external_funclet_id: &Hole<expir::ExternalFunctionId>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let operation = expir_operation.as_ref().opt().expect(&error).clone();
+    let node_id = match operation {
+        expir::Quotient::Node { node_id } => node_id,
+        _ => panic!(
+            "Expected node operation for local do builtin {}",
+            context.debug_info.node_expir(
+                state.get_current_funclet_id(),
+                state.get_current_node(context).as_ref().opt().unwrap()
+            )
+        ),
+    };
+    let mut inputs = Vec::new();
+    let mut outputs = Vec::new();
+    for input in expir_inputs.as_ref().opt().expect(&error).iter() {
+        let input_open = input.as_ref().opt().expect(&error).clone();
+        inputs.push(input_open);
+    }
+    // note that offset refers to the requirement that extracts be in sequence after a do
+    for (offset, output) in expir_outputs
+        .as_ref()
+        .opt()
+        .expect(&error)
+        .iter()
+        .enumerate()
+    {
+        let output_open = output.as_ref().opt().expect(&error).clone();
+        let typ = new_state.read_allocation(Location {
+            funclet: state.get_current_funclet_id(),
+            node: output_open,
+        });
+        new_state.set_instantiation(
+            output_open,
+            LocationTriple::new_value(Location {
+                funclet: state
+                    .get_funclet_spec(
+                        state.get_current_funclet_id(),
+                        &expir::FuncletKind::Value,
+                        context,
+                    )
+                    .funclet_id_opt
+                    .unwrap(),
+                node: node_id + offset + 1,
+            }),
+            typ,
+            context,
+        );
+        outputs.push(output_open);
+    }
+    let node = ir::Node::LocalDoExternal {
+        operation,
+        external_function_id: expir_external_funclet_id
+            .as_ref()
+            .opt()
+            .expect(&error)
+            .clone(),
+        inputs: inputs.into_boxed_slice(),
+        outputs: outputs.into_boxed_slice(),
     };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -246,25 +373,37 @@ fn explicate_encode_do(
         let input_open = input.as_ref().opt().expect(&error).clone();
         inputs.push(input_open);
     }
-    for output in expir_outputs.as_ref().opt().expect(&error).iter() {
+    for (offset, output) in expir_outputs
+        .as_ref()
+        .opt()
+        .expect(&error)
+        .iter()
+        .enumerate()
+    {
         let output_open = output.as_ref().opt().expect(&error).clone();
         let typ = new_state.read_allocation(Location {
             funclet: state.get_current_funclet_id(),
             node: output_open,
         });
+        let value_location = Location {
+            funclet: state
+                .get_funclet_spec(
+                    state.get_current_funclet_id(),
+                    &expir::FuncletKind::Value,
+                    context,
+                )
+                .funclet_id_opt
+                .unwrap(),
+            node: node_id + offset + 1,
+        };
         new_state.set_instantiation(
             output_open,
-            vec![Location {
-                funclet: state
-                    .get_funclet_spec(
-                        state.get_current_funclet_id(),
-                        &expir::FuncletKind::Value,
-                        context,
-                    )
-                    .funclet_id_opt
-                    .unwrap(),
-                node: node_id,
-            }],
+            LocationTriple {
+                value: Some(value_location),
+                // TODO: add timeline
+                timeline: None,
+                spatial: None,
+            },
             typ,
             context,
         );
@@ -322,7 +461,7 @@ fn explicate_write_ref(
     });
     new_state.set_instantiation(
         destination,
-        vec![instantiation_location.clone()],
+        instantiation_location.clone(),
         allocation_type,
         context,
     );
@@ -373,7 +512,7 @@ fn explicate_borrow_ref(
     new_state.add_allocation(schedule_node, ref_type.clone(), context);
     new_state.set_instantiation(
         schedule_node,
-        vec![instantiation_location.clone()],
+        instantiation_location.clone(),
         ref_type,
         context,
     );
@@ -416,7 +555,7 @@ fn explicate_read_ref(
     let (instantiation_location, _) = state.get_node_information(source, context);
     new_state.set_instantiation(
         state.get_current_node_id().unwrap(),
-        vec![instantiation_location.clone()],
+        instantiation_location.clone(),
         expir::Type::NativeValue { storage_type },
         context,
     );
@@ -437,6 +576,7 @@ fn explicate_read_ref(
 fn explicate_copy(
     expir_input: &Hole<usize>,
     expir_output: &Hole<usize>,
+    expir_encoder: Option<&Hole<usize>>,
     state: InState,
     context: &StaticContext,
 ) -> Option<FuncletOutState> {
@@ -455,8 +595,18 @@ fn explicate_copy(
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
     let (instantiation, typ) = state.get_node_information(input, context);
-    new_state.set_instantiation(output, vec![instantiation.clone()], typ.clone(), context);
-    let node = ir::Node::LocalCopy { input, output };
+    new_state.set_instantiation(output, instantiation.clone(), typ.clone(), context);
+    let node = match expir_encoder {
+        None => ir::Node::LocalCopy { input, output },
+        Some(e) => {
+            let encoder = e.as_ref().opt().expect(&error).clone();
+            ir::Node::EncodeCopy {
+                encoder,
+                input,
+                output,
+            }
+        }
+    };
     new_state.next_node();
     match explicate_node(new_state, context) {
         None => None,
@@ -507,17 +657,17 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
                 operation,
                 inputs,
                 outputs,
-            }) => explicate_local_do(operation, inputs, outputs, None, state, context),
+            }) => explicate_local_do_builtin(operation, inputs, outputs, state, context),
             Hole::Filled(expir::Node::LocalDoExternal {
                 operation,
                 inputs,
                 outputs,
                 external_function_id,
-            }) => explicate_local_do(
+            }) => explicate_local_do_external(
                 operation,
                 inputs,
                 outputs,
-                Some(external_function_id),
+                external_function_id,
                 state,
                 context,
             ),
@@ -535,8 +685,13 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
                 storage_type,
             }) => explicate_read_ref(source, storage_type, state, context),
             Hole::Filled(expir::Node::LocalCopy { input, output }) => {
-                explicate_copy(input, output, state, context)
+                explicate_copy(input, output, None, state, context)
             }
+            Hole::Filled(expir::Node::EncodeCopy {
+                input,
+                output,
+                encoder,
+            }) => explicate_copy(input, output, Some(encoder), state, context),
             Hole::Filled(expir::Node::EncodeDoExternal {
                 encoder,
                 operation,
