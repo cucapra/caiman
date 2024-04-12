@@ -13,36 +13,6 @@ use crate::rust_wgpu_backend::ffi;
 use super::force_lower_node;
 use super::tail_edge_explicator;
 
-fn spec_location(
-    spec: &expir::FuncletSpec,
-    funclet_id: FuncletId,
-    node_id: NodeId,
-    error: &str,
-    context: &StaticContext,
-) -> Option<Location> {
-    let index_error = format!(
-        "Funclet {} does not have enough arguments for phi node {}",
-        context.debug_info.funclet(&funclet_id),
-        context.debug_info.node(&funclet_id, node_id)
-    );
-    match &spec.input_tags.get(node_id).expect(&index_error) {
-        Hole::Empty => None,
-        Hole::Filled(t) => match t.quot {
-            ir::Quotient::None => None,
-            ir::Quotient::Node { node_id } | ir::Quotient::Input { index: node_id } => {
-                Some(Location {
-                    funclet: spec.funclet_id_opt.unwrap(),
-                    node: node_id.clone(),
-                })
-            }
-            ir::Quotient::Output { index } => panic!(
-                "Not sure to do with an output as an input for node {}",
-                context.debug_info.node(&funclet_id, node_id)
-            ),
-        },
-    }
-}
-
 fn explicate_phi_node(
     index: usize,
     state: InState,
@@ -85,26 +55,7 @@ fn explicate_phi_node(
         _ => {}
     }
 
-    let (value_spec, timeline_spec, spatial_spec) =
-        match &context.get_funclet(&funclet_id).spec_binding {
-            expir::FuncletSpecBinding::ScheduleExplicit {
-                value,
-                timeline,
-                spatial,
-            } => (value, timeline, spatial),
-            _ => {
-                unreachable!(
-                    "{} is not a scheduling funclet",
-                    context.debug_info.funclet(&funclet_id)
-                )
-            }
-        };
-
-    let location = LocationTriple {
-        value: spec_location(value_spec, funclet_id, node_id, &error, context),
-        timeline: spec_location(timeline_spec, funclet_id, node_id, &error, context),
-        spatial: spec_location(spatial_spec, funclet_id, node_id, &error, context),
-    };
+    let location = LocationTriple::new_triple_mapped(spec_input, funclet_id, node_id, &state, context);
 
     let value_location = new_state.set_instantiation(node_id, location, node_type, context);
     let node = ir::Node::Phi { index };
@@ -219,7 +170,7 @@ fn explicate_local_do_builtin(
                 funclet: state
                     .get_funclet_spec(
                         state.get_current_funclet_id(),
-                        &expir::FuncletKind::Value,
+                        &SpecLanguage::Value,
                         context,
                     )
                     .funclet_id_opt
@@ -302,7 +253,7 @@ fn explicate_local_do_external(
                 funclet: state
                     .get_funclet_spec(
                         state.get_current_funclet_id(),
-                        &expir::FuncletKind::Value,
+                        &SpecLanguage::Value,
                         context,
                     )
                     .funclet_id_opt
@@ -389,7 +340,7 @@ fn explicate_encode_do(
             funclet: state
                 .get_funclet_spec(
                     state.get_current_funclet_id(),
-                    &expir::FuncletKind::Value,
+                    &SpecLanguage::Value,
                     context,
                 )
                 .funclet_id_opt

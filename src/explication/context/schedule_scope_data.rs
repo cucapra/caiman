@@ -14,7 +14,7 @@ impl ScheduleScopeData {
 
     fn new_inner(
         funclet: FuncletId,
-        instantiations: HashMap<Location, Vec<NodeId>>,
+        instantiations: HashMap<Location, HashSet<NodeId>>,
         node_type_information: HashMap<NodeId, (LocationTriple, expir::Type)>,
         allocations: Vec<(NodeId, expir::Type)>,
         available_operations: HashMap<OpCode, Vec<NodeId>>,
@@ -45,31 +45,42 @@ impl ScheduleScopeData {
         typ: expir::Type,
         context: &StaticContext,
     ) {
+        let error = format!(
+            "Duplicate add of {} in location triple {:?}",
+            context.debug_info.node(&self.funclet, schedule_node),
+            location_triple
+        );
         match &location_triple.value {
-            None => {},
+            None => {}
             Some(value) => {
-                self.instantiations
+                let check = self
+                    .instantiations
                     .entry(value.clone())
-                    .or_insert(Vec::new())
-                    .push(schedule_node);
+                    .or_insert(HashSet::new())
+                    .insert(schedule_node);
+                assert!(check, error);
             }
         }
         match &location_triple.timeline {
-            None => {},
+            None => {}
             Some(timeline) => {
-                self.instantiations
+                let check = self
+                    .instantiations
                     .entry(timeline.clone())
-                    .or_insert(Vec::new())
-                    .push(schedule_node);
+                    .or_insert(HashSet::new())
+                    .insert(schedule_node);
+                assert!(check, error);
             }
         }
         match &location_triple.spatial {
-            None => {},
+            None => {}
             Some(spatial) => {
-                self.instantiations
+                let check = self
+                    .instantiations
                     .entry(spatial.clone())
-                    .or_insert(Vec::new())
-                    .push(schedule_node);
+                    .or_insert(HashSet::new())
+                    .insert(schedule_node);
+                assert!(check, error);
             }
         }
 
@@ -78,6 +89,42 @@ impl ScheduleScopeData {
         // but is also why backtracking is needed/complicated
         self.node_type_information
             .insert(schedule_node, (location_triple, typ));
+    }
+
+    // helper for match_triple
+    fn unify_instantiations(
+        &self,
+        current: Option<HashSet<usize>>,
+        location: &Option<Location>,
+        context: &StaticContext,
+    ) -> Option<HashSet<NodeId>> {
+        match location
+            .as_ref()
+            .map(|v| self.instantiations.get(v).cloned().unwrap_or_default())
+        {
+            None => current,
+            Some(matches) => match current {
+                None => Some(matches),
+                Some(current_matches) => Some(matches.union(&current_matches).cloned().collect()),
+            },
+        }
+    }
+
+    /*
+     * Returns a list of all instantiations that match
+     *   _all_ three non-empty members of the triple
+     * empty members of the triple are ignored
+     */
+    pub fn match_triple(
+        &self,
+        triple: &LocationTriple,
+        context: &StaticContext,
+    ) -> HashSet<NodeId> {
+        let mut result = None;
+        result = self.unify_instantiations(result, &triple.value, context);
+        result = self.unify_instantiations(result, &triple.timeline, context);
+        result = self.unify_instantiations(result, &triple.spatial, context);
+        result.unwrap_or_default()
     }
 
     pub fn add_allocation(

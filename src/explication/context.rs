@@ -1,4 +1,4 @@
-pub mod data_impls;
+pub mod schedule_scope_data;
 pub mod instate;
 pub mod outstate;
 pub mod staticcontext;
@@ -94,7 +94,7 @@ pub struct ScheduleScopeData {
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
     // we only care about local information
-    instantiations: HashMap<Location, Vec<NodeId>>,
+    instantiations: HashMap<Location, HashSet<NodeId>>,
 
     // map from node id to which remote(s) it instantiates, and what type it has
     // we really do need both directions here, annoyingly

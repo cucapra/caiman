@@ -1,5 +1,6 @@
 use super::*;
 use crate::explication::util::*;
+use itertools::Itertools;
 use paste::paste;
 
 impl InState {
@@ -133,25 +134,17 @@ impl InState {
         )
     }
 
-    pub fn get_funclet_spec<'a>(
+    pub fn get_funclet_spec_triple<'a>(
         &self,
         funclet: FuncletId,
-        spec_kind: &expir::FuncletKind,
         context: &'a StaticContext,
-    ) -> &'a expir::FuncletSpec {
+    ) -> (&'a expir::FuncletSpec, &'a expir::FuncletSpec, &'a expir::FuncletSpec) {
         match &context.get_funclet(&funclet).spec_binding {
             expir::FuncletSpecBinding::ScheduleExplicit {
                 value,
                 spatial,
                 timeline,
-            } => match spec_kind {
-                ir::FuncletKind::Value => value,
-                ir::FuncletKind::Timeline => timeline,
-                ir::FuncletKind::Spatial => spatial,
-                error_kind => {
-                    unreachable!("Invalid kind for spec node lookup: {:?}", error_kind)
-                }
-            },
+            } => (value, spatial, timeline),
             _ => unreachable!(
                 "{} is not a scheduling funclet",
                 context.debug_info.funclet(&funclet)
@@ -159,11 +152,25 @@ impl InState {
         }
     }
 
+    pub fn get_funclet_spec<'a>(
+        &self,
+        funclet: FuncletId,
+        spec_kind: &SpecLanguage,
+        context: &'a StaticContext,
+    ) -> &'a expir::FuncletSpec {
+        let results = self.get_funclet_spec_triple(funclet, context);
+        match spec_kind {
+            SpecLanguage::Value => results.0,
+            SpecLanguage::Timeline => results.1,
+            SpecLanguage::Spatial => results.2,
+        }
+    }
+
     pub fn get_spec_node<'a>(
         &self,
         funclet: FuncletId,
         node_id: NodeId,
-        spec_kind: &expir::FuncletKind,
+        spec_kind: &SpecLanguage,
         context: &'a StaticContext,
     ) -> &'a expir::Node {
         let spec_funclet_id = self
@@ -277,23 +284,26 @@ impl InState {
     //   panics in this case if there is none that can fulfill the requirements
     pub fn find_instantiation(
         &self,
-        target_location: &Location,
+        target_location_triple: &LocationTriple,
         target_type: &expir::Type,
         context: &StaticContext,
     ) -> Location {
         for scope in self.scopes.iter().rev() {
-            match scope.instantiations.get(&target_location) {
-                None => {}
-                Some(instantiations) => {
-                    for node in instantiations {
-                        let node_info = scope.node_type_information.get(&node).unwrap();
-                        if self.compare_types(&node_info.1, target_type) {
-                            return Location {
-                                funclet: scope.funclet.clone(),
-                                node: node.clone(),
-                            };
-                        }
-                    }
+            // sort the results so we go bottom to top of the funclet
+            dbg!(&target_location_triple);
+            for node in scope
+                .match_triple(target_location_triple, context)
+                .iter()
+                .sorted_by(|x, y| x.cmp(y))
+                .rev()
+            {
+                dbg!(&node);
+                let node_info = scope.node_type_information.get(&node).unwrap();
+                if self.compare_types(&node_info.1, target_type) {
+                    return Location {
+                        funclet: scope.funclet.clone(),
+                        node: node.clone(),
+                    };
                 }
             }
         }

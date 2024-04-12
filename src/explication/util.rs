@@ -20,7 +20,7 @@ pub struct Location {
 pub struct LocationTriple {
     pub value: Option<Location>,
     pub timeline: Option<Location>,
-    pub spatial: Option<Location>
+    pub spatial: Option<Location>,
 }
 
 impl LocationTriple {
@@ -28,21 +28,43 @@ impl LocationTriple {
         LocationTriple {
             value: Some(value),
             timeline: None,
-            spatial: None
+            spatial: None,
         }
     }
     pub fn new_timeline(timeline: Location) -> LocationTriple {
         LocationTriple {
             value: None,
             timeline: Some(timeline),
-            spatial: None
+            spatial: None,
         }
     }
     pub fn new_spatial(spatial: Location) -> LocationTriple {
         LocationTriple {
             value: None,
             timeline: None,
-            spatial: Some(spatial)
+            spatial: Some(spatial),
+        }
+    }
+    pub fn new_triple_mapped<T>(
+        f: T,
+        funclet_id: FuncletId,
+        node_id: NodeId,
+        state: &crate::explication::InState,
+        context: &crate::explication::StaticContext,
+    ) -> LocationTriple
+    where
+        T: Fn(
+            &expir::FuncletSpec,
+            FuncletId,
+            NodeId,
+            &crate::explication::StaticContext,
+        ) -> Option<Location>,
+    {
+        let specs = state.get_funclet_spec_triple(funclet_id, context);
+        LocationTriple {
+            value: f(specs.0, funclet_id, node_id, context),
+            timeline: f(specs.1, funclet_id, node_id, context),
+            spatial: f(specs.2, funclet_id, node_id, context),
         }
     }
 }
@@ -137,4 +159,52 @@ impl SpecLanguages {
             SpecLanguage::Spatial => &self.spatial,
         }
     }
+}
+
+fn spec_box_read(
+    to_read: &Box<[Hole<expir::Tag>]>,
+    spec: &expir::FuncletSpec,
+    funclet_id: FuncletId,
+    node_id: NodeId,
+    context: &crate::explication::context::StaticContext,
+) -> Option<Location> {
+    let index_error = format!(
+        "funclet {} does not have enough arguments for phi node {}",
+        context.debug_info.funclet(&funclet_id),
+        context.debug_info.node(&funclet_id, node_id)
+    );
+    match &to_read.get(node_id).expect(&index_error) {
+        Hole::Empty => None,
+        Hole::Filled(t) => match t.quot {
+            ir::Quotient::None => None,
+            ir::Quotient::Node { node_id } | ir::Quotient::Input { index: node_id } => {
+                Some(Location {
+                    funclet: spec.funclet_id_opt.unwrap(),
+                    node: node_id.clone(),
+                })
+            }
+            ir::Quotient::Output { index } => panic!(
+                "Not sure to do with an output as an input for node_id {}",
+                context.debug_info.node(&funclet_id, node_id)
+            ),
+        },
+    }
+}
+
+pub fn spec_input(
+    spec: &expir::FuncletSpec,
+    funclet_id: FuncletId,
+    node_id: NodeId,
+    context: &crate::explication::context::StaticContext,
+) -> Option<Location> {
+    spec_box_read(&spec.input_tags, spec, funclet_id, node_id, context)
+}
+
+pub fn spec_output(
+    spec: &expir::FuncletSpec,
+    funclet_id: FuncletId,
+    node_id: NodeId,
+    context: &crate::explication::context::StaticContext,
+) -> Option<Location> {
+    spec_box_read(&spec.output_tags, spec, funclet_id, node_id, context)
 }
