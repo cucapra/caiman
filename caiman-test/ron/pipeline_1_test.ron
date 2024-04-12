@@ -195,5 +195,12 @@
 		pipelines : [
 			(name : "pipeline_1", entry_funclet : 11),
 		],
+	),
+	debug_info : DebugInfo (
+		type_map: {},
+		ffi_type_map: {},
+		function_class_map: {},
+		external_function_map: {},
+		funclet_map: {},
 	)
 )

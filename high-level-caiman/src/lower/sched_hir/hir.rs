@@ -5,7 +5,7 @@ use crate::{
     enum_cast, lower::{lower_schedule::tag_to_tag, tuple_id}, parse::ast::{Binop, DataType, EncodedCommand, FullType, NestedExpr, SchedExpr, SchedFuncCall, SpecTerm, SpecType, Tag, Tags, TemplateArgs, TimelineOperation, Uop}
 };
 use caiman::assembly::ast as asm;
-pub use caiman::assembly::ast::Hole;
+pub use caiman::explication::Hole;
 
 use crate::{
     error::Info,

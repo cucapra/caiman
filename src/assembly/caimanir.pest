@@ -32,8 +32,6 @@ name_hole = { name | hole }
 name_hole_sep = ${ name_hole ~ sep }
 meta_name = ${ "$" ~ id }
 meta_name_sep = ${ meta_name ~ sep }
-meta_name_hole = { meta_name | hole }
-meta_name_hole_sep = ${ meta_name_hole ~ sep }
 
 //    ffi_types
 ffi_type_base = { "i32" | "f32" | "f64" | "u8" | "u16" | "u32" | "u64" | "usize" | "i8" |
@@ -66,8 +64,8 @@ buffer_flags = { "[" ~ buffer_flags_elements ~ "]" }
 
 phi_qualifier = { "phi-" }
 quotient = !{ phi_qualifier? ~ meta_name ~ ("." ~ name)? }
-quotient_hole = !{ phi_qualifier? ~ meta_name_hole ~ ("." ~ name_hole)? | hole }
-flow = { "dead" | "usable" | "saved" | "need" }
+quotient_hole = !{ phi_qualifier? ~ meta_name ~ ("." ~ name_hole)? | hole }
+flow = { "dead" | "usable" | "saved" | "need" | "?" }
 tag = ${ quotient ~ "-" ~ flow }
 
 // Program
@@ -196,6 +194,7 @@ schedule_header = { schedule_box ~ name ~ "<" ~ tag ~ "," ~ tag ~ ">" ~ "(" ~ sc
 schedule_command = { schedule_node | tail_edge | node_hole }
 schedule_funclet = { schedule_header ~ "{" ~ (schedule_command ~ ";")* ~ "}" }
 
+
 //   tail edges
 
 spec_mapping = { "[" ~ (quotient_hole ~ ("," ~ quotient_hole)*)? ~ "]" | hole }
@@ -256,7 +255,6 @@ static_sub_alloc_sep = ${ "static-sub-alloc" ~ sep }
 static_sub_alloc_node = { assign ~ static_sub_alloc_sep ~ place_hole_sep ~ type_hole_sep ~ name_hole }
 static_split_sep = ${ "static-split" ~ sep }
 static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
-// static_split_node = { assign ~ static_split_sep ~ place_hole_sep ~ name_hole ~ n_list ~ quotient_hole }
 static_merge_sep = ${ "static-merge" ~ sep }
 static_merge_node = { assign ~ static_merge_sep ~ place_hole_sep ~ quotient_hole ~ name_box }
 

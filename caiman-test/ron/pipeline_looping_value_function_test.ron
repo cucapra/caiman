@@ -235,5 +235,12 @@
 				}*/
 			),
 		]
+	),
+	debug_info : DebugInfo (
+		type_map: {},
+		ffi_type_map: {},
+		function_class_map: {},
+		external_function_map: {},
+		funclet_map: {},
 	)
 )

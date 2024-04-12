@@ -1,11 +1,21 @@
+use crate::explication;
 use crate::ir;
+use crate::debug_info::DebugInfo;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::default::Default;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+pub struct ExplicationDefinition {
+    pub version: (u32, u32, u32),
+    pub debug_info: DebugInfo,
+    pub program: explication::expir::Program,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Definition {
     pub version: (u32, u32, u32),
+    pub debug_info: DebugInfo,
     pub program: ir::Program,
 }
 
@@ -40,7 +50,7 @@ impl std::fmt::Display for CompileError {
 }
 
 // #[cfg(feature = "assembly")]
-fn read_assembly(compile_data: CompileData) -> Result<Definition, CompileError> {
+fn read_assembly(compile_data: CompileData) -> Result<ExplicationDefinition, CompileError> {
     let program = crate::assembly::parser::parse(&compile_data.path, &compile_data.input_string);
     // dbg!(&program);
     match program {
@@ -64,7 +74,7 @@ fn read_definition(
     compile_mode: CompileMode,
 ) -> Result<Definition, CompileError> {
     match compile_mode {
-        CompileMode::Assembly => read_assembly(compile_data),
+        CompileMode::Assembly => read_assembly(compile_data).map(explication::explicate),
         CompileMode::RON => match ron::from_str(&compile_data.input_string) {
             Err(why) => Err(CompileError {
                 message: format!("Parse error at {}: {}", why.position, why),
@@ -82,11 +92,11 @@ pub fn compile_caiman(
     // dbg!(&definition);
     assert_eq!(definition.version, (0, 0, 2));
     //ir::validation::validate_program(&definition.program);
-    match crate::type_system::check_program(&definition.program) {
+    match crate::type_system::check_program(&definition.program, &definition.debug_info) {
         Ok(_) => (),
         Err(error) => panic!("Type checking failed:\n{}", error),
     }
-    let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program);
+    let mut codegen = crate::rust_wgpu_backend::codegen::CodeGen::new(&definition.program, &definition.debug_info);
     codegen.set_print_codgen_debug_info(options.print_codegen_debug_info);
     let output_string = codegen.generate();
     Ok(output_string)

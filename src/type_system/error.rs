@@ -1,4 +1,7 @@
+use std::fmt::Debug;
+
 //use std::fmt::Display;
+use crate::debug_info::DebugInfo;
 
 #[derive(Debug)]
 pub enum Error {
@@ -34,6 +37,8 @@ pub struct ErrorContext<'scope> {
     parent_opt: Option<&'scope Self>,
     contextualize_cb_opt:
         Option<&'scope dyn Fn(&mut dyn std::fmt::Write) -> Result<(), std::fmt::Error>>,
+    debug_info: &'scope DebugInfo,
+    current_funclet_id: usize,
 }
 
 impl<'scope> ErrorContext<'scope> {
@@ -42,10 +47,14 @@ impl<'scope> ErrorContext<'scope> {
         contextualize_cb_opt: Option<
             &'scope dyn Fn(&mut dyn std::fmt::Write) -> Result<(), std::fmt::Error>,
         >,
+        debug_info: &'scope DebugInfo,
+        current_funclet_id: usize,
     ) -> Self {
         Self {
             parent_opt,
             contextualize_cb_opt,
+            debug_info,
+            current_funclet_id
         }
     }
 
@@ -53,6 +62,26 @@ impl<'scope> ErrorContext<'scope> {
         Error::Generic {
             message: format!("{}\n{}", m, self),
         }
+    }
+
+    pub fn debug_info(&self) -> &DebugInfo {
+        &self.debug_info
+    }
+
+    pub fn funclet_id(&self) -> usize {
+        self.current_funclet_id
+    }
+
+    pub fn debug_quotient(&self, operation: &crate::ir::Quotient) -> String {
+        self.debug_info.quot(&self.current_funclet_id, operation)
+    }
+
+    pub fn debug_node(&self, node_id: usize) -> String {
+        self.debug_info.node(&self.current_funclet_id, node_id)
+    }
+
+    pub fn debug_tag(&self, tag: &crate::ir::Tag) -> String {
+        self.debug_info.tag(&self.current_funclet_id, tag)
     }
 }
 

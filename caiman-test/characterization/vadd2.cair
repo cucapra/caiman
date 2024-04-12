@@ -1,0 +1,150 @@
+version 0.0.2
+
+type u32;
+type i32;
+type array<i32>;
+event %event0;
+buffer_space %buffspace;
+native_value %ni32 : i32;
+native_value %nu32 : u32;
+native_value %na32 : array<i32>;
+
+function @iadd(i32, i32) -> i32;
+function @empty() -> array<i32>;
+function @split(array<i32>) -> [i32, array<i32>];
+function @prepend(i32, array<i32>) -> array<i32>;
+
+function @vadd(array<i32>, array<i32>, u32) -> array<i32>;
+function @vadd2(array<i32>, array<i32>, array<i32>, u32) -> array<i32>;
+
+external-cpu-pure[impl @iadd] %iadd(i32, i32) -> i32;
+external-cpu-pure[impl @empty] %empty() -> array<i32>;
+external-cpu-pure[impl @split] %split(array<i32>) -> [i32, array<i32>];
+external-cpu-pure[impl @prepend] %prepend(i32, array<i32>) -> array<i32>;
+
+value[impl default @vadd] %vadd(
+%v1: array<i32>,
+%v2: array<i32>,
+%length: u32) -> array<i32> {
+    %v1_head_tail_t = call @split(%v1);
+    %v1_head = extract %v1_head_tail_t 0;
+    %v1_tail = extract %v1_head_tail_t 1;
+
+    %v2_head_tail_t = call @split(%v2);
+    %v2_head = extract %v2_head_tail_t 0;
+    %v2_tail = extract %v2_head_tail_t 1;
+
+    %added_t = call @iadd(%v1_head, %v2_head);
+    %added = extract %added_t 0;
+
+    %neg1 = constant %ni32 -1;
+    %length_m1_t = call @iadd(%length, %neg1);
+    %length_m1 = extract %length_m1_t 0;
+    %rec_t = call @vadd(%v1_tail, %v2_tail, %length_m1);
+    %rec = extract %rec_t 0;
+
+    %built_t = call @prepend(%added, %rec);
+    %built = extract %built_t 0;
+
+    %empty_t = call @empty();
+    %empty = extract %empty_t 0;
+
+    %result = select %length %built %empty;
+    return %result;
+}
+
+value[impl default @vadd2] %vadd2(
+%v1: array<i32>,
+%v2: array<i32>,
+%v3: array<i32>,
+%length: u32) -> array<i32> {
+    %temp_t = call @vadd(%v1, %v2, %length);
+    %temp = extract %temp_t 0;
+    %result_t = call @vadd(%temp, %v3, %length);
+    %result = extract %result_t 0;
+    return %result;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_main(
+%v1_loc : %na32,
+%v2_loc : %na32,
+%length_loc : node($val.%length)-have %ni32) -> %na32 {
+    %djoin = default-join;
+    %join = inline-join %vadd_ret [] %djoin;
+
+    schedule-select %length_loc [%vadd_rec_case, %vadd_base_case]
+        [value node($val.%result), timeline none, spatial none]
+        (%v1_loc, %v2_loc, %length_loc) %join;
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_rec_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32)
+-> [node($val.%result)-have %na32] {
+    %v1_head_loc = alloc-temporary local array<i32>;
+    %v1_tail_loc = alloc-temporary local array<i32>;
+    %v2_head_loc = alloc-temporary local array<i32>;
+    %v2_tail_loc = alloc-temporary local array<i32>;
+    %added_loc = alloc-temporary local i32;
+    %neg1_loc = alloc-temporary local i32;
+    %length_m1_loc = alloc-temporary local i32;
+
+    local-do-builtin node($val.%neg1)() -> %neg1_loc;
+    local-do-external %iadd node($val.%length_m1_t)(%length_loc, %neg1_loc) -> %length_m1_loc;
+
+    local-do-external %split node($val.%v1_head_tail_t)(%v1_loc) -> [%v1_head_loc, %v1_tail_loc];
+    local-do-external %split node($val.%v2_head_tail_t)(%v2_loc) -> [%v2_head_loc, %v2_tail_loc];
+    local-do-external %iadd node($val.%added)(%v1_head_loc, %v2_head_loc) -> %added_loc;
+
+    %added_val = read-ref i32 %added_loc;
+
+    %djoin = default-join;
+    %join = inline-join %vadd_rec_prepend [%added_val] %djoin;
+
+    %v1_tail_val = read-ref array<i32> %v1_tail_loc;
+    %v2_tail_val = read-ref array<i32> %v2_tail_loc;
+    %length_m1_val = read-ref u32 %length_m1_loc;
+
+    schedule-call %vadd_main[value node($val.%rec_t), timeline none, spatial none]
+        (%v1_tail_val, %v2_tail_val, %length_m1_val) %join;
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_rec_prepend(
+%added_loc : node($val.%added)-have %ni32,
+%rec_loc : node($val.%rec)-have %na32)
+-> [node($val.%result)-have %na32] {
+    %built_loc = alloc-temporary local array<i32>;
+    local-do-external %prepend node($val.%built_t)(%added_loc, %rec_loc) -> %built_loc;
+    %built_val = read-ref array<i32> %built_loc;
+    return %built_val;
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_base_case(%v1_loc : %na32, %v2_loc : %na32, %length_loc : %ni32)
+-> [node($val.%result)-have %na32] {
+    %empty_loc = alloc-temporary local array<i32>;
+    local-do-external %empty node($val.%empty)() -> %empty_loc;
+    %empty_val = read-ref array<i32> %empty_loc;
+    return %empty_val;
+}
+
+schedule[value $val = %vadd, timeline $time = %time, spatial $space = %space]
+<none-have, none-have>
+%vadd_ret(%result_loc : node($val.%result)-have %na32) -> %na32 {
+    return %result_loc;
+}
+
+pipeline "main" = %vadd_main;

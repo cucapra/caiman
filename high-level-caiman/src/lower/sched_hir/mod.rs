@@ -15,7 +15,9 @@ use crate::{
     parse::ast::{DataType, SchedulingFunc},
     typing::{Context, Mutability, SchedInfo},
 };
-use caiman::{assembly::ast as asm, ir};
+use caiman::assembly::ast::{self as asm};
+use caiman::explication::Hole;
+use caiman::ir;
 
 use self::{
     analysis::{
@@ -78,7 +80,7 @@ pub struct Funclet<'a> {
 
 impl<'a> Funclet<'a> {
     /// Gets the next blocks in the cfg as `FuncletIds`
-    pub fn next_blocks(&self) -> Vec<asm::Hole<asm::FuncletId>> {
+    pub fn next_blocks(&self) -> Vec<Hole<asm::FuncletId>> {
         match &self.block.terminator {
             Terminator::FinalReturn(_) => vec![],
             Terminator::Select { .. } => {
@@ -332,7 +334,7 @@ impl<'a> Funclet<'a> {
     }
 
     /// Gets the nodes that exit this funclet
-    pub fn output_args(&self) -> Vec<asm::Hole<asm::NodeId>> {
+    pub fn output_args(&self) -> Vec<Hole<asm::NodeId>> {
         self.parent
             .live_vars
             .get_out_fact(self.block.id)

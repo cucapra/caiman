@@ -60,6 +60,32 @@ impl BufferFlags {
     }
 }
 
+impl std::fmt::Display for BufferFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "BufferFlags[");
+        if self.map_read {
+            write!(f, "map_read, ");
+        }
+        if self.map_write {
+            write!(f, "map_write, ");
+        }
+        if self.copy_src {
+            write!(f, "copy_src, ");
+        }
+        if self.copy_dst {
+            write!(f, "copy_dst, ");
+        }
+        if self.storage {
+            write!(f, "storage, ");
+        }
+        if self.uniform {
+            write!(f, "uniform, ");
+        }
+        write!(f, "]");
+        Ok(())
+    }
+}
+
 pub use crate::rust_wgpu_backend::ffi;
 
 pub mod analysis;
@@ -74,11 +100,33 @@ pub enum Place {
     Gpu,
 }
 
+impl std::fmt::Display for Place {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Place::Local => "Local",
+            Place::Cpu => "CPU",
+            Place::Gpu => "GPU",
+        });
+        Ok(())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Constant {
     I32(i32),
     I64(i64),
     U64(u64),
+}
+
+impl std::fmt::Display for Constant {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Constant::I32(c) => {write!(f, "{}i32", c);}
+            Constant::I64(c) => {write!(f, "{}i64", c);},
+            Constant::U64(c) => {write!(f, "{}u64", c);},
+        };
+        Ok(())
+    }
 }
 
 pub type ExternalFunctionId = ffi::ExternalFunctionId;
@@ -188,7 +236,7 @@ pub enum Flow {
     Dead,   // Does not transform, can only be discarded and not read
     Usable, // Transforms forwards with state changes
     Need,   // Transforms backwards with state changes
-    Saved,   // Usable has met Need and associated state will not change, but can still be read
+    Saved,  // Usable has met Need and associated state will not change, but can still be read
 }
 
 // Save is a zero value that cannot be discarded or duplicated
@@ -409,7 +457,7 @@ pub enum FuncletKind {
 }
 
 impl FuncletKind {
-    fn default() -> Self {
+    pub fn default() -> Self {
         FuncletKind::Unknown
     }
 }
@@ -444,7 +492,7 @@ pub enum FuncletSpecBinding {
 }
 
 impl FuncletSpecBinding {
-    fn default() -> Self {
+    pub fn default() -> Self {
         FuncletSpecBinding::None
     }
 
