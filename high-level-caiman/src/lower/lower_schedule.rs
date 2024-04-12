@@ -801,7 +801,7 @@ fn lower_block(funclet: &Funclet<'_>) -> asm::Funclet {
             asm::Tag {
                 quot: Hole::Filled(asm::RemoteNodeId {
                     node: None,
-                    funclet: SpecType::Spatial.get_meta_id(),
+                    funclet: SpecType::Timeline.get_meta_id(),
                 }),
                 flow: Hole::Filled(ir::Flow::Usable),
             },
