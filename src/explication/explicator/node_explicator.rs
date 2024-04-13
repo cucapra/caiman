@@ -55,7 +55,8 @@ fn explicate_phi_node(
         _ => {}
     }
 
-    let location = LocationTriple::new_triple_mapped(spec_input, funclet_id, node_id, &state, context);
+    let location =
+        LocationTriple::new_triple_mapped(spec_input, funclet_id, node_id, &state, context);
 
     let value_location = new_state.set_instantiation(node_id, location, node_type, context);
     let node = ir::Node::Phi { index };
@@ -161,13 +162,13 @@ fn explicate_local_do_builtin(
     {
         let output_open = output.as_ref().opt().expect(&error).clone();
         let typ = new_state.read_allocation(Location {
-            funclet: state.get_current_funclet_id(),
-            node: output_open,
+            funclet_id: state.get_current_funclet_id(),
+            node_id: output_open,
         });
         new_state.set_instantiation(
             output_open,
             LocationTriple::new_value(Location {
-                funclet: state
+                funclet_id: state
                     .get_funclet_spec(
                         state.get_current_funclet_id(),
                         &SpecLanguage::Value,
@@ -175,7 +176,7 @@ fn explicate_local_do_builtin(
                     )
                     .funclet_id_opt
                     .unwrap(),
-                node: node_id,
+                node_id,
             }),
             typ,
             context,
@@ -244,13 +245,13 @@ fn explicate_local_do_external(
     {
         let output_open = output.as_ref().opt().expect(&error).clone();
         let typ = new_state.read_allocation(Location {
-            funclet: state.get_current_funclet_id(),
-            node: output_open,
+            funclet_id: state.get_current_funclet_id(),
+            node_id: output_open,
         });
         new_state.set_instantiation(
             output_open,
             LocationTriple::new_value(Location {
-                funclet: state
+                funclet_id: state
                     .get_funclet_spec(
                         state.get_current_funclet_id(),
                         &SpecLanguage::Value,
@@ -258,7 +259,7 @@ fn explicate_local_do_external(
                     )
                     .funclet_id_opt
                     .unwrap(),
-                node: node_id + offset + 1,
+                node_id: node_id + offset + 1,
             }),
             typ,
             context,
@@ -333,11 +334,11 @@ fn explicate_encode_do(
     {
         let output_open = output.as_ref().opt().expect(&error).clone();
         let typ = new_state.read_allocation(Location {
-            funclet: state.get_current_funclet_id(),
-            node: output_open,
+            funclet_id: state.get_current_funclet_id(),
+            node_id: output_open,
         });
         let value_location = Location {
-            funclet: state
+            funclet_id: state
                 .get_funclet_spec(
                     state.get_current_funclet_id(),
                     &SpecLanguage::Value,
@@ -345,7 +346,7 @@ fn explicate_encode_do(
                 )
                 .funclet_id_opt
                 .unwrap(),
-            node: node_id + offset + 1,
+            node_id: node_id + offset + 1,
         };
         new_state.set_instantiation(
             output_open,
@@ -407,8 +408,8 @@ fn explicate_write_ref(
     let (instantiation_location, _) = state.get_node_information(source, context);
     // assume that the typechecker will find a misaligned storage type
     let allocation_type = state.read_allocation(Location {
-        funclet: state.get_current_funclet_id(),
-        node: destination,
+        funclet_id: state.get_current_funclet_id(),
+        node_id: destination,
     });
     new_state.set_instantiation(
         destination,
@@ -568,6 +569,137 @@ fn explicate_copy(
     }
 }
 
+fn explicate_begin_encoding(
+    expir_place: &Hole<expir::Place>,
+    expir_event: &Hole<expir::Quotient>,
+    expir_encoded: &Hole<Box<[Hole<NodeId>]>>,
+    expir_fences: &Hole<Box<[Hole<NodeId>]>>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let input = expir_input.as_ref().opt().expect(&error).clone();
+    let output = expir_output.as_ref().opt().expect(&error).clone();
+    let (instantiation, typ) = state.get_node_information(input, context);
+    new_state.set_instantiation(output, instantiation.clone(), typ.clone(), context);
+    let node = match expir_encoder {
+        None => ir::Node::LocalCopy { input, output },
+        Some(e) => {
+            let encoder = e.as_ref().opt().expect(&error).clone();
+            ir::Node::EncodeCopy {
+                encoder,
+                input,
+                output,
+            }
+        }
+    };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
+}
+
+fn explicate_submit(
+    expir_encoder: &Hole<NodeId>,
+    expir_event: &Hole<expir::Quotient>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let input = expir_input.as_ref().opt().expect(&error).clone();
+    let output = expir_output.as_ref().opt().expect(&error).clone();
+    let (instantiation, typ) = state.get_node_information(input, context);
+    new_state.set_instantiation(output, instantiation.clone(), typ.clone(), context);
+    let node = match expir_encoder {
+        None => ir::Node::LocalCopy { input, output },
+        Some(e) => {
+            let encoder = e.as_ref().opt().expect(&error).clone();
+            ir::Node::EncodeCopy {
+                encoder,
+                input,
+                output,
+            }
+        }
+    };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
+}
+
+fn explicate_sync_fence(
+    expir_fence: &Hole<NodeId>,
+    expir_event: &Hole<expir::Quotient>,
+    state: InState,
+    context: &StaticContext,
+) -> Option<FuncletOutState> {
+    let error = format!(
+        "TODO Hole in node {}",
+        context.debug_info.node_expir(
+            state.get_current_funclet_id(),
+            state
+                .get_current_node(context)
+                .as_ref()
+                .opt()
+                .expect("Unreachable")
+        )
+    );
+    let mut new_state = state.clone();
+    let input = expir_input.as_ref().opt().expect(&error).clone();
+    let output = expir_output.as_ref().opt().expect(&error).clone();
+    let (instantiation, typ) = state.get_node_information(input, context);
+    new_state.set_instantiation(output, instantiation.clone(), typ.clone(), context);
+    let node = match expir_encoder {
+        None => ir::Node::LocalCopy { input, output },
+        Some(e) => {
+            let encoder = e.as_ref().opt().expect(&error).clone();
+            ir::Node::EncodeCopy {
+                encoder,
+                input,
+                output,
+            }
+        }
+    };
+    new_state.next_node();
+    match explicate_node(new_state, context) {
+        None => None,
+        Some(mut out) => {
+            out.add_node(node);
+            Some(out)
+        }
+    }
+}
+
 // initially setup a node that hasn't yet been read
 // distinct from explication in that we have no request to fulfill
 // panics if no node can be found during any step of the recursion
@@ -658,6 +790,16 @@ pub fn explicate_node(state: InState, context: &StaticContext) -> Option<Funclet
                 state,
                 context,
             ),
+            Hole::Filled(expir::Node::BeginEncoding {
+                place,
+                event,
+                encoded,
+                fences,
+            }) => explicate_begin_encoding(place, event, encoded, fences, state, context),
+            Hole::Filled(expir::Node::Submit { encoder, event }) => explicate_submit(expir_encoder, expir_event, state, context)
+            Hole::Filled(expir::Node::SyncFence { fence, event }) => {
+                explicate_sync_fence(fence, event, state, context)
+            }
             Hole::Filled(node) => {
                 let mut new_state = state.clone();
                 new_state.next_node();

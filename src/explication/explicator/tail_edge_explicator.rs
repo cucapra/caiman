@@ -51,11 +51,11 @@ fn explicate_return(
                     // we couldn't find anything in our funclet
                     None => todo!("{}", error),
                     Some(instantiation) => {
-                        if instantiation.funclet != funclet_id {
+                        if instantiation.funclet_id != funclet_id {
                             // TODO try and explicate something
                             todo!()
                         };
-                        nodes.push(instantiation.node);
+                        nodes.push(instantiation.node_id);
                     }
                 }
             }

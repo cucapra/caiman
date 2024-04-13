@@ -4,8 +4,8 @@ use itertools::Itertools;
 use paste::paste;
 
 impl InState {
-    pub fn new(funclet: FuncletId) -> InState {
-        let scopes = vec![ScheduleScopeData::new(funclet)];
+    pub fn new(funclet_id: FuncletId, context: &StaticContext) -> InState {
+        let scopes = vec![ScheduleScopeData::new(funclet_id, get_implicit_time(funclet_id, context))];
         InState { scopes }
     }
 
@@ -13,8 +13,8 @@ impl InState {
     // note that we are expected to clone the instate for each recursion
     // this way we avoid _problems_
 
-    pub fn enter_funclet(&mut self, funclet: FuncletId) {
-        self.scopes.push(ScheduleScopeData::new(funclet));
+    pub fn enter_funclet(&mut self, funclet_id: FuncletId, context: &StaticContext) {
+        self.scopes.push(ScheduleScopeData::new(funclet_id, get_implicit_time(funclet_id, context)));
     }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the lexpir element of the scope
@@ -23,6 +23,14 @@ impl InState {
             Some(_) => {}
         }
         self.scopes.len() == 0
+    }
+
+    pub fn get_current_time(&self) -> &Option<Location> {
+        self.get_latest_scope().get_current_time()
+    }
+
+    pub fn advance_time(&mut self, time: Location) {
+        self.get_latest_scope_mut().advance_time(time);
     }
 
     pub fn add_allocation(
@@ -51,8 +59,8 @@ impl InState {
                 .iter()
                 .filter(|(_, alloc)| compare_alloc(alloc))
                 .map(|v| Location {
-                    funclet: scope.funclet,
-                    node: v.0,
+                    funclet_id: scope.funclet_id,
+                    node_id: v.0,
                 })
                 .collect();
             if matches.len() > 0 {
@@ -65,9 +73,9 @@ impl InState {
     // Read any allocation and return the type information
     pub fn read_allocation(&self, location: Location) -> expir::Type {
         for scope in self.scopes.iter().rev() {
-            if scope.funclet == location.funclet {
+            if scope.funclet_id == location.funclet_id {
                 for (index, allocation) in scope.allocations.iter().enumerate() {
-                    if allocation.0 == location.node {
+                    if allocation.0 == location.node_id {
                         return allocation.1.clone();
                     }
                 }
@@ -97,8 +105,8 @@ impl InState {
 
     pub fn expect_location(&self) -> Location {
         Location {
-            funclet: self.get_latest_scope().funclet,
-            node: self.get_latest_scope().node.unwrap(),
+            funclet_id: self.get_latest_scope().funclet_id,
+            node_id: self.get_latest_scope().node_id.unwrap(),
         }
     }
 
@@ -115,22 +123,22 @@ impl InState {
     }
 
     pub fn get_current_funclet_id(&self) -> FuncletId {
-        self.get_latest_scope().funclet
+        self.get_latest_scope().funclet_id
     }
 
     pub fn get_current_funclet<'a>(&self, context: &'a StaticContext) -> &'a expir::Funclet {
-        &context.get_funclet(&self.get_latest_scope().funclet)
+        &context.get_funclet(&self.get_latest_scope().funclet_id)
     }
 
     pub fn get_current_node_id(&self) -> Option<NodeId> {
-        self.get_latest_scope().node
+        self.get_latest_scope().node_id
     }
 
     pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::Node> {
         let scope = self.get_latest_scope();
         get_expect_box(
-            &context.get_funclet(&scope.funclet).nodes,
-            scope.node.unwrap(),
+            &context.get_funclet(&scope.funclet_id).nodes,
+            scope.node_id.unwrap(),
         )
     }
 
@@ -195,13 +203,13 @@ impl InState {
         context: &'a StaticContext,
     ) -> &'a Hole<expir::TailEdge> {
         &context
-            .get_funclet(&self.get_latest_scope().funclet)
+            .get_funclet(&self.get_latest_scope().funclet_id)
             .tail_edge
     }
 
     pub fn is_end_of_funclet<'a>(&self, context: &'a StaticContext) -> bool {
         let scope = self.get_latest_scope();
-        scope.node.unwrap() >= context.get_funclet(&scope.funclet).nodes.len()
+        scope.node_id.unwrap() >= context.get_funclet(&scope.funclet_id).nodes.len()
     }
 
     pub fn next_node(&mut self) {
@@ -216,7 +224,7 @@ impl InState {
         let scope = self.get_latest_scope();
         scope.node_type_information.get(&node_id).expect(&format!(
             "Missing instantiation for node {}",
-            context.debug_info.node(&scope.funclet, node_id)
+            context.debug_info.node(&scope.funclet_id, node_id)
         ))
     }
 
@@ -299,8 +307,8 @@ impl InState {
                 let node_info = scope.node_type_information.get(&node).unwrap();
                 if self.compare_types(&node_info.1, target_type) {
                     return Some(Location {
-                        funclet: scope.funclet.clone(),
-                        node: node.clone(),
+                        funclet_id: scope.funclet_id.clone(),
+                        node_id: node.clone(),
                     });
                 }
             }

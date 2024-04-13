@@ -77,19 +77,23 @@ pub struct ScheduleScopeData {
     // the rule is more-to-less specific, then go up to the next scope out
 
     // the funclet id being worked on in this scope
-    pub funclet: expir::FuncletId,
+    pub funclet_id: expir::FuncletId,
 
     // the node of the original funclet we are working on
     // is none precisely when we are starting a new funclet
     //   OR inside a synthesized funclet
     // note that we may want to actually have two structs here in a way
     // then we can hold the "goal" of the sub-funclet more easily?
-    node: Option<NodeId>,
+    node_id: Option<NodeId>,
 
     // the index of the command we are building
     // incremented by one each "step" of the recursion
     // useful to keep track of naming and boring indexing details
     node_index: usize,
+
+    // where we currently are in the timeline
+    // is only None when the implicit in time is none
+    time: Option<Location>,
 
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations

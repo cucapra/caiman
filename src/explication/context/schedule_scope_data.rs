@@ -2,9 +2,10 @@ use super::*;
 use crate::explication::util::*;
 
 impl ScheduleScopeData {
-    pub fn new(funclet: FuncletId) -> ScheduleScopeData {
+    pub fn new(funclet_id: FuncletId, time: Option<Location>) -> ScheduleScopeData {
         ScheduleScopeData::new_inner(
-            funclet,
+            funclet_id,
+            time,
             HashMap::new(),
             HashMap::new(),
             Vec::new(),
@@ -13,16 +14,18 @@ impl ScheduleScopeData {
     }
 
     fn new_inner(
-        funclet: FuncletId,
+        funclet_id: FuncletId,
+        time: Option<Location>,
         instantiations: HashMap<Location, HashSet<NodeId>>,
         node_type_information: HashMap<NodeId, (LocationTriple, expir::Type)>,
         allocations: Vec<(NodeId, expir::Type)>,
         available_operations: HashMap<OpCode, Vec<NodeId>>,
     ) -> ScheduleScopeData {
         ScheduleScopeData {
-            funclet,
-            node: None,
+            funclet_id,
+            node_id: None,
             node_index: 0,
+            time,
             instantiations,
             node_type_information,
             allocations,
@@ -32,10 +35,18 @@ impl ScheduleScopeData {
     }
 
     pub fn next_node(&mut self) {
-        self.node = match self.node {
+        self.node_id = match self.node_id {
             None => Some(0),
             Some(x) => Some(x + 1),
         }
+    }
+
+    pub fn get_current_time(&self) -> &Option<Location> {
+        &self.time
+    }
+
+    pub fn advance_time(&mut self, time: Location) {
+        self.time = Some(time);
     }
 
     pub fn set_instantiation(
@@ -47,9 +58,11 @@ impl ScheduleScopeData {
     ) {
         let error = format!(
             "Duplicate add of {} in location triple {:?}",
-            context.debug_info.node(&self.funclet, schedule_node),
+            context.debug_info.node(&self.funclet_id, schedule_node),
             location_triple
         );
+        // potentially modified when checking the timeline
+        let mut modified_triple = location_triple.clone();
         match &location_triple.value {
             None => {}
             Some(value) => {
@@ -62,7 +75,20 @@ impl ScheduleScopeData {
             }
         }
         match &location_triple.timeline {
-            None => {}
+            // by default, every instantiation happens at the current time
+            // we can specify another time with the timeline triple
+            None => {
+                match &self.time {
+                    None => {}
+                    Some(current_time) => {
+                        self.instantiations
+                            .entry(current_time.clone())
+                            .or_insert(HashSet::new())
+                            .insert(schedule_node);
+                    }
+                }
+                modified_triple.timeline = self.time.clone()
+            }
             Some(timeline) => {
                 let check = self
                     .instantiations
@@ -71,7 +97,7 @@ impl ScheduleScopeData {
                     .insert(schedule_node);
                 assert!(check, error);
             }
-        }
+        };
         match &location_triple.spatial {
             None => {}
             Some(spatial) => {
@@ -105,7 +131,9 @@ impl ScheduleScopeData {
             None => current,
             Some(matches) => match current {
                 None => Some(matches),
-                Some(current_matches) => Some(matches.intersection(&current_matches).cloned().collect()),
+                Some(current_matches) => {
+                    Some(matches.intersection(&current_matches).cloned().collect())
+                }
             },
         }
     }

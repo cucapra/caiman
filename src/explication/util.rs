@@ -12,8 +12,8 @@ use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Location {
-    pub funclet: FuncletId,
-    pub node: NodeId,
+    pub funclet_id: FuncletId,
+    pub node_id: NodeId,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -161,6 +161,24 @@ impl SpecLanguages {
     }
 }
 
+fn read_input_quot(
+    tag: &expir::Tag,
+    funclet_id: FuncletId,
+    context: &crate::explication::StaticContext,
+) -> Option<Location> {
+    match tag.quot {
+        ir::Quotient::None => None,
+        ir::Quotient::Node { node_id } | ir::Quotient::Input { index: node_id } => Some(Location {
+            funclet_id,
+            node_id: node_id.clone(),
+        }),
+        ir::Quotient::Output { index } => panic!(
+            "Not sure to do with an output as an input for node_id {}",
+            context.debug_info.node(&funclet_id, index)
+        ),
+    }
+}
+
 fn spec_box_read(
     to_read: &Box<[Hole<expir::Tag>]>,
     spec: &expir::FuncletSpec,
@@ -175,19 +193,7 @@ fn spec_box_read(
     );
     match &to_read.get(node_id).expect(&index_error) {
         Hole::Empty => None,
-        Hole::Filled(t) => match t.quot {
-            ir::Quotient::None => None,
-            ir::Quotient::Node { node_id } | ir::Quotient::Input { index: node_id } => {
-                Some(Location {
-                    funclet: spec.funclet_id_opt.unwrap(),
-                    node: node_id.clone(),
-                })
-            }
-            ir::Quotient::Output { index } => panic!(
-                "Not sure to do with an output as an input for node_id {}",
-                context.debug_info.node(&funclet_id, node_id)
-            ),
-        },
+        Hole::Filled(t) => read_input_quot(t, spec.funclet_id_opt.unwrap(), context),
     }
 }
 
@@ -207,4 +213,25 @@ pub fn spec_output(
     context: &crate::explication::context::StaticContext,
 ) -> Option<Location> {
     spec_box_read(&spec.output_tags, spec, funclet_id, node_id, context)
+}
+
+pub fn get_implicit_time(
+    funclet_id: FuncletId,
+    context: &crate::explication::StaticContext,
+) -> Option<Location> {
+    match &context.get_funclet(&funclet_id).spec_binding {
+        expir::FuncletSpecBinding::ScheduleExplicit {
+            value,
+            spatial,
+            timeline,
+        } => timeline
+            .implicit_in_tag
+            .as_ref()
+            .opt()
+            .and_then(|t| read_input_quot(t, timeline.funclet_id_opt.unwrap(), context)),
+        _ => panic!(
+            "Invalid funclet for an implicit time lookup {}, expected a spec funclet",
+            context.debug_info.funclet(&funclet_id)
+        ),
+    }
 }
