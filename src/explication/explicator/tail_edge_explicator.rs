@@ -42,7 +42,6 @@ fn explicate_return(
                     state,
                     context,
                 );
-                dbg!(&target_location_triple);
                 let target_type = context.get_type(output);
                 match state.find_instantiation(
                     &target_location_triple,

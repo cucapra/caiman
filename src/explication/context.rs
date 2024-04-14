@@ -102,10 +102,7 @@ pub struct ScheduleScopeData {
 
     // map from node id to which remote(s) it instantiates, and what type it has
     // we really do need both directions here, annoyingly
-    node_type_information: HashMap<NodeId, (LocationTriple, expir::Type)>,
-
-    // list of available memory allocations, with associated type information
-    allocations: Vec<(NodeId, expir::Type)>,
+    node_type_information: HashMap<NodeId, NodeTypeInformation>,
 
     // map from operation code to a vector of "available" operations with holes
     // for now, these consist of exactly allocations where we don't yet know the type
@@ -114,6 +111,14 @@ pub struct ScheduleScopeData {
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections
     explication_hole: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeTypeInformation {
+    pub implements: Option<LocationTriple>,
+    pub typ: expir::Type,
+    pub place: expir::Place,
+    pub encoder: Option<Location>,
 }
 
 #[derive(Debug, Default)]

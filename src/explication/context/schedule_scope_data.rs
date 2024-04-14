@@ -17,7 +17,7 @@ impl ScheduleScopeData {
         funclet_id: FuncletId,
         time: Option<Location>,
         instantiations: HashMap<Location, HashSet<NodeId>>,
-        node_type_information: HashMap<NodeId, (LocationTriple, expir::Type)>,
+        node_type_information: HashMap<NodeId, NodeTypeInformation>,
         allocations: Vec<(NodeId, expir::Type)>,
         available_operations: HashMap<OpCode, Vec<NodeId>>,
     ) -> ScheduleScopeData {
@@ -28,7 +28,6 @@ impl ScheduleScopeData {
             time,
             instantiations,
             node_type_information,
-            allocations,
             available_operations,
             explication_hole: false,
         }

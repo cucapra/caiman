@@ -194,10 +194,13 @@ fn spec_box_read(
     );
     match &to_read.get(node_id).expect(&index_error) {
         Hole::Empty => None,
-        Hole::Filled(t) => Some(Location {
-            funclet_id: spec.funclet_id_opt.unwrap(),
-            quot: t.quot.clone()
-        }),
+        Hole::Filled(t) => match &t.quot {
+            ir::Quotient::None => None,
+            quot => Some(Location {
+                funclet_id: spec.funclet_id_opt.unwrap(),
+                quot: quot.clone()
+            })
+        }        
     }
 }
 
