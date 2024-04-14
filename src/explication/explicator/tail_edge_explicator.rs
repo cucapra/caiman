@@ -34,14 +34,15 @@ fn explicate_return(
             let funclet_id = state.get_current_funclet_id();
             let funclet = context.get_funclet(&funclet_id);
             let mut nodes = Vec::new();
-            for output in funclet.output_types.iter() {
+            for (index, output) in funclet.output_types.iter().enumerate() {
                 let target_location_triple = LocationTriple::new_triple_mapped(
                     spec_output,
                     funclet_id,
-                    output.clone(),
+                    index,
                     state,
                     context,
                 );
+                dbg!(&target_location_triple);
                 let target_type = context.get_type(output);
                 match state.find_instantiation(
                     &target_location_triple,
@@ -55,7 +56,7 @@ fn explicate_return(
                             // TODO try and explicate something
                             todo!()
                         };
-                        nodes.push(instantiation.node_id);
+                        nodes.push(instantiation.node_id().unwrap());
                     }
                 }
             }

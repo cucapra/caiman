@@ -1,11 +1,15 @@
 use super::*;
-use crate::explication::util::*;
+use crate::explication::util;
+use crate::explication::util::{Location, LocationTriple};
 use itertools::Itertools;
 use paste::paste;
 
 impl InState {
     pub fn new(funclet_id: FuncletId, context: &StaticContext) -> InState {
-        let scopes = vec![ScheduleScopeData::new(funclet_id, get_implicit_time(funclet_id, context))];
+        let scopes = vec![ScheduleScopeData::new(
+            funclet_id,
+            get_implicit_time(funclet_id, context),
+        )];
         InState { scopes }
     }
 
@@ -14,7 +18,10 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet_id: FuncletId, context: &StaticContext) {
-        self.scopes.push(ScheduleScopeData::new(funclet_id, get_implicit_time(funclet_id, context)));
+        self.scopes.push(ScheduleScopeData::new(
+            funclet_id,
+            get_implicit_time(funclet_id, context),
+        ));
     }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the lexpir element of the scope
@@ -29,8 +36,20 @@ impl InState {
         self.get_latest_scope().get_current_time()
     }
 
-    pub fn advance_time(&mut self, time: Location) {
-        self.get_latest_scope_mut().advance_time(time);
+    pub fn advance_time(&mut self, time: expir::Quotient, context: &StaticContext) {
+        let funclet_id = self
+            .get_funclet_spec(
+                self.get_latest_scope().funclet_id,
+                &SpecLanguage::Timeline,
+                context,
+            )
+            .funclet_id_opt
+            .unwrap()
+            .clone();
+        self.get_latest_scope_mut().advance_time(Location {
+            funclet_id,
+            quot: time,
+        });
     }
 
     pub fn add_allocation(
@@ -58,10 +77,7 @@ impl InState {
                 .allocations
                 .iter()
                 .filter(|(_, alloc)| compare_alloc(alloc))
-                .map(|v| Location {
-                    funclet_id: scope.funclet_id,
-                    node_id: v.0,
-                })
+                .map(|v| Location::new(scope.funclet_id, v.0))
                 .collect();
             if matches.len() > 0 {
                 return matches;
@@ -75,7 +91,7 @@ impl InState {
         for scope in self.scopes.iter().rev() {
             if scope.funclet_id == location.funclet_id {
                 for (index, allocation) in scope.allocations.iter().enumerate() {
-                    if allocation.0 == location.node_id {
+                    if allocation.0 == location.node_id().unwrap() {
                         return allocation.1.clone();
                     }
                 }
@@ -104,10 +120,10 @@ impl InState {
     }
 
     pub fn expect_location(&self) -> Location {
-        Location {
-            funclet_id: self.get_latest_scope().funclet_id,
-            node_id: self.get_latest_scope().node_id.unwrap(),
-        }
+        Location::new(
+            self.get_latest_scope().funclet_id,
+            self.get_latest_scope().node_id.unwrap(),
+        )
     }
 
     pub fn get_latest_scope(&self) -> &ScheduleScopeData {
@@ -146,7 +162,11 @@ impl InState {
         &self,
         funclet: FuncletId,
         context: &'a StaticContext,
-    ) -> (&'a expir::FuncletSpec, &'a expir::FuncletSpec, &'a expir::FuncletSpec) {
+    ) -> (
+        &'a expir::FuncletSpec,
+        &'a expir::FuncletSpec,
+        &'a expir::FuncletSpec,
+    ) {
         match &context.get_funclet(&funclet).spec_binding {
             expir::FuncletSpecBinding::ScheduleExplicit {
                 value,
@@ -306,13 +326,10 @@ impl InState {
             {
                 let node_info = scope.node_type_information.get(&node).unwrap();
                 if self.compare_types(&node_info.1, target_type) {
-                    return Some(Location {
-                        funclet_id: scope.funclet_id.clone(),
-                        node_id: node.clone(),
-                    });
+                    return Some(Location::new(scope.funclet_id.clone(), node.clone()));
                 }
             }
-        };
+        }
         None
         // let nodes = vec![
         //     expir::Node::AllocTemporary {

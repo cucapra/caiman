@@ -337,10 +337,10 @@ impl<'context> StaticContext<'context> {
                 self.debug_info.funclet(&location.funclet_id)
             ))
             .nodes
-            .get(location.node_id)
+            .get(location.node_id().unwrap())
             .expect(&format!(
                 "Invalid node index {} for funclet {}",
-                location.node_id,
+                location.node_id().unwrap(),
                 self.debug_info.funclet(&location.funclet_id)
             ))
             .as_ref()
