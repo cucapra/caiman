@@ -1,10 +1,6 @@
 struct Callbacks;
 
-impl main::CpuFunctions for Callbacks {
-    fn add(&self, _: &mut dyn caiman_rt::State, a: i32, b: i32) -> (i32,) {
-        (a + b,)
-    }
-}
+impl main::CpuFunctions for Callbacks {}
 
 #[test]
 fn main() -> Result<(), String> {

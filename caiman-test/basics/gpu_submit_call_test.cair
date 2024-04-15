@@ -36,7 +36,7 @@ value[impl @foo] %foo(%x : i32) -> [%out: i32] {
 
     %y2_t = call @bar(%y);
     %y2 = extract %y2_t 0;
-    return %y;
+    return %y2;
 }
 
 value[impl @bar] %bar(%x : i32) -> [%out: i32] {
@@ -48,11 +48,17 @@ value[impl @bar] %bar(%x : i32) -> [%out: i32] {
 
 timeline %foo_time(%e : %event0) -> [%out: %event0] {
     %enc = encoding-event %e [];
-    %enc1 = extract %enc 0;
-    %enc2 = extract %enc 1;
-    %sub = submission-event %enc2;
-    %snc = synchronization-event %enc1 %sub;
-    return %snc;
+    %loc1 = extract %enc 0;
+    %rem1 = extract %enc 1;
+    %sub = submission-event %rem1;
+    %snc = synchronization-event %loc1 %sub;
+
+    %enc2 = encoding-event %snc [];
+    %loc2 = extract %enc2 0;
+    %rem2 = extract %enc2 1;
+    %sub2 = submission-event %rem2;
+    %snc2 = synchronization-event %loc2 %sub2;
+    return %snc2;
 }
 
 spatial %foo_space(%bs : %buff_space) -> %buff_space {
@@ -60,8 +66,8 @@ spatial %foo_space(%bs : %buff_space) -> %buff_space {
 }
 
 schedule[value $val = %bar, timeline $time = %foo_time, spatial $space = %foo_space]
-%bar_main<$time.%e-usable, $time.%out-usable>
-(%x2_loc : $val.%x-usable %i32l)
+%bar_main<$time.%snc-usable, $time.%out-usable>
+(%x2_loc : $val.%x-usable $space-saved %i32l)
 -> [%out : $val.%out-usable %i32n] {
     %c_loc = alloc-temporary local [storage] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
@@ -69,13 +75,13 @@ schedule[value $val = %bar, timeline $time = %foo_time, spatial $space = %foo_sp
     %y_loc = alloc-temporary local [map_write] i32;
 
     local-do-builtin $val.%c() -> %c_loc;
-    %enc = begin-encoding gpu $time.%enc [%x_gpu, %y_gpu] [];
+    %enc = begin-encoding gpu $time.%enc2 [%x_gpu, %y_gpu] [];
     encode-copy %enc %x2_loc -> %x_gpu;
     %c = read-ref i32 %c_loc;
     encode-do %enc %simple $val.%y_t(%c, %c, %c, %x_gpu) -> %y_gpu;
 
-    %fnc = submit %enc $time.%sub;
-    sync-fence %fnc $time.%snc;
+    %fnc = submit %enc $time.%sub2;
+    sync-fence %fnc $time.%snc2;
     
     local-copy %y_gpu -> %y_loc;
     %result = read-ref i32 %y_loc;
@@ -84,12 +90,12 @@ schedule[value $val = %bar, timeline $time = %foo_time, spatial $space = %foo_sp
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<$time.%e-usable, $time.%out-usable>
-(%x_loc : $val.%x-usable %i32l)
+(%x_loc : $val.%x-usable $space-saved %i32l)
 -> [%out : $val.%out-usable %i32n] {
     %c_loc = alloc-temporary local [storage] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
     %y_gpu = alloc-temporary gpu [storage, map_read] i32;
-    %y_loc = alloc-temporary local [map_write] i32;
+    %y_loc = alloc-temporary local [map_read, map_write, copy_src, copy_dst, storage] i32;
 
     local-do-builtin $val.%c() -> %c_loc;
     %enc = begin-encoding gpu $time.%enc [%x_gpu, %y_gpu] [];
