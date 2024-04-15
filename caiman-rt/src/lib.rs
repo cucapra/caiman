@@ -145,7 +145,7 @@ impl GpuAllocator {
         self.allocator.alloc(id, size, align);
     }
 
-    pub fn get_buffer_ref<T: Sized + Any>(&self, id: usize) -> GpuBufferRef<'_, T> {
+    pub fn get_buffer_ref<T: Sized + Any>(&self, id: usize) -> GpuBufferRef<T> {
         let addr = self.allocator.get_starting_addr(id);
         GpuBufferRef::new(&self.buffer, addr.0 as wgpu::BufferAddress)
     }
@@ -326,7 +326,7 @@ impl GpuLocals {
     }
 
     /// Gets a GPU mutable pointer to the start of the allocation for the given id.
-    pub fn get_gpu_ref<T: Sized + Any>(&self, id: usize) -> GpuBufferRef<'_, T> {
+    pub fn get_gpu_ref<T: Sized + Any>(&self, id: usize) -> GpuBufferRef<T> {
         assert_eq!(
             self.type_ids.get(&id).unwrap(),
             &std::any::TypeId::of::<T>()
@@ -601,7 +601,7 @@ impl<'buffer> GpuBufferAllocator<'buffer> {
         }
     }
 
-    pub fn suballocate_ref<T: Sized>(&mut self) -> Option<GpuBufferRef<'buffer, T>> {
+    pub fn suballocate_ref<T: Sized>(&mut self) -> Option<GpuBufferRef<T>> {
         if let Some(starting_address) = self.abstract_allocator.suballocate_ref::<T>() {
             return Some(GpuBufferRef::new(
                 self.buffer,
@@ -661,15 +661,15 @@ impl<'buffer> GpuBufferAllocator<'buffer> {
 
 #[derive(Debug)]
 // A slot holding a pointer to gpu-resident data of type T
-pub struct GpuBufferRef<'buffer, T: Sized> {
+pub struct GpuBufferRef<T: Sized> {
     phantom: std::marker::PhantomData<*const T>,
-    pub buffer: &'buffer wgpu::Buffer,
+    pub buffer: *const wgpu::Buffer,
     pub base_address: wgpu::BufferAddress,
     //offset : wgpu::DynamicOffset,
 }
 
-impl<'buffer, T: Sized> GpuBufferRef<'buffer, T> {
-    pub fn new(buffer: &'buffer wgpu::Buffer, base_address: wgpu::BufferAddress) -> Self {
+impl<T: Sized> GpuBufferRef<T> {
+    pub fn new(buffer: &wgpu::Buffer, base_address: wgpu::BufferAddress) -> Self {
         Self {
             phantom: std::marker::PhantomData,
             buffer,
@@ -677,22 +677,24 @@ impl<'buffer, T: Sized> GpuBufferRef<'buffer, T> {
         }
     }
 
-    pub fn as_binding_resource(&self) -> wgpu::BindingResource<'buffer> {
+    pub fn as_binding_resource(&self) -> wgpu::BindingResource<'static> {
         let size_n: u64 = std::mem::size_of::<T>().try_into().unwrap();
         wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-            buffer: self.buffer,
+            // caiman should enforce that this is safe
+            buffer: unsafe { &*self.buffer },
             offset: self.base_address,
             size: std::num::NonZeroU64::new(size_n),
         })
     }
 
-    pub fn slice(&self) -> wgpu::BufferSlice<'buffer> {
+    pub fn slice(&self) -> wgpu::BufferSlice<'static> {
         // Technically, this could overflow?
         let mut end_address = self.base_address;
         // Rust needs the type hint...
         let size_opt: Option<wgpu::BufferAddress> = std::mem::size_of::<T>().try_into().ok();
         end_address += size_opt.unwrap();
-        self.buffer.slice(self.base_address..end_address)
+        // caiman should enforce that this is safe
+        unsafe { &*self.buffer }.slice(self.base_address..end_address)
     }
 }
 

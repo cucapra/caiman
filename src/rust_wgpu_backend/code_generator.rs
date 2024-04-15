@@ -1446,7 +1446,7 @@ impl<'program> CodeGenerator<'program> {
                 length
             ),
             ffi::Type::GpuBufferRef { element_type } => format!(
-                "caiman_rt::GpuBufferRef<'callee, {}>",
+                "caiman_rt::GpuBufferRef<{}>",
                 self.get_type_name_with_ref(*element_type, lifetime)
             ),
             ffi::Type::GpuBufferSlice { element_type } => format!(
@@ -1940,7 +1940,7 @@ impl<'program> CodeGenerator<'program> {
             self.build_get_gpu_ref(destination_var, Some(type_id))
         ));
         self.code_writer.write(format!(
-            "instance.state.get_queue_mut().write_buffer({}.buffer, {}.base_address, _t);\n",
+            "instance.state.get_queue_mut().write_buffer(unsafe {{ &*{}.buffer }}, {}.base_address, _t);\n",
             buffer_view_var_name, buffer_view_var_name
         ));
         write!(self.code_writer, "}}\n");
