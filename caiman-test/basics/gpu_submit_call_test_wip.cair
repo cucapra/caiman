@@ -84,7 +84,7 @@ schedule[value $val = %bar, timeline $time = %foo_time, spatial $space = %foo_sp
 
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<$time.%e-usable, $time.%out-usable>
-(%x_loc : $val.%x-usable $time.%e-usable %i32l)
+(%x_loc : $val.%x-usable %i32l)
 -> [%out : $val.%out-usable %i32n] {
     %c_loc = alloc-temporary local [storage] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
