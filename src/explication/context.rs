@@ -102,7 +102,7 @@ pub struct ScheduleScopeData {
 
     // map from node id to which remote(s) it instantiates, and what type it has
     // we really do need both directions here, annoyingly
-    node_type_information: HashMap<NodeId, NodeTypeInformation>,
+    storage_node_information: HashMap<NodeId, StorageNodeInformation>,
 
     // map from operation code to a vector of "available" operations with holes
     // for now, these consist of exactly allocations where we don't yet know the type
@@ -114,11 +114,9 @@ pub struct ScheduleScopeData {
 }
 
 #[derive(Debug, Clone)]
-pub struct NodeTypeInformation {
+pub struct StorageNodeInformation {
     pub implements: Option<LocationTriple>,
     pub typ: expir::Type,
-    pub place: expir::Place,
-    pub encoder: Option<Location>,
 }
 
 #[derive(Debug, Default)]

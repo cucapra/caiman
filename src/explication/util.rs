@@ -37,12 +37,22 @@ impl Location {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LocationTriple {
+    // we use Option to explicitly mean "don't care"
+    // which is distinct from an explicit "Quotient::None"
     pub value: Option<Location>,
     pub timeline: Option<Location>,
     pub spatial: Option<Location>,
 }
 
 impl LocationTriple {
+    pub fn new() -> LocationTriple {
+        LocationTriple {
+            value: None,
+            timeline: None,
+            spatial: None,
+        }
+    }
+
     pub fn new_value(value: Location) -> LocationTriple {
         LocationTriple {
             value: Some(value),
@@ -84,6 +94,36 @@ impl LocationTriple {
             value: f(specs.0, specs.0.funclet_id_opt.unwrap(), node_id, context),
             timeline: f(specs.1, specs.1.funclet_id_opt.unwrap(), node_id, context),
             spatial: f(specs.2, specs.2.funclet_id_opt.unwrap(), node_id, context),
+        }
+    }
+
+    // Returns a location triple where we explicitly don't care about Quotient::None
+    pub fn triple_ignoring_none(&self) -> LocationTriple {
+        let value = match &self.value {
+            Some(v) => match &v.quot {
+                ir::Quotient::None => None,
+                quot => Some(quot.clone()),
+            },
+            None => None,
+        };
+        let timeline = match &self.timeline {
+            Some(v) => match &v.quot {
+                ir::Quotient::None => None,
+                quot => Some(quot.clone()),
+            },
+            None => None,
+        };
+        let spatial = match &self.spatial {
+            Some(v) => match &v.quot {
+                ir::Quotient::None => None,
+                quot => Some(quot.clone()),
+            },
+            None => None,
+        };
+        LocationTriple {
+            value,
+            timeline,
+            spatial,
         }
     }
 }

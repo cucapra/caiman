@@ -52,31 +52,25 @@ impl InState {
         });
     }
 
-    pub fn add_allocation(
-        &mut self,
-        schedule_node: NodeId,
-        typ: expir::Type,
-        context: &StaticContext,
-    ) {
-        let scope = self.get_latest_scope_mut();
-        scope.add_allocation(schedule_node, typ, context);
+    fn compare_types(&self, typ1: expir::Type, typ2: expir::Type, context: &StaticContext) -> bool {
+        match typ1 {
+            ir::Type::NativeValue { storage_type } => todo!(),
+            ir::Type::Ref { storage_type, storage_place, buffer_flags } => todo!(),
+            ir::Type::Fence { queue_place } => todo!(),
+            ir::Type::Buffer { storage_place, static_layout_opt, flags } => todo!(),
+            ir::Type::Encoder { queue_place } => todo!(),
+            ir::Type::Event => todo!(),
+            ir::Type::BufferSpace => todo!(),
+        }
     }
 
-    // gets a list of the nodes of the available allocations in this scope (if there are any)
-    pub fn available_allocations(&self, typ: TypeId, place: expir::Place) -> Vec<Location> {
-        let compare_alloc = |alloc: &expir::Type| match alloc {
-            expir::Type::Ref {
-                storage_place,
-                storage_type,
-                buffer_flags,
-            } => typ == storage_type.0 && place == storage_place.clone(),
-            _ => unreachable!(),
-        };
+    // gets a list of the nodes of the given type and place in this scope (if there are any)
+    pub fn find_nodes(&self, typ: expir::Type) -> Vec<Location> {
         for scope in self.scopes.iter().rev() {
             let matches: Vec<_> = scope
-                .allocations
+                .instantiations
                 .iter()
-                .filter(|(_, alloc)| compare_alloc(alloc))
+                .filter(|(_, inst)| compare_storage(storage))
                 .map(|v| Location::new(scope.funclet_id, v.0))
                 .collect();
             if matches.len() > 0 {
@@ -86,37 +80,25 @@ impl InState {
         vec![]
     }
 
-    // Read any allocation and return the type information
-    pub fn read_allocation(&self, location: Location) -> expir::Type {
-        for scope in self.scopes.iter().rev() {
-            if scope.funclet_id == location.funclet_id {
-                for (index, allocation) in scope.allocations.iter().enumerate() {
-                    if allocation.0 == location.node_id().unwrap() {
-                        return allocation.1.clone();
-                    }
-                }
-                panic!(
-                    "Missing allocation {:?} (was it already consumed?)",
-                    location
-                );
-            }
-        }
-        panic!("Missing scope for {:?}", location);
+    pub fn add_storage_node(
+        &mut self,
+        schedule_node: NodeId,
+        typ: expir::Type,
+        place: expir::Place,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut()
+            .add_storage_node(schedule_node, typ, place, context);
     }
 
     pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
         location_triple: LocationTriple,
-        typ: expir::Type,
         context: &StaticContext,
     ) {
-        self.get_latest_scope_mut().set_instantiation(
-            schedule_node.clone(),
-            location_triple.clone(),
-            typ.clone(),
-            context,
-        );
+        self.get_latest_scope_mut()
+            .set_instantiation(schedule_node, location_triple, context);
     }
 
     pub fn expect_location(&self) -> Location {
@@ -240,12 +222,15 @@ impl InState {
         &self,
         node_id: NodeId,
         context: &StaticContext,
-    ) -> &(LocationTriple, expir::Type) {
+    ) -> &StorageNodeInformation {
         let scope = self.get_latest_scope();
-        scope.node_type_information.get(&node_id).expect(&format!(
-            "Missing instantiation for node {}",
-            context.debug_info.node(&scope.funclet_id, node_id)
-        ))
+        scope
+            .storage_node_information
+            .get(&node_id)
+            .expect(&format!(
+                "Missing instantiation for node {}",
+                context.debug_info.node(&scope.funclet_id, node_id)
+            ))
     }
 
     // Returns true if two types are "close enough" to equal
@@ -324,7 +309,7 @@ impl InState {
                 .sorted_by(|x, y| x.cmp(y))
                 .rev()
             {
-                let node_info = scope.node_type_information.get(&node).unwrap();
+                let node_info = scope.storage_node_information.get(&node).unwrap();
                 if self.compare_types(&node_info.1, target_type) {
                     return Some(Location::new(scope.funclet_id.clone(), node.clone()));
                 }

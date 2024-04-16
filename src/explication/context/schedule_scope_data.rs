@@ -17,7 +17,7 @@ impl ScheduleScopeData {
         funclet_id: FuncletId,
         time: Option<Location>,
         instantiations: HashMap<Location, HashSet<NodeId>>,
-        node_type_information: HashMap<NodeId, NodeTypeInformation>,
+        node_type_information: HashMap<NodeId, StorageNodeInformation>,
         allocations: Vec<(NodeId, expir::Type)>,
         available_operations: HashMap<OpCode, Vec<NodeId>>,
     ) -> ScheduleScopeData {
@@ -27,7 +27,7 @@ impl ScheduleScopeData {
             node_index: 0,
             time,
             instantiations,
-            node_type_information,
+            storage_node_information: node_type_information,
             available_operations,
             explication_hole: false,
         }
@@ -48,72 +48,85 @@ impl ScheduleScopeData {
         self.time = Some(time);
     }
 
+    pub fn add_storage_node(
+        &mut self,
+        schedule_node: NodeId,
+        typ: expir::Type,
+        place: expir::Place,
+        context: &StaticContext,
+    ) {
+        let check = self.storage_node_information.insert(
+            schedule_node,
+            StorageNodeInformation {
+                implements: None,
+                typ,
+                place,
+            },
+        );
+        assert!(
+            check.is_none(),
+            "Duplicate add of node {}",
+            context.debug_info.node(&self.funclet_id, schedule_node)
+        );
+    }
+
     pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
         location_triple: LocationTriple,
-        typ: expir::Type,
         context: &StaticContext,
     ) {
-        let error = format!(
-            "Duplicate add of {} in location triple {:?}",
-            context.debug_info.node(&self.funclet_id, schedule_node),
-            location_triple
-        );
-        // potentially modified when checking the timeline
-        let mut modified_triple = location_triple.clone();
-        match &location_triple.value {
-            None => {}
-            Some(value) => {
-                let check = self
-                    .instantiations
-                    .entry(value.clone())
-                    .or_insert(HashSet::new())
-                    .insert(schedule_node);
-                assert!(check, error);
-            }
-        }
-        match &location_triple.timeline {
-            // by default, every instantiation happens at the current time
-            // we can specify another time with the timeline triple
-            None => {
-                match &self.time {
-                    None => {}
-                    Some(current_time) => {
-                        self.instantiations
-                            .entry(current_time.clone())
-                            .or_insert(HashSet::new())
-                            .insert(schedule_node);
-                    }
-                }
-                modified_triple.timeline = self.time.clone()
-            }
-            Some(timeline) => {
-                let check = self
-                    .instantiations
-                    .entry(timeline.clone())
-                    .or_insert(HashSet::new())
-                    .insert(schedule_node);
-                assert!(check, error);
-            }
-        };
-        match &location_triple.spatial {
-            None => {}
-            Some(spatial) => {
-                let check = self
-                    .instantiations
-                    .entry(spatial.clone())
-                    .or_insert(HashSet::new())
-                    .insert(schedule_node);
-                assert!(check, error);
-            }
-        }
-
-        // note that this may overwrite what an allocation instantiates
+        // note that this may overwrite what a node instantiates
         // this is, of course, completely fine mechanically
         // but is also why backtracking is needed/complicated
-        self.node_type_information
-            .insert(schedule_node, (location_triple, typ));
+        let implementation = &mut self.storage_node_information
+            .get_mut(&schedule_node)
+            .expect(&format!(
+                "Attempting to update Node {} without already having an instantiation",
+                context.debug_info.node(&self.funclet_id, schedule_node)
+            )).implements.unwrap_or(LocationTriple::new());
+
+        // potentially modified when checking the timeline
+        match location_triple {
+            LocationTriple {
+                value,
+                timeline,
+                spatial,
+            } => {
+                match value {
+                    None => {}
+                    Some(value) => {
+                        self.instantiations
+                            .entry(value.clone())
+                            .or_insert(HashSet::new())
+                            .insert(schedule_node);
+                        implementation.value = Some(value);
+                    }
+                };
+                match timeline {
+                    // by default, every instantiation happens at the current time
+                    // we can specify another time with the timeline triple
+                    None => {}
+                    Some(timeline) => {
+                        self.instantiations
+                            .entry(timeline.clone())
+                            .or_insert(HashSet::new())
+                            .insert(schedule_node);
+                        implementation.timeline = Some(timeline);
+                    }
+                };
+                match spatial {
+                    None => {}
+                    Some(spatial) => {
+                        self.instantiations
+                            .entry(spatial.clone())
+                            .or_insert(HashSet::new())
+                            .insert(schedule_node);
+                        implementation.spatial = Some(spatial);
+                    }
+                };
+            }
+        }
     }
 
     // helper for match_triple
@@ -152,15 +165,6 @@ impl ScheduleScopeData {
         result = self.intersect_instantiations(result, &triple.timeline, context);
         result = self.intersect_instantiations(result, &triple.spatial, context);
         result.unwrap_or_default()
-    }
-
-    pub fn add_allocation(
-        &mut self,
-        schedule_node: NodeId,
-        typ: expir::Type,
-        context: &StaticContext,
-    ) {
-        self.allocations.push((schedule_node, typ));
     }
 
     pub fn add_available_operation(
