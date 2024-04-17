@@ -52,43 +52,14 @@ impl InState {
         });
     }
 
-    fn compare_types(&self, typ1: expir::Type, typ2: expir::Type, context: &StaticContext) -> bool {
-        match typ1 {
-            ir::Type::NativeValue { storage_type } => todo!(),
-            ir::Type::Ref { storage_type, storage_place, buffer_flags } => todo!(),
-            ir::Type::Fence { queue_place } => todo!(),
-            ir::Type::Buffer { storage_place, static_layout_opt, flags } => todo!(),
-            ir::Type::Encoder { queue_place } => todo!(),
-            ir::Type::Event => todo!(),
-            ir::Type::BufferSpace => todo!(),
-        }
-    }
-
-    // gets a list of the nodes of the given type and place in this scope (if there are any)
-    pub fn find_nodes(&self, typ: expir::Type) -> Vec<Location> {
-        for scope in self.scopes.iter().rev() {
-            let matches: Vec<_> = scope
-                .instantiations
-                .iter()
-                .filter(|(_, inst)| compare_storage(storage))
-                .map(|v| Location::new(scope.funclet_id, v.0))
-                .collect();
-            if matches.len() > 0 {
-                return matches;
-            }
-        }
-        vec![]
-    }
-
     pub fn add_storage_node(
         &mut self,
         schedule_node: NodeId,
         typ: expir::Type,
-        place: expir::Place,
         context: &StaticContext,
     ) {
         self.get_latest_scope_mut()
-            .add_storage_node(schedule_node, typ, place, context);
+            .add_storage_node(schedule_node, typ, context);
     }
 
     pub fn set_instantiation(
@@ -310,7 +281,7 @@ impl InState {
                 .rev()
             {
                 let node_info = scope.storage_node_information.get(&node).unwrap();
-                if self.compare_types(&node_info.1, target_type) {
+                if self.compare_types(&node_info.typ, target_type) {
                     return Some(Location::new(scope.funclet_id.clone(), node.clone()));
                 }
             }

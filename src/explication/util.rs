@@ -20,7 +20,7 @@ impl Location {
     pub fn new(funclet_id: FuncletId, node_id: NodeId) -> Location {
         Location {
             funclet_id,
-            quot: expir::Quotient::Node { node_id }
+            quot: expir::Quotient::Node { node_id },
         }
     }
 
@@ -100,23 +100,32 @@ impl LocationTriple {
     // Returns a location triple where we explicitly don't care about Quotient::None
     pub fn triple_ignoring_none(&self) -> LocationTriple {
         let value = match &self.value {
-            Some(v) => match &v.quot {
-                ir::Quotient::None => None,
-                quot => Some(quot.clone()),
+            Some(v) => match v {
+                Location {
+                    funclet_id,
+                    quot: ir::Quotient::None,
+                } => None,
+                loc => Some(loc.clone()),
             },
             None => None,
         };
         let timeline = match &self.timeline {
-            Some(v) => match &v.quot {
-                ir::Quotient::None => None,
-                quot => Some(quot.clone()),
+            Some(v) => match v {
+                Location {
+                    funclet_id,
+                    quot: ir::Quotient::None,
+                } => None,
+                loc => Some(loc.clone()),
             },
             None => None,
         };
         let spatial = match &self.spatial {
-            Some(v) => match &v.quot {
-                ir::Quotient::None => None,
-                quot => Some(quot.clone()),
+            Some(v) => match v {
+                Location {
+                    funclet_id,
+                    quot: ir::Quotient::None,
+                } => None,
+                loc => Some(loc.clone()),
             },
             None => None,
         };
@@ -234,13 +243,10 @@ fn spec_box_read(
     );
     match &to_read.get(node_id).expect(&index_error) {
         Hole::Empty => None,
-        Hole::Filled(t) => match &t.quot {
-            ir::Quotient::None => None,
-            quot => Some(Location {
-                funclet_id: spec.funclet_id_opt.unwrap(),
-                quot: quot.clone()
-            })
-        }        
+        Hole::Filled(t) => Some(Location {
+            funclet_id: spec.funclet_id_opt.unwrap(),
+            quot: t.quot.clone(),
+        }),
     }
 }
 
@@ -271,14 +277,10 @@ pub fn get_implicit_time(
             value,
             spatial,
             timeline,
-        } => timeline
-            .implicit_in_tag
-            .as_ref()
-            .opt()
-            .map(|t| Location {
-                funclet_id: timeline.funclet_id_opt.unwrap(),
-                quot: t.quot.clone(),
-            }),
+        } => timeline.implicit_in_tag.as_ref().opt().map(|t| Location {
+            funclet_id: timeline.funclet_id_opt.unwrap(),
+            quot: t.quot.clone(),
+        }),
         _ => panic!(
             "Invalid funclet for an implicit time lookup {}, expected a spec funclet",
             context.debug_info.funclet(&funclet_id)

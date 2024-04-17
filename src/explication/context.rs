@@ -91,10 +91,6 @@ pub struct ScheduleScopeData {
     // useful to keep track of naming and boring indexing details
     node_index: usize,
 
-    // where we currently are in the timeline
-    // is only None when the implicit in time is none
-    time: Option<Location>,
-
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
     // we only care about local information

@@ -51,11 +51,12 @@ spatial %foo_space(%bs : %buff_space) -> %buff_space {
 schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_space]
 %foo_main<$time.%e-usable, $time.%out-usable>
 (%x_loc : $val.%x-usable $time.%e-usable %i32l)
--> [%out : $val.%y-usable $time.%snc-usable %i32n] {
+-> [%out : $val.%y-usable $time-usable %i32n] {
     %c_loc = alloc-temporary local [storage] i32;
     %x_gpu = alloc-temporary gpu [storage, copy_dst] i32;
     %y_gpu = alloc-temporary gpu [storage, map_read] i32;
     %y_loc = alloc-temporary local [map_write] i32;
+    %y_bad = alloc-temporary local [...] i32;
 
     local-do-builtin $val.%c() -> %c_loc;
     %enc = begin-encoding gpu $time.%enc [%x_gpu, %y_gpu] [];

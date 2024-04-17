@@ -52,7 +52,6 @@ impl ScheduleScopeData {
         &mut self,
         schedule_node: NodeId,
         typ: expir::Type,
-        place: expir::Place,
         context: &StaticContext,
     ) {
         let check = self.storage_node_information.insert(
@@ -60,7 +59,6 @@ impl ScheduleScopeData {
             StorageNodeInformation {
                 implements: None,
                 typ,
-                place,
             },
         );
         assert!(

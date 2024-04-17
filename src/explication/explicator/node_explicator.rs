@@ -50,7 +50,7 @@ fn explicate_phi_node(
             storage_place,
             buffer_flags,
         } => {
-            new_state.add_allocation(node_id, node_type.clone(), context);
+            new_state.add_storage_node(node_id, node_type.clone(), context);
         }
         _ => {}
     }
@@ -58,7 +58,7 @@ fn explicate_phi_node(
     let location =
         LocationTriple::new_triple_mapped(spec_input, funclet_id, node_id, &state, context);
 
-    let value_location = new_state.set_instantiation(node_id, location, node_type, context);
+    new_state.set_instantiation(node_id, location, context);
     let node = ir::Node::Phi { index };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -92,7 +92,7 @@ fn explicate_allocate_temporary(
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
     let buffer_flags = expir_buffer_flags.as_ref().opt().expect(&error).clone();
     let mut new_state = state.clone();
-    new_state.add_allocation(
+    new_state.add_storage_node(
         state.get_current_node_id().unwrap(),
         expir::Type::Ref {
             storage_type,
@@ -161,22 +161,20 @@ fn explicate_local_do_builtin(
         .enumerate()
     {
         let output_open = output.as_ref().opt().expect(&error).clone();
-        let typ =
-            new_state.read_allocation(Location::new(state.get_current_funclet_id(), output_open));
+        let value_location = Location::new(
+            state
+                .get_funclet_spec(
+                    state.get_current_funclet_id(),
+                    &SpecLanguage::Value,
+                    context,
+                )
+                .funclet_id_opt
+                .unwrap(),
+            node_id,
+        );
         new_state.set_instantiation(
             output_open,
-            LocationTriple::new_value(Location::new(
-                state
-                    .get_funclet_spec(
-                        state.get_current_funclet_id(),
-                        &SpecLanguage::Value,
-                        context,
-                    )
-                    .funclet_id_opt
-                    .unwrap(),
-                node_id,
-            )),
-            typ,
+            LocationTriple::new_value(value_location),
             context,
         );
         outputs.push(output_open);
@@ -242,22 +240,20 @@ fn explicate_local_do_external(
         .enumerate()
     {
         let output_open = output.as_ref().opt().expect(&error).clone();
-        let typ =
-            new_state.read_allocation(Location::new(state.get_current_funclet_id(), output_open));
+        let value_location = Location::new(
+            state
+                .get_funclet_spec(
+                    state.get_current_funclet_id(),
+                    &SpecLanguage::Value,
+                    context,
+                )
+                .funclet_id_opt
+                .unwrap(),
+            node_id + offset + 1,
+        );
         new_state.set_instantiation(
             output_open,
-            LocationTriple::new_value(Location::new(
-                state
-                    .get_funclet_spec(
-                        state.get_current_funclet_id(),
-                        &SpecLanguage::Value,
-                        context,
-                    )
-                    .funclet_id_opt
-                    .unwrap(),
-                node_id + offset + 1,
-            )),
-            typ,
+            LocationTriple::new_value(value_location),
             context,
         );
         outputs.push(output_open);
@@ -329,8 +325,6 @@ fn explicate_encode_do(
         .enumerate()
     {
         let output_open = output.as_ref().opt().expect(&error).clone();
-        let typ =
-            new_state.read_allocation(Location::new(state.get_current_funclet_id(), output_open));
         let value_location = Location::new(
             state
                 .get_funclet_spec(
@@ -344,13 +338,7 @@ fn explicate_encode_do(
         );
         new_state.set_instantiation(
             output_open,
-            LocationTriple {
-                value: Some(value_location),
-                // TODO: add timeline
-                timeline: None,
-                spatial: None,
-            },
-            typ,
+            LocationTriple::new_value(value_location),
             context,
         );
         outputs.push(output_open);
@@ -399,16 +387,12 @@ fn explicate_write_ref(
     let source = expir_source.as_ref().opt().expect(&error).clone();
     let destination = expir_destination.as_ref().opt().expect(&error).clone();
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
-    let (instantiation_location, _) = state.get_node_information(source, context);
     // assume that the typechecker will find a misaligned storage type
-    let allocation_type =
-        state.read_allocation(Location::new(state.get_current_funclet_id(), destination));
-    new_state.set_instantiation(
-        destination,
-        instantiation_location.clone(),
-        allocation_type,
-        context,
-    );
+    let info = state.get_node_information(destination, context);
+    match &info.implements {
+        Some(impls) => new_state.set_instantiation(destination, impls.clone(), context),
+        None => {}
+    };
     let node = ir::Node::WriteRef {
         storage_type,
         source,
@@ -445,21 +429,14 @@ fn explicate_borrow_ref(
     let source = expir_source.as_ref().opt().expect(&error).clone();
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
 
-    let (instantiation_location, _) = state.get_node_information(source, context);
+    let info = state.get_node_information(source, context);
     let schedule_node = state.get_current_node_id().unwrap();
-    let ref_type = expir::Type::Ref {
-        storage_type: storage_type.clone(),
-        storage_place: expir::Place::Local,
-        buffer_flags: expir::BufferFlags::new(),
-    };
 
-    new_state.add_allocation(schedule_node, ref_type.clone(), context);
-    new_state.set_instantiation(
-        schedule_node,
-        instantiation_location.clone(),
-        ref_type,
-        context,
-    );
+    new_state.add_storage_node(schedule_node, info.typ.clone(), context);
+    match &info.implements {
+        Some(impls) => new_state.set_instantiation(schedule_node, impls.clone(), context),
+        None => {}
+    };
 
     let node = ir::Node::BorrowRef {
         storage_type,
@@ -496,13 +473,18 @@ fn explicate_read_ref(
     let source = expir_source.as_ref().opt().expect(&error).clone();
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
 
-    let (instantiation_location, _) = state.get_node_information(source, context);
-    new_state.set_instantiation(
-        state.get_current_node_id().unwrap(),
-        instantiation_location.clone(),
+    let info = state.get_node_information(source, context);
+    let schedule_node = state.get_current_node_id().unwrap();
+
+    new_state.add_storage_node(
+        schedule_node,
         expir::Type::NativeValue { storage_type },
         context,
     );
+    match &info.implements {
+        Some(impls) => new_state.set_instantiation(schedule_node, impls.clone(), context),
+        None => {}
+    };
     let node = ir::Node::ReadRef {
         storage_type,
         source,
@@ -537,8 +519,11 @@ fn explicate_local_copy(
     let mut new_state = state.clone();
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
-    let (instantiation, typ) = state.get_node_information(input, context);
-    new_state.set_instantiation(output, instantiation.clone(), typ.clone(), context);
+    let info = state.get_node_information(input, context);
+    match &info.implements {
+        Some(impls) => new_state.set_instantiation(output, impls.clone(), context),
+        None => {}
+    };
     let node = ir::Node::LocalCopy { input, output };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -572,8 +557,11 @@ fn explicate_encode_copy(
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
     let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
-    let (instantiation, typ) = state.get_node_information(input, context);
-    new_state.set_instantiation(output, instantiation.clone(), typ.clone(), context);
+    let info = state.get_node_information(input, context);
+    match &info.implements {
+        Some(impls) => new_state.set_instantiation(output, impls.clone(), context),
+        None => {}
+    };
     let node = ir::Node::EncodeCopy {
         encoder,
         input,

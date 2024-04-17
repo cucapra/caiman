@@ -68,7 +68,7 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     
     local-copy %y_gpu -> %y_loc;
     %result = read-ref i32 %y_loc;
-    return %result;
+    return ?;
 }
 
 pipeline "main" = %foo_main;
