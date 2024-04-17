@@ -12,6 +12,9 @@ pub extern crate wgpu;
 
 // None = waits on whole queue
 pub type GpuFence = Option<wgpu::SubmissionIndex>;
+/// The dummy type for the encoder. This is just to allow
+/// passing an encoder via serialized join to typecheck
+pub type ErasedEncoder = ();
 
 /// Manages the allocation of variables in a contiguous buffer,
 /// respecting the alignment requirements of each variable.

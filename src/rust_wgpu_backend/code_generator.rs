@@ -226,6 +226,7 @@ pub struct CodeGenerator<'program> {
     dispatcher_id_generator: IdGenerator,
     active_dispatchers: HashMap<Box<[ffi::TypeId]>, Dispatcher>,
     gpu_fence_type: Option<ffi::TypeId>,
+    gpu_encoder_type: Option<ffi::TypeId>,
 }
 
 impl<'program> CodeGenerator<'program> {
@@ -259,9 +260,12 @@ impl<'program> CodeGenerator<'program> {
             dispatcher_id_generator: IdGenerator::new(),
             active_dispatchers: HashMap::new(),
             gpu_fence_type: None,
+            gpu_encoder_type: None,
         };
 
         code_generator.gpu_fence_type = Some(code_generator.create_ffi_type(ffi::Type::GpuFence));
+        code_generator.gpu_encoder_type =
+            Some(code_generator.create_ffi_type(ffi::Type::GpuEncoder));
 
         let type_ids = code_generator
             .native_interface
@@ -274,6 +278,11 @@ impl<'program> CodeGenerator<'program> {
         }
 
         code_generator
+    }
+
+    /// Gets the type id of the encoder
+    pub fn get_encoder_type(&self) -> ffi::TypeId {
+        self.gpu_encoder_type.unwrap()
     }
 
     pub fn finish(&mut self) -> String {
@@ -1165,17 +1174,21 @@ impl<'program> CodeGenerator<'program> {
             dispatcher_id.0
         );
         write!(self.code_writer, "(join_stack");
-        for ((argument_index, var_id), var_type) in argument_var_ids
-            .iter()
-            .enumerate()
-            .zip(argument_types.iter())
-        {
+        let mut i = 0;
+        for var_type in argument_types.iter() {
+            if *var_type == self.get_encoder_type() {
+                // dummy argument for the encoder, no argument_var_id for this
+                write!(self.code_writer, ", ()");
+                continue;
+            }
+            let var_id = argument_var_ids[i];
+            i += 1;
             if self.is_cpu_ref(*var_type) {
-                write!(self.code_writer, ", {}", self.make_stack_ref(*var_id));
+                write!(self.code_writer, ", {}", self.make_stack_ref(var_id));
             } else if self.is_gpu_buf(*var_type) {
-                write!(self.code_writer, ", {}", self.access_gpu_str(*var_id));
+                write!(self.code_writer, ", {}", self.access_gpu_str(var_id));
             } else {
-                write!(self.code_writer, ", {}", self.access_val_str(*var_id));
+                write!(self.code_writer, ", {}", self.access_val_str(var_id));
             }
         }
         write!(self.code_writer, ", instance);\n");
@@ -1204,17 +1217,21 @@ impl<'program> CodeGenerator<'program> {
                 dispatcher_id.0
             );
             write!(self.code_writer, "(join_stack");
-            for ((return_index, var_id), var_type) in output_var_ids
-                .iter()
-                .enumerate()
-                .zip(output_var_types.iter())
-            {
+            let mut i = 0;
+            for var_type in output_var_types.iter() {
+                if *var_type == self.get_encoder_type() {
+                    // dummy argument for the encoder, no output_var_id for this
+                    write!(self.code_writer, ", ()");
+                    continue;
+                }
+                let var_id = output_var_ids[i];
+                i += 1;
                 if self.is_cpu_ref(*var_type) {
-                    write!(self.code_writer, ", {}", self.make_stack_ref(*var_id));
+                    write!(self.code_writer, ", {}", self.make_stack_ref(var_id));
                 } else if self.is_gpu_buf(*var_type) {
-                    write!(self.code_writer, ", {}", self.access_gpu_str(*var_id));
+                    write!(self.code_writer, ", {}", self.access_gpu_str(var_id));
                 } else {
-                    write!(self.code_writer, ", {}", self.access_val_str(*var_id));
+                    write!(self.code_writer, ", {}", self.access_val_str(var_id));
                 }
             }
             write!(self.code_writer, ", instance) }}");
@@ -1231,8 +1248,16 @@ impl<'program> CodeGenerator<'program> {
                         } else {
                             write!(self.code_writer, "StackRef::local({}) ", var_id.0);
                         }
+                    } else if self.is_gpu_buf(*var_type) {
+                        // TODO: may_return might be true and this might be a temp buffer
+                        // this could be OK if the funclet may not actually return
+                        assert!(
+                            self.variable_tracker.is_arg(*var_id),
+                            "Can't return a temp buffer"
+                        );
+                        write!(self.code_writer, "{}, ", self.get_var_name(*var_id));
                     } else {
-                        assert!(!self.is_gpu_buf(*var_type));
+                        assert!(*var_type != self.get_encoder_type());
                         write!(self.code_writer, "{}, ", self.access_val_str(*var_id));
                     }
                 }
@@ -1336,6 +1361,7 @@ impl<'program> CodeGenerator<'program> {
             ffi::Type::GpuBufferAllocator => (),
             ffi::Type::CpuBufferAllocator => (),
             ffi::Type::GpuFence => (),
+            ffi::Type::GpuEncoder => (),
             _ => panic!("Unimplemented type #{}: {:?}", type_id.0, typ),
             //_ => panic!("Unimplemented")
         }
@@ -1455,6 +1481,7 @@ impl<'program> CodeGenerator<'program> {
             ),
             ffi::Type::GpuBufferAllocator => format!("caiman_rt::GpuBufferAllocator<'callee>"),
             ffi::Type::GpuFence => format!("caiman_rt::GpuFence"),
+            ffi::Type::GpuEncoder => format!("caiman_rt::ErasedEncoder"),
             _ => format!("type_{}", type_id.0),
         }
     }

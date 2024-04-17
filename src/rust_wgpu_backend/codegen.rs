@@ -447,6 +447,7 @@ impl<'program> CodeGen<'program> {
             ir::Type::Fence {
                 queue_place: ir::Place::Gpu,
             } => self.code_generator.create_ffi_type(ir::ffi::Type::GpuFence),
+            ir::Type::Encoder { .. } => self.code_generator.get_encoder_type(),
             _ => panic!("Not a valid type for referencing from the CPU: {:?}", typ),
         };
 
@@ -1013,6 +1014,9 @@ impl<'program> CodeGen<'program> {
                                 fence_id,
                             }
                         }
+                        ir::Type::Encoder { queue_place } => NodeResult::Encoder {
+                            place: *queue_place,
+                        },
                         x => panic!("Incorrect type: {:?}", x),
                     };
                     output_node_results.push(node_result);
@@ -1132,6 +1136,11 @@ impl<'program> CodeGen<'program> {
                             storage_place: *storage_place,
                             static_layout_opt: *static_layout_opt,
                             var_id: argument_variable_ids[index],
+                        });
+                    }
+                    ir::Type::Encoder { queue_place } => {
+                        argument_node_results.push(NodeResult::Encoder {
+                            place: *queue_place,
                         });
                     }
                     _ => panic!("Unimplemented"),
