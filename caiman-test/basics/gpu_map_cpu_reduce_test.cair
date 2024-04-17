@@ -42,7 +42,6 @@ value[impl @foo] %foo(%x : i32, %z: i32) -> [%out: i32] {
     %r_t = call @add(%y, %y2);
     %r = extract %r_t 0;
     return %r;
-    // return %y2;
 }
 
 timeline %foo_time(%e : %event0) -> [%out: %event0] {
@@ -76,9 +75,6 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     %y_gpu2 = alloc-temporary gpu [storage, map_read] i32;
     %y_loc2 = alloc-temporary local [map_write] i32;
     %ret = alloc-temporary local [map_write] i32;
-    // %x_loc = alloc-temporary local [map_write, copy_src] i32;
-
-    // write-ref i32 %x -> %x_loc;
 
     local-do-builtin $val.%c() -> %c_loc;
     %c = read-ref i32 %c_loc;
@@ -100,8 +96,6 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     %a = read-ref i32 %y_loc;
     local-copy %y_gpu2 -> %y_loc2;
     %b = read-ref i32 %y_loc2;
-
-   // return %b;
 
     local-do-external %add $val.%r_t(%a, %b) -> %ret;
     %result = read-ref i32 %ret;
