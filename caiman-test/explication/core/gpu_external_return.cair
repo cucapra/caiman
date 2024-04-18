@@ -60,7 +60,7 @@ schedule[value $val = %foo, timeline $time = %foo_time, spatial $space = %foo_sp
     local-do-builtin $val.%c() -> %c_loc;
     %c = read-ref i32 %c_loc;
     
-    %enc = begin-encoding gpu $time.%enc1 [%x_gpu, %y_gpu] [];
+    %enc = begin-encoding gpu $time.%enc [%x_gpu, %y_gpu] [];
     encode-copy %enc %x_loc -> %x_gpu;
     encode-do %enc %simple $val.%y_t(%c, %c, %c, %x_gpu) -> %y_gpu;
 
