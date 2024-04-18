@@ -25,7 +25,6 @@ impl ScheduleScopeData {
             funclet_id,
             node_id: None,
             node_index: 0,
-            time,
             instantiations,
             storage_node_information: node_type_information,
             available_operations,
@@ -38,14 +37,6 @@ impl ScheduleScopeData {
             None => Some(0),
             Some(x) => Some(x + 1),
         }
-    }
-
-    pub fn get_current_time(&self) -> &Option<Location> {
-        &self.time
-    }
-
-    pub fn advance_time(&mut self, time: Location) {
-        self.time = Some(time);
     }
 
     pub fn add_storage_node(
@@ -77,12 +68,12 @@ impl ScheduleScopeData {
         // note that this may overwrite what a node instantiates
         // this is, of course, completely fine mechanically
         // but is also why backtracking is needed/complicated
-        let implementation = &mut self.storage_node_information
+        let mut implementation = self.storage_node_information
             .get_mut(&schedule_node)
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
                 context.debug_info.node(&self.funclet_id, schedule_node)
-            )).implements.unwrap_or(LocationTriple::new());
+            )).implements.clone().unwrap_or(LocationTriple::new());
 
         // potentially modified when checking the timeline
         match location_triple {

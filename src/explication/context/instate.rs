@@ -32,26 +32,6 @@ impl InState {
         self.scopes.len() == 0
     }
 
-    pub fn get_current_time(&self) -> &Option<Location> {
-        self.get_latest_scope().get_current_time()
-    }
-
-    pub fn advance_time(&mut self, time: expir::Quotient, context: &StaticContext) {
-        let funclet_id = self
-            .get_funclet_spec(
-                self.get_latest_scope().funclet_id,
-                &SpecLanguage::Timeline,
-                context,
-            )
-            .funclet_id_opt
-            .unwrap()
-            .clone();
-        self.get_latest_scope_mut().advance_time(Location {
-            funclet_id,
-            quot: time,
-        });
-    }
-
     pub fn add_storage_node(
         &mut self,
         schedule_node: NodeId,
