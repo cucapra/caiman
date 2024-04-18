@@ -153,6 +153,29 @@ impl InState {
         }
     }
 
+    pub fn get_triple_for_spec(
+        &self,
+        funclet: FuncletId,
+        spec_kind: &SpecLanguage,
+        quot: expir::Quotient,
+        context: &StaticContext,
+    ) -> LocationTriple {
+        let results = self.get_funclet_spec_triple(funclet, context);
+        fn build_location(spec: &expir::FuncletSpec, quot: expir::Quotient) -> Location {
+            Location {
+                funclet_id: spec.funclet_id_opt.unwrap(),
+                quot,
+            }
+        }
+        match spec_kind {
+            SpecLanguage::Value => LocationTriple::new_value(build_location(&results.0, quot)),
+            SpecLanguage::Timeline => {
+                LocationTriple::new_timeline(build_location(&results.1, quot))
+            }
+            SpecLanguage::Spatial => LocationTriple::new_spatial(build_location(&results.2, quot)),
+        }
+    }
+
     pub fn get_spec_node<'a>(
         &self,
         funclet: FuncletId,

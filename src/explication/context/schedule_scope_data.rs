@@ -89,6 +89,10 @@ impl ScheduleScopeData {
                             .entry(value.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
+                        match &current_instantiation.value {
+                            Some(location) => { self.instantiations.get_mut(location).unwrap().remove(&schedule_node); },
+                            None => {},
+                        }
                         current_instantiation.value = Some(value);
                     }
                 };
@@ -101,6 +105,10 @@ impl ScheduleScopeData {
                             .entry(timeline.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
+                        match &current_instantiation.timeline {
+                            Some(location) => { self.instantiations.get_mut(location).unwrap().remove(&schedule_node); },
+                            None => {},
+                        }
                         current_instantiation.timeline = Some(timeline);
                     }
                 };
@@ -111,6 +119,10 @@ impl ScheduleScopeData {
                             .entry(spatial.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
+                        match &current_instantiation.spatial {
+                            Some(location) => { self.instantiations.get_mut(location).unwrap().remove(&schedule_node); },
+                            None => {},
+                        }
                         current_instantiation.spatial = Some(spatial);
                     }
                 };

@@ -584,15 +584,12 @@ fn explicate_begin_encoding(
     let mut new_state = state.clone();
     let place = expir_place.as_ref().opt().expect(&error).clone();
     let event = expir_event.as_ref().opt().expect(&error).clone();
-    let timeline_spec = state.get_funclet_spec(
+    let timeline_loc = state.get_triple_for_spec(
         state.get_current_funclet_id(),
         &SpecLanguage::Timeline,
+        event.clone(),
         context,
     );
-    let timeline_loc = LocationTriple::new_timeline(Location {
-        funclet_id: timeline_spec.funclet_id_opt.unwrap(),
-        quot: event.clone(),
-    });
 
     let mut encoded = Vec::new();
     for node in expir_encoded.as_ref().opt().expect(&error).iter() {
@@ -648,8 +645,19 @@ fn explicate_submit(
     );
     let mut new_state = state.clone();
     let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
-    dbg!(&state.get_managed_by_timeline(encoder, context));
     let event = expir_event.as_ref().opt().expect(&error).clone();
+
+    let timeline_loc = state.get_triple_for_spec(
+        state.get_current_funclet_id(),
+        &SpecLanguage::Timeline,
+        event.clone(),
+        context,
+    );
+    for schedule_node in state.get_managed_by_timeline(encoder, context).iter() {
+        new_state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
+        new_state.set_timeline_manager(schedule_node, state.get_current_node_id().unwrap(), context)
+    }
+
     let node = ir::Node::Submit { encoder, event };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -681,6 +689,18 @@ fn explicate_sync_fence(
     let mut new_state = state.clone();
     let fence = expir_fence.as_ref().opt().expect(&error).clone();
     let event = expir_event.as_ref().opt().expect(&error).clone();
+
+    let timeline_loc = state.get_triple_for_spec(
+        state.get_current_funclet_id(),
+        &SpecLanguage::Timeline,
+        event.clone(),
+        context,
+    );
+    for schedule_node in state.get_managed_by_timeline(fence, context).iter() {
+        new_state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
+        new_state.clear_timeline_manager(schedule_node, context)
+    }
+
     let node = ir::Node::SyncFence { fence, event };
     new_state.next_node();
     match explicate_node(new_state, context) {
