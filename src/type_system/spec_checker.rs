@@ -1261,9 +1261,11 @@ fn check_tag_compatibility_interior(
             assert_eq!(index, index_2, "\n{}", error_context);
         }
         _ => panic!(
-            "Ill-formed: {:?} to {:?}\n{}",
+            "Ill-formed: {:?} to {:?}\n\n({:?} to {:?})\n\n{}",
             error_context.debug_tag(&source_tag),
             error_context.debug_tag(&destination_tag),
+            source_tag,
+            destination_tag,
             error_context
         ),
     }
