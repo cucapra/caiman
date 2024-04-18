@@ -2,10 +2,9 @@ use super::*;
 use crate::explication::util::*;
 
 impl ScheduleScopeData {
-    pub fn new(funclet_id: FuncletId, time: Option<Location>) -> ScheduleScopeData {
+    pub fn new(funclet_id: FuncletId) -> ScheduleScopeData {
         ScheduleScopeData::new_inner(
             funclet_id,
-            time,
             HashMap::new(),
             HashMap::new(),
             Vec::new(),
@@ -15,7 +14,6 @@ impl ScheduleScopeData {
 
     fn new_inner(
         funclet_id: FuncletId,
-        time: Option<Location>,
         instantiations: HashMap<Location, HashSet<NodeId>>,
         node_type_information: HashMap<NodeId, StorageNodeInformation>,
         allocations: Vec<(NodeId, expir::Type)>,
@@ -48,8 +46,9 @@ impl ScheduleScopeData {
         let check = self.storage_node_information.insert(
             schedule_node,
             StorageNodeInformation {
-                implements: None,
+                instantiation: LocationTriple::new(),
                 typ,
+                timeline_manager: None
             },
         );
         assert!(
@@ -62,21 +61,22 @@ impl ScheduleScopeData {
     pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
-        location_triple: LocationTriple,
+        instantiation: LocationTriple,
         context: &StaticContext,
     ) {
         // note that this may overwrite what a node instantiates
         // this is, of course, completely fine mechanically
         // but is also why backtracking is needed/complicated
-        let mut implementation = self.storage_node_information
+        let current_instantiation = &mut self
+            .storage_node_information
             .get_mut(&schedule_node)
             .expect(&format!(
                 "Attempting to update Node {} without already having an instantiation",
                 context.debug_info.node(&self.funclet_id, schedule_node)
-            )).implements.clone().unwrap_or(LocationTriple::new());
+            )).instantiation;
 
         // potentially modified when checking the timeline
-        match location_triple {
+        match instantiation {
             LocationTriple {
                 value,
                 timeline,
@@ -89,7 +89,7 @@ impl ScheduleScopeData {
                             .entry(value.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        implementation.value = Some(value);
+                        current_instantiation.value = Some(value);
                     }
                 };
                 match timeline {
@@ -101,7 +101,7 @@ impl ScheduleScopeData {
                             .entry(timeline.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        implementation.timeline = Some(timeline);
+                        current_instantiation.timeline = Some(timeline);
                     }
                 };
                 match spatial {
@@ -111,7 +111,7 @@ impl ScheduleScopeData {
                             .entry(spatial.clone())
                             .or_insert(HashSet::new())
                             .insert(schedule_node);
-                        implementation.spatial = Some(spatial);
+                        current_instantiation.spatial = Some(spatial);
                     }
                 };
             }
@@ -137,6 +137,35 @@ impl ScheduleScopeData {
                 }
             },
         }
+    }
+
+    pub fn set_timeline_manager(
+        &mut self,
+        schedule_node: &NodeId,
+        timeline_manager: NodeId,
+        context: &StaticContext,
+    ) {
+        self
+            .storage_node_information
+            .get_mut(&schedule_node)
+            .expect(&format!(
+                "Attempting to update Node {} without already having an instantiation",
+                context.debug_info.node(&self.funclet_id, *schedule_node)
+            )).timeline_manager = Some(timeline_manager);
+    }
+
+    pub fn clear_timeline_manager(
+        &mut self,
+        schedule_node: &NodeId,
+        context: &StaticContext,
+    ) {
+        self
+            .storage_node_information
+            .get_mut(&schedule_node)
+            .expect(&format!(
+                "Attempting to update Node {} without already having an instantiation",
+                context.debug_info.node(&self.funclet_id, *schedule_node)
+            )).timeline_manager = None;
     }
 
     /*

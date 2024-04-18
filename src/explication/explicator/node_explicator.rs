@@ -389,10 +389,7 @@ fn explicate_write_ref(
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
     // assume that the typechecker will find a misaligned storage type
     let info = state.get_node_information(destination, context);
-    match &info.implements {
-        Some(impls) => new_state.set_instantiation(destination, impls.clone(), context),
-        None => {}
-    };
+    new_state.set_instantiation(destination, info.instantiation.clone(), context);
     let node = ir::Node::WriteRef {
         storage_type,
         source,
@@ -433,10 +430,7 @@ fn explicate_borrow_ref(
     let schedule_node = state.get_current_node_id().unwrap();
 
     new_state.add_storage_node(schedule_node, info.typ.clone(), context);
-    match &info.implements {
-        Some(impls) => new_state.set_instantiation(schedule_node, impls.clone(), context),
-        None => {}
-    };
+    new_state.set_instantiation(schedule_node, info.instantiation.clone(), context);
 
     let node = ir::Node::BorrowRef {
         storage_type,
@@ -481,10 +475,7 @@ fn explicate_read_ref(
         expir::Type::NativeValue { storage_type },
         context,
     );
-    match &info.implements {
-        Some(impls) => new_state.set_instantiation(schedule_node, impls.clone(), context),
-        None => {}
-    };
+    new_state.set_instantiation(schedule_node, info.instantiation.clone(), context);
     let node = ir::Node::ReadRef {
         storage_type,
         source,
@@ -520,10 +511,7 @@ fn explicate_local_copy(
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
     let info = state.get_node_information(input, context);
-    match &info.implements {
-        Some(impls) => new_state.set_instantiation(output, impls.clone(), context),
-        None => {}
-    };
+    new_state.set_instantiation(output, info.instantiation.clone(), context);
     let node = ir::Node::LocalCopy { input, output };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -558,10 +546,7 @@ fn explicate_encode_copy(
     let output = expir_output.as_ref().opt().expect(&error).clone();
     let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
     let info = state.get_node_information(input, context);
-    match &info.implements {
-        Some(impls) => new_state.set_instantiation(output, impls.clone(), context),
-        None => {}
-    };
+    new_state.set_instantiation(output, info.instantiation.clone(), context);
     let node = ir::Node::EncodeCopy {
         encoder,
         input,
@@ -599,13 +584,27 @@ fn explicate_begin_encoding(
     let mut new_state = state.clone();
     let place = expir_place.as_ref().opt().expect(&error).clone();
     let event = expir_event.as_ref().opt().expect(&error).clone();
-    let encoded = expir_encoded
-        .as_ref()
-        .opt()
-        .expect(&error)
-        .iter()
-        .map(|e| e.as_ref().opt().expect(&error).clone())
-        .collect();
+    let timeline_spec = state.get_funclet_spec(
+        state.get_current_funclet_id(),
+        &SpecLanguage::Timeline,
+        context,
+    );
+    let timeline_loc = LocationTriple::new_timeline(Location {
+        funclet_id: timeline_spec.funclet_id_opt.unwrap(),
+        quot: event.clone(),
+    });
+
+    let mut encoded = Vec::new();
+    for node in expir_encoded.as_ref().opt().expect(&error).iter() {
+        let schedule_node = node.as_ref().opt().expect(&error);
+        new_state.set_instantiation(schedule_node.clone(), timeline_loc.clone(), context);
+        new_state.set_timeline_manager(
+            schedule_node,
+            state.get_current_node_id().unwrap(),
+            context,
+        );
+        encoded.push(schedule_node.clone());
+    }
     let fences = expir_fences
         .as_ref()
         .opt()
@@ -617,7 +616,7 @@ fn explicate_begin_encoding(
     let node = ir::Node::BeginEncoding {
         place,
         event,
-        encoded,
+        encoded: encoded.into_boxed_slice(),
         fences,
     };
     new_state.next_node();
@@ -649,6 +648,7 @@ fn explicate_submit(
     );
     let mut new_state = state.clone();
     let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
+    dbg!(&state.get_managed_by_timeline(encoder, context));
     let event = expir_event.as_ref().opt().expect(&error).clone();
     let node = ir::Node::Submit { encoder, event };
     new_state.next_node();

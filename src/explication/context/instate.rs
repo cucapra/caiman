@@ -6,10 +6,7 @@ use paste::paste;
 
 impl InState {
     pub fn new(funclet_id: FuncletId, context: &StaticContext) -> InState {
-        let scopes = vec![ScheduleScopeData::new(
-            funclet_id,
-            get_implicit_time(funclet_id, context),
-        )];
+        let scopes = vec![ScheduleScopeData::new(funclet_id)];
         InState { scopes }
     }
 
@@ -18,10 +15,7 @@ impl InState {
     // this way we avoid _problems_
 
     pub fn enter_funclet(&mut self, funclet_id: FuncletId, context: &StaticContext) {
-        self.scopes.push(ScheduleScopeData::new(
-            funclet_id,
-            get_implicit_time(funclet_id, context),
-        ));
+        self.scopes.push(ScheduleScopeData::new(funclet_id));
     }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the lexpir element of the scope
@@ -45,11 +39,43 @@ impl InState {
     pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
-        location_triple: LocationTriple,
+        instantiation: LocationTriple,
         context: &StaticContext,
     ) {
         self.get_latest_scope_mut()
-            .set_instantiation(schedule_node, location_triple, context);
+            .set_instantiation(schedule_node, instantiation, context);
+    }
+
+    pub fn set_timeline_manager(
+        &mut self,
+        schedule_node: &NodeId,
+        timeline_manager: NodeId,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut()
+            .set_timeline_manager(schedule_node, timeline_manager, context);
+    }
+
+    pub fn clear_timeline_manager(&mut self, schedule_node: &NodeId, context: &StaticContext) {
+        self.get_latest_scope_mut()
+            .clear_timeline_manager(schedule_node, context);
+    }
+
+    pub fn get_managed_by_timeline(
+        &self,
+        timeline_manager: NodeId,
+        context: &StaticContext,
+    ) -> Vec<NodeId> {
+        self.get_latest_scope()
+            .storage_node_information
+            .iter()
+            .filter(|(_, info)| {
+                info.timeline_manager
+                    .map(|o| o == timeline_manager)
+                    .unwrap_or(false)
+            })
+            .map(|v| v.0.clone())
+            .collect_vec()
     }
 
     pub fn expect_location(&self) -> Location {
@@ -169,6 +195,23 @@ impl InState {
         self.get_latest_scope_mut().next_node();
     }
 
+    pub fn get_all_instantiations(
+        &self,
+        location: &Location,
+        context: &StaticContext,
+    ) -> HashSet<NodeId> {
+        // Gets every instantiation of the location explicitly
+        // Useful for update-related stuff
+
+        self.get_latest_scope()
+            .instantiations
+            .iter()
+            .filter(|(loc, _)| **loc == *location)
+            .fold(HashSet::new(), |acc, (_, hs)| {
+                acc.intersection(hs).cloned().collect()
+            })
+    }
+
     pub fn get_node_information(
         &self,
         node_id: NodeId,
@@ -179,7 +222,7 @@ impl InState {
             .storage_node_information
             .get(&node_id)
             .expect(&format!(
-                "Missing instantiation for node {}",
+                "Missing information for node {}",
                 context.debug_info.node(&scope.funclet_id, node_id)
             ))
     }

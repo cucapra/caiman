@@ -111,8 +111,19 @@ pub struct ScheduleScopeData {
 
 #[derive(Debug, Clone)]
 pub struct StorageNodeInformation {
-    pub implements: Option<LocationTriple>,
+    // Information about a single node storing stuff that we've recorded in our state
+
+    // Which set of remote nodes this node stores data for (if any)
+    // Observe that an empty location is completely valid
+    pub instantiation: LocationTriple,
+
+    // The type of this storage
     pub typ: expir::Type,
+
+    // Which node is "managing" our timeline
+    // this could be a fence or an encoder (we don't really care here)
+    // This information is used for updating the timeline when the manager changes
+    pub timeline_manager: Option<NodeId>,
 }
 
 #[derive(Debug, Default)]
