@@ -41,7 +41,7 @@ fn explicate_return(
                     index,
                     state,
                     context,
-                );
+                ).triple_ignoring_none();
                 let target_type = context.get_type(output);
                 match state.find_instantiation(
                     &target_location_triple,

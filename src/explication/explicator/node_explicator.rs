@@ -42,19 +42,7 @@ fn explicate_phi_node(
         )
         .clone();
 
-    match node_type {
-        // we need to add this reference to our available allocations
-        // TODO: check the flow to see if we can actually do this
-        ir::Type::Ref {
-            storage_type,
-            storage_place,
-            buffer_flags,
-        } => {
-            new_state.add_storage_node(node_id, node_type.clone(), context);
-        }
-        _ => {}
-    }
-
+    new_state.add_storage_node(node_id, node_type.clone(), context);
     let location =
         LocationTriple::new_triple_mapped(spec_input, funclet_id, node_id, &state, context);
 
