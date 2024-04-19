@@ -12,8 +12,129 @@ use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Location {
-    pub funclet: FuncletId,
-    pub node: NodeId,
+    pub funclet_id: FuncletId,
+    pub quot: expir::Quotient,
+}
+
+impl Location {
+    pub fn new(funclet_id: FuncletId, node_id: NodeId) -> Location {
+        Location {
+            funclet_id,
+            quot: expir::Quotient::Node { node_id },
+        }
+    }
+
+    // utility function to forcibly return a nodeid
+    pub fn node_id(&self) -> Option<NodeId> {
+        match &self.quot {
+            ir::Quotient::Node { node_id } | ir::Quotient::Input { index: node_id } => {
+                Some(node_id.clone())
+            }
+            ir::Quotient::None | ir::Quotient::Output { index: _ } => None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LocationTriple {
+    // we use Option to explicitly mean "don't care"
+    // which is distinct from an explicit "Quotient::None"
+    pub value: Option<Location>,
+    pub timeline: Option<Location>,
+    pub spatial: Option<Location>,
+}
+
+impl LocationTriple {
+    pub fn new() -> LocationTriple {
+        LocationTriple {
+            value: None,
+            timeline: None,
+            spatial: None,
+        }
+    }
+
+    pub fn new_value(value: Location) -> LocationTriple {
+        LocationTriple {
+            value: Some(value),
+            timeline: None,
+            spatial: None,
+        }
+    }
+    pub fn new_timeline(timeline: Location) -> LocationTriple {
+        LocationTriple {
+            value: None,
+            timeline: Some(timeline),
+            spatial: None,
+        }
+    }
+    pub fn new_spatial(spatial: Location) -> LocationTriple {
+        LocationTriple {
+            value: None,
+            timeline: None,
+            spatial: Some(spatial),
+        }
+    }
+    pub fn new_triple_mapped<T>(
+        f: T,
+        funclet_id: FuncletId,
+        node_id: NodeId,
+        state: &crate::explication::InState,
+        context: &crate::explication::StaticContext,
+    ) -> LocationTriple
+    where
+        T: Fn(
+            &expir::FuncletSpec,
+            FuncletId,
+            NodeId,
+            &crate::explication::StaticContext,
+        ) -> Option<Location>,
+    {
+        let specs = state.get_funclet_spec_triple(funclet_id, context);
+        LocationTriple {
+            value: f(specs.0, specs.0.funclet_id_opt.unwrap(), node_id, context),
+            timeline: f(specs.1, specs.1.funclet_id_opt.unwrap(), node_id, context),
+            spatial: f(specs.2, specs.2.funclet_id_opt.unwrap(), node_id, context),
+        }
+    }
+
+    // Returns a location triple where we explicitly don't care about Quotient::None
+    pub fn triple_ignoring_none(&self) -> LocationTriple {
+        let value = match &self.value {
+            Some(v) => match v {
+                Location {
+                    funclet_id,
+                    quot: ir::Quotient::None,
+                } => None,
+                loc => Some(loc.clone()),
+            },
+            None => None,
+        };
+        let timeline = match &self.timeline {
+            Some(v) => match v {
+                Location {
+                    funclet_id,
+                    quot: ir::Quotient::None,
+                } => None,
+                loc => Some(loc.clone()),
+            },
+            None => None,
+        };
+        let spatial = match &self.spatial {
+            Some(v) => match v {
+                Location {
+                    funclet_id,
+                    quot: ir::Quotient::None,
+                } => None,
+                loc => Some(loc.clone()),
+            },
+            None => None,
+        };
+        LocationTriple {
+            value,
+            timeline,
+            spatial,
+        }
+    }
 }
 
 pub fn find_filled<T>(v: Vec<Hole<T>>) -> Vec<(usize, T)> {
@@ -105,5 +226,64 @@ impl SpecLanguages {
             SpecLanguage::Timeline => &self.timeline,
             SpecLanguage::Spatial => &self.spatial,
         }
+    }
+}
+
+fn spec_box_read(
+    to_read: &Box<[Hole<expir::Tag>]>,
+    spec: &expir::FuncletSpec,
+    funclet_id: FuncletId,
+    node_id: NodeId,
+    context: &crate::explication::context::StaticContext,
+) -> Option<Location> {
+    let index_error = format!(
+        "funclet {} does not have enough arguments for lookup {}",
+        context.debug_info.funclet(&funclet_id),
+        context.debug_info.node(&funclet_id, node_id)
+    );
+    match &to_read.get(node_id).expect(&index_error) {
+        Hole::Empty => None,
+        Hole::Filled(t) => Some(Location {
+            funclet_id: spec.funclet_id_opt.unwrap(),
+            quot: t.quot.clone(),
+        }),
+    }
+}
+
+pub fn spec_input(
+    spec: &expir::FuncletSpec,
+    funclet_id: FuncletId,
+    node_id: NodeId,
+    context: &crate::explication::context::StaticContext,
+) -> Option<Location> {
+    spec_box_read(&spec.input_tags, spec, funclet_id, node_id, context)
+}
+
+pub fn spec_output(
+    spec: &expir::FuncletSpec,
+    funclet_id: FuncletId,
+    node_id: NodeId,
+    context: &crate::explication::context::StaticContext,
+) -> Option<Location> {
+    spec_box_read(&spec.output_tags, spec, funclet_id, node_id, context)
+}
+
+pub fn get_implicit_time(
+    funclet_id: FuncletId,
+    context: &crate::explication::StaticContext,
+) -> Option<Location> {
+    match &context.get_funclet(&funclet_id).spec_binding {
+        expir::FuncletSpecBinding::ScheduleExplicit {
+            value,
+            spatial,
+            timeline,
+        } => timeline.implicit_in_tag.as_ref().opt().map(|t| Location {
+            funclet_id: timeline.funclet_id_opt.unwrap(),
+            quot: t.quot.clone(),
+        }),
+        _ => panic!(
+            "Invalid funclet for an implicit time lookup {}, expected a spec funclet",
+            context.debug_info.funclet(&funclet_id)
+        ),
     }
 }

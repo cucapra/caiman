@@ -1,10 +1,12 @@
 use super::*;
-use crate::explication::util::*;
+use crate::explication::util;
+use crate::explication::util::{Location, LocationTriple};
+use itertools::Itertools;
 use paste::paste;
 
 impl InState {
-    pub fn new(funclet: FuncletId) -> InState {
-        let scopes = vec![ScheduleScopeData::new(funclet)];
+    pub fn new(funclet_id: FuncletId, context: &StaticContext) -> InState {
+        let scopes = vec![ScheduleScopeData::new(funclet_id)];
         InState { scopes }
     }
 
@@ -12,8 +14,8 @@ impl InState {
     // note that we are expected to clone the instate for each recursion
     // this way we avoid _problems_
 
-    pub fn enter_funclet(&mut self, funclet: FuncletId) {
-        self.scopes.push(ScheduleScopeData::new(funclet));
+    pub fn enter_funclet(&mut self, funclet_id: FuncletId, context: &StaticContext) {
+        self.scopes.push(ScheduleScopeData::new(funclet_id));
     }
     pub fn exit_funclet(&mut self) -> bool {
         // returns if we have popped the lexpir element of the scope
@@ -24,84 +26,63 @@ impl InState {
         self.scopes.len() == 0
     }
 
-    pub fn add_allocation(
+    pub fn add_storage_node(
         &mut self,
         schedule_node: NodeId,
         typ: expir::Type,
         context: &StaticContext,
     ) {
-        let scope = self.get_latest_scope_mut();
-        scope.add_allocation(schedule_node, typ, context);
-    }
-
-    // gets a list of the nodes of the available allocations in this scope (if there are any)
-    pub fn available_allocations(&self, typ: TypeId, place: expir::Place) -> Vec<Location> {
-        let compare_alloc = |alloc: &expir::Type| match alloc {
-            expir::Type::Ref {
-                storage_place,
-                storage_type,
-                buffer_flags,
-            } => typ == storage_type.0 && place == storage_place.clone(),
-            _ => unreachable!(),
-        };
-        for scope in self.scopes.iter().rev() {
-            let matches: Vec<_> = scope
-                .allocations
-                .iter()
-                .filter(|(_, alloc)| compare_alloc(alloc))
-                .map(|v| Location {
-                    funclet: scope.funclet,
-                    node: v.0,
-                })
-                .collect();
-            if matches.len() > 0 {
-                return matches;
-            }
-        }
-        vec![]
-    }
-
-    // Read any allocation and return the type information
-    pub fn read_allocation(&self, location: Location) -> expir::Type {
-        for scope in self.scopes.iter().rev() {
-            if scope.funclet == location.funclet {
-                for (index, allocation) in scope.allocations.iter().enumerate() {
-                    if allocation.0 == location.node {
-                        return allocation.1.clone();
-                    }
-                }
-                panic!(
-                    "Missing allocation {:?} (was it already consumed?)",
-                    location
-                );
-            }
-        }
-        panic!("Missing scope for {:?}", location);
+        self.get_latest_scope_mut()
+            .add_storage_node(schedule_node, typ, context);
     }
 
     pub fn set_instantiation(
         &mut self,
         schedule_node: NodeId,
-        spec_remotes: Vec<Location>,
-        typ: expir::Type,
+        instantiation: LocationTriple,
         context: &StaticContext,
     ) {
-        let scope = self.get_latest_scope_mut();
-        for spec_remote in &spec_remotes {
-            scope.set_instantiation(
-                spec_remote.clone(),
-                typ.clone(),
-                schedule_node.clone(),
-                context,
-            );
-        }
+        self.get_latest_scope_mut()
+            .set_instantiation(schedule_node, instantiation, context);
+    }
+
+    pub fn set_timeline_manager(
+        &mut self,
+        schedule_node: &NodeId,
+        timeline_manager: NodeId,
+        context: &StaticContext,
+    ) {
+        self.get_latest_scope_mut()
+            .set_timeline_manager(schedule_node, timeline_manager, context);
+    }
+
+    pub fn clear_timeline_manager(&mut self, schedule_node: &NodeId, context: &StaticContext) {
+        self.get_latest_scope_mut()
+            .clear_timeline_manager(schedule_node, context);
+    }
+
+    pub fn get_managed_by_timeline(
+        &self,
+        timeline_manager: NodeId,
+        context: &StaticContext,
+    ) -> Vec<NodeId> {
+        self.get_latest_scope()
+            .storage_node_information
+            .iter()
+            .filter(|(_, info)| {
+                info.timeline_manager
+                    .map(|o| o == timeline_manager)
+                    .unwrap_or(false)
+            })
+            .map(|v| v.0.clone())
+            .collect_vec()
     }
 
     pub fn expect_location(&self) -> Location {
-        Location {
-            funclet: self.get_latest_scope().funclet,
-            node: self.get_latest_scope().node.unwrap(),
-        }
+        Location::new(
+            self.get_latest_scope().funclet_id,
+            self.get_latest_scope().node_id.unwrap(),
+        )
     }
 
     pub fn get_latest_scope(&self) -> &ScheduleScopeData {
@@ -117,44 +98,40 @@ impl InState {
     }
 
     pub fn get_current_funclet_id(&self) -> FuncletId {
-        self.get_latest_scope().funclet
+        self.get_latest_scope().funclet_id
     }
 
     pub fn get_current_funclet<'a>(&self, context: &'a StaticContext) -> &'a expir::Funclet {
-        &context.get_funclet(&self.get_latest_scope().funclet)
+        &context.get_funclet(&self.get_latest_scope().funclet_id)
     }
 
     pub fn get_current_node_id(&self) -> Option<NodeId> {
-        self.get_latest_scope().node
+        self.get_latest_scope().node_id
     }
 
     pub fn get_current_node<'a>(&self, context: &'a StaticContext) -> &'a Hole<expir::Node> {
         let scope = self.get_latest_scope();
         get_expect_box(
-            &context.get_funclet(&scope.funclet).nodes,
-            scope.node.unwrap(),
+            &context.get_funclet(&scope.funclet_id).nodes,
+            scope.node_id.unwrap(),
         )
     }
 
-    pub fn get_funclet_spec<'a>(
+    pub fn get_funclet_spec_triple<'a>(
         &self,
         funclet: FuncletId,
-        spec_kind: &expir::FuncletKind,
         context: &'a StaticContext,
-    ) -> &'a expir::FuncletSpec {
+    ) -> (
+        &'a expir::FuncletSpec,
+        &'a expir::FuncletSpec,
+        &'a expir::FuncletSpec,
+    ) {
         match &context.get_funclet(&funclet).spec_binding {
             expir::FuncletSpecBinding::ScheduleExplicit {
                 value,
-                spatial,
                 timeline,
-            } => match spec_kind {
-                ir::FuncletKind::Value => value,
-                ir::FuncletKind::Timeline => timeline,
-                ir::FuncletKind::Spatial => spatial,
-                error_kind => {
-                    unreachable!("Invalid kind for spec node lookup: {:?}", error_kind)
-                }
-            },
+                spatial,
+            } => (value, timeline, spatial),
             _ => unreachable!(
                 "{} is not a scheduling funclet",
                 context.debug_info.funclet(&funclet)
@@ -162,11 +139,48 @@ impl InState {
         }
     }
 
+    pub fn get_funclet_spec<'a>(
+        &self,
+        funclet: FuncletId,
+        spec_kind: &SpecLanguage,
+        context: &'a StaticContext,
+    ) -> &'a expir::FuncletSpec {
+        let results = self.get_funclet_spec_triple(funclet, context);
+        match spec_kind {
+            SpecLanguage::Value => results.0,
+            SpecLanguage::Timeline => results.1,
+            SpecLanguage::Spatial => results.2,
+        }
+    }
+
+    pub fn get_triple_for_spec(
+        &self,
+        funclet: FuncletId,
+        spec_kind: &SpecLanguage,
+        quot: expir::Quotient,
+        context: &StaticContext,
+    ) -> LocationTriple {
+        let results = self.get_funclet_spec_triple(funclet, context);
+        fn build_location(spec: &expir::FuncletSpec, quot: expir::Quotient) -> Location {
+            Location {
+                funclet_id: spec.funclet_id_opt.unwrap(),
+                quot,
+            }
+        }
+        match spec_kind {
+            SpecLanguage::Value => LocationTriple::new_value(build_location(&results.0, quot)),
+            SpecLanguage::Timeline => {
+                LocationTriple::new_timeline(build_location(&results.1, quot))
+            }
+            SpecLanguage::Spatial => LocationTriple::new_spatial(build_location(&results.2, quot)),
+        }
+    }
+
     pub fn get_spec_node<'a>(
         &self,
         funclet: FuncletId,
         node_id: NodeId,
-        spec_kind: &expir::FuncletKind,
+        spec_kind: &SpecLanguage,
         context: &'a StaticContext,
     ) -> &'a expir::Node {
         let spec_funclet_id = self
@@ -191,29 +205,49 @@ impl InState {
         context: &'a StaticContext,
     ) -> &'a Hole<expir::TailEdge> {
         &context
-            .get_funclet(&self.get_latest_scope().funclet)
+            .get_funclet(&self.get_latest_scope().funclet_id)
             .tail_edge
     }
 
     pub fn is_end_of_funclet<'a>(&self, context: &'a StaticContext) -> bool {
         let scope = self.get_latest_scope();
-        scope.node.unwrap() >= context.get_funclet(&scope.funclet).nodes.len()
+        scope.node_id.unwrap() >= context.get_funclet(&scope.funclet_id).nodes.len()
     }
 
     pub fn next_node(&mut self) {
         self.get_latest_scope_mut().next_node();
     }
 
+    pub fn get_all_instantiations(
+        &self,
+        location: &Location,
+        context: &StaticContext,
+    ) -> HashSet<NodeId> {
+        // Gets every instantiation of the location explicitly
+        // Useful for update-related stuff
+
+        self.get_latest_scope()
+            .instantiations
+            .iter()
+            .filter(|(loc, _)| **loc == *location)
+            .fold(HashSet::new(), |acc, (_, hs)| {
+                acc.intersection(hs).cloned().collect()
+            })
+    }
+
     pub fn get_node_information(
         &self,
         node_id: NodeId,
         context: &StaticContext,
-    ) -> &(Location, expir::Type) {
+    ) -> &StorageNodeInformation {
         let scope = self.get_latest_scope();
-        scope.node_type_information.get(&node_id).expect(&format!(
-            "Missing instantiation for node {}",
-            context.debug_info.node(&scope.funclet, node_id)
-        ))
+        scope
+            .storage_node_information
+            .get(&node_id)
+            .expect(&format!(
+                "Missing information for node {}",
+                context.debug_info.node(&scope.funclet_id, node_id)
+            ))
     }
 
     // Returns true if two types are "close enough" to equal
@@ -280,27 +314,25 @@ impl InState {
     //   panics in this case if there is none that can fulfill the requirements
     pub fn find_instantiation(
         &self,
-        target_location: &Location,
+        target_location_triple: &LocationTriple,
         target_type: &expir::Type,
         context: &StaticContext,
-    ) -> Location {
+    ) -> Option<Location> {
         for scope in self.scopes.iter().rev() {
-            match scope.instantiations.get(&target_location) {
-                None => {}
-                Some(instantiations) => {
-                    for node in instantiations {
-                        let node_info = scope.node_type_information.get(&node).unwrap();
-                        if self.compare_types(&node_info.1, target_type) {
-                            return Location {
-                                funclet: scope.funclet.clone(),
-                                node: node.clone(),
-                            };
-                        }
-                    }
+            // sort the results so we go bottom to top of the funclet
+            for node in scope
+                .match_triple(target_location_triple, context)
+                .iter()
+                .sorted_by(|x, y| x.cmp(y))
+                .rev()
+            {
+                let node_info = scope.storage_node_information.get(&node).unwrap();
+                if self.compare_types(&node_info.typ, target_type) {
+                    return Some(Location::new(scope.funclet_id.clone(), node.clone()));
                 }
             }
         }
-        todo!()
+        None
         // let nodes = vec![
         //     expir::Node::AllocTemporary {
         //         buffer_flags,

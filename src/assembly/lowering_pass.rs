@@ -86,7 +86,7 @@ pub fn ffi_to_ffi(value: FFIType, context: &mut Context) -> ffi::Type {
             element_type: context.ffi_type_id(element_type.as_ref()),
         },
         ast::FFIType::GpuFence => ffi::Type::GpuFence,
-        ast::FFIType::Unknown => unreachable!()
+        ast::FFIType::Unknown => unreachable!(),
     }
 }
 
@@ -403,19 +403,27 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
             inputs: inputs.iter().map(|n| context.node_id(n)).collect(),
         },
         ast::TailEdge::Return { return_values } => expir::TailEdge::Return {
-            return_values: return_values.as_ref().opt().map(|v| {
-                v.iter()
-                    .map(|n| n.as_ref().opt().map(|id| context.node_id(id)).into())
-                    .collect()
-            }).into(),
+            return_values: return_values
+                .as_ref()
+                .opt()
+                .map(|v| {
+                    v.iter()
+                        .map(|n| n.as_ref().opt().map(|id| context.node_id(id)).into())
+                        .collect()
+                })
+                .into(),
         },
         ast::TailEdge::Jump { join, arguments } => expir::TailEdge::Jump {
             join: join.as_ref().opt().map(|n| context.node_id(n)).into(),
-            arguments: arguments.as_ref().opt().map(|args| {
-                args.iter()
-                    .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
-                    .collect()
-            }).into(),
+            arguments: arguments
+                .as_ref()
+                .opt()
+                .map(|args| {
+                    args.iter()
+                        .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                        .collect()
+                })
+                .into(),
         },
         ast::TailEdge::ScheduleCall {
             operations,
@@ -428,13 +436,25 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 value_operation: operation_set.value,
                 timeline_operation: operation_set.timeline,
                 spatial_operation: operation_set.spatial,
-                callee_funclet_id: callee_funclet_id.as_ref().opt().map(|f| context.funclet_id(f)).into(),
-                callee_arguments: callee_arguments.as_ref().opt().map(|args| {
-                    args.iter()
-                        .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
-                        .collect()
-                }).into(),
-                continuation_join: continuation_join.as_ref().opt().map(|n| context.node_id(n)).into(),
+                callee_funclet_id: callee_funclet_id
+                    .as_ref()
+                    .opt()
+                    .map(|f| context.funclet_id(f))
+                    .into(),
+                callee_arguments: callee_arguments
+                    .as_ref()
+                    .opt()
+                    .map(|args| {
+                        args.iter()
+                            .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                            .collect()
+                    })
+                    .into(),
+                continuation_join: continuation_join
+                    .as_ref()
+                    .opt()
+                    .map(|n| context.node_id(n))
+                    .into(),
             }
         }
         ast::TailEdge::ScheduleSelect {
@@ -450,17 +470,29 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 timeline_operation: operation_set.timeline,
                 spatial_operation: operation_set.spatial,
                 condition: condition.as_ref().opt().map(|n| context.node_id(n)).into(),
-                callee_funclet_ids: callee_funclet_ids.as_ref().opt().map(|args| {
-                    args.iter()
-                        .map(|o| o.as_ref().opt().map(|f| context.funclet_id(f)).into())
-                        .collect()
-                }).into(),
-                callee_arguments: callee_arguments.as_ref().opt().map(|args| {
-                    args.iter()
-                        .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
-                        .collect()
-                }).into(),
-                continuation_join: continuation_join.as_ref().opt().map(|n| context.node_id(n)).into(),
+                callee_funclet_ids: callee_funclet_ids
+                    .as_ref()
+                    .opt()
+                    .map(|args| {
+                        args.iter()
+                            .map(|o| o.as_ref().opt().map(|f| context.funclet_id(f)).into())
+                            .collect()
+                    })
+                    .into(),
+                callee_arguments: callee_arguments
+                    .as_ref()
+                    .opt()
+                    .map(|args| {
+                        args.iter()
+                            .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                            .collect()
+                    })
+                    .into(),
+                continuation_join: continuation_join
+                    .as_ref()
+                    .opt()
+                    .map(|n| context.node_id(n))
+                    .into(),
             }
         }
         ast::TailEdge::ScheduleCallYield {
@@ -477,13 +509,22 @@ fn ir_tail_edge(tail: &ast::TailEdge, context: &mut Context) -> expir::TailEdge 
                 external_function_id: external_function_id
                     .as_ref()
                     .opt()
-                    .map(|id| context.external_funclet_id(id)).into(),
-                yielded_nodes: yielded_nodes.as_ref().opt().map(|args| {
-                    args.iter()
-                        .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
-                        .collect()
-                }).into(),
-                continuation_join: continuation_join.as_ref().opt().map(|n| context.node_id(n)).into(),
+                    .map(|id| context.external_funclet_id(id))
+                    .into(),
+                yielded_nodes: yielded_nodes
+                    .as_ref()
+                    .opt()
+                    .map(|args| {
+                        args.iter()
+                            .map(|o| o.as_ref().opt().map(|n| context.node_id(n)).into())
+                            .collect()
+                    })
+                    .into(),
+                continuation_join: continuation_join
+                    .as_ref()
+                    .opt()
+                    .map(|n| context.node_id(n))
+                    .into(),
             }
         }
     }
@@ -778,8 +819,63 @@ fn ir_program(program: &ast::Program, context: &mut Context) -> expir::Program {
     }
 }
 
+// check that the assumptions we make about the program hold
+fn check_assumptions(program: &ast::Program) {
+    // These are meant to make life a bit easier by making assumptions explicit
+    for declaration in &program.declarations {
+        match declaration {
+            ast::Declaration::Funclet(funclet) => {
+                for (current, command) in funclet.commands.iter().enumerate() {
+                    match command {
+                        Hole::Empty => {
+                            assert!(
+                                funclet.kind == ast::FuncletKind::ScheduleExplicit,
+                                "Cannot have a command hole in non-scheduling funclet {}",
+                                &funclet.header.name
+                            );
+                        }
+                        // check that an extract result follows a call in order
+                        Hole::Filled(ast::Command::Node(node)) => match &node.node {
+                            ast::Node::ExtractResult { node_id, index } => {
+                                let error = format!(
+                                    "Invalid use of ExtractResult for node {} in funclet {}, 
+                                    ExtractResult must apply to a previous call in order",
+                                    node.name.clone().unwrap_or(ast::NodeId("_".to_string())),
+                                    &funclet.header.name
+                                );
+                                let offset = index.as_ref().opt().expect(&error);
+                                match funclet.commands.get(current - offset - 1).expect(&error) {
+                                    Hole::Empty => {}
+                                    Hole::Filled(ast::Command::Node(check_node)) => {
+                                        match &check_node.node {
+                                            ast::Node::CallFunctionClass {
+                                                function_id,
+                                                arguments,
+                                            } => {}
+                                            ast::Node::EncodingEvent {
+                                                local_past,
+                                                remote_local_pasts,
+                                            } => {}
+                                            _ => panic!(error),
+                                        }
+                                    }
+                                    _ => panic!(error),
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 pub fn lower(mut original: ast::Program) -> frontend::ExplicationDefinition {
     // should probably handle errors with a result, future problem though
+    check_assumptions(&original);
     let mut context = Context::new(&original);
     // dbg!(&original);
     // todo!();
