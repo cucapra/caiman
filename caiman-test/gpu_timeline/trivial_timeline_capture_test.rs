@@ -10,11 +10,6 @@ fn main() -> Result<(), String> {
     let mut join_stack_bytes = [0u8; 4096usize];
     let mut join_stack = caiman_rt::JoinStack::new(&mut join_stack_bytes);
     let instance = main::Instance::new(&mut root_state, &callbacks);
-    let mut result = instance.start(&mut join_stack);
-    // infinite recursion since that's the only recursion supported with timeline
-    for _ in 0..20 {
-        let instance = result.prepare_next();
-        result = instance.resume_at_loop(&mut join_stack);
-    }
-    Ok(())
+    let result = instance.start(&mut join_stack);
+    crate::expect_returned!(39, result.returned().map(|x| x.0))
 }

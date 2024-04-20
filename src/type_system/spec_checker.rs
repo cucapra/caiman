@@ -1055,11 +1055,9 @@ fn check_tag_compatibility_enter(
         }
         _ => {
             panic!(
-                "Ill-formed: {:?} to {:?} via enter\n\n({:?} to {:?})\n\n{}",
+                "Ill-formed: {:?} to {:?} via enter\n{}",
                 error_context.debug_tag(&caller_tag),
                 error_context.debug_tag(&callee_tag),
-                caller_tag,
-                callee_tag,
                 error_context
             )
             /*return Err(Error::Generic {
@@ -1263,11 +1261,9 @@ fn check_tag_compatibility_interior(
             assert_eq!(index, index_2, "\n{}", error_context);
         }
         _ => panic!(
-            "Ill-formed: {:?} to {:?}\n\n({:?} to {:?})\n\n{}",
+            "Ill-formed: {:?} to {:?}\n{}",
             error_context.debug_tag(&source_tag),
             error_context.debug_tag(&destination_tag),
-            source_tag,
-            destination_tag,
             error_context
         ),
     }

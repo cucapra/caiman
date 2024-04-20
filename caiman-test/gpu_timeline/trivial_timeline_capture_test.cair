@@ -11,7 +11,7 @@ function @rec_sum(i32) -> i32;
 function @add(i32, i32) -> i32;
 function @gt(i32, i32) -> i32;
 function @rec_time(%event0) -> %event0;
-function @time(%event0) -> %event0;
+function @foo(i32) -> i32;
 
 function @loop() -> [];
 
@@ -41,7 +41,6 @@ external-gpu[impl @add] %add(%x : i32, %y: i32) -> [%out : i32]
         output : %out
     }
 }
-external-cpu-pure[impl @gt] %gt(i32, i32) -> i32;
 external-cpu[impl @loop] %loop() -> [];
 effect<%loop> %eff;
 
@@ -88,6 +87,20 @@ schedule[value $val = %main, timeline $time = %main_time, spatial $space = %spac
     return %y;
 }
 
+value[impl @foo] %foo(%i: i32) -> [%out: i32] {
+    return %i;
+}
+
+// only way to call something without a call in the timeline spec is for the callee
+// to implement the same spec
+schedule[value $val = %foo, timeline $time = %rec_time, spatial $space = %space]
+%foo_head<$time.%snc-usable, $time.%snc-usable>
+    (%arg : $val.%i-usable $space-usable $time.%snc-usable %ni32) ->
+    [%out : $val.%out-usable $space-usable $time.%snc-usable %ni32] 
+{
+    return %arg;
+}
+
 // rec_sum
 
 
@@ -98,7 +111,7 @@ value[impl default @rec_sum] %rec_sum(%i : %ni32) -> [%out: i32] {
     %i_minus_1_t = call @add(%one, %one, %one, %i, %neg_1);
     %i_minus_1 = extract %i_minus_1_t 0;
 
-    %r_t = call @rec_sum(%i_minus_1);
+    %r_t = call @foo(%i_minus_1);
     %r = extract %r_t 0;
 
     %sum_t = call @add(%one, %one, %one, %i, %r);
@@ -114,9 +127,7 @@ timeline[impl @rec_time] %rec_time(%e: %event0) -> [%out: %event0] {
     %sub = submission-event %rem;
     %snc = synchronization-event %loc %sub;
 
-    %r_t = call @rec_time(%snc);
-    %r = extract %r_t 0;
-    %enc2 = encoding-event %r [];
+    %enc2 = encoding-event %snc [];
     %loc2 = extract %enc2 0;
     %rem2 = extract %enc2 1;
     %sub2 = submission-event %rem2;
@@ -155,30 +166,17 @@ schedule[value $val = %rec_sum, timeline $time = %rec_time, spatial $space = %sp
     local-copy %arg_minus_1_gpu -> %arg_minus_1_ref;
     %arg_minus_1 = read-ref i32 %arg_minus_1_ref;
 
-    %default = default-join;
-    %join = serialized-join %rec_sum_rec_head [%arg_minus_1, %arg] %default;
 
-    schedule-call-yield %loop[$val, $time, $space]() %join;
+    %default = default-join;
+    %join = inline-join %rec_sum_rec_tail [%arg] %default;
+    schedule-call %foo_head[$val.%r_t, $time, $space](%arg_minus_1) %join;
 }
 
 schedule[value $val = %rec_sum, timeline $time = %rec_time, spatial $space = %space]
-%rec_sum_rec_head<$time.%snc-usable, $time.%out-usable>
-    (%arg_minus_1 : $val.%i_minus_1-usable $space-usable $time.%snc-usable %ni32,
-     %i : phi-$val.%i-usable $space-usable $time-usable %ni32) ->
-    [%out : $val.%out-usable $space-usable $time.%out-usable %ni32] 
-{
-
-    %default = default-join;
-    %join = serialized-join %rec_sum_rec_tail [%i] %default;
-
-    schedule-call %rec_sum_head[$val.%r_t, $time.%r_t, $space](%arg_minus_1) %join;
-}
-
-schedule[value $val = %rec_sum, timeline $time = %rec_time, spatial $space = %space]
-%rec_sum_rec_tail<$time.%r-usable, $time.%out-usable>
-    (%i : phi-$val.%i-usable $space-usable $time.%r-usable %ni32,
-     %r : $val.%r-usable $space-usable $time.%r-usable %ni32) ->
-    [%out : $val.%out-usable $space-usable $time.%out-usable %ni32] 
+%rec_sum_rec_tail<$time.%snc-usable, $time.%out-usable>
+    (%i : phi-$val.%i-usable $time.%snc-usable %ni32,
+    %r : $val.%r-usable $time.%snc-usable %ni32) ->
+    [%out : $val.%out-usable $time.%out-usable %ni32] 
 {
     %one_ref = alloc-temporary local [] i32;
     local-do-builtin $val.%one() -> %one_ref;
@@ -188,7 +186,7 @@ schedule[value $val = %rec_sum, timeline $time = %rec_time, spatial $space = %sp
     write-ref i32 %i -> %i_ref;
     %r_ref = alloc-temporary local [copy_src] i32;
     write-ref i32 %r -> %r_ref;
-    %res_ref = alloc-temporary local [] i32;
+    %res_ref = alloc-temporary local [map_write] i32;
 
     %i_gpu = alloc-temporary gpu [storage, copy_dst] i32;
     %r_gpu = alloc-temporary gpu [storage, copy_dst] i32;
