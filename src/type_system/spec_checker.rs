@@ -1055,9 +1055,11 @@ fn check_tag_compatibility_enter(
         }
         _ => {
             panic!(
-                "Ill-formed: {:?} to {:?} via enter\n{}",
+                "Ill-formed: {:?} to {:?} via enter\n\n({:?} to {:?})\n\n{}",
                 error_context.debug_tag(&caller_tag),
                 error_context.debug_tag(&callee_tag),
+                caller_tag,
+                callee_tag,
                 error_context
             )
             /*return Err(Error::Generic {
