@@ -379,14 +379,12 @@ fn explicate_write_ref(
     let info = state.get_node_information(&source, context);
     new_state.set_instantiation(
         destination,
-        info.instantiation.clone()
-            .expect(&format!(
-                "Missing instantiation for node {}",
-                context
-                    .debug_info
-                    .node(&state.get_current_funclet_id(), source)
-            ))
-            ,
+        info.instantiation.clone().expect(&format!(
+            "Missing instantiation for node {}",
+            context
+                .debug_info
+                .node(&state.get_current_funclet_id(), source)
+        )),
         context,
     );
     let node = ir::Node::WriteRef {
@@ -431,14 +429,12 @@ fn explicate_borrow_ref(
     new_state.add_storage_node(schedule_node, info.typ.clone(), context);
     new_state.set_instantiation(
         schedule_node,
-        info.instantiation.clone()
-            .expect(&format!(
-                "Missing instantiation for node {}",
-                context
-                    .debug_info
-                    .node(&state.get_current_funclet_id(), source)
-            ))
-            ,
+        info.instantiation.clone().expect(&format!(
+            "Missing instantiation for node {}",
+            context
+                .debug_info
+                .node(&state.get_current_funclet_id(), source)
+        )),
         context,
     );
 
@@ -487,14 +483,12 @@ fn explicate_read_ref(
     );
     new_state.set_instantiation(
         schedule_node,
-        info.instantiation.clone()
-            .expect(&format!(
-                "Missing instantiation for node {}",
-                context
-                    .debug_info
-                    .node(&state.get_current_funclet_id(), source)
-            ))
-            ,
+        info.instantiation.clone().expect(&format!(
+            "Missing instantiation for node {}",
+            context
+                .debug_info
+                .node(&state.get_current_funclet_id(), source)
+        )),
         context,
     );
     let node = ir::Node::ReadRef {
@@ -534,14 +528,12 @@ fn explicate_local_copy(
     let info = state.get_node_information(&input, context);
     new_state.set_instantiation(
         output,
-        info.instantiation.clone()
-            .expect(&format!(
-                "Missing instantiation for node {}",
-                context
-                    .debug_info
-                    .node(&state.get_current_funclet_id(), input)
-            ))
-            ,
+        info.instantiation.clone().expect(&format!(
+            "Missing instantiation for node {}",
+            context
+                .debug_info
+                .node(&state.get_current_funclet_id(), input)
+        )),
         context,
     );
     let node = ir::Node::LocalCopy { input, output };
@@ -580,14 +572,12 @@ fn explicate_encode_copy(
     let info = state.get_node_information(&input, context);
     new_state.set_instantiation(
         output,
-        info.instantiation.clone()
-            .expect(&format!(
-                "Missing instantiation for node {}",
-                context
-                    .debug_info
-                    .node(&state.get_current_funclet_id(), input)
-            ))
-            ,
+        info.instantiation.clone().expect(&format!(
+            "Missing instantiation for node {}",
+            context
+                .debug_info
+                .node(&state.get_current_funclet_id(), input)
+        )),
         context,
     );
     let node = ir::Node::EncodeCopy {

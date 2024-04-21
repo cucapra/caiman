@@ -80,7 +80,9 @@ impl ScheduleScopeData {
             ))
             .instantiation;
 
-        let mut new_instantiation = current_instantiation.clone().unwrap_or(LocationTriple::new());
+        let mut new_instantiation = current_instantiation
+            .clone()
+            .unwrap_or(LocationTriple::new());
 
         // potentially modified when checking the timeline
         match instantiation {
