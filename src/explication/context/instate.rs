@@ -218,7 +218,7 @@ impl InState {
         self.get_latest_scope_mut().next_node();
     }
 
-    pub fn get_all_instantiations(
+    pub fn get_instantiations(
         &self,
         location: &Location,
         context: &StaticContext,
@@ -237,102 +237,63 @@ impl InState {
 
     pub fn get_node_information(
         &self,
-        node_id: NodeId,
+        node_id: &NodeId,
         context: &StaticContext,
     ) -> &StorageNodeInformation {
-        let scope = self.get_latest_scope();
-        scope
-            .storage_node_information
-            .get(&node_id)
-            .expect(&format!(
-                "Missing information for node {}",
-                context.debug_info.node(&scope.funclet_id, node_id)
-            ))
+        self.get_latest_scope().get_node_information(node_id, context)
     }
 
-    // Returns true if two types are "close enough" to equal
-    // TODO: refine this condition
-    fn compare_types(&self, type1: &expir::Type, type2: &expir::Type) -> bool {
-        match (type1, type2) {
-            (
-                ir::Type::NativeValue {
-                    storage_type: storage_type1,
-                },
-                ir::Type::NativeValue {
-                    storage_type: storage_type2,
-                },
-            ) => true,
-            (
-                ir::Type::Ref {
-                    storage_type: storage_type1,
-                    storage_place: storage_place1,
-                    buffer_flags: buffer_flags1,
-                },
-                ir::Type::Ref {
-                    storage_type: storage_type2,
-                    storage_place: storage_place2,
-                    buffer_flags: buffer_flags2,
-                },
-            ) => true,
-            (
-                ir::Type::Fence {
-                    queue_place: queue_place1,
-                },
-                ir::Type::Fence {
-                    queue_place: queue_place2,
-                },
-            ) => true,
-            (
-                ir::Type::Buffer {
-                    storage_place: storage_place1,
-                    static_layout_opt: static_layout_opt1,
-                    flags: flags1,
-                },
-                ir::Type::Buffer {
-                    storage_place: storage_place2,
-                    static_layout_opt: static_layout_opt2,
-                    flags: flags2,
-                },
-            ) => true,
-            (
-                ir::Type::Encoder {
-                    queue_place: queue_place1,
-                },
-                ir::Type::Encoder {
-                    queue_place: queue_place2,
-                },
-            ) => true,
-            (ir::Type::Event, ir::Type::Event) => true,
-            (ir::Type::BufferSpace, ir::Type::BufferSpace) => true,
-            _ => false,
-        }
+    // Returns an ordered list of storage nodes in any scope (most to least recent)
+    // The order is as follows (tiebreaks are in node index order)
+    //   1. fully realized storage nodes without an instantiation
+    //   2. unrealized storage nodes (those still pending explication)
+    //   3. fully realized storage nodes with an existing instantiation
+    pub fn find_all_storage_nodes(&self, target_type: &expir::Type, context: &StaticContext) -> Vec<Location> {
+        let mut result = Vec::new();
+        for scope in self.scopes.iter().rev() {
+            let mut empty_nodes = Vec::new();
+            let mut filled_nodes = Vec::new();
+            // sort the results so we go top to bottom of the funclet
+            for node_id in scope.storage_of_type(target_type, context).iter().sorted_by(|x, y| x.cmp(y))
+            {
+                // this is ok because we can just use the phi associated with an input
+                let location = Location::new(scope.funclet_id.clone(), node_id.clone());
+                match scope.get_node_information(node_id, context).instantiation {
+                    Some(_) => filled_nodes.push(location),
+                    None => empty_nodes.push(location),
+                }
+            }
+            result.append(&mut empty_nodes);
+            result.append(&mut filled_nodes);
+        };
+        result
     }
 
-    // Returns an instantiation if one is available in any scope (most to leexpir recent)
-    // if there is no instantiation already made for the given funclet/node
-    //   pops the best available instantiation
-    //   panics in this case if there is none that can fulfill the requirements
-    pub fn find_instantiation(
+    // Returns an ordered list of storage nodes in any scope (most to least recent)
+    // The order is as follows ()
+    //   1. fully realized storage nodes without an instantiation
+    //   
+    pub fn find_matching_storage_nodes(
         &self,
         target_location_triple: &LocationTriple,
         target_type: &expir::Type,
         context: &StaticContext,
-    ) -> Option<Location> {
+    ) -> Vec<Location> {
+        let mut result = Vec::new();
         for scope in self.scopes.iter().rev() {
-            // sort the results so we go bottom to top of the funclet
+            // sort the results so we go top to bottom of the funclet
             for node in scope
                 .match_triple(target_location_triple, context)
                 .iter()
                 .sorted_by(|x, y| x.cmp(y))
-                .rev()
             {
                 let node_info = scope.storage_node_information.get(&node).unwrap();
-                if self.compare_types(&node_info.typ, target_type) {
-                    return Some(Location::new(scope.funclet_id.clone(), node.clone()));
+                if is_of_type(&node_info.typ, target_type) {
+                    result.push(Location::new(scope.funclet_id.clone(), node.clone()));
                 }
             }
         }
-        None
+        result
         // let nodes = vec![
         //     expir::Node::AllocTemporary {
         //         buffer_flags,

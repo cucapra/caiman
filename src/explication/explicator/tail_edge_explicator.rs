@@ -43,11 +43,11 @@ fn explicate_return(
                     context,
                 ).triple_ignoring_none();
                 let target_type = context.get_type(output);
-                match state.find_instantiation(
+                match state.find_matching_storage_nodes(
                     &target_location_triple,
                     target_type,
                     context,
-                ) {
+                ).first() {
                     // we couldn't find anything in our funclet
                     None => todo!("{}", error),
                     Some(instantiation) => {

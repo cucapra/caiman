@@ -376,8 +376,19 @@ fn explicate_write_ref(
     let destination = expir_destination.as_ref().opt().expect(&error).clone();
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
     // assume that the typechecker will find a misaligned storage type
-    let info = state.get_node_information(destination, context);
-    new_state.set_instantiation(destination, info.instantiation.clone(), context);
+    let info = state.get_node_information(&source, context);
+    new_state.set_instantiation(
+        destination,
+        info.instantiation.clone()
+            .expect(&format!(
+                "Missing instantiation for node {}",
+                context
+                    .debug_info
+                    .node(&state.get_current_funclet_id(), source)
+            ))
+            ,
+        context,
+    );
     let node = ir::Node::WriteRef {
         storage_type,
         source,
@@ -414,11 +425,22 @@ fn explicate_borrow_ref(
     let source = expir_source.as_ref().opt().expect(&error).clone();
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
 
-    let info = state.get_node_information(source, context);
+    let info = state.get_node_information(&source, context);
     let schedule_node = state.get_current_node_id().unwrap();
 
     new_state.add_storage_node(schedule_node, info.typ.clone(), context);
-    new_state.set_instantiation(schedule_node, info.instantiation.clone(), context);
+    new_state.set_instantiation(
+        schedule_node,
+        info.instantiation.clone()
+            .expect(&format!(
+                "Missing instantiation for node {}",
+                context
+                    .debug_info
+                    .node(&state.get_current_funclet_id(), source)
+            ))
+            ,
+        context,
+    );
 
     let node = ir::Node::BorrowRef {
         storage_type,
@@ -455,7 +477,7 @@ fn explicate_read_ref(
     let source = expir_source.as_ref().opt().expect(&error).clone();
     let storage_type = expir_storage_type.as_ref().opt().expect(&error).clone();
 
-    let info = state.get_node_information(source, context);
+    let info = state.get_node_information(&source, context);
     let schedule_node = state.get_current_node_id().unwrap();
 
     new_state.add_storage_node(
@@ -463,7 +485,18 @@ fn explicate_read_ref(
         expir::Type::NativeValue { storage_type },
         context,
     );
-    new_state.set_instantiation(schedule_node, info.instantiation.clone(), context);
+    new_state.set_instantiation(
+        schedule_node,
+        info.instantiation.clone()
+            .expect(&format!(
+                "Missing instantiation for node {}",
+                context
+                    .debug_info
+                    .node(&state.get_current_funclet_id(), source)
+            ))
+            ,
+        context,
+    );
     let node = ir::Node::ReadRef {
         storage_type,
         source,
@@ -498,8 +531,19 @@ fn explicate_local_copy(
     let mut new_state = state.clone();
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
-    let info = state.get_node_information(input, context);
-    new_state.set_instantiation(output, info.instantiation.clone(), context);
+    let info = state.get_node_information(&input, context);
+    new_state.set_instantiation(
+        output,
+        info.instantiation.clone()
+            .expect(&format!(
+                "Missing instantiation for node {}",
+                context
+                    .debug_info
+                    .node(&state.get_current_funclet_id(), input)
+            ))
+            ,
+        context,
+    );
     let node = ir::Node::LocalCopy { input, output };
     new_state.next_node();
     match explicate_node(new_state, context) {
@@ -533,8 +577,19 @@ fn explicate_encode_copy(
     let input = expir_input.as_ref().opt().expect(&error).clone();
     let output = expir_output.as_ref().opt().expect(&error).clone();
     let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
-    let info = state.get_node_information(input, context);
-    new_state.set_instantiation(output, info.instantiation.clone(), context);
+    let info = state.get_node_information(&input, context);
+    new_state.set_instantiation(
+        output,
+        info.instantiation.clone()
+            .expect(&format!(
+                "Missing instantiation for node {}",
+                context
+                    .debug_info
+                    .node(&state.get_current_funclet_id(), input)
+            ))
+            ,
+        context,
+    );
     let node = ir::Node::EncodeCopy {
         encoder,
         input,

@@ -115,7 +115,9 @@ pub struct StorageNodeInformation {
 
     // Which set of remote nodes this node stores data for (if any)
     // Observe that an empty location is completely valid
-    pub instantiation: LocationTriple,
+    // Also note that the empty option means specifically that we have not added anything
+    //   which is distinct from adding something of all types none
+    pub instantiation: Option<LocationTriple>,
 
     // The type of this storage
     pub typ: expir::Type,
@@ -144,4 +146,65 @@ pub struct FuncletOutState {
 
     // found tail edge for this funclet (if we managed to explicate one)
     tail_edge: Option<ir::TailEdge>,
+}
+
+// Utility functions for defining the structures here
+
+// Returns true if two types are "close enough" to equal
+// specifically if the checked_type could be of target_type
+// TODO: refine types with holes
+fn is_of_type(checked_type: &expir::Type, target_type: &expir::Type) -> bool {
+    match (checked_type, target_type) {
+        (
+            ir::Type::NativeValue {
+                storage_type: storage_type1,
+            },
+            ir::Type::NativeValue {
+                storage_type: storage_type2,
+            },
+        ) => true,
+        (
+            ir::Type::Ref {
+                storage_type: storage_type1,
+                storage_place: storage_place1,
+                buffer_flags: buffer_flags1,
+            },
+            ir::Type::Ref {
+                storage_type: storage_type2,
+                storage_place: storage_place2,
+                buffer_flags: buffer_flags2,
+            },
+        ) => true,
+        (
+            ir::Type::Fence {
+                queue_place: queue_place1,
+            },
+            ir::Type::Fence {
+                queue_place: queue_place2,
+            },
+        ) => true,
+        (
+            ir::Type::Buffer {
+                storage_place: storage_place1,
+                static_layout_opt: static_layout_opt1,
+                flags: flags1,
+            },
+            ir::Type::Buffer {
+                storage_place: storage_place2,
+                static_layout_opt: static_layout_opt2,
+                flags: flags2,
+            },
+        ) => true,
+        (
+            ir::Type::Encoder {
+                queue_place: queue_place1,
+            },
+            ir::Type::Encoder {
+                queue_place: queue_place2,
+            },
+        ) => true,
+        (ir::Type::Event, ir::Type::Event) => true,
+        (ir::Type::BufferSpace, ir::Type::BufferSpace) => true,
+        _ => false,
+    }
 }
