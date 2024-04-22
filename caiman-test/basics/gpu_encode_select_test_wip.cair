@@ -1,6 +1,6 @@
 version 0.0.2
 
-type i32;
+ffi i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
 ref %i32g : i32-gpu<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

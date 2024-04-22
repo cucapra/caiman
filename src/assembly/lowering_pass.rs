@@ -264,14 +264,14 @@ fn ir_type_decl(type_decl: &ast::TypeDecl, context: &mut Context) -> Option<expi
             Some(match &typ.data {
                 // only supported custom types atm
                 ast::LocalTypeInfo::NativeValue { storage_type } => expir::Type::NativeValue {
-                    storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
+                    storage_type: context.ffi_type_id(&storage_type),
                 },
                 ast::LocalTypeInfo::Ref {
                     storage_type,
                     storage_place,
                     buffer_flags,
                 } => expir::Type::Ref {
-                    storage_type: ffi::TypeId(context.loc_type_id(&storage_type)),
+                    storage_type: context.ffi_type_id(&storage_type),
                     storage_place: storage_place.clone(),
                     buffer_flags: buffer_flags.clone(),
                 },

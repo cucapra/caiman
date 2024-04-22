@@ -374,12 +374,12 @@ pub struct Funclet {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum LocalTypeInfo {
     NativeValue {
-        storage_type: TypeId,
+        storage_type: FFIType,
     },
 
     // Scheduling
     Ref {
-        storage_type: TypeId,
+        storage_type: FFIType,
         storage_place: ir::Place,
         buffer_flags: ir::BufferFlags,
     },

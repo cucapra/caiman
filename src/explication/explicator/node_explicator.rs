@@ -275,7 +275,7 @@ fn explicate_encode_do(
     state: InState,
     context: &StaticContext,
 ) -> Option<FuncletOutState> {
-    let error = format!(
+    let hole_error = format!(
         "TODO Hole in node {}",
         context.debug_info.node_expir(
             state.get_current_funclet_id(),
@@ -286,9 +286,16 @@ fn explicate_encode_do(
                 .expect("Unreachable")
         )
     );
-    let encoder = expir_encoder.as_ref().opt().expect(&error).clone();
-    let operation = expir_operation.as_ref().opt().expect(&error).clone();
-    let node_id = match operation {
+    let value_funclet_id = state
+        .get_funclet_spec(
+            state.get_current_funclet_id(),
+            &SpecLanguage::Value,
+            context,
+        )
+        .funclet_id_opt
+        .unwrap();
+    let operation = expir_operation.as_ref().opt().expect(&hole_error).clone();
+    let value_node_id = match operation {
         expir::Quotient::Node { node_id } => node_id,
         _ => panic!(
             "Expected node operation for local do builtin {}",
@@ -299,16 +306,16 @@ fn explicate_encode_do(
         ),
     };
 
-    let value_funclet_id = state
-        .get_funclet_spec(
-            state.get_current_funclet_id(),
-            &SpecLanguage::Value,
-            context,
-        )
-        .funclet_id_opt
-        .unwrap();
+    let value_error_text = format!(
+        " with value node {} {}",
+        context.debug_info.node(&value_funclet_id, value_node_id),
+        state.get_node_error(context)
+    );
+    let value_error = |error: &str| format!("{} : {}", error, value_error_text);
 
-    let node_location = Location::new(value_funclet_id, node_id);
+    let encoder = expir_encoder.as_ref().opt().expect(&hole_error).clone();
+
+    let node_location = Location::new(value_funclet_id, value_node_id);
     let call_arguments = match context.get_node(node_location) {
         expir::Node::CallFunctionClass {
             function_id,
@@ -320,21 +327,23 @@ fn explicate_encode_do(
         ),
     };
     let mut inputs = Vec::new();
-    for input in expir_inputs.as_ref().opt().expect(&error).iter() {
-        let input_open = input.as_ref().opt().expect(&error).clone();
+    for input in expir_inputs.as_ref().opt().expect(&hole_error).iter() {
+        let input_open = input.as_ref().opt().expect(&hole_error).clone();
         inputs.push(input_open);
     }
     let external_function_id = expir_external_funclet_id
         .as_ref()
         .opt()
-        .expect(&error)
+        .expect(&hole_error)
         .clone();
     let mut output_attempts = Vec::new();
     output_attempts.push(Vec::new());
+    let value_spec_node_types =
+        context.get_node_type_information(&value_funclet_id, &value_node_id);
     for (offset, output) in expir_outputs
         .as_ref()
         .opt()
-        .expect(&error)
+        .expect(&hole_error)
         .iter()
         .enumerate()
     {
@@ -345,28 +354,39 @@ fn explicate_encode_do(
                 }
             }
             None => {
-                let current_outputs = output_attempts.drain(..);
-                let target_type = expir::Type::Ref {
-                    storage_type: todo!(),
-                    storage_place: expir::Place::Local,
-                    buffer_flags: todo!(),
+                let storage_type = match context.get_type(
+                    value_spec_node_types
+                        .output_types
+                        .get(offset)
+                        .expect(&value_error(&format!("Missing argument index {}", offset))),
+                ) {
+                    ir::Type::NativeValue { storage_type } => storage_type.clone(),
+                    typ => panic!("{}", value_error(&format!("Cannot have type {:?} in a value funclet", typ))),
                 };
+                let target_type = expir::Type::Ref {
+                    storage_type,
+                    storage_place: expir::Place::Local,
+                    buffer_flags: expir::BufferFlags::new(),
+                };
+                let mut new_output_attempts = Vec::new();
                 for output_to_try in state.find_all_storage_nodes(&target_type, context).iter() {
                     if output_to_try.funclet_id == state.get_current_funclet_id() {
-                        for current_output in current_outputs {
+                        for current_output in output_attempts.iter() {
                             let mut new_output = current_output.clone();
                             new_output.push(output_to_try.node_id().unwrap());
-                            output_attempts.push(current_output.clone())
+                            new_output_attempts.push(current_output.clone())
                         }
                     }
                 }
+                output_attempts = new_output_attempts;
             }
         }
     }
+    dbg!("{:?}", &output_attempts);
     for outputs in output_attempts.drain(..) {
         let mut new_state = state.clone();
         for (offset, output) in outputs.iter().enumerate() {
-            let value_location = Location::new(value_funclet_id, node_id + offset + 1);
+            let value_location = Location::new(value_funclet_id, value_node_id + offset + 1);
             new_state.set_instantiation(
                 output.clone(),
                 LocationTriple::new_value(value_location),

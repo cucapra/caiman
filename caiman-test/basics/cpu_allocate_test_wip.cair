@@ -3,15 +3,15 @@ version 0.0.1
 types [
     i64,
     native_value $native_i64 {
-        type : i64
+        ffi : i64
     },
     slot $slot_local {
-        type : i64,
+        ffi : i64,
         stage : ready,
         place : local,
     },
     slot $slot_cpu {
-        type : i64,
+        ffi : i64,
         stage : ready,
         place : cpu,
     },

@@ -61,6 +61,16 @@ impl InState {
             .clear_timeline_manager(schedule_node, context);
     }
 
+    pub fn get_node_error(&self, context: &StaticContext) -> String {
+        format!(
+            "in spec node {}",
+            context.debug_info.node(
+                &self.get_current_funclet_id(),
+                self.get_current_node_id().unwrap()
+            )
+        )
+    }
+
     pub fn get_managed_by_timeline(
         &self,
         timeline_manager: NodeId,
@@ -240,7 +250,8 @@ impl InState {
         node_id: &NodeId,
         context: &StaticContext,
     ) -> &StorageNodeInformation {
-        self.get_latest_scope().get_node_information(node_id, context)
+        self.get_latest_scope()
+            .get_node_information(node_id, context)
     }
 
     // Returns an ordered list of storage nodes in any scope (most to least recent)
@@ -248,13 +259,20 @@ impl InState {
     //   1. fully realized storage nodes without an instantiation
     //   2. unrealized storage nodes (those still pending explication)
     //   3. fully realized storage nodes with an existing instantiation
-    pub fn find_all_storage_nodes(&self, target_type: &expir::Type, context: &StaticContext) -> Vec<Location> {
+    pub fn find_all_storage_nodes(
+        &self,
+        target_type: &expir::Type,
+        context: &StaticContext,
+    ) -> Vec<Location> {
         let mut result = Vec::new();
         for scope in self.scopes.iter().rev() {
             let mut empty_nodes = Vec::new();
             let mut filled_nodes = Vec::new();
             // sort the results so we go top to bottom of the funclet
-            for node_id in scope.storage_of_type(target_type, context).iter().sorted_by(|x, y| x.cmp(y))
+            for node_id in scope
+                .storage_of_type(target_type, context)
+                .iter()
+                .sorted_by(|x, y| x.cmp(y))
             {
                 // this is ok because we can just use the phi associated with an input
                 let location = Location::new(scope.funclet_id.clone(), node_id.clone());
@@ -265,14 +283,14 @@ impl InState {
             }
             result.append(&mut empty_nodes);
             result.append(&mut filled_nodes);
-        };
+        }
         result
     }
 
     // Returns an ordered list of storage nodes in any scope (most to least recent)
     // The order is as follows ()
     //   1. fully realized storage nodes without an instantiation
-    //   
+    //
     pub fn find_matching_storage_nodes(
         &self,
         target_location_triple: &LocationTriple,

@@ -605,7 +605,7 @@ impl CaimanAssemblyParser {
 
     fn native_value_decl(input: Node) -> ParseResult<ast::TypeDecl> {
         Ok(match_nodes!(input.into_children();
-            [name_type_separator(name), typ(storage_type)] =>
+            [name_type_separator(name), ffi_type(storage_type)] =>
                 ast::TypeDecl::Local(ast::LocalType {
                     name,
                     data: ast::LocalTypeInfo::NativeValue { storage_type }
@@ -619,9 +619,9 @@ impl CaimanAssemblyParser {
         ))
     }
 
-    fn ref_type(input: Node) -> ParseResult<(ast::TypeId, ir::Place)> {
+    fn ref_type(input: Node) -> ParseResult<(ast::FFIType, ir::Place)> {
         Ok(match_nodes!(input.into_children();
-            [typ(typ), place(place)] => (typ, place)
+            [ffi_type(typ), place(place)] => (typ, place)
         ))
     }
 

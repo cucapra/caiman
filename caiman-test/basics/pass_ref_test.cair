@@ -1,6 +1,6 @@
 version 0.0.2
 
-type i64;
+ffi i64;
 event %event0;
 buffer_space %buffspace;
 native_value %i64 : i64;

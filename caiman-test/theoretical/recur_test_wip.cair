@@ -3,7 +3,7 @@ version 0.0.1
 types [
     i64,
     slot $slot_local {
-        type : i64,
+        ffi : i64,
         stage : ready,
         place : local,
     },

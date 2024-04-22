@@ -184,25 +184,21 @@ impl Context {
                         self.local_type_table.push(t.name.clone());
                         match &t.data {
                             ast::LocalTypeInfo::NativeValue { storage_type } => {
-                                match storage_type {
-                                    ast::TypeId::FFI(f) => {
-                                        self.native_type_map.insert(t.name.clone(), f.clone());
-                                        let check = self
-                                            .ffi_to_native_map
-                                            .insert(f.clone(), t.name.clone());
-                                        match check {
-                                            None => {}
-                                            Some(old) => {
-                                                panic!(
-                                                    "Duplicate native values for FFI type {:?}, {} and {}",
-                                                    f.clone(),
-                                                    old,
-                                                    &t.name
-                                                );
-                                            }
-                                        }
+                                self.native_type_map
+                                    .insert(t.name.clone(), storage_type.clone());
+                                let check = self
+                                    .ffi_to_native_map
+                                    .insert(storage_type.clone(), t.name.clone());
+                                match check {
+                                    None => {}
+                                    Some(old) => {
+                                        panic!(
+                                            "Duplicate native values for FFI type {:?}, {} and {}",
+                                            storage_type.clone(),
+                                            old,
+                                            &t.name
+                                        );
                                     }
-                                    _ => {}
                                 }
                             }
                             _ => {}
@@ -298,6 +294,13 @@ impl Context {
         match self.local_type_table.get_index(name) {
             Some(t) => t,
             None => panic!("Unknown local type {:?}", name),
+        }
+    }
+
+    pub fn storage_type_id(&self, typ: &ast::TypeId) -> crate::rust_wgpu_backend::ffi::TypeId {
+        match typ {
+            ast::TypeId::FFI(ft) => self.ffi_type_id(&ft),
+            ast::TypeId::Local(s) => panic!("Attempting to use non-ffi-type {} as an ffi type", s),
         }
     }
 

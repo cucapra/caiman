@@ -490,4 +490,34 @@ impl<'context> StaticContext<'context> {
             self.debug_info.typ(type_id)
         ))
     }
+
+    pub fn get_node_dependencies(&self, funclet_id: &FuncletId, node_id: &NodeId) -> &Vec<NodeId> {
+        &self
+            .get_spec_data(funclet_id)
+            .node_dependencies
+            .get(node_id)
+            .expect(&format!(
+                "No dependency information found for node {}",
+                self.debug_info.node(funclet_id, node_id.clone())
+            ))
+    }
+
+    pub fn get_tail_edge_dependencies(&self, funclet_id: &FuncletId) -> &Vec<NodeId> {
+        &self.get_spec_data(funclet_id).tail_dependencies
+    }
+
+    pub fn get_node_type_information(
+        &self,
+        funclet_id: &FuncletId,
+        node_id: &NodeId,
+    ) -> &SpecNodeTypeInformation {
+        &self
+            .get_spec_data(funclet_id)
+            .deduced_types
+            .get(node_id)
+            .expect(&format!(
+                "No deduced types found for node {}",
+                self.debug_info.node(funclet_id, node_id.clone())
+            ))
+    }
 }

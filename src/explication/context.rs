@@ -48,13 +48,13 @@ struct SpecFuncletData {
 }
 
 #[derive(Debug)]
-struct SpecNodeTypeInformation {
+pub struct SpecNodeTypeInformation {
     // Input types are the types of the nodes that are given as inputs
-    input_types: Vec<expir::TypeId>,
+    pub input_types: Vec<expir::TypeId>,
 
     // Output types are the type(s) of this particular node\
     // Note that non-singular output types are assumed to be extracted before use
-    output_types: Vec<expir::TypeId>
+    pub output_types: Vec<expir::TypeId>
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"

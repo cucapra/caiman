@@ -11,7 +11,7 @@ version 0.0.2
 
 pipeline "main" = %add_twice_head;
 
-type i64;
+ffi i64;
 event %event0;
 buffer_space %buffspace;
 native_value %i64n : i64;

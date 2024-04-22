@@ -4,15 +4,15 @@ types [
     i32,
     i64,
     native_value $native_i32 {
-        type : i32
+        ffi : i32
     },
     slot $slot_local {
-        type : i32,
+        ffi : i32,
         stage : ready,
         place : local,
     },
     slot $slot_gpu {
-        type : i32,
+        ffi : i32,
         stage : ready,
         place : gpu,
     },

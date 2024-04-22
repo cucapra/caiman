@@ -81,12 +81,12 @@ effect_args = !{ "<" ~ (name ~ ("," ~ name)*)? ~ ">" }
 effect = ${ "effect" ~ effect_args? ~ sep ~ name ~ ";" }
 
 // Types
-ffi_type_decl = ${ "type" ~ sep ~ ffi_type }
+ffi_type_decl = ${ "ffi" ~ sep ~ ffi_type }
 
 name_type_separator = !{ name ~ ":" ~ "" }
-native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ typ }
+native_value_decl = ${ "native_value" ~ sep ~ name_type_separator ~ ffi_type }
 ref_buffer = { "<" ~ "flags" ~ "=" ~ buffer_flags ~ ">" }
-ref_type = ${  typ ~ "-" ~ place }
+ref_type = ${  ffi_type ~ "-" ~ place }
 ref_decl = { "ref" ~ name_type_separator ~ ref_type ~ ref_buffer }
 fence_decl = ${ "fence" ~ sep ~ name_type_separator ~ place }
 buffer_alignment_decl = !{ name ~ ":" ~ place ~ "<"
