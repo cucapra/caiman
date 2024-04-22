@@ -41,10 +41,20 @@ struct SpecFuncletData {
     // type information derived from dependencies
     // technically this can be derived from the nodes lazily
     // but it's slow enough recursing repeatedly when explicating to wanna do it up-front I guess
-    deduced_types: HashMap<NodeId, Vec<expir::TypeId>>,
+    deduced_types: HashMap<NodeId, SpecNodeTypeInformation>,
 
     // tailedge dependencies for scheduling
     tail_dependencies: Vec<NodeId>,
+}
+
+#[derive(Debug)]
+struct SpecNodeTypeInformation {
+    // Input types are the types of the nodes that are given as inputs
+    input_types: Vec<expir::TypeId>,
+
+    // Output types are the type(s) of this particular node\
+    // Note that non-singular output types are assumed to be extracted before use
+    output_types: Vec<expir::TypeId>
 }
 
 // NOTE: we use "available" here to mean "either not filled or not used yet"

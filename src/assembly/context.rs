@@ -33,6 +33,7 @@ pub struct Context {
     pub local_type_table: Table<String>,
     // cause we need to know the storage value of the native value
     pub native_type_map: HashMap<String, FFIType>,
+    pub ffi_to_native_map: HashMap<FFIType, String>,
     pub variable_map: HashMap<FuncletId, HashMap<NodeId, expir::Quotient>>,
     // for keeping track of the meanings of meta names for the current scheduling funclet
     // is None when we aren't in a scheduling funclet
@@ -157,6 +158,7 @@ impl Context {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
             native_type_map: HashMap::new(),
+            ffi_to_native_map: HashMap::new(),
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             effects: Table::new(),
@@ -185,6 +187,20 @@ impl Context {
                                 match storage_type {
                                     ast::TypeId::FFI(f) => {
                                         self.native_type_map.insert(t.name.clone(), f.clone());
+                                        let check = self
+                                            .ffi_to_native_map
+                                            .insert(f.clone(), t.name.clone());
+                                        match check {
+                                            None => {}
+                                            Some(old) => {
+                                                panic!(
+                                                    "Duplicate native values for FFI type {:?}, {} and {}",
+                                                    f.clone(),
+                                                    old,
+                                                    &t.name
+                                                );
+                                            }
+                                        }
                                     }
                                     _ => {}
                                 }
@@ -287,7 +303,12 @@ impl Context {
 
     pub fn loc_type_id(&self, typ: &ast::TypeId) -> usize {
         match typ {
-            ast::TypeId::FFI(ft) => self.ffi_type_id(&ft).0,
+            ast::TypeId::FFI(ft) => self.local_type_id(
+                &self
+                    .ffi_to_native_map
+                    .get(&ft)
+                    .expect(&format!("No storage type found for ffi type {:?}", ft)),
+            ),
             ast::TypeId::Local(s) => self.local_type_id(&s),
         }
     }
@@ -486,6 +507,7 @@ impl Context {
                 ffi_type_table,
                 local_type_table,
                 native_type_map,
+                ffi_to_native_map,
                 mut variable_map,
                 meta_map,
                 location,
@@ -519,16 +541,21 @@ impl Context {
                 let mut funclet_map = HashMap::new();
                 for (index, funclet) in funclet_indices
                     .local_funclet_table
-                    .drain(FuncletId("_UNNAMED_FUNCLET_".to_string())).into_iter().enumerate()
+                    .drain(FuncletId("_UNNAMED_FUNCLET_".to_string()))
+                    .into_iter()
+                    .enumerate()
                 {
                     let mut node_map = HashMap::new();
                     for (node, quot) in variable_map.get_mut(&funclet).unwrap().drain() {
                         node_map.insert(quot, node.0);
                     }
-                    funclet_map.insert(index, FuncletDebugMap {
-                        name: funclet.0,
-                        node_map
-                    });
+                    funclet_map.insert(
+                        index,
+                        FuncletDebugMap {
+                            name: funclet.0,
+                            node_map,
+                        },
+                    );
                 }
                 DebugInfo {
                     type_map,

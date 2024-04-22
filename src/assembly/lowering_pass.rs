@@ -372,7 +372,7 @@ fn ir_node(node: &ast::Node, context: &Context) -> expir::Node {
             let unwrapped_type = type_id.as_ref().opt().expect(&error).clone();
             let parsed_value = match &unwrapped_type {
                 ast::TypeId::Local(name) => match context.native_type_map.get(name) {
-                    None => panic!("{:?} must have a direct FFI storage type", type_id),
+                    None => panic!("{:?} must have a native type", type_id),
                     Some(t) => match t {
                         ast::FFIType::U64 => {
                             expir::Constant::U64(unwrapped_value.parse::<u64>().unwrap())
