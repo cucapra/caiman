@@ -35,8 +35,6 @@ impl<'context> StaticContext<'context> {
                 _ => {}
             }
         }
-        dbg!(&result);
-        todo!();
         self.spec_explication_data = result;
     }
 
@@ -327,13 +325,70 @@ impl<'context> StaticContext<'context> {
             expir::Node::EncodingEvent {
                 local_past,
                 remote_local_pasts,
-            } => todo!(),
-            expir::Node::SubmissionEvent { local_past } => todo!(),
+            } => {
+                let local_past_type = self.expect_one_output_type(
+                    funclet_id,
+                    local_past.as_ref().opt().expect(&hole_error).clone(),
+                    node_dependencies,
+                    deduced_types,
+                );
+                let input_types = vec![];
+                let output_types = vec![local_past_type.clone(), local_past_type.clone()];
+                SpecNodeTypeInformation {
+                    input_types,
+                    output_types,
+                }
+            }
+            expir::Node::SubmissionEvent { local_past } => {
+                let local_past_type = self.expect_one_output_type(
+                    funclet_id,
+                    local_past.as_ref().opt().expect(&hole_error).clone(),
+                    node_dependencies,
+                    deduced_types,
+                );
+                let input_types = vec![];
+                let output_types = vec![local_past_type.clone()];
+                SpecNodeTypeInformation {
+                    input_types,
+                    output_types,
+                }
+            }
             expir::Node::SynchronizationEvent {
                 local_past,
                 remote_local_past,
-            } => todo!(),
-            expir::Node::SeparatedBufferSpaces { count, space } => todo!(),
+            } => {
+                let local_past_type = self.expect_one_output_type(
+                    funclet_id,
+                    local_past.as_ref().opt().expect(&hole_error).clone(),
+                    node_dependencies,
+                    deduced_types,
+                );
+                let input_types = vec![];
+                let output_types = vec![local_past_type.clone()];
+                SpecNodeTypeInformation {
+                    input_types,
+                    output_types,
+                }
+            }
+            expir::Node::SeparatedBufferSpaces { count, space } => {
+                let space_type = self.expect_one_output_type(
+                    funclet_id,
+                    space.as_ref().opt().expect(&hole_error).clone(),
+                    node_dependencies,
+                    deduced_types,
+                );
+                let input_types = vec![];
+                let output_types = vec![space_type]
+                    .iter()
+                    .cycle()
+                    .take(count.as_ref().opt().expect(&hole_error).clone() + 1)
+                    .cloned()
+                    .collect();
+                SpecNodeTypeInformation {
+                    input_types,
+                    output_types,
+                }
+            }
             _ => unreachable!("Not a spec node {:?}", node),
         };
         deduced_types.insert(node_id, result);
