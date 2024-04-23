@@ -8,11 +8,11 @@ use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 fn unknown(index: &usize) -> String {
-    format!("__UNNAMED: {}", index)
+    format!("__UNNAMED")
 }
 
 fn unknown_quot(quot: &ir::Quotient) -> String {
-    format!("__UNNAMED: {:?}", quot)
+    format!("__UNNAMED")
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -40,7 +40,7 @@ impl DebugInfo {
         self.ffi_type_map
             .get(index)
             .as_ref()
-            .map(|f| format!("{:?}", f))
+            .map(|f| format!("{:?} : (type {})", f, index))
             .unwrap_or(unknown(index))
     }
     pub fn typ(&self, index: &usize) -> String {
@@ -66,14 +66,16 @@ impl DebugInfo {
     }
     pub fn quot(&self, funclet_index: &usize, quotient: &ir::Quotient) -> String {
         match self.funclet_map.get(funclet_index) {
-            None => format!("{}.{}", unknown(funclet_index), unknown_quot(quotient)),
+            None => format!("{}.{} : (funclet {}, quotient {:?})", unknown(funclet_index), unknown_quot(quotient), funclet_index, quotient),
             Some(f) => format!(
-                "{}.{}",
+                "{}.{} : (funclet {}, quotient {:?})",
                 &f.name,
                 f.node_map
                     .get(quotient)
                     .unwrap_or(&unknown_quot(quotient))
-                    .clone()
+                    .clone(),
+                funclet_index,
+                quotient
             ),
         }
     }

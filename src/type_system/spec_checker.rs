@@ -1048,8 +1048,8 @@ fn check_tag_compatibility_enter(
                 input_spec_node_ids[index],
                 node_id,
                 "{} -> {}\n{}",
-                error_context.debug_tag(&caller_tag),
-                error_context.debug_tag(&callee_tag),
+                error_context.debug_node(input_spec_node_ids[index]),
+                error_context.debug_node(node_id),
                 error_context
             );
         }
@@ -1101,16 +1101,16 @@ fn check_tag_compatibility_exit(
                     *index,
                     output_index,
                     "{} -> {}\n{}",
-                    error_context.debug_tag(&source_tag),
-                    error_context.debug_tag(&destination_tag),
+                    error_context.debug_node(*index),
+                    error_context.debug_node(output_index),
                     error_context
                 );
                 assert_eq!(
                     *call_node_id,
                     caller_spec_node_id,
                     "{:?} -> {:?}\n{}",
-                    error_context.debug_tag(&source_tag),
-                    error_context.debug_tag(&destination_tag),
+                    error_context.debug_node(*call_node_id),
+                    error_context.debug_node(caller_spec_node_id),
                     error_context
                 );
             } else {
