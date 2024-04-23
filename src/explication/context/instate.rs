@@ -61,6 +61,20 @@ impl InState {
             .clear_timeline_manager(schedule_node, context);
     }
 
+    pub fn hole_error(&self, context: &StaticContext) -> String {
+        format!(
+            "TODO Hole in node {}",
+            context.debug_info.node_expir(
+                self.get_current_funclet_id(),
+                self
+                    .get_current_node(context)
+                    .as_ref()
+                    .opt()
+                    .expect("Unreachable")
+            )
+        )
+    }
+
     pub fn get_node_error(&self, context: &StaticContext) -> String {
         format!(
             "in spec node {}",
