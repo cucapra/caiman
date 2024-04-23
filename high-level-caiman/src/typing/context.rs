@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{type_error, Info, LocalError};
-use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_ffi_type};
+use crate::lower::{binop_to_str, data_type_to_ffi, data_type_to_local_type};
 use crate::parse::ast::FullType;
 use crate::typing::LOCAL_TEMP_FLAGS;
 use crate::{
@@ -291,8 +291,8 @@ fn get_extern_decls(existing_externs: &HashSet<TypedBinop>) -> Vec<asm::Declarat
             [
                 asm::Declaration::FunctionClass(asm::FunctionClass {
                     name: asm::FunctionClassId(op_name.clone()),
-                    input_types: vec![data_type_to_ffi_type(op_l), data_type_to_ffi_type(op_r)],
-                    output_types: vec![data_type_to_ffi_type(ret)],
+                    input_types: vec![data_type_to_local_type(op_l), data_type_to_local_type(op_r)],
+                    output_types: vec![data_type_to_local_type(ret)],
                 }),
                 asm::Declaration::ExternalFunction(asm::ExternalFunction {
                     name: op_name.clone(),

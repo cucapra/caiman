@@ -46,7 +46,7 @@ def_assembly_id_type!(FunctionClassId);
 def_assembly_id_type!(NodeId);
 def_assembly_id_type!(LocalTypeId);
 
-pub type StorageTypeId = TypeId;
+pub type StorageTypeId = FFIType;
 
 // FFI stuff, rebuilt for a few reasons (mostly strings)
 
@@ -99,18 +99,19 @@ pub enum FFIType {
     Unknown
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
-pub enum TypeId {
-    FFI(FFIType),
-    Local(String),
+impl std::fmt::Display for FFIType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:#?}", self);
+        Ok(())
+    }
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub struct TypeId(pub String);
 
 impl std::fmt::Display for TypeId {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TypeId::FFI(typ) => write!(f, "{:?}", typ),
-            TypeId::Local(s) => write!(f, "{}", s)
-        };
+        write!(f, "{}", self.0);
         Ok(())
     }
 }

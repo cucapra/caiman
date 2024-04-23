@@ -333,8 +333,7 @@ macro_rules! lower_element {
     };
     ($arg:ident StorageType $context:ident) => {
         $arg.as_ref().opt().map(|n| match n {
-            ast::TypeId::FFI(ffi) => $context.ffi_type_id(ffi),
-            id => panic!("{:?} must be an FFI type", id)
+            ffi => $context.ffi_type_id(ffi),
         }).into()
     };
     ($arg:ident BufferFlags $context:ident) => {
@@ -370,23 +369,20 @@ fn ir_node(node: &ast::Node, context: &Context) -> expir::Node {
             let error = format!("Constant {:?} cannot have explication holes", &node);
             let unwrapped_value = value.as_ref().opt().expect(&error).clone();
             let unwrapped_type = type_id.as_ref().opt().expect(&error).clone();
-            let parsed_value = match &unwrapped_type {
-                ast::TypeId::Local(name) => match context.native_type_map.get(name) {
-                    None => panic!("{:?} must have a native type", type_id),
-                    Some(t) => match t {
-                        ast::FFIType::U64 => {
-                            expir::Constant::U64(unwrapped_value.parse::<u64>().unwrap())
-                        }
-                        ast::FFIType::I32 => {
-                            expir::Constant::I32(unwrapped_value.parse::<i32>().unwrap())
-                        }
-                        ast::FFIType::I64 => {
-                            expir::Constant::I64(unwrapped_value.parse::<i64>().unwrap())
-                        }
-                        _ => panic!("Unsupported constant type {:?}", type_id),
-                    },
+            let parsed_value = match context.native_type_map.get(&unwrapped_type.0) {
+                None => panic!("{:?} must have a native type", type_id),
+                Some(t) => match t {
+                    ast::FFIType::U64 => {
+                        expir::Constant::U64(unwrapped_value.parse::<u64>().unwrap())
+                    }
+                    ast::FFIType::I32 => {
+                        expir::Constant::I32(unwrapped_value.parse::<i32>().unwrap())
+                    }
+                    ast::FFIType::I64 => {
+                        expir::Constant::I64(unwrapped_value.parse::<i64>().unwrap())
+                    }
+                    _ => panic!("Unsupported constant type {:?}", type_id),
                 },
-                ast::TypeId::FFI(_) => panic!("Cannot directly type a constant with an ffi type"),
             };
             expir::Node::Constant {
                 value: Hole::Filled(parsed_value),

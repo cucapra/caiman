@@ -4,14 +4,14 @@ ffi i64;
 ref %i64l : i64-local<flags=[]>;
 event %event0;
 buffer_space %buffspace;
-native_value %i64n : i64;
+native_value %i64 : i64;
 
 function @main() -> i64;
 function @select_fn(i64, i64) -> i64;
 
 value[impl default @main] %foo() -> i64 {
-    %y = constant %i64n 1;
-    %z = constant %i64n 2;
+    %y = constant %i64 1;
+    %z = constant %i64 2;
     %r_t = call @select_fn(%y, %z);
     %r = extract %r_t 0;
     return %r;
@@ -27,7 +27,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_main<$time.%e-usable, $time.%e-usable>()
-    -> [%out: $val.%r-usable $space-usable $time.%e-usable %i64n]
+    -> [%out: $val.%r-usable $space-usable $time.%e-usable %i64]
 {
     %y_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%y() -> %y_ref;
@@ -47,8 +47,8 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_ret<$time.%e-usable, $time.%e-usable>
-    (%y : $val.%r-usable $space-usable $time.%e-usable %i64n) ->
-    [%out : $val.%r-usable $space-usable $time.%e-usable %i64n]
+    (%y : $val.%r-usable $space-usable $time.%e-usable %i64) ->
+    [%out : $val.%r-usable $space-usable $time.%e-usable %i64]
 {
     return %y;
 }
@@ -56,17 +56,17 @@ schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 
 // select fn
 
-value[impl default @select_fn] %sel(%a : %i64n, %b: %i64n) -> i64 {
-    %x = constant %i64n 0;
+value[impl default @select_fn] %sel(%a : %i64, %b: %i64) -> i64 {
+    %x = constant %i64 0;
     %r = select %x %a %b;
     return %r;
 }
 
 schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
 %sel_main<$time.%e-usable, $time.%e-usable>
-    (%a: $val.%a-usable $space-usable $time.%e-usable %i64n,
-    %b: $val.%b-usable $space-usable $time.%e-usable %i64n) ->
-    [%out : $val.%r-usable $space-usable $time.%e-usable %i64n] 
+    (%a: $val.%a-usable $space-usable $time.%e-usable %i64,
+    %b: $val.%b-usable $space-usable $time.%e-usable %i64) ->
+    [%out : $val.%r-usable $space-usable $time.%e-usable %i64] 
 {
     %x_loc = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_loc;
@@ -82,26 +82,26 @@ schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
 %sel_left<$time.%e-usable, $time.%e-usable>
-    (%a: $val.%a-usable $space-usable $time.%e-usable %i64n,
-    %b: $val.%b-usable $space-usable $time.%e-usable %i64n) ->
-    [%out : $val.%a-usable $space-saved $time.%e-usable %i64n] 
+    (%a: $val.%a-usable $space-usable $time.%e-usable %i64,
+    %b: $val.%b-usable $space-usable $time.%e-usable %i64) ->
+    [%out : $val.%a-usable $space-saved $time.%e-usable %i64] 
 {
     return %a;
 }
 
 schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
 %sel_right<$time.%e-usable, $time.%e-usable>
-    (%a: $val.%a-usable $space-usable $time.%e-usable %i64n,
-    %b: $val.%b-usable $space-usable $time.%e-usable %i64n) ->
-    [%out : $val.%b-usable $space-saved $time.%e-usable %i64n] 
+    (%a: $val.%a-usable $space-usable $time.%e-usable %i64,
+    %b: $val.%b-usable $space-usable $time.%e-usable %i64) ->
+    [%out : $val.%b-usable $space-saved $time.%e-usable %i64] 
 {
     return %b;
 }
 
 schedule[value $val = %sel, timeline $time = %time, spatial $space = %space]
 %sel_ret<$time.%e-usable, $time.%e-usable>
-    (%r : $val.%r-usable $space-saved $time.%e-usable %i64n) ->
-    [%out : $val.%r-usable $space-usable $time.%e-usable %i64n] 
+    (%r : $val.%r-usable $space-saved $time.%e-usable %i64) ->
+    [%out : $val.%r-usable $space-usable $time.%e-usable %i64] 
 {
     return %r;
 }

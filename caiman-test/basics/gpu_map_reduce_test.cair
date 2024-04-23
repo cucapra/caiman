@@ -8,9 +8,9 @@ event %event0;
 buffer %buffer_gpu : gpu<flags = [map_read, map_write, copy_src, copy_dst, storage], alignment_bits = 0, byte_size = 1024>;
 buffer_space %buff_space;
 
-function @simple(i32) -> i32;
-function @foo(i32) -> i32;
-function @add(i32, i32) -> i32;
+function @simple(%i32n) -> %i32n;
+function @foo(%i32n) -> %i32n;
+function @add(%i32n, %i32n) -> %i32n;
 
 
 external-cpu-pure[impl @add] %add(i32, i32) -> i32;
@@ -32,7 +32,7 @@ external-gpu[impl @simple] %simple(%x : i32) -> [%out : i32]
     }
 }
 
-value[impl @foo] %foo(%x : i32, %z: i32) -> [%out: i32] {
+value[impl @foo] %foo(%x : %i32n, %z: %i32n) -> [%out: %i32n] {
     %c = constant %i32n 1;
     %y_t = call @simple(%c, %c, %c, %x);
     %y = extract %y_t 0;

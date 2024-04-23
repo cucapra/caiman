@@ -22,7 +22,7 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
             SpecLiteral::Int(v) => asm::Node::Constant {
                 // TODO: different int widths
                 value: Hole::Filled(v),
-                type_id: Hole::Filled(asm::TypeId::Local(String::from("i64"))),
+                type_id: Hole::Filled(asm::TypeId(String::from("i64"))),
             },
             SpecLiteral::Bool(v) => asm::Node::Constant {
                 value: Hole::Filled(if v {
@@ -30,11 +30,11 @@ fn lower_spec_term(t: SpecTerm) -> asm::Node {
                 } else {
                     String::from("0")
                 }),
-                type_id: Hole::Filled(asm::TypeId::Local(String::from("bool"))),
+                type_id: Hole::Filled(asm::TypeId(String::from("bool"))),
             },
             SpecLiteral::Float(v) => asm::Node::Constant {
                 value: Hole::Filled(v),
-                type_id: Hole::Filled(asm::TypeId::Local(String::from("f64"))),
+                type_id: Hole::Filled(asm::TypeId(String::from("f64"))),
             },
             _ => todo!(),
         },

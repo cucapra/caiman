@@ -14,16 +14,16 @@ pipeline "main" = %addtwo_head;
 ffi i64;
 event %event0;
 buffer_space %buffspace;
-native_value %i64n : i64;
+native_value %i64 : i64;
 
-function @add(i64, i64) -> i64;
+function @add(%i64, %i64) -> %i64;
 
 external-cpu-pure[impl @add] %add(i64, i64) -> i64;
 
-function @addtwo(i64) -> i64;
+function @addtwo(%i64) -> %i64;
 
-value[impl default @addtwo] %addtwo(%x : i64) -> i64 {
-    %one = constant %i64n 1;
+value[impl default @addtwo] %addtwo(%x : %i64) -> %i64 {
+    %one = constant %i64 1;
     
     %y_t = call @add(%x, %one);
     %y = extract %y_t 0;
@@ -47,9 +47,9 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 schedule[value $val = %addtwo, timeline $time = %time, spatial $space = %space] 
 %addtwo_head
 <$time-usable, $time-usable>
-    (%x     : $val.%x-usable $time-usable $space-usable %i64n)
+    (%x     : $val.%x-usable $time-usable $space-usable %i64)
     -> 
-    $val.%result-usable $time-usable $space-usable %i64n
+    $val.%result-usable $time-usable $space-usable %i64
 {
     %one_ref = alloc-temporary local [storage, map_write] i64;
     %result_ref = alloc-temporary local [storage, map_write] i64;

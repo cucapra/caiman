@@ -3,19 +3,18 @@ version 0.0.2
 ffi i64;
 event %event0;
 buffer_space %buffspace;
-native_value %ni64 : i64;
+native_value %i64 : i64;
 
 // A simple tests where a funclet invokes another and passes a value
 
 
-function @main() -> i64;
-function @foo(i64) -> i64;
-
+function @main() -> %i64;
+function @foo(%i64) -> %i64;
 
 // main
 
-value[impl default @main] %main() -> i64 {
-    %x = constant %ni64 -1;
+value[impl default @main] %main() -> %i64 {
+    %x = constant %i64 -1;
     %y_t = call @foo(%x);
     %y = extract %y_t 0;
     return %y;
@@ -31,7 +30,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_head<$time-usable, $time-usable>() ->
-    [%out : $val.%y-usable $time-usable $space-usable %ni64]
+    [%out : $val.%y-usable $time-usable $space-usable %i64]
 {
     %x_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_ref;
@@ -45,22 +44,22 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 
 schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 %main_ret<$time-usable, $time-usable>
-    (%y : $val.%y-usable $time-usable $space-usable %ni64) ->
-    [%out : $val.%y-usable $time-usable $space-usable %ni64]
+    (%y : $val.%y-usable $time-usable $space-usable %i64) ->
+    [%out : $val.%y-usable $time-usable $space-usable %i64]
 {
     return %y;
 }
 
 // foo
 
-value[impl default @foo] %foo(%i : %ni64) -> [%out : i64] {
+value[impl default @foo] %foo(%i : %i64) -> [%out : %i64] {
     return %i;
 }
 
 schedule[value $val = %foo, timeline $time = %time, spatial $space = %space]
 %foo_impl<$time-usable, $time-usable>
-    (%arg : $val.%i-usable $time-usable $space-usable %ni64) ->
-    [%out : $val.%out-usable $time-usable $space-usable %ni64]
+    (%arg : $val.%i-usable $time-usable $space-usable %i64) ->
+    [%out : $val.%out-usable $time-usable $space-usable %i64]
 {
     return %arg;
 }

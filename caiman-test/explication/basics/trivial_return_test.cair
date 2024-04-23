@@ -3,12 +3,12 @@ version 0.0.2
 ffi i64;
 event %event0;
 buffer_space %buffspace;
-native_value %ni64 : i64;
+native_value %i64 : i64;
 
 function @main() -> i64;
 
 value[impl default @main] %value() -> i64 {
-    %x = constant %ni64 4;
+    %x = constant %i64 4;
     return %x;
 }
 
@@ -22,7 +22,7 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
 %foo<$time-usable, $time-usable>() ->
-[%out : $val.%x-usable $time-usable $space-usable %ni64] {
+[%out : $val.%x-usable $time-usable $space-usable %i64] {
     %x_ref = alloc-temporary local [] i64;
     local-do-builtin $val.%x() -> %x_ref;
     %result = read-ref i64 %x_ref;

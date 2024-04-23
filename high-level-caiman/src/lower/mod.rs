@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::{
     error::{self, type_error, Info, LocalError},
     parse::ast::{
@@ -48,18 +46,18 @@ pub const BOOL_FFI_TYPE: asm::FFIType = asm::FFIType::I32;
 const IN_STEM: &str = "_in_";
 
 /// Converts a high-level caiman data type to a caiman assembly type id.
-fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
+pub fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
     use asm::TypeId;
     match dt {
-        DataType::Bool => TypeId::Local(String::from("bool")),
-        DataType::Int(IntSize::I32) => TypeId::Local(String::from("i32")),
-        DataType::Int(IntSize::I64) => TypeId::Local(String::from("i64")),
-        DataType::BufferSpace => TypeId::Local(String::from("BufferSpace")),
-        DataType::Event => TypeId::Local(String::from("Event")),
-        DataType::UserDefined(name) => TypeId::Local(name.clone()),
-        DataType::Ref(t) => TypeId::Local(format!(
+        DataType::Bool => TypeId(String::from("bool")),
+        DataType::Int(IntSize::I32) => TypeId(String::from("i32")),
+        DataType::Int(IntSize::I64) => TypeId(String::from("i64")),
+        DataType::BufferSpace => TypeId(String::from("BufferSpace")),
+        DataType::Event => TypeId(String::from("Event")),
+        DataType::UserDefined(name) => TypeId(name.clone()),
+        DataType::Ref(t) => TypeId(format!(
             "&{}",
-            enum_cast!(TypeId::Local, data_type_to_local_type(t))
+            data_type_to_local_type(t)
         )),
         _ => todo!("TODO"),
     }
@@ -69,9 +67,8 @@ fn data_type_to_local_type(dt: &DataType) -> asm::TypeId {
 /// to the caiman assembly type id for the corresponding FFI type. For types
 /// that do not have FFI equivalents, this is the same as `data_type_to_local_type`.
 #[must_use]
-pub fn data_type_to_ffi_type(dt: &DataType) -> asm::TypeId {
-    use asm::TypeId;
-    data_type_to_ffi(dt).map_or_else(|| data_type_to_local_type(dt), TypeId::FFI)
+pub fn data_type_to_ffi_type(dt: &DataType) -> asm::FFIType {
+    data_type_to_ffi(dt).expect(&format!("Undefined type {:?}", dt))
 }
 
 /// For types that have FFI equivalents, convert a high-level caiman data type
@@ -95,7 +92,7 @@ pub const fn data_type_to_ffi(dt: &DataType) -> Option<asm::FFIType> {
 ///
 /// References are unwrapped to get the underlying type.
 #[must_use]
-pub fn data_type_to_storage_type(dt: &DataType) -> asm::TypeId {
+pub fn data_type_to_storage_type(dt: &DataType) -> asm::FFIType {
     match dt {
         DataType::Ref(d) => data_type_to_storage_type(d),
         x => data_type_to_ffi_type(x),

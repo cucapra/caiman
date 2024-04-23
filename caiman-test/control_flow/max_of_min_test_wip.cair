@@ -27,7 +27,7 @@ ffi i64;
 ref %i64l : i64-local<flags=[]>;
 event %event0;
 buffer_space %buffspace;
-native_value %i64n : i64;
+native_value %i64 : i64;
 
 function @max(i64, i64) -> i64;
 function @min(i64, i64) -> i64;
@@ -74,10 +74,10 @@ spatial %space(%bs : %buffspace) -> %buffspace {
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
 %max_main<$time-usable, $time-usable>
-(%x     : $val.%x-usable $time-usable $space-usable %i64n,
- %y     : $val.%y-usable $time-usable $space-usable %i64n) 
+(%x     : $val.%x-usable $time-usable $space-usable %i64,
+ %y     : $val.%y-usable $time-usable $space-usable %i64) 
 ->
-$val.%out-usable $time-usable $space-usable %i64n 
+$val.%out-usable $time-usable $space-usable %i64 
 {
     %b_loc = alloc-temporary local [] i64;
     local-do-external %lt $val.%b_t(%x, %y) -> %b_loc;
@@ -95,20 +95,20 @@ $val.%out-usable $time-usable $space-usable %i64n
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
 %max_left<$time-usable, $time-usable>
-(%x     : $val.%x-usable $time-usable $space-usable %i64n,
- %y     : $val.%y-usable $time-usable $space-usable %i64n)
+(%x     : $val.%x-usable $time-usable $space-usable %i64,
+ %y     : $val.%y-usable $time-usable $space-usable %i64)
 ->
-$val.%y-usable $time-usable $space-saved %i64n
+$val.%y-usable $time-usable $space-saved %i64
 {
     return %y;
 }
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
 %max_right<$time-usable, $time-usable>
-(%x     : $val.%x-usable $time-usable $space-usable %i64n,
- %y     : $val.%y-usable $time-usable $space-usable %i64n)
+(%x     : $val.%x-usable $time-usable $space-usable %i64,
+ %y     : $val.%y-usable $time-usable $space-usable %i64)
 ->
-$val.%x-usable $time-usable $space-saved %i64n
+$val.%x-usable $time-usable $space-saved %i64
 {
     return %x;
 }
@@ -117,9 +117,9 @@ $val.%x-usable $time-usable $space-saved %i64n
 
 schedule[value $val = %max, timeline $time = %time, spatial $space = %space]
 %max_ret<$time-usable, $time-usable>
-(%r : $val.%r-usable $time-usable $space-saved %i64n)
+(%r : $val.%r-usable $time-usable $space-saved %i64)
 ->
-$val.%out-usable $time-usable $space-usable %i64n
+$val.%out-usable $time-usable $space-usable %i64
 {
     return %r;
 }
@@ -128,10 +128,10 @@ $val.%out-usable $time-usable $space-usable %i64n
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
 %min_main<$time-usable, $time-usable>
-(%x     : $val.%x-usable $time-usable $space-usable %i64n,
- %y     : $val.%y-usable $time-usable $space-usable %i64n) 
+(%x     : $val.%x-usable $time-usable $space-usable %i64,
+ %y     : $val.%y-usable $time-usable $space-usable %i64) 
 ->
-$val.%r-usable $time-usable $space-usable %i64n 
+$val.%r-usable $time-usable $space-usable %i64 
 {
     %b_loc = alloc-temporary local [] i64;
     local-do-external %lt $val.%b_t(%x, %y) -> %b_loc;
@@ -151,20 +151,20 @@ $val.%r-usable $time-usable $space-usable %i64n
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
 %min_left<$time-usable, $time-usable>
-(%x     : $val.%x-usable $time-usable $space-usable %i64n,
- %y     : $val.%y-usable $time-usable $space-usable %i64n)
+(%x     : $val.%x-usable $time-usable $space-usable %i64,
+ %y     : $val.%y-usable $time-usable $space-usable %i64)
 ->
-$val.%x-usable $time-usable $space-saved %i64n
+$val.%x-usable $time-usable $space-saved %i64
 {
     return %x;
 }
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
 %min_right<$time-usable, $time-usable>
-(%x     : $val.%x-usable $time-usable $space-usable %i64n,
- %y     : $val.%y-usable $time-usable $space-usable %i64n)
+(%x     : $val.%x-usable $time-usable $space-usable %i64,
+ %y     : $val.%y-usable $time-usable $space-usable %i64)
 ->
-$val.%y-usable $time-usable $space-saved %i64n
+$val.%y-usable $time-usable $space-saved %i64
 {
     return %y;
 }
@@ -173,9 +173,9 @@ $val.%y-usable $time-usable $space-saved %i64n
 
 schedule[value $val = %min, timeline $time = %time, spatial $space = %space]
 %min_ret<$time-usable, $time-usable>
-(%r : $val.%r-usable $time-usable $space-saved %i64n)
+(%r : $val.%r-usable $time-usable $space-saved %i64)
 ->
-$val.%r-usable $time-usable $space-usable %i64n
+$val.%r-usable $time-usable $space-usable %i64
 {
     return %r;
 }

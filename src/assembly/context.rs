@@ -31,9 +31,8 @@ pub struct Context {
     pub path: String,
     pub ffi_type_table: Table<FFIType>,
     pub local_type_table: Table<String>,
-    // cause we need to know the storage value of the native value
+    // map from names of native types to the storage type
     pub native_type_map: HashMap<String, FFIType>,
-    pub ffi_to_native_map: HashMap<FFIType, String>,
     pub variable_map: HashMap<FuncletId, HashMap<NodeId, expir::Quotient>>,
     // for keeping track of the meanings of meta names for the current scheduling funclet
     // is None when we aren't in a scheduling funclet
@@ -158,7 +157,6 @@ impl Context {
             ffi_type_table: Table::new(),
             local_type_table: Table::new(),
             native_type_map: HashMap::new(),
-            ffi_to_native_map: HashMap::new(),
             funclet_indices: FuncletIndices::new(),
             function_classes: Table::new(),
             effects: Table::new(),
@@ -180,26 +178,10 @@ impl Context {
                 ast::Declaration::TypeDecl(typ) => match typ {
                     ast::TypeDecl::FFI(t) => self.ffi_type_table.push(t.clone()),
                     ast::TypeDecl::Local(t) => {
-                        // get native value types
                         self.local_type_table.push(t.name.clone());
                         match &t.data {
                             ast::LocalTypeInfo::NativeValue { storage_type } => {
-                                self.native_type_map
-                                    .insert(t.name.clone(), storage_type.clone());
-                                let check = self
-                                    .ffi_to_native_map
-                                    .insert(storage_type.clone(), t.name.clone());
-                                match check {
-                                    None => {}
-                                    Some(old) => {
-                                        panic!(
-                                            "Duplicate native values for FFI type {:?}, {} and {}",
-                                            storage_type.clone(),
-                                            old,
-                                            &t.name
-                                        );
-                                    }
-                                }
+                                self.native_type_map.insert(t.name.clone(), storage_type.clone());
                             }
                             _ => {}
                         }
@@ -297,23 +279,8 @@ impl Context {
         }
     }
 
-    pub fn storage_type_id(&self, typ: &ast::TypeId) -> crate::rust_wgpu_backend::ffi::TypeId {
-        match typ {
-            ast::TypeId::FFI(ft) => self.ffi_type_id(&ft),
-            ast::TypeId::Local(s) => panic!("Attempting to use non-ffi-type {} as an ffi type", s),
-        }
-    }
-
     pub fn loc_type_id(&self, typ: &ast::TypeId) -> usize {
-        match typ {
-            ast::TypeId::FFI(ft) => self.local_type_id(
-                &self
-                    .ffi_to_native_map
-                    .get(&ft)
-                    .expect(&format!("No storage type found for ffi type {:?}", ft)),
-            ),
-            ast::TypeId::Local(s) => self.local_type_id(&s),
-        }
+        self.local_type_id(&typ.0)
     }
 
     pub fn explicit_node_id(&self, funclet: &FuncletId, node: &Hole<NodeId>) -> expir::Quotient {
@@ -510,7 +477,6 @@ impl Context {
                 ffi_type_table,
                 local_type_table,
                 native_type_map,
-                ffi_to_native_map,
                 mut variable_map,
                 meta_map,
                 location,
