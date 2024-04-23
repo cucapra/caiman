@@ -85,7 +85,7 @@ fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
             | ir::FuncletKind::Timeline
             | ir::FuncletKind::Spatial => lower_spec_funclet(&id, context),
             ir::FuncletKind::ScheduleExplicit => {
-                explicate_schedule_funclet(InState::new(id), context)
+                explicate_schedule_funclet(InState::new(id, context), context)
             }
         })
         .collect()

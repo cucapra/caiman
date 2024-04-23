@@ -33,49 +33,32 @@ fn explicate_return(
             let mut result = FuncletOutState::new();
             let funclet_id = state.get_current_funclet_id();
             let funclet = context.get_funclet(&funclet_id);
-            let outputs = &funclet.output_types;
-            // TODO: expand to triple
-            let value_tags = &state
-                .get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context)
-                .output_tags;
-            assert!(
-                value_tags.len() == outputs.len(),
-                "Expected only equal tag and output lengths {}",
-                context.debug_info.funclet(&state.get_current_funclet_id())
-            );
             let mut nodes = Vec::new();
-            for (output, value_tag) in outputs.iter().zip(value_tags.iter()) {
-                let target_node = match value_tag
-                    .as_ref()
-                    .opt()
-                    .expect(&error)
-                    .quot
-                {
-                    ir::Quotient::Node { node_id } => node_id,
-                    _ => todo!(),
-                };
-                // TODO: I don't think this matters, oddly enough, but we should verify this
-                let target_type = &expir::Type::NativeValue {
-                    storage_type: ffi::TypeId(output.clone()),
-                };
-                let instantiation = state.find_instantiation(
-                    &Location {
-                        funclet: state
-                            .get_funclet_spec(funclet_id, &expir::FuncletKind::Value, context)
-                            .funclet_id_opt
-                            .unwrap(),
-                        node: target_node,
-                    },
+            for (index, output) in funclet.output_types.iter().enumerate() {
+                let target_location_triple = LocationTriple::new_triple_mapped(
+                    spec_output,
+                    funclet_id,
+                    index,
+                    state,
+                    context,
+                ).triple_ignoring_none();
+                let target_type = context.get_type(output);
+                match state.find_instantiation(
+                    &target_location_triple,
                     target_type,
                     context,
-                );
-                // we couldn't find anything in our funclet
-                if instantiation.funclet != funclet_id {
-                    // TODO try and explicate something
-                    todo!()
-                };
-                nodes.push(instantiation.node);
-            };
+                ) {
+                    // we couldn't find anything in our funclet
+                    None => todo!("{}", error),
+                    Some(instantiation) => {
+                        if instantiation.funclet_id != funclet_id {
+                            // TODO try and explicate something
+                            todo!()
+                        };
+                        nodes.push(instantiation.node_id().unwrap());
+                    }
+                }
+            }
             result.set_tail_edge(ir::TailEdge::Return {
                 return_values: nodes.into_boxed_slice(),
             });

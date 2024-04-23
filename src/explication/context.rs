@@ -1,4 +1,4 @@
-pub mod data_impls;
+pub mod schedule_scope_data;
 pub mod instate;
 pub mod outstate;
 pub mod staticcontext;
@@ -77,14 +77,14 @@ pub struct ScheduleScopeData {
     // the rule is more-to-less specific, then go up to the next scope out
 
     // the funclet id being worked on in this scope
-    pub funclet: expir::FuncletId,
+    pub funclet_id: expir::FuncletId,
 
     // the node of the original funclet we are working on
     // is none precisely when we are starting a new funclet
     //   OR inside a synthesized funclet
     // note that we may want to actually have two structs here in a way
     // then we can hold the "goal" of the sub-funclet more easily?
-    node: Option<NodeId>,
+    node_id: Option<NodeId>,
 
     // the index of the command we are building
     // incremented by one each "step" of the recursion
@@ -94,14 +94,11 @@ pub struct ScheduleScopeData {
     // map from spec location information to all instantiations in this funclet
     // note that there may be duplicates of the same node across scheduled instantiations
     // we only care about local information
-    instantiations: HashMap<Location, Vec<NodeId>>,
+    instantiations: HashMap<Location, HashSet<NodeId>>,
 
-    // map from node id to which remote it instantiates, and what type it has
+    // map from node id to which remote(s) it instantiates, and what type it has
     // we really do need both directions here, annoyingly
-    node_type_information: HashMap<NodeId, (Location, expir::Type)>,
-
-    // list of available memory allocations, with associated type information
-    allocations: Vec<(NodeId, expir::Type)>,
+    storage_node_information: HashMap<NodeId, StorageNodeInformation>,
 
     // map from operation code to a vector of "available" operations with holes
     // for now, these consist of exactly allocations where we don't yet know the type
@@ -110,6 +107,23 @@ pub struct ScheduleScopeData {
     // most recently found multiline hole, if one exists in this scope
     // note that explication holes are named in corrections
     explication_hole: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct StorageNodeInformation {
+    // Information about a single node storing stuff that we've recorded in our state
+
+    // Which set of remote nodes this node stores data for (if any)
+    // Observe that an empty location is completely valid
+    pub instantiation: LocationTriple,
+
+    // The type of this storage
+    pub typ: expir::Type,
+
+    // Which node is "managing" our timeline
+    // this could be a fence or an encoder (we don't really care here)
+    // This information is used for updating the timeline when the manager changes
+    pub timeline_manager: Option<NodeId>,
 }
 
 #[derive(Debug, Default)]
