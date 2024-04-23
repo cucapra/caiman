@@ -7,12 +7,12 @@ native_value %i64 : i64;
 
 // A simple recursive sum test
 
-function @main() -> i64;
-function @rec_sum(i64) -> i64;
+function @main() -> %i64;
+function @rec_sum(%i64) -> %i64;
 
-function @add(i64, i64) -> i64;
-// function @lte(i64, i64) -> i64;
-function @gt(i64, i64) -> i64;
+function @add(%i64, %i64) -> %i64;
+// function @lte(%i64, %i64) -> %i64;
+function @gt(%i64, %i64) -> %i64;
 
 function @loop() -> [];
 
@@ -25,7 +25,7 @@ effect<%loop> %eff;
 
 // main
 
-value[impl default @main] %main() -> [%out: i64] {
+value[impl default @main] %main() -> [%out: %i64] {
     %x = constant %i64 20;
     %y_t = call @rec_sum(%x);
     %y = extract %y_t 0;
@@ -66,7 +66,7 @@ schedule[value $val = %main, timeline $time = %time, spatial $space = %space]
 // rec_sum
 
 
-value[impl default @rec_sum] %rec_sum(%i : %i64) -> [%out: i64] {
+value[impl default @rec_sum] %rec_sum(%i : %i64) -> [%out: %i64] {
     %zero = constant %i64 0;
     %neg_1 = constant %i64 -1;
 

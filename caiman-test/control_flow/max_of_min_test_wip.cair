@@ -29,28 +29,28 @@ event %event0;
 buffer_space %buffspace;
 native_value %i64 : i64;
 
-function @max(i64, i64) -> i64;
-function @min(i64, i64) -> i64;
-function @max_q(i64, i64, i64, i64) -> i64;
-function @lt(i64, i64) -> i64;
+function @max(%i64, %i64) -> %i64;
+function @min(%i64, %i64) -> %i64;
+function @max_q(%i64, %i64, %i64, %i64) -> %i64;
+function @lt(%i64, %i64) -> %i64;
 
 external-cpu-pure[impl @lt] %lt(i64, i64) -> i64;
 
-value[impl default @max] %max(%x : i64, %y : i64) -> [%out: i64] {
+value[impl default @max] %max(%x : %i64, %y : %i64) -> [%out: %i64] {
     %b_t = call @lt(%x, %y);
     %b = extract %b_t 0;
     %r = select %b %y %x;
     return %r;
 }
 
-value[impl default @min] %min(%x : i64, %y : i64) -> [%out: i64] {
+value[impl default @min] %min(%x : %i64, %y : %i64) -> [%out: %i64] {
     %b_t = call @lt(%x, %y);
     %b = extract %b_t 0;
     %r = select %b %x %y;
     return %r;
 }
 
-value[impl default @max_q] %max_q(%x : i64, %y : i64, %z : i64, %w : i64) -> i64 {
+value[impl default @max_q] %max_q(%x : %i64, %y : %i64, %z : %i64, %w : %i64) -> %i64 {
     %left_t = call @max(%x, %y);
     %left = extract %left_t 0;
     %right_t = call @max(%z, %w);

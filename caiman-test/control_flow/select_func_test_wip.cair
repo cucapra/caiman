@@ -6,10 +6,10 @@ event %event0;
 buffer_space %buffspace;
 native_value %i64 : i64;
 
-function @main() -> i64;
-function @select_fn(i64, i64) -> i64;
+function @main() -> %i64;
+function @select_fn(%i64, %i64) -> %i64;
 
-value[impl default @main] %foo() -> i64 {
+value[impl default @main] %foo() -> %i64 {
     %y = constant %i64 1;
     %z = constant %i64 2;
     %r_t = call @select_fn(%y, %z);

@@ -6,9 +6,9 @@ event %event0;
 buffer_space %buffspace;
 native_value %i64 : i64;
 
-function @main() -> i64;
+function @main() -> %i64;
 
-value[impl default @main] %foo() -> [%out: i64] {
+value[impl default @main] %foo() -> [%out: %i64] {
     %x = constant %i64 0;
     %y = constant %i64 1;
     %z = constant %i64 2;

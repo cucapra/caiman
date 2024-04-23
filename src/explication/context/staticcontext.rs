@@ -211,9 +211,6 @@ impl<'context> StaticContext<'context> {
         if deduced_types.contains_key(&node_id) {
             return &deduced_types.get(&node_id).unwrap();
         };
-        let dependencies = node_dependencies
-            .get(&node_id)
-            .expect(&format!("Unknown spec node dependency {:?}", node_id));
         let funclet = self.get_funclet(&funclet_id);
         let node = self.get_node(Location::new(funclet_id, node_id));
         let hole_error = format!(
