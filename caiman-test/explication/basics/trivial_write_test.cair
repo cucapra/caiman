@@ -24,7 +24,7 @@ schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
 %foo<$time-usable, $time-usable>() ->
 [%out : $val.%x-usable $time-usable $space-usable %ni64] {
     %x_ref = alloc-temporary local [] i64;
-    local-do-builtin $val.%x() -> [?];
+    local-do-builtin $val.%x() -> ?;
     %result = read-ref i64 %x_ref;
     return %result;
 }

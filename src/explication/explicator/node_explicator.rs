@@ -121,16 +121,25 @@ fn enumerate_output_type_attempts(
     let value_error = |error: &str| format!("{} : {}", error, value_error_text);
     let value_spec_node_types =
         context.get_node_type_information(&value_funclet_id, &value_node_id);
+
+    let unpacked_outputs = match expir_outputs.as_ref().opt() {
+        Some(outputs) => outputs.iter().map(|o| o.clone().opt()).collect(),
+        None => {
+            let mut expanded_outputs = Vec::new();
+            for _ in 0..value_spec_node_types.output_types.len() {
+                expanded_outputs.push(None);
+            };
+            expanded_outputs
+        }
+    };
+
     let mut output_attempts = Vec::new();
     output_attempts.push(Vec::new());
-    for (offset, output) in expir_outputs
-        .as_ref()
-        .opt()
-        .expect(&state.hole_error(context))
+    for (offset, output) in unpacked_outputs
         .iter()
         .enumerate()
     {
-        match output.as_ref().opt() {
+        match output {
             Some(open_output) => {
                 for output_attempt in output_attempts.iter_mut() {
                     output_attempt.push(open_output.clone());
@@ -216,14 +225,13 @@ fn explicate_local_do_builtin(
 
     for outputs in output_attempts.drain(..) {
         let mut new_state = state.clone();
-        for (offset, output) in outputs.iter().enumerate() {
-            let value_location = Location::new(value_funclet_id, value_node_id + offset + 1);
-            new_state.set_instantiation(
-                output.clone(),
-                LocationTriple::new_value(value_location),
-                context,
-            );
-        }
+        assert!(outputs.len() == 1, "Local do builtin only supported on non-tuple output {}", state.get_node_error(context));
+        let value_location = Location::new(value_funclet_id, value_node_id);
+        new_state.set_instantiation(
+            outputs.first().unwrap().clone(),
+            LocationTriple::new_value(value_location),
+            context,
+        );
         let node = ir::Node::LocalDoBuiltin {
             operation,
             inputs: inputs.clone().into_boxed_slice(),

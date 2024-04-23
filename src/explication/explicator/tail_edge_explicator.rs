@@ -30,6 +30,7 @@ fn explicate_return(
             Some(result)
         }
         Hole::Empty => {
+            dbg!(&state);
             let mut result = FuncletOutState::new();
             let funclet_id = state.get_current_funclet_id();
             let funclet = context.get_funclet(&funclet_id);
