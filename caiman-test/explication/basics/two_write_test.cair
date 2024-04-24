@@ -31,7 +31,7 @@ schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
     local-do-builtin $val.%x() -> ?;
     %x = read-ref i64 %x_ref;
     
-    local-do-builtin $val.%y() -> [?];
+    local-do-builtin $val.%y() -> ?;
     %y = read-ref i64 %y_ref;
     return ?;
 }

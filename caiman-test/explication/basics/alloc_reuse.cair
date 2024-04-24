@@ -1,0 +1,41 @@
+version 0.0.2
+
+ffi i64;
+event %event0;
+buffer_space %buffspace;
+native_value %i64 : i64;
+
+function @main() -> %i64;
+function @op(%i64) -> %i64;
+
+external-cpu-pure[impl @op] %op(i64) -> i64;
+
+value[impl default @main] %value() -> [%out : %i64] {
+    %x = constant %i64 4;
+    %y_t = call @op(%x);
+    %y = extract %y_t 0;
+    return %y;
+}
+
+timeline %time(%e : %event0) -> %event0 {
+    return %e;
+}
+
+spatial %space(%bs : %buffspace) -> %buffspace {
+    return %bs;
+}
+
+schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
+%foo<$time-usable, $time-usable>() ->
+[%out2 : $val.%y-usable $time-usable $space-usable %i64] {
+    %ref = alloc-temporary local [] i64;
+
+    local-do-builtin ?() -> ?;
+    %x = read-ref i64 %ref;
+    
+    local-do-external %op $val.%y(%x) -> ?;
+    %y = read-ref i64 %ref;
+    return ?;
+}
+
+pipeline "main" = %foo;
