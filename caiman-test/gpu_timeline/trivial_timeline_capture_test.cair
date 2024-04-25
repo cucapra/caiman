@@ -1,5 +1,27 @@
 version 0.0.2
 
+// Captures an value across a function call for a funclet that doesn't modify
+// the timeline. This is currently the only way to capture a value across a call
+// involving a timeline. In order to do this, the caller and the callee must
+// also implement the same timeline spec. As such, the
+// call we are capturing over doesn't appear in the timeline spec.
+// This test was a modified version of `gpu_rec_sum`.
+
+// In psuedo-code, the program looks like this:
+// fn main() {
+//     return rec_sum(20);
+// }
+
+// fn rec_sum(x: i32) -> i32 {
+//     let f = encode (x - 1);
+//     let r = foo(f.wait());
+//     return (encode (x + r)).wait();
+// }
+
+// fn foo(x: i32) -> i32 {
+//     return x;
+// }
+
 type i32;
 event %event0;
 buffer_space %buffspace;
@@ -14,11 +36,6 @@ function @rec_time(%event0) -> %event0;
 function @foo(i32) -> i32;
 
 function @loop() -> [];
-
-// recursion with timeline
-// in order to have recursion that terminates,
-// we need different timeline operations for the recursive and base case
-// as this isn't supported right now, this is an infinite recursion
 
 external-gpu[impl @add] %add(%x : i32, %y: i32) -> [%out : i32]
 {

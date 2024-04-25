@@ -1,5 +1,8 @@
 version 0.0.2
 
+// The same as gpu external test but the input argument is a value instead
+// of a reference.
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

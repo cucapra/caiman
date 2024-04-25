@@ -1,5 +1,11 @@
 version 0.0.2
 
+// This is the same as gpu external test but with an added jump 
+// to a separate funclet which reads the results from the references
+// and returns them.
+
+// This is similar to how the frontend would generate the code.
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

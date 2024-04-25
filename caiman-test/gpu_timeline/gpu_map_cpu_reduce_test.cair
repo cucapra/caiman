@@ -1,5 +1,19 @@
 version 0.0.2
 
+// Performs two computations in parallel on the GPU.
+// Then synchronizes them and combines the results on the CPU.
+
+// In psuedo-hlc:
+// fn main(x: i32, y: i32) {
+//     let f = encode simple(x);
+//     submit f;
+//     let f2 = encode simple(y);
+//     submit f2;
+//     let r1 = wait f;
+//     let r2 = wait f2;
+//     return r1 + r2;
+// }
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

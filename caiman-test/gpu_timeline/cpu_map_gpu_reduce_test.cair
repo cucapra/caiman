@@ -1,5 +1,26 @@
 version 0.0.2
 
+// Performs two operations on the CPU
+// If the input is 1, we merge the two operations, otherwise
+// we merge the first operation with itself. The merging 
+// happens on the GPU.
+
+// This test encodes different things in the two branches
+// and synchronizes in the join point.
+
+// In psuedocode:
+// fn foo(c: i32) -> i32 {
+//     let a = baz();
+//     let b = bar();
+//     if c {
+//         encode merge(a, b)
+//     } else {
+//         encode merge(a, a)
+//     }
+//     sync fence
+//     return result-from-gpu
+// }
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

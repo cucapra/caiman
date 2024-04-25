@@ -1,5 +1,23 @@
 version 0.0.2
 
+// Submits work from one function and waits for the result, then, afterwards, 
+// submits work from another function and waits for the result.
+
+// This tests two submissions, in sequential order and has two schedules
+// implement the same timeline spec. Thus there is not call in the 
+// timeline spec but there is a call in the schedule
+
+// In pseudo-code:
+// fn main() {
+//     let r = encode simple(1);
+//     let f = w.wait();
+//     return f + bar();
+// }
+
+// fn bar() -> i32 {
+//     return (encode simple(2)).wait();
+// }
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

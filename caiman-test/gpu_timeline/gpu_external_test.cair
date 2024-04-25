@@ -1,5 +1,8 @@
 version 0.0.2
 
+// Performs a computation on the GPU,
+// encoding, submitting, and waiting all in one funclet.
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

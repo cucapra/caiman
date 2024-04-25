@@ -1,5 +1,23 @@
 version 0.0.2
 
+// Performs an infinite recursion where each iteration work is
+// performed on the GPU. Also tests calling a function that affects
+// the timeline from a function that doesn't.
+
+// In pseudo-hlc:
+// fn main() -> i32 {
+//     return rec_sum(20);
+// }
+
+// fn rec_sum(x: i32) -> i32 {
+//     let r = encode (x  - 1);
+//     submit r;
+//     let f = rec_sum(r.wait());
+//     let r2 = encode (f + f);
+//     submit r2;
+//     return r2.wait();
+// }
+
 type i32;
 event %event0;
 buffer_space %buffspace;

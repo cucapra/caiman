@@ -1,5 +1,22 @@
 version 0.0.2
 
+// Similar to gpu_submit_call where we have two events sequenced one after the other,
+// however this time we have one event that is submitted and synchronizerd in one
+// function and the other event is submitted and synchronized in another function.
+// There are two timeline specs this time, and the call is now part
+// of the timeline spec
+
+// In pseudo-code:
+// fn main() {
+//     let r = encode simple(1);
+//     let f = w.wait();
+//     return f + bar();
+// }
+
+// fn bar() -> i32 {
+//     return (encode simple(2)).wait();
+// }
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

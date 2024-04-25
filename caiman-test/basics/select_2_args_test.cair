@@ -1,8 +1,8 @@
 version 0.0.2
 
+// Codegen regression test where 2 arguments are passed to the left and right
+// branches of a select.
 
-// Test fails when 0 or 2+ arguments are passed to the left and right
-// funclets
 
 type i64;
 event %event0;

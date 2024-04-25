@@ -1,5 +1,20 @@
 version 0.0.2
 
+// Depending on a given boolean, this program will encode either one of two
+// kernel dispatches. This tests passing encoders to funclets
+
+// In pseudo-hlc:
+// fn foo(b: bool) -> i32 {
+//     let e = encoder();
+//     if b {
+//         e.encode simple(1);
+//     } else {
+//         e.encode simple2(1);
+//     }
+//     e.submit();
+//     return e.wait();
+// }
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;

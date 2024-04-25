@@ -1,5 +1,21 @@
 version 0.0.2
 
+// This test starts submits work on the GPU,
+// then passes the future to another function to wait for it later.
+// The callee does some work in parallel and waits for both results
+
+// In psuedo-hlc:
+// fn bar(r: future<i32>) -> i32 {
+//     let f = encode %simple(3);
+//     return r.wait() + f.wait();
+// }
+
+// fn main(x: i32) -> i32 {
+//     let f = encode simple(x);
+//     let r = bar(y);
+//     return r;
+// }
+
 type i32;
 native_value %i32n : i32;
 ref %i32l : i32-local<flags=[map_read, map_write, copy_src, copy_dst, storage]>;
