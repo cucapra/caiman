@@ -30,10 +30,10 @@ schedule[value $val = %value, timeline $time = %time, spatial $space = %space]
 [%out2 : $val.%y-usable $time-usable $space-usable %i64] {
     %ref = alloc-temporary local [] i64;
 
-    local-do-builtin ?() -> ?;
+    local-do-builtin $val.%x() -> ?;
     %x = read-ref i64 %ref;
     
-    local-do-external %op $val.%y(%x) -> ?;
+    local-do-external %op $val.%y_t(%x) -> ?;
     %y = read-ref i64 %ref;
     return ?;
 }
