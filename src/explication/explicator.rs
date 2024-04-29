@@ -111,6 +111,20 @@ fn explicate_spec_binding(
     }
 }
 
+/*
+ * The first pass of explication, where we fill in ??? with necessary operations
+ *   we also fill in specific operations that are purely type-directed
+ *   we do not attempt to actually put data in storage
+ */
+pub fn type_link_schedule_funclet(funclet_id: FuncletId, context: &StaticContext) -> Vec<expir::Funclet> {
+    let current = context.get_funclet(&funclet_id);
+    vec![current.clone()]
+}
+
+/* 
+ * The second pass of explication, where we assume we have the operations we need
+ *   and now we need to actually put the stuff in the correct storage at the right time
+ */
 pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -> ir::Funclet {
     let funclet = state.get_current_funclet_id();
     let current = context.get_funclet(&funclet);
@@ -121,7 +135,6 @@ pub fn explicate_schedule_funclet(mut state: InState, context: &StaticContext) -
             context.debug_info.funclet(&funclet)
         ),
         Some(mut result) => {
-            assert!(!result.has_fills_remaining());
             let spec_binding = explicate_spec_binding(&funclet, Some(&result), context);
             ir::Funclet {
                 kind: current.kind.clone(),

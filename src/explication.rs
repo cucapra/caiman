@@ -9,7 +9,9 @@ use crate::{debug_info::DebugInfo, ir};
 use context::{InState, StaticContext};
 use serde_derive::{Deserialize, Serialize};
 
-use self::explicator::{explicate_schedule_funclet, lower_spec_funclet};
+use self::explicator::{
+    explicate_schedule_funclet, lower_spec_funclet, type_link_schedule_funclet,
+};
 
 // Explication and frontend AST
 
@@ -74,19 +76,37 @@ where
     }
 }
 
+/*
+ * adds nodes and fills in ?/??? to build schedules that have all the operations
+ * does not actually _store_ any information, and as a result, does not need to backtrack
+ * note that this is _not_ done funclet-by-funclet to support adding control flow later
+ */
+fn type_link_schedule_funclets(context: &StaticContext) -> StableVec<expir::Funclet> {
+    let mut result = StableVec::new();
+    for (funclet_id, funclet) in context.program().funclets.iter() {
+        match &funclet.kind {
+            ir::FuncletKind::ScheduleExplicit => {
+                for linked in type_link_schedule_funclet(funclet_id, context) {
+                    result.add(linked);
+                }
+            }
+            _ => {
+                result.add(funclet.clone());
+            }
+        }
+    }
+    result
+}
+
 fn explicate_funclets(context: &StaticContext) -> StableVec<ir::Funclet> {
-    context
-        .program()
-        .funclets
+    let type_linked_funclets = type_link_schedule_funclets(context);
+    type_linked_funclets
         .iter()
         .map(|(id, funclet)| match funclet.kind {
-            ir::FuncletKind::Unknown
-            | ir::FuncletKind::Value
-            | ir::FuncletKind::Timeline
-            | ir::FuncletKind::Spatial => lower_spec_funclet(&id, context),
             ir::FuncletKind::ScheduleExplicit => {
                 explicate_schedule_funclet(InState::new(id, context), context)
             }
+            _ => lower_spec_funclet(&id, context),
         })
         .collect()
 }

@@ -140,17 +140,6 @@ pub struct StorageNodeInformation {
 
 #[derive(Debug, Default)]
 pub struct FuncletOutState {
-    // The return type from explicating a single funclet
-
-    // the allocations that still need to be concretized
-    // we map from funclet _index_ to the type to allocate to make recursion easier
-    // note that this necessarily refers to the current state
-    allocation_requests: HashMap<StorageTypeId, usize>,
-
-    // The types that still need explication for this scope
-    // they (by default) will be filled in the most "recent" open slot
-    to_fill: HashSet<Location>,
-
     // nodes we've built on this particular funclet of the stack
     nodes: VecDeque<ir::Node>,
 
