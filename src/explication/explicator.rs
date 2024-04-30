@@ -1,6 +1,8 @@
 mod tail_edge_explicator;
 mod node_explicator;
 
+use std::collections::VecDeque;
+
 use crate::explication::context::{FuncletOutState, InState, OpCode, StaticContext};
 use crate::explication::expir;
 use crate::explication::expir::{FuncletId, NodeId};
@@ -9,10 +11,42 @@ use crate::explication::util::Location;
 use crate::explication::util::*;
 use crate::explication::Hole;
 use crate::ir::Place;
+use crate::stable_vec::StableVec;
 use crate::{explication, frontend, ir};
 
 use super::expir::Funclet;
 use super::explicator_macros::force_lower_node;
+
+/*
+ * Adds local_do, encode_do, and local_builtin operations to the graph in type order
+ * This is done greedily based on types that we need that we don't yet have
+ * Where the type that has the most requirements is put in the hole "furthest" in the funclet
+ * Returns the updated vec of nodes
+ */
+fn add_do_operations(funclet_id: FuncletId, context: &StaticContext) -> StableVec<expir::Node> {
+    let current = context.get_funclet(&funclet_id);
+    let mut result = StableVec::new();
+    let mut target_value_types = VecDeque::new();
+    match &current.spec_binding {
+        expir::FuncletSpecBinding::ScheduleExplicit { value, spatial, timeline } => {
+            
+        },
+        spec_binding => panic!("Expected Schedule binding, got {} for funclet {}", &current.spec_binding, context.debug_info.funclet(&funclet_id))
+    }
+    for output_type in current.output_types.iter() {
+        target_value_types.push_back();
+    };
+    result
+}
+
+/*
+ * The first pass of explication, where we fill in ??? with necessary operations
+ *   we also fill in specific operations that are purely type-directed
+ *   we do not attempt to actually put data in storage
+ */
+pub fn type_link_schedule_funclet(funclet_id: FuncletId, context: &StaticContext) -> Option<Vec<expir::Funclet>> {
+    let updated_nodes = add_do_operations(funclet_id, context);
+}
 
 fn explicate_tag(tag: expir::Tag, context: &StaticContext) -> ir::Tag {
     let error = format!("Unimplemented flow hole in with quotient {:?}", &tag);
@@ -109,16 +143,6 @@ fn explicate_spec_binding(
             timeline: explicate_funclet_spec(timeline, state.unwrap(), context),
         },
     }
-}
-
-/*
- * The first pass of explication, where we fill in ??? with necessary operations
- *   we also fill in specific operations that are purely type-directed
- *   we do not attempt to actually put data in storage
- */
-pub fn type_link_schedule_funclet(funclet_id: FuncletId, context: &StaticContext) -> Vec<expir::Funclet> {
-    let current = context.get_funclet(&funclet_id);
-    vec![current.clone()]
 }
 
 /* 
