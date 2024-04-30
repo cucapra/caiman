@@ -86,7 +86,7 @@ fn type_link_schedule_funclets(context: &StaticContext) -> StableVec<expir::Func
     for (funclet_id, funclet) in context.program().funclets.iter() {
         match &funclet.kind {
             ir::FuncletKind::ScheduleExplicit => {
-                for linked in type_link_schedule_funclet(funclet_id, context) {
+                for linked in type_link_schedule_funclet(&funclet_id, context) {
                     result.add(linked);
                 }
             }

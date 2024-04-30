@@ -115,7 +115,6 @@ pub struct ScheduleScopeData {
     available_operations: HashMap<OpCode, Vec<usize>>,
 
     // most recently found multiline hole, if one exists in this scope
-    // note that explication holes are named in corrections
     explication_hole: bool,
 }
 
